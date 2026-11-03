@@ -185,7 +185,110 @@ public struct DeleteApprovalPreview: Equatable, Sendable {
     public var note: String { isRunner ? Approvals.deleteRunnerNote : Approvals.deleteWorkspaceNote }
 }
 
+/// What a workspace write would do, read off the card the server filed for it
+/// (`runner-api/runner-workspace-approval.ts`): which workspace, each variable by name and whole
+/// value, and what else it changes. The owner decides by reading the values, and the server erases
+/// them from the card once it is answered.
+public struct WorkspaceWritePreview: Equatable, Sendable {
+    public struct Variable: Equatable, Sendable, Identifiable {
+        public let name: String
+        public let value: String
+        public var id: String { name }
+        /// The way the engine will see it, on one block however long the value is.
+        public var line: String { "\(name)=\(value)" }
+    }
+
+    /// One more thing the write changes, in the card's own words.
+    public struct Field: Equatable, Sendable, Identifiable {
+        public let caption: String
+        public let value: String
+        public var id: String { caption }
+    }
+
+    public let isCreate: Bool
+    public let name: String
+    /// The runner it is on, or a new one goes on.
+    public let status: String
+    /// Its folder as it stands.
+    public let workDir: String?
+    /// The variables it would hold, by name: nil when the write leaves them alone.
+    public let env: [Variable]?
+    /// The variables on it now that the write takes away, since it replaces the whole map.
+    public let envRemoved: [String]
+    public let fields: [Field]
+
+    /// The card's header. The name is the next row rather than part of this line, as on a delete.
+    public var heading: String { isCreate ? "Create this workspace?" : "Change this workspace?" }
+    public var badge: String { "workspace" }
+    public var action: String { isCreate ? Approvals.workspaceCreateAction : Approvals.workspaceSaveAction }
+    /// What a refusal names, ahead of the reason to be typed. Web computes the same name (`declineSubject`).
+    public var declineName: String { name.isEmpty ? "this workspace" : name }
+}
+
 public extension Approvals {
+
+    /// The yes on a workspace write's card and the words on it. Web's card says the same
+    /// (`WorkspaceWriteCardCopyParityTests`).
+    static let workspaceSaveAction = "Save changes"
+    static let workspaceCreateAction = "Create it"
+    static let workspaceVariables = "Environment variables"
+    static let workspaceNoVariables = "No variables"
+    static let workspaceVariablesRemoved = "Variables removed"
+    static let workspaceWriteNote = "Every later session in this workspace starts with this, in any permission mode. "
+        + "A variable can run code as soon as the engine starts."
+
+    /// All a card holds, as text, when a server that predates this card filed what the asker sent: nil
+    /// for any other approval, and for a card `workspaceWritePreview` reads. Without it such a card would
+    /// ask for a yes with nothing on it.
+    static func workspaceWriteRawInput(toolName: String, from input: JSONValue) -> String? {
+        guard isWorkspaceCreate(toolName: toolName) || isWorkspaceUpdate(toolName: toolName),
+              workspaceWritePreview(toolName: toolName, from: input) == nil else { return nil }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        return (try? encoder.encode(input)).flatMap { String(data: $0, encoding: .utf8) }
+    }
+
+    /// The facts the server filed on an `orbit_agent_create` / `orbit_agent_update` card, or nil for any
+    /// other approval.
+    static func workspaceWritePreview(toolName: String, from input: JSONValue) -> WorkspaceWritePreview? {
+        let isCreate = isWorkspaceCreate(toolName: toolName)
+        guard isCreate || isWorkspaceUpdate(toolName: toolName), case .object? = input["changes"] else { return nil }
+        func text(_ value: JSONValue?) -> String? {
+            guard let string = value?.stringValue, !string.isEmpty else { return nil }
+            return string
+        }
+        func runnerName(_ value: JSONValue?) -> String? { text(value?["displayName"]) ?? text(value?["name"]) }
+        let changes = input["changes"]
+        var fields: [WorkspaceWritePreview.Field] = []
+        /// An empty string is a field being cleared, which a blank row on a card would not say.
+        func written(_ key: String, _ caption: String) {
+            if let value = changes?[key]?.stringValue {
+                fields.append(.init(caption: caption, value: value.isEmpty ? "Cleared" : value))
+            }
+        }
+        written("workDir", "Working directory")
+        written("systemPrompt", "System prompt")
+        written("appendSystemPrompt", "Appended system prompt")
+        if let runner = runnerName(changes?["runner"]) { fields.append(.init(caption: "Runner", value: runner)) }
+        if let worktree = changes?["enableWorktree"]?.boolValue {
+            fields.append(.init(caption: "Worktree", value: worktree
+                ? "Each session gets its own git worktree" : "Sessions run in the shared folder"))
+        }
+        if !isCreate { written("name", "Name") }
+        written("description", "Description")
+        written("defaultMergeTarget", "Merge target")
+        var env: [WorkspaceWritePreview.Variable]?
+        if case .object(let variables)? = changes?["env"] {
+            env = variables
+                .map { .init(name: $0.key, value: $0.value.stringValue ?? "") }
+                .sorted { $0.name < $1.name }
+        }
+        var removed: [String] = []
+        if case .array(let names)? = input["envRemoved"] { removed = names.compactMap(\.stringValue) }
+        return WorkspaceWritePreview(isCreate: isCreate, name: text(input["name"]) ?? "",
+                                     status: runnerName(input["runner"]).map { "On \($0)" } ?? "On no runner",
+                                     workDir: text(input["workDir"]), env: env, envRemoved: removed, fields: fields)
+    }
 
     /// The yes on a delete card, and the words around what goes. Web's card says the same
     /// (`DeleteCardCopyParityTests`); the two notes are the words the runner page's own Delete uses.

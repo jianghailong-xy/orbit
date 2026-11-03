@@ -19,6 +19,11 @@ func TestAgentCLIRoutesHeadersAndBodies(t *testing.T) {
 	}
 	var got request
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The writes below are put on the owner's card first (agent_write_card_test.go).
+		if strings.Contains(r.URL.Path, "/approvals") {
+			_, _ = w.Write([]byte(`{"id":"ap1","status":"ALLOWED"}`))
+			return
+		}
 		got = request{method: r.Method, path: r.URL.Path}
 		if r.Body != nil && r.ContentLength != 0 {
 			_ = json.NewDecoder(r.Body).Decode(&got.body)
@@ -117,6 +122,10 @@ func TestAgentCLISendsABase62RunnerIDVerbatim(t *testing.T) {
 		body map[string]interface{}
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/approvals") {
+			_, _ = w.Write([]byte(`{"id":"ap1","status":"ALLOWED"}`))
+			return
+		}
 		got.path = r.URL.Path
 		got.body = nil
 		if r.Body != nil && r.ContentLength != 0 {

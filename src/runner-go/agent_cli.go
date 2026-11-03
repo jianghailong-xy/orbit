@@ -29,6 +29,12 @@ switch is on.
 Run 'orbit agent <command> --help' for options.
 `
 
+// agentCardHelp is what the create and update help say about the card, in the words of the MCP tools.
+const agentCardHelp = `--env, --work-dir, --system-prompt, --append-system-prompt, --runner-id and --enable-worktree
+first put the write on a confirmation card in front of the account owner, in every permission
+mode, and wait for their answer: nothing is written if they decline. The other options need no card.
+`
+
 var agentActionHelp = map[string]string{
 	"list": `orbit agent list — list this owner's agents
 
@@ -54,7 +60,8 @@ Options:
   --env KEY=VALUE                Repeatable; REPLACES the whole environment map
   --default-merge-target BRANCH  Branch this agent's sessions merge into by default
   --json
-`,
+
+`+agentCardHelp,
 	"update": `orbit agent update — update an agent's configuration
 
 Usage:
@@ -74,7 +81,8 @@ Options:
 
 Existing env values are secret and never returned by 'orbit agent list', so pass the
 complete desired map whenever --env is used at all.
-`,
+
+`+agentCardHelp,
 	"delete": `orbit agent delete — delete an agent
 
 Usage:
@@ -103,6 +111,49 @@ var agentCLICapabilities = []cliCapabilitySpec{
 // agentDeleteApprovalToolName keys the card an agent delete is asked on. The server matches the delete
 // against it by this name (apiserver runner-api/runner-delete-approval.ts), so both ends spell it alike.
 const agentDeleteApprovalToolName = "orbit_agent_delete"
+
+// agentCreateApprovalToolName and agentUpdateApprovalToolName key the cards a workspace write is asked
+// on. The server files them with its own reading of the workspace and writes only against one a person
+// answered (apiserver runner-api/runner-workspace-approval.ts), so both ends spell them alike.
+const (
+	agentCreateApprovalToolName = "orbit_agent_create"
+	agentUpdateApprovalToolName = "orbit_agent_update"
+)
+
+// agentCardFields are the workspace fields a session writes only on the owner's card, in every mode:
+// what the workspace's next session starts under, and where. WORKSPACE_WRITE_CARD_FIELDS on the server
+// is the rule; asking here is what lets a write that follows it through.
+var agentCardFields = []string{"env", "workDir", "systemPrompt", "appendSystemPrompt", "runnerId", "enableWorktree"}
+
+// agentWriteNeedsCard says whether a write of these fields waits for the owner. A null names nothing:
+// the server reads it as absent or refuses it, whatever anybody answers.
+func agentWriteNeedsCard(fields map[string]interface{}) bool {
+	for _, field := range agentCardFields {
+		if value, named := fields[field]; named && value != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// askBeforeAgentWrite puts a workspace write on the owner's card when it needs one and waits. It returns
+// the reason a declined write hands back; id is empty on a create. The card carries the whole write,
+// values included, on the way to the server, which is the one place that stores it. Nothing here logs it.
+func askBeforeAgentWrite(t *Transport, sessionID, id string, body map[string]interface{}) (declined string, err error) {
+	if !agentWriteNeedsCard(body) {
+		return "", nil
+	}
+	card := make(map[string]interface{}, len(body)+1)
+	for field, value := range body {
+		card[field] = value
+	}
+	toolName := agentCreateApprovalToolName
+	if id != "" {
+		toolName = agentUpdateApprovalToolName
+		card["agentId"] = id
+	}
+	return askBeforeCreate(t, sessionID, toolName, card)
+}
 
 func cmdAgentCLI(args []string, out io.Writer) error {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
@@ -277,6 +328,11 @@ func cliAgentCreate(args []string, out io.Writer, ctx cliOrchestrationContext) e
 	if err != nil {
 		return err
 	}
+	if declined, err := askBeforeAgentWrite(t, ctx.sessionID, "", body); err != nil {
+		return fmt.Errorf("create agent: %w", err)
+	} else if declined != "" {
+		return fmt.Errorf("create agent: the human rejected this write, and nothing was written: %s", declined)
+	}
 	raw, err := t.createAgent(ctx.sessionID, ctx.token, body)
 	if err != nil {
 		return fmt.Errorf("create agent: %w", err)
@@ -306,6 +362,11 @@ func cliAgentUpdate(args []string, out io.Writer, ctx cliOrchestrationContext) e
 	t, err := cliSessionTransport(ctx)
 	if err != nil {
 		return err
+	}
+	if declined, err := askBeforeAgentWrite(t, ctx.sessionID, id, body); err != nil {
+		return fmt.Errorf("update agent: %w", err)
+	} else if declined != "" {
+		return fmt.Errorf("update agent: the human rejected this write, and nothing was written: %s", declined)
 	}
 	raw, err := t.updateAgent(ctx.sessionID, ctx.token, id, body)
 	if err != nil {

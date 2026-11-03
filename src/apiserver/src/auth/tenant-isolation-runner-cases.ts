@@ -1441,19 +1441,19 @@ export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly str
   },
   'POST /runner/workspaces body (the body)': {
     reads: ['body runnerId'],
-    reading: 'whitelisted field by field; the one id is the runner the workspace runs on (runner-agents.controller.ts:106)',
+    reading: 'whitelisted field by field; the one id is the runner the workspace runs on (runner-agents.controller.ts:110)',
   },
   'POST /runner/agents body (the body)': {
     reads: ['body runnerId'],
-    reading: 'the same body under the workspaces\' pre-rename name (runner-agents.controller.ts:106)',
+    reading: 'the same body under the workspaces\' pre-rename name (runner-agents.controller.ts:110)',
   },
   'PATCH /runner/workspaces/:id body (the body)': {
     reads: ['body runnerId'],
-    reading: 'whitelisted as on create; the one id is the runner to move it to (runner-agents.controller.ts:127)',
+    reading: 'whitelisted as on create; the one id is the runner to move it to (runner-agents.controller.ts:136)',
   },
   'PATCH /runner/agents/:id body (the body)': {
     reads: ['body runnerId'],
-    reading: 'the same body under the workspaces\' pre-rename name (runner-agents.controller.ts:127)',
+    reading: 'the same body under the workspaces\' pre-rename name (runner-agents.controller.ts:136)',
   },
   'GET /runner/region-check request': {
     reads: [],

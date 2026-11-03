@@ -19,7 +19,7 @@ object CardRequests {
         fun projectPath(vararg parts: String) = listOf("projects", requireNotNull(project)) + parts
         fun encoded(body: String) = Wire.json.parseToJsonElement(body).jsonObject
         if (card.family in setOf(CardFamily.TOOL, CardFamily.QUESTION, CardFamily.PLAN, CardFamily.CREATE,
-                CardFamily.BATCH, CardFamily.DAG, CardFamily.BLOCKER, CardFamily.PROVIDER, CardFamily.DELETE)) {
+                CardFamily.BATCH, CardFamily.DAG, CardFamily.BLOCKER, CardFamily.PROVIDER, CardFamily.DELETE, CardFamily.WORKSPACE_WRITE)) {
             val tool = required("toolName")
             val original = row.obj("input") ?: emptyObject
             val answers = if (verb == CardVerb.ANSWER) {
