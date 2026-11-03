@@ -680,11 +680,13 @@ func setupSourceWorktree(job *ClaimedSession, baseDir string, atRest bool) strin
 	base := pin
 	add := []string{"worktree", "add", "-b", job.Branch, wtPath, pin}
 	revived := branchExists(repoRoot, job.Branch)
+	hadBaseRef := false
 	if revived {
 		// A revived session whose checkout went away: the branch already holds its work, and its fork
 		// point heals like any other checkout's (see resolveBaseSha), from the base ref when that is in
 		// the branch's history, else from the pin.
 		if persisted, err := git(repoRoot, "rev-parse", "--verify", "--quiet", baseRefName(job.SessionID)); err == nil && persisted != "" {
+			hadBaseRef = true
 			if _, err := git(repoRoot, "merge-base", "--is-ancestor", persisted, job.Branch); err == nil {
 				base = persisted
 			}
@@ -699,7 +701,7 @@ func setupSourceWorktree(job *ClaimedSession, baseDir string, atRest bool) strin
 	}
 	_, _ = git(repoRoot, "update-ref", baseRefName(job.SessionID), base)
 	if _, err := git(repoRoot, add...); err != nil {
-		if !revived {
+		if !hadBaseRef {
 			_, _ = git(repoRoot, "update-ref", "-d", baseRefName(job.SessionID))
 		}
 		return refuseSourceWorktree(job, sourceRefusalWorktreeRequired, fmt.Sprintf("`git worktree add` failed: %v", err))
@@ -857,10 +859,13 @@ func setupCheckout(job *ClaimedSession, baseDir string, atRest bool) string {
 		}
 		// Whatever took the checkout may have left git believing it is still there.
 		_, _ = git(repoRoot, "worktree", "prune")
-		if _, err := git(repoRoot, "worktree", "add", wtPath, job.Branch); err != nil {
-			// The branch holds this session's work and this checkout is where it goes on. A disk too
-			// full to hold it, or the branch checked out somewhere else, is why it did not come back, and
-			// running in the shared directory instead has the agent writing in somebody else's checkout.
+		_, err = git(repoRoot, "worktree", "add", wtPath, job.Branch)
+		if err != nil && kept != "" {
+			// This session has had a checkout, its base ref says so, and that is where it goes on. A disk
+			// too full to hold it, or the branch checked out somewhere else, is why it did not come back,
+			// and running in the shared directory instead has the agent writing in somebody else's checkout.
+			// A session with no base ref has nothing to restore: a run taking over the branch of the run
+			// before it, while that run's checkout still holds it, takes the fallback below.
 			return refuseSourceWorktree(job, sourceRefusalWorktreeRequired, fmt.Sprintf("the session's checkout could not be restored from %s: %v", job.Branch, err))
 		}
 		_, _ = git(repoRoot, "update-ref", "-d", absentRefName(job.SessionID))
