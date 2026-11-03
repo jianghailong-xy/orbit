@@ -2732,6 +2732,10 @@ export interface WorktreesRemovableRequest {
  *  Any id absent from this list belongs to a still-resumable session and must be kept. */
 export interface WorktreesRemovableResponse {
   removable: string[];
+  /** The queried ids that are kept because their session is at rest on this runner, each with the
+   *  branch its next message resumes it from. Not a verdict on the checkout: a runner short of disk
+   *  judges that itself. Absent from an older control plane, and a runner reads absence as none. */
+  resumable?: { id: string; branch: string }[];
 }
 
 /**

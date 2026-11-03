@@ -137,6 +137,73 @@ shell. Sign in again with the UI's runner sign-in action. Claude Code then keeps
 that runtime (installed/auth/service PATH), UTC timestamps, and sanitized error text. Redact API keys,
 OAuth/device codes, tokens, cookies, credential files, private provider URLs, and repository contents.
 
+## D. The disk is short, or a session's checkout has gone
+
+**Symptom:** the runner log has `gc: reclaimed checkout <session> — ...` lines, or a session that is resumed
+spends its first minutes reinstalling dependencies.
+
+Each session works in its own checkout, `<ORBIT_HOME>/worktrees/<session id>`, and the runner looks them
+over every five minutes. The floor is **Keep Free** on the runner's page (Capacity). A runner with no floor
+set, or a platform that cannot report free space, reclaims nothing for lack of disk.
+
+| Free space | What goes |
+| --- | --- |
+| Above the floor | Only finished sessions' checkouts beyond the 32 most recent |
+| Below the floor | Every finished session's checkout (Completed, in Trash, or moved to another runner), then the checkouts below |
+
+Below the floor the runner goes on to the checkouts of sessions that can still resume, oldest first, one at a
+time, and stops as soon as free space is back above the floor. One goes only if all of this holds, judged
+twice, the second time immediately before it goes:
+
+- The control plane answers that the session is at rest on this runner and a message would resume it: waiting
+  for input, failed, cancelled or otherwise ended but not Completed. A session queued for an engine, running,
+  or being ended is not.
+- Nothing of the session is at work on the runner: no turn, no resident engine, no background job, no merge or
+  commit under way. An idle session with no engine does not count as work.
+- No process has its working directory or executable in the checkout, or holds a file in it open, and nothing
+  is mounted inside it. This is read from `/proc`, so on macOS and Windows these checkouts are never reclaimed.
+- Nothing in it has been written for 14 days. That covers every file and directory except those under a
+  dependency directory: `node_modules`, `.venv`, `venv`, `__pycache__`, `vendor`, `Pods` or `.gradle`.
+- `git status` reports nothing, untracked files included, whatever the repository's own settings say, and no
+  file is marked assume-unchanged or skip-worktree.
+- Every ignored file or directory it holds can be made again, going by its name: the dependency directories
+  above, or the build output `dist`, `build`, `.build`, `target`, `.next`, `.turbo`, `coverage` or
+  `tsconfig.tsbuildinfo`. Anything else ignored, such as a local `.env` or a report, keeps the checkout, however
+  old it is.
+- `git rev-list HEAD --not --remotes` is empty: every commit is on a remote. A repository with no remote
+  keeps its checkouts.
+- `HEAD` is on the session's own branch and its fork point is on record, no merge, rebase, cherry-pick, revert or
+  bisect is half done, the worktree is not locked (`git worktree lock`), and no other repository is nested in
+  it, a submodule or a clone in a dependency directory included.
+
+**What comes back.** The session's next message makes a new checkout of its branch at the same path, before the
+engine starts, and the conversation goes on. The branch and its commits were never touched, and the session's
+fork point is kept in `refs/orbit-base/<session id>`, so its diff is the same as before.
+
+**A runner restart brings back no checkout of a session at rest**, whatever took it: this cleanup, or a person
+with `rm -rf`. While the session's branch exists, the runner registers the session and logs `session <id> — its
+checkout is not on disk and stays away until its next turn`. The session's next message makes the checkout, on
+the fork point in its base ref, or else its pinned commit, or else the merge-base with the shared checkout's
+`HEAD`. So a checkout removed by hand to free space stays removed. Anything uncommitted in it is gone: the
+checkout comes back from the branch. A session with a background job carried across a self-update is at work,
+not at rest, and gets its checkout at once.
+
+**What does not come back.** Installed dependencies and build output, which the agent has to rebuild. These go by
+name, so a file a session put inside `dist` or `node_modules` goes with them.
+
+**If the checkout cannot come back**, for example because the disk is still too full or the branch is checked
+out somewhere else, the run ends with an error giving git's reason. It never runs in the shared working directory
+instead. Free the space or the branch and send the message again. `orbit resume` in a terminal needs the checkout
+to be there, so it says so and gives the command that sends the message.
+
+**Mixed versions.** Neither direction reclaims more than the older side would:
+
+| Runner | Control plane | Behaviour |
+| --- | --- | --- |
+| New | Old | The answer has no `resumable` list, so no session counts as resumable and these checkouts stay. |
+| Old | New | The runner reads only `removable`, which is unchanged, and ignores the new list. |
+| Old, after a new runner reclaimed some | Either | At its next start the old runner makes those checkouts again, and works their fork point out from the shared checkout's `HEAD`, as it always has. On a disk too full to hold them, `git worktree add` fails and it runs that session in the shared working directory, also as it always has, so free space before rolling a runner back. |
+
 ## Before opening a public issue
 
 Use the [support guide](../SUPPORT.md#useful-diagnostic-information) and bug-report form. Include the
