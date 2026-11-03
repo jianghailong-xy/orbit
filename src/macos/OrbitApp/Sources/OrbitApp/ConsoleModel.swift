@@ -1333,8 +1333,8 @@ final class ConsoleModel {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 60_000_000_000)
                 guard let self, !Task.isCancelled else { return }
-                await self.loadContextIfUnread()
                 await self.refreshRunner()
+                await self.loadContextIfUnread()
             }
         }
         evidencePollTask = Task { [weak self] in
