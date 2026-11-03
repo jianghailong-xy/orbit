@@ -102,7 +102,8 @@ function fingerprint(dir) {
  * fails, which ends the script under `set -e`, with 7 meaning the round finished. `prepare` is given the directories.
  * With `cut`, a round runs first in which the rsync call naming `cut.on` sends all but what `cut.holdsBack` matches and then
  * dies, as a dropped connection does, or as a full disk does with `cut.says`. What that left is `cutShort`, and the next poll
- * is the round this returns: with room again, or as cut as the first with `cut.everyPoll`.
+ * is the round this returns: with room again, or as cut as the first with `cut.everyPoll`. `cut.then`, given the directories, is
+ * what a person does in between.
  */
 function round({ prepare, system = CLUSTER, due = [], database = 'up', interval = 86_400, rsyncFailsOn = null, cut = null }) {
   const scratch = mkdtempSync(path.join(tmpdir(), 'pg-backup-offhost-'));
@@ -166,6 +167,7 @@ exec '${realRsync}' "$@"`,
       const log = poll();
       if (!cut.everyPoll) rmSync(cutting);
       cutShort = { log, mirror: fingerprint(dirs.target) };
+      cut.then?.(dirs);
     }
     const before = { mirror: fingerprint(dirs.target), copy: fingerprint(dirs.filesTarget) };
     const log = poll();
@@ -567,6 +569,21 @@ test('and when there is room again the next poll carries on and ends equal to th
   }
 });
 
+test('and so it does when a person takes the old one off that disk instead, as the line says', () => {
+  const result = round({
+    cut: {
+      on: '.staging-*',
+      holdsBack: `${NEW_BASE}/base.tar.gz`,
+      says: NO_ROOM,
+      then: ({ target }) => rmSync(path.join(target, 'base', OLD_BASE), { recursive: true }),
+    },
+    prepare: noBaseInCommon,
+  });
+  assert.match(result.cutShort.log, STOPPED);
+  mirrored(result);
+  assert.doesNotMatch(result.log, /ERROR/);
+});
+
 test('with room for both it goes through in one round: WAL, then everything with nothing deleted, then --delete', () => {
   for (const prepare of [noBaseInCommon, fallenBehind]) {
     const result = round({ prepare });
@@ -608,10 +625,10 @@ test('a pass that rsync reports a failure in and carries on from, to exit 23, st
 
 test('once --delete has run it does not say that nothing was deleted', () => {
   // The WAL and everything else landed, a new segment had no room, and the old base backup has gone on the way.
-  const result = round({ cut: { on: '--delete', holdsBack: 'no such file', says: NO_ROOM, everyPoll: true }, prepare: noBaseInCommon });
-  assert.equal(baseLine(result.after.mirror, OLD_BASE), undefined, result.log);
-  assert.match(result.log, /ERROR: off-host sync to .* failed: .*No space left on device/);
-  assert.doesNotMatch(result.log, /Nothing was deleted/);
+  const result = round({ cut: { on: '--delete', holdsBack: 'no such file', says: NO_ROOM }, prepare: noBaseInCommon });
+  assert.equal(baseLine(result.cutShort.mirror, OLD_BASE), undefined, result.cutShort.log);
+  assert.match(result.cutShort.log, /ERROR: off-host sync to .* failed: .*No space left on device/);
+  assert.doesNotMatch(result.cutShort.log, /Nothing was deleted/);
 });
 
 test('WAL keeps landing while a base backup does not fit, with a segment in common or not', () => {
