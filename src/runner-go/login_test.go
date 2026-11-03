@@ -173,6 +173,37 @@ func TestRejectionMarkerMatchesRealCLIOutput(t *testing.T) {
 	}
 }
 
+// The CLI's own reason has to reach the card, not just Go's "exit status 1". These are the shapes
+// `claude auth login` writes when it gives up: an OAuth refusal, a rejected paste on the prompt's
+// own line (behind the PTY's echo of the code), and credentials that could not be saved.
+func TestLoginFailureDetailCarriesTheCLIsOwnWords(t *testing.T) {
+	for _, c := range []struct{ name, out, want string }{
+		{"no failure printed", realLoginOutput, ""},
+		{"oauth refusal", realLoginOutput + "\r\nOAuth error: invalid_grant\r\n", "OAuth error: invalid_grant"},
+		{"rejected paste", realLoginOutput + "ABC#STATEInvalid code. Please make sure the full code was copied.\r\n", "Invalid code. Please make sure the full code was copied."},
+		{"rejected paste after echo", realLoginOutput + "ABC#STATE Invalid code. Please make sure the full code was copied.\r\n", "Invalid code. Please make sure the full code was copied."},
+		{"credentials not saved", realLoginOutput + "\r\nSign-in completed in the browser, but your new credentials could not be saved to /home/x/.claude\r\n", "Sign-in completed in the browser, but your new credentials could not be saved to /home/x/.claude"},
+		{"keychain locked", realLoginOutput + "\r\nOAuth error: Couldn't save your login. If your Mac's keychain is locked, unlock it and log in again.\r\n\r\nPress Enter to retry. (Esc to continue without logging in)\r\n", "OAuth error: Couldn't save your login. If your Mac's keychain is locked, unlock it and log in again."},
+		{"keychain locked after a redraw", realLoginOutput + "\r\n\x1b[2J\x1b[H*  .  * OAuth error: Couldn't save your login. If your Mac's keychain is locked, unlock it and log in again.\r\n\r\nPress Enter to retry. (Esc to continue without logging in)\r\n", "OAuth error: Couldn't save your login. If your Mac's keychain is locked, unlock it and log in again."},
+		{"retry instruction only", realLoginOutput + "\r\nPress Enter to retry.\r\n", ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := loginFailureDetail(c.out); got != c.want {
+				t.Fatalf("loginFailureDetail = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// The PTY stream is not a log: colours and OSC 8 hyperlink targets are terminal instructions, and
+// the card must show the CLI's words without them.
+func TestLoginFailureDetailStripsTerminalEscapes(t *testing.T) {
+	out := realLoginOutput + "\r\n\x1b[31mOAuth error: \x1b]8;;https://example.com/help\x07invalid_grant\x1b]8;;\x07\x1b[0m\r\n"
+	if got, want := loginFailureDetail(out), "OAuth error: invalid_grant"; got != want {
+		t.Fatalf("loginFailureDetail = %q, want %q", got, want)
+	}
+}
+
 // Cancel + retry must work immediately. The heartbeat redelivers `start` until the runner's
 // first report lands, so a repeat of the SAME attempt has to be a no-op — but a NEW attempt is
 // the user asking again, and must preempt. Getting this wrong locked the user out for the full

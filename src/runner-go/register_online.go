@@ -26,7 +26,8 @@ type runnerService struct {
 	// logFrom is logPath's size when the agent was loaded: the file outlives every runner that wrote
 	// to it, and what this one logs starts there.
 	logFrom int64
-	how     string // how it comes back: "runs at boot" or "starts at login"
+	how     string   // how it comes back: "runs at boot", "starts at login" or that it does not
+	notes   []string // what its owner has to know about that, when anything
 }
 
 // What register waits for. onlineWait bounds it: past it, a runner still not heard from is reported,
