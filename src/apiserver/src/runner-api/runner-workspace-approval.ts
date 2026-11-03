@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { toUuid } from '@orbit/shared';
 import { createHash, randomBytes } from 'node:crypto';
 
+import { orchestrationEnabled } from '../common/orchestration-switch';
 import type { PrismaService } from '../prisma/prisma.service';
 import { canonicalJson } from '../projects/canonical-json';
 import {
@@ -85,7 +86,7 @@ export interface WorkspaceWriteCard {
   writeDigest: string;
 }
 
-type Db = Pick<PrismaService, 'workspace' | 'runner' | 'approval'>;
+type Db = Pick<PrismaService, 'workspace' | 'runner' | 'approval' | 'user'>;
 
 /** Whether a write names a field that needs the owner's card. */
 export function namesWorkspaceCardField(write: OrchestratorWorkspaceInput): boolean {
@@ -99,10 +100,10 @@ export function workspaceWriteDigest(salt: string, workspaceId: string | null, w
 
 /**
  * The input a workspace write card is stored with, read from the write as the route will read it. A
- * write that is refused whatever the answer — another account's workspace or runner — files no card at
- * all, and neither does one that needs none: only this writes a card under these names, so what a card
- * under them says, and the digest it holds, is never the asker's. `agentId` is the id the asker names,
- * on an update.
+ * write that is refused whatever the answer — another account's workspace or runner, an account that
+ * has turned session orchestration off since this session started — files no card at all, and neither
+ * does one that needs none: only this writes a card under these names, so what a card under them says,
+ * and the digest it holds, is never the asker's. `agentId` is the id the asker names, on an update.
  */
 export async function workspaceWriteCardInput(
   prisma: Db,
@@ -114,6 +115,9 @@ export async function workspaceWriteCardInput(
   if (!namesWorkspaceCardField(write)) {
     throw new BadRequestException('this write needs no confirmation card: send it without one');
   }
+  // In the authorizer's words, which refuses the write itself for the same reason.
+  const owner = await prisma.user.findUniqueOrThrow({ where: { id: caller.ownerId }, select: { preferences: true } });
+  if (!orchestrationEnabled(owner)) throw new ForbiddenException('orchestration is not enabled for this session');
   const runner = (id: string) => prisma.runner.findFirst({
     where: { id, ownerId: caller.ownerId },
     select: { id: true, name: true, displayName: true },

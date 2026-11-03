@@ -242,6 +242,11 @@ test('a session writes what decides a workspace\'s next session only on the owne
     assert.equal((await card('orbit_agent_update', { agentId: target, env: { A: 1 } })).status, 400, 'a malformed value');
     assert.equal((await card('orbit_agent_update', { agentId: target, name: 'renamed' })).status, 400, 'a rename asks nobody');
     assert.equal((await card('orbit_agent_create', { name: 'x', description: 'y' })).status, 400, 'nor a bare create');
+    // Read live, as the routes read it: a session started before the owner turned it off is still running.
+    await db.user.update({ where: { id: alice.id }, data: { preferences: { enableOrchestration: false } } });
+    assert.equal((await card('orbit_agent_update', { agentId: target, env: { A: 'b' } })).status, 403, 'session orchestration off');
+    assert.equal((await card('orbit_agent_create', { name: 'x', env: { A: 'b' } })).status, 403, 'session orchestration off');
+    await db.user.update({ where: { id: alice.id }, data: { preferences: {} } });
     assert.equal(await db.approval.count({ where: { sessionId: { in: [asker.sessionId, stranger.sessionId] } } }), before);
   });
 
