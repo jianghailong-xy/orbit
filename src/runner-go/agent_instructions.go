@@ -318,8 +318,9 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 				rules = append(rules, "Bash("+command+" session "+action+" *)")
 			}
 			// The agent verbs ride the same gate and have no headless form: no service-token scope
-			// names them, so they are advertised only where a live session has the grant. A delete is
-			// put on a confirmation card in front of the owner first, and the server refuses it without one.
+			// names them, so they are advertised only where a live session has the grant. A delete, and a
+			// write of what decides the agent's next session, are put on a confirmation card in front of the
+			// owner first, and the server refuses them without one.
 			for _, action := range []string{"list", "create", "update", "delete"} {
 				rules = append(rules, "Bash("+command+" agent "+action+" *)")
 			}

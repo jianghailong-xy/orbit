@@ -291,6 +291,8 @@ test('the engines a run may move to are the owner\'s to list: the user API write
         workspaces,
         { assert: async () => 'orchestrating-session' } as unknown as RunnerOrchestrationAuthorizer,
         quiet(),
+        // None of these writes names a field the owner's card covers, so nothing reads this.
+        {} as never,
       );
       const spawned = await agents.createWorkspace(runner, 'orchestrating-session', 'credential', {
         name: 'agent-made', modelRoutingProviders: ['codex'],
