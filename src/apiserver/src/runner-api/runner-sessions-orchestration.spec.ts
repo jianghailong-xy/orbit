@@ -113,6 +113,8 @@ function makeController(orchestrationEnabled: boolean) {
     {},
     {
       get: (_target, prop: string) => async () => {
+        // Asked at every door that acts on another session; its own spec is session-reach.pg.spec.ts.
+        if (prop === 'assertMayReach') return { narrower: false };
         serviceCalls.push(prop);
         return { route: prop };
       },

@@ -86,7 +86,7 @@ suite('outside an Automatic project a session names why only the owner can settl
       'TRUNCATE "task", "session", "project", "workspace", "runner", "user" RESTART IDENTITY CASCADE',
     );
 
-    const service = new TasksService(prisma as never, {} as never, {
+    const service = new TasksService(prisma as never, { assertMayMoveRuns: async () => undefined } as never, {
       publishTaskChanged: () => undefined,
       publishForUser: () => undefined,
     } as never);

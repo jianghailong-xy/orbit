@@ -102,6 +102,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { ProjectsService } from './projects.service';
 import { TaskDispatchRefusalProducer } from './task-dispatch-refusal.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
+import { TaskRunStoppedProducer } from './task-run-stopped.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -164,6 +165,7 @@ function connect(url: string): Stack {
   const producer = new CompletionEvidenceProducer(prisma, convergence, deliveries);
   const provided = new Map<unknown, unknown>([
     [PrismaService, prisma],
+    [TaskRunStoppedProducer, new TaskRunStoppedProducer(prisma, convergence, deliveries)],
     [ProjectAcceptanceService, new ProjectAcceptanceService(prisma)],
     [SessionsService, sessions],
     [RealtimeService, realtime],
