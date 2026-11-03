@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -83,6 +85,27 @@ var integrationFetchLockPause = func(d time.Duration) { time.Sleep(d) }
 // The most check output a result carries, per §2.1. The control plane clips it again; this keeps a
 // runaway command from putting a gigabyte on the wire in the first place.
 const integrationOutputTail = 16 * 1024
+
+// What a failed check adds to the end of its tail and its log: the lines of its output that name the
+// failure, whatever else it printed. `go test ./...` prints nothing for a package that passes and
+// everything for one that fails, so a `--- FAIL:` line can be megabytes from the end, long gone from
+// the tail above and from the end of the log the control plane keeps.
+const (
+	// The section's heading. English, like every word a person or an agent reads.
+	integrationFailureHeading = "Failure lines from the whole output:"
+	// The first this many failure lines are held; the rest are only counted.
+	integrationFailureLinesMax = 64
+	// The most the section comes to, its heading and its note of what it left out included.
+	integrationFailureSectionMax = 8 * 1024
+	// The room that note is left, which is enough for any count.
+	integrationFailureNoteRoom = 64
+	// How long one line of the section may be, in runes.
+	integrationFailureLineRunes = 512
+	// How much of one line is looked at and held, in bytes: a line can be as long as the output.
+	// That many runes of any text, so the clip is always what ends a long line, and a secret that
+	// crosses where it cuts still reaches the redactor whole (integrationFailureScan.section).
+	integrationFailureScanBytes = 4 * integrationFailureLineRunes
+)
 
 // integrationLocks serialises jobs on this machine by repository root and target ref. The database
 // serialises them across machines (J1's partial unique index over RUNNING rows); this is the local
@@ -1298,6 +1321,7 @@ func runIntegrationCheckTracked(stop context.Context, scratch string, spec Integ
 	}
 	if errors.Is(context.Cause(ctx), context.DeadlineExceeded) {
 		result.TimedOut = true
+		addFailureLines(&result, output, index, progress)
 		return result, nil
 	}
 	var exitErr *exec.ExitError
@@ -1317,7 +1341,37 @@ func runIntegrationCheckTracked(stop context.Context, scratch string, spec Integ
 		// carries the reason.
 		result.OutputTail = tailOf(result.OutputTail+"\n"+runErr.Error(), integrationOutputTail)
 	}
+	addFailureLines(&result, output, index, progress)
 	return result, nil
+}
+
+// addFailureLines ends a failed check's tail and log with the lines of its output that name the
+// failure. It reads the result the way the job does (no exit code, or not the declared one) and
+// changes only the text, so a check that passed gets nothing however much failure it printed.
+//
+// The tail stays inside the 16 KB a result carries: the output's own oldest bytes make room. The
+// redactor is the log's, so the section reads the same in both, and it is applied here because the
+// section reaches lines the tail would have dropped. The command's own upload has closed by now, so
+// the section goes up as a second write on the same check, whose seq numbering carries on (attach).
+func addFailureLines(result *IntegrationCheckResult, output *integrationOutput, index int, progress *integrationProgress) {
+	if result.ExitCode != nil && *result.ExitCode == result.ExpectedExitCode {
+		return
+	}
+	redactor := newIntegrationOutputRedactor()
+	if progress != nil && progress.uploads != nil {
+		redactor = progress.uploads.redact
+	}
+	section := output.failureSection(redactor)
+	if section == "" {
+		return
+	}
+	result.OutputTail = tailOf(result.OutputTail, integrationOutputTail-len(section)) + section
+	if progress != nil {
+		out := newIntegrationOutput()
+		progress.uploadOutput(out, IntegrationJobOutputCheck{Name: result.Name, Index: index})
+		_, _ = out.Write([]byte(section))
+		out.closeSink()
+	}
 }
 
 // integrationOutput is one command's combined stdout and stderr, kept as it is written: the last
@@ -1334,6 +1388,8 @@ type integrationOutput struct {
 	bytes     int64
 	started   time.Time
 	lastWrite time.Time
+	// failures finds what names a failure in all of the output, which the tail alone can lose.
+	failures integrationFailureScan
 	// sink is where the same writes are streamed for upload (§2.2 J-T4's output route); nil on a
 	// legacy claim and whenever no uploader was attached. Writing to it is what the tail buffer
 	// does not do — it keeps every byte, the tail keeps the last 16 KB.
@@ -1381,6 +1437,7 @@ func (o *integrationOutput) Write(p []byte) (int, error) {
 	if len(o.tail) > 2*integrationOutputTail {
 		o.tail = append([]byte(nil), o.tail[len(o.tail)-integrationOutputTail:]...)
 	}
+	o.failures.write(p)
 	o.mu.Unlock()
 	// The uploader copies what it takes; the slice is the caller's and is reused.
 	o.sinkMu.Lock()
@@ -1420,6 +1477,106 @@ func (o *integrationOutput) text() string {
 		return string(o.tail)
 	}
 	return string(o.tail[len(o.tail)-integrationOutputTail:])
+}
+
+// failureSection is what this output's failure lines come to (integrationFailureScan.section).
+func (o *integrationOutput) failureSection(redactor *integrationOutputRedactor) string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.failures.section(redactor)
+}
+
+// integrationFailureLine is a line that names a failure, in what the test runners a project's checks
+// use print. Each is the first thing on its line, indented or not (a Go subtest, a nested vitest or
+// node:test test), because anywhere further along it is somebody quoting one:
+//
+//   - Go: `--- FAIL: TestName (0.00s)`, `panic: …`, the runtime's `fatal error: …`, and a package's
+//     `FAIL<tab>name<tab>1.2s` or `FAIL<tab>name [build failed]`, but not the bare `FAIL` that ends a
+//     run. A test binary past its timeout prints no `--- FAIL:` at all: the only place it names a test
+//     is under its panic, in `<tab>running tests:` and `<tab><tab>TestName (9m59s)`.
+//   - vitest: ` FAIL  file > suite > test` and `× test 3ms`.
+//   - node:test: `✖ test (1.2ms)`, which is what its default reporter prints on Node 26 when stdout is
+//     not a terminal, and `not ok 2 - test` with --test-reporter=tap, as any TAP producer does.
+var integrationFailureLine = regexp.MustCompile(`^\s*(?:--- FAIL: |panic: |fatal error: |FAIL\s+\S|not ok\b|[×✖] )` +
+	`|^\t(?:running tests:$|\t(?:Test|Fuzz)\S* \(\S+\)$)`)
+
+// integrationTerminalEscape is the colour FORCE_COLOR paints these lines with, which would hide them
+// from integrationFailureLine and tell a reader nothing. One the scan's bound cut short goes too.
+var integrationTerminalEscape = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*(?:[@-~]|$)`)
+
+// integrationFailureScan finds the failure lines as a command's output goes by. It holds the line
+// being written and the lines it kept, each up to integrationFailureScanBytes, and nothing else, so
+// what it holds has nothing to do with how much the command prints.
+type integrationFailureScan struct {
+	line    []byte
+	kept    []string
+	omitted int
+}
+
+// write takes what the command printed, in whatever pieces the pipe handed it over. A carriage return
+// ends a line as a newline does: a progress bar rewrites its line in place, and what follows it is
+// not part of it.
+func (s *integrationFailureScan) write(p []byte) {
+	for len(p) > 0 {
+		end := bytes.IndexAny(p, "\r\n")
+		piece := p
+		if end >= 0 {
+			piece = p[:end]
+		}
+		room := integrationFailureScanBytes - len(s.line)
+		s.line = append(s.line, piece[:min(room, len(piece))]...)
+		if end < 0 {
+			return
+		}
+		s.endLine()
+		p = p[end+1:]
+	}
+}
+
+func (s *integrationFailureScan) endLine() {
+	line := s.line
+	s.line = s.line[:0]
+	if bytes.IndexByte(line, 0x1b) >= 0 {
+		line = integrationTerminalEscape.ReplaceAll(line, nil)
+	}
+	if !integrationFailureLine.Match(line) {
+		return
+	}
+	if len(s.kept) == integrationFailureLinesMax {
+		s.omitted++
+		return
+	}
+	s.kept = append(s.kept, string(line))
+}
+
+// section is the failure lines as they end a tail or a log, on lines of their own whatever the output
+// ended in, or nothing when no line named a failure. It stops at the first line that does not fit,
+// so what it shows is always the first of them in the order they were printed.
+//
+// NUL and bytes that are not UTF-8 go first: PostgreSQL's text holds no NUL, so a chunk carrying one
+// would be refused, and these are the lines that must not be lost. Each line is redacted before it is
+// clipped, or the front half of a secret would be left for no rule to recognise.
+func (s *integrationFailureScan) section(redactor *integrationOutputRedactor) string {
+	s.endLine() // A last line the command never ended.
+	if len(s.kept) == 0 {
+		return ""
+	}
+	var out strings.Builder
+	out.WriteString("\n" + integrationFailureHeading)
+	omitted := s.omitted
+	for i, line := range s.kept {
+		line = strings.ToValidUTF8(strings.ReplaceAll(line, "\x00", ""), "")
+		line = clip(redactor.redact(line), integrationFailureLineRunes)
+		if out.Len()+1+len(line) > integrationFailureSectionMax-integrationFailureNoteRoom {
+			omitted += len(s.kept) - i
+			break
+		}
+		out.WriteString("\n" + line)
+	}
+	if omitted > 0 {
+		fmt.Fprintf(&out, "\nMore failure lines omitted: %d", omitted)
+	}
+	return out.String()
 }
 
 // runIntegrationCommand runs one command with its output tracked as it is written, and answers what

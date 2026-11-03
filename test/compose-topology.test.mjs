@@ -864,8 +864,10 @@ test('(r) the sidecar copies the files after the archive, beside its target, wit
   const { status, log, rsyncCalls } = backupRound({ target: SYNC_TARGET, files: ['ab', 'tmp'] });
   assert.equal(status, 7, log);
   assert.doesNotMatch(log, /ERROR/);
-  assert.equal(rsyncCalls.length, 2, log);
-  const [archive, files] = rsyncCalls;
+  assert.equal(rsyncCalls.length, 3, log);
+  const [wal, archive, files] = rsyncCalls;
+  assert.ok(wal.endsWith(` ${SYNC_TARGET}/`), wal);
+  assert.doesNotMatch(wal, /--delete/);
   assert.ok(archive.endsWith(` ${SYNC_TARGET}/`), archive);
   assert.match(archive, /--delete/);
   assert.ok(files.endsWith(` ${FILES_SYNC_TARGET}/`), files);
@@ -873,7 +875,7 @@ test('(r) the sidecar copies the files after the archive, beside its target, wit
   assert.match(files, / --exclude \/tmp\/ /);
   // A target written with its trailing slash names the same two directories.
   const slashed = backupRound({ target: `${SYNC_TARGET}/`, files: ['ab'] });
-  assert.ok(slashed.rsyncCalls[1].endsWith(` ${FILES_SYNC_TARGET}/`), slashed.rsyncCalls[1]);
+  assert.ok(slashed.rsyncCalls[2].endsWith(` ${FILES_SYNC_TARGET}/`), slashed.rsyncCalls[2]);
 });
 
 test('(r) a files directory with nothing but tmp/ has nothing to copy, as with ORBIT_FILES_BACKEND=s3, and that is no error', () => {
@@ -881,15 +883,15 @@ test('(r) a files directory with nothing but tmp/ has nothing to copy, as with O
     const { status, log, rsyncCalls } = backupRound({ target: SYNC_TARGET, files });
     assert.equal(status, 7, log);
     assert.doesNotMatch(log, /ERROR/);
-    assert.equal(rsyncCalls.length, 1, log);
-    assert.ok(rsyncCalls[0].endsWith(` ${SYNC_TARGET}/`), rsyncCalls[0]);
+    assert.equal(rsyncCalls.length, 2, log);
+    assert.ok(rsyncCalls.every((call) => call.endsWith(` ${SYNC_TARGET}/`)), rsyncCalls.join('\n'));
   }
 });
 
 test('(r) a files directory that is not there is still tried, so that a container missing its mount says so', () => {
   const { status, log, rsyncCalls } = backupRound({ target: SYNC_TARGET, files: null });
   assert.equal(status, 7, log);
-  assert.equal(rsyncCalls.length, 2, log);
+  assert.equal(rsyncCalls.length, 3, log);
 });
 
 test('(r) the mirror refuses an archive that cannot be the real one, so that --delete cannot empty its target', () => {
