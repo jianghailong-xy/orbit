@@ -269,10 +269,79 @@ public enum Approvals {
         return rules
     }
 
+    /// A heredoc whose operator has been read. Its delimiter is compared scalar by scalar, as a shell
+    /// compares bytes: `String` equality would also take canonically equivalent text for the same.
+    private struct Heredoc {
+        let delimiter: [Unicode.Scalar]
+        let stripTabs: Bool
+        let quoted: Bool
+    }
+
+    /// The heredoc whose `<<` or `<<-` is at `start`, and the index just past its word, or nil when no
+    /// word follows. The delimiter is the word with its quoting removed. A port of `readHeredoc` in
+    /// `@orbit/shared`.
+    private static func readHeredoc(_ chars: [Unicode.Scalar], at start: Int) -> (heredoc: Heredoc, end: Int)? {
+        var i = start + 2
+        let stripTabs = i < chars.count && chars[i] == "-"
+        if stripTabs { i += 1 }
+        while i < chars.count, chars[i] == " " || chars[i] == "\t" { i += 1 }
+        let wordStart = i
+        var delimiter: [Unicode.Scalar] = []
+        var quoted = false
+        while i < chars.count, !" \t\n;&|()<>".unicodeScalars.contains(chars[i]) {
+            let c = chars[i]
+            i += 1
+            if c == "'" || c == "\"" {
+                let end = chars[i...].firstIndex(of: c) ?? chars.count
+                delimiter += chars[i..<end]
+                i = end + 1
+                quoted = true
+            } else if c == "\\" {
+                if i < chars.count { delimiter.append(chars[i]) }
+                i += 1
+                quoted = true
+            } else {
+                delimiter.append(c)
+            }
+        }
+        return i == wordStart ? nil : (Heredoc(delimiter: delimiter, stripTabs: stripTabs, quoted: quoted), i)
+    }
+
+    /// Where the bodies of these heredocs end, reading from the line at `start`: just past the last
+    /// one's terminator, or at the end of the command when a terminator never comes. Unless the
+    /// delimiter is quoted, a backslash-newline joins two lines, and shells differ on whether what it
+    /// joins can terminate, so nothing past such a line is read. A port of `endOfHeredocBodies` in
+    /// `@orbit/shared`.
+    private static func endOfHeredocBodies(_ chars: [Unicode.Scalar], from start: Int, _ heredocs: [Heredoc]) -> Int {
+        var i = start
+        for heredoc in heredocs {
+            func terminates(_ text: ArraySlice<Unicode.Scalar>) -> Bool {
+                (heredoc.stripTabs ? text.drop { $0 == "\t" } : text).elementsEqual(heredoc.delimiter)
+            }
+            while true {
+                if i >= chars.count { return chars.count }
+                let lineStart = i
+                while i < chars.count, chars[i] != "\n" {
+                    i += !heredoc.quoted && chars[i] == "\\" ? 2 : 1
+                }
+                let line = chars[lineStart..<min(i, chars.count)]
+                i += 1
+                if terminates(line) { break }
+                var joined: [Unicode.Scalar] = []
+                for c in line {
+                    if c == "\n", joined.last == "\\" { joined.removeLast() } else { joined.append(c) }
+                }
+                if terminates(joined[...]) { return chars.count }
+            }
+        }
+        return i
+    }
+
     /// A shell line's top-level sub-commands, split at unquoted `;` `&&` `||` `|` and newlines.
     /// Quote- and backslash-aware, so an operator inside a quoted string stays literal (the `|` in
     /// `grep "a\|b"`): nothing escapes inside single quotes, a backslash escapes in double quotes and
-    /// outside them, and a `#` where a word could start runs to the end of the line and is dropped.
+    /// outside them, a `#` where a word could start runs to the end of the line and is dropped, and so
+    /// is a heredoc's body, from the next newline to its terminator.
     /// Best-effort, not a full shell parser. A port of `bashSegments` in `@orbit/shared`, walked by
     /// scalar like the web walks by code unit — a `\r\n` is one `Character`, and the newline in it
     /// must still split.
@@ -283,11 +352,14 @@ public enum Approvals {
         // The quote that is open: `'` and `"` as themselves, `$` for ANSI-C `$'…'`, which closes on `'`.
         var quote: Unicode.Scalar?
         var atWordStart = true
+        var heredocs: [Heredoc] = []
+        var inArithmetic = false
         var i = 0
         func endSegment() {
             out.append(String(cur))
             cur = String.UnicodeScalarView()
             atWordStart = true
+            inArithmetic = false
         }
         while i < chars.count {
             let c = chars[i]
@@ -336,9 +408,28 @@ public enum Approvals {
                 while i < chars.count, chars[i] != "\n" { i += 1 }
                 continue
             }
+            if c == "<", i + 1 < chars.count, chars[i + 1] == "<", !inArithmetic {
+                if i + 2 < chars.count, chars[i + 2] == "<" {
+                    // A here-string: its text is the word after it, on this line.
+                    cur.append(contentsOf: chars[i...(i + 2)])
+                    atWordStart = true
+                    i += 3
+                    continue
+                }
+                if let (heredoc, end) = readHeredoc(chars, at: i) {
+                    heredocs.append(heredoc)
+                    cur.append(contentsOf: chars[i..<min(end, chars.count)])
+                    i = end
+                    continue
+                }
+            }
             if c == ";" || c == "\n" {
                 endSegment()
                 i += 1
+                if c == "\n", !heredocs.isEmpty {
+                    i = endOfHeredocBodies(chars, from: i, heredocs)
+                    heredocs = []
+                }
                 continue
             }
             if c == "&" || c == "|", i + 1 < chars.count, chars[i + 1] == c {
@@ -351,6 +442,10 @@ public enum Approvals {
                 i += 1
                 continue
             }
+            // Between `$((` and `))` a `<<` is a shift. A bare `((` is arithmetic only in some shells,
+            // and a plain `sh` takes the `<<` in it for a heredoc.
+            if c == "(", i > 1, chars[i - 1] == "(", chars[i - 2] == "$" { inArithmetic = true }
+            if c == ")", i > 0, chars[i - 1] == ")" { inArithmetic = false }
             cur.append(c)
             atWordStart = c == " " || c == "\t" || c == "&" || c == "(" || c == ")" || c == "<" || c == ">"
             i += 1

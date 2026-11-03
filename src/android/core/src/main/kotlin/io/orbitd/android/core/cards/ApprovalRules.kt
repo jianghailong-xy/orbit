@@ -29,15 +29,66 @@ object ApprovalRules {
      * server itself, predates the choice and would only create the task. */
     fun offersCreateAndStart(tool: String, input: JsonObject): Boolean = tool == "orbit_task_create" &&
         input.flag("acceptsStartAfterCreate") && input.obj("preview")?.number("needsManualStart") == 1
+    private class Heredoc(val delimiter: String, val stripTabs: Boolean, val quoted: Boolean)
+    /** The heredoc whose `<<` or `<<-` is at [start] and the index just past its word, or null when no word follows. */
+    private fun readHeredoc(command: String, start: Int): Pair<Heredoc, Int>? {
+        var i = start + 2
+        val stripTabs = command.getOrNull(i) == '-'
+        if (stripTabs) i++
+        while (command.getOrNull(i) == ' ' || command.getOrNull(i) == '\t') i++
+        val wordStart = i
+        val delimiter = StringBuilder()
+        var quoted = false
+        while (i < command.length && command[i] !in " \t\n;&|()<>") {
+            val c = command[i++]
+            when (c) {
+                '\'', '"' -> {
+                    val end = command.indexOf(c, i).let { if (it < 0) command.length else it }
+                    delimiter.append(command, i, end)
+                    i = end + 1
+                    quoted = true
+                }
+                '\\' -> { command.getOrNull(i++)?.let { delimiter.append(it) }; quoted = true }
+                else -> delimiter.append(c)
+            }
+        }
+        return if (i == wordStart) null else Heredoc(delimiter.toString(), stripTabs, quoted) to i
+    }
+    /** Where the bodies of these heredocs end, reading from the line at [start]: just past the last one's terminator, or at the
+     * end of the command when a terminator never comes. Unless the delimiter is quoted, a backslash-newline joins two lines,
+     * and shells differ on whether what it joins can terminate, so nothing past such a line is read. */
+    private fun endOfHeredocBodies(command: String, start: Int, heredocs: List<Heredoc>): Int {
+        var i = start
+        for (heredoc in heredocs) {
+            fun terminates(text: String) = (if (heredoc.stripTabs) text.trimStart('\t') else text) == heredoc.delimiter
+            while (true) {
+                if (i >= command.length) return command.length
+                val lineStart = i
+                while (i < command.length && command[i] != '\n') {
+                    i += if (!heredoc.quoted && command[i] == '\\') 2 else 1
+                }
+                val line = command.substring(lineStart, minOf(i, command.length))
+                i++
+                if (terminates(line)) break
+                if (terminates(line.replace("\\\n", ""))) return command.length
+            }
+        }
+        return i
+    }
     fun bash(command: String): List<PermissionRule> {
         val segments = mutableListOf<String>()
         val part = StringBuilder()
         // The quote that is open: ' and " as themselves, $ for ANSI-C $'...', which closes on '.
         var quote: Char? = null
         var wordStart = true
+        val heredocs = mutableListOf<Heredoc>()
+        var inArithmetic = false
         var i = 0
         while (i < command.length) {
             val c = command[i++]
+            val angles = quote == null && c == '<' && command.getOrNull(i) == '<' && !inArithmetic
+            val hereString = angles && command.getOrNull(i + 1) == '<'
+            val heredoc = if (angles && !hereString) readHeredoc(command, i - 1) else null
             when {
                 quote == '\'' -> { part.append(c); if (c == '\'') quote = null }
                 quote != null && c == '\\' && i < command.length -> { part.append(c); part.append(command[i++]) }
@@ -51,11 +102,25 @@ object ApprovalRules {
                 c == '\'' || c == '"' -> { quote = c; part.append(c); wordStart = false }
                 c == '$' && command.getOrNull(i) == '\'' -> { quote = '$'; part.append(c); part.append(command[i++]); wordStart = false }
                 c == '#' && wordStart -> while (i < command.length && command[i] != '\n') i++
+                // A here-string: its text is the word after it, on this line.
+                hereString -> { part.append("<<<"); i += 2; wordStart = true }
+                heredoc != null -> {
+                    val (read, end) = heredoc
+                    heredocs += read
+                    part.append(command, i - 1, minOf(end, command.length))
+                    i = end
+                }
                 c == ';' || c == '\n' || c == '|' || (c == '&' && command.getOrNull(i) == '&') -> {
                     if ((c == '&' || c == '|') && command.getOrNull(i) == c) i++
-                    segments += part.toString(); part.clear(); wordStart = true
+                    segments += part.toString(); part.clear(); wordStart = true; inArithmetic = false
+                    if (c == '\n' && heredocs.isNotEmpty()) { i = endOfHeredocBodies(command, i, heredocs); heredocs.clear() }
                 }
-                else -> { part.append(c); wordStart = c in " \t&()<>" }
+                else -> {
+                    // Between $(( and )) a << is a shift. A bare (( is arithmetic only in some shells, and a plain sh takes the << in it for a heredoc.
+                    if (c == '(' && command.getOrNull(i - 2) == '(' && command.getOrNull(i - 3) == '$') inArithmetic = true
+                    if (c == ')' && command.getOrNull(i - 2) == ')') inArithmetic = false
+                    part.append(c); wordStart = c in " \t&()<>"
+                }
             }
         }
         segments += part.toString()

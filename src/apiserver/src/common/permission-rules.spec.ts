@@ -306,6 +306,26 @@ test('a rule covers only what can be read for certain: the shapes that reach a p
   }
 });
 
+test('a heredoc reaches a person whatever the rules name, though its body is no sub-command', () => {
+  const namesEveryLine = ['cat', 'ls', 'touch', 'sh', 'EOF', 'ONE', 'TWO'].map((prefix) => ({
+    toolName: 'Bash',
+    ruleContent: `${prefix}:*`,
+  }));
+  for (const command of [
+    'cat <<EOF\nls\nEOF',
+    "cat <<'EOF'\nls\nEOF",
+    'cat <<-EOF\n\tls\n\tEOF',
+    'cat <<ONE <<TWO\nls\nONE\nls\nTWO',
+    'ls; cat <<EOF\nls\nEOF\nls',
+    // An unquoted body is expanded, and a program can run any body it is handed.
+    'cat <<EOF\n$(touch x)\nEOF',
+    "sh <<'EOF'\ntouch x\nEOF",
+    'cat <<EOF\nls\nEOF\ntouch x',
+  ]) {
+    assert.deepEqual(coveredEverywhere(bash(command), namesEveryLine), [false, false, false, false, false], command);
+  }
+});
+
 test('a rule still covers the ordinary ways of writing what it names', () => {
   const allowed = [
     { toolName: 'Bash', ruleContent: 'ls:*' },
