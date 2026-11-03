@@ -677,6 +677,7 @@ func TestResumableSweepKeepsADirectoryThatIsARepositoryOfItsOwn(t *testing.T) {
 	mustGit(t, origin, "init", "-q", "--bare")
 	mustGit(t, path, "remote", "add", "origin", origin)
 	mustGit(t, path, "push", "-q", "origin", "orbit/sess-repo")
+	mustGit(t, path, "update-ref", baseRefName("sess-repo"), "HEAD")
 	ageCheckout(t, path, 20)
 	f.set(func() { f.answers["sess-repo"] = "resumable" })
 
@@ -822,6 +823,9 @@ func TestResumableSweepTakesNothingWhereItCannotSeeProcesses(t *testing.T) {
 	t.Run("at the first look", func(t *testing.T) {
 		f := newResumableFixture(t)
 		path := f.checkout(t, "sess-resumable")
+		f.set(func() {
+			f.atSecondLook["sess-resumable"] = func() { t.Error("the first look went on without knowing") }
+		})
 		blind(t)
 
 		sweepOnFullDisk(f)
@@ -1220,6 +1224,8 @@ func TestARestartMakesEveryOtherMissingCheckoutAsItAlwaysHas(t *testing.T) {
 	cases := map[string]func(t *testing.T, f *resumableFixture, job *ClaimedSession){
 		"its checkout is on disk": func(t *testing.T, f *resumableFixture, job *ClaimedSession) {
 			f.checkout(t, job.SessionID)
+			// As a sweep leaves it when it stops between marking the checkout and moving it.
+			mustGit(t, f.repo, "update-ref", reclaimedRefName(job.SessionID), job.Branch)
 		},
 		"nothing kept a base ref for it": func(t *testing.T, f *resumableFixture, job *ClaimedSession) {
 			mustGit(t, f.repo, "branch", job.Branch)
