@@ -144,6 +144,11 @@ final class EvidenceFilesWiringTests: XCTestCase {
         XCTAssertTrue(tile.contains("if picture { onView(file) } else { onSave(file) }"))
     }
 
+    /// A row's tiles start level, though a picture has no caption and a file beside it does.
+    func testARowsTilesStartLevel() throws {
+        XCTAssertTrue(try source(Self.viewsPath).contains("GridItem(.adaptive(minimum: 104), spacing: 8, alignment: .top)"))
+    }
+
     /// The viewer pages the pictures, and nothing else reaches it.
     func testTheViewerPagesOnlyPictures() throws {
         let views = try source(Self.viewsPath)

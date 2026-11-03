@@ -444,7 +444,8 @@ struct EvidenceFilesPage: View {
     @State private var pinFailed: String?
 
     /// Three tiles across a phone at any width it comes in, as many as fit in a window.
-    private static let columns = [GridItem(.adaptive(minimum: 104), spacing: 8)]
+    /// `.top`: a pinned picture has no caption, and beside a file that has one it would otherwise sit halfway down the row.
+    private static let columns = [GridItem(.adaptive(minimum: 104), spacing: 8, alignment: .top)]
 
     private var read: EvidenceFileRead {
         console.evidenceFileRead(taskID: target.taskID, revision: target.revision)
