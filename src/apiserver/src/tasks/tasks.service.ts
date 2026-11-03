@@ -124,6 +124,7 @@ import {
   type HandoffDeclaration,
 } from '../projects/project-handoff.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
+import type { RunStop } from '../projects/task-run-stopped.producer';
 import { storeDerivedProjectStatus } from '../projects/project-done-derived';
 import { completionEvidenceRevisedFact } from '../projects/completion-input';
 import { criterionStandingRefusal, quotedCriterion } from './task-evidence-decision';
@@ -2377,6 +2378,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!this.completionInputs) return;
     await this.completionInputs.routeDispatchRefusals([taskId]).catch((e) =>
       this.logger.warn(`dispatch-refusal delivery failed: ${e?.message ?? e}`),
+    );
+  }
+
+  /**
+   * A turn of a task's run has ended, committed: if that was the last thing the run had to do and
+   * its task is still owed something, the project's coordinator is told
+   * (`projects/task-run-stopped.producer.ts`). Logged rather than raised, like its siblings: the
+   * turn's completion is already committed, and nothing about it depends on this delivery.
+   */
+  async deliverRunStoppedAfterCommit(sessionId: string, stop: RunStop): Promise<void> {
+    if (!this.completionInputs) return;
+    await this.completionInputs.routeStoppedRun(sessionId, stop).catch((e) =>
+      this.logger.warn(`stopped-run delivery failed: ${e?.message ?? e}`),
     );
   }
 

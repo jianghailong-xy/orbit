@@ -28,6 +28,7 @@ public struct CoordinatorDelivery: Sendable, Equatable, Codable {
         case dependentReady = "DEPENDENT_READY"
         case taskDispatchRefused = "TASK_DISPATCH_REFUSED"
         case projectBlockerRaised = "PROJECT_BLOCKER_RAISED"
+        case taskRunStopped = "TASK_RUN_STOPPED"
         case criterionUnlanded = "CRITERION_UNLANDED"
         case acceptanceLanded = "ACCEPTANCE_LANDED"
         case acceptanceLandedHeld = "ACCEPTANCE_LANDED_HELD"
@@ -50,8 +51,8 @@ public struct CoordinatorDelivery: Sendable, Equatable, Codable {
     }
 
     public let kind: Kind
-    /// The task the fact is about, for the four facts that name one (evidence, a task that can start,
-    /// a refused start, a blocker). Nil for the rest.
+    /// The task the fact is about, for the five facts that name one (evidence, a task that can start,
+    /// a refused start, a blocker, a stopped run). Nil for the rest.
     public let task: TaskRef?
     /// The evidence revision the sentence names. Nil for every kind but the two evidence ones.
     public let revision: Int?
@@ -188,6 +189,7 @@ public enum CoordinatorDeliveryCard {
         case .dependentReady: return "Can start now: {task}"
         case .taskDispatchRefused: return "Could not start: {task}"
         case .projectBlockerRaised: return "Blocker raised: {task}"
+        case .taskRunStopped: return "Run stopped: {task}"
         case .criterionUnlanded: return "Work not on main yet: {count}"
         case .acceptanceLanded: return "{count} landed"
         case .acceptanceLandedHeld: return "{count} landed, Done held back"

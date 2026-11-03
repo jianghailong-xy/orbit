@@ -2648,7 +2648,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `attachment`, which is not a preserved relation. No `task`, `session`, `project` or `project_acceptance_*` object
       // nor any of the six preserved triggers/functions is named, so it is not another writer of the DONE fence. No
       // INSERT, UPDATE or DELETE.
-      '0465_attachment_test_report_summary'],
+      '0465_attachment_test_report_summary',
+      // 0467 widens `project_coordinator_wake_event_chk` by `TASK_RUN_STOPPED` and changes nothing else: no row is
+      // written, and no `task`, `session`, ledger table or preserved trigger/function is named, so it is not another
+      // writer of the DONE fence.
+      '0467_task_run_stopped_wake'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

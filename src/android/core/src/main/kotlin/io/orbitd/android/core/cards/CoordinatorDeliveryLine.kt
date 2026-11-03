@@ -45,7 +45,7 @@ object CoordinatorDeliveryLine {
     /** `COORDINATOR_DELIVERY_KINDS`, in its order: one per sentence a line can say. */
     val kinds = listOf(
         "EVIDENCE_SUBMITTED", "EVIDENCE_MOVED_IN", "DEPENDENT_READY", "TASK_DISPATCH_REFUSED", "PROJECT_BLOCKER_RAISED",
-        "CRITERION_UNLANDED", "ACCEPTANCE_LANDED", "ACCEPTANCE_LANDED_HELD", "ACCEPTANCE_LANDED_DONE", "LOOKS_FINISHED",
+        "TASK_RUN_STOPPED", "CRITERION_UNLANDED", "ACCEPTANCE_LANDED", "ACCEPTANCE_LANDED_HELD", "ACCEPTANCE_LANDED_DONE", "LOOKS_FINISHED",
         "SETTLED_UNMERGED", "CRITERIA_APPROVED", "CRITERIA_REJECTED",
     )
 
@@ -59,6 +59,7 @@ object CoordinatorDeliveryLine {
         "DEPENDENT_READY" to "Can start now: {task}",
         "TASK_DISPATCH_REFUSED" to "Could not start: {task}",
         "PROJECT_BLOCKER_RAISED" to "Blocker raised: {task}",
+        "TASK_RUN_STOPPED" to "Run stopped: {task}",
         "CRITERION_UNLANDED" to "Work not on main yet: {count}",
         "ACCEPTANCE_LANDED" to "{count} landed",
         "ACCEPTANCE_LANDED_HELD" to "{count} landed, Done held back",
