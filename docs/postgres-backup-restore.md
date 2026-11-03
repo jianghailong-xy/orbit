@@ -71,6 +71,14 @@ past retention, is sent `wal/` first, on its own and deleting nothing, and only 
 holds a finished segment before it holds a base backup, and keeps one from then on, so a sync cut short at any point is
 carried on by the next poll with nobody acting.
 
+`--delete` does not take the target's last base backup before another has landed. A target holding one of this archive's base
+backups whole keeps that one through `--delete`, which can then make room first: at the default `ORBIT_BASE_BACKUP_KEEP=2`, a
+target in step always holds one. A target holding base backups and none of those whole (`ORBIT_BASE_BACKUP_KEEP=1`, fallen behind
+past retention, or the one it shares only partly there) is sent the whole archive first, deleting nothing, and `--delete` runs
+only if that finished. **For that round its disk needs room for what it holds and the whole archive at once.** Without it the
+sync fails with `No space left on device` on every poll, with a `WARN` beside it, and the old base backups stay. WAL keeps landing
+until that fills the disk too. Free some room, or take the old base backups off that disk by hand, and the next poll carries on.
+
 **It also reads the target first, and leaves another cluster's archive alone.** A new cluster has a real
 base backup and real WAL of its own, so one started before a restore would otherwise replace the only copy
 of the old history. Each poll, before `--delete`, the sidecar lists the target's `wal/` and `base/`:
