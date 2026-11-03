@@ -31,6 +31,7 @@ struct ConsoleView: View {
     @State private var ownerAnswerTold: OwnerAnswerTold?
     @State private var coordinatorDeliveryTold: CoordinatorDeliveryTold?
     @State private var approvalReview: ApprovalReviewTarget?
+    @State private var evidenceFiles: EvidenceFilesTarget?
     @State private var approvalReviewDrafts = ApprovalReviewDrafts()
     /// Whether the reader has gone back far enough through the history for a phone's composer band to
     /// fold to its bar (`foldsBand`): written by the transcript's scroll tracker, off the same reading
@@ -367,6 +368,13 @@ struct ConsoleView: View {
                     ApprovalReviewSheet(console: console, target: target)
                         .environment(approvalReviewDrafts)
                 }
+                // What a card's file area opens, here for the reason the receipt's sheet is.
+                .environment(\.openEvidenceFiles, { target in
+                    evidenceFiles = target
+                })
+                .sheet(item: $evidenceFiles) { target in
+                    EvidenceFilesPage(console: console, target: target)
+                }
                 .imagePreview($imagePreviewTarget, images: imagePreviewPages, ns: imagePreviewNS,
                               store: registry.attachments)
             } else {
@@ -389,6 +397,7 @@ struct ConsoleView: View {
             ownerAnswerTold = nil
             coordinatorDeliveryTold = nil
             approvalReview = nil
+            evidenceFiles = nil
             approvalReviewDrafts = ApprovalReviewDrafts()
             readingBack = false
             bandOpened = false

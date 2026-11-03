@@ -63,8 +63,13 @@ written (`.staging-*`) are excluded, host keys are checked against the mounted `
 a failure is logged (`ERROR: off-host sync … failed`) without interrupting local backups. The
 sidecar installs `rsync`/`openssh-client` at start, so it needs to reach an Alpine mirror once
 per container start; without that it says so and keeps backing up locally. It refuses to mirror an
-archive with no base backup or no WAL (`ERROR: refusing off-host sync …`), so an empty or wrong mount
-cannot clear the target.
+archive with no base backup or no finished WAL segment (`ERROR: refusing off-host sync …`), so an empty or
+wrong mount cannot clear the target.
+
+A target sharing a segment with this archive keeps it through `--delete`. One sharing none, on a first sync or fallen behind
+past retention, is sent `wal/` first, on its own and deleting nothing, and only then gets that mirror. A target therefore
+holds a finished segment before it holds a base backup, and keeps one from then on, so a sync cut short at any point is
+carried on by the next poll with nobody acting.
 
 **It also reads the target first, and leaves another cluster's archive alone.** A new cluster has a real
 base backup and real WAL of its own, so one started before a restore would otherwise replace the only copy
@@ -72,9 +77,8 @@ of the old history. Each poll, before `--delete`, the sidecar lists the target's
 
 | What the target holds | What happens |
 | --- | --- |
-| Nothing Postgres wrote, or the directory is not there yet | A first install: it syncs |
-| A base backup that is also here, and no WAL | A first sync that was cut short: it syncs |
-| A base backup that is not here, and no WAL | Refused: nothing there says whose it is |
+| Nothing in `base/` and no finished segment, or the directory is not there yet | A first install: it syncs |
+| Anything in `base/` and no finished segment | Refused: nothing there says whose it is, whatever it is called |
 | Segments whose smallest has this cluster's system identifier | The same cluster, restored or back after an outage too: it syncs |
 | Segments with another system identifier | Refused |
 | WAL further on than here, on a later timeline or a later segment | Refused: `--delete` would remove it |
@@ -84,6 +88,11 @@ over an archive copied back looks like. A restored cluster keeps its system iden
 it syncs as usual. The identifier is read from the segment's own first page, so this works on a mirror made
 before this check, and writes no marker on the target. A new `initdb` is a new cluster however it comes about: moving to a
 new major version by dump and restore or by `pg_upgrade` gives it a new identifier, and the old mirror has to be moved aside.
+
+This script does not leave a base backup with no finished segment beside it. A sidecar older than this check could: it sent
+`base/` first, and deleted old segments before new ones landed, so a sync it had cut short can look like that. Such a
+target is refused like any other and has to be moved aside by hand, as below, because nothing there can say it is this
+cluster's. A mirror whose last sync finished holds WAL, so it is not this case.
 
 The read happens on every poll, before every `--delete`, because a listing's name, size and time say nothing of whose a file
 is. It fetches that one segment whole: about 17 KB for a segment closed nearly empty, and around 12 MB for a full one, so at

@@ -1,4 +1,5 @@
 import SwiftUI
+import OrbitKit
 #if os(iOS)
 import UIKit
 #elseif os(macOS)
@@ -49,10 +50,7 @@ enum FileHandoff {
         let file = folder.appendingPathComponent(safeName(name))
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try data.write(to: file, options: .atomic)
-            #if os(macOS)
-            try markAsDownloaded(file)
-            #endif
+            try DownloadMark.write(data, to: file)
         } catch {
             return false
         }
@@ -74,23 +72,9 @@ enum FileHandoff {
         #endif
     }
 
-    #if os(macOS)
-    /// The quarantine mark, which every browser leaves on a download: macOS checks a marked file before
-    /// anything in it runs, however it comes to be opened.
-    private static func markAsDownloaded(_ file: URL) throws {
-        var file = file
-        var values = URLResourceValues()
-        values.quarantineProperties = [
-            kLSQuarantineTypeKey as String: kLSQuarantineTypeOtherDownload as String,
-            kLSQuarantineAgentNameKey as String: "Orbit",
-        ]
-        try file.setResourceValues(values)
-    }
-    #endif
-
     /// The leaf of whatever name arrives, so a path can never write outside the temporary directory —
     /// and never an empty one, which would name the directory itself.
-    private static func safeName(_ name: String) -> String {
+    static func safeName(_ name: String) -> String {
         let leaf = name.split(separator: "/").last.map(String.init) ?? ""
         let safe = leaf.replacingOccurrences(of: "\n", with: "").trimmingCharacters(in: .whitespaces)
         return safe.isEmpty ? "orbit-file" : safe

@@ -4118,6 +4118,8 @@ final class ConsoleModel {
     /// the same reason. A card is drawn only for the rows `EvidenceDecisions.cardRows` keeps: this
     /// project's, and ones the door would take an answer to from here.
     private(set) var evidenceDecisions: EvidenceDecisionQueue?
+    /// What each version of evidence drawn here cites, by `task#revision` (`evidenceFileRead`).
+    private var evidenceFileReads: [String: EvidenceFileRead] = [:]
     /// Where this conversation stands as the coordinator its project's queued evidence waits for —
     /// paused, or back — read off its own row each time the row is adopted (`adoptServerSnapshot`):
     /// the line every waiting version carries (`EvidenceDecisions.pauseLine`). Paused for a reason
@@ -5239,6 +5241,41 @@ final class ConsoleModel {
             statusMessage = "That decision was not recorded — \(APIClient.failureReason(error))."
         }
         await refreshRulerQuestions(force: true)
+    }
+
+    /// Where this console's read of what one version of evidence cites stands: the card and the page it
+    /// opens read one list, and a List re-creates a card's row as it scrolls.
+    func evidenceFileRead(taskID: String, revision: String) -> EvidenceFileRead {
+        evidenceFileReads["\(taskID)#\(revision)"] ?? EvidenceFileRead()
+    }
+
+    /// The list's first page, once it is read, and otherwise another go. A card with no FILE citation
+    /// never reaches here (`EvidenceFiles.citesFiles`).
+    func readEvidenceFiles(taskID: String, revision: String) async {
+        let key = "\(taskID)#\(revision)"
+        let read = evidenceFileRead(taskID: taskID, revision: revision)
+        guard read.list == nil, !read.reading else { return }
+        evidenceFileReads[key] = EvidenceFileRead(unread: read.unread, reading: true)
+        do {
+            let page = try await api.evidenceFiles(taskID: taskID, revision: revision)
+            evidenceFileReads[key] = EvidenceFileRead(list: EvidenceFileList(page))
+        } catch {
+            evidenceFileReads[key] = EvidenceFileRead(unread: true)
+        }
+    }
+
+    /// The list's next page, on the press that asks for it: nothing is cut, and what was read stays.
+    func readMoreEvidenceFiles(taskID: String, revision: String) async {
+        let key = "\(taskID)#\(revision)"
+        let read = evidenceFileRead(taskID: taskID, revision: revision)
+        guard let list = read.list, let offset = list.nextOffset, !read.reading else { return }
+        evidenceFileReads[key] = EvidenceFileRead(list: list, reading: true)
+        do {
+            let page = try await api.evidenceFiles(taskID: taskID, revision: revision, offset: offset)
+            evidenceFileReads[key] = EvidenceFileRead(list: list.appending(page))
+        } catch {
+            evidenceFileReads[key] = EvidenceFileRead(list: list, unread: true)
+        }
     }
 
     /// Confirm the standard set as it stands. The digest is what makes this a confirmation of the
