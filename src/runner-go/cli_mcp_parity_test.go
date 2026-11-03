@@ -199,6 +199,11 @@ func TestWorkspaceCreateParametersStayInParityAcrossHTTPMCPAndCLI(t *testing.T) 
 	}
 	var mcpBody map[string]interface{}
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// These fields are put on the owner's card first (agent_write_card_test.go).
+		if strings.Contains(r.URL.Path, "/approvals") {
+			_, _ = w.Write([]byte(`{"id":"ap1","status":"ALLOWED"}`))
+			return
+		}
 		if r.Method != http.MethodPost || r.URL.Path != "/api/runner/agents" {
 			t.Errorf("agent_create hit %s %s", r.Method, r.URL.Path)
 		}

@@ -1,6 +1,7 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 
 import { isSessionGenerating } from '../common/session-generating';
+import { eraseEnvValuesOfCollectedCards } from './workspace-write-card-values';
 
 /**
  * Collecting the approvals whose tool call can never be answered — on a committed fact, never on a
@@ -225,6 +226,7 @@ export async function reapApprovalsOfEndedTurns(
           where: { sessionId, status: 'PENDING', id: { in: collected.map((a) => a.id) } },
           data: { status: APPROVAL_ABANDONED_STATUS, message: APPROVAL_ABANDONED_CALL_MESSAGE },
         });
+  if (lostItsJob.count + lostItsTurn.count + lostItsCall.count > 0) await eraseEnvValuesOfCollectedCards(tx, sessionId);
   return lostItsJob.count + lostItsTurn.count + lostItsCall.count;
 }
 
@@ -260,6 +262,7 @@ export async function reapApprovalsOfReturnedCalls(
     data: { status: APPROVAL_ABANDONED_STATUS, message: APPROVAL_ABANDONED_CALL_MESSAGE },
     select: { id: true },
   });
+  if (collected.length > 0) await eraseEnvValuesOfCollectedCards(tx, sessionId);
   return collected.map((row) => row.id);
 }
 
@@ -285,6 +288,7 @@ export async function reapApprovalsOfReturnedCallsIn(
     select: { id: true, sessionId: true },
   });
   for (const row of rows) collected.set(row.sessionId, [...(collected.get(row.sessionId) ?? []), row.id]);
+  for (const sessionId of collected.keys()) await eraseEnvValuesOfCollectedCards(tx, sessionId);
   return collected;
 }
 
@@ -386,5 +390,6 @@ export async function reapApprovalsOfReplacedSupervisor(
        SET "status" = ${APPROVAL_ABANDONED_STATUS}, "message" = ${APPROVAL_ORPHANED_MESSAGE}
      WHERE "session_id" = ${sessionId}::uuid AND "status" = 'PENDING'
     RETURNING "id"`;
+  if (collected.length > 0) await eraseEnvValuesOfCollectedCards(tx, sessionId);
   return collected.map((row) => row.id);
 }

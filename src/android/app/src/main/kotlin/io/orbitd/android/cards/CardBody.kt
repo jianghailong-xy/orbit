@@ -74,6 +74,12 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
             Field("The agent says it no longer blocks", input["reason"], open)
         }
         CardFamily.DELETE -> DeleteCardBody(DeleteCards.read(row.text("toolName").orEmpty(), row.obj("input") ?: JsonObject(emptyMap())))
+        CardFamily.WORKSPACE_WRITE -> {
+            val input = row.obj("input") ?: JsonObject(emptyMap())
+            // A server that predates this card files what the asker sent: all of it, or the card would ask for a yes with nothing on it.
+            if (input.obj("changes") == null) CodeText(input.toString(), "json")
+            else WorkspaceWriteCardBody(WorkspaceWriteCards.read(row.text("toolName").orEmpty(), input))
+        }
         CardFamily.EVIDENCE -> {
             Text(row.text("title") ?: "", style = MaterialTheme.typography.titleSmall)
             // Opened by Decide it myself: still saying what it waits for, and that deciding here is the owner's choice.
@@ -180,6 +186,36 @@ private fun DeleteCardBody(delete: DeleteCard) {
         }
     }
     Text(if (delete.isRunner) DeleteCards.runnerNote else DeleteCards.workspaceNote, style = small, color = muted)
+}
+
+/**
+ * What a workspace write does (iOS `ToolApprovalCard`'s write branch, web `WorkspaceWriteBody`): the name on its own row, where it
+ * stands, each variable by name and value, what a write of the variables takes away, then the rest of what changes. A value is on its
+ * own block in full, with no line limit: a value cut short would be a yes to something nobody read.
+ */
+@Composable
+private fun WorkspaceWriteCardBody(write: WorkspaceWriteCard) {
+    val small = MaterialTheme.typography.bodySmall
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val caption = MaterialTheme.typography.labelMedium
+    @Composable fun Block(text: String) = Text(text, style = small, fontFamily = FontFamily.Monospace)
+    Text(write.name, style = MaterialTheme.typography.titleSmall)
+    Text(DeleteCards.onRunner(write.host), style = small, color = muted)
+    write.workDir?.let { Block(it) }
+    write.env?.let { env ->
+        Text(WorkspaceWriteCards.variables, style = caption)
+        if (env.isEmpty()) Text(WorkspaceWriteCards.noVariables, style = small, color = muted)
+        env.forEach { Block(it.line) }
+    }
+    if (write.envRemoved.isNotEmpty()) {
+        Text(WorkspaceWriteCards.removed, style = caption)
+        write.envRemoved.forEach { Block(it) }
+    }
+    write.fields.forEach { field ->
+        Text(field.caption, style = caption)
+        Block(field.value)
+    }
+    Text(WorkspaceWriteCards.note, style = small, color = muted)
 }
 
 /**

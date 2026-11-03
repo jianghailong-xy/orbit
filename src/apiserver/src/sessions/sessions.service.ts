@@ -216,6 +216,7 @@ import {
 } from '../common/session-scheduling';
 import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/session-generating';
 import { countLiveApprovals, readByLiveBackgroundJob } from './abandoned-approvals';
+import { holdsWorkspaceWriteValues, withoutEnvValues } from './workspace-write-card-values';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
   normalizeBuiltinPermissionMode,
@@ -8174,12 +8175,20 @@ export class SessionsService {
       }
     }
     const status = dto.behavior === 'allow' ? 'ALLOWED' : 'DENIED';
+    // A workspace write's card holds its variables' values only while it asks (workspace-write-card-values.ts).
+    const answering = await this.prisma.approval.findFirst({
+      where: { id: approvalId, sessionId: id },
+      select: { toolName: true, input: true },
+    });
     // Only the first decision on a still-PENDING approval applies (idempotent).
     const res = await this.prisma.approval.updateMany({
       where: { id: approvalId, sessionId: id, status: 'PENDING' },
       data: {
         status,
         startAfterCreate,
+        ...(answering && holdsWorkspaceWriteValues(answering.toolName)
+          ? { input: withoutEnvValues(answering.input) as Prisma.InputJsonValue }
+          : {}),
         message: dto.message ?? null,
         answers: dto.answers ? (dto.answers as Prisma.InputJsonValue) : Prisma.DbNull,
         // Only an allow can carry "remember same kind" rules; the runner reads them off

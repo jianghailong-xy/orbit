@@ -54,6 +54,12 @@ public enum Approvals {
     /// `isRunnerDelete` and `isWorkspaceDelete`; the card reads `DeleteApprovalPreview`.
     public static func isRunnerDelete(toolName: String) -> Bool { toolName == "orbit_runner_delete" }
     public static func isWorkspaceDelete(toolName: String) -> Bool { toolName == "orbit_agent_delete" }
+    /// A session's write of what decides a workspace's next session: its variables, folder, system
+    /// prompts, runner or worktree setting. The server writes only on a card a person answered, so a
+    /// standing rule could answer nothing. Web keys them off `isWorkspaceCreate` and `isWorkspaceUpdate`;
+    /// the card reads `WorkspaceWritePreview`.
+    public static func isWorkspaceCreate(toolName: String) -> Bool { toolName == "orbit_agent_create" }
+    public static func isWorkspaceUpdate(toolName: String) -> Bool { toolName == "orbit_agent_update" }
     /// Every ask Orbit raises for itself. What they share is how they are answered: a refusal is a
     /// conversation rather than a press (the composer is armed with the reason), and none of them
     /// can be waived with a standing rule — what is being asked for differs each time.
@@ -62,6 +68,7 @@ public enum Approvals {
             || isTaskCreate(toolName: toolName) || isProjectCreate(toolName: toolName)
             || isBlockerResolve(toolName: toolName) || isMergeCheckChange(toolName: toolName)
             || isRunnerDelete(toolName: toolName) || isWorkspaceDelete(toolName: toolName)
+            || isWorkspaceCreate(toolName: toolName) || isWorkspaceUpdate(toolName: toolName)
     }
     /// A provider write — one of the owner's own providers created, changed or removed. Drawn and
     /// refused as a plain tool card (its input is the provider as it would be written, the key
@@ -179,6 +186,7 @@ public enum Approvals {
         if isDagChange(toolName: toolName) { return "Leaving the graph alone: " }
         if isBlockerResolve(toolName: toolName) { return "Leaving this open: " }
         if isRunnerDelete(toolName: toolName) || isWorkspaceDelete(toolName: toolName) { return "Keeping it: " }
+        if isWorkspaceUpdate(toolName: toolName) { return "Leaving it as it is: " }
         return "Not creating: "
     }
 
