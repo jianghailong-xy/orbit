@@ -194,6 +194,7 @@ final class CoordinatorDeliveryTests: XCTestCase {
             (.init(kind: .dependentReady, task: task, deliveredAt: at), "Can start now: Fix the claim"),
             (.init(kind: .taskDispatchRefused, task: task, deliveredAt: at), "Could not start: Fix the claim"),
             (.init(kind: .projectBlockerRaised, task: task, deliveredAt: at), "Blocker raised: Fix the claim"),
+            (.init(kind: .taskRunStopped, task: task, deliveredAt: at), "Run stopped: Fix the claim"),
             (.init(kind: .criterionUnlanded, count: 3, deliveredAt: at), "Work not on main yet: 3 tasks"),
             (.init(kind: .criterionUnlanded, count: 1, deliveredAt: at), "Work not on main yet: 1 task"),
             (.init(kind: .acceptanceLanded, count: 9, deliveredAt: at), "All 9 criteria landed"),

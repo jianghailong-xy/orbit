@@ -129,6 +129,11 @@ export const COORDINATOR_WAKE_EVENTS = [
   'PROJECT_SETTLED_UNMERGED',
   /** A delivery raised a human-owned blocker that the coordinator must explain and hand off. */
   'PROJECT_BLOCKER_RAISED',
+  /**
+   * A task's run stopped working, nothing will wake it, and its task is unsettled with no evidence
+   * waiting for a decision. Nothing else moves that task (`task-run-stopped.producer.ts`).
+   */
+  'TASK_RUN_STOPPED',
 ] as const;
 
 export type CoordinatorWakeEvent = (typeof COORDINATOR_WAKE_EVENTS)[number];
@@ -397,6 +402,38 @@ export function attemptBudgetSpentFact(spent: {
     subjectId: spent.taskId,
     subjectVersion: spent.sessionId,
     detail: { sessionId: spent.sessionId, dimension: spent.dimension },
+  };
+}
+
+/**
+ * `TASK_RUN_STOPPED` — a run has stopped working and its task is still owed something.
+ *
+ * Keyed on what ended rather than on the run, which is the difference from
+ * `ATTEMPT_ENDED_UNSETTLED`: a run ends once, and a parked one can be spoken to and stop again. Each
+ * stop is its own fact, so a coordinator that told the run something hears about it if the run stops
+ * again with nothing to show. The run's last words ride in `detail`, which is what the message is
+ * rendered from: they are the reason it stopped, and the one thing the fact cannot state itself.
+ */
+export function taskRunStoppedFact(stopped: {
+  projectId: string;
+  taskId: string;
+  taskTitle: string;
+  sessionId: string;
+  /** Names what ended, within the session: see `RunStop`. */
+  stopKey: string;
+  lastWords: string | null;
+}): WakeFact {
+  return {
+    event: 'TASK_RUN_STOPPED',
+    projectId: stopped.projectId,
+    subjectType: 'TASK',
+    subjectId: stopped.taskId,
+    subjectVersion: `${stopped.sessionId}:${stopped.stopKey}`,
+    detail: {
+      title: stopped.taskTitle,
+      sessionId: stopped.sessionId,
+      ...(stopped.lastWords ? { lastWords: stopped.lastWords } : {}),
+    },
   };
 }
 

@@ -261,9 +261,10 @@ public struct OwnerConfirmationBranch: Codable, Equatable, Sendable {
     }
 }
 
-/// How the task's work reaches main once it is DONE: not at all, onto the project's integration
-/// line with main asking the owner again, onto main by itself once the check is clean, or pushed
-/// there by the agent itself in an `AGENT_PUSH` project (§10.5 O-L2). `NONE` is `landsNothing` here
+/// How the task's work reaches main once it is DONE: not at all (which includes a branch with no
+/// changes, §10.5 O-L8), onto the project's integration line with main asking the owner again, onto
+/// main by itself once the check is clean, or pushed there by the agent itself in an `AGENT_PUSH`
+/// project (§10.5 O-L2). `NONE` is `landsNothing` here
 /// so that it can never be read as an optional's `.none`.
 public enum OwnerConfirmationLanding: String, Codable, Equatable, Sendable {
     case landsNothing = "NONE"
@@ -630,6 +631,8 @@ public enum OwnerConfirmations {
     public static let notOnMain = "Not on main yet"
     public static let noRecordOnMain = "No record of this branch on main"
     public static let doesNotMerge = "confirming doesn’t merge it"
+    /// The branch row when the branch has no changes and the read says nothing lands (§10.5 O-L8).
+    public static let noChanges = "No changes on this branch, so nothing lands"
     public static let lineThenOwner =
         "Goes onto the integration line; merging into main asks you again"
     public static let autoMain = "Lands on main by itself if the checks pass"
@@ -998,6 +1001,10 @@ public enum OwnerConfirmations {
     /// The branch row says confirming does not merge it only where the landing is read and is not
     /// Automatic's — there the DONE does lead to main, as the landing row says. An AGENT_PUSH
     /// project's DONE merges nothing either: its agent pushes, which is what its landing row says.
+    ///
+    /// A branch with no changes where nothing lands has nothing to merge, so its row says that
+    /// instead (§10.5 O-L8). `files` alone cannot say it: a line that still lands other work sends 0
+    /// for this branch too.
     public static func ifConfirmedRows(_ ifConfirmed: OwnerConfirmationIfConfirmed?)
         -> [IfConfirmedRow] {
         guard let ifConfirmed else { return [] }
@@ -1014,14 +1021,18 @@ public enum OwnerConfirmations {
         let landing = ifConfirmed.landing
         let main = RunSettings.mainBranchName(ifConfirmed.mainBranch)
         if let branch = ifConfirmed.branch, branch.onMain != .yes {
-            let unmerged = branch.onMain == .no
-            let staysOff = landing == .landsNothing || landing == .lineThenOwner || landing == .agentPushed
-            rows.append(IfConfirmedRow(
-                kind: .branch,
-                lead: unmerged ? notOn(main) : noRecordOn(main),
-                added: unmerged && branch.linesAdded > 0
-                    ? "+\(OrbitLinkCopy.number(branch.linesAdded))" : nil,
-                detail: staysOff ? "\(branch.name) — \(doesNotMerge)" : branch.name))
+            if landing == .landsNothing && branch.files == 0 {
+                rows.append(IfConfirmedRow(kind: .branch, lead: noChanges, detail: branch.name))
+            } else {
+                let unmerged = branch.onMain == .no
+                let staysOff = landing == .landsNothing || landing == .lineThenOwner || landing == .agentPushed
+                rows.append(IfConfirmedRow(
+                    kind: .branch,
+                    lead: unmerged ? notOn(main) : noRecordOn(main),
+                    added: unmerged && branch.linesAdded > 0
+                        ? "+\(OrbitLinkCopy.number(branch.linesAdded))" : nil,
+                    detail: staysOff ? "\(branch.name) — \(doesNotMerge)" : branch.name))
+            }
         }
         if landing == .lineThenOwner {
             rows.append(IfConfirmedRow(kind: .landing, lead: lineThenOwner(main)))

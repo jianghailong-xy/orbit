@@ -41,9 +41,10 @@ const (
 
 // On shutdown the runner stops claiming, signals each session to drain, and waits up
 // to this long for in-flight turns to finish + ack before exiting. Idle sessions detach
-// immediately; only a mid-turn session consumes any of this budget. Keep systemd's
-// TimeoutStopSec comfortably above it (see service.go) so we exit before any SIGKILL.
-const shutdownDrainTimeout = 100 * time.Second
+// immediately; only a mid-turn session consumes any of this budget. The service manager's
+// stop limit stays above the whole stop (shutdown_drain.go, THE BUDGETS) so we exit before
+// any SIGKILL.
+var shutdownDrainTimeout = hostStopBudget.drain
 
 type runLoopStopReason uint8
 
@@ -2250,8 +2251,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// in-flight turn would get the very session we're trying to preserve marked FAILED.
 	// Cover provider drain, both release backstops, the final event flush, and a racing
 	// terminal finalization — and the heartbeat's own operations, which keep it beating too
-	// until they are done or stopped (shutdownSequence). systemd's stop timeout and a managed
-	// Pod's termination grace both remain above this whole envelope.
+	// until they are done or stopped (shutdownSequence). The service manager's stop limit
+	// remains above this whole envelope (THE BUDGETS, shutdown_drain.go).
 	drainStart := time.Now()
 	drainDeadline := drainStart.Add(shutdownSupervisorTimeout)
 	// A landing being handed back is sent until the deadline and no longer: past it, the lease
@@ -2305,6 +2306,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// sessions handed on for one is ended now, as a runner stop ends every job it hosts.
 		endHandedOn()
 	}
+	logln(fmt.Sprintf("stop finished after %s: %d session supervisor(s) and %d heartbeat operation(s) left behind",
+		time.Since(drainStart).Round(100*time.Millisecond), left.sessions, left.operations))
 	return restart, endHandedOn
 }
 

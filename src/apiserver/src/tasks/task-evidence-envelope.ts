@@ -610,7 +610,10 @@ export async function resolveEvidenceCitations(
     refuseCitation(
       'EVIDENCE_NO_RESOLVABLE_CITATION',
       'no citation in this envelope resolves to a row of this task; nothing was written. Evidence '
-      + 'is a claim plus a handle somebody else can pull — without one it is a report',
+      + 'is a claim plus a handle somebody else can pull — without one it is a report. Run the checks with '
+      + 'bg_run and cite the job id it returns (bgj_...) as a TOOL_CALL ref. A commit sha resolves only once '
+      + 'Orbit has recorded it for this task, and a repository path or a session id does not resolve at all, '
+      + 'so submitting the same refs again later will not help',
       'CITE_THIS_TASKS_OWN_ROWS',
     );
   }

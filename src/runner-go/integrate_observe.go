@@ -121,7 +121,7 @@ func observeTask(repoRoot string, task IntegrationObserveTask, upstreamSha, line
 // base..delivered: that is the one answer of an observation that depends on where it ran.
 //
 // An empty branch carried no commit of its own, so nothing of it was applied anywhere: false, the way
-// J-S3 answers the same branch (0410), rather than the "every line" of a list with no line in it.
+// a landing answers the same branch (0410), rather than the "every line" of a list with no line in it.
 func observedFullyApplied(repoRoot, upstreamSha, delivered, base string, empty bool) *bool {
 	if empty {
 		applied := false
