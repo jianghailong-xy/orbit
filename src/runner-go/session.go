@@ -1860,14 +1860,15 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// Finalization does NOT remove the checkout, and nothing on this path does. The server's
 	// keepCheckout=false says the checkout has become ELIGIBLE for reclamation — Complete, Move
 	// to Trash, a successfully completed task — not that it has to go now; Open resumable ends
-	// (idle-park, user-end, cancel) are never eligible at all. Everything git tracks is on the
+	// (idle-park, user-end, cancel) are not eligible, and only gcResumableCheckouts takes one of
+	// those, by rules of its own, once the disk is short. Everything git tracks is on the
 	// branch by this point, but `add -A` honours .gitignore, so removing the directory also
 	// discards what is expensive and untracked (node_modules, generated clients) and charges the
 	// next session on this repository a full rebuild — a real cost paid to reclaim disk that may
-	// not be short. gcWorktrees is the single deleter: it re-asks this same server judgement
-	// every pass and acts on it only under disk pressure or its retention cap. That also means a
-	// checkout THIS function could not remove — every `return` above, lease loss in particular —
-	// is reclaimed by a later sweep instead of leaking until the process restarts.
+	// not be short. gcWorktrees is the single deleter of an eligible checkout: it re-asks this same
+	// server judgement every pass and acts on it only under disk pressure or its retention cap. That
+	// also means a checkout THIS function could not remove — every `return` above, lease loss in
+	// particular — is reclaimed by a later sweep instead of leaking until the process restarts.
 	finalizeRequest := RunFinalizeRequest{Status: status, IsolationStatus: job.IsolationStatus, RuntimeSessionID: currentRuntimeSessionID(job)}
 	// Carry the failure reason onto the session record. Only on failure: the
 	// apiserver writes `error` straight through, so attaching a recovered-from

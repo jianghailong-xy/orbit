@@ -109,6 +109,17 @@ here, and every owner-channel action besides — 403 `IMPERSONATION_READ_ONLY` b
 read or written. It lasts 30 minutes and is never refreshed. Nothing the owner decides can be
 decided through it, so none of these rows changes for the owner's own login.
 
+The `Project DONE` column is about writing the status, and one such write counts for more than the
+others: **Reopen project**, `{ "status": "OPEN" }` on `PATCH /projects/:id` through the owner REST row,
+taking the project out of DONE or CANCELLED. Since migration 0469 that press is recorded, and the
+project stays OPEN until the owner records it done, the criteria's seal moves, or a task serving a
+criterion changes: its status, a new evidence revision or decision, a new verdict, or a new merge
+receipt that says it landed. A task serving no criterion changes none of that, and neither does
+pointing a task at a criterion or moving one off. The same value from any other row is not the press: a session and a token are refused it whole, as the table says, and
+the runner credential with no session header still writes the column, which the projection then
+answers on its next edge. As everywhere on this page, the record says a signed-in owner credential
+sent it, not that a person did.
+
 The project standard-set confirmation row is the N22 addition, and since migration 0245 gave the
 action its one writer, the rule it states is no longer about a role.
 `refuseSessionAuthoredConfirmation` refuses ANY request that carries an acting session — code
@@ -500,7 +511,11 @@ The coordinator card's role under (B) is a prompt with a link, not an answer sur
 >   except for the one condition `refuseProjectStatusWrite` adds — the projection is what makes the
 >   column come back to what the facts say, not a gate that stops the PATCH;
 > - `coordinator-authority.ts`'s "Project settlement remains AUTOMATIC — no principal writes it" is
->   no longer prose describing a deleted machine. It describes this one.
+>   no longer prose describing a deleted machine. It describes this one;
+> - since 2026-11-03 the projection does not store DONE over the owner's Reopen project while the
+>   facts it was pressed over stand (the note under the path matrix). `derivedDone` still reads the
+>   facts, so it can say done while `status` says OPEN: the first is the facts, the second is the
+>   owner's decision, and a coordinator can still ask them with `project_request_done`.
 
 Nothing derived it before that. `project.status = 'DONE'` is an ordinary column write
 (`docs/project-done-gate.md:11-17`): `projects.service.ts:1899` copies `dto.status` through, and the

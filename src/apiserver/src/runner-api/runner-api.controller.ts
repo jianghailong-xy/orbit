@@ -28,6 +28,7 @@ import type { Request, Response } from 'express';
 import { plainToInstance } from 'class-transformer';
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
+import { deriveSessionCapabilities, type SessionCapabilityFields } from '../sessions/session-state';
 import { readWorktreeArtifactRequest, worktreeFileAnswerKey } from '../sessions/worktree-artifact';
 import { branchName } from '../projects/project-criterion-landing';
 import { TasksService } from '../tasks/tasks.service';
@@ -977,6 +978,22 @@ const ANSWERS_USER_TURN: ReadonlySet<RunEventType> = new Set([
   RunEventType.ASSISTANT,
   RunEventType.RESULT,
 ]);
+/**
+ * Whether a session whose checkout `worktrees-removable` keeps is at rest on this runner, its next
+ * message resuming it there. PENDING and RUNNING are not at rest: one of those is being handed to an
+ * engine. An unassigned session is not this runner's to say that about. What `deriveSessionCapabilities`
+ * calls a live session NOT_TERMINAL is a session a message simply reaches, and RUNNER_OFFLINE is this
+ * reading no runner row, the asker being that runner; every other reason there refuses a resume.
+ */
+function restsResumableOn(
+  runnerId: string,
+  session: Omit<SessionCapabilityFields, 'assignedRunner'> & { status: RunStatus },
+): boolean {
+  if (session.assignedRunnerId !== runnerId) return false;
+  if (session.status === RunStatus.PENDING || session.status === RunStatus.RUNNING) return false;
+  const { resumeBlockedReason: blocked } = deriveSessionCapabilities({ ...session, assignedRunner: null });
+  return blocked === null || blocked === 'NOT_TERMINAL' || blocked === 'RUNNER_OFFLINE';
+}
 const RUNNER_CAPABILITIES_HEADER = 'x-orbit-runner-capabilities';
 // Distinct from the named-capability header above: this one advertises which built-in
 // runtimes the runner binary can actually drive (runner 0.1.82+).
@@ -9317,7 +9334,13 @@ export class RunnerApiController {
    *  neither Completed nor deleted, and is still assigned to this runner — it stays resumable, so
    *  idle-parked sessions survive a runner restart. Everything else (Completed, deleted, missing,
    *  or moved to a workspace on another runner — docs/session-folders-move-design.md §5.4) is
-   *  removable leftover. The runner keeps a checkout's branch, and never removes a dirty one. */
+   *  removable leftover. The runner keeps a checkout's branch, and never removes a dirty one.
+   *
+   *  `resumable` is a second answer, about the sessions that are kept: the ones at rest here, whose
+   *  next message brings them back through a new checkout of the branch named beside them. All it
+   *  says is that; a runner short of disk decides from the checkout itself whether one of them can go
+   *  (docs/runner-troubleshooting.md). A runner that predates it reads `removable` alone, which
+   *  this does not change. */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/worktrees-removable')
   async worktreesRemovable(
@@ -9340,11 +9363,28 @@ export class RunnerApiController {
             deletedAt: null,
             OR: [{ assignedRunnerId: null }, { assignedRunnerId: runner.id }],
           },
-          select: { id: true },
+          select: {
+            id: true,
+            status: true,
+            completedAt: true,
+            archivedAt: true,
+            deletedAt: true,
+            cancelRequestedAt: true,
+            startedAt: true,
+            numTurns: true,
+            runtimeSessionId: true,
+            assignedRunnerId: true,
+            branch: true,
+          },
         })
       : [];
     const keep = new Set(keepRows.map((r) => r.id));
-    return { removable: ids.filter((id) => !keep.has(id)) };
+    return {
+      removable: ids.filter((id) => !keep.has(id)),
+      resumable: keepRows.flatMap((r) =>
+        r.branch != null && restsResumableOn(runner.id, r) ? [{ id: r.id, branch: r.branch }] : [],
+      ),
+    };
   }
 
   /** Outcome of a heartbeat-delivered MergeCommand — persist it so the worktree status bar

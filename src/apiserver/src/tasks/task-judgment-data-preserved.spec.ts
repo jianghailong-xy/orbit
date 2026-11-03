@@ -2662,7 +2662,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0468 is one `CREATE INDEX ... IF NOT EXISTS`, a partial btree beside `task_completion_evidence`: an index is a new
       // relation of its own, not a rewrite of the table, as with 0283. No row is written, and nothing is altered or dropped, so
       // the ledger stays append-only and this is not another writer of the DONE fence.
-      '0468_evidence_cites_files_idx'],
+      '0468_evidence_cites_files_idx',
+      // 0469 adds `project.reopened_at` and `reopened_facts`, both NULL on every existing row, and two CHECKs on
+      // those columns alone: no row is written, and no `task`, `session`, ledger table or preserved trigger/function
+      // is named, so it is not another writer of the DONE fence.
+      '0469_project_owner_reopen'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

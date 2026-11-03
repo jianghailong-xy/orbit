@@ -499,7 +499,7 @@ func TestWorktreeIsNotCreatedBeforeThePin(t *testing.T) {
 		t.Fatal(err)
 	}
 	pin := strings.Index(string(source), "ensureSourcePinned(loopCtx, t, job)")
-	worktree := strings.Index(string(source), "setupWorktree(job, sessionExecDir(job.WorkDir))")
+	worktree := strings.Index(string(source), "pool.setupSupervisorCheckout(job, sessionExecDir(job.WorkDir), initiallyActive)")
 	if pin < 0 || worktree < 0 {
 		t.Fatalf("cannot find both steps in the session start path (pin=%d worktree=%d)", pin, worktree)
 	}

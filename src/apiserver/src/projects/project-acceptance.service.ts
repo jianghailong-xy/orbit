@@ -39,7 +39,7 @@ import {
   refuseSessionAuthoredConfirmation,
 } from './coordinator-authority';
 import { VERIFICATION_METHOD_RUNGS } from './criteria-edit-classification';
-import { storeDerivedProjectStatus } from './project-done-derived';
+import { NO_REOPEN_RECORD, storeDerivedProjectStatus } from './project-done-derived';
 import { defaultStartLine, startProjectLine, type StartLineSettings } from './project-integration-line';
 import { tellCoordinatorProjectStarted } from './project-started';
 import { START_REQUEST_KIND, answerStartRequests } from './project-start-request';
@@ -448,6 +448,8 @@ export class ProjectAcceptanceService {
           doneAt: at,
           doneCriteriaDigest: version.digest,
           acceptedGaps: input.acceptedGaps as unknown as Prisma.InputJsonValue,
+          // This record is the owner's answer now, and it replaces any Reopen they pressed before it.
+          ...NO_REOPEN_RECORD,
         },
       });
       await answerDoneRequests(tx, {

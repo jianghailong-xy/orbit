@@ -61,6 +61,11 @@ import { START_REQUEST_KIND } from './project-start-request';
  * landings in flight, and one whose project has moved since is superseded the next time it is read
  * (`supersedeStaleDoneRequest`) — and refused at the owner's press before that. So nobody is shown
  * "Is this project done?" about a project that is no longer the one the coordinator checked.
+ *
+ * AND OVER A REOPEN. A project whose owner pressed Reopen is OPEN whatever the facts prove
+ * (`storeDerivedProjectStatus`), and this reads the work rather than the projection, so the check
+ * passes on the facts and the request is filed like any other. The owner's answer is what ends the
+ * press. This is the way a coordinator asks to close a project the owner reopened and it has finished.
  */
 
 export const DONE_REQUEST_KIND = 'DONE_REQUEST';
