@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SESSION_ENDING_SELECT, sessionHasEnded } from '../projects/project-open-item';
+import { readBlockSender } from '../sessions/session-message';
 import { SessionsService } from '../sessions/sessions.service';
 import {
   EvidenceReviewDeliveryRefused,
@@ -111,9 +112,14 @@ export class EvidenceReviewService {
    * Called after the decision's commit, so a delivery that cannot be made — the run has ended, or
    * a fault — is logged and never reported as a failed decision: the note is recorded, and stays
    * readable on the revision in `task_evidence_list`. Keyed by the decision row, so the decide
-   * door's own replay replays the turn instead of delivering twice.
+   * door's own replay replays the turn instead of delivering twice. A replay whose block would read
+   * differently now, its session's mode having moved, is refused by that key and logged like any
+   * other delivery that cannot be made: the turn already delivered stands.
+   *
+   * `fromSessionId` is the session that decided, and null for the account owner's press in the app:
+   * the block names it and its mode, as a session's message says who sent it (session-message.ts).
    */
-  async deliverSendBack(ownerId: string, taskId: string, decisionId: string): Promise<void> {
+  async deliverSendBack(ownerId: string, taskId: string, decisionId: string, fromSessionId: string | null): Promise<void> {
     const decision = await this.prisma.taskEvidenceDecision.findFirst({
       where: { id: decisionId, taskId, ownerId },
       select: {
@@ -137,6 +143,7 @@ export class EvidenceReviewService {
         + 'the note is on the revision in task_evidence_list');
       return;
     }
+    const from = fromSessionId ? await readBlockSender(this.prisma, ownerId, fromSessionId, runSessionId) : null;
     try {
       await this.sessions.createTurn(
         ownerId,
@@ -149,6 +156,7 @@ export class EvidenceReviewService {
             revision: decision.evidence.revision.toString(),
             decidedByType: decision.decidedByType,
             note: decision.note,
+            from,
           }),
           intent: 'NEXT_TURN',
         },

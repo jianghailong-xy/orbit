@@ -99,6 +99,7 @@ import { FilesService } from '../files/files.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { ControlPlaneLeader } from '../realtime/control-plane-leader';
+import { assertMayEndWorkingRuns } from '../sessions/session-reach';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import { isClaudeRegionRefused, isEngineSignedOut } from '../sessions/engine-signin-preflight';
 import { withSessionState } from '../sessions/session-state';
@@ -10496,6 +10497,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               if (wouldReplacementCreateCycle(edges, id, dependsOnTaskIds)) {
                 throw new BadRequestException('These dependencies would create a cycle');
               }
+            }
+            // A verdict settles its verifier, and a task reaching DONE ends the run working it, so a session
+            // that may not end that run may not write this (sessions/session-reach.ts). Asked here, past every
+            // refusal of this write and before anything of it. Whatever projects DONE is on this branch: a
+            // verdict is `consumesVerificationRequest`, a retirement cleared is `supersession` and a role
+            // attached is `touchesHierarchy`. A person's own edit names no session.
+            if (actingSessionId && projectedVerifierStatus === TaskStatus.DONE && before.status !== TaskStatus.DONE) {
+              await assertMayEndWorkingRuns(tx, ownerId, actingSessionId, id, 'writeVerdict');
             }
             // WHICH SIDE of the status write this goes on is not a style choice: one PATCH
             // routinely does both, and 0128's trigger judges every statement on its own.

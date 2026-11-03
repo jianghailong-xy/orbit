@@ -19,6 +19,7 @@ import {
   assertCriterionUnmoved,
   assertCurrentEvidenceRevision,
   assertDecidingSessionInTaskProject,
+  assertDecisionMayReachRuns,
   assertIndependentDecidingSession,
   assertRunMayDecide,
   decisionNote,
@@ -105,6 +106,7 @@ interface LockedSubmissionTask extends LockedCriterionTask {
  */
 interface LockedDecisionTask {
   projectId: string | null;
+  status: TaskStatus;
   completionCriterion: TaskCompletionCriterionValue;
   criterionDefinitionId: string | null;
   criterionRevision: number | null;
@@ -727,7 +729,9 @@ export class TaskCompletionEvidenceService {
    * (independent of the work, acting for the project the task is in, and no run the evidence is
    * not addressed to), is it answering the
    * version that is actually open, and is the standard it is answering still the one stated. A
-   * refusal at any of them writes nothing.
+   * refusal at any of them writes nothing. A version already answered answers next, as it did. Last
+   * of all, of a decision about to be written, what it would do to a run
+   * (`assertDecisionMayReachRuns`), which a press in the app is not asked.
    */
   async decide(
     ownerId: string,
@@ -753,6 +757,8 @@ export class TaskCompletionEvidenceService {
     const answered = BigInt(input.evidenceRevision);
     // Outside the transaction: a missing note reads no row, so it need not hold the Task mutex.
     const note = decisionNote(input.decision, input.note);
+    const ownerInTheApp = principal !== undefined
+      && ownerConfirmationPrincipalRefusal(ownerId, principal) === null;
 
     const committed = await withTransactionRetry(this.prisma, async (tx) => {
       // The same Task mutex submission takes. It is what makes check 1 a compare-and-set: a
@@ -760,6 +766,7 @@ export class TaskCompletionEvidenceService {
       // and it is the lock the derived status below is written under.
       const [task] = await tx.$queryRaw<LockedDecisionTask[]>(Prisma.sql`
         SELECT "project_id" AS "projectId",
+               "status",
                "completion_criterion"::text AS "completionCriterion",
                "criterion_definition_id" AS "criterionDefinitionId",
                "criterion_revision" AS "criterionRevision",
@@ -779,8 +786,6 @@ export class TaskCompletionEvidenceService {
       // deciding the owner card of a task in no project that has no dispatching session, in the run
       // that card is drawn in — the only conversation left to draw it in. The owner decides there,
       // not the run; every other session that did the work is refused exactly as before.
-      const ownerInTheApp = principal !== undefined
-        && ownerConfirmationPrincipalRefusal(ownerId, principal) === null;
       if (!(await ownerDecidesInTheRun(tx, { ownerId, taskId }, decidingSession.id, ownerInTheApp))) {
         await assertIndependentDecidingSession(tx, { ownerId, taskId }, decidingSession);
       }
@@ -794,7 +799,7 @@ export class TaskCompletionEvidenceService {
       const latest = await tx.taskCompletionEvidence.findFirst({
         where: { taskId },
         orderBy: { revision: 'desc' },
-        select: { id: true, revision: true, criterionRevision: true, evidenceDigest: true, evidence: true },
+        select: { id: true, revision: true, criterionRevision: true, evidenceDigest: true, evidence: true, sourceSessionId: true },
       });
       if (!latest) throw new NotFoundException('this task has no completion evidence to decide');
       assertCurrentEvidenceRevision(answered, latest.revision);
@@ -827,6 +832,23 @@ export class TaskCompletionEvidenceService {
         return { decision: decisionResponse(existing), completed: false, projectId: task.projectId };
       }
 
+      // The derivation, and the only thing this door writes outside its own row. It asks the
+      // task's OWN declared criterion: evidence submitted against an EXECUTABLE or VERIFICATION
+      // task is recorded and answered like any other, and completes nothing, because those two are
+      // settled by facts of their own.
+      const completed = deriveTaskCompletionStatus({
+        completionCriterion: task.completionCriterion,
+        latestEvidenceRevision: latest.revision,
+        confirmedEvidenceRevision: input.decision === 'CONFIRM' ? latest.revision : null,
+      });
+      if (!ownerInTheApp) {
+        await assertDecisionMayReachRuns(tx, { ownerId, taskId }, decidingSession.id, {
+          decision: input.decision,
+          settlesTheTask: completed != null && (task.status === TaskStatus.OPEN || task.status === TaskStatus.IN_PROGRESS),
+          submittedBy: latest.sourceSessionId,
+        });
+      }
+
       const written = await tx.taskEvidenceDecision.create({
         data: {
           id: randomUUID(),
@@ -849,15 +871,6 @@ export class TaskCompletionEvidenceService {
       // A send-back starts the 30 days of what this version cites, and a CONFIRM holds it until the task goes (§2.8).
       await settleCitedFileExpiry(tx, { ownerId, taskId });
 
-      // The derivation, and the only thing this door writes outside its own row. It asks the
-      // task's OWN declared criterion: evidence submitted against an EXECUTABLE or VERIFICATION
-      // task is recorded and answered like any other, and completes nothing, because those two are
-      // settled by facts of their own.
-      const completed = deriveTaskCompletionStatus({
-        completionCriterion: task.completionCriterion,
-        latestEvidenceRevision: latest.revision,
-        confirmedEvidenceRevision: written.decision === 'CONFIRM' ? latest.revision : null,
-      });
       let settled = false;
       if (completed != null) {
         // The criterion and the pending statuses are repeated in the write even though the row is
@@ -905,7 +918,7 @@ export class TaskCompletionEvidenceService {
     // goes on submit; a fault is logged and never reported as a failed decision, the note staying
     // readable on the revision in `list`.
     if (committed.decision.decision === 'SEND_BACK') {
-      await this.evidenceReviews?.deliverSendBack(ownerId, taskId, committed.decision.id)
+      await this.evidenceReviews?.deliverSendBack(ownerId, taskId, committed.decision.id, ownerInTheApp ? null : input.decidingSessionId)
         .catch((error) => this.logger.warn(`send-back of task ${taskId} was not handed to its run: `
           + `${error instanceof Error ? error.message : error}`));
     }

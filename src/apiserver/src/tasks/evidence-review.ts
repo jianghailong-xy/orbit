@@ -2,6 +2,7 @@ import { ConflictException } from '@nestjs/common';
 import { CreatorType, type Prisma } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
 import { SESSION_ENDING_SELECT, sessionHasEnded } from '../projects/project-open-item';
+import type { BlockSender } from '../sessions/session-message';
 import { EVIDENCE_REVIEW_TURN_KEY_PREFIX, EVIDENCE_SEND_BACK_TURN_KEY_PREFIX } from '../sessions/watch-turn-key';
 import { criterionStandingRefusal, decidingSessionDisqualification } from './task-evidence-decision';
 import {
@@ -104,6 +105,9 @@ export function evidenceSendBackTurnId(decisionId: string): string {
  * What that turn says. Written into the turn at delivery — the decision row it names is immutable,
  * so nothing here is re-rendered at hand-out time, unlike the review block. The run learns whose
  * note it is, what the next revision has to show, and that nothing else was going to reach it.
+ *
+ * `from` is the session that decided, which the account owner's press in the app is not. The door also records a
+ * session that named no workspace as USER, so it is `from`, and not that column, that says the owner did not write this.
  */
 export function evidenceSendBackMessage(input: {
   taskId: string;
@@ -111,12 +115,19 @@ export function evidenceSendBackMessage(input: {
   revision: string;
   decidedByType: CreatorType;
   note: string;
+  from?: BlockSender | null;
 }): string {
-  const by = input.decidedByType === CreatorType.USER ? 'the account owner' : 'the session that reviewed it';
+  const by = !input.from && input.decidedByType === CreatorType.USER ? 'the account owner' : 'the session that reviewed it';
+  const attributes = [
+    `task="${uuidToBase62(input.taskId)}"`,
+    `revision="${input.revision}"`,
+    ...(input.from?.attributes ?? []),
+  ];
   return [
-    `<orbit-evidence-send-back task="${uuidToBase62(input.taskId)}" revision="${input.revision}">`,
+    `<orbit-evidence-send-back ${attributes.join(' ')}>`,
     `Revision ${input.revision} of the completion evidence you submitted for the task “${input.taskTitle}”`,
     `was sent back by ${by}.`,
+    ...(input.from?.lines ?? []),
     '',
     'What the next revision has to show (the note recorded with the decision):',
     input.note,

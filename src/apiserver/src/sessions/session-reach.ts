@@ -7,6 +7,7 @@ import {
   resolvePermissionMode,
   widerSessionRefusal,
 } from '../common/permission-mode';
+import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
 
 /**
  * What a session may do to another session that already exists: give it a turn, or end, complete,
@@ -36,6 +37,12 @@ import {
  * deleting its list (`TaskListsService.remove`). Those doors ask of each live run they would end, and
  * of nothing else: a task with no live run, or one no wider than the caller, goes on as it did.
  *
+ * So does what answers a run's work. A CONFIRM (`TaskCompletionEvidenceService.decide`) or a verdict
+ * (`TasksService.update`) that settles the task ends the run working it. A SEND_BACK and a confirmation return
+ * (`OwnerConfirmationReviewService.returnToRun`) hand the run the caller's words as its next turn. Each asks last,
+ * inside the transaction that writes it and past every refusal of its own, so a refused answer writes nothing and a
+ * version already answered keeps the answer it had. An answer that ends nothing and gives no turn asks nothing.
+ *
  * The run of a verification task is held to one rule more, whatever the sender's mode: only its project's
  * coordinator and the judgment sessions opened for that project may write to it, because what it finds is
  * worth only as much as nobody having told it what to find.
@@ -54,6 +61,10 @@ const ACTS = {
   cancelTask: { words: 'end it by cancelling its task', carriesMessage: false },
   deleteTask: { words: 'end it by deleting its task', carriesMessage: false },
   deleteList: { words: 'end it by deleting the list its task is in', carriesMessage: false },
+  confirmEvidence: { words: 'end it by confirming its evidence', carriesMessage: false },
+  writeVerdict: { words: 'end it by writing its verdict', carriesMessage: false },
+  sendBackEvidence: { words: 'send its evidence back to it', carriesMessage: true },
+  returnConfirmation: { words: 'return its confirmation request to it', carriesMessage: true },
 } as const;
 
 export type SessionAct = keyof typeof ACTS;
@@ -125,15 +136,21 @@ function verifierMessageRefusal(target: ReachRow): ForbiddenException {
     statusCode: 403,
     error: 'Forbidden',
     code: VERIFIER_MESSAGE_REFUSED_CODE,
-    message:
-      `Session ${uuidToBase62(target.id)} is the run of a verification task, which takes messages only from its `
-      + "project's coordinator and the judgment sessions opened for that project. Nothing was sent. Tell the coordinator "
-      + 'what it should know with project_send, or ask the account owner.',
+    message: target.task?.projectId
+      ? `Session ${uuidToBase62(target.id)} is the run of a verification task, which takes messages only from its `
+        + "project's coordinator and the judgment sessions opened for that project. Nothing was sent. Tell the coordinator "
+        + 'what it should know with project_send, or ask the account owner.'
+      : `Session ${uuidToBase62(target.id)} is the run of a verification task in no project, which takes no session's `
+        + 'messages. Nothing was sent. Ask the account owner.',
   });
 }
 
-/** What a caller of this mode can do instead, for the refusal. */
-function nextStep(callerMode: string): string {
+/** What a caller of this mode can do instead of this act, for the refusal. */
+function nextStep(callerMode: string, act: SessionAct): string {
+  if (act === 'returnConfirmation') {
+    return 'Record what must change with task_confirmation_review instead, under needsYou or notChecked: that gives the '
+      + 'run no turn, and the account owner reads it on their card. Or ask the account owner to switch this session\'s mode.';
+  }
   return callerMode === PermissionMode.PLAN
     ? 'Write what you want done into your plan, or ask the account owner to switch this session\'s mode. If that '
       + 'session is waiting on your answer, session_reply still reaches it.'
@@ -204,8 +221,26 @@ export async function assertSessionMayReach(
     targetMode,
     target.engine,
     ACTS[act].words,
-    nextStep(callerMode),
+    nextStep(callerMode, act),
   ));
+}
+
+/**
+ * Whether this session may end what a task reaching DONE ends: each live run doing its work, by the reaper's rule, which
+ * leaves a session only reading the task alone. Asked in the transaction of the write that would settle it.
+ */
+export async function assertMayEndWorkingRuns(
+  db: ReachDb,
+  ownerId: string,
+  callerSessionId: string,
+  taskId: string,
+  act: 'confirmEvidence' | 'writeVerdict',
+): Promise<void> {
+  const runs = await db.session.findMany({
+    where: { ownerId, taskId, startsTaskWork: true, status: { in: TASK_OCCUPYING } },
+    select: { id: true },
+  });
+  for (const run of runs) await assertSessionMayReach(db, ownerId, callerSessionId, run.id, act);
 }
 
 /**

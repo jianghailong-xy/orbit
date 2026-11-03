@@ -2,6 +2,8 @@ import { BadRequestException, ConflictException, ForbiddenException } from '@nes
 import type { Prisma as PrismaTypes } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
 import { criterionKeyOf } from '../projects/project-acceptance';
+import { SESSION_ENDING_SELECT, sessionHasEnded } from '../projects/project-open-item';
+import { assertMayEndWorkingRuns, assertSessionMayReach } from '../sessions/session-reach';
 import {
   type CriterionStandingTask,
   definitionIdFromKey,
@@ -41,6 +43,10 @@ import { taskOfRunBehind } from './verifier-write-authority';
  *     not having done the work makes a session independent, not the one to settle it.
  *  4. **A rejection says what to do next.** SEND_BACK carries a note; the task is not written to at
  *     all, so it stays OPEN and waits for the next evidence revision.
+ *  5. **The decider may do this to the run.** A CONFIRM that settles the task ends the run working it,
+ *     and a SEND_BACK gives the run that submitted a turn with the decider's words, so a session
+ *     held back from either (sessions/session-reach.ts) is held back from it here. Asked last, of a
+ *     decision about to be written (`assertDecisionMayReachRuns`).
  *
  * Every refusal carries a `requiredAction`, because a decider who is refused is holding an opinion
  * and needs to be told where to put it.
@@ -458,6 +464,35 @@ export async function sessionJudgesEvidence(
     where: { projectId: task.projectId, sessionId: session.id, status: 'SESSION_OPENED' },
   });
   return judgments > 0;
+}
+
+/**
+ * Check 5. What this decision is about to do to a run is held to what the deciding session may do to that run.
+ *
+ * A CONFIRM asks only when it settles the task, and of the runs working it now, whichever of them submitted. A SEND_BACK
+ * asks of the session that submitted, and only when it would give that session a turn: `deliverSendBack` never brings back a
+ * session that has ended, so the note then stays on the revision and nothing reaches anybody. The account owner's press in the
+ * app is not asked: the caller does not call this for one.
+ */
+export async function assertDecisionMayReachRuns(
+  tx: PrismaTypes.TransactionClient,
+  scope: { ownerId: string; taskId: string },
+  decidingSessionId: string,
+  answer: { decision: EvidenceDecisionValue; settlesTheTask: boolean; submittedBy: string },
+): Promise<void> {
+  if (answer.decision === 'CONFIRM') {
+    if (answer.settlesTheTask) {
+      await assertMayEndWorkingRuns(tx, scope.ownerId, decidingSessionId, scope.taskId, 'confirmEvidence');
+    }
+    return;
+  }
+  const run = await tx.session.findFirst({
+    where: { id: answer.submittedBy, ownerId: scope.ownerId },
+    select: SESSION_ENDING_SELECT,
+  });
+  if (run && !sessionHasEnded(run) && run.cancelRequestedAt === null) {
+    await assertSessionMayReach(tx, scope.ownerId, decidingSessionId, answer.submittedBy, 'sendBackEvidence');
+  }
 }
 
 /** Check 4's other half: a rejection nobody can act on leaves the next revision nothing to aim at. */

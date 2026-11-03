@@ -165,6 +165,42 @@ function senderIsNarrower(sender: Sender, recipient: RecipientMode | null): bool
 /** The tag the block is written under. */
 export const SESSION_MESSAGE_BLOCK_TAG = 'orbit-session-message';
 
+function fromSessionAttribute(sender: Sender): string {
+  return `from-session="${uuidToBase62(sender.id)}"`;
+}
+
+function fromModeAttribute(sender: Sender): string {
+  return `from-mode="${attribute(sender.mode)}"`;
+}
+
+function narrowerSenderLines(sender: Sender, recipient: RecipientMode | null): string[] {
+  return senderIsNarrower(sender, recipient) ? [narrowerSenderNote(sender.mode, recipient!)] : [];
+}
+
+/**
+ * What a platform turn's own block says of the session whose words it carries (a send-back's note, a reviewer's return), in the
+ * attributes and the sentence §2.2's block has: that turn has no sender, so nothing else would.
+ */
+export interface BlockSender {
+  attributes: string[];
+  lines: string[];
+}
+
+/** The session that said it, as it stands now, against the session it is being handed to. Null when it is gone. */
+export async function readBlockSender(
+  db: Pick<Prisma.TransactionClient, 'session'>,
+  ownerId: string,
+  senderSessionId: string,
+  recipientSessionId: string,
+): Promise<BlockSender | null> {
+  const sender = await readSender(db, ownerId, senderSessionId);
+  if (!sender) return null;
+  return {
+    attributes: [fromSessionAttribute(sender), fromModeAttribute(sender)],
+    lines: narrowerSenderLines(sender, await readRecipientMode(db, ownerId, recipientSessionId)),
+  };
+}
+
 /**
  * An attribute value as it can sit between double quotes: escaped, and on one line. A title is
  * anybody's text, and one holding a quote, a `<` or a newline would otherwise end the attribute, or
@@ -203,10 +239,10 @@ export function sessionMessageBlock(
   recipient?: RecipientMode | null,
 ): string {
   const attributes = [
-    `from-session="${uuidToBase62(sender.id)}"`,
+    fromSessionAttribute(sender),
     `from-title="${attribute(sender.title)}"`,
     `from-agent="${attribute(sender.workspace?.name ?? '')}"`,
-    `from-mode="${attribute(sender.mode)}"`,
+    fromModeAttribute(sender),
     // A sender that runs no task has none to name.
     ...(sender.taskId ? [`task="${uuidToBase62(sender.taskId)}"`] : []),
     ...(request
@@ -216,7 +252,7 @@ export function sessionMessageBlock(
   return [
     `<${SESSION_MESSAGE_BLOCK_TAG} ${attributes.join(' ')}>`,
     'This message comes from another Orbit session, not from the account owner.',
-    ...(senderIsNarrower(sender, recipient ?? null) ? [narrowerSenderNote(sender.mode, recipient!)] : []),
+    ...narrowerSenderLines(sender, recipient ?? null),
     ...(request ? requestLines(request) : []),
     `</${SESSION_MESSAGE_BLOCK_TAG}>`,
   ].join('\n');

@@ -355,6 +355,8 @@ function taskUpdateFixture(
     taskList: { findMany: async () => [] },
     projectHandoffApproval: { findFirst: async () => null },
     session: {
+      // Nothing is working this verifier here: what a verdict asks of a live run is session-judgment-reach.pg.spec.ts's.
+      findMany: async () => [],
       findFirst: async () => ({
         id: SESSION,
         taskId: null,
