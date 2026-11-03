@@ -66,10 +66,12 @@ function scanBashLine(cmd: string): { segments: string[]; readable: boolean } {
   let quote: '"' | "'" | "$'" | null = null;
   let readable = true;
   let atWordStart = true;
+  let openBraces = 0;
   const endSegment = () => {
     segments.push(cur);
     cur = '';
     atWordStart = true;
+    openBraces = 0;
   };
   for (let i = 0; i < cmd.length; i++) {
     const c = cmd[i];
@@ -140,8 +142,15 @@ function scanBashLine(cmd: string): { segments: string[]; readable: boolean } {
     }
     // A subshell, or in zsh a glob qualifier, which can run code.
     if (c === '(' || c === ')' || NOT_A_SHELL_SPACE.test(c)) readable = false;
+    if (c === '{') openBraces++;
+    if (c === '}') {
+      // With no open brace in its word this is a plain character to most shells, and in zsh it can end the command.
+      if (openBraces === 0) readable = false;
+      else openBraces--;
+    }
     cur += c;
     atWordStart = WORD_BREAKS.has(c);
+    if (atWordStart) openBraces = 0;
   }
   segments.push(cur);
   return { segments, readable: readable && quote === null };

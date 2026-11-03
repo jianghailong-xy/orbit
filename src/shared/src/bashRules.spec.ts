@@ -172,6 +172,22 @@ describe('readableBashSegments', () => {
     expect(trimmed('find . \\( -name a \\)')).toEqual(['find . \\( -name a \\)']);
   });
 
+  it('refuses a close brace with no open one in its word, which can end a command in zsh', () => {
+    expect(trimmed('ls a}\\\n touch x')).toBeNull();
+    expect(trimmed('ls $a}\\\n touch x')).toBeNull();
+    expect(trimmed('ls a}')).toBeNull();
+    expect(trimmed('ls {a b}')).toBeNull();
+    expect(trimmed('ls {}}')).toBeNull();
+    expect(trimmed('ls \\{a}')).toBeNull();
+    // A pair is brace expansion, and a quoted or escaped one is only text.
+    expect(trimmed('ls {a,b}')).toEqual(['ls {a,b}']);
+    expect(trimmed('ls x{a,b}y{c,d}')).toEqual(['ls x{a,b}y{c,d}']);
+    expect(trimmed('find . -exec ls {} +')).toEqual(['find . -exec ls {} +']);
+    expect(trimmed("ls 'a}'")).toEqual(["ls 'a}'"]);
+    expect(trimmed('ls "a}"')).toEqual(['ls "a}"']);
+    expect(trimmed('ls a\\}')).toEqual(['ls a\\}']);
+  });
+
   it('refuses a character JS takes for a space and a shell takes for part of a word', () => {
     for (const odd of ['\r', '\f', '\v', '\u00a0', '\u2028', '\u3000', '\ufeff', '\u0000']) {
       expect(trimmed(`ls${odd}x`), JSON.stringify(odd)).toBeNull();

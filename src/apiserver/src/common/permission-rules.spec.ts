@@ -292,7 +292,8 @@ test('a rule covers only what can be read for certain: the shapes that reach a p
     bash('ls "a'),
     bash('ls a\\'),
     bash("ls '\\'"),
-    // A subshell, and a space only JS sees.
+    // A close brace that can end a command in zsh, a subshell, and a space only JS sees.
+    bash('ls a}\\\n touch x'),
     bash('ls *(x)'),
     bash('ls\rx'),
     bash('\u00a0ls'),
@@ -334,6 +335,7 @@ test('a rule still covers the ordinary ways of writing what it names', () => {
     'git commit -m "a (b)"',
     'ls $HOME',
     'ls FOO=bar',
+    'ls {a,b}',
     '  ls  \n',
   ]) {
     assert.deepEqual(coveredEverywhere(bash(command), allowed), [true, true, true, true, true], command);
