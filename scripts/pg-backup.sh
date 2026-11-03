@@ -16,8 +16,8 @@
 # set the loop also mirrors it to another machine over ssh — the only copy that survives
 # losing this disk. The attachment files go with it: Postgres only names their bytes, which
 # are in the files directory (docs/orbit-files-design.md §2.10), mounted here read-only.
-# Before the mirror's --delete it reads the target, and leaves one that holds another cluster's
-# archive alone. The files copy is pruned by name, of bytes the database says have gone.
+# Before the mirror's --delete it reads the target, and leaves one it cannot read, or that holds another
+# cluster's archive, alone. The files copy is pruned by name, of bytes the database says have gone.
 set -eu
 
 ARCHIVE_DIR="${ORBIT_ARCHIVE_DIR:-/archive}"
@@ -108,20 +108,32 @@ sync_ready() {
   if [ -f "$SYNC_KNOWN_HOSTS" ]; then
     ssh_opts="$ssh_opts -o UserKnownHostsFile=$SYNC_KNOWN_HOSTS -o StrictHostKeyChecking=yes"
   fi
+  # Where rsync's stderr goes while its stdout is read, for this round: the loop removes it.
+  if ! rsync_stderr="$(mktemp)"; then
+    log "ERROR: off-host sync to $SYNC_TARGET failed: could not make a temporary file"
+    return 1
+  fi
 }
 
-# One directory of the target, as `rsync --list-only` prints it: "<mode> <size> <date> <time> <name>".
-# Exit 23 is rsync finding nothing at that path, which is what a first install looks like, so it
-# answers as an empty directory. Any other failure says why on the way out, and answers non-zero.
+# What the last rsync said on stderr, on one line and short enough for a log line. Only a failure asks: ssh says what it likes
+# there on the way, such as a warning about the server's key exchange, which is neither a name in a listing nor a change, and
+# ends its lines in carriage returns, which on a terminal would write over the start of the log line.
+rsync_said() { printf '%s' "$(cat "$rsync_stderr")" | tr -d '\r' | tr '\n' ' ' | tail -c 300; }
+
+# One directory of the target, as `rsync --list-only` prints it on stdout: "<mode> <size> <date> <time> <name>".
+# A listing that fails says why on the way out and answers non-zero, unless the path is not there at all, which is what a first
+# install looks like and answers as an empty directory. Exit 23 cannot tell those apart, since a directory it may not read exits 23
+# too, and the words for which it was are the backup host's. So rsync is asked again: with --ignore-missing-args, and with -R so
+# that it looks up the whole path at once, it exits 0 and lists nothing only if that lookup says the path does not exist.
 list_target() {
-  if listing="$(rsync --list-only --timeout=600 -e "ssh $ssh_opts" "$@" 2>&1)"; then
+  if listing="$(rsync --list-only --timeout=600 -e "ssh $ssh_opts" "$@" 2>"$rsync_stderr")"; then
     printf '%s\n' "$listing"
     return 0
-  else
-    status=$?
   fi
-  [ "$status" -eq 23 ] && return 0
-  printf '%s\n' "$listing" | tr '\n' ' ' | tail -c 300
+  if found="$(rsync --list-only -R --ignore-missing-args --timeout=600 -e "ssh $ssh_opts" "$@" 2>/dev/null)" && [ -z "$found" ]; then
+    return 0
+  fi
+  rsync_said
   return 1
 }
 
@@ -192,9 +204,9 @@ target_is_ours() {
   there=""
   for segment in $(printf '%s\n' "$remote_segments" | tr -d , | sort -n -k2 | head -n 3 | awk '{print $NF}'); do
     rm -f "$scratch/segment"
-    if ! out="$(rsync --timeout=600 -e "ssh $ssh_opts" "$SYNC_TARGET/wal/$segment" "$scratch/segment" 2>&1)"; then
+    if ! rsync --timeout=600 -e "ssh $ssh_opts" "$SYNC_TARGET/wal/$segment" "$scratch/segment" >/dev/null 2>"$rsync_stderr"; then
       rm -rf "$scratch"
-      log "ERROR: off-host sync to $SYNC_TARGET failed: could not read $segment from the target: $(printf '%s' "$out" | tr '\n' ' ' | tail -c 300)"
+      log "ERROR: off-host sync to $SYNC_TARGET failed: could not read $segment from the target: $(rsync_said)"
       return 1
     fi
     there="$(segment_system_id "$scratch/segment")"
@@ -263,14 +275,14 @@ sync_archive() {
   # Then --delete so the copy mirrors retention instead of growing forever; --timeout so a
   # stalled transfer cannot wedge the loop and stop base backups; .staging-* is a backup
   # still being written, so it never ships.
-  if ! sent="$( { { [ "$hold_deletes" = no ] && [ -n "$shared_segments" ]; } || rsync -a --timeout=600 --itemize-changes -e "ssh $ssh_opts" "$WAL_DIR" "$SYNC_TARGET/" 2>&1; } \
-       && { [ "$hold_deletes" = no ] || rsync -a --timeout=600 --itemize-changes --exclude '.staging-*' -e "ssh $ssh_opts" "$ARCHIVE_DIR/" "$SYNC_TARGET/" 2>&1; })"; then
-    log "ERROR: off-host sync to $SYNC_TARGET failed: $(printf '%s' "$sent" | tr '\n' ' ' | tail -c 300)$(no_room_advice "$sent")"
+  if ! sent="$( { { [ "$hold_deletes" = no ] && [ -n "$shared_segments" ]; } || rsync -a --timeout=600 --itemize-changes -e "ssh $ssh_opts" "$WAL_DIR" "$SYNC_TARGET/" 2>"$rsync_stderr"; } \
+       && { [ "$hold_deletes" = no ] || rsync -a --timeout=600 --itemize-changes --exclude '.staging-*' -e "ssh $ssh_opts" "$ARCHIVE_DIR/" "$SYNC_TARGET/" 2>"$rsync_stderr"; })"; then
+    log "ERROR: off-host sync to $SYNC_TARGET failed: $(rsync_said)$(no_room_advice "$(cat "$rsync_stderr")")"
     return 1
   fi
   if ! out="$(rsync -a --delete --timeout=600 --itemize-changes --exclude '.staging-*' \
-       -e "ssh $ssh_opts" "$ARCHIVE_DIR/" "$SYNC_TARGET/" 2>&1)"; then
-    log "ERROR: off-host sync to $SYNC_TARGET failed: $(printf '%s' "$out" | tr '\n' ' ' | tail -c 300)"
+       -e "ssh $ssh_opts" "$ARCHIVE_DIR/" "$SYNC_TARGET/" 2>"$rsync_stderr")"; then
+    log "ERROR: off-host sync to $SYNC_TARGET failed: $(rsync_said)"
     return 1
   fi
   MIRRORED=yes
@@ -292,8 +304,8 @@ sync_files() {
   # of, so what goes from this copy goes by name, in prune_files (docs/postgres-backup-restore.md).
   # tmp/ is uploads still arriving.
   if ! out="$(rsync -a --timeout=600 --itemize-changes --exclude '/tmp/' \
-       -e "ssh $ssh_opts" "$FILES_DIR/" "$FILES_SYNC_TARGET/" 2>&1)"; then
-    log "ERROR: off-host sync to $FILES_SYNC_TARGET failed: $(printf '%s' "$out" | tr '\n' ' ' | tail -c 300)"
+       -e "ssh $ssh_opts" "$FILES_DIR/" "$FILES_SYNC_TARGET/" 2>"$rsync_stderr")"; then
+    log "ERROR: off-host sync to $FILES_SYNC_TARGET failed: $(rsync_said)"
     return 1
   fi
   changed="$(printf '%s\n' "$out" | grep -c . || true)"
@@ -322,13 +334,9 @@ prune_files() {
     log "ERROR: refusing to prune $FILES_SYNC_TARGET: $FILES_DIR is empty or not mounted"
     return 1
   fi
-  if listed="$(rsync -r --list-only --timeout=600 -e "ssh $ssh_opts" "$FILES_SYNC_TARGET/" 2>&1)"; then
-    :
-  else
-    status=$?
-    # No copy there yet, and so nothing to prune.
-    [ "$status" -eq 23 ] && return 0
-    log "ERROR: pruning $FILES_SYNC_TARGET failed: could not list it: $(printf '%s' "$listed" | tr '\n' ' ' | tail -c 300)"
+  # No copy there yet lists as empty, and so leaves nothing to prune.
+  if ! listed="$(list_target -r "$FILES_SYNC_TARGET/")"; then
+    log "ERROR: pruning $FILES_SYNC_TARGET failed: could not list it: $listed"
     return 1
   fi
   scratch="$(mktemp -d)"
@@ -351,10 +359,10 @@ prune_files() {
   # keeps them. Every other name is excluded, which --delete leaves alone, and --max-delete says how many
   # this can be whatever the rules turn out to match.
   echo '- *' >> "$scratch/rules"
-  if ! out="$(rsync -r --delete --max-delete="$count" --filter="merge $scratch/rules" --timeout=600 \
-       -e "ssh $ssh_opts" "$scratch/none/" "$FILES_SYNC_TARGET/" 2>&1)"; then
+  if ! rsync -r --delete --max-delete="$count" --filter="merge $scratch/rules" --timeout=600 \
+       -e "ssh $ssh_opts" "$scratch/none/" "$FILES_SYNC_TARGET/" >/dev/null 2>"$rsync_stderr"; then
     rm -rf "$scratch"
-    log "ERROR: pruning $FILES_SYNC_TARGET failed: $(printf '%s' "$out" | tr '\n' ' ' | tail -c 300)"
+    log "ERROR: pruning $FILES_SYNC_TARGET failed: $(rsync_said)"
     return 1
   fi
   rm -rf "$scratch"
@@ -433,6 +441,7 @@ while :; do
     sync_archive || true
     sync_files || true
     prune_files || true
+    rm -f "$rsync_stderr"
   fi
   sleep "$POLL"
 done
