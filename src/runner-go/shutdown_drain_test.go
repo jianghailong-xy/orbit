@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -280,6 +281,73 @@ func TestLandingsHandedOverAfterTheStopBeganAreHandedBack(t *testing.T) {
 		t.Fatalf("handed back %v, want %v", got, want)
 	}
 	ops.Wait()
+}
+
+// What each service manager allows, against what the stop can take. A systemd unit and a managed Pod keep the
+// numbers they were sized for, whatever a Mac needs. A Mac's stop fits launchd's window, in the order it has
+// everywhere: what a stop interrupts still has time to say so.
+func TestTheStopFitsWhatEachServiceManagerAllows(t *testing.T) {
+	for _, goos := range []string{"linux", "windows"} {
+		budget := stopBudgetFor(goos)
+		want := stopBudget{
+			drain:        100 * time.Second,
+			leaseRelease: 10 * time.Second,
+			eventFlush:   20 * time.Second,
+			finalize:     20 * time.Second,
+			margin:       10 * time.Second,
+		}
+		if budget != want {
+			t.Errorf("%s stops under %+v, want %+v", goos, budget, want)
+		}
+		if latest := budget.envelope() + shutdownLastBeatWait; latest != 175*time.Second {
+			t.Errorf("%s is gone %v into a stop at the latest, want 175 s: 5 s inside systemd's limit, 65 s inside a Pod's", goos, latest)
+		}
+	}
+	unit := renderSystemdUnit("u", "g", "/o/orbit", "/h", "/o", "/usr/bin", nil)
+	if !strings.Contains(unit, "TimeoutStopSec=180\n") {
+		t.Errorf("the unit's stop limit moved, which the budgets above were sized for:\n%s", unit)
+	}
+
+	mac := stopBudgetFor("darwin")
+	window := time.Duration(launchdExitTimeOutSeconds) * time.Second
+	if latest := mac.envelope() + shutdownLastBeatWait + linkCloseWait; latest != 55*time.Second || latest >= window {
+		t.Errorf("a Mac is gone %v into a stop at the latest, want 55 s inside launchd's %v", latest, window)
+	}
+	const (
+		checkTreeEnds = 5 * time.Second  // cmd.WaitDelay (configureSessionProcessTree)
+		handBackTry   = 15 * time.Second // Transport.integrationJobRelease
+	)
+	if left := mac.envelope() - mac.drain; left < checkTreeEnds+handBackTry {
+		t.Errorf("%v of a Mac's stop is left when a check is stopped, too little to hand it back once", left)
+	}
+	flushEnds := mac.drain + 2*mac.leaseRelease + mac.eventFlush
+	if jobsReported := bgDrainWaitCap + bgKillTeardownGrace; flushEnds < jobsReported {
+		t.Errorf("a Mac's last flush ends %v into the stop, before the jobs drain reports what it killed at %v", flushEnds, jobsReported)
+	}
+	if flushEnds > mac.envelope() {
+		t.Errorf("a Mac's last flush ends %v into the stop, past the envelope of %v", flushEnds, mac.envelope())
+	}
+}
+
+// The numbers the stop actually runs on are this operating system's.
+func TestTheStopRunsOnThisOperatingSystemsBudget(t *testing.T) {
+	want := stopBudgetFor(runtime.GOOS)
+	got := stopBudget{
+		drain:        shutdownDrainTimeout,
+		leaseRelease: finalLeaseReleaseTimeout,
+		eventFlush:   eventFlushShutdownGrace,
+		finalize:     finalizeRunShutdownGrace,
+		margin:       want.margin,
+	}
+	if got != want {
+		t.Errorf("the stop runs on %+v, want %+v", got, want)
+	}
+	if shutdownOperationsTimeout != want.drain {
+		t.Errorf("heartbeat work gets %v, want what a turn gets, %v", shutdownOperationsTimeout, want.drain)
+	}
+	if shutdownSupervisorTimeout != want.envelope() {
+		t.Errorf("the envelope is %v, want %v", shutdownSupervisorTimeout, want.envelope())
+	}
 }
 
 // Asked of the source, as the self-update's turn gate is (TestTheRunLoopOnlyUpdatesThroughTheTurnGate):

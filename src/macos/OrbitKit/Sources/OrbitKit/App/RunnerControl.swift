@@ -138,6 +138,7 @@ public enum Launchctl {
     public static func bootstrap(domain: String, plistPath: String) -> [String] { ["bootstrap", domain, plistPath] }
     public static func bootout(domain: String, plistPath: String) -> [String] { ["bootout", domain, plistPath] }
     public static func kickstartRestart(domain: String) -> [String] { ["kickstart", "-k", "\(domain)/\(label)"] }
+    public static func terminate(domain: String) -> [String] { ["kill", "SIGTERM", "\(domain)/\(label)"] }
     public static func list() -> [String] { ["list"] }
     public static func printService(domain: String) -> [String] { ["print", "\(domain)/\(label)"] }
 }
@@ -149,6 +150,12 @@ public enum Launchctl {
 /// runner from the control plane's /dl once, at enrollment, and from then on the runner updates
 /// `~/.orbit/bin/orbit` itself. Pure string → unit-tested.
 public enum LaunchdPlist {
+    /// What launchd gives the runner between SIGTERM and SIGKILL when launchd stops it, on every
+    /// macOS: a plist with no such key gets 5 s, and macOS 26 and later read anything above 60 as 60.
+    /// The same number as runner-go's `launchdExitTimeOutSeconds`, which has the measurements, and
+    /// the runner's whole stop stays inside it.
+    public static let exitTimeOut = 60
+
     public static func make(label: String, programPath: String, orbitHome: String,
                             home: String, path: String, logPath: String) -> String {
         """
@@ -170,6 +177,7 @@ public enum LaunchdPlist {
           </dict>
           <key>RunAtLoad</key><true/>
           <key>KeepAlive</key><true/>
+          <key>ExitTimeOut</key><integer>\(exitTimeOut)</integer>
           <key>StandardOutPath</key><string>\(logPath)</string>
           <key>StandardErrorPath</key><string>\(logPath)</string>
         </dict>
@@ -192,27 +200,39 @@ public enum LaunchdPlist {
         return "gui/\(uid)"
     }
 
-    /// The LaunchAgent an older app left, rewritten so its runner updates itself. Apps that bundled
-    /// the runner set ORBIT_NO_SELFUPDATE and copied their own runner over `~/.orbit/bin/orbit`
-    /// whenever the versions differed; an app with no runner to copy would leave it on its version
-    /// for good. `installed` is the plist on disk, nil when no service is installed. Returns
-    /// `make`'s plist with the installed one's label, binary, ORBIT_HOME, HOME, PATH and log, or
-    /// nil when there's nothing to rewrite: no service, a plist without ORBIT_NO_SELFUPDATE (already
-    /// rewritten, or the CLI's — it never sets it), or one that doesn't read as a plist with those
-    /// values.
+    /// The LaunchAgent an older app left, rewritten. `installed` is the plist on disk, nil when no
+    /// service is installed. There are two things to put right:
+    ///
+    /// Apps that bundled the runner set ORBIT_NO_SELFUPDATE and copied their own runner over
+    /// `~/.orbit/bin/orbit` whenever the versions differed; an app with no runner to copy would
+    /// leave it on its version for good. Those get `make`'s plist with the installed one's label,
+    /// binary, ORBIT_HOME, HOME, PATH and log.
+    ///
+    /// A plist with no ExitTimeOut has launchd kill its runner 5 s into every stop, so it gets
+    /// `exitTimeOut` and otherwise stays as it is.
+    ///
+    /// Returns nil when there's nothing to rewrite: no service, a plist with neither problem
+    /// (already rewritten, or the CLI's, which sets ExitTimeOut and never ORBIT_NO_SELFUPDATE), or
+    /// one that doesn't read as a plist with those values.
     public static func migrated(from installed: String?) -> String? {
         guard let installed,
               let plist = try? PropertyListSerialization.propertyList(from: Data(installed.utf8), format: nil)
-                as? [String: Any],
-              let env = plist["EnvironmentVariables"] as? [String: String],
-              env["ORBIT_NO_SELFUPDATE"] != nil,
-              let label = plist["Label"] as? String,
-              let program = (plist["ProgramArguments"] as? [String])?.first,
-              let orbitHome = env["ORBIT_HOME"], let home = env["HOME"], let path = env["PATH"],
-              let logPath = plist["StandardOutPath"] as? String
+                as? [String: Any]
         else { return nil }
-        return make(label: label, programPath: program, orbitHome: orbitHome,
-                    home: home, path: path, logPath: logPath)
+        if (plist["EnvironmentVariables"] as? [String: String])?["ORBIT_NO_SELFUPDATE"] != nil {
+            guard let env = plist["EnvironmentVariables"] as? [String: String],
+                  let label = plist["Label"] as? String,
+                  let program = (plist["ProgramArguments"] as? [String])?.first,
+                  let orbitHome = env["ORBIT_HOME"], let home = env["HOME"], let path = env["PATH"],
+                  let logPath = plist["StandardOutPath"] as? String
+            else { return nil }
+            return make(label: label, programPath: program, orbitHome: orbitHome,
+                        home: home, path: path, logPath: logPath)
+        }
+        guard plist["ExitTimeOut"] == nil, let end = installed.range(of: "</dict>", options: .backwards)
+        else { return nil }
+        return installed.replacingCharacters(
+            in: end, with: "  <key>ExitTimeOut</key><integer>\(exitTimeOut)</integer>\n</dict>")
     }
 }
 

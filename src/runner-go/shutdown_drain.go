@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"runtime"
 	"time"
 )
 
@@ -19,26 +20,87 @@ import (
 // 90 s, where the next process would otherwise have reclaimed it.
 //
 // So the heartbeat now beats until both kinds of work are over, the second kind gets a budget, and what
-// is left of it when the budget runs out is stopped and handed back — a landing stops its checks,
-// removes its scratch worktree and gives its claim back to be run again at once (integrate.go,
+// is left of it when the budget runs out is stopped and handed back — a landing stops its checks, gives
+// its claim back to be run again at once and removes its scratch worktree (integrate.go,
 // handBackIntegrationJob).
 //
-// THE BUDGETS. Everything stays inside the supervisor envelope the sessions already had,
-// shutdownSupervisorTimeout (170 s), which is below both deadlines a stop is held to:
+// THE BUDGETS. Everything stays inside the supervisor envelope, shutdownSupervisorTimeout, which is below
+// the deadline the service manager holds a stop to. That deadline is not the same everywhere, so the
+// pieces are too (stopBudgetFor):
 //   - systemd's TimeoutStopSec of a self-managed runner, 180 s (service.go, host_setup.go);
 //   - a managed runner Pod's termination grace, 240 s (MANAGED_POD_TERMINATION_GRACE_SECONDS in
-//     src/apiserver/src/managed-runners/managed-runner-resources.ts).
+//     src/apiserver/src/managed-runners/managed-runner-resources.ts);
+//   - launchd's ExitTimeOut on a Mac, 60 s at most, whatever a plist asks for (launchdExitTimeOutSeconds in
+//     service.go, which has the measurements).
 //
-// Heartbeat work gets what an in-flight turn gets, shutdownDrainTimeout (100 s), to finish on its own.
-// That leaves 70 s of the envelope for what is stopped then: ending a check's process tree (5 s at
-// most), removing its worktree, and the hand-back request (15 s per attempt, tried again while time
-// remains). The last beat is waited for at most shutdownLastBeatWait (5 s), so the runner is gone 175 s
-// after the stop at the very latest: 5 s inside systemd's limit, 65 s inside the Pod's. An idle runner
-// is gone as soon as it has drained, as before.
-const (
+// On Linux the envelope is 170 s. Heartbeat work gets what an in-flight turn gets, shutdownDrainTimeout
+// (100 s), to finish on its own. That leaves 70 s of the envelope for what is stopped then: ending a
+// check's process tree (5 s at most), the hand-back request (15 s per attempt, tried again while time
+// remains), and removing the check's worktree. The last beat is waited for at most shutdownLastBeatWait
+// (5 s), so the runner is gone 175 s after the stop at the very latest: 5 s inside systemd's limit, 65 s
+// inside the Pod's.
+//
+// On a Mac the envelope is 45 s, in the same order. Turns and heartbeat work get 25 s to finish on their
+// own, which leaves 20 s for one whole hand-back attempt after the check's tree has ended. A turn torn
+// down at 25 s has its releases, 5 s each, and a flush that ends 40 s into the stop, and a jobs drain
+// that kills at bgDrainWaitCap (30 s) reports inside that flush. Past the envelope come the last beat (5 s
+// at most) and the link's close (linkCloseWait, 5 s at most), so the runner is gone 55 s after the stop at
+// the very latest, 5 s inside launchd's limit. macOS 15 would allow more, but one budget for every Mac is
+// one thing to reason about, and the runner cannot tell who sent its SIGTERM anyway.
+//
+// A worktree is removed beside the hand-back rather than ahead of it, because a project's scratch tree
+// can take longer to delete than a Mac's stop has left. What did not go in time is cleared by the next
+// attempt at the job, or by the sweep at the next start.
+//
+// An idle runner is gone as soon as it has drained, everywhere.
+
+// stopBudget is what a stopping runner gives each piece of its stop.
+type stopBudget struct {
+	// drain is what an in-flight turn gets to finish, and what heartbeat work gets before it is stopped.
+	drain time.Duration
+	// leaseRelease bounds one release of an inbox generation; a stopping session can make two.
+	leaseRelease time.Duration
+	// eventFlush is what the final event flush is given past the drain and the releases.
+	eventFlush time.Duration
+	// finalize is what a terminal finalization racing the stop is given.
+	finalize time.Duration
+	// margin is the rest of the envelope, for the wait on an engine's output after it is killed.
+	margin time.Duration
+}
+
+// stopBudgetFor is the budget a runner on this operating system stops under.
+func stopBudgetFor(goos string) stopBudget {
+	if goos == "darwin" {
+		return stopBudget{
+			drain:        25 * time.Second,
+			leaseRelease: 5 * time.Second,
+			eventFlush:   5 * time.Second,
+			finalize:     5 * time.Second,
+		}
+	}
+	return stopBudget{
+		drain:        100 * time.Second,
+		leaseRelease: 10 * time.Second,
+		eventFlush:   20 * time.Second,
+		finalize:     20 * time.Second,
+		margin:       10 * time.Second,
+	}
+}
+
+// envelope is how long the stop waits for sessions and operations before it leaves without them.
+func (b stopBudget) envelope() time.Duration {
+	return b.drain + 2*b.leaseRelease + b.eventFlush + b.finalize + b.margin
+}
+
+var (
+	hostStopBudget = stopBudgetFor(runtime.GOOS)
+
 	shutdownOperationsTimeout = shutdownDrainTimeout
-	shutdownLastBeatWait      = 5 * time.Second
-	shutdownPollInterval      = 200 * time.Millisecond
+)
+
+const (
+	shutdownLastBeatWait = 5 * time.Second
+	shutdownPollInterval = 200 * time.Millisecond
 )
 
 // shutdownSequence is the stop, in order, with each piece the run loop owns passed in.

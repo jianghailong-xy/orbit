@@ -200,8 +200,9 @@ func runIntegrationJob(cmd IntegrationJobCommand, report integrationReporter) in
 // done (runloop.go's shutdown). When stop ends, the job stops at the first step that would otherwise
 // keep it: a round not yet begun is not begun, and the tree's recipe or a check still running is ended
 // with its whole process tree. The job then answers Interrupted, and its scratch worktree goes as on
-// every other exit. Git steps are not cut short, and a job whose checks have passed goes on to its
-// push and its verification: those take seconds, and finishing them is cheaper than doing it all again.
+// every other exit, once onInterrupted has been told. Git steps are not cut short, and a job whose
+// checks have passed goes on to its push and its verification: those take seconds, and finishing them
+// is cheaper than doing it all again.
 func runIntegrationJobUntil(stop context.Context, cmd IntegrationJobCommand, report integrationReporter) integrationResult {
 	return runIntegrationJobUntilWithProgress(stop, cmd, report, nil)
 }
@@ -220,7 +221,7 @@ type integrationProgressSender func(ctx context.Context, req IntegrationJobProgr
 // The job's own context is a CHILD of stop with a cause (context.WithCancelCause), because the two
 // ways a job ends early are not the same fact: the runner stopping hands the claim back to be run
 // again (J-T11), while a cancellation the control plane asked for is answered CANCELLED (J-T12).
-func runIntegrationJobUntilWithProgress(stop context.Context, cmd IntegrationJobCommand, report integrationReporter, sender integrationProgressSender) integrationResult {
+func runIntegrationJobUntilWithProgress(stop context.Context, cmd IntegrationJobCommand, report integrationReporter, sender integrationProgressSender) (result integrationResult) {
 	if cmd.CancelRequested {
 		return integrationResult{State: "CANCELLED", Phase: "FETCH"}
 	}
@@ -278,7 +279,12 @@ func runIntegrationJobUntilWithProgress(stop context.Context, cmd IntegrationJob
 	if legacy := legacyIntegrationScratchPath(workDir, cmd.JobID); legacy != scratch {
 		removeIntegrationWorktree(repoRoot, legacy)
 	}
-	defer removeIntegrationWorktree(repoRoot, scratch)
+	defer func() {
+		if result.Interrupted && cmd.onInterrupted != nil {
+			cmd.onInterrupted()
+		}
+		removeIntegrationWorktree(repoRoot, scratch)
+	}()
 
 	one := integrateOnce
 	if cmd.Kind == "CHECK_PROMOTION" || cmd.Kind == "LAND_PROMOTION" {
@@ -2095,6 +2101,20 @@ func runIntegrationJobAndReport(stop, handBack context.Context, t *Transport, jo
 			return t.integrationJobOutput(ctx, job.JobID, req)
 		}
 	}
+	// Removing a scratch worktree can outlast what the stop has left (THE BUDGETS, shutdown_drain.go), and it is
+	// the hand-back the next process is waiting for. What stays on disk the next attempt clears, so the hand-back
+	// goes as soon as the job knows it stopped.
+	var startHandBack sync.Once
+	handedBack := make(chan struct{})
+	beginHandBack := func() {
+		startHandBack.Do(func() {
+			go func() {
+				defer close(handedBack)
+				handBackIntegrationJob(handBack, t, job)
+			}()
+		})
+	}
+	job.onInterrupted = beginHandBack
 	result := runIntegrationJobUntilWithProgress(stop, job, func(phase string, moved *IntegrationUpstreamMoved) {
 		// Best effort: the lease renewal matters, the phase is for a reader, and the work carries
 		// on either way. The one report that is more than a phase is `upstreamMoved` — the control
@@ -2109,8 +2129,9 @@ func runIntegrationJobAndReport(stop, handBack context.Context, t *Transport, jo
 	}, sender)
 	if result.Interrupted {
 		logln("integration job", job.JobID, "stopped in", result.Phase,
-			"because this runner is stopping; nothing was pushed and its worktree is gone, so it is handed back to be run again")
-		handBackIntegrationJob(handBack, t, job)
+			"because this runner is stopping; nothing was pushed, so it is handed back to be run again")
+		beginHandBack()
+		<-handedBack
 		return
 	}
 	if result.Stopped {

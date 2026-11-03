@@ -72,13 +72,19 @@ final class RunnerControl {
         await refresh()
     }
 
+    // bootout and kickstart wait for the runner to leave, and with work in flight it first finishes
+    // what it can: up to a minute (`LaunchdPlist.exitTimeOut`).
     func stop() async {
+        message = "Stopping. A runner with work in flight can take up to a minute."
         _ = await Self.launchctl(Launchctl.bootout(domain: domain, plistPath: paths.plistFile.path))
+        message = nil
         await refresh()
     }
 
     func restart() async {
+        message = "Restarting. A runner with work in flight can take up to a minute."
         _ = await Self.launchctl(Launchctl.kickstartRestart(domain: domain))
+        message = nil
         await refresh()
     }
 
@@ -142,24 +148,36 @@ final class RunnerControl {
         }
     }
 
-    /// Launch-time upkeep for a Mac an older app enrolled. That app bundled the runner, so its
-    /// LaunchAgent set ORBIT_NO_SELFUPDATE and the app put its own runner back whenever the
-    /// versions differed. This rewrites the plist from today's template, keeping its binary,
-    /// ORBIT_HOME, HOME, PATH and log (`LaunchdPlist.migrated`), and reloads the service if it's
-    /// loaded. The binary isn't replaced: the runner updates it at its next check. No-op when no
-    /// service is installed, once rewritten, and for the CLI's plist. A stopped service picks the
-    /// new plist up at its next start.
+    /// Launch-time upkeep for a Mac an older app enrolled. That app either bundled the runner, so its
+    /// LaunchAgent set ORBIT_NO_SELFUPDATE and the app put its own runner back whenever the versions
+    /// differed, or wrote a plist with no ExitTimeOut, so launchd kills the runner 5 s into any stop.
+    /// This rewrites the plist (`LaunchdPlist.migrated`) and reloads the service if it's loaded. The
+    /// binary isn't replaced: the runner updates it at its next check. No-op when no service is
+    /// installed, once rewritten, and for the CLI's plist. A stopped service picks the new plist up at
+    /// its next start.
     func migrateLaunchAgent() async {
         let installed = try? String(contentsOf: paths.plistFile, encoding: .utf8)   // nil: no service
         guard let plist = LaunchdPlist.migrated(from: installed) else { return }
         do { try Data(plist.utf8).write(to: paths.plistFile) } catch { return }
         let list = await Self.launchctl(Launchctl.list())
-        guard Launchctl.parseList(list.output).loaded else { return }
+        let service = Launchctl.parseList(list.output)
+        guard service.loaded else { return }
         let plistPath = paths.plistFile.path
         let domain = self.domain
+        // The reload is launchd's own stop, which the plist being replaced may limit to 5 s. A SIGTERM
+        // from here starts no clock: the runner finishes what it can and leaves, launchd starts it again
+        // (KeepAlive), and the bootout then stops one with nothing to finish.
+        if let running = service.pid {
+            _ = await Self.launchctl(Launchctl.terminate(domain: domain))
+            for _ in 0..<LaunchdPlist.exitTimeOut {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                let now = await Self.launchctl(Launchctl.list())
+                if Launchctl.parseList(now.output).pid != running { break }
+            }
+        }
         _ = await Self.launchctl(Launchctl.bootout(domain: domain, plistPath: plistPath))
         // bootout can return while the runner is still draining, and bootstrap fails until it has
-        // exited (launchd SIGKILLs it after 20s by default), so keep trying a little longer.
+        // exited, so keep trying a little longer.
         for _ in 0..<30 {
             if await Self.launchctl(Launchctl.bootstrap(domain: domain, plistPath: plistPath)).status == 0 { break }
             try? await Task.sleep(nanoseconds: 1_000_000_000)

@@ -285,20 +285,21 @@ func eventFlushRetryPolicy(serverRejections *int) func(error) bool {
 const (
 	leaseActivationTimeout    = 20 * time.Second
 	terminalEventFlushTimeout = 5 * time.Second
-	finalizeRunShutdownGrace  = 20 * time.Second
 )
+
+var finalizeRunShutdownGrace = hostStopBudget.finalize
 
 // finalLeaseReleaseTimeout bounds one release of an inbox generation (retirePendingGeneration). A variable only so a
 // test can shorten it: the release that follows an engine's stop is sent again past it for as long as the control plane
 // cannot be reached (retireStoppedGeneration).
-var finalLeaseReleaseTimeout = 10 * time.Second
+var finalLeaseReleaseTimeout = hostStopBudget.leaseRelease
 
 // eventFlushShutdownGrace is what the final event flush is given past the turn drain and the
 // lease releases once the runner has begun to stop. A variable only so a test can scale it down
 // together with bgDrainWaitCap, the drain staying the longer of the two.
 var (
-	eventFlushShutdownGrace   = 20 * time.Second
-	shutdownSupervisorTimeout = shutdownDrainTimeout + 2*finalLeaseReleaseTimeout + eventFlushShutdownGrace + finalizeRunShutdownGrace + 10*time.Second
+	eventFlushShutdownGrace   = hostStopBudget.eventFlush
+	shutdownSupervisorTimeout = hostStopBudget.envelope()
 )
 
 func newLeaseGeneration() (string, error) {
