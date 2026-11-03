@@ -26,6 +26,7 @@ import {
   AggregationTaskFact,
   AggregationTaskStatus,
   PlannedTaskAggregation,
+  planTaskAggregation,
 } from './task-aggregation';
 import { taskRetirement } from '../tasks/task-supersession';
 import {
@@ -171,6 +172,24 @@ export async function collectAggregationScope(
     })),
     truncated: false,
   };
+}
+
+/**
+ * Which tasks a write of one task would settle: the moves to DONE of the plan `recomputeAggregates` runs once that write has
+ * committed, over the facts as they stand now with that task as the write leaves it. A PASS settles the subject that declares
+ * VERIFICATION_PASSED when the check is its newest. That is the plan's to say, so the answer cannot drift from what the write
+ * goes on to do, and a scope too big to plan settles nothing here as it settles nothing there.
+ */
+export async function tasksSettledBy(
+  db: AggregationScopeTransaction,
+  ownerId: string,
+  seedTaskIds: readonly string[],
+  written: Pick<AggregationTaskFact, 'id' | 'status' | 'verdict' | 'verifiesTaskId' | 'parentTaskId' | 'retirement'>,
+): Promise<string[]> {
+  const scope = await collectAggregationScope(db, ownerId, seedTaskIds);
+  if (scope.truncated) return [];
+  const plan = planTaskAggregation(scope.facts.map((fact) => (fact.id === written.id ? { ...fact, ...written } : fact)));
+  return plan.aggregations.filter((move) => move.to === 'DONE').map((move) => move.taskId);
 }
 
 /**

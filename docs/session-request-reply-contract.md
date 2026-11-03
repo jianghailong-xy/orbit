@@ -153,7 +153,7 @@ P0 让接收方第一次知道是谁在跟它说话，两个会话也就第一�
 | 门 | 什么时候问 | 比的是谁 |
 |---|---|---|
 | `task_evidence_decide` CONFIRM | 这次确认会让任务变 DONE | 做这个任务的每个活 run（`starts_task_work`，reaper 结束的就是这些），不管证据是谁提交的 |
-| `task_update {verdict}` | 这次写会让复核任务变 DONE。PASS、FAIL、INCONCLUSIVE 都会 | 这个复核任务上做事的每个活 run |
+| `task_update {verdict}` | 这次写会结算任务：复核任务自己（PASS、FAIL、INCONCLUSIVE 都会），和等它 PASS 的被复核任务（`VERIFICATION_PASSED`，这个 check 是最新的）。用的是写之后真正跑的那份计划（`tasksSettledBy`） | 这些任务上做事的每个活 run。复核任务自己的 run 也一样：它窄、被复核任务的 run 更宽时被拒，这两个 run 不直接相关 |
 | `task_evidence_decide` SEND_BACK | 这次退回会给一轮 | 提交这个版本的会话 |
 | `task_confirmation_return` | 这次退回会给一轮 | 这份确认请求所在的 run |
 
@@ -195,8 +195,8 @@ PROBLEMS，不给 run 一轮）。
 
 **这条规则挡不住的。** 不带会话的 runner 凭证；带 `mentions` 的评论；相关的 Auto 会话把话转给别人；Auto 发 Auto；
 Auto 的会话结束运行中的复核任务；`task_update` 改描述（对方读 `task_get` 才看到）；模型读到 §2.2 那句话之后怎么做。
-任何不是 run、不代表项目的 Auto 对话判项目里任务的证据：这张表只比模式，谁该判证据是决定门自己的规则。写结论时只问复核任务上的 run：
-`VERIFICATION_PASSED` 的被复核任务因此变 DONE 时，它上面的 run 被结束，不问。检查在写的事务里，不锁会话：检查之后才开始的 run 不会被问到。
+任何不是 run、不代表项目的 Auto 对话判项目里任务的证据：这张表只比模式，谁该判证据是决定门自己的规则。检查在写的事务里，不锁会话：
+检查之后才开始的 run 不会被问到。
 
 ---
 

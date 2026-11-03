@@ -13,6 +13,8 @@
  * Besides the table:
  *   - each direct relation, and what looks like one and is not;
  *   - only what the door would end or give a turn to is asked: a run that has ended, a write that ends nothing, go on as they did;
+ *   - a verdict ends more than its verifier's run when it settles more than its verifier: the subject that waits on its PASS,
+ *     by the plan the write goes on to run;
  *   - every refusal the door already had comes first, in its own words, and so does a version already answered;
  *   - a run of a verification task takes the two doors that carry words only as `session_send` does;
  *   - a stored mode that is null reads as the account's default, and a mode that runs as Bypass on its engine counts as Bypass;
@@ -1004,6 +1006,149 @@ test('what a session answers about a run reaches the run only as the table says'
       assertWent(await VERDICT.call(stop, stop.run), `a ${mode} run concluding its own check`);
       await VERDICT.went(stop);
     }
+  });
+
+  // ── what a verdict settles besides its verifier ──────────────────────────────────────────────
+  const gate: TaskShape = { completionCriterion: 'VERIFICATION', completionPolicy: 'VERIFICATION_PASSED', acceptanceCommand: null, acceptanceExpectedExitCode: null };
+  const aCheck = (subject: string, extra: TaskShape = {}): Promise<string> =>
+    taskIn({ verifiesTaskId: subject, completionCriterion: 'VERIFICATION', acceptanceCommand: null, acceptanceExpectedExitCode: null, ...extra });
+
+  /** A subject that waits on its check's PASS, with a run of its own in a mode, and that check, nobody running it. */
+  async function subjectAndCheck(mode: string | null, extra: TaskShape = {}, run: Shape = {}): Promise<{ subject: string; run: string; check: string }> {
+    const subject = await taskIn({ ...gate, ...extra });
+    const session = await sessionIn(mode, { taskId: subject, startsTaskWork: true, ...run });
+    return { subject, run: session, check: await aCheck(subject, extra.projectId ? { projectId: extra.projectId } : {}) };
+  }
+  const writeVerdict = (check: string, verdict: string, from: string): Promise<Answer> =>
+    send('PATCH', `/runner/tasks/${uuidToBase62(check)}`, { verdict }, asSession(from));
+  const statusOf = async (taskId: string): Promise<string> => (await taskRow(taskId)).status;
+
+  /** Everything a refused verdict could have changed, on both tasks. */
+  async function twoTasks(pair: { subject: string; run: string; check: string }): Promise<string> {
+    return JSON.stringify({
+      check: await taskRow(pair.check),
+      subject: await taskRow(pair.subject),
+      run: await prisma.session.findUniqueOrThrow({ where: { id: pair.run }, select: { status: true, endReason: true, cancelRequestedAt: true } }),
+    });
+  }
+
+  await t.test('a verdict that settles the subject: a Plan coordinator is refused, and is told it is the subject’s run it would end', async () => {
+    const coordinator = await sessionIn('plan');
+    const pair = await subjectAndCheck('auto', { projectId: await projectCoordinatedBy(coordinator) });
+    const before = await twoTasks(pair);
+    const answer = await writeVerdict(pair.check, 'PASS', coordinator);
+    assertRefused(answer, 'a Plan coordinator');
+    const words = String(answer.json.message);
+    assert.ok(words.includes(`session ${uuidToBase62(pair.run)} runs in "auto"`), words);
+    assert.ok(words.includes('so this session may not end it by writing the verdict that settles its task. Nothing was changed.'), words);
+    assert.equal(await twoTasks(pair), before, 'a refusal changes nothing');
+  });
+
+  await t.test('a verdict that settles the subject: a Default coordinator is directly related to its run, so it goes through', async () => {
+    const coordinator = await sessionIn('default');
+    const pair = await subjectAndCheck('auto', { projectId: await projectCoordinatedBy(coordinator) });
+    assertWent(await writeVerdict(pair.check, 'PASS', coordinator), 'a Default coordinator');
+    assert.equal(await statusOf(pair.check), 'DONE');
+    assert.equal(await statusOf(pair.subject), 'DONE');
+  });
+
+  await t.test('a verdict that settles the subject: a Default conversation unrelated to its run is refused, in no project', async () => {
+    const pair = await subjectAndCheck('auto');
+    const before = await twoTasks(pair);
+    assertRefused(await writeVerdict(pair.check, 'PASS', await sessionIn('default')), 'an unrelated Default');
+    assert.equal(await twoTasks(pair), before, 'a refusal changes nothing');
+  });
+
+  await t.test('a verdict that settles the subject: Auto and Bypass go through, whatever the subject’s run is to them', async () => {
+    for (const mode of ['auto', 'bypassPermissions']) {
+      const pair = await subjectAndCheck('bypassPermissions');
+      assertWent(await writeVerdict(pair.check, 'PASS', await sessionIn(mode)), `an unrelated ${mode}`);
+      assert.equal(await statusOf(pair.subject), 'DONE');
+    }
+  });
+
+  await t.test('a verdict that settles the subject: a run no wider than the caller goes on as it did', async () => {
+    const pair = await subjectAndCheck('default');
+    assertWent(await writeVerdict(pair.check, 'PASS', await sessionIn('default')), 'Default and Default');
+    assert.equal(await statusOf(pair.subject), 'DONE');
+  });
+
+  await t.test('a check’s own run in a narrow mode, the subject’s run wider: not directly related, so it is refused, and nothing is written', async () => {
+    const pair = await subjectAndCheck('auto');
+    const checkRun = await sessionIn('default', { taskId: pair.check, startsTaskWork: true });
+    const before = await twoTasks(pair);
+    const answer = await writeVerdict(pair.check, 'PASS', checkRun);
+    assertRefused(answer, 'a Default check concluding over a wider subject run');
+    assert.ok(String(answer.json.message).includes(uuidToBase62(pair.run)), answer.text);
+    assert.equal(await twoTasks(pair), before, 'a refusal changes nothing');
+    assert.equal(await prisma.taskCompletionEvidence.count({ where: { taskId: pair.check } }), 0);
+
+    const planPair = await subjectAndCheck('default');
+    const planRun = await sessionIn('plan', { taskId: planPair.check, startsTaskWork: true });
+    assertRefused(await writeVerdict(planPair.check, 'PASS', planRun), 'a Plan check concluding over a wider subject run');
+
+    const samePair = await subjectAndCheck('default');
+    const sameRun = await sessionIn('default', { taskId: samePair.check, startsTaskWork: true });
+    assertWent(await writeVerdict(samePair.check, 'PASS', sameRun), 'a Default check over a Default subject run');
+    assert.equal(await statusOf(samePair.subject), 'DONE');
+  });
+
+  await t.test('a verdict that settles the subject: a subject with no live run is not asked about, even from Plan', async () => {
+    const never = await taskIn(gate);
+    const check = await aCheck(never);
+    assertWent(await writeVerdict(check, 'PASS', await sessionIn('plan')), 'a subject nobody started');
+    assert.equal(await statusOf(never), 'DONE');
+    for (const ended of [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED]) {
+      const pair = await subjectAndCheck('auto', {}, { status: ended, finishedAt: new Date() });
+      assertWent(await writeVerdict(pair.check, 'PASS', await sessionIn('plan')), `a subject whose run has ${ended}`);
+      assert.equal(await statusOf(pair.subject), 'DONE');
+    }
+  });
+
+  await t.test('a verdict that settles the subject: a session only reading the subject is left alone by its end, so it is not asked about', async () => {
+    const pair = await subjectAndCheck('auto', {}, { startsTaskWork: false });
+    assertWent(await writeVerdict(pair.check, 'PASS', await sessionIn('plan')), 'past a reader');
+    assert.equal(await statusOf(pair.subject), 'DONE');
+  });
+
+  await t.test('a PASS that does not settle the subject is not asked about it: a subject not waiting on it', async () => {
+    const subject = await taskIn({ completionCriterion: 'VERIFICATION', completionPolicy: 'MANUAL', acceptanceCommand: null, acceptanceExpectedExitCode: null });
+    await sessionIn('auto', { taskId: subject, startsTaskWork: true });
+    const check = await aCheck(subject);
+    assertWent(await writeVerdict(check, 'PASS', await sessionIn('plan')), 'a MANUAL subject');
+    assert.equal(await statusOf(check), 'DONE');
+    assert.equal(await statusOf(subject), 'OPEN', 'nothing settled it');
+
+    const another = await taskIn();
+    await sessionIn('auto', { taskId: another, startsTaskWork: true });
+    const anotherCheck = await aCheck(another);
+    assertWent(await writeVerdict(anotherCheck, 'PASS', await sessionIn('plan')), 'a subject with a command of its own');
+    assert.equal(await statusOf(another), 'OPEN');
+  });
+
+  await t.test('a PASS that does not settle the subject is not asked about it: a newer check is the one it waits on', async () => {
+    const pair = await subjectAndCheck('auto');
+    await prisma.task.update({ where: { id: pair.check }, data: { createdAt: new Date(Date.now() - 60_000) } });
+    await aCheck(pair.subject);
+    assertWent(await writeVerdict(pair.check, 'PASS', await sessionIn('plan')), 'an older check');
+    assert.equal(await statusOf(pair.check), 'DONE');
+    assert.equal(await statusOf(pair.subject), 'OPEN', 'the newer check has said nothing');
+  });
+
+  for (const verdict of ['FAIL', 'INCONCLUSIVE']) {
+    await t.test(`a ${verdict} does not settle the subject, so its run is not asked about`, async () => {
+      const pair = await subjectAndCheck('auto');
+      assertWent(await writeVerdict(pair.check, verdict, await sessionIn('plan')), `a ${verdict} from Plan`);
+      assert.deepEqual([await statusOf(pair.check), (await taskRow(pair.check)).verdict], ['DONE', verdict]);
+      assert.equal(await statusOf(pair.subject), 'OPEN');
+    });
+  }
+
+  await t.test('a verdict on a check that is a parent’s last child settles the parent too, which has no run to ask about: the database keeps a work session off it', async () => {
+    const parent = await taskIn({ ...judged, completionPolicy: 'ALL_CHILDREN_DONE' });
+    const check = await aCheck(await taskIn(), { parentTaskId: parent });
+    assertWent(await writeVerdict(check, 'FAIL', await sessionIn('plan')), 'a verdict from Plan');
+    assert.deepEqual([await statusOf(check), await statusOf(parent)], ['DONE', 'DONE']);
   });
 
   // ── the run of a verification task ───────────────────────────────────────────────────────────

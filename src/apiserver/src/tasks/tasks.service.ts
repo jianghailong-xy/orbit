@@ -59,6 +59,7 @@ import {
   type AgentProviderSeed,
 } from '../workspaces/workspace-provider';
 import {
+  type AggregationTaskStatus,
   foremanPolicyConflict,
   planTaskAggregation,
   taskStartOwnedByCompletion,
@@ -67,6 +68,7 @@ import {
   AGGREGATION_SCOPE_MAX_TASKS,
   applyTaskAggregations,
   collectAggregationScope,
+  tasksSettledBy,
 } from '../projects/task-aggregation-writer';
 import {
   INTEGRATION_ITEM_KINDS,
@@ -10279,6 +10281,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // is: since 0132 the edge write advances `task_dependency_revision` instead of re-writing the
     // dependent Task, so replacing prerequisites alone leaves the row written exactly once.
     const rewritesTaskRow = !!supersession;
+    // Every input to §13.1 that this write could have moved: the task's own status, the policy
+    // that reads its children, the verdict its subject's parent may be waiting on, and either end
+    // of a re-parenting. Seeded with the task itself as well as its links, because the task can be
+    // a parent, a child, a verifier and a subject at once and the closure starts from all of them.
+    const aggregationSeeds = [
+      id,
+      before.parentTaskId,
+      before.verifiesTaskId,
+      dto.parentTaskId,
+      verifiesTaskId,
+      // §13.6 SU9: both ends of the supersession edge this write may have moved. The closure
+      // walks the chain from a seed, so seeding the predecessor as well as the successor is
+      // what makes a parent at the START of a chain recompute when a link at its END changes.
+      before.supersededByTaskId,
+      dto.supersededByTaskId ?? undefined,
+    ].filter((taskId): taskId is string => !!taskId);
     const updated = await (
       // `scopeFence` joins the two conditions that already force the transaction branch, and for
       // the same kind of reason: a scope re-check that runs outside the transaction it is meant to
@@ -10506,6 +10524,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             if (actingSessionId && projectedVerifierStatus === TaskStatus.DONE && before.status !== TaskStatus.DONE) {
               await assertMayEndWorkingRuns(tx, ownerId, actingSessionId, id, 'writeVerdict');
             }
+            // ...and it can settle more than its own verifier, by the plan `recomputeAggregates` runs below once this
+            // has committed: the subject that waits on its PASS, whose run ends with it just the same.
+            if (actingSessionId && concludesVerdict && verifiesTaskId) {
+              const settles = await tasksSettledBy(tx, ownerId, aggregationSeeds, {
+                id,
+                status: (projectedVerifierStatus ?? before.status) as AggregationTaskStatus,
+                verdict: dto.verdict ?? null,
+                verifiesTaskId,
+                parentTaskId: dto.parentTaskId === undefined ? before.parentTaskId : (dto.parentTaskId ?? null),
+                retirement: taskRetirement({ terminalReason: terminalReasonAfter, supersededByTaskId: supersededByTaskIdAfter }),
+              });
+              for (const settled of settles) {
+                await assertMayEndWorkingRuns(tx, ownerId, actingSessionId, settled, 'settleByVerdict');
+              }
+            }
             // WHICH SIDE of the status write this goes on is not a style choice: one PATCH
             // routinely does both, and 0128's trigger judges every statement on its own.
             //
@@ -10666,10 +10699,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // observation and lets the reader infer the cause from the verification count rather than
     // asserting one. Either way it is a campaign's most consequential silent change: this
     // deployment reverted six tasks in one afternoon and nothing anywhere said so.
-    // Every input to §13.1 that this write could have moved: the task's own status, the policy
-    // that reads its children, the verdict its subject's parent may be waiting on, and either end
-    // of a re-parenting. Seeded with the task itself as well as its links, because the task can be
-    // a parent, a child, a verifier and a subject at once and the closure starts from all of them.
     const movesAggregationInput =
       dto.status !== undefined ||
       dto.completionPolicy !== undefined ||
@@ -10685,21 +10714,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       dto.supersededByTaskId !== undefined ||
       dto.terminalReason !== undefined;
     if (movesAggregationInput) {
-      await this.recomputeAggregates(
-        ownerId,
-        [
-          id,
-          before.parentTaskId,
-          before.verifiesTaskId,
-          dto.parentTaskId,
-          verifiesTaskId,
-          // §13.6 SU9: both ends of the supersession edge this write may have moved. The closure
-          // walks the chain from a seed, so seeding the predecessor as well as the successor is
-          // what makes a parent at the START of a chain recompute when a link at its END changes.
-          before.supersededByTaskId,
-          dto.supersededByTaskId ?? undefined,
-        ].filter((taskId): taskId is string => !!taskId),
-      ).catch((e) => this.logger.warn(`aggregation after update of ${id} failed: ${e?.message ?? e}`));
+      await this.recomputeAggregates(ownerId, aggregationSeeds)
+        .catch((e) => this.logger.warn(`aggregation after update of ${id} failed: ${e?.message ?? e}`));
 
     }
     // A PASS on an evidence-bound verifier may have derived the SUBJECT's DONE inside the
