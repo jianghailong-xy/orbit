@@ -147,7 +147,7 @@ object EvidenceFiles {
         citation.obj("testReport")?.let { runCatching { Wire.json.decodeFromJsonElement(EvidenceTestReport.serializer(), it) }.getOrNull() }
     }
 
-    /** The reports of what a page shows: the citations', and a receipt's, which has none, off the list it has read (the web's `evidenceReportsOf`). */
+    /** The reports of what a page shows: the citations', and a receipt's, which has none, off the list it has read. */
     fun reports(citations: List<JsonObject>, files: List<EvidenceFile>): List<EvidenceTestReport> =
         reports(citations).ifEmpty { files.mapNotNull { file -> file.testReport?.let { runCatching { Wire.json.decodeFromJsonElement(EvidenceTestReport.serializer(), it) }.getOrNull() } } }
 

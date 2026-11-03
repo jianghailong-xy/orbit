@@ -79,19 +79,28 @@ internal object EvidenceFilesServer {
     @Volatile var holdBytes: CompletableDeferred<Unit>? = null
     /** The bytes of these files wait on their own: which picture comes first is the server's to say. */
     val holdFile = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
+    /** The receipts the conversation holds, as JSON rows. */
+    @Volatile var decided = ""
+    /** What a press of a pin answers: a status other than 200 refuses it. */
+    @Volatile var pinStatus = 200
+    @Volatile var pinnedAt: String? = "2026-11-03T01:00:00.000Z"
+    /** The pages of an older version, by revision. */
+    @Volatile var olderPages: Map<String, String> = emptyMap()
     /** How many messages the conversation holds above its cards. */
     @Volatile var messages = 0
     val bytes = ConcurrentHashMap<String, ByteArray>()
     val calls = CopyOnWriteArrayList<String>()
 
-    fun reset() { citations = ""; pages = emptyMap(); hold = null; holdBytes = null; pending = true; messages = 0; holdFile.clear(); bytes.clear(); calls.clear() }
+    fun reset() { citations = ""; pages = emptyMap(); hold = null; holdBytes = null; pending = true; messages = 0; holdFile.clear(); decided = ""; pinStatus = 200; olderPages = emptyMap(); bytes.clear(); calls.clear() }
     fun attachmentReads() = calls.filter { it.startsWith("GET attachments/") }.map { it.removePrefix("GET attachments/") }
     fun routeReads() = calls.filter { it.startsWith("GET tasks/$TASK/evidence/2/files") }
 
     /** One entry as `GET /tasks/:taskId/evidence/:revision/files` answers it. */
     fun file(id: String, name: String?, folder: String? = "menu-shots", mimeType: String? = "image/png", sizeBytes: Long? = 214L * 1024, width: Int? = null,
-        height: Int? = null, expiredAt: String? = null, gone: Boolean = false) = """{"id":"$id","kind":"file","name":${q(name)},"label":null,"mimeType":${q(mimeType)},
-        "sizeBytes":$sizeBytes,"sha256":"$SHA","folder":${q(folder)},"width":$width,"height":$height,"expiredAt":${q(expiredAt)},"gone":$gone,"testReport":null,
+        height: Int? = null, expiredAt: String? = null, gone: Boolean = false, expiresAt: String? = null, pinnedAt: String? = null, pinnable: Boolean? = null,
+        testReport: String = "null") = """{"id":"$id","kind":"file","name":${q(name)},"label":null,"mimeType":${q(mimeType)},
+        "sizeBytes":$sizeBytes,"sha256":"$SHA","folder":${q(folder)},"width":$width,"height":$height,"expiredAt":${q(expiredAt)},"gone":$gone,"testReport":$testReport,
+        "expiresAt":${q(expiresAt)},"pinnedAt":${q(pinnedAt)},${if (pinnable == null) "" else "\"pinnable\":$pinnable,"}
         "createdAt":${if (gone) "null" else "\"2026-11-02T06:40:00.000Z\""},"sessionId":null,"taskId":null,"fileBundleId":null}"""
     fun page(files: List<String>, fileCount: Int = files.size, totalBytes: Long = 1_887_437, nextOffset: Int? = null) =
         """{"revision":"2","submittedAt":"$SUBMITTED","fileCount":$fileCount,"totalBytes":$totalBytes,"files":${files.joinToString(",", "[", "]")},"nextOffset":$nextOffset}"""
@@ -117,7 +126,7 @@ internal object EvidenceFilesServer {
     private fun queue() = """{"decidingSessionId":"$COORD","count":1,"oldestAgeSeconds":600,"pending":[${if (!pending) "" else """{"taskId":"$TASK","title":"$TITLE","status":"IN_PROGRESS",
         "projectId":"$PROJECT","ownerCard":null,"criterion":{"key":"keys","text":"$CRITERION"},"evidenceRevision":"2","submittedAt":"$SUBMITTED","ageSeconds":600,
         "claim":"$CLAIM","gaps":["$GAP"],"citations":[$citations],"decidability":{"decidable":true,"refusal":null,"requiredAction":null},
-        "independence":{"independent":true,"disqualification":null,"requiredAction":null}}"""}],"waitingOnYou":[],"waitingOnCoordinator":[],"sentToCoordinator":[],"decided":[]}"""
+        "independence":{"independent":true,"disqualification":null,"requiredAction":null}}"""}],"waitingOnYou":[],"waitingOnCoordinator":[],"sentToCoordinator":[],"decided":[$decided]}"""
     private fun eventsPage() = (1..messages).joinToString(",", "[", "]") { """{"seq":$it,"type":"assistant","payload":{"text":"Message $it of the conversation."},"ts":"$SUBMITTED"}""" }
         .let { """{"events":$it,"hasMore":false,"lastSeq":$messages,"latestSeq":$messages}""" }
 
@@ -130,9 +139,17 @@ internal object EvidenceFilesServer {
         val query = api.query.joinToString("&") { (k, v) -> "$k=$v" }
         calls += "${api.method.name} $path" + if (query.isEmpty()) "" else "?$query"
         when {
+            path.startsWith("tasks/$TASK/evidence/") && path.endsWith("/files") && path != "tasks/$TASK/evidence/2/files" ->
+                olderPages[path.removePrefix("tasks/$TASK/evidence/").removeSuffix("/files")]?.let(::ok) ?: ApiResponse(404, """{"message":"evidence not found"}""".encodeToByteArray())
             path == "tasks/$TASK/evidence/2/files" -> {
                 hold?.await()
                 pages[api.query.toMap()["offset"]?.toInt() ?: 0]?.let(::ok) ?: ApiResponse(500, """{"message":"The route could not answer."}""".encodeToByteArray())
+            }
+            path.startsWith("attachments/") && path.endsWith("/pin") -> {
+                val pinning = api.method.name == "PUT"
+                calls += "${if (pinning) "PIN" else "UNPIN"} ${path.removePrefix("attachments/").removeSuffix("/pin")}"
+                if (pinStatus != 200) ApiResponse(pinStatus, """{"statusCode":$pinStatus,"message":"refused"}""".encodeToByteArray())
+                else ok("""{"expiresAt":"2026-11-17T06:00:00.000Z","expiredAt":null,"pinnedAt":${q(if (pinning) pinnedAt else null)}}""")
             }
             path.startsWith("attachments/") -> {
                 holdBytes?.await()
@@ -700,6 +717,189 @@ class EvidenceFilesCardTest {
         val small = decodeThumbnail(split(40, 60))
         assertEquals(40, small.width)
         assertEquals(40, small.height)
+    }
+
+    // ---- Being kept: the pin. ----
+
+    private val pinDate = "2026-11-17T06:00:00.000Z"
+    private val keptOn get() = EvidenceFiles.expires(pinDate)!!
+    private val pinnedDate = "2026-11-03T01:00:00.000Z"
+    private fun pinOn(id: String) = "${tileOnPage(id)}:pin"
+    private fun markOn(id: String) = "${tileOnPage(id)}:pinned"
+    private fun pinPresses() = server.calls.filter { it.startsWith("PIN ") || it.startsWith("UNPIN ") }.map { it.substringBefore(' ') }
+
+    /** The owner's choice on the board: several pictures, one pinned, and nothing else on them to see or press. */
+    @Test fun aPictureIsOnlyMarkedOnThePageAndNothingIsPressedThere() {
+        serveTheBoard()
+        server.pages = mapOf(0 to server.page(listOf(
+            server.file(EvidenceFilesServer.LIGHT_OPEN, "shots/a.png", pinnable = true, expiresAt = pinDate),
+            server.file(EvidenceFilesServer.LIGHT_SHUT, "shots/b.png", pinnable = true, pinnedAt = pinnedDate),
+            server.file(EvidenceFilesServer.DARK_OPEN, "shots/c.png", pinnable = true, expiresAt = pinDate))))
+        openPage()
+        await { exists(hasTestTag(tileOnPage(EvidenceFilesServer.DARK_OPEN))) }
+        assertTrue(exists(hasTestTag(markOn(EvidenceFilesServer.LIGHT_SHUT)), unmerged = true))
+        compose.onNodeWithTag(markOn(EvidenceFilesServer.LIGHT_SHUT), useUnmergedTree = true).assertHasNoClickAction()
+        listOf(EvidenceFilesServer.LIGHT_OPEN, EvidenceFilesServer.DARK_OPEN).forEach { assertFalse(exists(hasTestTag(markOn(it)), unmerged = true)) }
+        listOf(EvidenceFilesServer.LIGHT_OPEN, EvidenceFilesServer.LIGHT_SHUT, EvidenceFilesServer.DARK_OPEN).forEach { assertFalse(exists(hasTestTag(pinOn(it)), unmerged = true)) }
+        shot("7-page-one-pinned")
+    }
+
+    @Test fun theViewerPinsAndUnpinsAPictureAndSaysHowLongItStays() {
+        serveTheBoard()
+        server.pages = mapOf(0 to server.page(listOf(server.file(EvidenceFilesServer.LIGHT_OPEN, "shots/a.png", pinnable = true, expiresAt = pinDate))))
+        openPage()
+        compose.onNodeWithTag(tileOnPage(EvidenceFilesServer.LIGHT_OPEN)).performClick()
+        await { text("evidence-viewer:keep") == keptOn }
+        assertTrue(exists(hasContentDescription(EvidenceFiles.pin), unmerged = true))
+        shot("7-viewer-to-pin")
+        compose.onNodeWithTag("evidence-viewer:pin").performClick()
+        await { text("evidence-viewer:keep") == EvidenceFiles.pinned }
+        assertEquals(listOf("PIN"), pinPresses())
+        assertTrue(exists(hasContentDescription(EvidenceFiles.unpin), unmerged = true))
+        shot("7-viewer-pinned")
+        compose.onNodeWithTag("evidence-viewer:pin").performClick()
+        await { text("evidence-viewer:keep") == keptOn }
+        assertEquals(listOf("PIN", "UNPIN"), pinPresses())
+        compose.onNodeWithTag("evidence-viewer:done").performClick()
+        await { !exists(hasTestTag("evidence-viewer")) }
+        assertFalse("the page behind it says so too", exists(hasTestTag(markOn(EvidenceFilesServer.LIGHT_OPEN)), unmerged = true))
+    }
+
+    @Test fun whatTheServerDoesNotOfferHasNoPinAnywhere() {
+        serveTheBoard()
+        server.pages = mapOf(0 to server.page(listOf(
+            server.file(EvidenceFilesServer.LIGHT_OPEN, "shots/a.png", pinnable = false),
+            server.file(EvidenceFilesServer.PAGE, "notes/page.html", mimeType = "text/html", pinnable = false))))
+        openPage()
+        compose.onNodeWithTag(tileOnPage(EvidenceFilesServer.LIGHT_OPEN)).performClick()
+        await { text("evidence-viewer:position") == "1 of 1" }
+        assertFalse(exists(hasTestTag("evidence-viewer:pin")))
+        compose.onNodeWithTag("evidence-viewer:done").performClick()
+        await { !exists(hasTestTag("evidence-viewer")) }
+        assertFalse(exists(hasTestTag(pinOn(EvidenceFilesServer.PAGE)), unmerged = true))
+    }
+
+    /** A server older than the field sends none of this: the page and the viewer are what they were. */
+    @Test fun aServerOlderThanTheFieldOffersNoPin() {
+        serveTheBoard()
+        openPage()
+        compose.onNodeWithTag(tileOnPage(EvidenceFilesServer.LIGHT_OPEN)).performClick()
+        await { text("evidence-viewer:position") == "1 of 8" }
+        assertFalse(exists(hasTestTag("evidence-viewer:pin")))
+        assertFalse(exists(hasTestTag("evidence-viewer:keep"), unmerged = true))
+        assertFalse(exists(hasTestTag(pinOn(EvidenceFilesServer.REPORT)), unmerged = true))
+    }
+
+    @Test fun aFileWithNoViewerKeepsThePinOnItsTile() {
+        serveTheBoard()
+        server.bytes[EvidenceFilesServer.PAGE] = "<!doctype html>".encodeToByteArray()
+        server.pages = mapOf(0 to server.page(listOf(server.file(EvidenceFilesServer.PAGE, "notes/page.html", mimeType = "text/html", pinnable = true, expiresAt = pinDate))))
+        openPage()
+        await { exists(hasTestTag(pinOn(EvidenceFilesServer.PAGE)), unmerged = true) }
+        assertEquals(keptOn, text("${tileOnPage(EvidenceFilesServer.PAGE)}:keep"))
+        compose.onNodeWithTag(pinOn(EvidenceFilesServer.PAGE)).assertContentDescriptionEquals(EvidenceFiles.pin).performClick()
+        await { text("${tileOnPage(EvidenceFilesServer.PAGE)}:keep") == EvidenceFiles.pinned }
+        compose.onNodeWithTag(pinOn(EvidenceFilesServer.PAGE)).assertContentDescriptionEquals(EvidenceFiles.unpin)
+        assertFalse("the pin opens neither door", exists(hasTestTag("evidence-files:download")))
+        assertEquals(emptyList<String>(), server.attachmentReads())
+        assertEquals(listOf("PIN"), pinPresses())
+    }
+
+    @Test fun aTombstonedPictureIsBroughtBackFromItsTile() {
+        serveTheBoard()
+        server.pages = mapOf(0 to server.page(listOf(server.file(EvidenceFilesServer.LIGHT_OPEN, "shots/a.png", pinnable = true, expiredAt = expiredAt, expiresAt = expiredAt))))
+        openPage()
+        await { exists(hasTestTag(pinOn(EvidenceFilesServer.LIGHT_OPEN)), unmerged = true) }
+        says(tileOnPage(EvidenceFilesServer.LIGHT_OPEN), "${EvidenceFiles.expired}\n$expiredOn")
+        shot("7-tombstone-with-pin")
+        assertEquals("an expired tile reads nothing", emptyList<String>(), server.attachmentReads())
+        compose.onNodeWithTag(pinOn(EvidenceFilesServer.LIGHT_OPEN)).performClick()
+        await { exists(hasTestTag(markOn(EvidenceFilesServer.LIGHT_OPEN)), unmerged = true) }
+        assertFalse("a picture again, it is pinned from its viewer", exists(hasTestTag(pinOn(EvidenceFilesServer.LIGHT_OPEN)), unmerged = true))
+        await { server.attachmentReads().any { ObjectId.same(it, EvidenceFilesServer.LIGHT_OPEN) } }
+        await { exists(hasTestTag(pictureOf(EvidenceFilesServer.LIGHT_OPEN)), unmerged = true) }
+    }
+
+    @Test fun aFileWhoseBytesHaveGoneHasNoPin() {
+        serveTheBoard()
+        server.pages = mapOf(0 to server.page(listOf(
+            server.file(EvidenceFilesServer.LIGHT_OPEN, "shots/a.png", pinnable = false, expiredAt = expiredAt),
+            server.file(EvidenceFilesServer.LIGHT_SHUT, null, folder = null, mimeType = null, sizeBytes = null, gone = true, pinnable = false))))
+        openPage()
+        await { exists(hasTestTag(tileOnPage(EvidenceFilesServer.LIGHT_SHUT))) }
+        listOf(EvidenceFilesServer.LIGHT_OPEN, EvidenceFilesServer.LIGHT_SHUT).forEach { assertFalse(exists(hasTestTag(pinOn(it)), unmerged = true)) }
+    }
+
+    @Test fun aPressToldTheBytesWentStopsOfferingAndSaysSo() {
+        serveTheBoard()
+        server.pinStatus = 410
+        server.pages = mapOf(0 to server.page(listOf(server.file(EvidenceFilesServer.LIGHT_OPEN, "shots/a.png", pinnable = true, expiredAt = expiredAt))))
+        openPage()
+        await { exists(hasTestTag(pinOn(EvidenceFilesServer.LIGHT_OPEN)), unmerged = true) }
+        compose.onNodeWithTag(pinOn(EvidenceFilesServer.LIGHT_OPEN)).performClick()
+        await { text("evidence-files:notice") == EvidenceFiles.pinFailed }
+        await { !exists(hasTestTag(pinOn(EvidenceFilesServer.LIGHT_OPEN)), unmerged = true) }
+    }
+
+    @Test fun aPressThatFailsAnyOtherWayKeepsThePin() {
+        serveTheBoard()
+        server.pinStatus = 502
+        server.pages = mapOf(0 to server.page(listOf(server.file(EvidenceFilesServer.PAGE, "notes/page.html", mimeType = "text/html", pinnable = true, pinnedAt = pinnedDate))))
+        openPage()
+        await { exists(hasTestTag(pinOn(EvidenceFilesServer.PAGE)), unmerged = true) }
+        compose.onNodeWithTag(pinOn(EvidenceFilesServer.PAGE)).performClick()
+        await { text("evidence-files:notice") == EvidenceFiles.unpinFailed }
+        compose.onNodeWithTag(pinOn(EvidenceFilesServer.PAGE)).assertIsEnabled().assertContentDescriptionEquals(EvidenceFiles.unpin)
+    }
+
+    // ---- A receipt: the way to an older version's files. ----
+
+    private val receiptKey = "receipt:EVIDENCE:${EvidenceFilesServer.TASK}:1"
+    private fun receipt(extra: String) = """{"taskId":"${EvidenceFilesServer.TASK}","title":"${EvidenceFilesServer.TITLE}","projectId":"${EvidenceFilesServer.PROJECT}",
+        "evidenceRevision":"1","decision":"SEND_BACK","note":"Firefox is missing.","decidedAt":"2026-11-02T07:00:00.000Z","decidedByType":"USER"$extra}"""
+    private fun olderReads() = server.calls.filter { it.startsWith("GET tasks/${EvidenceFilesServer.TASK}/evidence/1/files") }
+
+    @Test fun aReceiptCitingNoFileIsWhatItWasAndReadsNothing() {
+        server.citations = EvidenceFilesServer.TOOL_CITATION
+        server.decided = receipt(""", "citesFiles":false""")
+        openCard()
+        await { exists(hasText("Firefox is missing.", substring = true), unmerged = true) }
+        assertFalse(exists(hasTestTag("$receiptKey:files")))
+        assertEquals(emptyList<String>(), olderReads())
+        assertEquals(emptyList<String>(), server.attachmentReads())
+    }
+
+    @Test fun aServerOlderThanTheFieldOffersNoEntry() {
+        server.citations = EvidenceFilesServer.TOOL_CITATION
+        server.decided = receipt("")
+        openCard()
+        await { exists(hasText("Firefox is missing.", substring = true), unmerged = true) }
+        assertFalse(exists(hasTestTag("$receiptKey:files")))
+        assertEquals(emptyList<String>(), olderReads())
+    }
+
+    /** The older version's page, opened from where a reader can reach it: a dated Expired that real data reaches, its report off the rows, and a pin where its bytes remain. */
+    @Test fun aReceiptCitingFilesOpensThatVersionsPageAndReadsOnlyOnThePress() {
+        val summary = """{"format":"playwright","total":48,"passed":46,"failed":0,"skipped":2,"durationMs":38000,"failedNames":[],"skippedNames":[]}"""
+        server.citations = EvidenceFilesServer.TOOL_CITATION
+        server.decided = receipt(""", "citesFiles":true""")
+        server.olderPages = mapOf("1" to server.page(listOf(
+            server.file(EvidenceFilesServer.LIGHT_OPEN, "shots/a.png", pinnable = true, expiredAt = expiredAt, expiresAt = expiredAt),
+            server.file(EvidenceFilesServer.LIGHT_SHUT, "shots/b.png", pinnable = false, expiredAt = expiredAt, expiresAt = expiredAt),
+            server.file(EvidenceFilesServer.REPORT, "report.json", folder = null, mimeType = "application/json", pinnable = false, expiredAt = expiredAt, testReport = summary))))
+        openCard()
+        await { exists(hasTestTag("$receiptKey:files")) }
+        assertEquals("a receipt reads nothing until it is pressed", emptyList<String>(), olderReads())
+        compose.onNodeWithTag("$receiptKey:files").assertTextContains(EvidenceFiles.title).performClick()
+        await { exists(hasTestTag("evidence-files:version")) && exists(hasTestTag(tileOnPage(EvidenceFilesServer.LIGHT_OPEN))) }
+        assertEquals("one read, on the press", 1, olderReads().size)
+        says("evidence-files:version", "Revision 1 · ${OwnerReview.receiptTime(EvidenceFilesServer.SUBMITTED)}")
+        says(tileOnPage(EvidenceFilesServer.LIGHT_OPEN), "${EvidenceFiles.expired}\n$expiredOn")
+        says("evidence-files:report:0", "46 passed · 0 failed · 2 skipped · 38s")
+        assertTrue(exists(hasTestTag(pinOn(EvidenceFilesServer.LIGHT_OPEN)), unmerged = true))
+        assertFalse(exists(hasTestTag(pinOn(EvidenceFilesServer.LIGHT_SHUT)), unmerged = true))
+        assertEquals(emptyList<String>(), server.attachmentReads())
+        shot("8-older-version")
     }
 
     // ---- Once the bytes have gone. ----

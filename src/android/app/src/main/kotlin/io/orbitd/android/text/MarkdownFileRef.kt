@@ -15,10 +15,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.attachments.AttachmentActions
+import io.orbitd.android.core.cards.EvidenceFiles
 import kotlinx.coroutines.*
 import org.commonmark.node.Link
 
@@ -86,6 +88,8 @@ internal fun ImageFileRow(ref: MarkdownFileRef, open: (String) -> Unit) {
     val resources = LocalReaderResources.current
     var viewer by remember(ref) { mutableStateOf(false) }
     var loading by remember(ref) { mutableStateOf(true) }
+    // Told its bytes have gone, the row says so and opens nothing.
+    var expired by remember(ref) { mutableStateOf<ExpiredRead?>(null) }
     val bitmap by produceState<Bitmap?>(null, ref, resources) {
         value = null; loading = true
         try {
@@ -99,16 +103,20 @@ internal fun ImageFileRow(ref: MarkdownFileRef, open: (String) -> Unit) {
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
             }
         } catch (cancel: CancellationException) { throw cancel }
-        catch (_: Exception) { value = null }
+        catch (failure: Exception) {
+            value = null
+            if (EvidenceFiles.isExpiredRead(failure)) expired = ExpiredRead(EvidenceFiles.expiredAtOf(failure))
+        }
         finally { loading = false }
     }
     val image = bitmap
     val label = ref.label.ifEmpty { ref.fileName }
     val accent = MaterialTheme.colorScheme.primary
     val shape = RoundedCornerShape(if (image == null) 9.dp else 14.dp)
+    val gone = expired
     Column(Modifier.widthIn(max = 320.dp).clip(shape).background(MaterialTheme.colorScheme.surfaceContainerLow)
         .border(1.dp, if (image != null) MaterialTheme.colorScheme.outlineVariant else accent.copy(alpha = 0.22f), shape)
-        .clickable(onClickLabel = if (image != null) "Preview image" else "Preview or open this file") { if (image != null) viewer = true else open(ref.href) }
+        .then(if (gone != null) Modifier.testTag("attachment-expired-file") else Modifier.clickable(onClickLabel = if (image != null) "Preview image" else "Preview or open this file") { if (image != null) viewer = true else open(ref.href) })
         .semantics(mergeDescendants = true) { contentDescription = label }) {
         if (image != null) {
             Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(12.dp)) {
@@ -127,10 +135,10 @@ internal fun ImageFileRow(ref: MarkdownFileRef, open: (String) -> Unit) {
             }
             Column(Modifier.weight(1f)) {
                 Text(label, maxLines = 1, overflow = TextOverflow.MiddleEllipsis, style = MaterialTheme.typography.labelLarge)
-                Text(if (image != null) imageCaption(ref) else "Preview file", style = MaterialTheme.typography.bodySmall,
+                Text(if (gone != null) EvidenceFiles.expiredLine(gone.at) else if (image != null) imageCaption(ref) else "Preview file", style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (!loading) Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (!loading && gone == null) Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
     if (viewer && image != null && resources?.available() == true) {
