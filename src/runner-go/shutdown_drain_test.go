@@ -307,8 +307,8 @@ func TestTheStopFitsWhatEachServiceManagerAllows(t *testing.T) {
 
 	mac := stopBudgetFor("darwin")
 	window := time.Duration(launchdExitTimeOutSeconds) * time.Second
-	if latest := mac.envelope + shutdownLastBeatWait + linkCloseWait; latest != 55*time.Second || latest >= window {
-		t.Errorf("a Mac is gone %v into a stop at the latest, want 55 s inside launchd's %v", latest, window)
+	if latest := mac.envelope + shutdownLastBeatWait + linkShadowStopWait + linkCloseWait; latest != 57*time.Second || latest >= window {
+		t.Errorf("a Mac is gone %v into a stop at the latest, want 57 s inside launchd's %v", latest, window)
 	}
 	const (
 		checkTreeEnds = 5 * time.Second  // cmd.WaitDelay (configureSessionProcessTree)
