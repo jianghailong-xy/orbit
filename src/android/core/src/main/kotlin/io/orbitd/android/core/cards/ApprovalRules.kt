@@ -13,7 +13,8 @@ object ApprovalRules {
     const val mergeCheckChange = "orbit_project_update_integration"
     private val asks = setOf("AskUserQuestion", "ExitPlanMode", "orbit_task_create", "orbit_project_create",
         "orbit_task_batch", "orbit_dag_change", "orbit_blocker_resolve", "orbit_provider_create",
-        "orbit_provider_update", "orbit_provider_delete", mergeCheckChange, DeleteCards.runnerTool, DeleteCards.workspaceTool)
+        "orbit_provider_update", "orbit_provider_delete", mergeCheckChange, DeleteCards.runnerTool, DeleteCards.workspaceTool,
+        WorkspaceWriteCards.createTool, WorkspaceWriteCards.updateTool)
     private val shells = setOf("bash", "/bin/bash", "/usr/bin/bash", "sh", "/bin/sh", "/usr/bin/sh", "zsh", "/bin/zsh", "/usr/bin/zsh")
     fun remember(tool: String, input: JsonObject): List<PermissionRule> = when {
         tool.isBlank() || tool in asks -> emptyList()

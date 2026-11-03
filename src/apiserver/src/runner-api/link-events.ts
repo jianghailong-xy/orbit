@@ -9,6 +9,7 @@ import { classifyTransactionFault } from '../common/transaction-retry';
 import { managedRunnerInstanceOffer, managedRunnerInstanceVerdict } from '../managed-runners/managed-runner-instance';
 import { runnerLinkCredential, RunnerLinkTokenRefused, verifyRunnerLinkToken } from './runner-link-token';
 import { stripNul } from './strip-nul';
+import { withoutEnvValuesInToolUse } from '../sessions/workspace-write-card-values';
 
 /**
  * Durable events over the runner link (docs/runner-link-design.md §5.8, §6.6): what a link call to the events route
@@ -98,7 +99,7 @@ export function readLinkEventBatch(body: unknown, now: Date = new Date()): LinkE
   const raw = (body as { events?: unknown } | null)?.events;
   if (!Array.isArray(raw) || raw.length === 0) malformed('the batch has no events');
   // Sanitized as HTTPS sanitizes a batch, before anything is read off it (runner-api.controller.ts `events`).
-  const listed = stripNul(raw as unknown[]);
+  const listed = stripNul(raw as unknown[]).map(withoutEnvValuesInToolUse);
   const events: NormalizedRunEvent[] = [];
   const tombstones: LinkTombstone[] = [];
   let previous = 0;
