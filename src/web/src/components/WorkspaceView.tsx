@@ -477,7 +477,6 @@ import {
   permissionModeAvailableOnRunner,
   runtimeTakesMidTurnSteer,
   STEER_WITHDRAW_ERRORS,
-  TRASH_RETENTION_DAYS,
   withEnginePlanUsage,
   type AccountEngine,
 } from '@orbit/shared';
@@ -519,6 +518,7 @@ import { streamAnchorAfter } from '../lib/streamAnchor';
 import { backgroundWorkIsActive, isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
 import type { OutlivingWork } from '../lib/sessionActivity';
 import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
+import { trashNoteWhen } from '../lib/trashNote';
 import { firstPaintSlice, transcriptPlaceholder } from '../lib/transcriptPaint';
 import { loadTranscript, saveTranscript } from '../lib/transcriptStore';
 import {
@@ -11604,26 +11604,13 @@ export function WorkspaceView({
               {selected &&
                 selectedTrashed &&
                 (() => {
-                  // Days until the reaper permanently purges this trashed session. Reframes
+                  // When the reaper purges this trashed session, or what is keeping it here. Reframes
                   // the retained transcript as an honest, time-boxed Trash rather than a
-                  // "delete that didn't delete", and offers a real permanent delete.
-                  const left = selected.deletedAt
-                    ? Math.max(
-                        0,
-                        Math.ceil(
-                          (new Date(selected.deletedAt).getTime() +
-                            TRASH_RETENTION_DAYS * 86_400_000 -
-                            Date.now()) /
-                            86_400_000,
-                        ),
-                      )
-                    : null;
-                  const when =
-                    left === null
-                      ? ''
-                      : left <= 0
-                        ? ' · deletes soon'
-                        : ` · auto-deletes in ${left} day${left === 1 ? '' : 's'}`;
+                  // "delete that didn't delete", and offers a real permanent delete. Only the detail
+                  // knows what holds a session, so the list row alone promises no date.
+                  const when = detailForSelected
+                    ? trashNoteWhen(selected.deletedAt, detailForSelected.trashHold)
+                    : '';
                   return (
                     <div className="chat-note">
                       In Trash{when}.{' '}

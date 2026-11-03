@@ -596,6 +596,8 @@ private struct MarkdownImageView: View {
                         .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) },
                     image: img
                 )
+            } else if let expired = store.expiry(id) {
+                ExpiredAttachmentFace(at: expired.expiredAt).frame(width: 120, height: 90)
             } else if store.isNotImage(id) {
                 unavailable   // the bytes didn't decode as an image
             } else {
@@ -770,7 +772,9 @@ private struct MarkdownFileLinkView: View {
     private var previewImages: [PreviewImage] {
         image.map { [.inline(id: previewKey, image: $0)] } ?? []
     }
-    private var canFetch: Bool { attachmentID != nil || artifactPath != nil }
+    private var canFetch: Bool { (attachmentID != nil || artifactPath != nil) && expired == nil }
+    /// What a read of this file was told, once its bytes have gone: the card says so and opens nothing.
+    private var expired: ExpiredAttachment? { attachmentID.flatMap { store.expiry($0) } }
 
     var body: some View {
         Group {
@@ -795,6 +799,10 @@ private struct MarkdownFileLinkView: View {
                     .disabled(fetching)
                     .accessibilityLabel(fileName)
                     .accessibilityHint("Preview or open this file")
+            } else if let expired {
+                card
+                    .accessibilityLabel(fileName)
+                    .accessibilityHint(EvidenceFiles.expiredLine(expired.expiredAt))
             } else {
                 card
                     .accessibilityLabel(fileName)
@@ -842,7 +850,9 @@ private struct MarkdownFileLinkView: View {
         .overlay {
             RoundedRectangle(cornerRadius: image == nil ? 9 : 14)
                 .strokeBorder(image != nil ? Color.primary.opacity(0.10)
-                    : canFetch ? Color.accentColor.opacity(0.22) : Color.primary.opacity(0.13), lineWidth: 1)
+                    : expired != nil ? Color.secondary.opacity(0.6)
+                    : canFetch ? Color.accentColor.opacity(0.22) : Color.primary.opacity(0.13),
+                    style: StrokeStyle(lineWidth: 1, dash: expired != nil ? [3, 3] : []))
         }
         .contentShape(Rectangle())
     }
@@ -865,7 +875,11 @@ private struct MarkdownFileLinkView: View {
                 Text(label)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                if canFetch {
+                if let expired {
+                    Text(EvidenceFiles.expiredLine(expired.expiredAt))
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                } else if canFetch {
                     Text(image != nil ? imageCaption : "Preview file")
                         .font(.orbitMeta)
                         .foregroundStyle(.secondary)
@@ -939,7 +953,10 @@ private struct MarkdownFileLinkView: View {
                 data = nil
             }
             guard let data else {
-                app?.showToast("Couldn't open that file", detail: fileName, tone: .error)
+                // Told its bytes went, the card says so; anything else may come back.
+                if expired == nil {
+                    app?.showToast("Couldn't open that file", detail: fileName, tone: .error)
+                }
                 return
             }
             // An old link may have lost its filename. Decode the bytes before choosing a reader:

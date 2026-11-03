@@ -2659,6 +2659,7 @@ private struct CriteriaDecisionReceiptCard: View {
 /// browser's, held by `EvidenceDecisionCopyParityTests`.
 private struct EvidenceDecisionReceiptCard: View {
     let decided: RecordedEvidenceDecision
+    @Environment(\.openEvidenceFiles) private var openFiles
 
     var body: some View {
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
@@ -2677,8 +2678,26 @@ private struct EvidenceDecisionReceiptCard: View {
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            // The one way to an older version's files, and so to where they are seen to expire: the latest
+            // version's do not (§2.8), and only the latest is ever a card. Read when it is pressed, not here.
+            if decided.citesFiles == true { filesEntry }
         }
         .approvalChrome(.blue)
+    }
+
+    private var filesEntry: some View {
+        Button {
+            PlatformHaptics.tap()
+            openFiles(EvidenceFilesTarget(taskID: decided.taskId, revision: decided.evidenceRevision, citations: []))
+        } label: {
+            HStack(spacing: 6) {
+                Text(EvidenceFiles.title).font(.orbitLabel).foregroundStyle(Color.accentColor)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.orbitMeta).foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

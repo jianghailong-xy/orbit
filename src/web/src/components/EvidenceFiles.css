@@ -24,6 +24,19 @@
 .evidence-tile-expired { padding: 4px; color: var(--text-3); overflow-wrap: anywhere; }
 .evidence-tile:has(> .evidence-tile-expired) { border-style: dashed; border-color: var(--border); }
 .evidence-tile-more { font-size: 13px; font-weight: 600; color: var(--text-2); }
+
+/* A file's pin at the tile's corner: a button where the tile has no viewer to pin it from, and on a picture only the mark that
+   it is pinned. Its target is larger than it looks, for a finger. */
+.evidence-tile-pin {
+  position: absolute; top: 6px; right: 6px; display: flex; align-items: center; justify-content: center; box-sizing: border-box;
+  width: 26px; height: 26px; padding: 0; border: 1px solid var(--border-subtle); border-radius: 50%;
+  color: var(--text-3); background: var(--bg-raised); font-size: 13px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
+}
+.evidence-tile-pin.is-pinned { color: var(--brand); border-color: var(--brand); }
+button.evidence-tile-pin { cursor: pointer; }
+button.evidence-tile-pin::after { content: ''; position: absolute; inset: -9px; }
+button.evidence-tile-pin:disabled { cursor: progress; opacity: 0.6; }
+button.evidence-tile-pin:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: var(--orbit-focus-offset); }
 .evidence-tile-press { cursor: pointer; }
 .evidence-tile-press:hover { border-color: var(--border); }
 .evidence-tile-press:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: var(--orbit-focus-offset); }
@@ -64,9 +77,10 @@ button.evidence-report-head:focus-visible { outline: var(--orbit-focus-width) so
 .evidence-files-group-head { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--text-2); overflow-wrap: anywhere; }
 .evidence-files-group-head span { font-weight: 400; color: var(--text-3); }
 .evidence-files-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
-.evidence-page-tile { min-width: 0; }
+.evidence-page-tile { position: relative; min-width: 0; }
 .evidence-tile-caption { margin-top: 4px; font-size: 11.5px; line-height: 1.4; color: var(--text-3); }
 .evidence-tile-name { overflow: hidden; color: var(--text-2); text-overflow: ellipsis; white-space: nowrap; }
 .evidence-tile-facts { overflow-wrap: anywhere; }
 .evidence-files-showing { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 16px; font-size: 12.5px; color: var(--text-3); }
+.evidence-viewer-pinned { color: var(--brand); }
 .evidence-viewer-path { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: rgba(255, 255, 255, 0.85); }

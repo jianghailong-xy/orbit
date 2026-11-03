@@ -30,6 +30,14 @@ export const EVIDENCE_FILE_DOWNLOAD_FAILED = "Couldn't download the file";
 /** What the area says while the list is read, and when it could not be. */
 export const EVIDENCE_FILES_LOADING = 'Reading…';
 export const EVIDENCE_FILES_UNREAD = 'The files could not be read just now.';
+/** What presses a file's pin, either way (§2.8). */
+export const EVIDENCE_FILE_PIN = 'Pin';
+export const EVIDENCE_FILE_UNPIN = 'Unpin';
+/** What a pinned file says of how long it stays, where one with a date says when it expires. */
+export const EVIDENCE_FILE_PINNED = 'Pinned';
+/** What a press that did not go through says. */
+export const EVIDENCE_FILE_PIN_FAILED = "Couldn't pin the file";
+export const EVIDENCE_FILE_UNPIN_FAILED = "Couldn't unpin the file";
 /** The two lists a test report opens into. */
 export const EVIDENCE_REPORT_FAILED = 'Failed';
 export const EVIDENCE_REPORT_SKIPPED = 'Skipped';
@@ -82,6 +90,23 @@ export interface EvidenceFile {
   /** When its bytes expired. */
   expiredAt: string | null;
   gone: boolean;
+  /** When it expires, while nothing holds it. Null while evidence does, and on a file that never expires. */
+  expiresAt?: string | null;
+  /** When it was pinned, which keeps it past `expiresAt`. */
+  pinnedAt?: string | null;
+  /** Whether it can be pinned: what `file_upload` kept, while its bytes remain. A server older than this field offers no pin. */
+  pinnable?: boolean;
+}
+
+/** What a press of the pin answers, either way: the three dates it may have moved. */
+export type EvidenceFilePinAnswer = Pick<EvidenceFile, 'expiresAt' | 'expiredAt' | 'pinnedAt'>;
+
+/** A read of a file whose bytes have gone (410), and when they expired. A server older than the date says only that they went. */
+export class ExpiredAttachmentError extends Error {
+  constructor(public readonly expiredAt: string | null) {
+    super('attachment expired');
+    this.name = 'ExpiredAttachmentError';
+  }
 }
 
 /** A page of a version's files. The count and the size are the whole list's, whichever page it is. */
@@ -170,6 +195,36 @@ export function evidenceExpiryDate(at: string, now: Date = new Date()): string {
   const date = new Date(at);
   const year = date.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' as const };
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...year });
+}
+
+/** Whether the server offers this file a pin. */
+export function evidenceFileCanPin(file: Pick<EvidenceFile, 'pinnable'>): boolean {
+  return file.pinnable === true;
+}
+
+/** Whether this file is pinned. */
+export function evidenceFileIsPinned(file: Pick<EvidenceFile, 'pinnedAt'>): boolean {
+  return file.pinnedAt != null;
+}
+
+/** `Expires Dec 2`. */
+export const evidenceFileExpires = (at: string, now?: Date): string => `Expires ${evidenceExpiryDate(at, now)}`;
+
+/** How long a file with its bytes stays: `Pinned`, `Expires Dec 2`, or nothing where evidence holds it or it never expires. */
+export function evidenceFileKeep(file: Pick<EvidenceFile, 'gone' | 'expiredAt' | 'expiresAt' | 'pinnedAt'>, now?: Date): string | null {
+  if (evidenceFileIsGone(file)) return null;
+  if (evidenceFileIsPinned(file)) return EVIDENCE_FILE_PINNED;
+  return file.expiresAt ? evidenceFileExpires(file.expiresAt, now) : null;
+}
+
+/** `Expired Dec 2`, on one line, or `Expired` from a server that does not say when. */
+export function evidenceFileExpiredLine(at: string | null, now?: Date): string {
+  return at === null ? EVIDENCE_FILE_EXPIRED : `${EVIDENCE_FILE_EXPIRED} ${evidenceExpiryDate(at, now)}`;
+}
+
+/** The file after a press of its pin, with what the server answered. */
+export function evidenceFileWithPin(file: EvidenceFile, answer: EvidenceFilePinAnswer): EvidenceFile {
+  return { ...file, expiresAt: answer.expiresAt, expiredAt: answer.expiredAt, pinnedAt: answer.pinnedAt };
 }
 
 /** Whether every file has lost its bytes. Only the last page can say so of the whole list. */

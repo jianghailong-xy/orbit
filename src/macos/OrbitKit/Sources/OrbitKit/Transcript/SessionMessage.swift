@@ -24,6 +24,12 @@ public struct SessionMessage: Sendable, Equatable, Codable {
     public let fromAgentName: String
     /// The task the sending session runs; nil when it runs none.
     public let fromTaskId: String?
+    /// The sending session's stored mode (`from-mode` in the block); nil on an event stored before the
+    /// card carried it. Nothing draws it yet, here or on the web.
+    public let fromMode: String?
+    /// The sender runs narrower than the session it wrote to, by the server's own comparison; nil when
+    /// it does not.
+    public let fromModeNarrower: Bool?
     /// The request this message is, when its sender asked for a reply (`expectReply`) — the
     /// request's public id; nil on every message that asked for none. Its state is not here: the
     /// card reads it live (`SessionRequestView`), because the stored event never changes and the
@@ -31,11 +37,14 @@ public struct SessionMessage: Sendable, Equatable, Codable {
     public let requestId: String?
 
     public init(fromSessionId: String, fromTitle: String = "", fromAgentName: String = "",
-                fromTaskId: String? = nil, requestId: String? = nil) {
+                fromTaskId: String? = nil, fromMode: String? = nil, fromModeNarrower: Bool? = nil,
+                requestId: String? = nil) {
         self.fromSessionId = fromSessionId
         self.fromTitle = fromTitle
         self.fromAgentName = fromAgentName
         self.fromTaskId = fromTaskId
+        self.fromMode = fromMode
+        self.fromModeNarrower = fromModeNarrower
         self.requestId = requestId
     }
 
@@ -52,11 +61,14 @@ public struct SessionMessage: Sendable, Equatable, Codable {
         guard case .object(let card)? = value,
               let from = card["fromSessionId"]?.stringValue, !from.isEmpty else { return nil }
         let task = card["fromTaskId"]?.stringValue
+        let mode = card["fromMode"]?.stringValue
         let request = card["requestId"]?.stringValue
         return SessionMessage(fromSessionId: from,
                               fromTitle: card["fromTitle"]?.stringValue ?? "",
                               fromAgentName: card["fromAgentName"]?.stringValue ?? "",
                               fromTaskId: task?.isEmpty == false ? task : nil,
+                              fromMode: mode?.isEmpty == false ? mode : nil,
+                              fromModeNarrower: card["fromModeNarrower"]?.boolValue == true ? true : nil,
                               requestId: request?.isEmpty == false ? request : nil)
     }
 }

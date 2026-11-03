@@ -8,6 +8,7 @@ import XCTest
 /// Stands in for the network: records the URL asked for and answers with the page.
 private final class EvidenceFilesURLProtocol: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) static var asked: [URL] = []
+    nonisolated(unsafe) static var methods: [String] = []
     nonisolated(unsafe) static var answer: (status: Int, data: Data) = (200, Data())
 
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -15,6 +16,7 @@ private final class EvidenceFilesURLProtocol: URLProtocol, @unchecked Sendable {
 
     override func startLoading() {
         Self.asked.append(request.url!)
+        Self.methods.append(request.httpMethod ?? "")
         let response = HTTPURLResponse(url: request.url!, statusCode: Self.answer.status,
                                        httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
@@ -363,6 +365,7 @@ final class EvidenceFilesTests: XCTestCase {
 
     private func client(_ data: Data, status: Int = 200) -> APIClient {
         EvidenceFilesURLProtocol.asked = []
+        EvidenceFilesURLProtocol.methods = []
         EvidenceFilesURLProtocol.answer = (status, data)
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [EvidenceFilesURLProtocol.self]
@@ -381,6 +384,113 @@ final class EvidenceFilesTests: XCTestCase {
         XCTAssertNil(asked[0].query)
         XCTAssertTrue(asked[1].path.hasSuffix("/tasks/T1/evidence/2/files"), asked[1].path)
         XCTAssertEqual(asked[1].query, "offset=1000")
+    }
+
+    // MARK: being kept, and the pin
+
+    private static let now = ISO8601DateFormatter().date(from: "2026-11-03T00:00:00Z")!
+
+    /// A server older than the field offers no pin, so nil and false read alike.
+    func testAPinIsOfferedOnlyWhereTheServerOffersOne() {
+        XCTAssertTrue(EvidenceFiles.canPin(EvidenceFile(id: "a", pinnable: true)))
+        XCTAssertFalse(EvidenceFiles.canPin(EvidenceFile(id: "a", pinnable: false)))
+        XCTAssertFalse(EvidenceFiles.canPin(EvidenceFile(id: "a")))
+    }
+
+    /// Web's `evidenceFileKeep`, case for case.
+    func testAFileSaysHowLongItStays() {
+        XCTAssertEqual(EvidenceFiles.keep(EvidenceFile(id: "a", expiresAt: "2026-11-17T06:00:00.000Z"), now: Self.now), "Expires Nov 17")
+        XCTAssertEqual(EvidenceFiles.keep(EvidenceFile(id: "a", expiresAt: "2027-01-05T06:00:00.000Z"), now: Self.now), "Expires Jan 5, 2027")
+        XCTAssertEqual(EvidenceFiles.keep(EvidenceFile(id: "a", expiresAt: "2026-11-17T06:00:00.000Z", pinnedAt: "2026-11-02T00:00:00.000Z"), now: Self.now), "Pinned")
+        XCTAssertNil(EvidenceFiles.keep(EvidenceFile(id: "a"), now: Self.now), "evidence holds it, or it never expires")
+        XCTAssertNil(EvidenceFiles.keep(EvidenceFile(id: "a", expiredAt: "2026-10-01T00:00:00.000Z", expiresAt: "2026-10-01T00:00:00.000Z"), now: Self.now),
+                     "what has lost its bytes is its tile's to say")
+        XCTAssertNil(EvidenceFiles.keep(EvidenceFile(id: "a", gone: true), now: Self.now))
+    }
+
+    func testAPlaceholderIsDatedWhenTheServerSaysWhen() {
+        XCTAssertEqual(EvidenceFiles.expiredLine("2026-09-14T00:00:00.000Z", now: Self.now), "Expired Sep 14")
+        XCTAssertEqual(EvidenceFiles.expiredLine(nil, now: Self.now), "Expired")
+    }
+
+    /// A press answers the three dates, and a file with a tombstone it brought back is a picture again.
+    func testAPressTakesWhatTheServerAnswered() {
+        let tombstoned = EvidenceFile(id: "a", name: "a.png", mimeType: "image/png", expiredAt: "2026-10-01T00:00:00.000Z",
+                                      expiresAt: "2026-10-01T00:00:00.000Z", pinnable: true)
+        XCTAssertFalse(EvidenceFiles.isPicture(tombstoned))
+        let pinned = tombstoned.withPin(EvidenceFilePinAnswer(expiresAt: "2026-10-01T00:00:00.000Z", pinnedAt: "2026-11-03T00:00:00.000Z"))
+        XCTAssertTrue(EvidenceFiles.isPinned(pinned))
+        XCTAssertTrue(EvidenceFiles.isPicture(pinned))
+        XCTAssertTrue(EvidenceFiles.canPin(pinned), "and its pin can be taken away")
+        XCTAssertFalse(EvidenceFiles.isPinned(pinned.withPin(EvidenceFilePinAnswer(expiresAt: "2026-10-01T00:00:00.000Z"))))
+        XCTAssertFalse(EvidenceFiles.canPin(tombstoned.notPinnable()), "told its bytes went, it stops offering")
+        let listed = list([picture("a"), picture("b")]).updating("b") { $0.withPin(EvidenceFilePinAnswer(pinnedAt: "2026-11-03T00:00:00.000Z")) }
+        XCTAssertEqual(listed.files.map(EvidenceFiles.isPinned), [false, true])
+    }
+
+    /// The route as a server older than `pinnable` answers it: no pin, and nothing else changes.
+    func testAnOlderRoutesAnswerOffersNoPin() throws {
+        let page = try JSONDecoder().decode(EvidenceFilePage.self, from: Data(Self.routeJSON.utf8))
+        XCTAssertTrue(page.files.allSatisfy { !EvidenceFiles.canPin($0) })
+    }
+
+    func testTheRoutesNewFieldsDecode() throws {
+        let row = #"{"id":"a","gone":false,"expiresAt":"2026-11-17T06:00:00.000Z","pinnedAt":"2026-11-02T00:00:00.000Z","pinnable":true,"testReport":{"format":"junit","total":1,"passed":1,"failed":0,"skipped":0}}"#
+        let file = try JSONDecoder().decode(EvidenceFile.self, from: Data(row.utf8))
+        XCTAssertEqual(file.expiresAt, "2026-11-17T06:00:00.000Z")
+        XCTAssertEqual(file.pinnedAt, "2026-11-02T00:00:00.000Z")
+        XCTAssertEqual(file.pinnable, true)
+        XCTAssertEqual(file.testReport?.format, "junit")
+        let unreadable = #"{"id":"a","gone":false,"testReport":{"total":"three"}}"#
+        XCTAssertNil(try JSONDecoder().decode(EvidenceFile.self, from: Data(unreadable.utf8)).testReport,
+                     "a summary this build cannot read does not fail the list")
+    }
+
+    /// A receipt has no citations, so its page reads its reports off the rows.
+    func testAPageReadsItsReportsOffTheRowsWhenItHasNoCitations() {
+        let report = EvidenceTestReport(format: "junit", total: 1, passed: 1, failed: 0, skipped: 0)
+        let files = [picture("a"), EvidenceFile(id: "r", gone: false, testReport: report)]
+        XCTAssertEqual(EvidenceFiles.reports([], files: files), [report])
+        XCTAssertEqual(EvidenceFiles.reports([citation(report: report)], files: []), [report])
+        XCTAssertEqual(EvidenceFiles.reports([citation()], files: [picture("a")]), [])
+    }
+
+    /// The pin's two doors, by method and by address.
+    func testThePinAsksItsDoor() async throws {
+        let api = client(Data(#"{"id":"a","expiresAt":"2026-11-17T06:00:00.000Z","expiredAt":null,"pinnedAt":"2026-11-03T00:00:00.000Z"}"#.utf8))
+        let answer = try await api.setAttachmentPinned("a1", pinned: true)
+        XCTAssertEqual(answer, EvidenceFilePinAnswer(expiresAt: "2026-11-17T06:00:00.000Z", pinnedAt: "2026-11-03T00:00:00.000Z"))
+        XCTAssertTrue(EvidenceFilesURLProtocol.asked[0].path.hasSuffix("/attachments/a1/pin"))
+        XCTAssertEqual(EvidenceFilesURLProtocol.methods, ["PUT"])
+        _ = try await api.setAttachmentPinned("a1", pinned: false)
+        XCTAssertEqual(EvidenceFilesURLProtocol.methods, ["PUT", "DELETE"])
+    }
+
+    // MARK: a read of a file that went
+
+    func testA410SaysWhenAndEveryOtherFailureSaysNothing() {
+        let dated = APIError.http(status: 410, body: #"{"statusCode":410,"message":"gone","expiredAt":"2026-09-14T00:00:00.000Z"}"#)
+        XCTAssertEqual(ExpiredAttachment(dated)?.expiredAt, "2026-09-14T00:00:00.000Z")
+        // A server older than the date, and a body nobody can read, say only that the bytes went.
+        let older = ExpiredAttachment(APIError.http(status: 410, body: #"{"statusCode":410,"message":"this file expired on 2026-09-14"}"#))
+        XCTAssertNotNil(older)
+        XCTAssertNil(older?.expiredAt)
+        XCTAssertNotNil(ExpiredAttachment(APIError.http(status: 410, body: nil)))
+        XCTAssertNotNil(ExpiredAttachment(APIError.http(status: 410, body: "<html>")))
+        for other: Error in [APIError.http(status: 404, body: nil), APIError.http(status: 500, body: nil), APIError.unauthorized,
+                             APIError.invalidResponse, URLError(.notConnectedToInternet)] {
+            XCTAssertNil(ExpiredAttachment(other), "\(other) is what it always was")
+        }
+    }
+
+    func testAReceiptSaysWhetherItsVersionCitesAFile() throws {
+        func decoded(_ extra: String) throws -> RecordedEvidenceDecision {
+            let row = #"{"taskId":"t","title":"T","projectId":null,"evidenceRevision":"1","decision":"SEND_BACK","note":"no","decidedAt":"2026-09-14T00:00:00.000Z","decidedByType":"USER""# + extra + "}"
+            return try JSONDecoder().decode(RecordedEvidenceDecision.self, from: Data(row.utf8))
+        }
+        XCTAssertEqual(try decoded(#","citesFiles":true"#).citesFiles, true)
+        XCTAssertEqual(try decoded(#","citesFiles":false"#).citesFiles, false)
+        XCTAssertNil(try decoded("").citesFiles, "a server older than the field: no entry, and the receipt is what it was")
     }
 
     /// Another account's task and a task that does not exist are one 404, which the area reads as a list

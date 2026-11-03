@@ -65,6 +65,27 @@ export const KEEPS_SESSION_IN_TRASH: Prisma.AttachmentWhereInput = {
   ],
 };
 
+/** What a session's Trash note says is holding it (`trashHoldOf`). */
+export type TrashHold = 'PINNED_FILE' | 'CITED_FILE';
+
+/**
+ * Why the hourly purge is leaving this session in Trash, or null when nothing is, read with the purge's own rule so the two
+ * cannot disagree. A session holding both says the pin: a pin ends only when somebody takes it away, and a citation can end
+ * by itself, so the pin is what the reader can act on.
+ */
+export async function trashHoldOf(
+  db: Pick<Prisma.TransactionClient, 'attachment'>,
+  sessionId: string,
+): Promise<TrashHold | null> {
+  const held = await db.attachment.findFirst({
+    where: { sessionId, ...KEEPS_SESSION_IN_TRASH },
+    orderBy: { pinnedAt: { sort: 'desc', nulls: 'last' } },
+    select: { pinnedAt: true },
+  });
+  if (!held) return null;
+  return held.pinnedAt ? 'PINNED_FILE' : 'CITED_FILE';
+}
+
 /** The date an upload starts with, for the rows `file_upload` writes. */
 export function uploadExpiry(createdAt: Date): Date {
   return new Date(createdAt.getTime() + UPLOAD_RETENTION_MS);

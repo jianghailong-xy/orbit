@@ -387,6 +387,9 @@ struct ImagePagerView: View {
             Group {
                 if let img = store.image(for: attachmentID) {
                     pageBody(img, isCurrent: isCurrent, size: size)
+                } else if let expired = store.expiry(attachmentID) {
+                    Text(EvidenceFiles.expiredLine(expired.expiredAt))
+                        .font(.orbitProse).foregroundStyle(.white.opacity(0.6))
                 } else if store.isNotImage(attachmentID) {
                     // The answer is in and there is no picture: a spinner would wait for ever.
                     Image(systemName: "photo").font(.orbitHeroGlyph).foregroundStyle(.white.opacity(0.4))

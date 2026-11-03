@@ -21,8 +21,8 @@ import Foundation
    The list and the summaries are read from rows, so an expired file keeps its name, its size, its
    sha256 and its report. Only its picture goes. The latest version of a task's evidence never expires
    (§2.8) and only the latest is ever a card, so on a card the placeholder real data reaches is the
-   one for a file whose row went (`gone`, with no date). The dated one is drawn from the same fields
-   for whatever the route says.
+   one for a file whose row went (`gone`, with no date). The dated one is met on the page of an older
+   version, which its receipt opens (`RecordedEvidenceDecision.citesFiles`).
    ───────────────────────────────────────────────────────────────────────────────────────────── */
 
 // MARK: - the rows, as the server publishes them
@@ -91,10 +91,21 @@ public struct EvidenceFile: Codable, Equatable, Sendable, Identifiable {
     /// When its bytes expired.
     public let expiredAt: String?
     public let gone: Bool
+    /// When it expires, while nothing holds it. Nil while evidence does, and on a file that never expires.
+    public let expiresAt: String?
+    /// When it was pinned, which keeps it past `expiresAt`.
+    public let pinnedAt: String?
+    /// Whether it can be pinned: what `file_upload` kept, while its bytes remain. A server older than this
+    /// field offers no pin, so nil reads as no.
+    public let pinnable: Bool?
+    /// What `file_upload --as test-report` kept of it. A receipt has no citations, so its page reads its
+    /// reports off these.
+    public let testReport: EvidenceTestReport?
 
     public init(id: String, name: String? = nil, folder: String? = nil, mimeType: String? = nil,
                 sizeBytes: Int? = nil, sha256: String? = nil, width: Int? = nil, height: Int? = nil,
-                expiredAt: String? = nil, gone: Bool = false) {
+                expiredAt: String? = nil, gone: Bool = false, expiresAt: String? = nil, pinnedAt: String? = nil,
+                pinnable: Bool? = nil, testReport: EvidenceTestReport? = nil) {
         self.id = id
         self.name = name
         self.folder = folder
@@ -105,6 +116,81 @@ public struct EvidenceFile: Codable, Equatable, Sendable, Identifiable {
         self.height = height
         self.expiredAt = expiredAt
         self.gone = gone
+        self.expiresAt = expiresAt
+        self.pinnedAt = pinnedAt
+        self.pinnable = pinnable
+        self.testReport = testReport
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, folder, mimeType, sizeBytes, sha256, width, height, expiredAt, gone
+        case expiresAt, pinnedAt, pinnable, testReport
+    }
+
+    // Tolerant about the report alone, as a citation's is: a summary this build cannot read is one line
+    // less, and must not fail the whole list.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decodeIfPresent(String.self, forKey: .name)
+        folder = try c.decodeIfPresent(String.self, forKey: .folder)
+        mimeType = try c.decodeIfPresent(String.self, forKey: .mimeType)
+        sizeBytes = try c.decodeIfPresent(Int.self, forKey: .sizeBytes)
+        sha256 = try c.decodeIfPresent(String.self, forKey: .sha256)
+        width = try c.decodeIfPresent(Int.self, forKey: .width)
+        height = try c.decodeIfPresent(Int.self, forKey: .height)
+        expiredAt = try c.decodeIfPresent(String.self, forKey: .expiredAt)
+        gone = try c.decode(Bool.self, forKey: .gone)
+        expiresAt = try c.decodeIfPresent(String.self, forKey: .expiresAt)
+        pinnedAt = try c.decodeIfPresent(String.self, forKey: .pinnedAt)
+        pinnable = try c.decodeIfPresent(Bool.self, forKey: .pinnable)
+        testReport = try? c.decodeIfPresent(EvidenceTestReport.self, forKey: .testReport)
+    }
+
+    /// This file after a press of its pin, with what the server answered.
+    public func withPin(_ answer: EvidenceFilePinAnswer) -> EvidenceFile {
+        EvidenceFile(id: id, name: name, folder: folder, mimeType: mimeType, sizeBytes: sizeBytes, sha256: sha256,
+                     width: width, height: height, expiredAt: answer.expiredAt, gone: gone,
+                     expiresAt: answer.expiresAt, pinnedAt: answer.pinnedAt, pinnable: pinnable, testReport: testReport)
+    }
+
+    /// This file once a press was told its bytes have gone: it can only say so from now on.
+    public func notPinnable() -> EvidenceFile {
+        EvidenceFile(id: id, name: name, folder: folder, mimeType: mimeType, sizeBytes: sizeBytes, sha256: sha256,
+                     width: width, height: height, expiredAt: expiredAt, gone: gone,
+                     expiresAt: expiresAt, pinnedAt: pinnedAt, pinnable: false, testReport: testReport)
+    }
+}
+
+/// What a press of the pin answers, either way (`PUT` and `DELETE /attachments/:id/pin`): the three dates
+/// it may have moved. Everything else about a file stays as the list read it.
+public struct EvidenceFilePinAnswer: Codable, Equatable, Sendable {
+    public let expiresAt: String?
+    public let expiredAt: String?
+    public let pinnedAt: String?
+
+    public init(expiresAt: String? = nil, expiredAt: String? = nil, pinnedAt: String? = nil) {
+        self.expiresAt = expiresAt
+        self.expiredAt = expiredAt
+        self.pinnedAt = pinnedAt
+    }
+}
+
+/// A read of a file whose bytes have gone (410), and when they expired. A server older than the date says
+/// only that they went, so a client draws `Expired` with no date.
+public struct ExpiredAttachment: Equatable, Sendable {
+    public let expiredAt: String?
+
+    public init(expiredAt: String? = nil) { self.expiredAt = expiredAt }
+
+    private struct Body: Decodable { let expiredAt: String? }
+
+    /// What this failure says of the file, or nil when it says nothing of the kind: every other failure
+    /// is what it always was.
+    public init?(_ error: Error) {
+        guard case APIError.http(status: 410, body: let body) = error else { return nil }
+        let date = body?.data(using: .utf8).flatMap { try? JSONDecoder().decode(Body.self, from: $0) }?.expiredAt
+        self.init(expiredAt: date)
     }
 }
 
@@ -140,6 +226,12 @@ public struct EvidenceFileList: Equatable, Sendable {
     public init(_ page: EvidenceFilePage) {
         self.init(submittedAt: page.submittedAt, fileCount: page.fileCount, totalBytes: page.totalBytes,
                   files: page.files, nextOffset: page.nextOffset)
+    }
+
+    /// With one file changed, wherever the list holds it.
+    public func updating(_ id: String, _ change: (EvidenceFile) -> EvidenceFile) -> EvidenceFileList {
+        EvidenceFileList(submittedAt: submittedAt, fileCount: fileCount, totalBytes: totalBytes,
+                         files: files.map { $0.id == id ? change($0) : $0 }, nextOffset: nextOffset)
     }
 
     private init(submittedAt: String, fileCount: Int, totalBytes: Int, files: [EvidenceFile],
@@ -204,6 +296,15 @@ public enum EvidenceFiles {
     /// `EVIDENCE_FILES_UNREAD`).
     public static let loading = "Reading…"
     public static let unread = "The files could not be read just now."
+    /// What presses a file's pin, either way (`EVIDENCE_FILE_PIN`, `EVIDENCE_FILE_UNPIN`).
+    public static let pin = "Pin"
+    public static let unpin = "Unpin"
+    /// What a pinned file says of how long it stays, where one with a date says when it expires
+    /// (`EVIDENCE_FILE_PINNED`).
+    public static let pinned = "Pinned"
+    /// What a press that did not go through says (`EVIDENCE_FILE_PIN_FAILED`, `EVIDENCE_FILE_UNPIN_FAILED`).
+    public static let pinFailed = "Couldn't pin the file"
+    public static let unpinFailed = "Couldn't unpin the file"
     /// The two lists a test report opens into (`EVIDENCE_REPORT_FAILED`, `EVIDENCE_REPORT_SKIPPED`).
     public static let reportFailed = "Failed"
     public static let reportSkipped = "Skipped"
@@ -238,6 +339,19 @@ public enum EvidenceFiles {
     public static func testReports(_ citations: [EvidenceDecisionCitation]) -> [EvidenceTestReport] {
         citations.compactMap(\.testReport)
     }
+
+    /// The reports of what a page shows: the citations', and a receipt's, which has none, off the list it
+    /// has read.
+    public static func reports(_ citations: [EvidenceDecisionCitation], files: [EvidenceFile]) -> [EvidenceTestReport] {
+        let cited = testReports(citations)
+        return cited.isEmpty ? files.compactMap(\.testReport) : cited
+    }
+
+    /// Whether the server offers this file a pin.
+    public static func canPin(_ file: EvidenceFile) -> Bool { file.pinnable == true }
+
+    /// Whether this file is pinned.
+    public static func isPinned(_ file: EvidenceFile) -> Bool { file.pinnedAt != nil }
 
     /// What a file is called where one name is needed.
     public static func name(_ file: EvidenceFile) -> String { file.name ?? file.id }
@@ -340,6 +454,23 @@ public enum EvidenceFiles {
         guard let date = RelativeTime.parse(at) else { return at }
         let sameYear = Calendar.current.isDate(date, equalTo: now, toGranularity: .year)
         return (sameYear ? englishDay : englishDayOfYear).string(from: date)
+    }
+
+    /// `Expires Dec 2`.
+    public static func expires(_ at: String, now: Date = Date()) -> String { "Expires \(expiryDate(at, now: now))" }
+
+    /// How long a file with its bytes stays: `Pinned`, `Expires Dec 2`, or nothing where evidence holds
+    /// it or it never expires.
+    public static func keep(_ file: EvidenceFile, now: Date = Date()) -> String? {
+        if isGone(file) { return nil }
+        if isPinned(file) { return pinned }
+        return file.expiresAt.map { expires($0, now: now) }
+    }
+
+    /// `Expired Dec 2`, on one line, or `Expired` from a server that does not say when.
+    public static func expiredLine(_ at: String?, now: Date = Date()) -> String {
+        guard let at else { return fileExpired }
+        return "\(fileExpired) \(expiryDate(at, now: now))"
     }
 
     /// The server's rule for a size (web's `formatFileSize`), not the system's: `ByteCountFormatter`

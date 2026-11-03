@@ -5,6 +5,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -12,6 +13,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import io.orbitd.android.R
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.management.RunnerCopy
 import io.orbitd.android.management.RunnerPage
@@ -31,6 +33,14 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
     if (card.family == CardFamily.OWNER_CONFIRMATION && card.context.text("ownerCard") != null) { OwnerCardBody(card, open, owner, reopen, recorded); return }
     if (card.key.startsWith("receipt:")) {
         CardFields(row, listOf("title", "decision", "decidedAt", "decidedByType", "note", "report", "review", "answers", "reason", "problems", "resultingSeal"), open)
+        // The one way to an older version's files, and so to where they are seen to expire: the latest version's do not (§2.8), and only
+        // the latest is ever a card. Read when it is pressed: a receipt rides every read of the conversation, and reads nothing itself.
+        if (card.family == CardFamily.EVIDENCE && row.flag("citesFiles")) LocalEvidenceFiles.current?.let { files ->
+            OutlinedButton(onClick = { files.open(card.key) }, Modifier.testTag("${card.key}:files")) {
+                Text(EvidenceFiles.title)
+                Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.padding(start = 4.dp).size(14.dp))
+            }
+        }
         return
     }
     when (card.family) {
