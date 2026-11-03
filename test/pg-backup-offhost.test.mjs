@@ -12,6 +12,11 @@
 // holds the system identifier Postgres wrote into it, so none of this needs a marker on the target, and one is read from the
 // target before every --delete.
 //
+// What the target answers (a listing decides what --delete may take): only a path that is not there reads as empty. One that is
+// there and cannot be read stops the round with nothing sent or deleted, and what ssh says on stderr is neither a line of a listing
+// nor a change. Those cases put real rsync at both ends of a stand-in ssh, with the far side an unprivileged account, since no mode
+// stops root.
+//
 // What --delete takes on the way (it must not take the target's last base backup before another has landed): a target holding
 // one of this archive's base backups whole has the one pass it always had, since that one stays and --delete can make room. One
 // holding base backups and none of those whole is sent everything first, and --delete runs only if that finished.
@@ -21,7 +26,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -45,6 +50,15 @@ function segment(system, filler = '') {
 }
 const walName = (timeline, number) => `${timeline.toString(16).toUpperCase().padStart(8, '0')}00000000${number.toString(16).toUpperCase().padStart(8, '0')}`;
 const BEGINNING = new Date('2026-01-01T00:00:00Z');
+/** What OpenSSH 10.1 and later print on stderr, as 10.3 did for a server with no post-quantum key exchange, each line ending in a carriage return as well. */
+const SSH_WARNING = [
+  '** WARNING: connection is not using a post-quantum key exchange algorithm.',
+  '** This session may be vulnerable to "store now, decrypt later" attacks.',
+  '** The server may need to be upgraded. See https://openssh.com/pq.html',
+];
+const AS_ROOT = process.getuid() === 0;
+/** Who the far side is when this runs as root: the uid of `nobody`, which needs no entry on this machine. */
+const FAR_SIDE_ACCOUNT = 65534;
 
 /** An archive as the sidecar's mount holds it: base/<stamp>/, wal/<segment>.gz, each with a time of its own, as rsync keeps. */
 function archiveIn(dir, { system = CLUSTER, timeline = 1, from = 1, to = 3, bases = ['20260101T000000Z'], at = BEGINNING } = {}) {
@@ -91,6 +105,7 @@ function fingerprint(dir) {
   const walk = (at) => readdirSync(at, { withFileTypes: true }).flatMap((entry) => {
     const file = path.join(at, entry.name);
     if (entry.isDirectory()) return walk(file);
+    if (entry.isSymbolicLink()) return [`${path.relative(dir, file)} -> ${readlinkSync(file)}`];
     return [`${path.relative(dir, file)} ${createHash('sha256').update(readFileSync(file)).digest('hex')} ${statSync(file).mtimeMs}`];
   });
   return walk(dir).sort();
@@ -104,21 +119,30 @@ function fingerprint(dir) {
  * dies, as a dropped connection does, or as a full disk does with `cut.says`. What that left is `cutShort`, and the next poll
  * is the round this returns: with room again, or as cut as the first with `cut.everyPoll`. `cut.then`, given the directories, is
  * what a person does in between.
+ * With `server` the target is reached through a stand-in ssh that runs the far side's real rsync, printing OpenSSH's warning first
+ * if `server.warns`. `locked`, given the directories, names a directory of the target and the mode it has for the length of each poll.
  */
-function round({ prepare, system = CLUSTER, due = [], database = 'up', interval = 86_400, rsyncFailsOn = null, cut = null }) {
-  const scratch = mkdtempSync(path.join(tmpdir(), 'pg-backup-offhost-'));
+function round({ prepare, system = CLUSTER, due = [], database = 'up', interval = 86_400, rsyncFailsOn = null, cut = null, server = null, locked = null }) {
+  // The far side has to reach this directory as the unprivileged account when this runs as root, so not through a private TMPDIR.
+  const scratch = mkdtempSync(path.join(AS_ROOT ? '/tmp' : tmpdir(), 'pg-backup-offhost-'));
   try {
     const dirs = {
       archive: path.join(scratch, 'archive'),
       files: path.join(scratch, 'files'),
       target: path.join(scratch, 'backup-host', 'orbit-pg-archive'),
       filesTarget: path.join(scratch, 'backup-host', 'orbit-pg-archive-files'),
+      tmp: path.join(scratch, 'tmp'),
     };
     mkdirSync(path.join(dirs.archive, 'base'), { recursive: true });
     mkdirSync(path.join(dirs.archive, 'wal'), { recursive: true });
     mkdirSync(path.dirname(dirs.target), { recursive: true });
     mkdirSync(dirs.files);
+    mkdirSync(dirs.tmp);
     prepare?.(dirs);
+    if (server && AS_ROOT) {
+      chmodSync(scratch, 0o755);
+      execFileSync('chown', ['-R', `${FAR_SIDE_ACCOUNT}:${FAR_SIDE_ACCOUNT}`, path.dirname(dirs.target)]);
+    }
     const stubs = path.join(scratch, 'stubs');
     mkdirSync(stubs);
     const queries = path.join(scratch, 'psql-queries');
@@ -135,7 +159,11 @@ esac`,
       // A base backup is taken at the start of the round only when none is recent, which `prepare` decides.
       pg_basebackup: 'for arg; do case "$arg" in --pgdata=*) mkdir -p "${arg#--pgdata=}"; echo backup > "${arg#--pgdata=}/base.tar.gz" ;; esac; done',
       pg_archivecleanup: ':',
-      ssh: ':',
+      ssh: server ? `while [ $# -gt 0 ]; do case "$1" in -p|-i|-o|-l) shift 2 ;; -*) shift ;; *) break ;; esac; done
+shift
+${server.warns ? SSH_WARNING.map((line) => `printf '%s\\r\\n' '${line}' >&2`).join('\n') : ''}
+cd /
+PATH='${process.env.PATH}' exec ${AS_ROOT ? `setpriv --reuid=${FAR_SIDE_ACCOUNT} --regid=${FAR_SIDE_ACCOUNT} --clear-groups` : ''} sh -c "$*"` : ':',
       sleep: 'exit 7',
       // The real one, with each call written down.
       rsync: `printf '%s\\n' "$*" >> '${rsyncCalls}'
@@ -144,21 +172,27 @@ ${cut ? `if [ -e '${cutting}' ]; then case "$*" in *'${cut.on}'*) '${realRsync}'
 exec '${realRsync}' "$@"`,
     })) writeFileSync(path.join(stubs, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
     const poll = () => {
+      const [lockedDir, mode] = locked?.(dirs) ?? [];
+      if (lockedDir) chmodSync(lockedDir, mode);
       const run = spawnSync('sh', ['scripts/pg-backup.sh'], {
         cwd: repo,
         encoding: 'utf8',
         env: {
           PATH: `${stubs}:${process.env.PATH}`,
+          TMPDIR: dirs.tmp,
           ORBIT_ARCHIVE_DIR: dirs.archive,
           ORBIT_FILES_DIR: dirs.files,
-          ORBIT_BACKUP_SYNC_TARGET: dirs.target,
+          ORBIT_BACKUP_SYNC_TARGET: server ? `backup-host:${dirs.target}` : dirs.target,
           ORBIT_BACKUP_MIN_FREE_MB: '0',
           ORBIT_BASE_BACKUP_INTERVAL: String(interval),
         },
         timeout: 30_000,
       });
+      // So that what it holds can be read, and removed, whatever became of the round.
+      if (lockedDir && existsSync(lockedDir)) chmodSync(lockedDir, 0o755);
       const log = run.stdout + run.stderr;
       assert.equal(run.status, 7, `the round finished: ${log}`);
+      if (existsSync(dirs.tmp)) assert.deepEqual(readdirSync(dirs.tmp), [], `no temporary file outlives the round: ${log}`);
       return log;
     };
     let cutShort = null;
@@ -438,7 +472,14 @@ test('a first install syncs, to a missing directory or an empty one, or to one w
     writeFileSync(path.join(target, 'wal', `.${walName(1, 1)}.gz.AbCdEf`), 'half a segment');
     writeFileSync(path.join(target, 'wal', '00000002.history.gz'), 'a history file sorts first');
   };
-  for (const make of [null, empty, bare, firstSegmentCut]) {
+  // A backup disk mounted elsewhere and linked in, whose path rsync still has to find missing through the link.
+  const underALink = (target) => {
+    const parent = path.dirname(target);
+    rmSync(parent, { recursive: true });
+    mkdirSync(`${parent}-disk`);
+    symlinkSync(`${parent}-disk`, parent);
+  };
+  for (const make of [null, empty, bare, firstSegmentCut, underALink]) {
     const result = round({
       prepare: ({ archive, target }) => {
         archiveIn(archive);
@@ -818,6 +859,153 @@ test('a mirror it refuses still gets the files, which are named by their content
   assert.deepEqual(result.after.copy.map((line) => line.split(' ')[0]), [`ab/${file}`]);
 });
 
+// ── What the target answers ─────────────────────────────────────────────────────────────────────────────────────────
+
+test('a directory on the target it may not read is not an empty one: nothing is sent and nothing goes', () => {
+  for (const [dir, mode] of [['base', 0o300], ['base', 0o000], [path.join('base', OLD_BASE), 0o000], ['wal', 0o300], ['wal', 0o000], ['.', 0o000]]) {
+    for (const warns of [false, true]) {
+      const result = round({
+        server: { warns },
+        locked: ({ target }) => [path.join(target, dir), mode],
+        prepare: noBaseInCommon,
+      });
+      assert.deepEqual(result.after.mirror, result.before.mirror, result.log);
+      assert.match(result.log, /ERROR: off-host sync to .* failed: could not read the target: .*Permission denied/);
+      assert.doesNotMatch(result.log, /\r/, 'and it stays one line on a terminal');
+      assert.deepEqual(writesToMirror(result), [], result.rsyncCalls.join('\n'));
+    }
+  }
+});
+
+test('nor is anything else that stands where a directory goes: only a path that is not there reads as empty', () => {
+  const inTheWay = {
+    'a file': (file) => writeFileSync(file, 'not a directory'),
+    'a link to nothing': (file) => symlinkSync('nothing here', file),
+  };
+  for (const name of ['base', 'wal']) {
+    for (const [what, make] of Object.entries(inTheWay)) {
+      const result = round({
+        prepare: ({ archive, target }) => {
+          archiveIn(archive);
+          archiveIn(target);
+          rmSync(path.join(target, name), { recursive: true });
+          make(path.join(target, name));
+        },
+      });
+      assert.deepEqual(result.after.mirror, result.before.mirror, `${what} as ${name}: ${result.log}`);
+      assert.match(result.log, /ERROR: off-host sync to .* failed: could not read the target: .+/);
+      assert.deepEqual(writesToMirror(result), [], result.rsyncCalls.join('\n'));
+    }
+  }
+});
+
+test('a first install goes the same way over ssh, with a warning on the way or none: to a missing directory, an empty one, or empty base/ and wal/', () => {
+  const emptyDirectories = (target) => {
+    mkdirSync(path.join(target, 'base'), { recursive: true });
+    mkdirSync(path.join(target, 'wal'));
+  };
+  for (const warns of [false, true]) {
+    for (const make of [null, (target) => mkdirSync(target), emptyDirectories]) {
+      const result = round({
+        server: { warns },
+        prepare: ({ archive, target }) => {
+          archiveIn(archive);
+          make?.(target);
+        },
+      });
+      mirrored(result);
+      assert.doesNotMatch(result.log, /ERROR/);
+      assert.match(result.log, /mirrored \d+ change\(s\) to backup-host:\S+orbit-pg-archive$/m);
+    }
+  }
+});
+
+const SSH_WORDS = /algorithm|attacks|https:/;
+
+test('what ssh says is not read as what the target holds: a refusal names only what is there', () => {
+  const result = round({ server: { warns: true }, prepare: baseOnlyTarget('20260201T000000Z') });
+  refused(result, /it holds base backups and no WAL to tell whose they are \(20260201T000000Z\)/);
+  assert.doesNotMatch(result.log, SSH_WORDS);
+});
+
+test('and another cluster\'s mirror is refused over ssh as it is anywhere else, warning or none', () => {
+  for (const warns of [false, true]) {
+    const result = round({
+      server: { warns },
+      prepare: ({ archive, target }) => {
+        archiveIn(archive, { bases: ['20260301T000000Z'] });
+        archiveIn(target, { system: OTHER_CLUSTER, from: 80, to: 90, bases: ['20260201T000000Z'] });
+      },
+    });
+    refused(result, new RegExp(`its archive belongs to cluster ${OTHER_CLUSTER} .* and this one is ${CLUSTER}`));
+    assert.doesNotMatch(result.log, SSH_WORDS);
+  }
+});
+
+/** A mirror and a files copy that already are this archive and these files, so that a round has nothing to change on either. */
+const nothingToChange = ({ archive, target, files, filesTarget }) => {
+  archiveIn(archive);
+  mkdirSync(path.join(files, 'ab'));
+  writeFileSync(path.join(files, 'ab', 'ab'.repeat(32)), 'bytes');
+  execFileSync('rsync', ['-a', `${archive}/`, `${target}/`]);
+  execFileSync('rsync', ['-a', `${files}/`, `${filesTarget}/`]);
+};
+
+test('with nothing to change it logs no change, whatever ssh says on the way', () => {
+  for (const warns of [false, true]) {
+    const result = round({ server: { warns }, prepare: nothingToChange });
+    mirrored(result);
+    assert.doesNotMatch(result.log, /ERROR|mirrored/);
+  }
+});
+
+test('and what it counts is what changed, on whichever passes ran, the same with a warning as without', () => {
+  /** Two new segments and their directory's time, and one new file and its directory's time: a time of its own, since rsync compares whole seconds. */
+  const someNew = (dirs) => {
+    nothingToChange(dirs);
+    archiveIn(dirs.archive, { from: 4, to: 5, bases: [] });
+    writeFileSync(path.join(dirs.files, 'ab', `${'ab'.repeat(31)}cd`), 'more bytes');
+    for (const dir of [path.join(dirs.archive, 'wal'), path.join(dirs.files, 'ab')]) utimesSync(dir, BEGINNING, BEGINNING);
+  };
+  for (const [prepare, expected] of [[someNew, ['mirrored 3 change(s) to orbit-pg-archive', 'mirrored 2 change(s) to orbit-pg-archive-files']], [fallenBehind, null]]) {
+    const [quiet, warned] = [false, true].map((warns) => {
+      const result = round({ server: { warns }, prepare });
+      mirrored(result);
+      return result.log.match(/mirrored \d+ change\(s\) to \S+/g).map((line) => line.replace(/ to .*\//, ' to '));
+    });
+    assert.deepEqual(warned, quiet);
+    if (expected) assert.deepEqual(quiet, expected);
+  }
+});
+
+test('a target in step is asked what it always was: its two listings and one segment, this archive\'s two, and the one pass', () => {
+  const result = round({ prepare: inStep });
+  const { archive, target } = result.dirs;
+  assert.deepEqual(result.rsyncCalls.map((call) => call.replace(/ -e ssh -p 22 -i \S+ -o BatchMode=yes -o ConnectTimeout=15( -o \S+)*/, ' -e ssh').replace(/\/wal\/[0-9A-F]{24}\.gz \S+\/segment$/, '/wal/<smallest> <scratch>')), [
+    `--list-only --timeout=600 -e ssh ${target}/wal/`,
+    `--list-only --timeout=600 -e ssh -r ${target}/base/`,
+    `--list-only ${archive}/wal/`,
+    `--timeout=600 -e ssh ${target}/wal/<smallest> <scratch>`,
+    `--list-only -r ${archive}/base/`,
+    `-a --delete --timeout=600 --itemize-changes --exclude .staging-* -e ssh ${archive}/ ${target}/`,
+  ]);
+});
+
+test('with nowhere to keep what rsync says it does not sync, and says so, and the local backups go on', () => {
+  const result = round({
+    prepare: (dirs) => {
+      archiveIn(dirs.archive);
+      utimesSync(path.join(dirs.archive, 'base', '20260101T000000Z'), BEGINNING, BEGINNING);
+      archiveIn(dirs.target);
+      rmSync(dirs.tmp, { recursive: true });
+    },
+  });
+  assert.deepEqual(result.after.mirror, result.before.mirror, result.log);
+  assert.deepEqual(result.log.match(/ERROR.*$/gm), [result.log.match(/ERROR: off-host sync to .* failed: could not make a temporary file$/m)?.[0]], result.log);
+  assert.match(result.log, /completed base backup /);
+  assert.deepEqual(result.rsyncCalls, [], result.log);
+});
+
 // ── The files copy ──────────────────────────────────────────────────────────────────────────────────────────────────
 
 const NAME = (char) => char.repeat(64);
@@ -943,7 +1131,7 @@ test('with no copy there yet there is nothing to prune', () => {
     },
   });
   assert.equal(result.after.copy, null, result.log);
-  assert.match(result.log, /ERROR: off-host sync to .*-files failed/, 'that is the one thing said');
+  assert.match(result.log, /ERROR: off-host sync to .*-files failed: ssh: connect to host backup-host/, 'that is the one thing said');
   assert.doesNotMatch(result.log, /pruning .* failed|refusing to prune|pruned/);
 });
 
@@ -951,11 +1139,32 @@ test('a copy it cannot list is not pruned, and it says so', () => {
   const name = NAME('a');
   const result = round({
     due: [name],
-    rsyncFailsOn: '-r --list-only',
+    rsyncFailsOn: 'orbit-pg-archive-files/',
     prepare: prepareCopy([name], [NAME('b')]),
   });
   assert.equal(onCopy(result).includes(inCopy(name)), true, result.log);
   assert.match(result.log, /ERROR: pruning .* failed: could not list it: ssh: connect to host backup-host/);
+});
+
+test('nor one with a directory it may not read: not having a copy yet is all that reads as nothing to prune', () => {
+  const name = `aa${'1'.repeat(62)}`;
+  const result = round({
+    server: { warns: false },
+    due: [name],
+    locked: ({ filesTarget }) => [path.join(filesTarget, 'aa'), 0o000],
+    prepare: prepareCopy([name, NAME('b')], [NAME('b')]),
+  });
+  assert.equal(onCopy(result).includes(inCopy(name)), true, result.log);
+  assert.match(result.log, /ERROR: pruning .* failed: could not list it: .*Permission denied/);
+  assert.doesNotMatch(result.log, /pruned/);
+});
+
+test('and a prune that fails says why', () => {
+  const name = NAME('a');
+  const result = round({ due: [name], rsyncFailsOn: '--max-delete', prepare: prepareCopy([name], [NAME('b')]) });
+  assert.equal(onCopy(result).includes(inCopy(name)), true, result.log);
+  assert.match(result.log, /ERROR: pruning .* failed: ssh: connect to host backup-host/);
+  assert.doesNotMatch(result.log, /pruned/);
 });
 
 test('a name that is not a sha256 is not a name: a database cannot aim this anywhere else', () => {
