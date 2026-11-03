@@ -298,7 +298,7 @@ var finalLeaseReleaseTimeout = 10 * time.Second
 // together with bgDrainWaitCap, the drain staying the longer of the two.
 var (
 	eventFlushShutdownGrace   = 20 * time.Second
-	shutdownSupervisorTimeout = shutdownDrainTimeout + 2*finalLeaseReleaseTimeout + eventFlushShutdownGrace + finalizeRunShutdownGrace + 10*time.Second
+	shutdownSupervisorTimeout = hostStopBudget.envelope
 )
 
 func newLeaseGeneration() (string, error) {
