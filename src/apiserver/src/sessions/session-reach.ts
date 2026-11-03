@@ -129,7 +129,8 @@ function nextStep(callerMode: string): string {
 
 /**
  * Refuse what the rule above refuses. Answers whether the caller is the narrower of the two, which is what
- * makes a message it goes on to send say so (session-message.ts) when that message has no block of its own.
+ * makes a paused run's brief say so (session-message.ts `readBriefSender`): a brief is no session's message, so
+ * nothing else would.
  *
  * `clientTurnId` is the key of a message sent by `createTurn` or `resume`. A retry of one already filed from this
  * session is answered with the turn it filed, whatever has changed since: a committed operation owns its key, so

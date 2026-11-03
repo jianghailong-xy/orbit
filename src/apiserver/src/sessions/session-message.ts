@@ -7,6 +7,8 @@ import {
   type SessionRequestState,
 } from '@orbit/shared';
 import { isWiderThanStarter, resolvePermissionMode, whatItRunsAs } from '../common/permission-mode';
+import { taskRunResumeToken } from '../tasks/task-run-identity';
+import { readExecuteTarget, TASK_RUN_ACTION } from '../tasks/task-run-receipt';
 
 /**
  * One Orbit session's message to another, and what the platform says about who sent it
@@ -285,6 +287,29 @@ export async function appendSessionMessageContext(
   if (!sender) return content;
   const recipient = await readRecipientMode(tx, ownerId, recipientSessionId);
   return `${content ?? ''}\n\n${sessionMessageBlock(sender, request, recipient)}`;
+}
+
+/**
+ * The narrower session whose `task_start` handed a paused run this turn's brief, which the run request froze
+ * with its plan (`TasksService.executeLeased`), or null for every other turn. The block is delivered from it the
+ * way it is from a sender. It is not the turn's sender: that column is a session's message to every reader of it,
+ * and this turn is the task's brief, drawn and settled as one. The session named is what the runner's header said
+ * on that route: attribution rather than proof.
+ */
+export async function readBriefSender(
+  tx: Pick<Prisma.TransactionClient, 'taskRunRequest'>,
+  ownerId: string,
+  clientTurnId: string,
+  sessionId: string,
+): Promise<string | null> {
+  const requestToken = taskRunResumeToken(clientTurnId, sessionId);
+  if (requestToken === null) return null;
+  const request = await tx.taskRunRequest.findUnique({
+    where: { ownerId_actionKind_requestToken: { ownerId, actionKind: TASK_RUN_ACTION.execute, requestToken } },
+    select: { target: true },
+  });
+  const plan = readExecuteTarget(request?.target)?.plan;
+  return plan?.kind === 'RESUME' ? plan.narrowerSessionId ?? null : null;
 }
 
 /**

@@ -45,9 +45,9 @@ export const taskRunFingerprint = {
  */
 export type TaskRunPlan =
   | { kind: 'ADOPT'; sessionId: string }
-  // `senderSessionId` is the narrower session whose press this is (sessions/session-reach.ts), which the
-  // turn is written as coming from so the paused run reads what §2.2 of the session contract says of it.
-  | { kind: 'RESUME'; sessionId: string; turnId: string; senderSessionId?: string }
+  // `narrowerSessionId` is the narrower session whose press this is (sessions/session-reach.ts): the paused
+  // run reads what §2.2 of the session contract says of it, in the block delivered after the brief.
+  | { kind: 'RESUME'; sessionId: string; turnId: string; narrowerSessionId?: string }
   | { kind: 'CREATE'; sessionId: string };
 
 /**

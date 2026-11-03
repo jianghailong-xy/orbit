@@ -14610,12 +14610,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           // §13.6 SU6: a paused run being handed the task's prompt IS doing the task's work, so the
           // row says so — otherwise a session first opened to look at the task keeps the salvage
           // exemption while executing it, and the reaper never follows the task's lifecycle for it.
-          {
-            batch: batch ?? null,
-            startsTaskWork: true,
-            fence,
-            ...(plan.senderSessionId ? { senderSessionId: plan.senderSessionId } : {}),
-          },
+          { batch: batch ?? null, startsTaskWork: true, fence },
         );
       } catch (error) {
         // The turn never landed, so these are not a message's pictures — just bytes. Dropped on
@@ -15102,12 +15097,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       runRequestToken,
     );
     // A paused run answers in its own mode, so handing it this brief is giving it a turn, and a session
-    // reaches it as `session_send` would (sessions/session-reach.ts). Let through narrower, the turn is
-    // written as that session's, frozen with the plan, and delivered with the block §2.2 says it has: the
-    // brief stays what the turn holds, which is what keeps its card. No wider than the run, it is as it was.
+    // reaches it as `session_send` would (sessions/session-reach.ts). Let through narrower, who pressed is
+    // frozen with the plan and said in the block §2.2 delivers after the brief. The turn stays the task's
+    // brief and is not signed: a signed turn is a session's message to every reader of that column, and
+    // this one is drawn and settled as a brief. No wider than the run, it is as it was.
     const planned: TaskRunPlan = actingSessionId && plannedRun.kind === 'RESUME'
       && (await this.sessions.assertMayReach(ownerId, actingSessionId, plannedRun.sessionId, 'resumeRun')).narrower
-      ? { ...plannedRun, senderSessionId: actingSessionId }
+      ? { ...plannedRun, narrowerSessionId: actingSessionId }
       : plannedRun;
     // Routed for a fresh run only (docs/model-routing-design.md §8.1). The decision is frozen and
     // recorded either way; only an Agent with smart selection on is dispatched with it — any other

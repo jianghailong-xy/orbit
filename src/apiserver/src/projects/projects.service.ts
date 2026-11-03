@@ -4843,9 +4843,9 @@ export class ProjectsService {
     if (ask && resolved.sessionId === actingSessionId) throw selfRequestRefusal();
     // `session_send`'s rule (sessions/session-reach.ts), on the conversation this resolved. Before the
     // `try` below, because it answers the caller and says nothing about whether the coordinator can be
-    // reached: it leaves as itself rather than as an undelivered message. Nothing here has written anything
-    // a refusal would strand: a rotation or a first open above only happens for a session no narrower than
-    // the account default, and that is the mode what it opened runs in.
+    // reached: it leaves as itself rather than as an undelivered message. A rotation or a first open above
+    // only happens for a session no narrower than the account default, the mode what it opened runs in, so a
+    // refusal here normally has nothing to strand.
     await this.sessions.assertMayReach(ownerId, actingSessionId, resolved.sessionId, 'message', clientTurnId);
     const turn = { clientTurnId, content: message };
     const charge = {

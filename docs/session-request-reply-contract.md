@@ -32,7 +32,7 @@
   （`POST /runner/projects/:id/coordinator/messages`，目标在投递时解析），以及 `session_interrupt` 附带的消息
   （`POST /runner/sessions/:id/interrupt` 带 `message`）。人从客户端发的、headless 凭据发的、
   平台自己投递的（watch 唤醒、open item、criteria 回复……）都**不是**会话间消息，本文不改它们。
-  一个窄模式的会话用 `task_start` 接续更宽的暂停的 run 时，那一轮也按会话间消息记发送者（§2.1、§2.5）。
+  一个窄模式的会话用 `task_start` 接续更宽的暂停的 run 时，那一轮还是任务简报，不算会话间消息，只多一个 §2.2 的块（§2.5）。
 - **请求**：带 `expectReply: true` 的会话间消息。
 - **结局**：请求的终态，五种之一（§4）。
 - **回信 turn**：平台为把结局交给发送方，在发送方会话里排的 turn。
@@ -45,10 +45,6 @@
 
 `conversation_turn` 新增可空列 `sender_session_id`。§1 的三个入口写 turn 时填调用方会话，其他入口一律留空。
 空值就是今天的语义：人或平台写的。
-
-`task_start` 接续暂停的 run 时（`POST /runner/tasks/:id/execute`，`TasksService.execute` 的 RESUME 计划），只有调用方
-比这个 run 窄才填它：这一轮的内容还是任务简报，所以 `taskStart` 卡片照旧；投递时多一个 §2.2 的块。不比 run 窄时不填，
-和以前一样。这一轮不计入 §2.4 的上限。
 
 例外只有一个：自动重试（`src/apiserver/src/sessions/auto-retry.service.ts`）重发上一条消息时，新 turn 沿用原 turn 的
 `sender_session_id`。重发的还是那个会话的话，丢了署名，对方就会把它当成 owner 说的。这是平台的重发，不计入 §2.4 的上限。
@@ -79,6 +75,11 @@ The sender runs in default, which is narrower than this session's auto. Its mess
 `from-mode` 是发送方存的模式，空值按账户默认解析，读的是投递时的值。第二句只在发送方比接收方窄时出现，比较和 §2.5 是同一个
 函数（`isWiderThanStarter`）。接收方的模式在它的引擎上按 Bypass 跑时（Kimi、OpenCode、Antigravity 的 Auto，Codex 的
 Don't Ask），这句后面多说一句它实际按什么跑。这两样只是告诉接收方，挡不住模型照做。
+
+`task_start` 接续暂停的 run 时（`POST /runner/tasks/:id/execute`，`TasksService.execute` 的 RESUME 计划），调用方比这个 run
+窄，投递时也在任务简报后面加这个块。调用方记在运行请求冻结的计划里（`plan.narrowerSessionId`），这一轮不写
+`sender_session_id`：它还是任务简报，所以 `taskStart` 卡片照旧，也不算发给这个会话的消息，不计入 §2.4。不比 run 窄时没有块，
+和以前一样。这条路上的调用方来自 `X-Orbit-Session-Id`，那个头是归属，不是凭证。
 
 块必须放在正文之后：`controlPlaneNoteOf` 靠「回显以作者原文开头」切出平台追加的部分
 （`src/apiserver/src/runner-api/control-plane-note.ts`）。放在前面会让切分失效，块就会被记成发送者的原话。

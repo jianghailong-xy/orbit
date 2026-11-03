@@ -294,7 +294,7 @@ import {
   assertEngineSessionById as assertEngineSessionRowById,
   SESSION_KIND_LANDING,
 } from '../sessions/engine-session';
-import { appendSessionMessageContext } from '../sessions/session-message';
+import { appendSessionMessageContext, readBriefSender } from '../sessions/session-message';
 import { SessionRequestService } from '../sessions/session-request.service';
 import {
   appendSessionRepliesContext,
@@ -5306,6 +5306,12 @@ export class RunnerApiController {
               await readRequestForBlock(tx, sessionId, t.id),
               sessionId,
             )) ?? content;
+          } else if (sessionContext) {
+            // A paused run's brief a narrower session pressed `task_start` for says so the same way (§2.2).
+            const pressedBy = await readBriefSender(tx, sessionContext.ownerId, t.clientTurnId, sessionId);
+            if (pressedBy) {
+              content = (await appendSessionMessageContext(tx, sessionContext.ownerId, pressedBy, content, null, sessionId)) ?? content;
+            }
           }
           // A list's console also carries back what the control plane noticed while nobody was
           // talking to it. Piggybacked here rather than pushed as its own turn — see

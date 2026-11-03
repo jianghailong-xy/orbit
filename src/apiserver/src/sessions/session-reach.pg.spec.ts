@@ -956,7 +956,23 @@ test('a session reaches a wider session only as the table says', {
     assert.equal(echoed.status, 202, echoed.text);
     const stored = (await prisma.runEvent.findFirstOrThrow({ where: { sessionId: paused, seq: 1 } })).payload as Record<string, any>;
     assert.ok(stored.taskStart, `the task start card is gone: ${JSON.stringify(stored).slice(0, 400)}`);
-    assert.equal(stored.sessionMessage?.fromMode, 'default');
+    assert.match(String(stored.controlPlaneNote), /The sender runs in default, which is narrower than this session's auto\./);
+    // Not a session's message: every client draws that card ahead of the task's, and a signed turn settles differently.
+    assert.equal('sessionMessage' in stored, false, 'the brief was given a session message card');
+    assert.equal(turn.senderSessionId, null, 'the brief was signed as a session message');
+  });
+
+  await t.test('a paused run told by a session no narrower reads the brief alone, as it always did', async () => {
+    const from = await sessionIn('auto');
+    const taskId = await taskIn(null, { creatorSessionId: from });
+    const paused = await sessionIn('auto', { taskId, startsTaskWork: true });
+    const answer = await send(
+      'POST', `/runner/tasks/${uuidToBase62(taskId)}/execute`, { triggerId: uuidToBase62(randomUUID()) },
+      { 'x-orbit-session-id': uuidToBase62(from) },
+    );
+    assert.equal(answer.status, 201, answer.text);
+    const { content } = await deliveredTo(paused);
+    assert.doesNotMatch(content, /orbit-session-message/);
   });
 
   await t.test('a narrower message written into a running turn carries the same block', async () => {
