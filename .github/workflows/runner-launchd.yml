@@ -9,14 +9,20 @@ on:
     branches: [main]
     paths:
       - "src/runner-go/service.go"
-      - "src/runner-go/shutdown_drain.go"
+      - "src/runner-go/service_test.go"
       - "src/runner-go/service_launchd_darwin_test.go"
+      - "src/runner-go/shutdown_drain.go"
+      - "src/runner-go/shutdown_drain_test.go"
+      - "src/runner-go/link_mode.go"
       - ".github/workflows/runner-launchd.yml"
   pull_request:
     paths:
       - "src/runner-go/service.go"
-      - "src/runner-go/shutdown_drain.go"
+      - "src/runner-go/service_test.go"
       - "src/runner-go/service_launchd_darwin_test.go"
+      - "src/runner-go/shutdown_drain.go"
+      - "src/runner-go/shutdown_drain_test.go"
+      - "src/runner-go/link_mode.go"
       - ".github/workflows/runner-launchd.yml"
   workflow_dispatch:
 

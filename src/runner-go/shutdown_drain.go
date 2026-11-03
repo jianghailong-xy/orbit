@@ -41,12 +41,14 @@ import (
 // inside the Pod's.
 //
 // On a Mac the envelope is 45 s, in the same order. Turns and heartbeat work get 25 s to finish on their
-// own, which leaves 20 s for one whole hand-back attempt after the check's tree has ended. A turn torn
-// down at 25 s has its releases, 5 s each, and a flush that ends 40 s into the stop, and a jobs drain
-// that kills at bgDrainWaitCap (30 s) reports inside that flush. Past the envelope come the last beat (5 s
-// at most) and the link's close (linkCloseWait, 5 s at most), so the runner is gone 55 s after the stop at
-// the very latest, 5 s inside launchd's limit. macOS 15 would allow more, but one budget for every Mac is
-// one thing to reason about, and the runner cannot tell who sent its SIGTERM anyway.
+// own, which leaves 20 s for one whole hand-back attempt after the check's tree has ended, and a jobs drain
+// that kills at bgDrainWaitCap (30 s) has reported by 35 s. The releases, the last flush and a racing
+// finalization keep the limits they have everywhere, which add up to more than a Mac has left when the
+// control plane does not answer: there, the envelope is what ends them. When it answers they take a moment.
+// Past the envelope come the last beat (5 s at most) and the link's close (linkCloseWait, 5 s at most), so
+// the runner is gone 55 s after the stop at the very latest, 5 s inside launchd's limit. macOS 15 would
+// allow more, but one budget for every Mac is one thing to reason about, and the runner cannot tell who
+// sent its SIGTERM anyway.
 //
 // A worktree is removed beside the hand-back rather than ahead of it, because a project's scratch tree
 // can take longer to delete than a Mac's stop has left. What did not go in time is cleared by the next
@@ -54,42 +56,20 @@ import (
 //
 // An idle runner is gone as soon as it has drained, everywhere.
 
-// stopBudget is what a stopping runner gives each piece of its stop.
+// stopBudget is what a stop is held to on one operating system.
 type stopBudget struct {
 	// drain is what an in-flight turn gets to finish, and what heartbeat work gets before it is stopped.
 	drain time.Duration
-	// leaseRelease bounds one release of an inbox generation; a stopping session can make two.
-	leaseRelease time.Duration
-	// eventFlush is what the final event flush is given past the drain and the releases.
-	eventFlush time.Duration
-	// finalize is what a terminal finalization racing the stop is given.
-	finalize time.Duration
-	// margin is the rest of the envelope, for the wait on an engine's output after it is killed.
-	margin time.Duration
+	// envelope is how long the stop waits for sessions and operations before it leaves without them.
+	envelope time.Duration
 }
 
 // stopBudgetFor is the budget a runner on this operating system stops under.
 func stopBudgetFor(goos string) stopBudget {
 	if goos == "darwin" {
-		return stopBudget{
-			drain:        25 * time.Second,
-			leaseRelease: 5 * time.Second,
-			eventFlush:   5 * time.Second,
-			finalize:     5 * time.Second,
-		}
+		return stopBudget{drain: 25 * time.Second, envelope: 45 * time.Second}
 	}
-	return stopBudget{
-		drain:        100 * time.Second,
-		leaseRelease: 10 * time.Second,
-		eventFlush:   20 * time.Second,
-		finalize:     20 * time.Second,
-		margin:       10 * time.Second,
-	}
-}
-
-// envelope is how long the stop waits for sessions and operations before it leaves without them.
-func (b stopBudget) envelope() time.Duration {
-	return b.drain + 2*b.leaseRelease + b.eventFlush + b.finalize + b.margin
+	return stopBudget{drain: 100 * time.Second, envelope: 170 * time.Second}
 }
 
 var (

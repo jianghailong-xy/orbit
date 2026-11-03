@@ -289,17 +289,14 @@ func TestLandingsHandedOverAfterTheStopBeganAreHandedBack(t *testing.T) {
 func TestTheStopFitsWhatEachServiceManagerAllows(t *testing.T) {
 	for _, goos := range []string{"linux", "windows"} {
 		budget := stopBudgetFor(goos)
-		want := stopBudget{
-			drain:        100 * time.Second,
-			leaseRelease: 10 * time.Second,
-			eventFlush:   20 * time.Second,
-			finalize:     20 * time.Second,
-			margin:       10 * time.Second,
+		if budget.drain != 100*time.Second {
+			t.Errorf("%s drains for %v, want 100 s", goos, budget.drain)
 		}
-		if budget != want {
-			t.Errorf("%s stops under %+v, want %+v", goos, budget, want)
+		// Provider drain, both release backstops, the last flush, a racing finalization and a margin.
+		if want := budget.drain + 2*finalLeaseReleaseTimeout + eventFlushShutdownGrace + finalizeRunShutdownGrace + 10*time.Second; budget.envelope != want {
+			t.Errorf("%s has an envelope of %v, want %v", goos, budget.envelope, want)
 		}
-		if latest := budget.envelope() + shutdownLastBeatWait; latest != 175*time.Second {
+		if latest := budget.envelope + shutdownLastBeatWait; latest != 175*time.Second {
 			t.Errorf("%s is gone %v into a stop at the latest, want 175 s: 5 s inside systemd's limit, 65 s inside a Pod's", goos, latest)
 		}
 	}
@@ -310,43 +307,32 @@ func TestTheStopFitsWhatEachServiceManagerAllows(t *testing.T) {
 
 	mac := stopBudgetFor("darwin")
 	window := time.Duration(launchdExitTimeOutSeconds) * time.Second
-	if latest := mac.envelope() + shutdownLastBeatWait + linkCloseWait; latest != 55*time.Second || latest >= window {
+	if latest := mac.envelope + shutdownLastBeatWait + linkCloseWait; latest != 55*time.Second || latest >= window {
 		t.Errorf("a Mac is gone %v into a stop at the latest, want 55 s inside launchd's %v", latest, window)
 	}
 	const (
 		checkTreeEnds = 5 * time.Second  // cmd.WaitDelay (configureSessionProcessTree)
 		handBackTry   = 15 * time.Second // Transport.integrationJobRelease
 	)
-	if left := mac.envelope() - mac.drain; left < checkTreeEnds+handBackTry {
+	if left := mac.envelope - mac.drain; left < checkTreeEnds+handBackTry {
 		t.Errorf("%v of a Mac's stop is left when a check is stopped, too little to hand it back once", left)
 	}
-	flushEnds := mac.drain + 2*mac.leaseRelease + mac.eventFlush
-	if jobsReported := bgDrainWaitCap + bgKillTeardownGrace; flushEnds < jobsReported {
-		t.Errorf("a Mac's last flush ends %v into the stop, before the jobs drain reports what it killed at %v", flushEnds, jobsReported)
-	}
-	if flushEnds > mac.envelope() {
-		t.Errorf("a Mac's last flush ends %v into the stop, past the envelope of %v", flushEnds, mac.envelope())
+	if jobsReported := bgDrainWaitCap + bgKillTeardownGrace; jobsReported >= mac.envelope {
+		t.Errorf("a Mac's jobs drain has ended its jobs %v into the stop, with no time left of %v to report them", jobsReported, mac.envelope)
 	}
 }
 
 // The numbers the stop actually runs on are this operating system's.
 func TestTheStopRunsOnThisOperatingSystemsBudget(t *testing.T) {
 	want := stopBudgetFor(runtime.GOOS)
-	got := stopBudget{
-		drain:        shutdownDrainTimeout,
-		leaseRelease: finalLeaseReleaseTimeout,
-		eventFlush:   eventFlushShutdownGrace,
-		finalize:     finalizeRunShutdownGrace,
-		margin:       want.margin,
-	}
-	if got != want {
-		t.Errorf("the stop runs on %+v, want %+v", got, want)
+	if shutdownDrainTimeout != want.drain {
+		t.Errorf("a turn drains for %v, want %v", shutdownDrainTimeout, want.drain)
 	}
 	if shutdownOperationsTimeout != want.drain {
 		t.Errorf("heartbeat work gets %v, want what a turn gets, %v", shutdownOperationsTimeout, want.drain)
 	}
-	if shutdownSupervisorTimeout != want.envelope() {
-		t.Errorf("the envelope is %v, want %v", shutdownSupervisorTimeout, want.envelope())
+	if shutdownSupervisorTimeout != want.envelope {
+		t.Errorf("the envelope is %v, want %v", shutdownSupervisorTimeout, want.envelope)
 	}
 }
 

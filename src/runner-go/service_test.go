@@ -86,7 +86,7 @@ func TestLaunchdPlistAllowsCompleteGracefulShutdown(t *testing.T) {
 			t.Fatalf("ExitTimeOut = %d: macOS 26 and later read anything above 60 as 60", seconds)
 		}
 		mac := stopBudgetFor("darwin")
-		if latest := mac.envelope() + shutdownLastBeatWait + linkCloseWait; latest > time.Duration(seconds)*time.Second-5*time.Second {
+		if latest := mac.envelope + shutdownLastBeatWait + linkCloseWait; latest > time.Duration(seconds)*time.Second-5*time.Second {
 			t.Fatalf("a Mac's stop can take %v, within 5 s of the %d s launchd gives it", latest, seconds)
 		}
 	}
