@@ -343,7 +343,7 @@ JSON 的 `kinds.<kind>.fields` 与 TS 的 `KIND_SPECS[kind].fields` 用同一套
   正文至多 10 万字、路径至多 500 字。
 - **引用**：`{ kind: 'note', ref: <note id>, quote? }`，只在本 owner 的 note 里解析（别人的 note 是 `WIKI_SOURCE_UNRESOLVED`），
   引文校验和 Automatic 的核实读的都是存下的脱敏正文；出处的 `locator` 是 `{ path }`，客户端显示成「Note · 路径」。
-  note 是 agent 写的二手内容，不算 owner 原话。
+  note 是 agent 写的二手内容，不算 owner 原话；核实者只读到 note 时，结论最多 `unreviewed`（§7.5 的 `second_hand`）。
 - **提议**：只由服务端的导入作业提（`import.propose.made`，见下）。P11 起没有路由收导入的 op：收会话自己的模型读出的条目的
   `POST /api/runner/wiki/spaces/:id/imports` 已删除，还调它的 runner 得到 404。origin 由作业定为 `import`（不看 op 里的字段）。
   生效只看 space 的审阅模式：Manual 全部待审；Tiered 直接生效为 Unreviewed（按抽检规则抽检）；Automatic 先等核实，
@@ -398,7 +398,7 @@ proposed ──accept / edit──▶ active ──supersede──▶ superseded
 - 生来就是 `proposed`（等 Review 的 add / supersede，或 Automatic 里等核实的 add）或 `active`（owner 自己的，或审阅模式直接生效的 add）。
   `superseded`、`retired` 是终态。`rejected` 是「已结束」（`states.entry.ended`：不推送、agent 检索不到、客户端显示为结束），
   但不再是终态：唯一的出路是 §7.5 的重开——当时读不到任何出处原文、被 unsupported 结论拒掉的谱系回到 `proposed`，重新等核实。
-- Automatic 里等核实的 add：核实结论 supported 让它变 `active`（trust `auto`），partial 变 `active`（trust `unreviewed`），
+- Automatic 里等核实的 add：核实结论 supported 让它变 `active`（trust `auto`，证据或污染封顶时是 `unreviewed`，§7.5），partial 变 `active`（trust `unreviewed`），
   unsupported 与 duplicate 让它变 `rejected`（§7.4）。
 - 审阅模式直接生效、还没人确认的条目（trust `auto` / `unreviewed`），owner 在抽检卡上或在条目上 Reject 时变 `rejected`，与被拒的提议一样留作反例。
 - 被拒的条目保留，作为反例：以后提议的 `similar[]` 会显示「曾被拒：理由」。
@@ -466,7 +466,9 @@ Confirm 时，模式对它生效过、还没人答的 op 变 `accepted`（§7.5�
 | agent / maintenance / import / watch | 待审 | 立即（space 可关） | 待审 | 待审 | 待审 | 立即 |
 | 被污染的 op（owner 除外） | 待审 | 待审 | 待审 | 待审 | 待审 | 立即 |
 
-- 污染：调用会话在这个 op 之前用过 WebFetch / WebSearch（codex 的 webSearch 也算），或引用的 turn 来自被污染的时段。
+- 污染：调用会话在这个 op 之前用过 WebFetch / WebSearch（codex 的 webSearch 也算），或引用的 turn 来自被污染的时段，或引用的 note 在
+  frontmatter 里用 `originSessionId` 指向本 owner 用过它们的会话。这个值是引擎自己的会话 id，按 `session.runtime_session_id` 查；
+  没写或查不到的 note 不算污染。
   被污染的 op 按第三行处理，Review 卡上有 Web-derived 警示。
 - challenge 从任何来源都立即生效：它只打一个标，作用是让条目立刻退出推送，等 owner 在 Review 里 Re-confirm、Amend 或 Retire。
 - `wiki.ts` 的 `WIKI_EFFECT_POLICY` 是这张表的数据形态，`wikiOpEffect()` 给出单个 op 的结论。
@@ -531,7 +533,7 @@ System model，在服务端的 verify 作业里（`jobs.kindRuns.verify`，§24.
 
   | 结论 | 结果 |
   | --- | --- |
-  | `supported` | 生效：add 的谱系变 active、amend 写新版，trust `auto`，推送 |
+  | `supported` | 生效：add 的谱系变 active、amend 写新版，trust `auto`，推送；证据封顶时 trust `unreviewed`、不推送（§7.5） |
   | `partial` | 生效，trust `unreviewed`：显示、不推送，owner 可 Reject |
   | `unsupported` | op 被拒，`decision_reason = not_true`，核实理由记在 op 上；add 的谱系变 `rejected` 留作反例，之后的 similar[] 显示 `rejectedReason: not_true` 和 `rejectedBecause`（核实者原话） |
   | `duplicate` | 必须用 `duplicateOf` 指明重复的是哪条：只能是这个 op 自己 similar[] 里的条目，或 amend 自己的目标条目，且必须 active。op 被拒（`decision_reason = duplicate`，add 的谱系随之 `rejected`），它的出处追加到那条条目上（同 reinforce，内容、状态、trust 不变）；space 关了 `autoAcceptReinforce` 时不追加 |
@@ -595,10 +597,20 @@ owner 2026-09-27 定：核实必须拿得到证据。预览 space 里出处全�
   每种文本都由若干「部分」按行拼成，顺序固定。空串或只有空白算**读不到**：claude 的 thinking 大多是空串，那是一条没有内容的记录，
   不是一条「什么都没说」的证据。
   交给核实者前先过共享脱敏器（`secret-redaction.ts`，含本 owner `workspace.env` 的真实值），再按 `verificationSourceMaxChars`（8,000 字）截断。
-- **证据标记**：核实列表的每个 item 带 `evidence: readable | unreadable`（至少一条出处有原文 / 一条都没有）。服务端记结论时**自己再读一遍**，
-  不信核实者报的，并把它存进 op 的 `verification_evidence`（迁移 0314；0314 之前的结论为 NULL），读回来是 `verification.evidence`。
+- **证据标记**：核实列表的每个 item 带 `evidence: readable | second_hand | unreadable`（一条出处都没有原文是 `unreadable`；有原文的全是 note 是
+  `second_hand`；其余 `readable`）。服务端记结论时**自己再读一遍**，
+  不信核实者报的，并把它存进 op 的 `verification_evidence`（迁移 0314、0470；0314 之前的结论为 NULL），读回来是 `verification.evidence`。
+- **只读到 note 不算核实了内容**（`second_hand`，设计 `docs/wiki-memory-claims-design.md` §3.4、§6.1）：条目是从 note 抽的，只读 note 的结论只说明抄得对。
+  supported、partial 都按 `unreviewed` 生效（显示、不推送）；unsupported 照样拒绝；duplicate 仍转 reinforce。这些结论都计入自动退回，因为模型确实读了原文，
+  重开也不碰它们。note 旁边有别的带原文的出处就不算，不论那条是什么类别（agent 回复、thinking、任务文本照常得 `auto`）；旁边的出处没有原文（空 thinking，
+  或库里读不到原文的 commit）时仍算，因为结论读到的不是那条。旧条目和旧结论不改。
+- **证据类别**：`wikiEvidenceClass()`（`wiki.ts`）按 §6.1 的表给每条出处分类，`WikiService.sourceText` 给出每条记录的类别；强弱依次是 `observed`（工具调用和结果，
+  写文件类工具与 wiki 读取除外；background_task、error、commit、merge receipt）、`owner_words`（`isOwnerTurn`、`isOwnerAnswer`、owner 解决的 blocker）、
+  `agent_words`（assistant、thinking、写文件类工具和 wiki 读取、别的会话发来的 turn、父会话写给子会话的开场）、`no_intent_words`（其余 message 和 steer、
+  旧会话的 user 事件、其余审批）、`task_text`（任务 run 的开场、task、task comment）、`orbit_or_shell`（Orbit 自己写的 turn、shell、interrupt、
+  turn_end、system 事件）、`memory`（note）。目前只有“全是 `memory`”影响信任，其余类别只记录口径。
 - **读不到原文不等于无支撑**：全部出处都读不到原文的 op，supported、partial、unsupported 一律按 `unreviewed` 生效（显示、不推送）；
-  duplicate 仍转 reinforce（只追加出处）。这些结论不计入自动退回：退回窗口只数有可读原文（或 0314 之前记下）的结论。
+  duplicate 仍转 reinforce（只追加出处）。这些结论不计入自动退回：退回窗口只数有可读原文（`readable`、`second_hand`，或 0314 之前记下）的结论。
 - **tainted 在 Automatic 下**：`wikiReviewEffect` 让 Automatic 把 tainted 的 add、对机器写的条目的 amend 送去核实（Manual、Tiered 仍待审；
   对 owner 写过或确认过的条目的 amend、supersede、retire、reinforce 仍等 owner）。核实结论最多到 `unreviewed`：supported、partial 都是
   `unreviewed`，unsupported 照样拒绝并计入退回，duplicate 被拒但**不追加任何出处**——tainted 的出处不能改变已有条目的推送资格
@@ -933,7 +945,9 @@ JSON 里是 `space.settings.maintenance` 与 `maintenance`；实现在 `src/apis
 - 内容照设计 §8.2 第 1 步，外加 agent 自己的轨迹：头部（会话、任务、验收标准、污染标记）；任务会话的开场 prompt（去掉任务模板尾巴）、
   owner 的消息和 steer、打断；AskUserQuestion 问答、ExitPlanMode、带理由的 DENIED；agent 的回复、thinking 里命中信号的句子、
   压缩的工具时间线（命令首行 + 结果首尾行，连续的读 / 改折成一行）；已结算任务最新 3 条 agent 评论和 owner 评论；merge receipt 的 sha；
-  owner 解决 blocker 时写的说明。读写记忆文件的工具调用连同结果剔除，指向记忆库的句子剔除。
+  owner 解决 blocker 时写的说明。读写记忆文件的工具调用连同结果剔除，指向记忆库的句子剔除。读 wiki 的调用也连同结果剔除，否则 wiki 的内容可以绕一圈
+  回来当证据：各引擎的 `wiki_search`、`wiki_get`（`mcp__orbit__wiki_get`、`orbit__wiki_get`、不带前缀的 `wiki_get`），以及命令里跑 `orbit wiki search`、
+  `orbit wiki get` 的工具调用和后台任务（`wikiCallReadsWiki()`）。
 - 打分与装箱照演示的打包器 v2；每行以 `L12` 开头，`sources` 把每个行名对到一手记录（turn / event / tool_call / task_comment /
   approval / merge_receipt / owner_decision），维护作业提议条目时引用这些记录，不引用案卷。服务端的出处解析因此补了
   `merge_receipt` 与 `owner_decision`（owner 解决的 blocker；它不算 Tiered 的 owner 原话）。

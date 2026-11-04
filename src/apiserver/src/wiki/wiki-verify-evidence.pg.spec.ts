@@ -17,7 +17,12 @@
  *   4. the reopening: an op an unsupported verdict rejected when the reader of the time could read
  *      none of its sources waits for its verification again, the earlier verdict kept in its history
  *      and gone from the neighbours' hints; and a tainted op an automatic space holds for the owner is
- *      sent to its verification.
+ *      sent to its verification;
+ *   5. what rests on a note alone (design section 3.4, in the scope section 6.1's audit set): class by class — a tool
+ *      result, the owner's words, a file-writing tool, an agent's reply, a thinking, a note — the class of
+ *      the real record, the mark, the trust a supported verdict leaves, and that each counts toward the
+ *      fallback; a note is capped, and nothing else is;
+ *   6. a note is as tainted as the session its frontmatter names.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-verify-evidence.pg.spec.ts
  *
@@ -46,6 +51,7 @@ import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { WikiController } from './wiki.controller';
+import { registerWikiNote } from './wiki-import';
 import { appendWikiContext } from './wiki-push';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiService, type WikiPrincipal } from './wiki.service';
@@ -183,7 +189,7 @@ interface VerificationItem {
   op: 'add' | 'amend';
   entry: { kind: string; title: string; summary: string };
   sources: Array<{ kind: string; ref: string; quote: string | null; text: string | null; truncated: boolean }>;
-  evidence: 'readable' | 'unreadable';
+  evidence: 'readable' | 'second_hand' | 'unreadable';
   similar: Array<{ id: string; title: string; status: string; rejectedReason?: string; rejectedBecause?: string }>;
 }
 
@@ -260,6 +266,40 @@ async function event(h: Harness, sessionId: string, type: string, payload: Recor
     [id, sessionId, type, JSON.stringify(payload)],
   );
   return id;
+}
+
+/** A tool call as the runner records it: its tool_use and tool_result events, and its tool_call row. */
+async function recordedCall(h: Harness, sessionId: string, name: string, input: Record<string, unknown>, output: string): Promise<{ call: string; use: string; result: string }> {
+  const toolUseId = `toolu_${randomUUID().replace(/-/gu, '')}`;
+  const use = await event(h, sessionId, 'tool_use', { id: toolUseId, name, input });
+  const result = await event(h, sessionId, 'tool_result', { toolUseId, isError: false, content: output });
+  const id = randomUUID();
+  await h.sql.query(`INSERT INTO "tool_call"("id","session_id","name","tool_use_id","input","output") VALUES ($1,$2,$3,$4,$5,$6)`, [
+    id, sessionId, name, toolUseId, JSON.stringify(input), JSON.stringify(output),
+  ]);
+  return { call: id, use, result };
+}
+
+/** A conversation turn of a session; by default what the user door files, the owner's own words (`isOwnerTurn`). */
+async function turn(h: Harness, sessionId: string, content: string, over: { kind?: string; sendIntent?: string | null; clientTurnId?: string } = {}): Promise<string> {
+  const id = randomUUID();
+  await h.sql.query(
+    `INSERT INTO "conversation_turn"("id","session_id","seq","client_turn_id","content","status","kind","send_intent")
+     VALUES ($1,$2,(SELECT COALESCE(MAX("seq"), 0) + 1 FROM "conversation_turn" WHERE "session_id" = $2),$3,$4,'ANSWERED',$5,$6)`,
+    [id, sessionId, over.clientTurnId ?? randomUUID(), content, over.kind ?? 'message', over.sendIntent === undefined ? 'NEXT_TURN' : over.sendIntent],
+  );
+  return id;
+}
+
+/** A memory file as `orbit wiki import` registers it: redacted and stored by the one door notes come in by. */
+async function note(h: Harness, ownerId: string, spaceId: string, text: string): Promise<string> {
+  const registered = await registerWikiNote(h.prisma as unknown as PrismaService, h.service, ownerId, spaceId, { path: `memory/${randomUUID()}.md`, text, readBy: 'server' });
+  return registered.id;
+}
+
+/** The engine's own id for a session: what a memory file's frontmatter calls `originSessionId`. */
+async function runsAs(h: Harness, sessionId: string, runtimeSessionId: string): Promise<void> {
+  await h.sql.query(`UPDATE "session" SET "runtime_session_id" = $2 WHERE "id" = $1`, [sessionId, runtimeSessionId]);
 }
 
 /** A space the owner makes through the door and puts in a mode, bound to a workspace when one is named. */
@@ -926,5 +966,373 @@ test('evidence · reopening: what was rejected for want of text waits for its ve
     assert.equal((spaces.body as Array<{ id: string; pendingOps: number }>).find((s) => toUuid(s.id) === tiered)?.pendingOps, 1, 'it left the queue');
     const done = await h.service.recordVerifications(agent(owner.id, web), tiered, [verdict(add.opId!, 'supported')]);
     assert.equal((done.outcomes[0] as { trust?: string }).trust, 'unreviewed', 'and its verdict is capped like any tainted op\'s');
+  });
+});
+
+// ── 5. what rests on a note ─────────────────────────────────────────────────────────────────────
+
+/** A concept the import principal adds, retitled per use: no anchor, no neighbour, any number of them. */
+function conceptAdds(count: number, prefix: string, sources: unknown[]): unknown[] {
+  return Array.from({ length: count }, (_unused, n) => ({
+    op: 'add',
+    entry: { ...pitfall(`${prefix} ${n + 1} ${randomUUID().slice(0, 8)}`), kind: 'concept', fields: { definition: 'A thing the records name.', boundaries: 'Only this one.' } },
+    sources,
+  }));
+}
+
+test('evidence · class by class, only a note is capped: its supported is no more than Unreviewed, and every class counts', { skip, concurrency: 1, timeout: 900_000 }, async (t) => {
+  const h = await boot();
+  const owner = await account(h, 'evidence-classes');
+  const machine = await runner(h, owner.id);
+  const ws = await workspace(h, owner.id);
+  const space = await modeSpace(h, owner, 'automatic', ws);
+  const records = await session(h, owner.id, ws, machine);
+  const proposer = await session(h, owner.id, ws, machine);
+  const mine = { runner: machine, headers: { 'x-orbit-session-id': proposer } };
+  const verify = (opId: string, value: string, over: Record<string, unknown> = {}) =>
+    h.service.recordVerifications(agent(owner.id, proposer), space, [verdict(opId, value, over)]);
+  const reader: WikiPrincipal = { origin: 'maintenance', ownerId: owner.id, userId: null, sessionId: null, toolCallId: null };
+
+  const ran = await recordedCall(h, records, 'Bash', { command: 'npm test' }, 'The suite passed: 12 tests, none skipped.');
+  const wrote = await recordedCall(h, records, 'Write', { file_path: 'docs/notes.md', content: 'The suite passes.' }, 'File created.');
+  const memory = await note(h, owner.id, space, '---\nname: suite\n---\nThe suite passes with 12 tests.\n');
+  const classes = [
+    { name: 'a tool result', source: { kind: 'event', ref: ran.result }, evidenceClass: 'observed', mark: 'readable', trust: 'auto' },
+    { name: 'a tool call\'s row', source: { kind: 'tool_call', ref: ran.call }, evidenceClass: 'observed', mark: 'readable', trust: 'auto' },
+    { name: 'the owner\'s words', source: { kind: 'turn', ref: await turn(h, records, 'Keep the suite at twelve tests.') }, evidenceClass: 'owner_words', mark: 'readable', trust: 'auto' },
+    { name: 'a file-writing tool\'s row', source: { kind: 'tool_call', ref: wrote.call }, evidenceClass: 'agent_words', mark: 'readable', trust: 'auto' },
+    { name: 'a file-writing tool\'s call', source: { kind: 'event', ref: wrote.use }, evidenceClass: 'agent_words', mark: 'readable', trust: 'auto' },
+    { name: 'a file-writing tool\'s result', source: { kind: 'event', ref: wrote.result }, evidenceClass: 'agent_words', mark: 'readable', trust: 'auto' },
+    { name: 'an agent\'s reply', source: { kind: 'event', ref: await event(h, records, 'assistant', { text: 'The suite passes with twelve tests.' }) }, evidenceClass: 'agent_words', mark: 'readable', trust: 'auto' },
+    { name: 'a thinking', source: { kind: 'event', ref: await event(h, records, 'thinking', { text: 'So the suite must pass with twelve tests.' }) }, evidenceClass: 'agent_words', mark: 'readable', trust: 'auto' },
+    { name: 'a note', source: { kind: 'note', ref: memory }, evidenceClass: 'memory', mark: 'second_hand', trust: 'unreviewed' },
+  ] as const;
+
+  await t.test('supported: each class of record, the mark it earns and the trust it leaves, read back from the rows', async () => {
+    for (const row of classes) {
+      const record = await h.service.sourceText(h.prisma as unknown as Prisma.TransactionClient, reader, row.source);
+      assert.equal(record?.evidenceClass, row.evidenceClass, `${row.name}: its class`);
+      const [outcome] = await propose(h, mine, [{ op: 'add', entry: pitfall(`What rests on ${row.name}`), sources: [row.source] }]);
+      assert.equal(outcome.waitsFor, 'verification', row.name);
+      const items = await listed(h, owner.id, proposer, space);
+      assert.equal(items.find((item) => toUuid(item.opId) === toUuid(outcome.opId!))?.evidence, row.mark, `${row.name}: the list says so first`);
+      const done = await verify(outcome.opId!, 'supported');
+      assert.equal(done.outcomes[0].status, 'applied', `${row.name}: ${JSON.stringify(done.outcomes[0])}`);
+      assert.equal((done.outcomes[0] as { trust?: string }).trust, row.trust, `${row.name}: the trust its verdict leaves`);
+      const op = await opRow(h, outcome.opId!);
+      assert.equal(op.verificationVerdict, 'supported', `${row.name}: the verdict stands as it was said`);
+      assert.equal(op.verificationEvidence, row.mark, `${row.name}: stored with what it could read`);
+      assert.equal(op.decision, 'auto_applied');
+      const entry = await entryRow(h, outcome.entryId!);
+      assert.equal(entry.status, 'active', row.name);
+      assert.equal(entry.trust, row.trust, row.name);
+      assert.equal(entry.tainted, false, row.name);
+    }
+  });
+
+  await t.test('more records of the table, class by class, against what section 6.1 counted', async () => {
+    const classOf = async (kind: 'turn' | 'event' | 'tool_call' | 'task' | 'approval', ref: string) =>
+      (await h.service.sourceText(h.prisma as unknown as Prisma.TransactionClient, reader, { kind, ref }))?.evidenceClass;
+    const wikiRead = await recordedCall(h, records, 'mcp__orbit__wiki_get', { ids: ['34abc'] }, 'An entry the wiki holds.');
+    assert.equal(await classOf('tool_call', wikiRead.call), 'agent_words', 'a wiki read is not observed');
+    assert.equal(await classOf('event', wikiRead.result), 'agent_words', 'and neither is its result');
+    const cliRead = await recordedCall(h, records, 'Bash', { command: "'/usr/local/bin/orbit' wiki search suite" }, 'An entry the wiki holds.');
+    assert.equal(await classOf('tool_call', cliRead.call), 'agent_words', 'nor the same read through the CLI');
+    assert.equal(await classOf('event', cliRead.use), 'agent_words');
+    assert.equal(await classOf('event', cliRead.result), 'agent_words');
+    assert.equal(await classOf('event', await event(h, records, 'tool_result', { toolUseId: 'toolu_gone', content: 'A result whose call was not recorded.' })), 'observed');
+    assert.equal(await classOf('event', await event(h, records, 'background_task', { command: 'npm test', status: 'completed', summary: 'done' })), 'observed');
+    assert.equal(await classOf('event', await event(h, records, 'error', { message: 'The engine stopped.' })), 'observed');
+    assert.equal(await classOf('event', await event(h, records, 'user', { text: 'An old session\'s message.' })), 'no_intent_words');
+    assert.equal(await classOf('event', await event(h, records, 'system', { subtype: 'compact_summary', text: 'So far.' })), 'orbit_or_shell');
+    assert.equal(await classOf('turn', await turn(h, records, 'A client that sends no intent.', { sendIntent: null })), 'no_intent_words');
+    assert.equal(await classOf('turn', await turn(h, records, 'ls', { kind: 'shell', sendIntent: null })), 'orbit_or_shell');
+    assert.equal(await classOf('turn', await turn(h, records, 'A wake.', { sendIntent: null, clientTurnId: `bg-wake:${randomUUID()}` })), 'orbit_or_shell');
+    const sent = await turn(h, records, 'Another session\'s message.', { sendIntent: null });
+    await h.sql.query(`UPDATE "conversation_turn" SET "sender_session_id" = $2 WHERE "id" = $1`, [sent, proposer]);
+    assert.equal(await classOf('turn', sent), 'agent_words');
+    assert.equal(await classOf('turn', await turn(h, records, 'A top-level opening.', { sendIntent: null, clientTurnId: `initial-${randomUUID()}` })), 'no_intent_words');
+    const child = await session(h, owner.id, ws, machine);
+    await h.sql.query(`UPDATE "session" SET "parent_session_id" = $2 WHERE "id" = $1`, [child, records]);
+    assert.equal(await classOf('turn', await turn(h, child, 'A parent opens its child.', { sendIntent: null, clientTurnId: `initial-${randomUUID()}` })), 'agent_words');
+    const work = randomUUID();
+    await h.sql.query(`INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","completion_criterion","updated_at") VALUES ($1,'a task',$2,'USER',$2,'OWNER_CONFIRMED',now())`, [work, owner.id]);
+    assert.equal(await classOf('task', work), 'task_text');
+    const run = await session(h, owner.id, ws, machine);
+    await h.sql.query(`UPDATE "session" SET "task_id" = $2 WHERE "id" = $1`, [run, work]);
+    assert.equal(await classOf('turn', await turn(h, run, 'A task run\'s opening.', { sendIntent: null, clientTurnId: `initial-${randomUUID()}` })), 'task_text');
+    const approvals = async (status: string, answers: string | null, decidedBy: string | null) => {
+      const id = randomUUID();
+      await h.sql.query(
+        `INSERT INTO "approval"("id","session_id","tool_name","input","status","answers","decided_by_id") VALUES ($1,$2,'AskUserQuestion','{}',$3,$4,$5)`,
+        [id, records, status, answers, decidedBy],
+      );
+      return id;
+    };
+    assert.equal(await classOf('approval', await approvals('ALLOWED', '{"Which":"This one"}', owner.id)), 'owner_words');
+    assert.equal(await classOf('approval', await approvals('ALLOWED', '{"Which":"This one"}', null)), 'no_intent_words');
+  });
+
+  await t.test('a note beside a source with text is decided by that source; beside one with no text, it is still only a note', async () => {
+    const empty = await event(h, records, 'thinking', { text: '  ' });
+    const reply = await event(h, records, 'assistant', { text: 'The suite holds twelve tests.' });
+    const sha = 'abcdef0123456789abcdef0123456789abcdef01';
+    await h.sql.query(
+      `INSERT INTO "session_merge_receipt"("id","owner_id","session_id","idempotency_key","result","source_branch","source_sha","target_branch","target_sha_after","recorded_by")
+       VALUES ($1,$2,$3,$4,'MERGED','orbit/x',$5,'main',$6,'RUNNER')`,
+      [randomUUID(), owner.id, records, `receipt-${randomUUID()}`, sha, sha],
+    );
+    const cite = (kind: string, ref: string) => ({ kind, ref });
+    const cases = [
+      { name: 'a note and a tool result', sources: [cite('note', memory), cite('event', ran.result)], mark: 'readable', trust: 'auto' },
+      { name: 'a note and an agent\'s reply', sources: [cite('note', memory), cite('event', reply)], mark: 'readable', trust: 'auto' },
+      { name: 'a note and an empty thinking', sources: [cite('note', memory), cite('event', empty)], mark: 'second_hand', trust: 'unreviewed' },
+      { name: 'a note and a commit', sources: [cite('note', memory), cite('commit', sha)], mark: 'second_hand', trust: 'unreviewed' },
+    ];
+    for (const row of cases) {
+      const [outcome] = await propose(h, mine, [{ op: 'add', entry: pitfall(`What rests on ${row.name}`), sources: row.sources }]);
+      const done = await verify(outcome.opId!, 'supported');
+      assert.equal((done.outcomes[0] as { trust?: string }).trust, row.trust, row.name);
+      assert.equal((await opRow(h, outcome.opId!)).verificationEvidence, row.mark, row.name);
+    }
+    // A commit alone has no text to read: that is the old cap, not this one.
+    const [alone] = await propose(h, mine, [{ op: 'add', entry: pitfall('What rests on a commit alone'), sources: [cite('commit', sha)] }]);
+    await verify(alone.opId!, 'supported');
+    assert.equal((await opRow(h, alone.opId!)).verificationEvidence, 'unreadable');
+    assert.equal((await entryRow(h, alone.entryId!)).trust, 'unreviewed');
+  });
+
+  await t.test('what a note\'s verdict leaves: partial and unsupported as ever, shown and never pushed, the verifier\'s word for it not taken', async () => {
+    const bound = await workspace(h, owner.id);
+    const quiet = await modeSpace(h, owner, 'automatic', bound);
+    const talks = await session(h, owner.id, bound, machine);
+    const who = { runner: machine, headers: { 'x-orbit-session-id': talks } };
+    const said = await note(h, owner.id, quiet, 'The release script tags at once.\n');
+    const seen = await event(h, records, 'tool_result', { toolUseId: 'toolu_seen', content: 'Tagged v1 and pushed the tag.' });
+    const [copied, control, part, wrong] = await propose(h, who, [
+      { op: 'add', entry: pitfall('The release script tags at once'), sources: [{ kind: 'note', ref: said }] },
+      { op: 'add', entry: pitfall('Cutting a release pushes the tag'), sources: [{ kind: 'event', ref: seen }] },
+      { op: 'add', entry: pitfall('Part of it is in the note'), sources: [{ kind: 'note', ref: said }] },
+      { op: 'add', entry: pitfall('The note does not say this at all'), sources: [{ kind: 'note', ref: said }] },
+    ]);
+    const decide = (opId: string, value: string, over: Record<string, unknown> = {}) => h.service.recordVerifications(agent(owner.id, talks), quiet, [verdict(opId, value, over)]);
+    // The server reads what the verifier could read: a verifier that says it read more changes nothing.
+    assert.equal(((await decide(copied.opId!, 'supported', { evidence: 'readable' })).outcomes[0] as { trust?: string }).trust, 'unreviewed');
+    assert.equal(((await decide(control.opId!, 'supported')).outcomes[0] as { trust?: string }).trust, 'auto');
+    assert.equal(((await decide(part.opId!, 'partial')).outcomes[0] as { trust?: string }).trust, 'unreviewed');
+    assert.equal((await opRow(h, part.opId!)).verificationEvidence, 'second_hand');
+    const rejected = await decide(wrong.opId!, 'unsupported');
+    assert.equal(rejected.outcomes[0].status, 'rejected', 'it read the note, so it can reject');
+    const op = await opRow(h, wrong.opId!);
+    assert.equal(op.decisionReason, 'not_true');
+    assert.equal(op.verificationEvidence, 'second_hand');
+    assert.equal((await entryRow(h, wrong.entryId!)).status, 'rejected');
+
+    const handed = await pushed(h, owner.id, bound, await session(h, owner.id, bound, machine));
+    assert.ok(!handed.has(toUuid(copied.entryId!)), 'an entry that rests on a note is not pushed');
+    assert.ok(handed.has(toUuid(control.entryId!)), 'one that rests on a tool result is');
+    assert.ok((await agentFinds(h, who, 'release script tags')).has(toUuid(copied.entryId!)), 'and it can still be found and read');
+
+    // It read what it rejected: the reopening is for what could not be read.
+    const reopened = await call(h, { bearer: owner.bearer }, 'POST', `/wiki/spaces/${quiet}/verifications/reopen`);
+    expectStatus(reopened, 200, 'the owner reopens');
+    assert.deepEqual(reopened.body.reopened, [], 'a second-hand rejection stands');
+    assert.equal((await opRow(h, wrong.opId!)).decision, 'rejected');
+  });
+
+  await t.test('a note\'s duplicate still adds its source, and changes nothing else of the entry it names', async () => {
+    const seen = await event(h, records, 'tool_result', { toolUseId: 'toolu_dup', content: 'The migration applied in 41 seconds.' });
+    const said = await note(h, owner.id, space, 'The migration applied in forty one seconds.\n');
+    const [kept] = await propose(h, mine, [{ op: 'add', entry: pitfall('The migration applied in forty one seconds'), sources: [{ kind: 'event', ref: seen }] }]);
+    await verify(kept.opId!, 'supported');
+    const target = toUuid(kept.entryId!);
+    const before = await liveSources(h, target);
+    const [again] = await propose(h, mine, [{ op: 'add', entry: pitfall('The migration applied in forty one seconds'), sources: [{ kind: 'note', ref: said }] }]);
+    assert.ok(again.similar?.some((near) => toUuid(near.id) === target), 'the neighbour is recorded with the op');
+    const done = await verify(again.opId!, 'duplicate', { duplicateOf: target });
+    assert.equal(done.outcomes[0].status, 'reinforced');
+    assert.equal((done.outcomes[0] as { reinforced?: boolean }).reinforced, true);
+    assert.equal(await liveSources(h, target), before + 1, 'its note was added');
+    assert.equal((await opRow(h, again.opId!)).verificationEvidence, 'second_hand');
+    assert.equal((await entryRow(h, target)).trust, 'auto', 'and the entry it names keeps its trust');
+  });
+
+  await t.test('an amend that cites only a note leaves its entry no more than Unreviewed', async () => {
+    const seen = await event(h, records, 'tool_result', { toolUseId: 'toolu_amend', content: 'The retry backs off to thirty seconds.' });
+    const said = await note(h, owner.id, space, 'The retry backs off to a minute.\n');
+    const [made] = await propose(h, mine, [{ op: 'add', entry: pitfall('The retry backs off'), sources: [{ kind: 'event', ref: seen }] }]);
+    await verify(made.opId!, 'supported');
+    const target = toUuid(made.entryId!);
+    assert.equal((await entryRow(h, target)).trust, 'auto');
+    const [amend] = await propose(h, mine, [{ op: 'amend', entryId: target, baseRevision: 1, changes: { summary: 'It backs off to a minute.' }, sources: [{ kind: 'note', ref: said }] }]);
+    assert.equal(amend.waitsFor, 'verification');
+    const done = await verify(amend.opId!, 'supported');
+    assert.equal((done.outcomes[0] as { trust?: string }).trust, 'unreviewed');
+    assert.equal((await opRow(h, amend.opId!)).verificationEvidence, 'second_hand');
+    assert.equal((await entryRow(h, target)).trust, 'unreviewed');
+  });
+
+  await t.test('every class counts toward the fallback: the sixteenth unsupported of each sends its space back to Tiered', async () => {
+    const system = importer(owner.id);
+    for (const row of classes) {
+      const fresh = await modeSpace(h, owner, 'automatic');
+      const source = row.source.kind === 'note' ? { kind: 'note', ref: await note(h, owner.id, fresh, `A note for ${row.name}.\n`) } : row.source;
+      const made = await h.service.submitChangeset(system, fresh, { rationale: row.name, ops: conceptAdds(16, row.name, [source]), idempotencyKey: `count-${randomUUID()}` });
+      const ops = (made.ops as Outcome[]).map((op) => op.opId!);
+      const record = (opId: string) => h.service.recordVerifications(system, fresh, [verdict(opId, 'unsupported')]);
+      const notified = h.fellBack.length;
+      for (const opId of ops.slice(0, 15)) assert.equal((await record(opId)).outcomes[0].status, 'rejected', row.name);
+      assert.equal(((await h.prisma.wikiSpace.findFirstOrThrow({ where: { id: fresh } })).settings as { reviewMode: string }).reviewMode, 'automatic', `${row.name}: fifteen of fifty are not over 30%`);
+      assert.equal(h.fellBack.length, notified, row.name);
+      const tripped = await record(ops[15]);
+      assert.equal(tripped.mode, 'tiered', `${row.name}: the sixteenth is`);
+      assert.deepEqual(h.fellBack.slice(notified), [{ ownerId: owner.id, spaceId: fresh, unsupported: 16, window: WIKI_REVIEW_RULES.verificationWindow }], row.name);
+      const stored = await h.prisma.wikiChangesetOp.findMany({ where: { id: { in: ops.map(toUuid) } }, select: { verificationEvidence: true } });
+      assert.deepEqual([...new Set(stored.map((op) => op.verificationEvidence))], [row.mark], row.name);
+    }
+  });
+
+  await t.test('a supported verdict about a note takes its place in the window, as any verdict that read something', async () => {
+    const fresh = await modeSpace(h, owner, 'automatic');
+    const system = importer(owner.id);
+    const said = { kind: 'note', ref: await note(h, owner.id, fresh, 'A note the whole window reads.\n') };
+    const record = (opId: string, value: string) => h.service.recordVerifications(system, fresh, [verdict(opId, value)]);
+    const made = async (count: number, prefix: string) =>
+      ((await h.service.submitChangeset(system, fresh, { rationale: prefix, ops: conceptAdds(count, prefix, [said]), idempotencyKey: `window-${randomUUID()}` })).ops as Outcome[]).map((op) => op.opId!);
+    for (const opId of await made(15, 'Older')) await record(opId, 'unsupported');
+    const later = [...(await made(20, 'Later')), ...(await made(15, 'Latest'))];
+    for (const opId of later) assert.equal(((await record(opId, 'supported')).outcomes[0] as { trust?: string }).trust, 'unreviewed');
+    // Fifteen, then thirty-five, then one more: of the latest fifty, fifteen are unsupported. Were the
+    // thirty-five out of the window, this one would be the sixteenth.
+    const [last] = await made(1, 'Last');
+    const notified = h.fellBack.length;
+    const answer = await record(last, 'unsupported');
+    assert.equal(answer.outcomes[0].status, 'rejected');
+    assert.equal(answer.mode, 'automatic');
+    assert.equal(h.fellBack.length, notified);
+  });
+});
+
+// ── 6. a note is as tainted as the session it says it came from ─────────────────────────────────
+
+test('evidence · a note is as tainted as the session its frontmatter names, and one it cannot find leaves it clean', { skip, concurrency: 1, timeout: 600_000 }, async (t) => {
+  const h = await boot();
+  const owner = await account(h, 'evidence-note-taint');
+  const machine = await runner(h, owner.id);
+  const ws = await workspace(h, owner.id);
+  const space = await modeSpace(h, owner, 'automatic', ws);
+  const system = importer(owner.id);
+  const run = (name: string) => `${name}-${randomUUID()}`;
+
+  const webRun = run('web');
+  const web = await session(h, owner.id, ws, machine);
+  await runsAs(h, web, webRun);
+  await toolCall(h, web, 'WebFetch', 'a vendor page');
+  const quietRun = run('quiet');
+  const quiet = await session(h, owner.id, ws, machine);
+  await runsAs(h, quiet, quietRun);
+  await toolCall(h, quiet, 'Bash', 'ok');
+  // One conversation under two sessions: only the later stretch read the web.
+  const twiceRun = run('twice');
+  for (const reads of [false, true]) {
+    const stretch = await session(h, owner.id, ws, machine);
+    await runsAs(h, stretch, twiceRun);
+    if (reads) await toolCall(h, stretch, 'WebSearch', 'a search');
+  }
+  // The same id on another owner's session is nothing to do with this owner's note.
+  const strangerRun = run('stranger');
+  const stranger = await account(h, 'evidence-note-stranger');
+  const theirs = await session(h, stranger.id, await workspace(h, stranger.id), null);
+  await runsAs(h, theirs, strangerRun);
+  await toolCall(h, theirs, 'WebFetch', 'their page');
+
+  const nested = (id: string) => `---\nname: a-note\nmetadata:\n  type: project\n  originSessionId: ${id}\n---\nThe body of the note ${randomUUID()}.\n`;
+  const cases = [
+    { name: 'names a session that read the web, under metadata', text: nested(webRun), tainted: true },
+    { name: 'names it at the top level, quoted', text: `---\nname: a-note\noriginSessionId: "${webRun}"\n---\nThe body of the note ${randomUUID()}.\n`, tainted: true },
+    { name: 'names one of two sessions of a conversation that did', text: nested(twiceRun), tainted: true },
+    { name: 'names a session that did not', text: nested(quietRun), tainted: false },
+    { name: 'names no session this owner has', text: nested(run('gone')), tainted: false },
+    { name: 'names another owner\'s session', text: nested(strangerRun), tainted: false },
+    { name: 'says it only in its body', text: `---\nname: a-note\n---\nThat came from originSessionId: ${webRun}\n`, tainted: false },
+    { name: 'has no frontmatter', text: `originSessionId: ${webRun}\nThe body of the note ${randomUUID()}.\n`, tainted: false },
+    { name: 'never closes its frontmatter', text: `---\noriginSessionId: ${webRun}\nThe body of the note ${randomUUID()}.\n`, tainted: false },
+    { name: 'names none', text: `---\nname: a-note\ntype: project\n---\nThe body of the note ${randomUUID()}.\n`, tainted: false },
+  ];
+
+  await t.test('the op, its source and the entry say so, and its verdict leaves it Unreviewed either way', async () => {
+    for (const row of cases) {
+      const ref = await note(h, owner.id, space, row.text);
+      const made = await h.service.submitChangeset(system, space, {
+        rationale: row.name, ops: [{ op: 'add', entry: pitfall(`A note that ${row.name}`), sources: [{ kind: 'note', ref }] }], idempotencyKey: `taint-${randomUUID()}`,
+      });
+      const [outcome] = made.ops as Outcome[];
+      assert.equal(outcome.waitsFor, 'verification', row.name);
+      const op = await opRow(h, outcome.opId!);
+      assert.equal(op.tainted, row.tainted, `${row.name}: the op`);
+      const source = await h.prisma.wikiSource.findFirstOrThrow({ where: { ownerId: owner.id, kind: 'note', ref: toUuid(ref) } });
+      assert.equal(source.tainted, row.tainted, `${row.name}: its source`);
+      const done = await h.service.recordVerifications(system, space, [verdict(outcome.opId!, 'supported')]);
+      assert.equal((done.outcomes[0] as { trust?: string }).trust, 'unreviewed', row.name);
+      assert.equal((await opRow(h, outcome.opId!)).verificationEvidence, 'second_hand', row.name);
+      const entry = await entryRow(h, outcome.entryId!);
+      assert.equal(entry.tainted, row.tainted, `${row.name}: the entry`);
+      assert.equal(entry.trust, 'unreviewed', row.name);
+    }
+  });
+
+  await t.test('a tainted note counts like any tainted op: hidden from agents, and its duplicate adds nothing', async () => {
+    const bystander = await session(h, owner.id, ws, machine);
+    const agentReads = { runner: machine, headers: { 'x-orbit-session-id': bystander } };
+    const entries = await h.prisma.wikiEntry.findMany({ where: { ownerId: owner.id, spaceId: space, title: { startsWith: 'A note that' } }, select: { id: true, tainted: true } });
+    assert.ok(entries.some((entry) => entry.tainted) && entries.some((entry) => !entry.tainted));
+    for (const entry of entries) {
+      expectStatus(await call(h, agentReads, 'GET', `/runner/wiki/entries/${entry.id}`), entry.tainted ? 404 : 200, 'an agent reads the clean ones, and not the tainted');
+    }
+
+    const seen = await event(h, await session(h, owner.id, ws, machine), 'tool_result', { toolUseId: 'toolu_kept', content: 'Retries stop after five attempts.' });
+    const clean = await session(h, owner.id, ws, machine);
+    const [kept] = await propose(h, { runner: machine, headers: { 'x-orbit-session-id': clean } }, [{ op: 'add', entry: pitfall('Retries stop after five attempts'), sources: [{ kind: 'event', ref: seen }] }]);
+    await h.service.recordVerifications(agent(owner.id, clean), space, [verdict(kept.opId!, 'supported')]);
+    const target = toUuid(kept.entryId!);
+    const before = await liveSources(h, target);
+    const ref = await note(h, owner.id, space, nested(webRun));
+    const made = await h.service.submitChangeset(system, space, {
+      rationale: 'a tainted duplicate', ops: [{ op: 'add', entry: pitfall('Retries stop after five attempts'), sources: [{ kind: 'note', ref }] }], idempotencyKey: `taint-dup-${randomUUID()}`,
+    });
+    const [again] = made.ops as Outcome[];
+    const done = await h.service.recordVerifications(system, space, [verdict(again.opId!, 'duplicate', { duplicateOf: target })]);
+    assert.equal(done.outcomes[0].status, 'reinforced');
+    assert.equal((done.outcomes[0] as { reinforced?: boolean }).reinforced, false, 'nothing was added');
+    assert.equal(await liveSources(h, target), before);
+    const entry = await entryRow(h, target);
+    assert.equal(entry.tainted, false);
+    assert.equal(entry.trust, 'auto');
+  });
+
+  await t.test('Manual and Tiered hold a tainted note for the owner, and a clean one as they always did', async () => {
+    for (const mode of ['manual', 'tiered'] as const) {
+      const held = await modeSpace(h, owner, mode);
+      const webNote = await note(h, owner.id, held, nested(webRun));
+      const quietNote = await note(h, owner.id, held, nested(quietRun));
+      const [tainted, plain] = (await h.service.submitChangeset(system, held, {
+        rationale: mode,
+        ops: [
+          { op: 'add', entry: pitfall(`A ${mode} note from a web session`), sources: [{ kind: 'note', ref: webNote }] },
+          { op: 'add', entry: pitfall(`A ${mode} note from a quiet session`), sources: [{ kind: 'note', ref: quietNote }] },
+        ],
+        idempotencyKey: `held-${randomUUID()}`,
+      })).ops as Outcome[];
+      assert.equal((await opRow(h, tainted.opId!)).tainted, true, mode);
+      assert.equal((await opRow(h, tainted.opId!)).decision, 'pending', `${mode}: it waits for the owner`);
+      assert.equal((await opRow(h, plain.opId!)).tainted, false, mode);
+    }
+  });
+
+  await t.test('the note\'s session is not one more independent session for Tiered', async () => {
+    const record = await h.service.sourceText(h.prisma as unknown as Prisma.TransactionClient, system, { kind: 'note', ref: await note(h, owner.id, space, nested(webRun)) });
+    assert.equal(record?.tainted, true);
+    assert.equal(record?.sessionId, null);
+    assert.equal(record?.ownerWords, false);
   });
 });
