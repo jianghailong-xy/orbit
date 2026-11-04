@@ -67,7 +67,7 @@ export interface NormalizedSearchQuery {
 }
 
 /** Escape the three characters LIKE treats specially (default escape char is `\`). */
-const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`);
+export const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 /** Decode an exact raw/public id while treating every other query as normal search text. */
 const decodeSessionId = (s: string): string | null => {

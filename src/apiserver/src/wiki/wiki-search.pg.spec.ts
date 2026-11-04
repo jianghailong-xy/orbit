@@ -13,8 +13,8 @@
  * reaching an entry whose only Chinese is an alias, a path reaching an entry through its anchor or
  * its pitfall trigger, an entry that both legs found ranking above one only the keyword leg did,
  * tenant and space isolation on both doors, the match reasons the contract lists, and the semantic
- * placeholder changing nothing. And the `wiki_exposure` row a session's search or read leaves, which a
- * failed write does not cost the read.
+ * placeholder changing nothing. And what the read fix added: the keyword leg's last pass, and the
+ * `wiki_exposure` row a session's search or read leaves, which a failed write does not cost the read.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-search.pg.spec.ts
  *
@@ -40,7 +40,8 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
 import { WikiController } from './wiki.controller';
-import { compareRanked, looksLikePath, pathQueries, rrfFuse, usageOf, WikiRetrieval } from './wiki-retrieval';
+import { broaden, normalizeSearchQuery } from '../sessions/search-query';
+import { anyWordPatterns, compareRanked, looksLikePath, pathQueries, rrfFuse, usageOf, WikiRetrieval } from './wiki-retrieval';
 import { WikiService } from './wiki.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -393,6 +394,32 @@ test('the fusion and the tiebreak order hits the way the design says', () => {
   assert.deepEqual(pathQueries('a query', ['./src/web', 'src/web']), ['src/web'], 'a caller names them');
 });
 
+test('the last keyword pass asks about the words that take part, and session search is not asked', () => {
+  const groups = (q: string): string[][] | null => anyWordPatterns(normalizeSearchQuery(q)!);
+
+  assert.deepEqual(groups('session stuck after restart'), [['%session%'], ['%stuck%'], ['%after%'], ['%restart%']]);
+  assert.deepEqual(groups('go to the runner'), [['%the%'], ['%runner%']], 'a Latin word under three characters takes no part');
+  // One word that takes part is not a question about the query: it only finds what holds that word.
+  assert.equal(groups('wiki'), null);
+  assert.equal(groups('cache 5m'), null, 'a Latin pair does not count, so only one word takes part');
+  assert.equal(groups('go to'), null);
+  assert.equal(groups('go to runner'), null);
+  // The floor counts code points, so a CJK pair stays out like any other two-character word.
+  assert.equal(groups('会话 列表'), null);
+  assert.equal(groups('会话 curl'), null);
+  assert.deepEqual(groups('日本語のテスト 会话'), [['%日本語%'], ['%テスト%']]);
+  // A word past the dictionary is its adjacent pairs, none of which clears the floor.
+  assert.equal(groups('数据库优化 runner'), null);
+  // Two characters only count when both are CJK.
+  assert.equal(groups('A股 runner'), null);
+  // A word is matched literally, however the first two passes spell it.
+  assert.deepEqual(groups('100% snake_case'), [['%100\\%%'], ['%snake\\_case%']]);
+
+  // The second pass still asks for every word, and that pass is all session search ever asks.
+  const session = normalizeSearchQuery('go to the runner')!;
+  assert.deepEqual(broaden(session)?.patterns, [['%go%'], ['%to%'], ['%the%'], ['%runner%']]);
+});
+
 // ── the two-legged search ───────────────────────────────────────────────────────────────────────
 
 test('0307 · the wiki search path', { skip, concurrency: 1, timeout: 300_000 }, async (t) => {
@@ -696,6 +723,74 @@ test('0307 · the wiki search path', { skip, concurrency: 1, timeout: 300_000 },
     );
     const confirmed = await ownerSearch(h, owner, { q: 'TEXT', space: here, trust: 'confirmed' });
     assert.deepEqual(hitsOf(confirmed), [], 'nothing this owner wrote is merely confirmed');
+  });
+
+  await t.test('with no entry holding every word, the ones holding the most come first', async () => {
+    const most = await ownerEntry(h, owner, here, {
+      kind: 'pitfall',
+      title: 'A quokka wombat stalls after a numbat',
+      summary: 'Three of the words, and the only entry with three.',
+      fields: { trigger: { paths: ['src/apiserver/src/'], commands: ['quokka'] }, symptom: 'It stalls.', cause: 'Timing.', fix: 'Wait.' },
+    });
+    const fewest = await ownerEntry(h, owner, here, {
+      kind: 'concept',
+      title: 'A numbat',
+      summary: 'One of the words.',
+      fields: { definition: 'A numbat is a marsupial.', boundaries: 'Only itself.' },
+    });
+    const between = await ownerEntry(h, owner, here, {
+      kind: 'concept',
+      title: 'A wombat',
+      summary: 'Two of the words, one of them only in its fields.',
+      fields: { definition: 'A wombat lives beside a quokka.', boundaries: 'Only itself.' },
+    });
+    const none = await ownerEntry(h, owner, here, {
+      kind: 'concept',
+      title: 'A platypus',
+      summary: 'None of the words, though it ends in go.',
+      fields: { definition: 'A platypus lays eggs.', boundaries: 'Only itself.' },
+    });
+
+    // The phrase is nowhere, and neither is any entry with all four words: this query found nothing
+    // before the last pass.
+    const q = 'quokka wombat numbat bilby';
+    const answer = await sessionSearch(h, machine, mine, { q });
+    assert.deepEqual(
+      hitsOf(answer).map((hit) => hit.id),
+      [most, between, fewest],
+      `most words first, and an entry with none is not an answer: ${JSON.stringify(answer.body)}`,
+    );
+    assert.deepEqual(hitFor(answer, most, 'the entry with three').match, ['keyword'], 'it is still the keyword leg');
+    assert.equal(hitsOf(answer).some((hit) => hit.id === none), false);
+    assert.equal((await ownerSearch(h, owner, { q, space: here })).body.hits.length, 3, 'the owner door asks the same');
+
+    // A pass found something, so the last pass is not asked: the entry with every word stands alone.
+    const whole = await sessionSearch(h, machine, mine, { q: 'wombat quokka' });
+    assert.deepEqual(hitsOf(whole).map((hit) => hit.id).sort(), [most, between].sort(), 'every word found these');
+    assert.equal(hitsOf(whole).some((hit) => hit.id === fewest), false);
+
+    // A word under the floor neither finds an entry nor is what keeps one out.
+    const short = await sessionSearch(h, machine, mine, { q: 'go numbat bilby' });
+    assert.deepEqual(hitsOf(short).map((hit) => hit.id).sort(), [most, fewest].sort(), `only numbat found these: ${JSON.stringify(short.body)}`);
+    const nothing = await sessionSearch(h, machine, mine, { q: 'go to' });
+    assert.deepEqual(hitsOf(nothing), [], 'nothing clears the floor, so nothing is asked');
+    // One word left is not enough to ask about: numbat is in two entries, and this finds neither.
+    const alone = await sessionSearch(h, machine, mine, { q: 'go numbat' });
+    assert.deepEqual(hitsOf(alone), [], `one word takes part, so the last pass is not asked: ${JSON.stringify(alone.body)}`);
+
+    // A CJK pair is under the floor like any other two-character word: nothing clears it here.
+    const chinese = await sessionSearch(h, machine, mine, { q: '闭集 知识' });
+    assert.deepEqual(hitsOf(chinese), [], `no word took part: ${JSON.stringify(chinese.body)}`);
+
+    // A wildcard in a word is a character, not a match for every entry.
+    const wild = await sessionSearch(h, machine, mine, { q: '%%% ___' });
+    assert.deepEqual(hitsOf(wild), [], `no entry holds those characters: ${JSON.stringify(wild.body)}`);
+
+    // The filters are the same hard filter: another space's, and a kind not asked for, stay out.
+    const pitfalls = await sessionSearch(h, machine, mine, { q, kind: 'pitfall' });
+    assert.deepEqual(hitsOf(pitfalls).map((hit) => hit.id), [most]);
+    const elsewhereWord = await sessionSearch(h, machine, mine, { q: 'aurora staging bilby' });
+    assert.equal(hitsOf(elsewhereWord).some((hit) => hit.id === elsewhereEntry), false, 'another space is not in the last pass either');
   });
 
   await t.test('a session\'s search and read leave a row each, and nobody else\'s do', async () => {
