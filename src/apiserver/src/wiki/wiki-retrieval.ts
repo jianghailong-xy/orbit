@@ -43,11 +43,11 @@ import { broaden, normalizeSearchQuery, stripEmphasis, type NormalizedSearchQuer
  * reading another's unaccepted claims.
  *
  * WHAT IS NOT HERE: the semantic leg (§6.3, phase 2 — the parameter is accepted and the answer
- * says `semantic: false`, which is the whole of the placeholder), the `search` exposure row
- * (`exposureChannels` — a write, and T6 owns the first reader of exposures), and the aggregation
- * into `stats.searchHits`/`gets`, which is what the usage tiebreak reads: a column 0307 gives an
- * entry and no phase-1 writer fills yet, so the tiebreak is in place and every entry is level on it
- * today.
+ * says `semantic: false`, which is the whole of the placeholder), the `search` exposure row (a
+ * write, and it is the runner door's: a person's search is not an exposure, `exposureRules.people`),
+ * and the aggregation into `stats.searchHits`/`gets`, which is what the usage tiebreak reads: a
+ * column 0307 gives an entry and no phase-1 writer fills yet, so the tiebreak is in place and every
+ * entry is level on it today.
  */
 
 /** Reciprocal rank fusion's constant (design §6.1): a leg's first hit is worth 1/(RRF_K + 1). */

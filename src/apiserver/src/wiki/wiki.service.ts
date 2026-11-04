@@ -4828,14 +4828,16 @@ export class WikiService {
     const since = new Date(Date.now() - days * 86_400_000);
     const rows = await this.prisma.wikiExposure.findMany({
       where: { ownerId, at: { gte: since }, entry: { spaceId } },
-      select: { entryId: true, sessionId: true, channel: true },
+      select: { entryId: true, sessionId: true, channel: true, at: true },
     });
     const sessions = new Set<string>();
+    // A search writes one row per entry it returned, all with one `at` (`exposureRules.reads`): those rows
+    // are one search here, and each entry still counts it below.
+    const searches = new Set<string>();
     const byEntry = new Map<string, { total: number; pushed: number; searched: number; fetched: number }>();
-    let searches = 0;
     let gets = 0;
     for (const row of rows) {
-      if (row.channel === 'search') searches += 1;
+      if (row.channel === 'search') searches.add(`${row.sessionId}:${row.at.getTime()}`);
       if (row.channel === 'get') gets += 1;
       if (row.channel === 'push' && row.sessionId) sessions.add(row.sessionId);
       const entry = byEntry.get(row.entryId) ?? { total: 0, pushed: 0, searched: 0, fetched: 0 };
@@ -4854,7 +4856,7 @@ export class WikiService {
     return {
       days,
       sessionsPushed: sessions.size,
-      searches,
+      searches: searches.size,
       gets,
       entries: ranked.map(([entryId, counts]) => ({
         entryId,

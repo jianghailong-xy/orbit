@@ -28,9 +28,11 @@ Usage:
   orbit wiki verify --space ID [--json]
 
 The wiki is this codebase's own knowledge: decisions and what they rejected, pitfalls and their
-fixes, conventions, recipes. You READ it and you PROPOSE to it; you never decide. An agent's write
-is a proposal that waits for the owner in Review — or, in an automatic space, for its verification,
-which the Orbit server runs and 'orbit wiki verify' waits for — so never report one as saved.
+fixes, conventions, recipes. You READ it and you PROPOSE to it; you never decide. Whether an agent's
+write takes effect depends on the space's review mode: in manual it waits for the owner in Review, in
+tiered most adds and amends are live at once, and in automatic it waits for its verification, which
+the Orbit server runs and 'orbit wiki verify' waits for. What is live, other sessions can find. Report
+what each op's status says, and never call a pending op saved.
 
 These commands act for the session they run in (ORBIT_SESSION_ID): what it may read is what that
 session's workspace is bound to, and its proposal is recorded against it.
@@ -73,7 +75,7 @@ Options:
 An id this session may not read is reported beside the ones that were. Read the sources before
 relying on an entry: a claim whose sources you cannot open is a claim you cannot check.
 `,
-	"propose": `orbit wiki propose — propose what this session learned, for the owner's review
+	"propose": `orbit wiki propose — propose what this session learned
 
 Usage:
   orbit wiki propose (--ops JSON | --ops-file -) [--rationale TEXT | --rationale-file -]
@@ -92,7 +94,9 @@ Options:
 
 An op is one of add / reinforce / amend / supersede / retire / challenge, and cites the records it
 came from. Record only what someone could not read from the code; a claim you cannot cite is not
-ready. What this writes waits for the owner — do not tell the user it is saved.
+ready. Whether it takes effect depends on the space's review mode, and what has taken effect other
+sessions can find in a search: tell the user what each op's status says, and never call a pending
+op saved.
 
 A source is {"kind": KIND, "ref": REF, "quote": TEXT}, and what REF is depends on the kind:
   turn, event, task, task_comment, approval, merge_receipt, note

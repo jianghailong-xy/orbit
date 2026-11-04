@@ -100,6 +100,7 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches bool) s
 		orbitProjectInstructions(insideRecordedWork) +
 		orbitProgressInstructions(insideRecordedWork) +
 		orbitWaitInstructionsFor(watches) +
+		orbitWikiPathInstructions +
 		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: their inputs are schema-checked and " +
 		"they need no shell. The Orbit CLI at `" + command + "` is for shell composition (pipes, scripts, bulk input) and " +
 		"work that outlives this turn. Inside a session both attribute the task to you, so either is fine; the CLI needs " +
@@ -132,6 +133,13 @@ const orbitReplyFileInstructions = "To hand the user a file, link it in your rep
 const orbitEvidenceFileInstructions = "For evidence, cite a command's output by its tool call rather than saving a log, " +
 	"and keep screenshots and reports with file_upload rather than in the repository: it reads those same two " +
 	"directories and returns a link that also works in a reply, and an id to cite as a FILE check.\n\n"
+
+// orbitWikiPathInstructions sends an agent to the wiki at the moment it can use what is there: searches by
+// path found nothing 3 times in 21 up to 2026-11-02, where multi-word ones did 124 times in 188
+// (docs/wiki-memory-claims-design.md). "If your tool list has it" because this text goes to every session, and
+// an account with the wiki off has no such tool (wikiToolDescriptors). ASCII like the rest of the paragraph.
+const orbitWikiPathInstructions = "Before changing a file, use wiki_search with its path to look up known pitfalls, " +
+	"if your tool list has it.\n\n"
 
 // orbitWaitInstructions routes a wait on Orbit's own work to a watch. An agent told to "wait for these
 // tasks" otherwise writes the loop it knows, sleep plus task_get or `orbit task get`, which holds its turn

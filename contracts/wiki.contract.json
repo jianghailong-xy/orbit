@@ -871,6 +871,7 @@
   "exposureRules": {
     "what": "Which session received which revision of which entry, when: so the server can answer what a session was told when it started, and whom to tell when an entry is withdrawn.",
     "session": "A push always names its session. A search or get from a runner with no session names none.",
+    "reads": "The runner door's search and entry routes write them, after the read has its answer: one row per entry returned, naming the revision it is at, and the session the door requires. The rows of one read share one at, and the home page's usage read counts a search once by its session and at, however many entries it returned. A write that fails is logged and the answer goes out: a read never fails for its record.",
     "people": "Reads by people are not exposures; they are counted apart."
   },
 
@@ -2233,7 +2234,7 @@
       "wiki_propose": "orbit wiki propose"
     },
     "notTools": "No tool accepts, confirms, decides, hard-deletes or overwrites a page. Confirmation exists only on the owner channel.",
-    "proposeDescription": "Record only what someone could not read from the code: a decision and what was rejected, a pitfall and its fix, a convention. Cite the turns or records it came from; a claim you cannot cite is not ready. What you propose waits for the owner's review — do not tell the user it is saved.",
+    "proposeDescription": "Record only what someone could not read from the code: a decision and what was rejected, a pitfall and its fix, a convention. Cite the turns or records it came from; a claim you cannot cite is not ready. Whether it takes effect depends on the space's review mode, and what has taken effect other sessions can find in a search: tell the user what each op's status says, and never call a pending op saved.",
     "doors": {
       "user": {
         "prefix": "/api/wiki",
