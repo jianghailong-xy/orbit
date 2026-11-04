@@ -2666,7 +2666,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0469 adds `project.reopened_at` and `reopened_facts`, both NULL on every existing row, and two CHECKs on
       // those columns alone: no row is written, and no `task`, `session`, ledger table or preserved trigger/function
       // is named, so it is not another writer of the DONE fence.
-      '0469_project_owner_reopen'],
+      '0469_project_owner_reopen',
+      // 0470 widens `wiki_changeset_op_verification_evidence_chk` by `second_hand` and changes nothing else: no row is
+      // written, `wiki_changeset_op` is not a preserved relation, and no `task`, `session`, ledger table or preserved
+      // trigger/function is named, so it is not another writer of the DONE fence.
+      '0470_wiki_verification_second_hand'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

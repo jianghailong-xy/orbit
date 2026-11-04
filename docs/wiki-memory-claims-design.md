@@ -11,7 +11,7 @@
 1. **关联，但 memory 只当线索。** 一次 memory 写入里有三样东西：agent 判断这条重要（信号）、一句话（声明）、写在哪个 session 的哪一刻（指针）。信号和指针直接用；声明只当待查的问题，永远不当证据。
 2. **不建新流水线。** 写入本来就是 session 事件流里的工具调用，维护作业也已经读过 97% 写过 memory 的 session。只改三处：案卷留下声明，抽取改问法，核对按证据定信任。
 3. **agent 的行为不变。** 不加钩子，不发 runner，不加指令。Claude 照常写 memory，服务端自己看得到。
-4. **信任要看第一手证据。** 现在 67% 的生效条目只有 agent 自己的话或 memory 作出处，其中大多数是 `auto`（§1.3）。以后 `auto` 必须有工具结果或 owner 的原话，其余最多 Unreviewed。否则“从 session 找证据”只会找到 agent 把同一句话又说了一遍。
+4. **信任要看第一手证据。** 现在 67% 的生效条目只有 agent 自己的话或 memory 作出处，其中大多数是 `auto`（§1.3）。按 M1 的抽查（§6.1 的判定），以后只有 memory 出处的 op 不再得 `auto`，来自声明的条目没有工具结果或 owner 的原话时也一样，都最多 Unreviewed。否则“从 session 找证据”只会找到 agent 把同一句话又说了一遍。
 5. **只有 Claude 自动关联。** Codex 的 memory 是空闲后后台生成的摘要，默认关闭，里面没有“工作中的 agent 判断这条重要”这个信号。其余引擎用 `wiki_note`。
 6. **`wiki_note` 变小。** Claude 平时不用调。它只用于没有 memory 的引擎、纠错和 owner 明说“记到 wiki”，走同一条路。
 7. **历史 memory 会导入，但不再照抄。** 10 月以来从未导入的写入（1,006 个 session）和 9 月已导入的 note（958 个能找回 session）都回到原 session 核对，从新到旧分批跑。找不回 session 的最多 Unreviewed（§5）。
@@ -81,16 +81,18 @@ Codex 不接，理由有三条：它是后台模型对同一批对话的摘要�
 
 **R1：声明不是证据。** memory 和 `wiki_note` 的正文只能提出问题。它们不进 `sources`，核对器也看不到。这保留了现有的规则：二手内容不能回流成出处。
 
-**R2：第一手证据决定信任。** Automatic 下，`supported` 要变成 `auto`，出处必须满足：
+**R2：只有 memory 撑不起 `auto`。** Automatic 下，`supported` 要变成 `auto`，核对器读到的不能只有 note。范围按 M1 定（§6.1 的判定）：
 
-| 条目类型 | `auto` 需要 |
+| op 的出处 | 判 `supported` 得到 |
 | --- | --- |
-| decision、convention | owner 的话：`ownerWords` 为真的 turn、审批、blocker 答复 |
-| pitfall、recipe、concept | 观察到的结果，或 owner 的话 |
+| 只有 `note` | 最多 Unreviewed，`verification_evidence` 记 `second_hand`，计入回退统计 |
+| 来自声明（`promptedBy`），没有第一手出处 | 最多 Unreviewed，由“声明上线”任务接上 |
+| 其它 | `auto`，和现在一样：agent 回复、thinking、任务文本都算 |
 
-- 观察到的：非写文件类工具的调用和结果、`background_task`、`error`、提交、合并回执。
-- 不算的：agent 的回复和 thinking、写文件类工具（那还是 agent 自己写的字）、wiki 读取结果、任务文本（owner 写的除外）、别的 session 发来的消息、note。
-- 不满足时最多 Unreviewed。条目照样可搜可读，只是不再显得验证过。
+- 第一手：§6.1 表里的“观察到的”和“owner 的话”。分类函数是 `wikiEvidenceClass`（`src/shared/src/wiki.ts`），写文件类工具和 wiki 读取不算观察到的。
+- decision、convention 不要求 owner 的话：owner 的话这类错误率也是 13.3%，和只有 agent 的话一样，没有数据支持这个要求。
+- 最多 Unreviewed 的条目照样可搜可读，只是不再显得验证过。
+- 旧条目不动。
 
 **R3：一条流水线。** memory 写入、`wiki_note`、历史 note 最后都是案卷里的声明。没有第二套抽取、队列和表。
 
@@ -117,7 +119,7 @@ Codex 不接，理由有三条：它是后台模型对同一批对话的摘要�
 - **预算：** 总量仍是 8k，演示里 16k 反而更差（69.5% 对 64.2%）。声明和证据窗最多占 25%，从普通窗口里让。
 - **确定性：** 同样的记录产生同样的文本。没有声明的案卷字节不变，现有 golden fixture 不用动。
 - **留出：** `sha256(sessionId)` 落在 10% 的 session 不放声明（§6）。
-- **排除 wiki 读取：** `wiki_search`、`wiki_get` 的结果不进案卷。现在 `SKIPPED_TOOLS` 没有它们（`src/apiserver/src/wiki/wiki-dossier.ts:178`），wiki 内容可以绕一圈回来当证据。
+- **排除 wiki 读取：** `wiki_search`、`wiki_get` 的结果不进案卷，否则 wiki 内容可以绕一圈回来当证据。判定在 `wikiCallReadsWiki`（`src/shared/src/wiki.ts`）：各引擎的工具名，加上工具调用和后台任务的命令里跑的 `orbit wiki search`、`orbit wiki get`。
 
 ### 3.3 抽取
 
@@ -144,8 +146,9 @@ Add "note": "C1" to an entry that came from a note. Because this case has notes,
 ### 3.4 核对
 
 - **读的东西不变：** 条目加被引记录。声明不在其中，核对器不知道条目来自 memory。
-- **证据多一档：** `verification_evidence` 增加 `second_hand`，表示有文本但不满足 R2。`supported` 落到 Unreviewed，并且计入回退统计，因为模型确实读了文本。`unreadable` 的行为不变。改动在 `wikiVerdictEffect`（`src/shared/src/wiki.ts:383`）和它的调用处。
-- **污染：** 从记录抽的 op 按记录所在 session 判定污染，这是现成的。note 现在写死未污染（`src/apiserver/src/wiki/wiki.service.ts:4302`），要改成按 `originSessionId` 找到的 session 判定。
+- **证据多一档：** `verification_evidence` 增加 `second_hand`，表示核对器读到的原文全部来自 note。`supported` 落到 Unreviewed，并且计入回退统计，因为模型确实读了文本。`unreadable` 的行为不变。改动在 `wikiVerdictEffect`（`src/shared/src/wiki.ts`）和它的调用处。
+- **边界：** note 旁边有别的带原文的出处就不算 `second_hand`，不论那条是什么类别。旁边的出处没有原文（空 thinking，库里读不到原文的 commit）时仍算，因为结论读到的不是那条。
+- **污染：** 从记录抽的 op 按记录所在 session 判定污染，这是现成的。note 按 frontmatter 的 `originSessionId` 找到的 session 判定：这个值是引擎的 session id，查 `session.runtime_session_id`，只查本 owner，一个 id 对应多个 session 时任一污染就算。没写或找不到的按未污染，note 反正封顶。
 
 ### 3.5 代码
 
@@ -176,7 +179,7 @@ memory 里有一条：`release.sh next` 会直接打 tag。owner 当时只说了
 | 出处 | note | 工具结果那一行 |
 | 字段 | 只能从这句话里抽 | `trigger.commands`、`symptom`、`cause` 从工具结果和 thinking 填 |
 | 锚点 | note 提到才有 | session 读过的 `.claude/skills/release/release.sh` |
-| 信任 | 核对器读 note，判 supported，得 `auto` | 引了工具结果才是 `auto`；只引 agent 的话就是 Unreviewed |
+| 信任 | 核对器读 note，判 supported，也最多 Unreviewed（此前得 `auto`） | 引了工具结果才是 `auto`；只引 agent 的话就是 Unreviewed |
 
 ---
 
@@ -347,6 +350,18 @@ R2 的前提是“只有 agent 的话或 memory 的条目更容易错”。这�
 
 来源：生产 session `34rpoZgTTLiTFG9BtKVOg`，只读。分类脚本 `m1-class.sql`、判定明细和答案文件在任务的 FILE 证据里（目录 `6VTnMbzoT5pDDjz3LNYVHE`）。
 
+#### 判定（协调者，2026-11-05，任务评论 `34rs8v95minAiLfP2jZbU`）
+
+门槛按字面没过：只有 agent 的话 +9.94，低于 10。规则写的是不过就收窄或取消，所以 R2 不按原样上，也不因为只差 0.06 就放行。
+
+1. **只有 `note` 出处的 op：** 核对判 supported 也最多 Unreviewed，`verification_evidence` 记 `second_hand`，计入回退统计。只有 memory 是 +16.3，这条有数据支持。
+2. **其它 op 不变：** 出处是 agent 回复、thinking、任务文本的，`supported` 仍得 `auto`。decision、convention 不要求 owner 的话：owner 的话这类错误率也是 13.3%，和只有 agent 的话一样，没有数据支持这个要求。
+3. **来自声明的条目（`promptedBy`）：** 没有第一手出处时最多 Unreviewed，否则等于 memory 只换了个说法。由“声明上线”任务接上，用上面这张表的分类函数。
+4. **照做，不受抽查影响：** note 的污染按原 session 判定；`wiki_search`、`wiki_get` 的结果不进案卷。
+5. **旧条目不动。**
+
+分类函数 `wikiEvidenceClass` 用上面的口径，有三处补充：表里没写的 `turn_end`、`system` 事件归“Orbit 和 shell”（生产上没有只靠它们的条目）；OpenCode 的 `ApplyPatch` 就是 `apply_patch`；Bash 里的 `orbit wiki search`、`orbit wiki get` 和工具一样算 wiki 读取。
+
 ### 6.2 回放（M2 到 M6）
 
 用分支代码构建案卷和提示，生产库只读，模型用 System model，不写任何 wiki 表，约 2 小时 GPU。
@@ -433,8 +448,8 @@ memory 进了抽取，就不能再拿它评召回率。所以留 10% 的 session
 ## 10. 已定（owner 2026-11-04：全部按推荐，不确定的按数据测量）
 
 1. **改合同的 memory 规则。** 案卷规定不含 memory，可追溯到 9 月演示时“不受 memory 干扰”的要求。当时防的是 memory 混进证据和评分，这两点都保留了。
-2. **R2 管所有新 op。** M1 不支持时重新定（§6.1）。
-3. **旧的“只有 agent 的话”条目（4,473 条 `auto`）先不动。** 等 M1 和 P0 的读取数据。
+2. **R2 只管只有 `note` 出处的新 op，和没有第一手出处的声明条目。** M1 不支持原来的“管所有新 op”，按 §6.1 的判定收窄。
+3. **旧的“只有 agent 的话”条目（§6.1 的严格口径 5,475 条 `auto`）不动，新 op 里只有 agent 的话的也照常得 `auto`。** 证据规则不改任何旧条目；旧 note 条目只在历史回填收尾时处理（§5）。
 4. **历史回填两批都做。** 从新到旧，试点不过就停。
 5. **矛盾的声明先只计数。**
 6. **“有没有用”不靠 owner 盲评，改成数据（G5）。**

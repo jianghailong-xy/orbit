@@ -150,7 +150,7 @@ interface Fixture {
     whereUsed: string | null;
   }>;
   checkedLines: Array<{
-    verification: { verdict: string; model: string } | null;
+    verification: { verdict: string; model: string; evidence?: string } | null;
     tainted: boolean;
     who: string | null;
     when: string | null;

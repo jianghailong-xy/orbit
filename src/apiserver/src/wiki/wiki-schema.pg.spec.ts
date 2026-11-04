@@ -583,15 +583,17 @@ test('0307 · the Orbit Wiki data model', { skip, concurrency: 1, timeout: 300_0
       'wiki_changeset_op_verification_duplicate_chk', 'a supported op naming a duplicate');
     await refuses(op({ verification_duplicate_of: ENTRY }),
       'wiki_changeset_op_verification_duplicate_chk', 'a duplicate named with no verdict at all');
-    // 0314: what the verifier could read is one of two words, and only ever beside a verdict; the
+    // 0314, 0470: what the verifier could read is one of three words, and only ever beside a verdict; the
     // earlier verdicts of a reopened op are a list, empty for every other op.
-    for (const evidence of ['readable', 'unreadable']) {
+    for (const evidence of ['readable', 'second_hand', 'unreadable']) {
       await admits(client, () => op({ decision: 'auto_applied', decided_at: new Date(), applied_by_mode: 'automatic', ...trail, verification_evidence: evidence })());
     }
     await refuses(op({ decision: 'auto_applied', decided_at: new Date(), ...trail, verification_evidence: 'partly' }),
-      'wiki_changeset_op_verification_evidence_chk', 'a mark that is neither of the two');
-    await refuses(op({ decision: 'verifying', verification_evidence: 'unreadable' }),
-      'wiki_changeset_op_verification_evidence_chk', 'what a verifier could read, with no verdict beside it');
+      'wiki_changeset_op_verification_evidence_chk', 'a mark that is none of the three');
+    for (const evidence of ['unreadable', 'second_hand']) {
+      await refuses(op({ decision: 'verifying', verification_evidence: evidence }),
+        'wiki_changeset_op_verification_evidence_chk', 'what a verifier could read, with no verdict beside it');
+    }
     await refuses(op({ verification_history: JSON.stringify({ verdict: 'unsupported' }) }),
       'wiki_changeset_op_verification_history_chk', 'earlier verdicts that are not a list');
     await admits(client, () => op({ decision: 'verifying', verification_history: JSON.stringify([{ verdict: 'unsupported', reopenedAt: '2026-09-28T00:00:00.000Z' }]) })());

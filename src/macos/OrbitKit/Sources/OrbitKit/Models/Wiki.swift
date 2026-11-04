@@ -669,10 +669,12 @@ public enum WikiVerificationVerdict: String, Codable, Sendable, CaseIterable {
 }
 
 /// What the verifier could read of an op's sources when its verdict was recorded (contract
-/// `reviewModes.verification.evidence`): with none of them readable, the verdict applied nothing
-/// past Unreviewed.
+/// `reviewModes.verification.evidence`): with none of them readable, or only a note, the verdict
+/// applied nothing past Unreviewed.
 public enum WikiVerificationEvidence: String, Codable, Sendable, CaseIterable {
-    case readable, unreadable
+    case readable
+    case secondHand = "second_hand"
+    case unreadable
     case unknown
 
     public init(from decoder: Decoder) throws {

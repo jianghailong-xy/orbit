@@ -22,7 +22,7 @@
  * no task list, and starts the cursor as far back as the owner's look-back says — 14 days by default,
  * the moment itself, or the earliest fact — never moving a cursor that has a position; the dossier
  * keeps nothing but its sources and hash; the agent's own trace is in it
- * and memory-file tool calls are not; a batch project gets counts and no dossiers; a tool error
+ * and memory-file tool calls and reads of the wiki are not; a batch project gets counts and no dossiers; a tool error
  * shared by three sessions is a cluster; and what a maintenance task made before the server ran the runs
  * left in its hidden list is still no fact.
  *
@@ -1198,6 +1198,79 @@ interface Placed {
   id: string;
   spans: WikiDossierSpan[];
 }
+
+test('a read of the wiki is left out with its result, under any engine\'s name and through the CLI, and the rest of the dossier is the same to the byte', { skip }, async () => {
+  const h = await boot();
+  const owner = await account(h, 'wiki-reads');
+  const machine = await runner(h, owner.id);
+  const ws = await workspace(h, owner.id);
+  const spaceId = await space(h, owner, ws);
+  await maintained(h, owner, spaceId, ws);
+
+  /** One session's trace: the same records each time, and the reads of the wiki when asked for. */
+  const trace = async (reads: boolean): Promise<{ id: string; reads: Array<{ useEventId: string; toolCallId: string }>; background: string | null }> => {
+    const talk = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id, status: 'SUCCEEDED', lastTurnAt: minutesAgo(20), title: 'A session that reads the wiki' });
+    await turn(h, talk, 'Find out why the release script tags at once.', { clientTurnId: 'owner-asks', at: minutesAgo(50) });
+    await event(h, talk, 'assistant', { text: 'I will read the script.' }, minutesAgo(46));
+    await tool(h, talk, 'Bash', { command: 'bash scripts/release.sh next' }, 'tagging v1.2.3 … pushed', { at: minutesAgo(44) });
+    const out: Array<{ useEventId: string; toolCallId: string }> = [];
+    let background: string | null = null;
+    if (reads) {
+      const words = (name: string) => `WIKI-READ-WORDS from ${name}: the wiki says the release script tags at once`;
+      for (const [name, input] of [
+        ['mcp__orbit__wiki_search', { query: 'release script' }],
+        ['mcp__orbit__wiki_get', { ids: ['34abc'] }],
+        ['orbit__wiki_search', { query: 'release script' }],
+        ['orbit__wiki_get', { ids: ['34abc'] }],
+        ['wiki_search', { query: 'release script' }],
+        ['wiki_get', { ids: ['34abc'] }],
+        ['Bash', { command: 'orbit wiki search release' }],
+        ['Bash', { command: 'orbit wiki get 34abc --json' }],
+        ['Bash', { command: "'/usr/local/bin/orbit' wiki search release | head -20" }],
+        ['Bash', { command: 'cd /root/orbit && /root/.orbit/bin/orbit wiki get 34abc' }],
+        ['mcp__orbit__bg_run', { command: 'orbit wiki get 34abc', kind: 'job' }],
+      ] as const) {
+        out.push(await tool(h, talk, name, input, words(name), { at: minutesAgo(43) }));
+      }
+      background = await event(h, talk, 'background_task', { command: 'orbit wiki search release', status: 'completed', exitCode: 0, summary: words('a background read') }, minutesAgo(43));
+    }
+    await event(h, talk, 'assistant', { text: 'Root cause found: release.sh next is not a dry run.' }, minutesAgo(41));
+    return { id: talk, reads: out, background };
+  };
+
+  const withReads = await trace(true);
+  const without = await trace(false);
+  const read = await buildDossier(h.prisma, (await loadDossierRecords(h.prisma, owner.id, withReads.id))!, { literals: [] });
+  const plain = await buildDossier(h.prisma, (await loadDossierRecords(h.prisma, owner.id, without.id))!, { literals: [] });
+
+  assert.doesNotMatch(read.text, /WIKI-READ-WORDS/u, 'no read\'s result is in the text');
+  assert.doesNotMatch(read.text, /wiki_search|wiki_get|orbit wiki/u, 'and neither is the call');
+  const cited = new Set(read.sources.map((source) => toUuid(source.id)));
+  for (const one of withReads.reads) {
+    assert.ok(!cited.has(one.toolCallId) && !cited.has(one.useEventId), 'and no line cites it');
+  }
+  assert.ok(!cited.has(withReads.background!), 'nor a background task that read it');
+  assert.match(read.text, /\$ bash scripts\/release\.sh next → ok: tagging v1\.2\.3/u, 'what the session did stays');
+  assert.match(read.text, /Root cause found: release\.sh next is not a dry run\./u);
+  assert.equal(read.text, plain.text, 'the dossier reads as if the reads were never made');
+
+  // What is not a read of the wiki stays: writing to it, its help, and a tool of another name.
+  const others = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id, status: 'SUCCEEDED', lastTurnAt: minutesAgo(20) });
+  // Each fails and then works, which is what carries a tool line into a dossier this short.
+  const failedThenWorked = async (name: string, input: Record<string, unknown>, words: string, at: number) => {
+    await tool(h, others, name, input, 'Exit code 1\nnot yet', { isError: true, at: minutesAgo(at + 0.5) });
+    return tool(h, others, name, input, `${words} recorded`, { at: minutesAgo(at) });
+  };
+  const proposed = await failedThenWorked('mcp__orbit__wiki_propose', { rationale: 'a pitfall' }, 'WIKI-PROPOSED', 44);
+  const cli = await failedThenWorked('Bash', { command: 'orbit wiki propose --file ops.json' }, 'WIKI-CLI-PROPOSED', 43);
+  const help = await failedThenWorked('Bash', { command: 'orbit wiki --help' }, 'WIKI-HELP', 42);
+  const kept = await buildDossier(h.prisma, (await loadDossierRecords(h.prisma, owner.id, others))!, { literals: [] });
+  const keptCited = new Set(kept.sources.map((source) => toUuid(source.id)));
+  for (const [one, words] of [[proposed, /WIKI-PROPOSED/u], [cli, /WIKI-CLI-PROPOSED/u], [help, /WIKI-HELP/u]] as const) {
+    assert.match(kept.text, words);
+    assert.ok(keptCited.has(one.toolCallId), 'and its line cites its call');
+  }
+});
 
 test('every line goes back to its record: the words at its spans, redacted, are the words it declares — compressed lines too', { skip }, async () => {
   const h = await boot();
