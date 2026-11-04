@@ -90,6 +90,13 @@ const render = (a: ApprovalInfo) => renderToStaticMarkup(<ApprovalPanel approval
 const batchApproval = (preview: Record<string, unknown>): ApprovalInfo =>
   ({ id: 'b1', toolName: 'orbit_task_batch', input: { preview } }) as ApprovalInfo;
 
+describe('a plan to approve', () => {
+  it('keeps a word of its code whole, as a reply does (lib/codeWords)', () => {
+    const html = render({ id: 'p1', toolName: 'ExitPlanMode', input: { plan: '先预览、`--enable_part_writer` 再构建' } } as ApprovalInfo);
+    expect(html).toContain('<span class="code-break"></span><code><span class="code-word">--enable_part_writer</span></code>');
+  });
+});
+
 describe('single create approval', () => {
   const create = (toolName: string, input: Record<string, unknown>): ApprovalInfo =>
     ({ id: 'c1', toolName, input }) as ApprovalInfo;

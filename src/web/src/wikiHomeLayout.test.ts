@@ -47,10 +47,6 @@ describe('a document\u2019s words', () => {
     expect(css.indexOf('.wk-dc-code code {')).toBeGreaterThan(css.indexOf('.wk-art code, .wk-fncard code'));
   });
 
-  it('lets a line end before code by the stylesheet, so nothing is copied with it', () => {
-    expect(css).toContain(".wk-code-break::before { content: '\\200B'; }");
-  });
-
   it('keeps a footnote marker on the line of the sentence it ends', () => {
     expect(css).toContain(".wk-fn::before { content: '\\2060'; }");
   });

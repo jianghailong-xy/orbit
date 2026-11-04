@@ -8,6 +8,7 @@ import { ReviewCard } from './ReviewCard';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { ENTER_HINT, SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
 import { buildBatchGraph, describeShape } from '../lib/batchGraph';
+import { rehypeCodeWords } from '../lib/codeWords';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { markdownToPlainLines } from '../lib/markdownText';
 import { mainBranchName } from '../lib/projectStart';
@@ -682,6 +683,7 @@ export function ApprovalPanel({
         {plan ? (
           <Markdown
             remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeCodeWords]}
             urlTransform={referenceUrlTransform}
             components={{ a: ReferenceLink }}
           >
@@ -804,6 +806,7 @@ function BlockerResolveBody({ input }: { input: BlockerResolveInput }): JSX.Elem
       {about && <p className="dag-approval-caption">{about}</p>}
       <Markdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeCodeWords]}
         urlTransform={referenceUrlTransform}
         components={{ a: ReferenceLink }}
       >
@@ -812,6 +815,7 @@ function BlockerResolveBody({ input }: { input: BlockerResolveInput }): JSX.Elem
       <p className="dag-approval-caption">The agent says it no longer blocks</p>
       <Markdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeCodeWords]}
         urlTransform={referenceUrlTransform}
         components={{ a: ReferenceLink }}
       >
@@ -844,6 +848,7 @@ function SkipMergeCheckBody({ input }: { input: SkipMergeCheckInput }): JSX.Elem
       <p className="dag-approval-caption">The agent says this red is the check&rsquo;s, not the work&rsquo;s</p>
       <Markdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeCodeWords]}
         urlTransform={referenceUrlTransform}
         components={{ a: ReferenceLink }}
       >
@@ -998,6 +1003,7 @@ function CreateBody({ input }: { input: CreateInput }): JSX.Element {
           </summary>
           <Markdown
             remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeCodeWords]}
             urlTransform={referenceUrlTransform}
             components={{ a: ReferenceLink }}
           >
@@ -1012,6 +1018,7 @@ function CreateBody({ input }: { input: CreateInput }): JSX.Element {
             <>
               <Markdown
                 remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeCodeWords]}
                 urlTransform={referenceUrlTransform}
                 components={{ a: ReferenceLink }}
               >

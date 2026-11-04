@@ -30,6 +30,7 @@ import {
 } from '@ant-design/icons';
 import { Image } from './ui/Image';
 import { ImagePreview, type ImagePreviewItem } from './ui/ImagePreview';
+import { rehypeCodeWords } from '../lib/codeWords';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { formatThinkingDuration, formatThinkingSize } from '../lib/thinkingDraft';
 import { checkDuration } from '../lib/checkDuration';
@@ -3544,7 +3545,7 @@ export const MD = memo(function MD({
     <div className="md">
       <Markdown
         remarkPlugins={plugins}
-        rehypePlugins={highlight ? [rehypeHighlight] : []}
+        rehypePlugins={highlight ? [rehypeHighlight, rehypeCodeWords] : [rehypeCodeWords]}
         urlTransform={transcriptUrlTransform}
         components={{ pre: CodeBlock, img: MarkdownImage, a: MarkdownLink, ...orbitLinkCardComponents }}
       >

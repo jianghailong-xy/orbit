@@ -287,10 +287,10 @@ describe("a document's page", () => {
     await vi.waitFor(() => expect(page()?.querySelector('.wk-dc-sec p code')).toBeTruthy());
     const [command, path] = [...page().querySelectorAll('.wk-dc-sec p code')];
     expect(command.textContent).toBe('python tea-cli.py --app_id 123');
-    expect(text('.wk-code-word', command)).toEqual(['python', 'tea-cli.py', '--app_id', '123']);
+    expect(text('.code-word', command)).toEqual(['python', 'tea-cli.py', '--app_id', '123']);
     // A word no phone's line would hold is left to wrap.
     expect(path.textContent).toBe(long);
-    expect(path.querySelector('.wk-code-word')).toBeNull();
+    expect(path.querySelector('.code-word')).toBeNull();
   });
 
   it('lets a line end before code, except after what opens a bracket or a quote', async () => {
@@ -302,7 +302,7 @@ describe("a document's page", () => {
     await vi.waitFor(() => expect(page()?.querySelector('.wk-dc-sec p code')).toBeTruthy());
     const paragraph = page().querySelector('.wk-dc-sec p')!;
     const before = [...paragraph.querySelectorAll('code')].map((code) => (code.previousSibling as Element).className ?? 'words');
-    expect(before).toEqual(['wk-code-break', 'words', 'words']);
+    expect(before).toEqual(['code-break', 'words', 'words']);
     // Drawn by the stylesheet: nothing a reader copies, and no <wbr>, which Safari answers by drawing the code's first word twice.
     expect(paragraph.textContent).toBe('参数、--force、（--hour）和“--date” ');
     expect(paragraph.querySelector('wbr')).toBeNull();
