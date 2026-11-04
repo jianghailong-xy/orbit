@@ -2944,10 +2944,10 @@ function deliveryReviewMessage(
     + `${answers.map((line) => `- ${line}`).join('\n')}\n`
     + `When the task is sent back, cancelled or superseded${exemption ? ', or its work lands' : ''}, the platform closes this item itself; once you take it up it stays yours, `
     + 'and the platform does not hand it to the account owner because time ran out.\n'
-    + 'This is not a question about the acceptance criteria, so do not put it to the account owner as one: changing the acceptance criteria and confirming the set of criteria are still only the account owner’s to do, '
+    + 'This is not a question about the acceptance criteria, so do not put it to the account owner as one: changing the acceptance criteria and confirming the set of criteria are still only the account owner’s to decide, '
     + 'and a criterion that changed after the work started is the account owner’s blocker.'
     + (exemption
-      ? ' If the reason in fact argues that the acceptance criterion this task serves should not apply or should say something else, do not accept it: that would be changing the acceptance criteria.'
+      ? ' If the reason in fact argues that the acceptance criterion this task serves should not apply or should say something else, do not accept it: that would be changing the acceptance criteria. File that change with project_update, and the account owner answers it on a card.'
       : '')
     + '\n\n'
     + notice;

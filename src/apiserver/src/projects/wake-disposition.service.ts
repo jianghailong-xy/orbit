@@ -958,15 +958,15 @@ function dispositionKey(reason: BlockerDisposition['reason'], taskId = ''): stri
 }
 
 /** One executable sentence per reason, addressed to the person the blocker hands the delivery to. */
-const REQUIRED_ACTION: Readonly<Record<BlockerDisposition['reason'], string>> = {
+export const REQUIRED_ACTION: Readonly<Record<BlockerDisposition['reason'], string>> = {
   CRITERION_EXEMPTION_ARGUED:
     'This task keeps the completion criterion it declared although Orbit questioned it, and whoever filed it wrote '
     + 'down why. Read that reason against the acceptance criterion it serves and rule on whether it holds before it '
     + 'merges.',
   ACCEPTANCE_STANDARD_MOVED:
     'The acceptance criterion this work declared was changed after it started. Confirm whether it passes under '
-    + 'today’s wording; only the account owner can change the acceptance criteria, and the coordinator session cannot '
-    + 'do it for them.',
+    + 'today’s wording. Rewording a criterion is the account owner’s decision: a session files the edit with '
+    + 'project_update, and they answer it on a card.',
   OUTSIDE_DECLARED_SCOPE:
     'This delivery changed files its own declaration never mentioned. Look at the changes detail.paths lists, '
     + 'and decide whether to accept it, send it back or have it split up; do not merge before you have decided.',

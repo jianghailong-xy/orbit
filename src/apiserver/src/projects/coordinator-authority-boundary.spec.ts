@@ -623,8 +623,10 @@ test('the conversational opening no longer offers the criteria or DONE as its ow
 
     // It still says what project_update IS for.
     assert.match(opening, /project_update/);
-    // And no longer sells it as the way to rewrite the exam or to record that the goal was met.
+    // And no longer sells it as the way to rewrite the exam or to record that the goal was met:
+    // what it sends for a rewrite is held for the owner (since 2026-09-09), and the opening says so.
     assert.doesNotMatch(opening, /project_update[^.]*acceptance criteria/);
+    assert.match(opening, /is held as a proposal, and the account owner approves or refuses it on a card/);
     assert.doesNotMatch(opening, /status\s*(?:as|to|=)\s*DONE/);
     // Naming the two, and naming who decides them, rather than falling silent: a coordinator that
     // is told nothing goes looking, which is the same wasted turn by another route.
