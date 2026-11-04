@@ -13,10 +13,10 @@ import (
 // The Wiki tools (docs/wiki-design.md §5.2, contracts/wiki.contract.json `agentSurface`).
 //
 // An agent reads the wiki and proposes to it; it never decides. There is no accept, no confirm, no
-// hard delete and no page overwrite here, and no tool that would be one: what an agent learned
-// lands as a proposal that waits for the owner in Review. Three tools, split by risk rather than by
-// entity — the two that only read say so, and the one that writes is the only one that changes what
-// anyone can see.
+// hard delete and no page overwrite here, and no tool that would be one: what an agent learned goes
+// through the space's review mode, which decides whether it waits or is live. Three tools, split by
+// risk rather than by entity — the two that only read say so, and the one that writes is the only
+// one that changes what anyone can see.
 //
 // WHAT A SESSION MAY READ IS WHAT ITS WORKSPACE IS BOUND TO. The space comes from the calling
 // session's own header on the server side (never from an argument here), so nothing a model writes
@@ -57,23 +57,27 @@ var wikiIncludes = []string{"sources", "anchors", "history"}
 // for word, and wiki_tools_test.go holds the two equal. It leads the tool description because the
 // failure it prevents is a model that reads the mechanics first: a proposal described by its fields
 // reads like a write that happened, and the session tells the user it saved something that is
-// waiting for review. So the precondition comes before any parameter, and says both halves — what
-// is worth recording at all, and that recording it saves nothing.
+// waiting. So the precondition comes before any parameter, and says both halves — what is worth
+// recording at all, and that what recording it does depends on the space (contract `reviewModes`).
+// It used to say every proposal waits for the owner, which only a Manual space does.
 const wikiProposePrecondition = "Record only what someone could not read from the code: a decision and what " +
 	"was rejected, a pitfall and its fix, a convention. Cite the turns or records it came from; a claim you " +
-	"cannot cite is not ready. What you propose waits for the owner's review — do not tell the user it is saved."
+	"cannot cite is not ready. Whether it takes effect depends on the space's review mode, and what has taken " +
+	"effect other sessions can find in a search: tell the user what each op's status says, and never call a " +
+	"pending op saved."
 
 const wikiProposeDescription = wikiProposePrecondition + " This is how what you learned reaches the wiki: " +
 	"ops[] is the batch, each op naming one of add / reinforce / amend / supersede / retire / challenge and " +
 	"citing the sources it came from (a turn of this session is {kind:\"turn\",session:\"self\"}), with one " +
-	"rationale for the batch and an idempotencyKey so a retry is not a second proposal. An op that applies " +
-	"at once (a reinforce, a challenge, a kind the owner left auto-accepting) is recorded as applied; every " +
-	"other waits as pending. What is recorded is a PROPOSAL either way: the owner reads it in Review and " +
-	"accepts, edits or rejects it, so nothing here is knowledge yet, and nothing here reached any other " +
-	"session. You cannot accept, confirm, delete or overwrite an entry: there is no tool that does, and the " +
-	"owner's decision is the only door. Pass dryRun to have every op checked and answered as it would be, " +
-	"recording nothing. Search first with wiki_search: a near neighbour is answered under similar[], and " +
-	"reinforcing the entry that exists is better than adding a second one."
+	"rationale for the batch and an idempotencyKey so a retry is not a second proposal. Each op answers with " +
+	"its status. applied: it is live now, and other sessions of this space can find it; a challenge always " +
+	"is, a reinforce unless the space holds reinforces back, and in a Tiered space most adds and amends. " +
+	"pending: it is not live. In a Manual space it waits for the owner in Review; in an Automatic space a " +
+	"verification reads the sources it cites and its verdict decides (waitsFor says so); a supersede or a " +
+	"retire waits for the owner in every mode. The owner can still reject or revert what went live. You " +
+	"cannot accept, confirm or delete an entry: there is no tool that does. Pass dryRun to have every op " +
+	"checked and answered as it would be, recording nothing. Search first with wiki_search: a near neighbour " +
+	"is answered under similar[], and reinforcing the entry that exists is better than adding a second one."
 
 // wikiSourceRefs is what each source kind takes as its ref (contracts/wiki.contract.json
 // `sourceInput.refs`), said where a source is filled in: a tool_use_id where a row's id goes is the
@@ -92,8 +96,8 @@ const wikiSourceRefs = "ref by kind: turn, event, task, task_comment, approval, 
 // are not gated on orchestration: reading what your own workspace shares and proposing what you
 // learned is not a power over anybody else's session. They ARE gated on the wiki being on at all
 // (wiki_rollout below), and every one of them carries an outputSchema and annotations: two declare
-// themselves read-only, and the one that writes declares that it is not destructive — a proposal
-// changes nothing the owner has not decided.
+// themselves read-only, and the one that writes declares that it is not destructive — it keeps every
+// revision, and what ends a lineage waits for the owner.
 func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]interface{}) []map[string]interface{} {
 	str := map[string]interface{}{"type": "string"}
 	queryProp := map[string]interface{}{
@@ -290,7 +294,7 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 			}, "ops"),
 			// readOnlyHint false and destructiveHint false, both said out loud: a proposal writes,
 			// and what it writes takes nothing away from anybody — the entry an amendment is about
-			// keeps its revision until the owner decides, and a retire is the owner's to accept.
+			// keeps its earlier revisions, and a retire is the owner's to accept.
 			// (design §5.2: wiki_propose carries no destructiveHint.)
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
@@ -652,7 +656,7 @@ func describeWikiGet(answer wikiGetAnswer) string {
 }
 
 // describeWikiPropose says what happened to the batch in the terms that decide what the agent is
-// allowed to say about it: a proposal is not knowledge, and only the owner can turn it into any.
+// allowed to say about it: what is pending is not knowledge, and what was applied is live.
 func describeWikiPropose(answer wikiProposeAnswer, names []string, dryRun bool) string {
 	var out strings.Builder
 	switch {
@@ -668,26 +672,47 @@ func describeWikiPropose(answer wikiProposeAnswer, names []string, dryRun bool) 
 		// command for this session to run, and no model of its provider is asked about any of this.
 		fmt.Fprintf(&out, "Recorded: changeset %s. It is not saved yet: in this automatic space the deployment's "+
 			"own worker verifies what waits for its verification, so the verdict arrives by itself — nothing for "+
-			"this session to run, and no model of this session's is asked. Everything else waits for the owner in "+
-			"Review; until then no other session reads it and nothing here is knowledge.\n", answer.ChangesetID)
+			"this session to run, and no model of this session's is asked. Anything else pending waits for the "+
+			"owner in Review; until then no other session reads it and it is not knowledge.\n", answer.ChangesetID)
 	case wikiOpsWaitForVerification(answer.Ops):
 		// An automatic space: what it took waits for a verdict, not for the owner (contract
 		// `reviewModes.verification`), and the command that asks for one is this session's to run.
 		fmt.Fprintf(&out, "Recorded: changeset %s. It is not saved: in this automatic space what waits for its "+
-			"verification goes live only when `orbit wiki verify` reports a verdict for it, and anything else waits "+
-			"for the owner in Review; until then no other session reads it and nothing here is knowledge.\n", answer.ChangesetID)
+			"verification goes live only when `orbit wiki verify` reports a verdict for it, and anything else pending "+
+			"waits for the owner in Review; until then no other session reads it and it is not knowledge.\n", answer.ChangesetID)
+	case wikiOpsCount(answer.Ops, "pending") > 0:
+		fmt.Fprintf(&out, "Recorded: changeset %s. What is pending is a proposal for the owner's review. It is not "+
+			"saved: the owner decides in Review, and until they do, no other session reads it and it is not "+
+			"knowledge.\n", answer.ChangesetID)
 	default:
-		fmt.Fprintf(&out, "Recorded as a proposal for the owner's review: changeset %s. It is not saved: the owner "+
-			"decides in Review, and until they do, no other session reads it and nothing here is knowledge.\n", answer.ChangesetID)
+		fmt.Fprintf(&out, "Recorded: changeset %s.\n", answer.ChangesetID)
 	}
 	for _, op := range answer.Ops {
 		out.WriteString("  " + describeWikiOp(op, names, answer.ServedBy == "server"))
 		out.WriteString("\n")
 	}
-	if len(answer.Ops) > 0 {
-		out.WriteString("Report this as a proposal waiting for review, never as a saved entry.\n")
+	// A dry run recorded nothing, whatever its ops answer as, so there is nothing of it to report.
+	if dryRun {
+		return out.String()
+	}
+	if wikiOpsCount(answer.Ops, "applied") > 0 {
+		out.WriteString("What is applied is live now, and other sessions of this space can find it.\n")
+	}
+	if wikiOpsCount(answer.Ops, "pending") > 0 {
+		out.WriteString("Report what is pending as a proposal, never as a saved entry.\n")
 	}
 	return out.String()
+}
+
+// wikiOpsCount is how many ops of an answer have this status.
+func wikiOpsCount(ops []map[string]interface{}, status string) int {
+	count := 0
+	for _, op := range ops {
+		if got, _ := op["status"].(string); got == status {
+			count++
+		}
+	}
+	return count
 }
 
 // describeWikiOp is one op's line. server says the deployment's own worker verifies what waits
