@@ -758,7 +758,9 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   verdict 与编号的读法同 21.3 的枚举值（只去包裹的反引号、引号和首尾空白）。**读不成结论就不放行**：不回报，计入 verify 作业报告里的失败，op 继续等。
   维护运行不是会话：它在自己的进程里核实本次运行的 op，没结论的再问一遍，仍没结论的不让运行失败（§27.3 第 7 步）。
   描述文案把「只核实本会话的 op、绝不手写结论」写成前置条件（`agentSurface.verify.precondition`），逐词测试。
-- **`wiki_propose` 的描述**把「这是提议、要等 owner 审」写成前置条件（JSON 的 `agentSurface.proposeDescription`），T5 做逐词测试。
+- **`wiki_propose` 的描述**把「是否生效取决于 space 的审阅模式，已生效的内容其他会话能搜到，按每个 op 的状态告诉用户，pending 不算已保存」写成前置条件
+  （JSON 的 `agentSurface.proposeDescription`），T5 做逐词测试。之前写的是「要等 owner 审」，只有 Manual 是这样：Tiered 下 add 和 amend 多数当场生效，
+  Automatic 下由核实结论决定。
 - **用户门** `/api/wiki`（JwtAuthGuard，owner 本人）：spaces 列表（待审数、plan 等你数、绑定的 workspace、文档数，§2）、建 space、改设置（含审阅模式）、读 / 加入 / 留在外面 workspace、首页、条目列表、主题、
   时间线、owner 的变更集（立即生效，带 CAS）、条目详情、pin / unpin、逐条 Reject 与 Confirm、`GET /api/wiki/search`（⌘K 的独立端点）、Review、
   按 id 读一次运行（`GET /api/wiki/changesets/:id`，§7.6）、decide、整次撤回、重开核实（§7.5）。
@@ -773,6 +775,9 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   整次撤回、逐条 Reject 与 Confirm、重开核实、切换审阅模式、读一次运行同样只在用户门、同样拒绝带会话头的请求。
 - **读的边界**：只有在 space 里的 workspace（§2 绑定）的会话能读这个 space 的条目；在 space 里就是 owner 同意在这些
   workspace 之间共享**已确认**的条目，把某个 workspace 留在外面就是收回。待审提议只有提出它的会话看得见。
+- **读取记录**（`exposureRules.reads`）：runner 门的 search 和读条目拿到答案之后写 `wiki_exposure`，channel 分别是 `search`、`get`，返回一条写一行，记条目当时的版本和调用会话。
+  一次读取写出的行共用一个 `at`，首页用量的 `searches` 按 (session_id, at) 去重，一次搜索返回多条只算一次；每条条目的 `searched` 仍各记一次。
+  写失败只记日志，答案照常返回。owner 门的读不写。
 - **灰度**：`ORBIT_WIKI=off|canary|on`，默认 `on`；`canary` 只给 `ORBIT_WIKI_CANARY_OWNERS` 列出的账号（逗号分隔的 id），其余账号同 `off`。
   对没开 wiki 的账号：两道门的所有路由都回 404 `WIKI_DISABLED`，claim 下发 `wikiDisabled`，runner 不挂这组工具，不推送
   `<orbit_wiki_context>`，`orbit-wiki:` 链接卡读作 unavailable；web 收到 `WIKI_DISABLED` 就藏起侧栏入口和 ⌘K 的 Wiki 分区。

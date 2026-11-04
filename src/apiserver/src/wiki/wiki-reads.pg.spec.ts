@@ -342,9 +342,9 @@ test('wiki reads · a topic page, the timeline and the usage window', { skip, co
     await exposure(h, owner, first.entryId, 'push', { sessionId: sessionA });
     await exposure(h, owner, first.entryId, 'push', { sessionId: sessionA }); // same session, twice
     await exposure(h, owner, first.entryId, 'push', { sessionId: sessionB });
-    await exposure(h, owner, first.entryId, 'search');
+    await exposure(h, owner, first.entryId, 'search', { sessionId: sessionA });
     await exposure(h, owner, first.entryId, 'get');
-    await exposure(h, owner, second.entryId, 'search');
+    await exposure(h, owner, second.entryId, 'search', { sessionId: sessionB });
     await exposure(h, owner, first.entryId, 'search', { at: new Date(Date.now() - 30 * 86_400_000) });
     await exposure(h, owner, elsewhere.body.ops[0].entryId, 'search');
     await exposure(h, theirs, foreign.body.ops[0].entryId, 'search');
@@ -376,6 +376,36 @@ test('wiki reads · a topic page, the timeline and the usage window', { skip, co
     expectStatus(plain, 200, 'the same space without asking');
     assert.equal(plain.body.usage, undefined, 'the four aggregates are paid for only by the read that asks');
     assert.equal(plain.body.id, made, 'and it is still the space itself that answers');
+  });
+
+  await t.test('a search that returned several entries is one search, and each entry still counts it', async () => {
+    const owner = await account(h, 'one search owner');
+    const made = await space(h, owner, 'github.com/orbit/one-search.git');
+    const written = await write(h, owner, made, [
+      principled('The first entry a search returned', ['tasks-dispatch']),
+      principled('The second entry a search returned', ['tasks-dispatch']),
+    ]);
+    expectStatus(written, 200, 'two entries');
+    const [first, second] = written.body.ops as Array<{ entryId: string }>;
+
+    const session = randomUUID();
+    const at = new Date();
+    // One search: two rows, one session, one moment.
+    await exposure(h, owner, first.entryId, 'search', { sessionId: session, at });
+    await exposure(h, owner, second.entryId, 'search', { sessionId: session, at });
+    // The same session again a moment later, and another session at that same moment: a search each.
+    await exposure(h, owner, first.entryId, 'search', { sessionId: session, at: new Date(at.getTime() + 1) });
+    await exposure(h, owner, second.entryId, 'search', { sessionId: randomUUID(), at });
+
+    const answer = await call(h, owner.bearer, 'GET', `/wiki/spaces/${made}?include=usage`);
+    expectStatus(answer, 200, 'the space with its usage');
+    const usage = answer.body.usage as { searches: number; entries: Array<{ entryId: string; searched: number }> };
+    assert.equal(usage.searches, 3, 'four rows, three searches');
+    assert.deepEqual(
+      usage.entries.map((entry) => [entry.entryId, entry.searched]).sort(),
+      [[first.entryId, 2], [second.entryId, 2]].sort(),
+      'each entry counts every search that returned it',
+    );
   });
 });
 

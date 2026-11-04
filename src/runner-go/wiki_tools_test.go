@@ -272,7 +272,7 @@ func TestWikiProposeDescriptionIsAPrecondition(t *testing.T) {
 	}
 	description, _ := wikiDescriptor(t, "wiki_propose")["description"].(string)
 
-	// Every sentence of it, verbatim: a paraphrase is how "waits for the owner's review" becomes
+	// Every sentence of it, verbatim: a paraphrase is how "never call a pending op saved" becomes
 	// "the owner will see it" and the reader starts treating the write as done.
 	for _, sentence := range strings.Split(contract, ". ") {
 		sentence = strings.TrimSpace(sentence)
@@ -301,17 +301,35 @@ func TestWikiProposeDescriptionIsAPrecondition(t *testing.T) {
 		"a pitfall and its fix, a convention",
 		"Cite the turns or records it came from",
 		"a claim you cannot cite is not ready",
-		"What you propose waits for the owner's review",
-		"do not tell the user it is saved",
-		// And what the caller may not do with it: there is no tool, and the owner's decision is
-		// the only door. A model that believes it can confirm will offer to.
-		"You cannot accept, confirm, delete or overwrite an entry",
-		"the owner's decision is the only door",
-		// Recording it is not the same as it being true: what is recorded is a proposal either way.
-		"nothing here is knowledge yet",
+		"Whether it takes effect depends on the space's review mode",
+		"what has taken effect other sessions can find in a search",
+		"never call a pending op saved",
+		// What each status means in each mode (contract `reviewModes.effect`).
+		"applied: it is live now, and other sessions of this space can find it",
+		"in a Tiered space most adds and amends",
+		"In a Manual space it waits for the owner in Review",
+		"in an Automatic space a verification reads the sources it cites and its verdict decides",
+		"a supersede or a retire waits for the owner in every mode",
+		// And what the caller may not do with it: there is no tool. A model that believes it can
+		// confirm will offer to.
+		"You cannot accept, confirm or delete an entry",
 	} {
 		if !strings.Contains(description, phrase) {
 			t.Errorf("the wiki_propose description does not say %q", phrase)
+		}
+	}
+	// What it said until 2026-11, true of a Manual space alone: in a Tiered space an add is live and
+	// searchable at once, and an Automatic space's verdict decides with no owner involved. So each of
+	// these told a session something false about where what it wrote had gone.
+	for _, phrase := range []string{
+		"waits for the owner's review",
+		"nothing here reached any other session",
+		"nothing here is knowledge",
+		"PROPOSAL either way",
+		"the owner's decision is the only door",
+	} {
+		if strings.Contains(description, phrase) {
+			t.Errorf("the wiki_propose description still says %q, which holds in a Manual space alone", phrase)
 		}
 	}
 	// Both halves of the copy the memory rule is about: ask first, and say what happens next.
@@ -324,7 +342,7 @@ func TestWikiProposeDescriptionIsAPrecondition(t *testing.T) {
 	// tool is noise, and noise is what makes the reader skim the real one.
 	for _, name := range []string{"wiki_search", "wiki_get"} {
 		text, _ := wikiDescriptor(t, name)["description"].(string)
-		if strings.Contains(text, "do not tell the user it is saved") {
+		if strings.Contains(text, "never call a pending op saved") {
 			t.Errorf("%s carries the proposal precondition", name)
 		}
 	}
@@ -512,9 +530,10 @@ func TestWikiProposeReportsAProposalNotASavedEntry(t *testing.T) {
 	}
 	text := wikiToolText(t, result)
 	for _, phrase := range []string{
-		"Recorded as a proposal for the owner's review",
+		"What is pending is a proposal for the owner's review",
 		"It is not saved",
 		"never as a saved entry",
+		"What is applied is live now, and other sessions of this space can find it",
 		"op 0 add: pending",
 		"op 1 reinforce: applied (now revision 2)",
 		"similar: e9 The same trap",
@@ -526,6 +545,23 @@ func TestWikiProposeReportsAProposalNotASavedEntry(t *testing.T) {
 	structured, _ := result["structuredContent"].(wikiProposeAnswer)
 	if structured.ChangesetID != "cs-1" || len(structured.Ops) != 2 {
 		t.Errorf("structuredContent = %#v, want the server's own answer", result["structuredContent"])
+	}
+
+	// Everything applied, as in a Tiered space: it is live, and the answer does not call it unsaved.
+	allApplied := `{"changesetId":"cs-2","replayed":false,"ops":[{"seq":0,"status":"applied","opId":"o3","entryId":"e3","revision":1}]}`
+	srv, _ = wikiDoor(t, http.StatusOK, allApplied)
+	text = wikiToolText(t, wikiMCP(t, srv.URL).callTool("wiki_propose", map[string]interface{}{
+		"ops":            []interface{}{map[string]interface{}{"op": "add"}},
+		"rationale":      "learned it fixing T5",
+		"idempotencyKey": "t5-applied",
+	}))
+	if !strings.Contains(text, "What is applied is live now") || !strings.Contains(text, "op 0 add: applied (now revision 1)") {
+		t.Errorf("an applied op is not reported as live:\n%s", text)
+	}
+	for _, phrase := range []string{"not saved", "never as a saved entry", "owner's review", "no other session reads it"} {
+		if strings.Contains(text, phrase) {
+			t.Errorf("an answer whose every op applied says %q:\n%s", phrase, text)
+		}
 	}
 
 	// A dry run records nothing, and says so before it says anything else — a model that reports
@@ -1208,6 +1244,13 @@ func TestWikiInstructionsLinkEntriesAndPreApproveTheCommands(t *testing.T) {
 	}
 	if !strings.Contains(instructions, "`[title](orbit-wiki:<id>)`") {
 		t.Errorf("the citation is not the link shape the clients draw: %q", instructions)
+	}
+	// Every form says where a known pitfall is looked up, and only for a session that has the tool.
+	for _, form := range []struct{ inside, watches bool }{{false, true}, {true, true}, {false, false}, {true, false}} {
+		got := orbitCLIInstructions(exe, form.inside, form.watches)
+		if !strings.Contains(got, "Before changing a file, use wiki_search with its path to look up known pitfalls, if your tool list has it.") {
+			t.Errorf("instructions (inside=%v, watches=%v) do not say to look a file up before changing it: %q", form.inside, form.watches, got)
+		}
 	}
 	rules := strings.Join(orbitCLIAllowedTools(exe, false), "\n")
 	for _, action := range []string{"search", "get", "propose", "verify", "import"} {

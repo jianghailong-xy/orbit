@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, HttpCode, HttpStatus, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, HttpCode, HttpStatus, Logger, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { Runner } from '@prisma/client';
 import { JUDGMENT_DISPATCH_ORIGIN } from '../projects/coordinator-authority';
 import { toUuid } from '@orbit/shared';
@@ -44,6 +44,8 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 @UseGuards(RunnerAuthGuard, WikiRolloutGuard)
 @Controller('runner/wiki')
 export class RunnerWikiController {
+  private readonly logger = new Logger(RunnerWikiController.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly wiki: WikiService,
@@ -82,7 +84,7 @@ export class RunnerWikiController {
     }
     await this.assertNotExcluded(sessionId);
     const spaceId = await this.wiki.resolveSpaceForCall(runner.ownerId, sessionId, null);
-    return this.retrieval.search({
+    const answer = await this.retrieval.search({
       ownerId: runner.ownerId,
       sessionId,
       spaceId,
@@ -94,6 +96,8 @@ export class RunnerWikiController {
       limit: limit === undefined ? undefined : Number(limit),
       semantic: flagParam(semantic),
     });
+    await this.recordExposure(runner.ownerId, sessionId, 'search', answer.hits.map((hit) => hit.id));
+    return answer;
   }
 
   /**
@@ -271,12 +275,36 @@ export class RunnerWikiController {
     // Resolving the space FIRST is the read boundary: a session whose workspace is bound to no space
     // is told how to bind it rather than shown another codebase's entries.
     const spaceId = await this.wiki.resolveSpaceForCall(runner.ownerId, sessionId, null);
-    return this.wiki.getEntry(
+    const entry = await this.wiki.getEntry(
       runner.ownerId,
       id,
       { sources: include !== 'none', history: include === 'all', exposure: false },
       spaceId,
     );
+    await this.recordExposure(runner.ownerId, sessionId, 'get', [id]);
+    return entry;
+  }
+
+  /**
+   * What this session was just given (contract `exposureRules`): one row per entry, naming the revision
+   * the entry is at, and all under one `at`, which is how the usage read tells one search from several.
+   * The read has its answer by now, and the record of it is worth less than the answer, so nothing that
+   * goes wrong here reaches the caller: it is logged and the answer goes out.
+   */
+  private async recordExposure(ownerId: string, sessionId: string, channel: 'search' | 'get', entryIds: string[]): Promise<void> {
+    if (entryIds.length === 0) return;
+    try {
+      const entries = await this.prisma.wikiEntry.findMany({
+        where: { ownerId, id: { in: entryIds } },
+        select: { id: true, currentRevision: true },
+      });
+      const at = new Date();
+      await this.prisma.wikiExposure.createMany({
+        data: entries.map((entry) => ({ ownerId, entryId: entry.id, revision: entry.currentRevision, sessionId, channel, at })),
+      });
+    } catch (error) {
+      this.logger.warn(`wiki ${channel} exposure not recorded for session ${sessionId}: ${(error as Error)?.message}`);
+    }
   }
 
   /**

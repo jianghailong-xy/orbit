@@ -1485,7 +1485,8 @@ describe('wiki contract', () => {
     expect(surface.decide.route).toBe(CONTRACT.effectPolicy.decide.route);
     expect(runner.some((route) => /decide/u.test(route))).toBe(false);
     expect(surface.decide.sessionHeader).toMatch(/WIKI_OWNER_CHANNEL_ONLY/u);
-    expect(surface.proposeDescription).toMatch(/waits for the owner's review/u);
+    expect(surface.proposeDescription).toMatch(/depends on the space's review mode/u);
+    expect(surface.proposeDescription).not.toMatch(/waits for the owner's review/u);
   });
 
   it('announces a change by the space\'s id alone', () => {

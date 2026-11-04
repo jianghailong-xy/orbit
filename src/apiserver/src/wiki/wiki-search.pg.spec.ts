@@ -13,7 +13,8 @@
  * reaching an entry whose only Chinese is an alias, a path reaching an entry through its anchor or
  * its pitfall trigger, an entry that both legs found ranking above one only the keyword leg did,
  * tenant and space isolation on both doors, the match reasons the contract lists, and the semantic
- * placeholder changing nothing.
+ * placeholder changing nothing. And the `wiki_exposure` row a session's search or read leaves, which a
+ * failed write does not cost the read.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-search.pg.spec.ts
  *
@@ -695,6 +696,98 @@ test('0307 · the wiki search path', { skip, concurrency: 1, timeout: 300_000 },
     );
     const confirmed = await ownerSearch(h, owner, { q: 'TEXT', space: here, trust: 'confirmed' });
     assert.deepEqual(hitsOf(confirmed), [], 'nothing this owner wrote is merely confirmed');
+  });
+
+  await t.test('a session\'s search and read leave a row each, and nobody else\'s do', async () => {
+    const rows = async (sessionId: string | null, channel: string) =>
+      h.prisma.wikiExposure.findMany({
+        where: { sessionId, channel, entry: { spaceId: toUuid(here) } },
+        select: { ownerId: true, entryId: true, revision: true, sessionId: true, channel: true },
+      });
+    const reader = await session(h, owner.id, ws, machine.id, 'the session whose reads are recorded');
+    const call_ = (route: string): Promise<Answer> =>
+      call(h, { runner: machine.token, headers: { 'x-orbit-session-id': reader } }, 'GET', route);
+    const record = (entryId: string, channel: string, revision = 1) => ({
+      ownerId: owner.id, entryId: toUuid(entryId), revision, sessionId: reader, channel,
+    });
+
+    const searchesSoFar = async (): Promise<number> => {
+      const space_ = await call(h, { bearer: owner.bearer }, 'GET', `/wiki/spaces/${here}?include=usage`);
+      expectStatus(space_, 200, 'the space with its usage');
+      return space_.body.usage.searches as number;
+    };
+    const searchesBefore = await searchesSoFar();
+
+    // One row per entry the search returned, under the channel it came by.
+    const found = await sessionSearch(h, machine, reader, { q: 'run-pg-spec.sh' });
+    assert.ok(hitsOf(found).length >= 2, `a search with more than one hit: ${JSON.stringify(found.body)}`);
+    // All under one moment, which is what lets the home page count them as the one search they were.
+    const moments = await h.prisma.wikiExposure.findMany({ where: { sessionId: reader, channel: 'search' }, select: { at: true } });
+    assert.equal(new Set(moments.map((row) => row.at.getTime())).size, 1, 'the rows of one search share their at');
+    assert.equal(await searchesSoFar(), searchesBefore + 1, 'a search that returned several entries is one search');
+    assert.deepEqual(
+      (await rows(reader, 'search')).map((row) => row.entryId).sort(),
+      hitsOf(found).map((hit) => toUuid(hit.id)).sort(),
+      'one row per entry returned',
+    );
+    assert.deepEqual(
+      (await rows(reader, 'search')).find((row) => row.entryId === toUuid(recipe)),
+      record(recipe, 'search'),
+      'the row names who, what and which revision',
+    );
+
+    // A read leaves one, and it names the revision the entry is at now.
+    const edited = await call(h, { bearer: owner.bearer }, 'POST', `/wiki/spaces/${here}/changesets`, {
+      rationale: 'the owner corrects it',
+      ops: [{ op: 'amend', entryId: recipe, baseRevision: 1, changes: { summary: 'Builds the tree, migrates a template and runs the spec.' } }],
+    });
+    expectStatus(edited, 200, 'the owner amends the recipe');
+    expectStatus(await call_(`/runner/wiki/entries/${recipe}`), 200, 'the session reads the recipe');
+    assert.deepEqual(await rows(reader, 'get'), [record(recipe, 'get', 2)]);
+
+    // What was not given is not recorded: no hits, an entry it may not read, and an entry nobody has.
+    const before = await h.prisma.wikiExposure.count({ where: { sessionId: reader } });
+    assert.deepEqual(hitsOf(await sessionSearch(h, machine, reader, { q: 'zzzqqqxxx' })), []);
+    assert.equal((await call_(`/runner/wiki/entries/${elsewhereEntry}`)).status, 404, "another space's entry");
+    assert.equal((await call_(`/runner/wiki/entries/${randomUUID()}`)).status, 404, 'no such entry');
+    assert.equal(await h.prisma.wikiExposure.count({ where: { sessionId: reader } }), before);
+
+    // A person's reads are not exposures (`exposureRules.people`).
+    const total = await h.prisma.wikiExposure.count({ where: { ownerId: owner.id } });
+    assert.ok(hitsOf(await ownerSearch(h, owner, { q: 'run-pg-spec.sh', space: here })).length > 0);
+    expectStatus(await call(h, { bearer: owner.bearer }, 'GET', `/wiki/entries/${recipe}`), 200, 'the owner reads the recipe');
+    assert.equal(await h.prisma.wikiExposure.count({ where: { ownerId: owner.id } }), total);
+  });
+
+  await t.test('a record that cannot be written costs the read nothing', async () => {
+    const reader = await session(h, owner.id, ws, machine.id, 'the session whose record fails');
+    // A real refusal from the real table: PostgreSQL turns the door's INSERT down with 23514, whatever
+    // the rows, and the rows already in the table are not rechecked.
+    await h.sql.query(
+      `ALTER TABLE "wiki_exposure" ADD CONSTRAINT "spec_refuses_reads" CHECK ("channel" = 'push') NOT VALID`,
+    );
+    try {
+      const refused = await h.sql
+        .query(
+          `INSERT INTO "wiki_exposure"("id","owner_id","entry_id","revision","session_id","channel")
+           VALUES ($1,$2,$3,1,$4,'search')`,
+          [randomUUID(), owner.id, toUuid(recipe), reader],
+        )
+        .then(() => null, (error: { code?: string }) => error.code);
+      assert.equal(refused, '23514', 'the write really is refused while this case runs');
+
+      const found = await sessionSearch(h, machine, reader, { q: 'run-pg-spec.sh' });
+      assert.ok(hitsOf(found).some((hit) => hit.id === recipe), `the search still answers: ${JSON.stringify(found.body)}`);
+      const read = await call(h, { runner: machine.token, headers: { 'x-orbit-session-id': reader } }, 'GET', `/runner/wiki/entries/${recipe}`);
+      expectStatus(read, 200, 'the read still answers');
+      assert.equal(read.body.id, recipe);
+      assert.equal(await h.prisma.wikiExposure.count({ where: { sessionId: reader } }), 0, 'and neither left a row');
+    } finally {
+      await h.sql.query(`ALTER TABLE "wiki_exposure" DROP CONSTRAINT "spec_refuses_reads"`);
+    }
+    // And the next read is recorded: the failure held nothing shut.
+    await sessionSearch(h, machine, reader, { q: 'run-pg-spec.sh' });
+    assert.ok((await h.prisma.wikiExposure.count({ where: { sessionId: reader, channel: 'search' } })) > 0);
   });
 
   // The fixture, read back through the database once at the end: an assertion that a search found
