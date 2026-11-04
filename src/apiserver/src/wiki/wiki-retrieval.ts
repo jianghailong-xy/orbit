@@ -137,9 +137,19 @@ export function pathQueries(q: string | undefined, paths: readonly string[] | un
   return looksLikePath(q ?? '') ? [normalizePath(q!)].filter((path) => path.length > 0) : [];
 }
 
-/** Whether a word takes part in the last pass: it clears session search's floor. `to` says nothing about an entry. */
+/** A word of exactly two CJK characters, which is an ordinary word in those languages. */
+const CJK_PAIR = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]{2}$/u;
+
+/**
+ * Whether a word takes part in the last pass: it clears session search's floor, or it is a CJK pair.
+ *
+ * The floor is there to keep a word with no trigram away from a table too large to read row by row, and
+ * here it would also cost a Chinese query most of its words, leaving one generic word to answer for it
+ * (`会话 curl` asking only about curl). wiki_entry is small enough to pay for them, and the replay holds that
+ * to a number (docs/wiki-memory-claims-design.md §6.3). `to` and `5m` stay out: they say nothing about an entry.
+ */
 function usableInLastPass(word: string): boolean {
-  return [...word].length >= CONTENT_MIN_CHARS;
+  return [...word].length >= CONTENT_MIN_CHARS || CJK_PAIR.test(word);
 }
 
 /**
@@ -387,10 +397,11 @@ export class WikiRetrieval {
    * The keyword leg's last pass: the entries holding any of the words, those holding the most first,
    * and pg_trgm's similarity to the whole query among those holding as many.
    *
-   * Always over the indexed expression: every word here cleared the floor, so each ILIKE is a condition the
-   * trigram index can answer. The inner query reads each entry's text once and hands it up, because the count
-   * asks of the text once per word and `wiki_entry_search_text` costs about 0.1 ms a call (0313); `OFFSET 0` is
-   * what keeps the planner from folding the call back into every one of them.
+   * Always over the indexed expression. A word of three characters or more is a condition the trigram index
+   * can answer; a CJK pair has no trigram, so a query holding one reads the space's entries, which is what the
+   * replay's latency gate is for. The inner query reads each entry's text once and hands it up, because the
+   * count asks of the text once per word and `wiki_entry_search_text` costs about 0.1 ms a call (0313);
+   * `OFFSET 0` is what keeps the planner from folding the call back into every one of them.
    */
   private async anyWordLeg(where: Prisma.Sql, norm: NormalizedSearchQuery, groups: string[][]): Promise<string[]> {
     const holds = (col: Prisma.Sql, group: string[]): Prisma.Sql =>

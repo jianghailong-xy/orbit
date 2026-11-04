@@ -404,12 +404,12 @@ test('the last keyword pass asks about the words that take part, and session sea
   assert.equal(groups('cache 5m'), null, 'a Latin pair does not count, so only one word takes part');
   assert.equal(groups('go to'), null);
   assert.equal(groups('go to runner'), null);
-  // The floor counts code points, so a CJK pair stays out like any other two-character word.
-  assert.equal(groups('会话 列表'), null);
-  assert.equal(groups('会话 curl'), null);
-  assert.deepEqual(groups('日本語のテスト 会话'), [['%日本語%'], ['%テスト%']]);
-  // A word past the dictionary is its adjacent pairs, none of which clears the floor.
-  assert.equal(groups('数据库优化 runner'), null);
+  // A CJK pair is a word: most of what a Chinese query splits into.
+  assert.deepEqual(groups('会话 列表'), [['%会话%'], ['%列表%']]);
+  assert.deepEqual(groups('会话 curl'), [['%会话%'], ['%curl%']]);
+  assert.deepEqual(groups('日本語のテスト 会话'), [['%日本語%'], ['%テスト%'], ['%会话%']]);
+  // A word past the dictionary is its adjacent pairs, any of which will do.
+  assert.deepEqual(groups('数据库优化 runner'), [['%数据%'], ['%库优%', '%优化%'], ['%runner%']]);
   // Two characters only count when both are CJK.
   assert.equal(groups('A股 runner'), null);
   // A word is matched literally, however the first two passes spell it.
@@ -778,9 +778,19 @@ test('0307 · the wiki search path', { skip, concurrency: 1, timeout: 300_000 },
     const alone = await sessionSearch(h, machine, mine, { q: 'go numbat' });
     assert.deepEqual(hitsOf(alone), [], `one word takes part, so the last pass is not asked: ${JSON.stringify(alone.body)}`);
 
-    // A CJK pair is under the floor like any other two-character word: nothing clears it here.
+    // A CJK pair takes part: 闭集 is only in the convention, and 知识 only in the alias of the concept.
     const chinese = await sessionSearch(h, machine, mine, { q: '闭集 知识' });
-    assert.deepEqual(hitsOf(chinese), [], `no word took part: ${JSON.stringify(chinese.body)}`);
+    assert.deepEqual(hitsOf(chinese).map((hit) => hit.id).sort(), [closedSets, spaceEntry].sort(), `each pair found its entry: ${JSON.stringify(chinese.body)}`);
+    // And counts like any other word: the entry holding the pair and the Latin word comes first.
+    const both = await ownerEntry(h, owner, here, {
+      kind: 'concept',
+      title: '闭集 and a wallaby',
+      summary: 'Both of the words.',
+      fields: { definition: 'A wallaby beside a 闭集.', boundaries: 'Only itself.' },
+    });
+    const mixed = await sessionSearch(h, machine, mine, { q: '闭集 wallaby bilby' });
+    assert.equal(hitsOf(mixed)[0]?.id, both, `the entry holding both words leads: ${JSON.stringify(mixed.body)}`);
+    assert.ok(hitsOf(mixed).some((hit) => hit.id === closedSets), 'and the one holding only the pair is still found');
 
     // A wildcard in a word is a character, not a match for every entry.
     const wild = await sessionSearch(h, machine, mine, { q: '%%% ___' });
