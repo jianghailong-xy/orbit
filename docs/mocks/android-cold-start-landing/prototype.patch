@@ -1,0 +1,824 @@
+diff --git a/src/android/app/src/main/kotlin/io/orbitd/android/MainActivity.kt b/src/android/app/src/main/kotlin/io/orbitd/android/MainActivity.kt
+index 2fda4dc..d41180c 100644
+--- a/src/android/app/src/main/kotlin/io/orbitd/android/MainActivity.kt
++++ b/src/android/app/src/main/kotlin/io/orbitd/android/MainActivity.kt
+@@ -225,6 +225,25 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
+                 }
+             }
+         }
++        // Board prototype, iOS LoadFailureLogic.defaultLanding: the workspace used last, else the first in the drawer's order.
++        var lastWorkspace by remember(signedIn.handle) { mutableStateOf<String?>(null) }
++        var lastWorkspaceRead by remember(signedIn.handle) { mutableStateOf(false) }
++        LaunchedEffect(signedIn.handle) {
++            lastWorkspace = runCatching { app.session.readData(signedIn.handle, io.orbitd.android.core.auth.DataKind.CACHE, "last-workspace")?.decodeToString() }.getOrNull()
++            lastWorkspaceRead = true
++        }
++        LaunchedEffect(signedIn.handle, route.destination, route.id) {
++            if (route.destination == Destination.WORKSPACE) route.id?.let { id ->
++                runCatching { app.session.writeData(signedIn.handle, io.orbitd.android.core.auth.DataKind.CACHE, "last-workspace", id.encodeToByteArray()) }
++            }
++        }
++        LaunchedEffect(lastWorkspaceRead, route, data.ready, workspaces.firstOrNull()?.id, navigation.canGoBack, navigation.pending) {
++            if (lastWorkspaceRead && data.ready && workspaces.isNotEmpty() &&
++                route.destination == Destination.WORKSPACES && !navigation.canGoBack && navigation.pending == null) {
++                val target = workspaces.firstOrNull { ObjectId.same(it.id, lastWorkspace) } ?: workspaces.first()
++                land(target.id, OrbitRoute(Destination.WORKSPACE, target.id, target.id))
++            }
++        }
+         // A merge's push (A11-9) names its project only: once the directory is read, its sessions page lands as the project's root
+         // over the workspace the drawer's row would pick (iOS 6b4bef713 `openProjectMerge`).
+         val arrival = navigation.pending?.takeIf { it.waitsForDirectory }
+@@ -273,7 +292,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
+                             if (dest == Destination.WIKI) WikiDrawerRow(app, signedIn.handle, drawer.isOpen, row) else row()
+                         }
+                         SectionHeading("Workspaces")
+-                        DirectoryStatus(data) { app.realtime.refreshDirectory() }
++                        DrawerUnreachableRow(data) { app.realtime.refreshDirectory() }
+                         if (data.ready && data.workspaces.isEmpty() && machinesToSetUp.isEmpty()) Text(MachineSetupCopy.NO_WORKSPACES_YET, Modifier.padding(16.dp))
+                         workspaces.forEach { workspace ->
+                             val runner = data.runners.firstOrNull { ObjectId.same(it.id, workspace.runnerId) }
+@@ -301,8 +320,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
+                         DrawerProjects(projects, ProjectAttention.coordinatorPulses(data.sessions["open"].orEmpty()), drawerLive,
+                             navigation.section, root = { id -> projectRoot(id, data, route.workspaceId, Origin.DRAWER) }) { key, root -> select(key, root) }
+                         Spacer(Modifier.height(24.dp))
+-                        Button(onClick = { scope.launch { drawer.close() }; openNewSession(Origin.DRAWER) },
+-                            enabled = data.fresh) { Text("New session") }
++                        Button(onClick = { scope.launch { drawer.close() }; openNewSession(Origin.DRAWER) }) { Text("New session") }
+                         TextButton(onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.SETTINGS, origin = Origin.DRAWER)) }) {
+                             Icon(painterResource(R.drawable.ic_settings), null); Spacer(Modifier.width(8.dp)); Text("Settings")
+                         }
+@@ -334,12 +352,11 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
+                             Icon(painterResource(if (navigation.canGoBack) R.drawable.ic_back else R.drawable.ic_menu), if (navigation.canGoBack) "Back" else "Open navigation")
+                         }
+                     }, actions = {
+-                        if (route.destination == Destination.WORKSPACE) IconButton(onClick = {
+-                            open(OrbitRoute(Destination.SETTINGS, id = "workspace", workspaceId = route.id))
+-                        }) { Icon(painterResource(R.drawable.ic_settings), "Workspace settings") }
+                         PageBar.Actions(route, this)
+                         if (navigation.canGoBack) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { Icon(painterResource(R.drawable.ic_menu), "Open navigation") }
+-                        IconButton(onClick = { app.realtime.refreshDirectory() }) { Icon(painterResource(R.drawable.ic_refresh), "Refresh directory") }
++                        // iOS: the list is refreshed by pulling it; its bar has no refresh button.
++                        if (route.destination != Destination.WORKSPACE && route.destination != Destination.FOLDER && route.destination != Destination.WORKSPACES)
++                            IconButton(onClick = { app.realtime.refreshDirectory() }) { Icon(painterResource(R.drawable.ic_refresh), "Refresh directory") }
+                     })
+             }) { padding ->
+                 Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding(), contentAlignment = Alignment.TopCenter) {
+@@ -349,7 +366,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
+                             when (route.destination) {
+                                 Destination.WORKSPACES -> WorkspaceHome(data, { w -> land(w.id, OrbitRoute(Destination.WORKSPACE, w.id, w.id)) },
+                                     startSession = { openNewSession() }) { app.realtime.refreshDirectory() }
+-                                Destination.WORKSPACE, Destination.FOLDER -> DirectoryScreen(route, data, api, ::open, { app.realtime.refreshDirectory() },
++                                Destination.WORKSPACE, Destination.FOLDER -> DirectoryScreen(route, data, api, signedIn.handle, ::open, { app.realtime.refreshDirectory() },
+                                     revision, watches.summaries)
+                                 Destination.PROJECT_SESSIONS -> SessionProjectPage(app, signedIn.handle, route, data, api, revision, ::open)
+                                 Destination.LANDINGS -> route.id?.let { project ->
+@@ -409,7 +426,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
+ }
+ 
+ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (route.destination) {
+-    Destination.WORKSPACES -> "Workspaces"
++    Destination.WORKSPACES -> ""
+     Destination.WORKSPACE -> data.workspaces.firstOrNull { ObjectId.same(it.id, route.id) }?.name ?: "Workspace"
+     Destination.FOLDER -> data.folders.firstOrNull { ObjectId.same(it.id, route.id) }?.name ?: "Folder unavailable"
+     Destination.SEARCH -> "Search sessions"
+@@ -438,7 +455,6 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
+ private fun WorkspaceHome(data: DirectoryData, open: (DirectoryWorkspace) -> Unit, startSession: () -> Unit, refresh: () -> Unit) {
+     // A launcher's cold start lands here. Its rows are the workspaces, after the status item; "No workspaces" is not one.
+     val list = androidx.compose.foundation.lazy.rememberLazyListState()
+-    ReportDirectoryDrawn(data, list) { it.index in 1..data.workspaces.size }
+     androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize(), state = list) {
+         item { DirectoryStatus(data, refresh) }
+         if (data.ready && data.workspaces.isEmpty()) item {
+@@ -448,11 +464,6 @@ private fun WorkspaceHome(data: DirectoryData, open: (DirectoryWorkspace) -> Uni
+                 Button(onClick = startSession) { Text(MachineSetupCopy.START_A_SESSION) }
+             }
+         }
+-        val workspaces = orderedWorkspaces(data.workspaces)
+-        items(workspaces.size) { index ->
+-            val w = workspaces[index]
+-            TextButton(onClick = { open(w) }, modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).testTag("workspace:${w.id}")) { Text(w.name) }
+-        }
+     }
+ }
+ 
+diff --git a/src/android/app/src/main/kotlin/io/orbitd/android/composer/NewSessionComposer.kt b/src/android/app/src/main/kotlin/io/orbitd/android/composer/NewSessionComposer.kt
+index 168502a..a39e03a 100644
+--- a/src/android/app/src/main/kotlin/io/orbitd/android/composer/NewSessionComposer.kt
++++ b/src/android/app/src/main/kotlin/io/orbitd/android/composer/NewSessionComposer.kt
+@@ -50,9 +50,8 @@ fun NewSessionComposer(
+     var choosingEngine by remember(target) { mutableStateOf(false) }
+     // Where an engine or a credential that can't run here is fixed: the runner's page for that engine.
+     val openRunner = { runner: String, engine: String -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) }
+-    LaunchedEffect(handle, target, data.fresh, retry) {
++    LaunchedEffect(handle, target, retry) {
+         detail = null
+-        if (!data.fresh) return@LaunchedEffect
+         try { detail = ComposerApi(app.session, handle, target.key, target).detail(); error = null }
+         catch (cancel: CancellationException) { throw cancel }
+         catch (e: Exception) { error = directoryError(e) }
+@@ -85,7 +84,7 @@ fun NewSessionComposer(
+             }
+             Spacer(Modifier.weight(1f))
+             val current = detail
+-            val fresh = data.fresh && current != null && current.flag("enabled") != false
++            val fresh = current != null && current.flag("enabled") != false
+             val session = current?.let { SessionState(target.key, snapshot = SessionSnapshot(it, emptyList(), emptyList(), emptyList(), emptyMap()), fresh = fresh) }
+             Box(Modifier.heightIn(max = composerHeight)) { SessionComposer(app, handle, target.key, session, target, openRunner = openRunner) }
+         }
+diff --git a/src/android/app/src/main/kotlin/io/orbitd/android/directory/DirectoryActions.kt b/src/android/app/src/main/kotlin/io/orbitd/android/directory/DirectoryActions.kt
+index 225a6e6..727551d 100644
+--- a/src/android/app/src/main/kotlin/io/orbitd/android/directory/DirectoryActions.kt
++++ b/src/android/app/src/main/kotlin/io/orbitd/android/directory/DirectoryActions.kt
+@@ -44,7 +44,7 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
+     var busy by remember { mutableStateOf(false) }
+     var error by remember { mutableStateOf<String?>(null) }
+     var phase by remember { mutableStateOf<String?>(null) }
+-    val canWrite = !busy && data.fresh
++    val canWrite = !busy
+     // Complete, Move to Open, Move to Trash, Rename and a folder move close the dialog at once; the toast says how they
+     // went (A05-4), so their requests run in the app's scope rather than this dialog's.
+     val app = LocalContext.current.applicationContext as OrbitApplication
+@@ -93,7 +93,7 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
+                 Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                     Text(question.message)
+                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+-                    if (!data.fresh) Text("Refresh the directory before making changes.")
++                    
+                     if (busy) LoadingMessage(phase ?: "Saving…")
+                 }
+             },
+@@ -117,7 +117,7 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
+             text = {
+                 Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+-                    if (!data.fresh) Text("Refresh the directory before making changes.")
++                    
+                     if (busy) LoadingMessage("Saving…")
+                     when (dialog) {
+                         is DirectoryDialog.SessionMenu -> {
+@@ -128,7 +128,7 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
+                                 ActionButton("Tags…", canWrite) { setDialog(DirectoryDialog.Tags(s)) }
+                             }
+                             val positive = if (dialog.view == SessionView.OPEN) SessionAction.COMPLETE else SessionAction.RESTORE
+-                            val allowed = data.fresh && s.capabilities?.allows(positive) == true
++                            val allowed = s.capabilities?.allows(positive) == true
+                             ActionButton(if (positive == SessionAction.COMPLETE) "Complete" else "Move to Open", !busy && allowed) {
+                                 setDialog(null)
+                                 if (positive == SessionAction.COMPLETE) actions.complete(s.id, s.title) else actions.restore(s.id, s.title)
+diff --git a/src/android/app/src/main/kotlin/io/orbitd/android/directory/DirectoryApi.kt b/src/android/app/src/main/kotlin/io/orbitd/android/directory/DirectoryApi.kt
+index 765fbf3..c4d46e6 100644
+--- a/src/android/app/src/main/kotlin/io/orbitd/android/directory/DirectoryApi.kt
++++ b/src/android/app/src/main/kotlin/io/orbitd/android/directory/DirectoryApi.kt
+@@ -72,6 +72,10 @@ data class DirectoryData(
+     val error: String? = null, val waitingForConnection: Boolean = false,
+     /** The rows are the copy this device's cache restored, not yet replaced by a read from the server. */
+     val cached: Boolean = false,
++    /** Board prototype: the device's copy is still being read. */
++    val restoring: Boolean = false,
++    /** Board prototype: no connection to read over. */
++    val offline: Boolean = false,
+     val runnerRows: List<JsonObject> = emptyList(),
+     val workspaceRows: List<JsonObject> = emptyList(),
+ ) {
+diff --git a/src/android/app/src/main/kotlin/io/orbitd/android/directory/DirectoryScreen.kt b/src/android/app/src/main/kotlin/io/orbitd/android/directory/DirectoryScreen.kt
+index 8378922..c3c1422 100644
+--- a/src/android/app/src/main/kotlin/io/orbitd/android/directory/DirectoryScreen.kt
++++ b/src/android/app/src/main/kotlin/io/orbitd/android/directory/DirectoryScreen.kt
+@@ -33,12 +33,22 @@ import io.orbitd.android.perf.OrbitPerf
+ import io.orbitd.android.ui.LocalOrbitColors
+ import io.orbitd.android.watch.WatchSessionSummary
+ import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.withContext
++import kotlinx.coroutines.withTimeoutOrNull
++import kotlinx.serialization.builtins.ListSerializer
++import io.orbitd.android.cards.SessionNeedsYouBar
++import io.orbitd.android.core.auth.SessionHandle
++import io.orbitd.android.wiki.PageBar
++import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+ import kotlinx.coroutines.delay
+ 
+-/** [revision] re-reads the project rows' progress after a control event; [watching] is every session parked on a watch that will
+- * resume it, which a project row's line says. */
++/** Board prototype: the workspace's list as iOS draws it on a phone. [revision] re-reads the project rows' progress after a control
++ * event; [watching] is every session parked on a watch that will resume it, which a project row's line says. */
++@OptIn(ExperimentalMaterial3Api::class)
+ @Composable
+-internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: DirectoryApi,
++internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: DirectoryApi, handle: SessionHandle,
+     open: (OrbitRoute) -> Unit, refresh: () -> Unit, revision: Long = 0L, watching: Map<String, WatchSessionSummary> = emptyMap()) {
+     var view by rememberSaveable { mutableStateOf(SessionView.entries.firstOrNull { it.query == route.sessionView } ?: SessionView.OPEN) }
+     var grouping by rememberSaveable { mutableStateOf(Grouping.RECENCY) }
+@@ -51,102 +61,124 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
+     val workspace = route.workspaceId ?: route.id.orEmpty()
+     val isFolder = route.destination == Destination.FOLDER
+     val workspaceName = data.workspaces.firstOrNull { ObjectId.same(it.id, workspace) }?.name ?: "Workspace"
++    val app = LocalContext.current.applicationContext as OrbitApplication
+ 
+-    Column(Modifier.fillMaxSize()) {
+-        OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+-            singleLine = true, label = { Text("Search sessions") },
+-            trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("Clear") } })
+-        if (query.isNotBlank()) {
+-            SearchResultsList(query, api, open)
+-        } else {
+-            val sessions = data.sessions[view.query].orEmpty()
+-            // A05-6: in Open and Completed, a project's members are one row in its coordinator's place. Its coordinator may be in another
+-            // workspace, and so may members whose words the row borrows; what the row counts and shows moving is this workspace's.
+-            val listing = if (!SessionProjectGrouping.listShowsProjects(view, byTag = tag != null || grouping == Grouping.TAG)) null else {
+-                val runner = data.workspaces.firstOrNull { ObjectId.same(it.id, workspace) }?.runnerId
+-                SessionProjectGrouping.listing(sessions.filter { ObjectId.same(it.workspace, workspace) }, data.folders.filter { ObjectId.same(it.workspaceId, workspace) },
+-                    sidebar, view, byTag = false, folderId = if (isFolder) route.id else null,
+-                    runnerOffline = data.runners.firstOrNull { ObjectId.same(it.id, runner) }?.online == false,
+-                    coordinators = (sessions + data.sessions[SessionView.OPEN.query].orEmpty()).filter { it.projectMembership?.isCoordinator == true },
+-                    // The view's own list across every workspace (iOS: the account's Open list, or the scope's `allSessions`).
+-                    contentSessions = sessions,
+-                    watching = watching,
+-                    recaps = LocalSessionRecaps.current)
++    // iOS: Open is the app's list; Completed and Trash are read when you go to them, and again while you stay.
++    var otherRows by remember(view) { mutableStateOf<List<DirectorySession>?>(null) }
++    var otherError by remember(view) { mutableStateOf<String?>(null) }
++    var otherReads by remember { mutableIntStateOf(0) }
++    LaunchedEffect(view, otherReads) {
++        if (view == SessionView.OPEN) return@LaunchedEffect
++        try {
++            otherRows = withContext(Dispatchers.Default) {
++                api.read(listOf("sessions"), ListSerializer(DirectorySession.serializer()), listOf("view" to view.query))
+             }
+-            val projects = listing?.projects.orEmpty().associateBy { it.projectId }
+-            val groups = directoryGroups(listing?.entries?.map { it.groupingSession } ?: visibleSessions(sessions, data.folders, workspace,
+-                if (isFolder) route.id else null, view, tag, grouping == Grouping.TAG), view, grouping)
+-            // A folder counts a project's members where their coordinator is filed.
+-            val counted = listing?.assigned ?: sessions
+-            val folders = if (isFolder || view == SessionView.TRASH || tag != null || grouping == Grouping.TAG) emptyList() else data.folders.filter { f ->
+-                ObjectId.same(f.workspaceId, workspace) && (view == SessionView.OPEN && tag == null ||
+-                    counted.any { ObjectId.same(it.folderId, f.id) && (tag == null || it.tags.any { t -> ObjectId.same(t.id, tag) }) })
+-            }.sortedBy { it.name.lowercase() }
+-            val list = rememberLazyListState()
+-            // Its rows are the folders and the session and project rows, keyed by id; not the chips, status, buttons or headings.
+-            ReportDirectoryDrawn(data, list) { (it.key as? String)?.startsWith("heading:") == false }
+-            LazyColumn(Modifier.fillMaxSize().testTag("directory-list"), state = list, contentPadding = PaddingValues(bottom = 24.dp)) {
+-                item {
+-                    Column {
+-                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+-                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+-                            SessionView.entries.forEach { option ->
+-                                FilterChip(selected = view == option, onClick = { view = option }, label = { Text(option.label) })
++            otherError = null
++        } catch (cancel: CancellationException) { throw cancel }
++        catch (failure: Exception) { otherError = directoryError(failure) }
++    }
++
++    PageBar.Bind(route, title = null, actions = {
++        SessionOptionsMenu(view, data.tags, tag, grouping == Grouping.TAG, isFolder, onView = { view = it }, onTag = { tag = it },
++            onByTag = { grouping = if (it) Grouping.TAG else Grouping.RECENCY },
++            onNewFolder = { action = DirectoryDialog.NewFolder(workspace) },
++            onSettings = {
++                if (isFolder && folder != null) action = DirectoryDialog.EditFolder(folder)
++                else open(OrbitRoute(Destination.SETTINGS, id = "workspace", workspaceId = workspace))
++            }, settingsLabel = if (isFolder) "Folder options" else "Settings")
++        IconButton(onClick = { open(OrbitRoute(Destination.DRAFT, workspaceId = workspace, folderId = if (isFolder) route.id else null)) }) {
++            Icon(painterResource(R.drawable.ic_compose), "Start a new session with $workspaceName")
++        }
++    })
++
++    val list = rememberLazyListState()
++    // iOS `BottomSearchReveal`: out of the way while the list is read downward, back on the way up, at the top and at the end.
++    val searchShown by remember { derivedStateOf { !list.canScrollBackward || !list.canScrollForward || list.lastScrolledBackward } }
++    var pulling by remember { mutableStateOf(false) }
++    val scope = rememberCoroutineScope()
++
++    Column(Modifier.fillMaxSize()) {
++        SessionNeedsYouBar(app, handle, "", list, hidden = false, below = null, onBelow = {}, open = open)
++        Box(Modifier.weight(1f).fillMaxWidth()) {
++            if (query.isNotBlank()) {
++                SearchResultsList(query, api, open)
++            } else {
++                val shown = if (view == SessionView.OPEN) data.sessions[view.query].orEmpty() else otherRows.orEmpty()
++                val sessions = shown
++                // A05-6: in Open and Completed, a project's members are one row in its coordinator's place. Its coordinator may be in another
++                // workspace, and so may members whose words the row borrows; what the row counts and shows moving is this workspace's.
++                val listing = if (!SessionProjectGrouping.listShowsProjects(view, byTag = tag != null || grouping == Grouping.TAG)) null else {
++                    val runner = data.workspaces.firstOrNull { ObjectId.same(it.id, workspace) }?.runnerId
++                    SessionProjectGrouping.listing(sessions.filter { ObjectId.same(it.workspace, workspace) }, data.folders.filter { ObjectId.same(it.workspaceId, workspace) },
++                        sidebar, view, byTag = false, folderId = if (isFolder) route.id else null,
++                        runnerOffline = data.runners.firstOrNull { ObjectId.same(it.id, runner) }?.online == false,
++                        coordinators = (sessions + data.sessions[SessionView.OPEN.query].orEmpty()).filter { it.projectMembership?.isCoordinator == true },
++                        contentSessions = sessions, watching = watching, recaps = LocalSessionRecaps.current)
++                }
++                val projects = listing?.projects.orEmpty().associateBy { it.projectId }
++                val groups = directoryGroups(listing?.entries?.map { it.groupingSession } ?: visibleSessions(sessions, data.folders, workspace,
++                    if (isFolder) route.id else null, view, tag, grouping == Grouping.TAG), view, grouping)
++                // A folder counts a project's members where their coordinator is filed.
++                val counted = listing?.assigned ?: sessions
++                val folders = if (isFolder || view == SessionView.TRASH || tag != null || grouping == Grouping.TAG) emptyList() else data.folders.filter { f ->
++                    ObjectId.same(f.workspaceId, workspace) && (view == SessionView.OPEN && tag == null ||
++                        counted.any { ObjectId.same(it.folderId, f.id) && (tag == null || it.tags.any { t -> ObjectId.same(t.id, tag) }) })
++                }.sortedBy { it.name.lowercase() }
++                // Its rows are the folders and the session and project rows, keyed by id; not the headings.
++                ReportDirectoryDrawn(data, list) { (it.key as? String)?.startsWith("heading:") == false }
++                PullToRefreshBox(isRefreshing = pulling, onRefresh = {
++                    pulling = true
++                    if (view != SessionView.OPEN) otherReads++
++                    scope.launch { try { withTimeoutOrNull(15_000) { app.realtime.rereadDirectory() } } finally { pulling = false } }
++                }, modifier = Modifier.fillMaxSize()) {
++                    LazyColumn(Modifier.fillMaxSize().testTag("directory-list"), state = list, contentPadding = PaddingValues(bottom = 84.dp)) {
++                        if (data.ready && isFolder && folder == null) {
++                            item { StatusMessage("Folder unavailable", "It may have been deleted or moved.", refresh) }
++                        } else {
++                            items(folders, key = { "folder:${it.id}" }) { f ->
++                                CompactFolderRow(f, counted.filter { ObjectId.same(it.folderId, f.id) },
++                                    onOpen = { open(OrbitRoute(Destination.FOLDER, f.id, workspace, origin = Origin.LIST, sessionView = view.query)) },
++                                    onOptions = { action = DirectoryDialog.EditFolder(f) })
++                                HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                             }
+-                        }
+-                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+-                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+-                            TextButton(onClick = { grouping = if (grouping == Grouping.RECENCY) Grouping.TAG else Grouping.RECENCY }) {
+-                                Text(if (grouping == Grouping.RECENCY) "By time" else "By tag")
++                            groups.forEachIndexed { index, group ->
++                                // iOS: the leading Today keeps no title; its rows already say when.
++                                if (!(index == 0 && group.title == "Today")) item(key = "heading:${group.id}") { SectionHeading(group.title) }
++                                items(group.sessions, key = { it.id }) { session ->
++                                    val project = projects[session.id]
++                                    if (project != null) SessionProjectRowView(project, { open(OrbitRoute(Destination.PROJECT_SESSIONS, project.projectId, workspace, origin = Origin.LIST)) }) {
++                                        projectMenu = project
++                                    }
++                                    else CompactSessionRow(session, data.machineName(session.workspace), live = view != SessionView.TRASH,
++                                        onOpen = { open(OrbitRoute(Destination.SESSION, session.id, workspace, if (isFolder) route.id else null)) },
++                                        onOptions = { action = DirectoryDialog.SessionMenu(session, view) })
++                                    HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
++                                }
+                             }
+-                            FilterChip(tag == null, { tag = null }, label = { Text("All tags") })
+-                            data.tags.forEach { t -> FilterChip(ObjectId.same(tag, t.id), { tag = t.id }, label = { Text(t.name) }) }
+-                        }
+-                    }
+-                }
+-                item { DirectoryStatus(data, refresh) }
+-                if (data.ready && isFolder && folder == null) {
+-                    item { StatusMessage("Folder unavailable", "It may have been deleted or moved.", refresh) }
+-                } else {
+-                    item {
+-                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+-                            TextButton(onClick = { open(OrbitRoute(Destination.DRAFT, workspaceId = workspace,
+-                                folderId = if (isFolder) route.id else null)) }, enabled = data.fresh) { Text("New session") }
+-                            if (!isFolder && view != SessionView.TRASH) TextButton(onClick = { action = DirectoryDialog.NewFolder(workspace) }, enabled = data.fresh) { Text("New folder") }
+-                            if (isFolder && folder != null) TextButton(onClick = { action = DirectoryDialog.EditFolder(folder) }) { Text("Folder options") }
+-                        }
+-                    }
+-                    items(folders, key = { "folder:${it.id}" }) { f ->
+-                        val children = counted.filter { ObjectId.same(it.folderId, f.id) }
+-                        ListItem(headlineContent = { Text(f.name) }, leadingContent = { Icon(painterResource(R.drawable.ic_folder), null) },
+-                            supportingContent = { Text("${children.size} sessions · ${children.sumOf { it.pendingApprovals }} need you · ${children.count { it.runState == "RUNNING" || it.status == "RUNNING" }} running") },
+-                            trailingContent = { IconButton(onClick = { action = DirectoryDialog.EditFolder(f) }) { Icon(painterResource(R.drawable.ic_more), "Options for ${f.name}") } },
+-                            modifier = Modifier.clickable(role = Role.Button) { open(OrbitRoute(Destination.FOLDER, f.id, workspace, origin = Origin.LIST, sessionView = view.query)) })
+-                    }
+-                    groups.forEach { group ->
+-                        item(key = "heading:${group.id}") { SectionHeading(group.title) }
+-                        items(group.sessions, key = { it.id }) { session ->
+-                            val project = projects[session.id]
+-                            if (project != null) SessionProjectRowView(project, { open(OrbitRoute(Destination.PROJECT_SESSIONS, project.projectId, workspace, origin = Origin.LIST)) }) {
+-                                projectMenu = project
++                            // iOS's overlay on an empty list: Loading…, or there being none. A read that failed says so.
++                            if (groups.isEmpty() && folders.isEmpty()) item {
++                                val waiting = if (view == SessionView.OPEN) !data.ready else otherRows == null && otherError == null
++                                Box(Modifier.fillParentMaxHeight(0.8f).fillMaxWidth(), contentAlignment = Alignment.Center) {
++                                    when {
++                                        waiting -> Text("Loading…", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
++                                        otherError != null -> StatusMessage("Couldn't load sessions", otherError!!) { }
++                                        else -> Text(if (tag != null) "No matches" else "No ${view.label.lowercase()} sessions",
++                                            style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
++                                    }
++                                }
+                             }
+-                            else SessionRow(session, data.machineName(session.workspace),
+-                                { open(OrbitRoute(Destination.SESSION, session.id, workspace, if (isFolder) route.id else null)) },
+-                                { action = DirectoryDialog.SessionMenu(session, view) })
+                         }
+                     }
+-                    if (data.ready && groups.isEmpty() && folders.isEmpty()) item {
+-                        StatusMessage(if (tag != null) "No matches" else "No ${view.label.lowercase()} sessions",
+-                            if (isFolder) "Sessions moved here will appear in this folder." else "Sessions in $workspaceName will appear here.")
+-                    }
+                 }
+             }
++            Box(Modifier.align(Alignment.BottomCenter)) {
++                BottomSearchVisibility(query.isNotEmpty() || searchShown) { BottomSearchField(query, { query = it }) }
++            }
+         }
+     }
+     action?.let { DirectoryActionDialog(it, api, data, setDialog = { action = it }, onChanged = refresh) }
+-    val app = LocalContext.current.applicationContext as OrbitApplication
+     projectMenu?.let { row ->
+-        ProjectRowMenu(row, data.fresh, close = { projectMenu = null },
++        ProjectRowMenu(row, true, close = { projectMenu = null },
+             openSession = { id -> open(OrbitRoute(Destination.SESSION, id, workspace, if (isFolder) route.id else null)) },
+             openSessions = { open(OrbitRoute(Destination.PROJECT_SESSIONS, row.projectId, workspace, origin = Origin.LIST)) },
+             openProject = { open(OrbitRoute(Destination.PROJECT, row.projectId)) },
+@@ -272,12 +304,34 @@ internal fun ReportDirectoryDrawn(data: DirectoryData, list: LazyListState, isRo
+     ReportDrawn()
+ }
+ 
++/** iOS `AgentContentColumn.workspaceList`: with no rows, a spinner while the list loads, or why it could not; the list draws no status of its own. */
+ @Composable
+ fun DirectoryStatus(data: DirectoryData, refresh: () -> Unit) {
+-    if (data.waitingForConnection) StatusMessage("Waiting for connection", "Connect to the network to load your workspaces.", refresh)
+-    if (data.refreshing || !data.ready && data.error == null && !data.waitingForConnection) LoadingMessage("Loading workspaces and sessions…")
+-    data.error?.let { StatusMessage("Couldn't load workspaces", it, refresh) }
+-    if (data.ready && !data.fresh && data.error == null) Text("Showing saved sessions. Connecting to Orbit…", Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall)
++    if (data.ready) return
++    Box(Modifier.fillMaxWidth().padding(top = 300.dp), contentAlignment = Alignment.Center) {
++        when {
++            data.waitingForConnection || data.error != null -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
++                Text("Workspaces couldn't be loaded", style = MaterialTheme.typography.titleMedium)
++                Text("Request failed — check your connection.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
++                Button(onClick = refresh) { Text("Retry") }
++            }
++            !data.restoring -> CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.5.dp)
++        }
++    }
++}
++
++/** iOS `NavigationDrawer.unreachableRow`: heads the drawer's workspaces when the list could not be read, rows kept below it. */
++@Composable
++fun DrawerUnreachableRow(data: DirectoryData, refresh: () -> Unit) {
++    if (!(data.error != null || data.offline) || !data.ready) return
++    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
++        Icon(painterResource(R.drawable.ic_globe), null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
++        Column(Modifier.weight(1f)) {
++            Text("Can't reach Orbit", style = MaterialTheme.typography.bodyLarge)
++            Text("Couldn't load workspaces", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
++        }
++        TextButton(onClick = refresh) { Text("Retry") }
++    }
+ }
+ 
+ @Composable
+@@ -298,6 +352,6 @@ fun StatusMessage(title: String, message: String, retry: (() -> Unit)? = null) {
+ 
+ @Composable
+ fun SectionHeading(title: String) {
+-    Text(title, Modifier.padding(horizontal = 16.dp, vertical = 12.dp).semantics { heading() },
+-        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
++    Text(title, Modifier.padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 6.dp).semantics { heading() },
++        style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+ }
+diff --git a/src/android/app/src/main/kotlin/io/orbitd/android/directory/RealtimeDirectory.kt b/src/android/app/src/main/kotlin/io/orbitd/android/directory/RealtimeDirectory.kt
+index 28e13e8..62a5c8c 100644
+--- a/src/android/app/src/main/kotlin/io/orbitd/android/directory/RealtimeDirectory.kt
++++ b/src/android/app/src/main/kotlin/io/orbitd/android/directory/RealtimeDirectory.kt
+@@ -15,9 +15,9 @@ import io.orbitd.android.core.realtime.RealtimeState
+ @Composable
+ fun rememberDirectoryData(app: OrbitApplication, handle: SessionHandle): State<DirectoryData> {
+     val live by remember(app) { app.realtime.state.map { it.directoryFields() }.distinctUntilChanged() }
+-        .collectAsState(RealtimeState())
++        .collectAsState(remember(app) { app.realtime.state.value.directoryFields() })
+     val trashing by app.trashing.ids.collectAsState()
+-    return remember(live, handle, trashing) { mutableStateOf(if (live.handle !== handle) DirectoryData() else directoryData(live, trashing)) }
++    return remember(live, handle, trashing) { mutableStateOf(if (live.handle !== handle) DirectoryData(restoring = true) else directoryData(live, trashing)) }
+ }
+ 
+ /** The state without what never changes the directory: a streaming delta, and an account event until the read behind it lands.
+@@ -34,7 +34,8 @@ internal fun directoryData(live: RealtimeState, trashing: Set<String> = emptySet
+             runners = decode(snapshot?.runners.orEmpty(), DirectoryRunner.serializer()),
+             sessions = snapshot?.sessions.orEmpty().mapValues { TrashingSessions.without(decode(it.value, DirectorySession.serializer()), trashing) { s -> s.id } },
+             folders = decode(snapshot?.folders.orEmpty(), Folder.serializer()), tags = decode(snapshot?.tags.orEmpty(), Tag.serializer()),
+-            waitingForConnection = snapshot == null && !live.directoryRefreshing && live.controlConnection == ConnectionState.STOPPED && live.directoryError == null,
++            waitingForConnection = snapshot == null && live.directoryRestored && !live.directoryRefreshing && live.controlConnection == ConnectionState.STOPPED && live.directoryError == null,
++            restoring = !live.directoryRestored, offline = live.directoryRestored && live.controlConnection == ConnectionState.STOPPED,
+             ready = snapshot != null, fresh = live.directoryFresh, refreshing = live.directoryRefreshing, cached = live.directoryCached,
+             runnerRows = snapshot?.runners.orEmpty(), workspaceRows = snapshot?.workspaces.orEmpty(),
+             error = live.directoryError?.let { when (it.httpStatus) {
+diff --git a/src/android/app/src/main/kotlin/io/orbitd/android/directory/SessionProjectPage.kt b/src/android/app/src/main/kotlin/io/orbitd/android/directory/SessionProjectPage.kt
+index c8e92fd..1641dd0 100644
+--- a/src/android/app/src/main/kotlin/io/orbitd/android/directory/SessionProjectPage.kt
++++ b/src/android/app/src/main/kotlin/io/orbitd/android/directory/SessionProjectPage.kt
+@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.border
+ import androidx.compose.foundation.clickable
++import androidx.compose.foundation.combinedClickable
+ import androidx.compose.foundation.layout.*
+ import androidx.compose.foundation.lazy.LazyColumn
+ import androidx.compose.foundation.lazy.items
+@@ -75,32 +76,30 @@ import kotlinx.serialization.json.JsonObject
+ /** The project in its coordinator's place, with a session row's two lines (iOS `SessionProjectRowView`): its name, what its sessions
+  * are doing — waiting on you, running, a background job — and when; then its progress and what the row says. A tap opens the
+  * project's sessions; ⋯ the row's menu. */
++@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+ @Composable
+ internal fun SessionProjectRowView(row: SessionProjectRow, onOpen: () -> Unit, onOptions: () -> Unit) {
+     val muted = MaterialTheme.colorScheme.onSurfaceVariant
+     val words = SessionProjectCopy.statusWords(row)
+-    ListItem(
+-        headlineContent = {
+-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+-                Text(row.title, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+-                ProjectIndicator(row.indicator)
+-                // An instant this clock cannot read draws no time at all.
+-                (row.lastTurnAt ?: row.createdAt)?.let { WikiDate.relative(it, Instant.now()) }?.let {
+-                    Text(it, style = MaterialTheme.typography.labelMedium, color = muted, maxLines = 1, softWrap = false)
+-                }
+-            }
+-        },
+-        supportingContent = {
+-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+-                ProjectProgressChip(row.taskCounts, row.runningCount, row.status)
+-                // The line, the sentence alone (iOS `SessionProjectRowView`, the web's project row).
+-                Text(row.line.text,
+-                    Modifier.testTag("project-row-line"), maxLines = 1, overflow = TextOverflow.Ellipsis,
+-                    style = MaterialTheme.typography.bodyMedium, color = lineColor(row.line.tone))
++    // Board prototype: the same two lines and padding as a session's row (iOS draws them alike).
++    Column(Modifier.fillMaxWidth().combinedClickable(role = Role.Button, onLongClickLabel = "Options for ${row.title}", onLongClick = onOptions, onClick = onOpen)
++        .semantics { stateDescription = words }.testTag("project-row:${row.projectId}").padding(horizontal = 16.dp, vertical = 11.dp),
++        verticalArrangement = Arrangement.spacedBy(3.dp)) {
++        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++            Text(row.title, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
++            ProjectIndicator(row.indicator)
++            // An instant this clock cannot read draws no time at all.
++            (row.lastTurnAt ?: row.createdAt)?.let { WikiDate.relative(it, Instant.now()) }?.let {
++                Text(it, style = MaterialTheme.typography.labelMedium, color = muted, maxLines = 1, softWrap = false)
+             }
+-        },
+-        trailingContent = { IconButton(onOptions) { Icon(painterResource(R.drawable.ic_more), "Options for ${row.title}") } },
+-        modifier = Modifier.clickable(role = Role.Button, onClick = onOpen).semantics { stateDescription = words }.testTag("project-row:${row.projectId}"))
++        }
++        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
++            ProjectProgressChip(row.taskCounts, row.runningCount, row.status)
++            // The line, the sentence alone (iOS `SessionProjectRowView`, the web's project row).
++            Text(row.line.text, Modifier.testTag("project-row-line"), maxLines = 1, overflow = TextOverflow.Ellipsis,
++                style = MaterialTheme.typography.bodyMedium, color = lineColor(row.line.tone))
++        }
++    }
+ }
+ 
+ @Composable
+diff --git a/src/android/core/src/main/kotlin/io/orbitd/android/core/realtime/RealtimeCache.kt b/src/android/core/src/main/kotlin/io/orbitd/android/core/realtime/RealtimeCache.kt
+index 2453e87..174ec4b 100644
+--- a/src/android/core/src/main/kotlin/io/orbitd/android/core/realtime/RealtimeCache.kt
++++ b/src/android/core/src/main/kotlin/io/orbitd/android/core/realtime/RealtimeCache.kt
+@@ -29,10 +29,10 @@ internal data class RealtimeCache(
+         private const val KEY = "realtime-v1"
+         private const val MAX_BYTES = 8 * 1024 * 1024
+ 
+-        suspend fun read(auth: AuthSession, handle: SessionHandle): RealtimeCache {
++        suspend fun read(auth: AuthSession, handle: SessionHandle, context: CoroutineContext = EmptyCoroutineContext): RealtimeCache {
+             val bytes = auth.readData(handle, DataKind.CACHE, KEY) ?: return RealtimeCache()
+             if (bytes.size > MAX_BYTES) return RealtimeCache()
+-            val cached = try { Wire.decode(bytes, serializer()) } catch (_: Exception) { return RealtimeCache() }
++            val cached = try { withContext(context) { Wire.decode(bytes, serializer()) } } catch (_: Exception) { return RealtimeCache() }
+             if (cached.schema != 1 || cached.sessions.size > 8) return RealtimeCache()
+             if (cached.sessions.values.any { t ->
+                 t.resumeSeq !in 0 until SENTINEL_SEQ || t.events.size > Transcript.WINDOW_SIZE ||
+diff --git a/src/android/core/src/main/kotlin/io/orbitd/android/core/realtime/RealtimeModels.kt b/src/android/core/src/main/kotlin/io/orbitd/android/core/realtime/RealtimeModels.kt
+index 295249d..8a607be 100644
+--- a/src/android/core/src/main/kotlin/io/orbitd/android/core/realtime/RealtimeModels.kt
++++ b/src/android/core/src/main/kotlin/io/orbitd/android/core/realtime/RealtimeModels.kt
+@@ -103,6 +103,8 @@ data class RealtimeState(
+     val directoryFresh: Boolean = false,
+     /** [directory] is the copy this device's cache restored, and no read from the server has replaced it yet. */
+     val directoryCached: Boolean = false,
++    /** Board prototype: the device's copy has been read (or there is none). */
++    val directoryRestored: Boolean = false,
+     val directoryError: RealtimeError? = null,
+     val session: SessionState? = null,
+     val controlConnection: ConnectionState = ConnectionState.STOPPED,
+diff --git a/src/android/core/src/main/kotlin/io/orbitd/android/core/realtime/RealtimeRest.kt b/src/android/core/src/main/kotlin/io/orbitd/android/core/realtime/RealtimeRest.kt
+index 865f12f..c75b3f3 100644
+--- a/src/android/core/src/main/kotlin/io/orbitd/android/core/realtime/RealtimeRest.kt
++++ b/src/android/core/src/main/kotlin/io/orbitd/android/core/realtime/RealtimeRest.kt
+@@ -44,10 +44,9 @@ internal class RealtimeRest(private val api: OrbitApi, private val background: C
+         val folders = async { objects(handle, listOf("session-folders"), previous = previous?.folders) }
+         val tags = async { objects(handle, listOf("session-tags"), previous = previous?.tags) }
+         val runners = async { objects(handle, listOf("runners"), previous = previous?.runners) }
+-        val views = listOf("open", "completed", "trash").map { view ->
+-            async { view to objects(handle, listOf("sessions"), listOf("view" to view), previous?.sessions?.get(view)) }
+-        }
+-        DirectorySnapshot(workspaces.await(), views.awaitAll().toMap(), folders.await(), tags.await(), runners.await())
++        // Board prototype, as iOS: a launch and an event read Open. Completed and Trash are read by the page showing them.
++        val open = async { objects(handle, listOf("sessions"), listOf("view" to "open"), previous?.sessions?.get("open")) }
++        DirectorySnapshot(workspaces.await(), mapOf("open" to open.await()), folders.await(), tags.await(), runners.await())
+     }
+ 
+     /** `after=` pages are 200 events, as on iOS and web: five of them are the server's SSE_GAP_CAP. */
+diff --git a/src/android/core/src/main/kotlin/io/orbitd/android/core/realtime/RealtimeStore.kt b/src/android/core/src/main/kotlin/io/orbitd/android/core/realtime/RealtimeStore.kt
+index 7c95f7d..8804a33 100644
+--- a/src/android/core/src/main/kotlin/io/orbitd/android/core/realtime/RealtimeStore.kt
++++ b/src/android/core/src/main/kotlin/io/orbitd/android/core/realtime/RealtimeStore.kt
+@@ -126,15 +126,15 @@ class RealtimeStore(
+     }
+ 
+     private suspend fun account(handle: SessionHandle) = coroutineScope {
+-        val loaded = try { RealtimeCache.read(auth, handle) } catch (cancelled: CancellationException) { throw cancelled }
++        val loaded = try { RealtimeCache.read(auth, handle, background) } catch (cancelled: CancellationException) { throw cancelled }
+         catch (error: Exception) {
+-            publish(handle) { it.copy(directoryError = RealtimeError.from(error)) }
++            publish(handle) { it.copy(directoryError = RealtimeError.from(error), directoryRestored = true) }
+             RealtimeCache()
+         }
+         if (!current(handle)) throw SessionChanged()
+         val cache = MutableStateFlow(loaded)
+         val writes = Channel<Unit>(Channel.CONFLATED)
+-        publish(handle) { it.copy(directory = loaded.directory, directoryCached = loaded.directory != null) }
++        publish(handle) { it.copy(directory = loaded.directory, directoryCached = loaded.directory != null, directoryRestored = true) }
+         // Explicit navigation (including selecting the directory) wins over cold-start restoration.
+         selection.update {
+             // StateFlow may conflate SignedOut during a fast login. Selection ownership, not
+diff --git a/src/android/app/src/main/kotlin/io/orbitd/android/directory/SessionListPage.kt b/src/android/app/src/main/kotlin/io/orbitd/android/directory/SessionListPage.kt
+new file mode 100644
+index 0000000..3df01fa
+--- /dev/null
++++ b/src/android/app/src/main/kotlin/io/orbitd/android/directory/SessionListPage.kt
+@@ -0,0 +1,150 @@
++package io.orbitd.android.directory
++
++import androidx.compose.animation.AnimatedVisibility
++import androidx.compose.animation.fadeIn
++import androidx.compose.animation.fadeOut
++import androidx.compose.animation.slideInVertically
++import androidx.compose.animation.slideOutVertically
++import androidx.compose.foundation.BorderStroke
++import androidx.compose.foundation.ExperimentalFoundationApi
++import androidx.compose.foundation.background
++import androidx.compose.foundation.combinedClickable
++import androidx.compose.foundation.layout.*
++import androidx.compose.foundation.shape.CircleShape
++import androidx.compose.foundation.text.BasicTextField
++import androidx.compose.material3.*
++import androidx.compose.runtime.*
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.alpha
++import androidx.compose.ui.graphics.Brush
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.SolidColor
++import androidx.compose.ui.platform.testTag
++import androidx.compose.ui.res.painterResource
++import androidx.compose.ui.semantics.Role
++import androidx.compose.ui.text.style.TextOverflow
++import androidx.compose.ui.unit.dp
++import io.orbitd.android.R
++import io.orbitd.android.core.cards.ClaudeRegion
++import io.orbitd.android.management.LocalSessionRecaps
++import io.orbitd.android.ui.LocalOrbitColors
++import io.orbitd.android.wiki.WikiDate
++import java.time.Instant
++
++/* Board prototype, docs/mocks/android-cold-start-landing: the workspace's list as iOS draws it on a phone. */
++
++/** iOS `AgentSessionRow.compactRow`: the title with the live mark and the time on its right, and one line under it. Long press is the
++ * row's menu, as on iOS; there is no ⋮. */
++@OptIn(ExperimentalFoundationApi::class)
++@Composable
++internal fun CompactSessionRow(session: DirectorySession, machine: String?, live: Boolean, onOpen: () -> Unit, onOptions: () -> Unit) {
++    val muted = MaterialTheme.colorScheme.onSurfaceVariant
++    val recaps = LocalSessionRecaps.current
++    val line = remember(session, recaps, live) { SessionLine.make(session, live = live, recaps = recaps) }
++    val generating = session.isGenerating
++    Column(Modifier.fillMaxWidth()
++        .combinedClickable(role = Role.Button, onLongClickLabel = "Options for ${session.name}", onLongClick = onOptions, onClick = onOpen)
++        .padding(horizontal = 16.dp, vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
++        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++            Text(session.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
++            when {
++                session.pendingApprovals > 0 -> Box(Modifier.size(7.dp).background(LocalOrbitColors.current.needsYou, CircleShape))
++                generating -> CircularProgressIndicator(Modifier.size(14.dp), color = muted, strokeWidth = 1.5.dp)
++                session.runningBgJobCount > 0 -> Icon(painterResource(R.drawable.ic_terminal), null, Modifier.size(14.dp).alpha(0.7f), tint = muted)
++            }
++            // A working row says so with its spinner, not with a column of "just now".
++            if (!generating) (session.lastTurnAt ?: session.createdAt)?.let { WikiDate.relative(it, Instant.now()) }?.let {
++                Text(it, style = MaterialTheme.typography.labelMedium, color = muted, maxLines = 1, softWrap = false)
++            }
++        }
++        Text(ClaudeRegion.heldWords(session.regionHeld, machine) ?: line.text, maxLines = 1, overflow = TextOverflow.Ellipsis,
++            style = MaterialTheme.typography.bodyMedium, color = when (line.tone) {
++                SessionLine.Tone.APPROVAL, SessionLine.Tone.WARNING -> LocalOrbitColors.current.needsYou
++                SessionLine.Tone.RUNNING -> MaterialTheme.colorScheme.primary
++                else -> muted
++            })
++    }
++}
++
++/** iOS `SessionFolderRowView`: the folder, its name, what is happening in it, its count and a chevron. */
++@OptIn(ExperimentalFoundationApi::class)
++@Composable
++internal fun CompactFolderRow(folder: Folder, sessions: List<DirectorySession>, onOpen: () -> Unit, onOptions: () -> Unit) {
++    val muted = MaterialTheme.colorScheme.onSurfaceVariant
++    val waiting = sessions.sumOf { it.pendingApprovals }
++    Row(Modifier.fillMaxWidth().combinedClickable(role = Role.Button, onLongClick = onOptions, onClick = onOpen)
++        .padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
++        Icon(painterResource(R.drawable.ic_folder), null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
++        Text(folder.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
++        when {
++            waiting > 0 -> Text("$waiting", Modifier.background(LocalOrbitColors.current.needsYou, CircleShape).padding(horizontal = 6.dp),
++                style = MaterialTheme.typography.labelSmall, color = Color.Black)
++            sessions.any { it.isGenerating } -> CircularProgressIndicator(Modifier.size(14.dp), color = muted, strokeWidth = 1.5.dp)
++        }
++        Text("${sessions.size}", style = MaterialTheme.typography.labelMedium, color = muted)
++        Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(14.dp), tint = muted.copy(alpha = 0.6f))
++    }
++}
++
++/** iOS's field at the foot of the list, in a thumb's reach. */
++@Composable
++internal fun BottomSearchField(query: String, onQuery: (String) -> Unit, modifier: Modifier = Modifier) {
++    val muted = MaterialTheme.colorScheme.onSurfaceVariant
++    Surface(modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 26.dp, bottom = 10.dp).height(50.dp), shape = CircleShape,
++        color = MaterialTheme.colorScheme.surfaceContainerHigh, border = BorderStroke(0.5.dp, muted.copy(alpha = 0.25f)), shadowElevation = 6.dp) {
++        Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
++            Icon(painterResource(R.drawable.ic_search), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurface)
++            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
++                if (query.isEmpty()) Text("Search sessions", style = MaterialTheme.typography.bodyLarge, color = muted, maxLines = 1)
++                BasicTextField(query, onQuery, Modifier.fillMaxWidth().testTag("session-search"), singleLine = true,
++                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
++                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary))
++            }
++            if (query.isNotEmpty()) IconButton({ onQuery("") }, Modifier.size(28.dp)) { Icon(painterResource(R.drawable.ic_clear), "Clear") }
++        }
++    }
++}
++
++@Composable
++internal fun BottomSearchVisibility(visible: Boolean, content: @Composable () -> Unit) {
++    AnimatedVisibility(visible, enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut()) {
++        val surface = MaterialTheme.colorScheme.surface
++        Box(Modifier.fillMaxWidth().background(Brush.verticalGradient(0f to surface.copy(alpha = 0f), 0.45f to surface.copy(alpha = 0.92f), 1f to surface))) { content() }
++    }
++}
++
++/** iOS `sessionOptionsMenu`: what the bar's ≡ holds on a phone — the scope, the tag filter and grouping, a new folder and the settings. */
++@Composable
++internal fun SessionOptionsMenu(view: SessionView, tags: List<Tag>, tag: String?, byTag: Boolean, isFolder: Boolean,
++    onView: (SessionView) -> Unit, onTag: (String?) -> Unit, onByTag: (Boolean) -> Unit, onNewFolder: () -> Unit, onSettings: () -> Unit, settingsLabel: String) {
++    var open by remember { mutableStateOf(false) }
++    var tagsOpen by remember { mutableStateOf(false) }
++    Box {
++        IconButton(onClick = { open = true; tagsOpen = false }) {
++            Icon(painterResource(if (tag == null) R.drawable.ic_filter else R.drawable.ic_filter_on), "Session scope, ${view.label}")
++        }
++        DropdownMenu(open, onDismissRequest = { open = false }) {
++            @Composable fun tick(on: Boolean) { if (on) Icon(painterResource(R.drawable.ic_check), null, Modifier.size(20.dp)) else Spacer(Modifier.size(20.dp)) }
++            if (tagsOpen) {
++                DropdownMenuItem(text = { Text("All") }, leadingIcon = { tick(tag == null) }, onClick = { onTag(null); open = false })
++                tags.forEach { t -> DropdownMenuItem(text = { Text(t.name) }, leadingIcon = { tick(tag == t.id) }, onClick = { onTag(t.id); open = false }) }
++            } else {
++                SessionView.entries.forEach { option ->
++                    DropdownMenuItem(text = { Text(option.label) }, leadingIcon = { tick(view == option) }, onClick = { onView(option); open = false })
++                }
++                if (tags.isNotEmpty()) {
++                    HorizontalDivider()
++                    DropdownMenuItem(text = { Text("Filter by Tag") }, leadingIcon = { Icon(painterResource(R.drawable.ic_tag), null, Modifier.size(20.dp)) },
++                        trailingIcon = { Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(14.dp)) }, onClick = { tagsOpen = true })
++                    DropdownMenuItem(text = { Text("Group by Tag") }, leadingIcon = { tick(byTag) }, onClick = { onByTag(!byTag); open = false })
++                }
++                HorizontalDivider()
++                if (!isFolder && view != SessionView.TRASH) DropdownMenuItem(text = { Text("New Folder…") },
++                    leadingIcon = { Icon(painterResource(R.drawable.ic_folder_plus), null, Modifier.size(20.dp)) }, onClick = { onNewFolder(); open = false })
++                DropdownMenuItem(text = { Text(settingsLabel) }, leadingIcon = { Icon(painterResource(R.drawable.ic_settings), null, Modifier.size(20.dp)) },
++                    onClick = { onSettings(); open = false })
++            }
++        }
++    }
++}
+diff --git a/src/android/app/src/main/res/drawable/ic_compose.xml b/src/android/app/src/main/res/drawable/ic_compose.xml
+new file mode 100644
+index 0000000..490da5e
+--- /dev/null
++++ b/src/android/app/src/main/res/drawable/ic_compose.xml
+@@ -0,0 +1,4 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
++    <path android:pathData="M12,5H7A3,3 0 0,0 4,8V17A3,3 0 0,0 7,20H16A3,3 0 0,0 19,17V12" android:strokeColor="#FF000000" android:strokeWidth="1.8" android:strokeLineCap="round" android:strokeLineJoin="round"/>
++    <path android:pathData="M18.2,3.6L20.4,5.8L12.4,13.8L9.4,14.6L10.2,11.6Z" android:strokeColor="#FF000000" android:strokeWidth="1.6" android:strokeLineJoin="round"/>
++</vector>
+diff --git a/src/android/app/src/main/res/drawable/ic_filter.xml b/src/android/app/src/main/res/drawable/ic_filter.xml
+new file mode 100644
+index 0000000..89d4e8b
+--- /dev/null
++++ b/src/android/app/src/main/res/drawable/ic_filter.xml
+@@ -0,0 +1,3 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
++    <path android:pathData="M3.5,7H20.5 M6.5,12H17.5 M9.5,17H14.5" android:strokeColor="#FF000000" android:strokeWidth="1.8" android:strokeLineCap="round"/>
++</vector>
+diff --git a/src/android/app/src/main/res/drawable/ic_filter_on.xml b/src/android/app/src/main/res/drawable/ic_filter_on.xml
+new file mode 100644
+index 0000000..cc1f8df
+--- /dev/null
++++ b/src/android/app/src/main/res/drawable/ic_filter_on.xml
+@@ -0,0 +1,4 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
++    <path android:fillColor="#FF000000" android:pathData="M12,2.5A9.5,9.5 0 1,0 12,21.5A9.5,9.5 0 1,0 12,2.5Z"/>
++    <path android:pathData="M6.5,8.5H17.5 M8.5,12H15.5 M10.5,15.5H13.5" android:strokeColor="#FFFFFFFF" android:strokeWidth="1.6" android:strokeLineCap="round"/>
++</vector>
+diff --git a/src/android/app/src/main/res/drawable/ic_tag.xml b/src/android/app/src/main/res/drawable/ic_tag.xml
+new file mode 100644
+index 0000000..f359db6
+--- /dev/null
++++ b/src/android/app/src/main/res/drawable/ic_tag.xml
+@@ -0,0 +1,4 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
++    <path android:pathData="M4,4H11.5L20,12.5L12.5,20L4,11.5Z" android:strokeColor="#FF000000" android:strokeWidth="1.8" android:strokeLineJoin="round"/>
++    <path android:fillColor="#FF000000" android:pathData="M8,6.6A1.4,1.4 0 1,0 8,9.4A1.4,1.4 0 1,0 8,6.6Z"/>
++</vector>

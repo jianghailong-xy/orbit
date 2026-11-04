@@ -36,6 +36,8 @@ data class DirectorySession(
     val agent: WorkspaceRef? = null, val agentId: String? = null, val workspaceId: String? = null,
     val folderId: String? = null, val pinnedAt: String? = null,
     val createdAt: String? = null, val lastTurnAt: String? = null,
+    /** When the turn now running began, which a working row counts from; null with none running and from an older server. */
+    val currentTurnStartedAt: String? = null,
     val pendingApprovals: Int = 0, val runningBgJobCount: Int = 0,
     val confirmationUnderReview: JsonObject? = null,
     val lastAssistantText: String? = null, val lastUserText: String? = null,
@@ -61,14 +63,6 @@ data class DirectorySession(
     val isLanding get() = sessionKind == "LANDING"
     val workspace get() = workspaceId ?: agentId ?: agent?.id
     val name get() = title?.takeIf(String::isNotBlank) ?: "Untitled session"
-    val stateLabel get() = when {
-        pendingApprovals > 0 -> "Needs you · $pendingApprovals"
-        // Its report is with its reviewer (A08-1; OrbitKit `underReviewLine`): drawn, not counted, and who has it.
-        confirmationUnderReview != null -> "Under review · ${(confirmationUnderReview["reviewerTitle"] as? JsonPrimitive)?.contentOrNull?.trim()
-            ?.ifEmpty { null } ?: "Reviewer"}"
-        runState == "RUNNING" || status == "RUNNING" -> "Running"
-        else -> (runState ?: status).lowercase().replace('_', ' ').replaceFirstChar(Char::uppercase)
-    }
 }
 /** What a LANDING session row says about its subject (`SessionLandingSummary`, contract §2.9 LS6): the subject it represents and where
  * it stands, so the project's Landings window can put a landing still in hand under `Now` and a settled one in the day it settled, and

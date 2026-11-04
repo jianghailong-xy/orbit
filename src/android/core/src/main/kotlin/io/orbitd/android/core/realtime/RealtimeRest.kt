@@ -39,15 +39,14 @@ internal class RealtimeRest(private val api: OrbitApi, private val background: C
         }
     }
 
+    /** Open is the app's list (iOS): what a launch, a connect and an event read. Completed and Trash are read by the page showing them. */
     suspend fun directory(handle: SessionHandle, previous: DirectorySnapshot? = null): DirectorySnapshot = coroutineScope {
         val workspaces = async { objects(handle, listOf("workspaces"), previous = previous?.workspaces) }
         val folders = async { objects(handle, listOf("session-folders"), previous = previous?.folders) }
         val tags = async { objects(handle, listOf("session-tags"), previous = previous?.tags) }
         val runners = async { objects(handle, listOf("runners"), previous = previous?.runners) }
-        val views = listOf("open", "completed", "trash").map { view ->
-            async { view to objects(handle, listOf("sessions"), listOf("view" to view), previous?.sessions?.get(view)) }
-        }
-        DirectorySnapshot(workspaces.await(), views.awaitAll().toMap(), folders.await(), tags.await(), runners.await())
+        val open = async { objects(handle, listOf("sessions"), listOf("view" to "open"), previous?.sessions?.get("open")) }
+        DirectorySnapshot(workspaces.await(), mapOf("open" to open.await()), folders.await(), tags.await(), runners.await())
     }
 
     /** `after=` pages are 200 events, as on iOS and web: five of them are the server's SSE_GAP_CAP. */

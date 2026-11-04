@@ -34,12 +34,13 @@ import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** One per application. Auth owns credentials and disk namespaces; this store owns foreground
  * connections, bounded transcript/cache state, and authority refreshes. UI must match state.handle
  * by identity with its captured AuthState handle. Neither background execution nor a live-only
- * event is needed to recover pending cards on the next foreground connection. [background] is where the cache record is
- * encoded and directory lists are decoded; the application's store runs on the main thread and passes a background
+ * event is needed to recover pending cards on the next foreground connection. [background] is where the cache records are
+ * encoded and decoded and directory lists are decoded; the application's store runs on the main thread and passes a background
  * dispatcher. [witness] is told what the streams and pages brought in, for a measurement. */
 class RealtimeStore(
     private val auth: AuthSession,
@@ -56,6 +57,9 @@ class RealtimeStore(
     private val network = MutableStateFlow(Network())
     private val selection = MutableStateFlow(Selection(null, 0))
     private val directoryRevision = MutableStateFlow(0L)
+    /** Moved by every [refreshDirectory] and [rereadDirectory]: someone changed something. What a list the store does not read
+     * (Completed, Trash) reads itself again behind. */
+    val directoryAsks: StateFlow<Long> = directoryRevision.asStateFlow()
     /** Moved by every account event and connect. Nobody waits on the read behind one, so unlike [directoryRevision] it costs a
      * read on the wire nothing: see [control]. */
     private val directoryChanges = MutableStateFlow(0L)
@@ -126,7 +130,15 @@ class RealtimeStore(
     }
 
     private suspend fun account(handle: SessionHandle) = coroutineScope {
-        val loaded = try { RealtimeCache.read(auth, handle) } catch (cancelled: CancellationException) { throw cancelled }
+        // The rows first: the first frame wants them, and only this account's transcripts come after.
+        val restored = try { SavedDirectory.read(auth, handle, background) } catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Exception) {
+            publish(handle) { it.copy(directoryError = RealtimeError.from(error)) }
+            null
+        }
+        if (!current(handle)) throw SessionChanged()
+        publish(handle) { it.copy(directory = restored, directoryCached = restored != null, directoryRestored = true) }
+        val loaded = try { RealtimeCache.read(auth, handle, background) } catch (cancelled: CancellationException) { throw cancelled }
         catch (error: Exception) {
             publish(handle) { it.copy(directoryError = RealtimeError.from(error)) }
             RealtimeCache()
@@ -134,7 +146,6 @@ class RealtimeStore(
         if (!current(handle)) throw SessionChanged()
         val cache = MutableStateFlow(loaded)
         val writes = Channel<Unit>(Channel.CONFLATED)
-        publish(handle) { it.copy(directory = loaded.directory, directoryCached = loaded.directory != null) }
         // Explicit navigation (including selecting the directory) wins over cold-start restoration.
         selection.update {
             // StateFlow may conflate SignedOut during a fast login. Selection ownership, not
@@ -156,8 +167,20 @@ class RealtimeStore(
             }
         }
         launch {
+            // Once, as the app leaves the foreground (iOS `persistLaunchSnapshot`), and only what a read of this run brought: a run
+            // that never reached the server leaves the copy it started from. A failed write costs the next launch newer rows, no more.
+            var kept = restored
+            foreground.collect { visible ->
+                val snapshot = state.value.directory
+                if (visible || snapshot == null || state.value.directoryCached || !current(handle)) return@collect
+                if (withContext(background) { snapshot == kept }) return@collect
+                try { SavedDirectory.write(auth, handle, snapshot, background); kept = snapshot }
+                catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { }
+            }
+        }
+        launch {
             combine(foreground, network) { visible, path -> visible to path }.collectLatest { (visible, path) ->
-                if (visible && path.available) control(handle, path, cache, writes)
+                if (visible && path.available) control(handle, path)
                 else publish(handle) { it.copy(controlConnection = ConnectionState.STOPPED,
                     directoryFresh = false, directoryRefreshing = false) }
             }
@@ -183,8 +206,7 @@ class RealtimeStore(
     private fun active(handle: SessionHandle, path: Network): Boolean =
         current(handle) && foreground.value && network.value == path
 
-    private suspend fun control(handle: SessionHandle, path: Network,
-        cache: MutableStateFlow<RealtimeCache>, writes: Channel<Unit>) = coroutineScope {
+    private suspend fun control(handle: SessionHandle, path: Network) = coroutineScope {
         val refresh = Channel<Unit>(Channel.CONFLATED)
         launch { directoryRevision.collect { refresh.trySend(Unit) } }
         launch { directoryChanges.collect { refresh.trySend(Unit) } }
@@ -213,14 +235,13 @@ class RealtimeStore(
                             directoryFresh = current, directoryError = null)
                     }
                     directoryLanded.update { maxOf(it, revision) }
-                    cache.update { it.copy(directory = snapshot) }
-                    writes.trySend(Unit)
                     retry.healthy()
                 } catch (cancelled: CancellationException) { throw cancelled }
                 catch (error: Exception) {
                     publish(handle) { it.copy(directoryRefreshing = false, directoryFresh = false,
                         directoryError = RealtimeError.from(error)) }
-                    delay(retry.delayMs(true))
+                    // Someone asking (a press of Retry, a write) is read for now, not after the backoff.
+                    withTimeoutOrNull(retry.delayMs(true)) { directoryRevision.first { it != revision } }
                     refresh.trySend(Unit)
                 }
             }

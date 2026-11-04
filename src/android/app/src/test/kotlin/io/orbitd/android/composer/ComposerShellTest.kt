@@ -74,15 +74,11 @@ abstract class ComposerShellTest {
         await { has(hasTestTag("composer-model") and isEnabled()) }
     }
 
-    /** A new session in the workspace, from its page's New session. */
+    /** A new session in the workspace the launch landed on, from its bar's ✎. */
     protected fun openDraft() {
-        await { has(hasText("Alpha") and hasClickAction()) }
-        compose.onAllNodes(hasText("Alpha") and hasClickAction())[0].performClick()
-        val newSession = hasText("New session") and hasClickAction() and isEnabled()
+        val newSession = hasContentDescription("Start a new session with Alpha")
         await { has(newSession) }
-        // The page's own, not the closed drawer's off to the left.
-        val onScreen = compose.onAllNodes(newSession).fetchSemanticsNodes().indexOfFirst { it.boundsInRoot.left >= 0 }
-        compose.onAllNodes(newSession)[onScreen].performClick()
+        compose.onNode(newSession).performClick()
         await { has(hasTestTag("composer-model") and isEnabled()) }
     }
 

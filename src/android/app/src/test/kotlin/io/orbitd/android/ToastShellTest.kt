@@ -122,8 +122,8 @@ class ToastShellTest {
     private fun toast(text: String) = compose.onNode(hasText(text) and hasAnyAncestor(hasTestTag("toast")))
     private fun toastShows(text: String) = compose.onAllNodes(hasText(text) and hasAnyAncestor(hasTestTag("toast"))).fetchSemanticsNodes().isNotEmpty()
     private fun rowAction(session: String, action: String) {
-        await { compose.onAllNodesWithContentDescription("Options for $session").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithContentDescription("Options for $session").performScrollTo().performClick()
+        await { compose.onAllNodes(hasRowMenu("Options for $session")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasRowMenu("Options for $session")).performScrollTo().openRowMenu()
         compose.onNode(hasText(action) and hasAnyAncestor(isDialog())).performScrollTo().performClick()
         compose.waitForIdle()
     }

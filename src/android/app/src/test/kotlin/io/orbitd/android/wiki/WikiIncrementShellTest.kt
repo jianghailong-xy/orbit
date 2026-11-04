@@ -216,9 +216,8 @@ class WikiIncrementShellTest {
         shell.workspaces = """[{"id":"$workspace","name":"wikova-develop"}]"""
         shell.spaces = spaces(orbit = mapOf("pendingOps" to 3), wikova = mapOf("workspaceIds" to listOf(workspace)))
         signIn()
-        // The workspace's session list, from the workspaces page.
-        awaitTag("workspace:$workspace")
-        compose.onNodeWithTag("workspace:$workspace").performClick()
+        // The workspace's session list, where the launch lands.
+        awaitTag("directory-list")
         compose.onNodeWithContentDescription("Open navigation").performClick()
         awaitThat("the Wiki row") { compose.onAllNodes(hasText("Wiki") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("Wiki") and hasClickAction()).performClick()

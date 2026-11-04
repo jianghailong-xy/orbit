@@ -46,14 +46,14 @@ class TrashShellTest {
     @Test fun theRowLeavesTheListAndItsCountOnThePressAndIsHeldUntilTheReReadLands() {
         NavShell.running = setOf(NavShell.PLAIN)
         signIn(); openAlpha()
-        await { exists(hasContentDescription("Options for Plain notes")) }
+        await { exists(hasRowMenu("Options for Plain notes")) }
         // The drawer is composed while it is closed: its Alpha row counts the run.
         await { exists(hasText("Fixture runner · 1 running")) }
         val answer = CompletableDeferred<Unit>()
         NavShell.holdDelete = answer
         rowAction("Plain notes", "Move to Trash")
         await { NavShell.calls.any { it == "DELETE sessions/${NavShell.PLAIN}" } }
-        compose.onAllNodesWithContentDescription("Options for Plain notes").assertCountEquals(0)
+        compose.onAllNodes(hasRowMenu("Options for Plain notes")).assertCountEquals(0)
         compose.onAllNodesWithText("Fixture runner · 1 running").assertCountEquals(0)
         assertFalse(toastShows("Moved to Trash"))
         assertTrue("the server still has it", snapshotHasPlain())
@@ -68,7 +68,7 @@ class TrashShellTest {
         behind.complete(Unit)
         await { app().trashing.ids.value.isEmpty() }
         assertFalse(snapshotHasPlain())
-        compose.onAllNodesWithContentDescription("Options for Plain notes").assertCountEquals(0)
+        compose.onAllNodes(hasRowMenu("Options for Plain notes")).assertCountEquals(0)
     }
 
     /** The list offers Move to Trash only while the directory is fresh, so no read of it is on the wire at the press; the reads that
@@ -82,18 +82,18 @@ class TrashShellTest {
         rowAction("Plain notes", "Move to Trash")
         rowAction("Review navigation", "Move to Trash")
         await { NavShell.calls.any { it == "DELETE sessions/${NavShell.PLAIN}" } && NavShell.calls.any { it == "DELETE sessions/${NavShell.SESSION}" } }
-        compose.onAllNodesWithContentDescription("Options for Plain notes").assertCountEquals(0)
-        compose.onAllNodesWithContentDescription("Options for Review navigation").assertCountEquals(0)
+        compose.onAllNodes(hasRowMenu("Options for Plain notes")).assertCountEquals(0)
+        compose.onAllNodes(hasRowMenu("Options for Review navigation")).assertCountEquals(0)
         first.complete(Unit)
         await { toastShows("Moved to Trash") && app().trashing.ids.value == setOf(TrashingSessions.key(NavShell.SESSION)) }
         assertTrue("the first move's re-read had the second row in it", snapshotHas(NavShell.SESSION))
         assertFalse(snapshotHas(NavShell.PLAIN))
-        compose.onAllNodesWithContentDescription("Options for Review navigation").assertCountEquals(0)
+        compose.onAllNodes(hasRowMenu("Options for Review navigation")).assertCountEquals(0)
         second.complete(Unit)
         await { app().trashing.ids.value.isEmpty() }
         assertFalse(snapshotHas(NavShell.SESSION))
-        compose.onAllNodesWithContentDescription("Options for Plain notes").assertCountEquals(0)
-        compose.onAllNodesWithContentDescription("Options for Review navigation").assertCountEquals(0)
+        compose.onAllNodes(hasRowMenu("Options for Plain notes")).assertCountEquals(0)
+        compose.onAllNodes(hasRowMenu("Options for Review navigation")).assertCountEquals(0)
     }
 
     @Test fun aRefusedMoveBringsTheRowBackAtOnceAndSaysWhy() {
@@ -103,18 +103,18 @@ class TrashShellTest {
         NavShell.holdDelete = answer
         rowAction("Plain notes", "Move to Trash")
         await { NavShell.calls.any { it == "DELETE sessions/${NavShell.PLAIN}" } }
-        compose.onAllNodesWithContentDescription("Options for Plain notes").assertCountEquals(0)
+        compose.onAllNodes(hasRowMenu("Options for Plain notes")).assertCountEquals(0)
         answer.complete(Unit)
         await { toastShows("Couldn't move to Trash") }
         compose.onNode(hasText("The session is busy.") and hasAnyAncestor(hasTestTag("toast"))).assertExists()
-        await { exists(hasContentDescription("Options for Plain notes")) }
+        await { exists(hasRowMenu("Options for Plain notes")) }
         assertTrue(app().trashing.ids.value.isEmpty())
     }
 
     /** Undo can come while the move's own re-read is still out: the row is let back on the press, before the restore is asked. */
     @Test fun undoLetsTheRowBackOnThePressEvenWhileTheMovesReadIsOut() {
         signIn(); openAlpha()
-        await { exists(hasContentDescription("Options for Plain notes")) }
+        await { exists(hasRowMenu("Options for Plain notes")) }
         val behind = CompletableDeferred<Unit>()
         NavShell.holdOpen = behind
         rowAction("Plain notes", "Move to Trash")
@@ -125,7 +125,7 @@ class TrashShellTest {
         await { NavShell.calls.any { it == "POST sessions/${NavShell.PLAIN}/restore" } }
         NavShell.holdOpen = null
         behind.complete(Unit)
-        await { exists(hasContentDescription("Options for Plain notes")) }
+        await { exists(hasRowMenu("Options for Plain notes")) }
         await { toastShows("Moved to Open") }
     }
 
@@ -136,8 +136,8 @@ class TrashShellTest {
     private fun exists(matcher: SemanticsMatcher) = compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
     private fun toastShows(text: String) = exists(hasText(text) and hasAnyAncestor(hasTestTag("toast")))
     private fun rowAction(session: String, action: String) {
-        await { exists(hasContentDescription("Options for $session")) }
-        compose.onNodeWithContentDescription("Options for $session").performScrollTo().performClick()
+        await { exists(hasRowMenu("Options for $session")) }
+        compose.onNode(hasRowMenu("Options for $session")).performScrollTo().openRowMenu()
         compose.onNode(hasText(action) and hasAnyAncestor(isDialog())).performScrollTo().performClick()
         compose.waitForIdle()
     }

@@ -49,9 +49,10 @@ private class BarShift { var shown = false; var seen = false; var height = 0f }
  * its destination is already here, and leaving to find the other would lose the reader's place — and otherwise what
  * waits elsewhere, the session on screen left out of it. [below] is this conversation's answer; a press on it is
  * [onBelow] with the row to show. Folded away ([hidden]) with the rest of the chrome while a phone's composer types.
+ * A session list shows no single session, so its [sessionId] is null and everything waiting is elsewhere.
  */
 @Composable
-internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, sessionId: String, list: LazyListState,
+internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, sessionId: String?, list: LazyListState,
     hidden: Boolean, below: WaitingBelow?, onBelow: (String) -> Unit, open: (OrbitRoute) -> Unit) {
     val openRows by remember(app, handle) {
         app.realtime.state.map { live -> if (live.handle === handle) live.directory?.sessions?.get("open").orEmpty() else emptyList() }
