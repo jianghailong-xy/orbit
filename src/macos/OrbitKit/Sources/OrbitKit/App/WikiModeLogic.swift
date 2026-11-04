@@ -317,12 +317,12 @@ public enum WikiModeLogic {
 
     /// The bar's second line: who checked it and what they said, when known, then who applied it and
     /// when (`wikiCheckedLine`).
-    public static func checkedLine(verdict: WikiVerificationVerdict?, model: String?, tainted: Bool,
-                                   who: String?, when: String?) -> String {
+    public static func checkedLine(verdict: WikiVerificationVerdict?, model: String?, evidence: WikiVerificationEvidence? = nil,
+                                   tainted: Bool, who: String?, when: String?) -> String {
         var parts: [String] = []
         if let verdict, let model {
             parts.append("Checked by \(model): \(WikiModeCopy.verdictWord(verdict))")
-            if tainted { parts.append(WikiModeCopy.cappedAtUnreviewed) }
+            if tainted || evidenceCaps(evidence) { parts.append(WikiModeCopy.cappedAtUnreviewed) }
         }
         if let who { parts.append(when.map { "\(who), \($0)" } ?? who) }
         return parts.joined(separator: " · ")
@@ -403,6 +403,11 @@ public enum WikiModeLogic {
         return summary
     }
 
+    /// A verdict that what it could read held at Unreviewed, whatever it said (`wikiEvidenceCaps`).
+    private static func evidenceCaps(_ evidence: WikiVerificationEvidence?) -> Bool {
+        evidence == .secondHand || evidence == .unreadable
+    }
+
     private static func runRow(_ op: WikiChangesetOp, _ entries: [String: WikiEntry]) -> RunRow {
         let entryId = op.op == .add || op.op == .supersede ? (op.resultEntryId ?? op.entryId) : op.entryId
         let entry = entryId.flatMap { entries[PublicID.storageKey($0)] }
@@ -416,7 +421,8 @@ public enum WikiModeLogic {
         // An entry that has ended since (retired with its run, rejected) wears no mark.
         let trust: WikiTrust?
         if let entry { trust = entry.status == .active ? entry.trust : nil } else {
-            trust = op.tainted == true && verdictTrust != nil ? .unreviewed : verdictTrust
+            let capped = op.tainted == true || evidenceCaps(op.verification?.evidence)
+            trust = capped && verdictTrust != nil ? .unreviewed : verdictTrust
         }
         return RunRow(op: op, entryId: entryId,
                       title: entry?.title ?? draft?["title"]?.stringValue ?? "—",

@@ -193,7 +193,7 @@ final class WikiContractTests: XCTestCase {
         XCTAssertNil(op.verification?.evidence, "a verdict recorded before the server kept the mark")
     }
 
-    /// Revision 4: a verdict says what its verifier could read, in the contract's two words, and the
+    /// Revision 4: a verdict says what its verifier could read, in the contract's words, and the
     /// owner's Confirm and the reopening are routes of the owner's door.
     func testTheEvidenceMarkAndTheOwnersNewRoutesAreTheContracts() throws {
         let c = try contract()
@@ -205,6 +205,8 @@ final class WikiContractTests: XCTestCase {
         let capped = #"{"id":"op","decision":"auto_applied","verification":{"verdict":"unsupported","reason":"No record could be read.","model":"qwen3.8-27b-fp8","at":"2026-09-28T01:00:00.000Z","duplicateOf":null,"evidence":"unreadable"}}"#
         let op = try JSONDecoder().decode(WikiChangesetOp.self, from: Data(capped.utf8))
         XCTAssertEqual(op.verification?.evidence, .unreadable)
+        let secondHand = #"{"verdict":"supported","evidence":"second_hand"}"#
+        XCTAssertEqual(try JSONDecoder().decode(WikiOpVerification.self, from: Data(secondHand.utf8)).evidence, .secondHand)
         let later = #"{"verdict":"supported","evidence":"partly"}"#
         XCTAssertEqual(try JSONDecoder().decode(WikiOpVerification.self, from: Data(later.utf8)).evidence, .unknown)
         let user = try object(try object(try object(c["agentSurface"], "agentSurface")["doors"], "agentSurface.doors")["user"],

@@ -880,7 +880,7 @@ struct WikiEntryPage: View {
         let current = detail.history.max { ($0.revision ?? 0) < ($1.revision ?? 0) }
         let verification = detail.verification
         let line = WikiModeLogic.checkedLine(verdict: verification?.verdict, model: verification?.model,
-                                             tainted: entry.tainted == true,
+                                             evidence: verification?.evidence, tainted: entry.tainted == true,
                                              who: current.map { Self.historyWord($0.authorKind) },
                                              when: current?.createdAt.flatMap { RelativeTime.format($0, now: now) })
         return HStack(alignment: .top, spacing: 8) {

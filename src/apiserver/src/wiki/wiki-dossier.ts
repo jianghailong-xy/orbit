@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import {
   WIKI_MAINTENANCE_RULES,
+  wikiCallReadsWiki,
   wikiEstimateTokens,
   type WikiDossier,
   type WikiDossierSource,
@@ -832,7 +833,7 @@ function timeline(records: DossierRecords, redact: (text: string) => string): Li
           || (event.bgExit !== null && event.bgExit !== '');
         if (!finished) break;
         const command = redact(event.bgCommand ?? '');
-        if (MEMORY_PATH.test(command)) break;
+        if (MEMORY_PATH.test(command) || wikiCallReadsWiki(null, command)) break;
         const record = held(runEventParts('background_task', { command: event.bgCommand, summary: event.bgSummary }), redact);
         const ok = ['0', 'None', ''].includes(String(event.bgExit ?? '')) && event.bgStatus !== 'failed';
         const exit = event.bgExit === null || event.bgExit === '' ? '' : ` exit=${event.bgExit}`;
@@ -933,6 +934,8 @@ function toolLine(
   const input = redact(use.input ?? '');
   if (MEMORY_PATH.test([command, filePath, pattern, input].join(' '))) return null;
   if (SKIPPED_TOOLS.has(name)) return null;
+  // A read of the wiki, left out with its result: what the wiki said must not come back as a source of what it says.
+  if (wikiCallReadsWiki(name, command)) return null;
   const evidence = new EvidenceBuilder();
   const field = (key: string, value: string): Mapped => evidence.add(`input.${key}`, value, key.length + 2);
   let err = String(result?.isError ?? '').toLowerCase() === 'true';

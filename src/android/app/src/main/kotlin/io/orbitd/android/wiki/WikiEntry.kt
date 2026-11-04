@@ -321,7 +321,7 @@ private fun MarkBar(detail: WikiEntryDetail, banner: WikiModeLogic.Banner, now: 
     val current = detail.history.maxByOrNull { it.revision ?: 0 }
     val verification = detail.verification
     val line = WikiModeLogic.checkedLine(verification?.verdict, verification?.model, entry.tainted == true,
-        current?.let { historyWord(it.authorKind) }, current?.createdAt?.let { WikiDate.relative(it, now) })
+        current?.let { historyWord(it.authorKind) }, current?.createdAt?.let { WikiDate.relative(it, now) }, verification?.evidence)
     val tone = WikiPalette.color(banner.tone)
     Row(Modifier.fillMaxWidth().background(if (banner.tone == WikiTone.AMBER) WikiPalette.amberWash else tone.copy(alpha = if (banner.tone == WikiTone.MUTED) 0.08f else 0.12f),
         RoundedCornerShape(10.dp)).padding(10.dp).testTag("wiki-entry-mark"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

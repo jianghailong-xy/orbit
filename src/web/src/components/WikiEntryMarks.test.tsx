@@ -213,6 +213,20 @@ describe('an entry a review mode applied', () => {
     evidence: 'readable' as const,
   };
 
+  it('says a verdict that read only a note was capped', async () => {
+    await mount({ changesetId: 'run-1', appliedByMode: 'automatic', verification: { ...VERDICT, verdict: 'supported', evidence: 'second_hand' } });
+    expect(container.querySelector('.wk-markbar .wk-markbar-line')?.textContent).toBe(
+      'Checked by qwen3.8-27b-fp8: supported · capped at Unreviewed · Wiki maintenance, 2h ago',
+    );
+  });
+
+  it('draws a verdict whose evidence is a word it does not know as any other', async () => {
+    await mount({ changesetId: 'run-1', appliedByMode: 'automatic', verification: { ...VERDICT, evidence: 'a word from later' as never } });
+    expect(container.querySelector('.wk-markbar .wk-markbar-line')?.textContent).toBe(
+      'Checked by qwen3.8-27b-fp8: partly supported · Wiki maintenance, 2h ago',
+    );
+  });
+
   it('says who checked it and what they said, from the entry read, with nothing of it waiting in Review', async () => {
     await mount({ changesetId: 'run-1', appliedByMode: 'automatic', verification: VERDICT });
     expect(container.querySelector('.wk-markbar .wk-markbar-line')?.textContent).toBe(

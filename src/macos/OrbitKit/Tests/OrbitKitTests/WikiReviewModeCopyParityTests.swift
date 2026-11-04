@@ -214,6 +214,7 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
             struct Verification: Decodable {
                 let verdict: WikiVerificationVerdict
                 let model: String
+                let evidence: WikiVerificationEvidence?
             }
             let verification: Verification?
             let tainted: Bool
@@ -390,6 +391,7 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         XCTAssertEqual(WikiModeCopy.rejectOnRecord, answers.foot)
         for line in shared.checkedLines {
             XCTAssertEqual(WikiModeLogic.checkedLine(verdict: line.verification?.verdict, model: line.verification?.model,
+                                                     evidence: line.verification?.evidence,
                                                      tainted: line.tainted, who: line.who, when: line.when), line.says)
         }
     }
