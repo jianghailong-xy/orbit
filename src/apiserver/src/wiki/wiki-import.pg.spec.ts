@@ -701,7 +701,7 @@ test('import · what an import proposes takes effect as the space\'s review mode
     assert.equal((await pushed(h, who)).size, 0, 'an Unreviewed entry is shown, and never pushed');
   });
 
-  await t.test('Automatic: held for a verification that reads the note\'s own text; a supported verdict pushes it', async () => {
+  await t.test('Automatic: held for a verification that reads the note\'s own text; having read nothing else, a supported verdict leaves it Unreviewed', async () => {
     const who = await importer(h, 'automatic', 'automatic');
     const text = 'Wait for GET /health to answer 200 before calling the local model: the tunnel drops.';
     const kept = await note(h, who, 'memory/vllm-health.md', text);
@@ -736,11 +736,12 @@ test('import · what an import proposes takes effect as the space\'s review mode
       { opId: items[0].opId, verdict: 'supported', reason: 'The note says the tunnel drops.', model: 'qwen3.8-27b-fp8' },
       { opId: items[1].opId, verdict: 'partial', reason: 'The note says to wait, not that it is a rule.', model: 'qwen3.8-27b-fp8' },
     ]);
-    assert.deepEqual(verified.outcomes.map((o) => [o.status, 'trust' in o ? o.trust : null]), [['applied', 'auto'], ['applied', 'unreviewed']]);
+    assert.deepEqual(verified.outcomes.map((o) => [o.status, 'trust' in o ? o.trust : null]), [['applied', 'unreviewed'], ['applied', 'unreviewed']]);
+    for (const op of outcomes) assert.equal((await opRow(h, op.opId!)).verificationEvidence, 'second_hand');
+    // An entry drawn from a note, checked against the same note, shows only that it was copied: shown, and not pushed.
     const live = await pushed(h, who);
-    assert.ok(live.has(toUuid(outcomes[0].entryId!)), 'the supported entry is pushed');
-    // A convention is pushed wherever the session is — when it is trusted: a partial one is shown only.
-    assert.ok(!live.has(toUuid(outcomes[1].entryId!)), 'the partial one is shown and not pushed');
+    assert.ok(!live.has(toUuid(outcomes[0].entryId!)), 'the supported entry is shown and not pushed');
+    assert.ok(!live.has(toUuid(outcomes[1].entryId!)), 'and so is the partial one');
   });
 
   await t.test('the floors: a principle is refused, and an import in a session that read the web waits', async () => {

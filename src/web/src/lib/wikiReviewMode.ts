@@ -235,12 +235,17 @@ export const WIKI_VERDICT_WORDS: Record<string, string> = {
 };
 export const WIKI_CAPPED_AT_UNREVIEWED = 'capped at Unreviewed';
 
+/** A verdict that what it could read held at Unreviewed, whatever it said (contract `reviewModes.verification.evidence`). */
+function wikiEvidenceCaps(evidence: string | null | undefined): boolean {
+  return evidence === 'second_hand' || evidence === 'unreadable';
+}
+
 /**
  * The bar's second line: who checked it and what they said, when that is known, then who applied it
  * and when — `Checked by qwen3.8: partly supported · Wiki maintenance, 2h ago`.
  */
 export function wikiCheckedLine(input: {
-  verification?: { verdict: string; model: string } | null;
+  verification?: { verdict: string; model: string; evidence?: string | null } | null;
   tainted: boolean;
   who: string | null;
   when: string | null;
@@ -249,7 +254,7 @@ export function wikiCheckedLine(input: {
   if (input.verification) {
     const verdict = WIKI_VERDICT_WORDS[input.verification.verdict] ?? input.verification.verdict;
     parts.push(`Checked by ${input.verification.model}: ${verdict}`);
-    if (input.tainted) parts.push(WIKI_CAPPED_AT_UNREVIEWED);
+    if (input.tainted || wikiEvidenceCaps(input.verification.evidence)) parts.push(WIKI_CAPPED_AT_UNREVIEWED);
   }
   if (input.who) parts.push(input.when ? `${input.who}, ${input.when}` : input.who);
   return parts.join(' · ');
@@ -376,7 +381,9 @@ function runRow(op: WikiChangesetOp, entries: ReadonlyMap<string, WikiEntry>): W
     title: entry?.title ?? (typeof draft.title === 'string' ? draft.title : '—'),
     summary: entry?.summary ?? (typeof draft.summary === 'string' ? draft.summary : ''),
     // An entry that has ended since (retired with its run, rejected) wears no mark: nothing it was applied with stands.
-    trust: entry ? (entry.status === 'active' ? entry.trust : null) : op.tainted && verdictTrust ? 'unreviewed' : verdictTrust,
+    trust: entry
+      ? (entry.status === 'active' ? entry.trust : null)
+      : (op.tainted || wikiEvidenceCaps(op.verification?.evidence)) && verdictTrust ? 'unreviewed' : verdictTrust,
   };
 }
 

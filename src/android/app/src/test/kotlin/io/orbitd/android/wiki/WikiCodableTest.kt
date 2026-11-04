@@ -139,4 +139,23 @@ class WikiCodableTest {
         assertEquals(3, result.ops?.first()?.revision)
         assertEquals("WIKI_SCHEMA", result.ops?.last()?.reasons?.first()?.code)
     }
+
+    /** What a verdict could read, in the shared words: the bar and a run's marks say a capped verdict was capped, and a
+     * word from a later server reads as any other, on the three clients' one fixture. */
+    @Test fun aVerdictsEvidenceCapsWhatItsBarAndItsRunSay() {
+        val shared = WikiSharedFiles.reviewMode
+        shared.farr("checkedLines").map { it.jsonObject }.forEach { line ->
+            val verification = line["verification"] as? JsonObject
+            assertEquals(line.fstr("says"), WikiModeLogic.checkedLine(verification?.get("verdict").text(), verification?.get("model").text(),
+                line["tainted"].bool() == true, line["who"].text(), line["when"].text(), verification?.get("evidence").text()))
+        }
+        shared.farr("runs").map { it.jsonObject }.forEach { run ->
+            val summary = WikiModeLogic.runSummary(WikiChangesetView.decode(run.getValue("view")))
+            val marks = (summary.added + summary.amended + summary.reinforced).associate { it.title to it.trust }
+            assertEquals(run.fstr("name"), run.fobj("marks").mapValues { it.value.text() }, marks)
+        }
+        val later = decode(WikiOpVerification.serializer(), """{"verdict":"supported","model":"m","evidence":"a word from later"}""")
+        assertEquals("a word from later", later.evidence)
+        assertEquals("Checked by m: supported", WikiModeLogic.checkedLine(later.verdict, later.model, false, null, null, later.evidence))
+    }
 }
