@@ -71,12 +71,26 @@ export function wikiMaintainTopicsOf(topics: ReadonlyArray<{ slug: string; title
   return topics.map((topic) => ({ slug: topic.slug, title: topic.title, description: topic.description ?? '' }));
 }
 
+/** What an extraction is told of the agent's notes, when its case file carries any (docs/wiki-memory-claims-design.md §3.3). */
+const WIKI_MAINTAIN_NOTES_PROMPT = `THE AGENT'S NOTES: C lines are notes the agent wrote to its own memory during this work. A note is what the
+agent believed, not evidence. Take each as a question: does the rest of the case show it?
+- shown: the case shows it. Write the entry from what the lines show.
+- narrowed: the case shows part of it. Write only that part.
+- contradicted: the case shows otherwise. Write no entry from the note; if what the case shows is worth keeping, write that.
+- absent: the case neither shows nor refutes it. Write no entry.
+- not_durable: progress, status, or one task's detail. Write no entry.
+Answer for each note first: its outcome and, for shown or narrowed, the lines that show it in "shownBy". Name tool and owner lines: an agent or think line only says what the agent believed, so name one only when no tool or owner line bears on the note.
+Then write the entries. An entry that came from a note starts with "note": "C1" and cites the lines of that note's "shownBy"; a note shown or narrowed has such an entry. Never cite a C line. In every entry, when a tool or owner line bears on it, cite that line even if an agent line says it better.
+Because this case has notes, output
+{"notes": [{"note": "C1", "outcome": "shown", "shownBy": ["L12"]}], "entries": [{"note": "C1", "kind": ...}, {"kind": ...}]}.`;
+
 /**
  * The demo's extraction prompt (prompts.py EXTRACT_INSTRUCTIONS, the A2+6 run: at most six entries, the
  * few-shot example), for this space's repository: the model is told which repository the case is about and
- * what it is, and to say so when the case is about something else.
+ * what it is, and to say so when the case is about something else. `claims` says the case file carries the
+ * agent's notes, and the prompt then ends by telling the model how to read them and what to answer.
  */
-export function wikiMaintainPrompt(context: WikiMaintainPromptContext, about: string, dossier: string): string {
+export function wikiMaintainPrompt(context: WikiMaintainPromptContext, about: string, dossier: string, options: { claims?: boolean } = {}): string {
   // filepath.Base of the repository URL, as the Go prompt read it.
   const trimmed = context.repo.urlNorm.replace(/\/+$/u, '');
   const name = context.repo.urlNorm !== '' ? trimmed.slice(trimmed.lastIndexOf('/') + 1) : context.title;
@@ -152,7 +166,85 @@ A case about something other than the repository above -> {"offTopic": true}
 ==== CASE FILE ====
 ${dossier}
 ==== END OF CASE FILE ====
-Output the JSON array now.`;
+${options.claims ? `${WIKI_MAINTAIN_NOTES_PROMPT}\nOutput the JSON object now.` : 'Output the JSON array now.'}`;
+}
+
+/** What the model may say became of a note (§3.3), in the words the prompt gives it. */
+export const WIKI_MAINTAIN_NOTE_OUTCOMES = ['shown', 'narrowed', 'contradicted', 'absent', 'not_durable'] as const;
+
+/** A note's outcome, or `unanswered`: the model did not say, or not so that it can be read, and nobody asks again. */
+export type WikiMaintainNoteOutcome = (typeof WIKI_MAINTAIN_NOTE_OUTCOMES)[number] | 'unanswered';
+
+/** What the model said of one note: its outcome, and the lines it named as showing it. */
+export interface WikiMaintainNoteAnswer {
+  outcome: WikiMaintainNoteOutcome;
+  shownBy: string[];
+}
+
+/** The most lines `wikiMaintainCiteShownBy` adds to an entry's sources. */
+const WIKI_MAINTAIN_NOTE_SOURCES_ADDED = 2;
+
+/**
+ * What the model said of each of the case's notes, read from wherever in its answer it said so: each
+ * `{"note": "C1", "outcome": "shown", "shownBy": ["L12"]}` is a flat object of its own, so a broken entry beside it
+ * costs it nothing. The first it said of a note counts; a note it does not name is `unanswered`.
+ */
+export function wikiMaintainNoteAnswers(answer: string, refs: readonly string[]): Map<string, WikiMaintainNoteAnswer> {
+  const answers = new Map<string, WikiMaintainNoteAnswer>(refs.map((ref) => [ref, { outcome: 'unanswered', shownBy: [] }]));
+  for (const [flat] of answer.matchAll(/\{[^{}]*\}/gu)) {
+    let said: unknown;
+    try {
+      said = JSON.parse(flat);
+    } catch {
+      continue;
+    }
+    if (!wikiImportIsObject(said)) continue;
+    const note = answerField(said, 'note');
+    const outcome = answerField(said, 'outcome');
+    if (typeof note !== 'string' || typeof outcome !== 'string' || answers.get(note)?.outcome !== 'unanswered') continue;
+    if (!(WIKI_MAINTAIN_NOTE_OUTCOMES as readonly string[]).includes(outcome)) continue;
+    answers.set(note, { outcome: outcome as WikiMaintainNoteOutcome, shownBy: wikiImportTextList(answerField(said, 'shownBy')) });
+  }
+  return answers;
+}
+
+/** The speakers whose lines say what happened or what the owner said, as an agent's words do not (design §2). */
+const FIRST_HAND_SPEAKERS = new Set(['tool', 'merge', 'owner', 'user', 'blocker', 'comment-owner']);
+/** The speakers whose words are the owner's: a source of theirs is quoted, or it does not read as their words. */
+const OWNER_SPEAKERS = new Set(['owner', 'user', 'blocker', 'comment-owner']);
+
+/**
+ * An entry that came from a note also cites what the model said shows that note: it names the lines in `shownBy`
+ * and then often writes the entry from the agent's reply about them, which only says what the agent believed. At
+ * most `WIKI_MAINTAIN_NOTE_SOURCES_ADDED` first-hand lines are added to an op's sources, each one's record cited as
+ * any other, and the verdict is still the verifier's, from those records.
+ */
+export function wikiMaintainCiteShownBy(
+  ops: readonly WikiMaintainOp[],
+  notes: ReadonlyMap<string, WikiMaintainNoteAnswer>,
+  lines: ReadonlyMap<string, WikiMaintainLine>,
+): void {
+  for (const op of ops) {
+    const shownBy = op.note ? notes.get(op.note)?.shownBy ?? [] : [];
+    const sources = op.body.sources as Array<Record<string, unknown>>;
+    const cited = new Set(sources.map((source) => `${String(source.kind)}:${String(source.ref)}`));
+    let added = 0;
+    for (const ref of shownBy) {
+      const line = lines.get(ref);
+      if (!line || !FIRST_HAND_SPEAKERS.has(line.author) || cited.has(`${line.kind}:${line.id}`)) continue;
+      if (added === WIKI_MAINTAIN_NOTE_SOURCES_ADDED) break;
+      const source: Record<string, unknown> = { kind: line.kind, ref: line.id };
+      const words = OWNER_SPEAKERS.has(line.author) ? line.spans.find((span) => (span.text ?? '').trim() !== '')?.text : undefined;
+      const placed = words ? wikiMaintainPlace(line.spans, cutRunes(words, WIKI_MAINTAIN_JOB.quoteMaxChars)) : null;
+      if (placed) {
+        source.quote = placed.words;
+        source.locator = { start: placed.start, end: placed.end };
+      }
+      sources.push(source);
+      cited.add(`${line.kind}:${line.id}`);
+      added += 1;
+    }
+  }
 }
 
 /** The model saying the session is not about this repository: `{"offTopic": true}`. */
@@ -305,6 +397,8 @@ export interface WikiMaintainOp {
   topic: string;
   session: string;
   title: string;
+  /** The note of the case file the entry came from (`C1`), when the model said and the case carries it. Not a source. */
+  note?: string;
 }
 
 /** Why an op is here, and what was wrong with the rest of an answer: the runner's `wikiMaintainBuilt`. */
@@ -409,7 +503,10 @@ export function buildWikiMaintainOps(
       continue;
     }
     built.titles.add(title.toLowerCase());
-    built.ops.push({ body: { op: 'add', entry: draft, sources }, topic, session: dossier.sessionId, title });
+    const op: WikiMaintainOp = { body: { op: 'add', entry: draft, sources }, topic, session: dossier.sessionId, title };
+    const noted = wikiImportText(item.note, 20);
+    if (/^C\d+$/u.test(noted) && dossier.text.includes(`\n${noted} claim: `)) op.note = noted;
+    built.ops.push(op);
   }
   return built;
 }
