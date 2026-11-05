@@ -57,7 +57,7 @@ import {
   type VolumeSwitchCheck,
 } from './managed-runner-volume-switch';
 import { managedRunnerWork, recordManagedDemand, sleepingRunnersWithDemand } from './managed-runner-work';
-import { RUNNER_BEATS, runnerLastBeatAt } from '../runners/runner-presence';
+import { RUNNER_BEATS, RUNNER_SILENT_AFTER_MS, runnerLastBeatAt } from '../runners/runner-presence';
 
 /**
  * The managed runner manager: drives one mapping's data volume and instance towards its desired
@@ -137,6 +137,12 @@ import { RUNNER_BEATS, runnerLastBeatAt } from '../runners/runner-presence';
  *     a Docker host whose firewall for managed runners is not in force (FIREWALL_NOT_ENFORCED).
  *   - A FAILED mapping whose recorded volume was missing is looked at again, and becomes retryable
  *     once that very volume is back (`volumeBack`).
+ *   - On a server that takes the runner daemon's calls over the runner link alone, a runner from before
+ *     the link client is never heard again, and a sleep needs its telemetry. A READY instance of a
+ *     previous image that has been silent past PREVIOUS_IMAGE_SILENCE_MS is asked to stop, where its host
+ *     reports every stop (`stopSilentPrevious`, Docker); the host's report of that stop starts the next
+ *     generation from the current image, as after a crash. Silence alone, on the current image, still
+ *     authorizes nothing.
  *   - A backend that cannot be reached at all — no request got to it: the Kubernetes API server or
  *     the Docker channel down, restarting or cut off — spends no attempt in any state (`unreachable`),
  *     any more than a held volume does: the budget counts tries that failed, and an outage lasts as
@@ -178,7 +184,24 @@ export interface ManagedRunnerManagerOptions {
   now?: () => Date;
   random?: () => number;
   log?: Pick<Logger, 'warn' | 'error'>;
+  /**
+   * Whether this server takes the runner daemon's calls over the runner link alone (docs/runner-link-design.md
+   * §11.3, §13), so that a runner from before the link client is not heard at all. Asked only of a silent READY
+   * instance of a previous image (`stopSilentPrevious`). Absent: link-only, as every build is once the cut-over's
+   * switch is gone; while it exists, the runtime passes it (managed-runner-runtime.ts).
+   */
+  linkOnly?: () => boolean | Promise<boolean>;
 }
+
+/**
+ * How long a READY instance of a previous image must have been silent before, on a link-only server, it is stopped
+ * so that the next generation starts from the current image (`stopSilentPrevious`): the reaper's hold on the silence
+ * of a mass disconnection's runners, MASS_DISCONNECT_HOLD_MS (realtime/reaper.service.ts; a spec holds the two equal).
+ * After an upgrade every running container is of a previous image, and an outage shorter than that — a gateway, an
+ * apiserver or the database restarting, the network cut for the ten minutes the runner link's drills cut it — leaves
+ * them all silent at once. Past it the reaper reaps the runner's sessions anyway.
+ */
+export const PREVIOUS_IMAGE_SILENCE_MS = RUNNER_SILENT_AFTER_MS + 10 * 60_000;
 
 /** The row moved on under this pass. */
 class Superseded extends Error {}
@@ -334,6 +357,7 @@ export class ManagedRunnerManager {
   private readonly now: () => Date;
   private readonly random: () => number;
   private readonly log: Pick<Logger, 'warn' | 'error'>;
+  private readonly linkOnly: () => boolean | Promise<boolean>;
   /** This environment's capacity pool, created or brought to the backend's totals once per process. */
   private pool?: Promise<string>;
 
@@ -352,6 +376,7 @@ export class ManagedRunnerManager {
     this.now = options.now ?? (() => new Date());
     this.random = options.random ?? Math.random;
     this.log = options.log ?? new Logger('ManagedRunnerManager');
+    this.linkOnly = options.linkOnly ?? (() => true);
   }
 
   /**
@@ -782,8 +807,35 @@ export class ManagedRunnerManager {
     this.checkInstance(mapping, instance);
     if (instance.terminated) return this.terminated(mapping, instance);
     // A stale heartbeat makes READY unusable (the status says so); it is not proof the instance died,
-    // and it authorizes nothing.
-    return (await this.beginDrain(mapping)) ?? { done: 'READY' };
+    // and on its own it authorizes nothing. Of a previous image, on a link-only server, it is asked to stop.
+    return (await this.stopSilentPrevious(mapping, instance)) ?? (await this.beginDrain(mapping)) ?? { done: 'READY' };
+  }
+
+  /**
+   * A READY instance made from a previous image (`previousImage`, which an upgrade leaves every running one on),
+   * silent past PREVIOUS_IMAGE_SILENCE_MS — or past the profile's freshness, if that is longer — on a server that
+   * takes the daemon's calls over the runner link alone: a runner from before the link client, which that server
+   * answers 426 on every call. It never beats again, so it can neither be used nor put to sleep. It is asked to stop,
+   * where its host reports every stop it makes (`stopInstance`, Docker); asking is no proof. Its host's report of the
+   * exit is, read as for any stop (`terminated`): recorded as the proof, the container removed by UID, its volume
+   * released, and the next generation made from the image the profile names now, on the same volume and runner (or
+   * asleep, if its owner asked). A stop reported by anything else, or a container gone, fences. Null when it stays.
+   */
+  private async stopSilentPrevious(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step | null> {
+    if (!this.backend.stopInstance || !instance.previousImage || !instance.running) return null;
+    const now = this.now();
+    const beats = await this.prisma.runner.findUnique({ where: { id: mapping.runnerId }, select: RUNNER_BEATS });
+    const beat = runnerLastBeatAt(beats);
+    const silenceMs = Math.max(PREVIOUS_IMAGE_SILENCE_MS, this.profile.lifecycle.heartbeatFreshSeconds * 1000);
+    if (beat && now.getTime() - beat.getTime() <= silenceMs) return null;
+    if (!(await this.linkOnly())) return null;
+    this.log.warn(
+      `managed runner ${mapping.id}: READY, its ${this.backend.terms.instance} ${instance.uid} of generation ${mapping.generation} made from a `
+        + `previous image (${instance.previousImage}) and silent since ${beat?.toISOString() ?? 'it started'}, on a server that takes runners `
+        + `over the link alone; asking it to stop, so that the next generation starts from the current image`,
+    );
+    await this.backend.stopInstance(mapping);
+    return { done: 'READY' };
   }
 
   // ── sleep and wake ─────────────────────────────────────────────────────────────────────────

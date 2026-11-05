@@ -1312,6 +1312,29 @@ one through the API (`POST /api/managed-runner/sleep`), and only while nothing r
 and the stop proof are as for any sleep. A container of the previous image that was made and never started is never started: the
 channel removes it and makes a new one from the current image.
 
+The exception is a runner from before the runner link's client, in a container made before about 2026-10-25, on a
+server that takes the runner daemon's calls over the [runner link](#runner-link) alone. That server answers every
+call of such a runner 426, so the runner never reports in again: its owner sees it offline, and it can neither take
+work nor go to sleep. The manager replaces it. Once a `READY` runner whose container runs a previous image has been
+silent for 10 minutes 45 seconds, the manager asks the channel to stop that container and waits for Docker's report
+that it exited. It then removes the container and starts the next generation from the current image, on the same
+volume and with the same runner, which works over the link and picks its sessions up again. The wait is as long as
+the reaper holds the silence of runners that lose contact together, so an outage that silences every runner at once,
+such as the apiserver or the link gateway restarting, stops none of them for its image. The apiserver logs both
+steps:
+
+```text
+WARN [ManagedRunnerManager] managed runner <mapping id>: READY, its container <instance uid> of generation 1 made from a previous image (sha256:…) and silent since <time>, on a server that takes runners over the link alone; asking it to stop, so that the next generation starts from the current image
+WARN [ManagedRunnerManager] managed runner <mapping id>: POD_TERMINATED: container <instance uid> of generation 1 stopped in READY with exit code 0, not out of memory; starting generation 2 on the same volume in 8 s (attempt 1 of 5)
+```
+
+Until the new container is ready, its owner reads "The runner instance stopped, so it is being started again on the
+same data volume." A container that ends without Docker's report of its exit, or disappears, is not replaced: the
+runner waits in `FENCING`, as for any [container that vanished](managed-runner-docker-operations.md#a-runners-container-vanished-without-dockers-report).
+A runner that still reports in is never stopped for its image, and a silent one on the current image is left as it
+is. To replace one sooner, stop its container yourself with `docker stop mr-<runner id>`. The manager takes Docker's
+report of that stop as it takes any other, and starts the next generation from the current image.
+
 `/upgrade` deletes no image, and Docker keeps whatever a container still runs. What happens to the previous image
 then depends on Docker's image store:
 
