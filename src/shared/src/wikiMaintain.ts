@@ -165,11 +165,14 @@ export function wikiMaintenanceRunSessions(input: { mode: WikiReviewMode; active
 export type WikiMaintenanceClaimsReport = {
   /** Of those dossiers, the sessions that ran on Claude: what `seen` being 0 says something about. */
   claudeSessions: number;
-  /** The writes to memory files, and of those: what said too little, what passed the cap, what a held-out session kept out. */
+  /** The writes to memory files, and of those: what said too little, and what a held-out session kept out. */
   seen: number;
   skipped: number;
-  overCap: number;
   heldOut: number;
+  /** The session's `wiki_note`s, apart from `seen`, whose going quiet is what the run watches for. Absent from a run before them. */
+  notes: number;
+  /** What passed the cap, of either. */
+  overCap: number;
   /** What the model said of each note carried; `unanswered` when it did not say, or its answer could not be had. */
   shown: number;
   narrowed: number;

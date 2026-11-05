@@ -1476,4 +1476,60 @@ test('evidence · an op that came from a note: promptedBy is the server\'s, and 
     assert.deepEqual(await ids(), [toUuid(noted.opId!), toUuid(plain.opId!)]);
     for (const opId of [noted.opId!, plain.opId!]) await h.service.recordVerifications(as, space, [verdict(opId, 'partial')]);
   });
+
+  await t.test('a wiki_note is read from its row, under the same rule: only agent words beside it, or a record repeating it, is no more than Unreviewed', async () => {
+    const said = `The upload test fails with ECONNREFUSED because the port is read at import ${randomUUID()}.`;
+    const answered = await call(h, { runner: machine, headers: { 'x-orbit-session-id': records } }, 'POST', '/runner/wiki/notes', { text: said });
+    assert.equal(answered.status, 200, JSON.stringify(answered.body));
+    const noted = { noteId: answered.body.noteId as string, file: 'wiki_note' };
+    const addFrom = async (sources: unknown[]) => {
+      added += 1;
+      const answer = await h.service.submitChangeset(as, space, { rationale: 'what a note prompted', ops: [{ op: 'add', entry: pitfall(`What a note prompted ${added}`), sources }] }, { promptedBy: [noted] });
+      return (answer.ops as Outcome[])[0];
+    };
+    const reply = await event(h, records, 'assistant', { text: 'The port is read at import.' });
+    const repeats = await recordedCall(h, records, 'Read', { file_path: '/tmp/tool-results/note.txt' }, `1\t${said}`);
+    const ran = await recordedCall(h, records, 'Bash', { command: 'npm test' }, 'connect ECONNREFUSED 127.0.0.1:9000');
+    const filedAsTool = await recordedCall(h, records, 'mcp__orbit__wiki_note', { text: 'Filed in other words than the note.' }, 'Noted.');
+    const filedAsShell = await recordedCall(h, records, 'Bash', { command: 'orbit wiki note "Filed in other words than the note."' }, 'Noted.');
+    const own = await addFrom([{ kind: 'event', ref: reply }]);
+    assert.deepEqual((await opRow(h, own.opId!)).promptedBy, noted);
+    assert.deepEqual(await verdictOf(own, 'a reply'), { mark: 'second_hand', trust: 'unreviewed', verdict: 'supported' });
+    assert.deepEqual(await verdictOf(await addFrom([{ kind: 'tool_call', ref: repeats.call }]), 'the note read back'), { mark: 'second_hand', trust: 'unreviewed', verdict: 'supported' });
+    assert.deepEqual(await verdictOf(await addFrom([{ kind: 'tool_call', ref: filedAsTool.call }]), 'the tool call that filed it'), { mark: 'second_hand', trust: 'unreviewed', verdict: 'supported' });
+    assert.deepEqual(await verdictOf(await addFrom([{ kind: 'tool_call', ref: filedAsShell.call }]), 'the shell command that filed it'), { mark: 'second_hand', trust: 'unreviewed', verdict: 'supported' });
+    assert.deepEqual(await verdictOf(await addFrom([{ kind: 'tool_call', ref: ran.call }]), 'what happened'), { mark: 'readable', trust: 'auto', verdict: 'supported' });
+  });
+});
+
+test('evidence · a wiki_note is as tainted as the session that wrote it, and cited by itself it is no more than Unreviewed', { skip, concurrency: 1, timeout: 600_000 }, async () => {
+  const h = await boot();
+  const owner = await account(h, 'evidence-session-note');
+  const machine = await runner(h, owner.id);
+  const ws = await workspace(h, owner.id);
+  const space = await modeSpace(h, owner, 'automatic', ws);
+  const noteOf = async (sessionId: string, text: string): Promise<string> => {
+    const answer = await call(h, { runner: machine, headers: { 'x-orbit-session-id': sessionId } }, 'POST', '/runner/wiki/notes', { text });
+    assert.equal(answer.status, 200, JSON.stringify(answer.body));
+    return answer.body.noteId;
+  };
+  const web = await session(h, owner.id, ws, machine);
+  await toolCall(h, web, 'WebFetch', 'a vendor page');
+  const quiet = await session(h, owner.id, ws, machine);
+  await toolCall(h, quiet, 'Bash', 'ok');
+  const fromWeb = await noteOf(web, `What the vendor page said, in the session's words ${randomUUID()}.`);
+  const fromQuiet = await noteOf(quiet, `What the quiet session saw for itself ${randomUUID()}.`);
+
+  const proposer = await session(h, owner.id, ws, machine);
+  const as = agent(owner.id, proposer);
+  const add = async (noteId: string, title: string) => (await h.service.submitChangeset(as, space, {
+    rationale: 'an agent cites a note', ops: [{ op: 'add', entry: pitfall(title), sources: [{ kind: 'note', ref: noteId }] }],
+  })).ops as Outcome[];
+  const [tainted] = await add(fromWeb, 'What the vendor page said');
+  assert.equal((await opRow(h, tainted.opId!)).tainted, true, 'the session that wrote it read the web, and its frontmatter is not what says so');
+  const [clean] = await add(fromQuiet, 'What the quiet session saw');
+  assert.equal((await opRow(h, clean.opId!)).tainted, false);
+  const done = await h.service.recordVerifications(as, space, [verdict(clean.opId!, 'supported')]);
+  assert.equal((done.outcomes[0] as { trust?: string }).trust, 'unreviewed');
+  assert.equal((await opRow(h, clean.opId!)).verificationEvidence, 'second_hand');
 });

@@ -2450,8 +2450,8 @@ export class WikiService {
   }
 
   /**
-   * The words of the note an op came from, redacted as what they are held against was, read from the write it names; null
-   * when that event can no longer be read.
+   * The words of the note an op came from, redacted as what they are held against was, read from the write or the row it
+   * names; null when that can no longer be read.
    */
   private async promptedNote(reader: Tx, ownerId: string, promptedBy: Prisma.JsonValue, literals: readonly string[]): Promise<string | null> {
     const by = promptedBy as unknown as WikiPromptedBy;
@@ -4531,21 +4531,23 @@ export class WikiService {
         return { ref: sha, text: null, tainted: false, ownerWords: false, sessionId: null, evidenceClass: wikiEvidenceClass({ kind: 'commit' }) };
       }
       case 'note': {
-        // A file `orbit wiki import` registered (contract `import.source`), among this owner's notes
-        // alone: its stored text — redacted before it was kept — and the file it came from. Agent-written
-        // second-hand content, never the owner's own words. It belongs to no session for what "independent
-        // sessions" count, whichever one its frontmatter names: only the taint reads that one.
+        // A file `orbit wiki import` registered (contract `import.source`), or a session's `wiki_note`, among
+        // this owner's notes alone: its stored text — redacted before it was kept — and where it came from.
+        // Agent-written second-hand content, never the owner's own words. It belongs to no session for what
+        // "independent sessions" count, whichever one wrote it or its frontmatter names: only the taint reads that one.
         if (!ref) return null;
         const note = await tx.wikiNote.findFirst({
           where: { id: ref, ownerId: principal.ownerId },
-          select: { id: true, path: true, text: true },
+          select: { id: true, path: true, text: true, sessionId: true },
         });
         if (!note) return null;
         return {
           ref: note.id,
           text: note.text,
           locator: { path: note.path },
-          tainted: await this.noteOriginWasTainted(tx, principal.ownerId, note.text),
+          tainted: note.sessionId
+            ? await this.sessionWasTainted(tx, note.sessionId)
+            : await this.noteOriginWasTainted(tx, principal.ownerId, note.text),
           ownerWords: false,
           sessionId: null,
           evidenceClass: wikiEvidenceClass({ kind: 'note' }),

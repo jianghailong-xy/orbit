@@ -2672,7 +2672,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // trigger/function is named, so it is not another writer of the DONE fence.
       '0470_wiki_verification_second_hand',
       // A nullable column for what an op's note was, and a CHECK of its shape: nothing to preserve, no row written.
-      '0471_wiki_op_prompted_by'],
+      '0471_wiki_op_prompted_by',
+      // A nullable column saying which session wrote a note, and its index: nothing to preserve, no row written.
+      '0472_wiki_note_session'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

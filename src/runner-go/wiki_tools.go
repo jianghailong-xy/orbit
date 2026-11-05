@@ -8,22 +8,24 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // The Wiki tools (docs/wiki-design.md §5.2, contracts/wiki.contract.json `agentSurface`).
 //
 // An agent reads the wiki and proposes to it; it never decides. There is no accept, no confirm, no
 // hard delete and no page overwrite here, and no tool that would be one: what an agent learned goes
-// through the space's review mode, which decides whether it waits or is live. Three tools, split by
-// risk rather than by entity — the two that only read say so, and the one that writes is the only
-// one that changes what anyone can see.
+// through the space's review mode, which decides whether it waits or is live. Four tools, split by
+// risk rather than by entity — the two that only read say so, the one that proposes changes what
+// anyone can see, and wiki_note only leaves a claim for maintenance to check, unless it corrects an
+// entry, which flags it at once.
 //
 // WHAT A SESSION MAY READ IS WHAT ITS WORKSPACE IS BOUND TO. The space comes from the calling
 // session's own header on the server side (never from an argument here), so nothing a model writes
 // can widen the reach of a call; a session reads the entries its bound workspace shares, plus the
 // proposals it made itself and the owner has not decided.
 //
-// The same three verbs are `orbit wiki search|get|propose` (wiki_cli.go), which run the runWikiTool
+// The same four verbs are `orbit wiki search|get|propose|note` (wiki_cli.go), which run the runWikiTool
 // below: one implementation, two doors.
 
 // The contract's limits, repeated so a schema states the bounds a request would be refused against.
@@ -31,6 +33,10 @@ const (
 	wikiSearchLimitMax = 10
 	wikiGetIDsMax      = 10
 	wikiOpsPerTurn     = 5
+	// contracts/wiki.contract.json agentSurface.note.rules.
+	wikiNoteTextMaxChars = 2000
+	wikiNotePathsMax     = 10
+	wikiNotePathMaxChars = 200
 )
 
 // wikiEntryKinds is contracts/wiki.contract.json kinds, in the order the contract lists them. The
@@ -78,6 +84,17 @@ const wikiProposeDescription = wikiProposePrecondition + " This is how what you 
 	"cannot accept, confirm or delete an entry: there is no tool that does. Pass dryRun to have every op " +
 	"checked and answered as it would be, recording nothing. Search first with wiki_search: a near neighbour " +
 	"is answered under similar[], and reinforcing the entry that exists is better than adding a second one."
+
+// wikiNoteDescription is contracts/wiki.contract.json `agentSurface.noteDescription`, word for word, and
+// wiki_tools_test.go holds the two equal (docs/wiki-memory-claims-design.md section 4). It says first that this
+// is not in the wiki yet: a note is a claim the next maintenance run checks, and a session that took it for a
+// saved entry would tell the user something untrue.
+const wikiNoteDescription = "Tell the wiki something this session learned that someone could not read from the code: " +
+	"a decision and why, a trap and its fix, a rule the owner gave. One claim, in one or two sentences. Maintenance " +
+	"reads it later against this session's records and writes an entry only if they bear it out, so it is not in the " +
+	"wiki yet and may never be. Not for progress or status: use task_progress_report. If your engine keeps its own " +
+	"memory, what you write there is read the same way: do not write both. To say an entry is wrong, pass corrects " +
+	"with its id: the entry is flagged at once."
 
 // wikiSourceRefs is what each source kind takes as its ref (contracts/wiki.contract.json
 // `sourceInput.refs`), said where a source is filled in: a tool_use_id where a row's id goes is the
@@ -298,6 +315,42 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 			// (design §5.2: wiki_propose carries no destructiveHint.)
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
+		{
+			"name":        "wiki_note",
+			"description": wikiNoteDescription,
+			"inputSchema": obj(map[string]interface{}{
+				"text": map[string]interface{}{
+					"type":        "string",
+					"maxLength":   wikiNoteTextMaxChars,
+					"description": "The claim, in one or two sentences, at most " + strconv.Itoa(wikiNoteTextMaxChars) + " characters.",
+				},
+				"paths": map[string]interface{}{
+					"type":        "array",
+					"maxItems":    wikiNotePathsMax,
+					"items":       map[string]interface{}{"type": "string", "maxLength": wikiNotePathMaxChars},
+					"description": "Repo-relative paths the claim is about, at most " + strconv.Itoa(wikiNotePathsMax) + ": they are kept with its text, and help maintenance find the records that bear on it.",
+				},
+				"corrects": map[string]interface{}{
+					"type":        "string",
+					"description": "The id of an entry this says is wrong, as wiki_search returned it. The entry is flagged at once, and the owner answers the flag in Review.",
+				},
+			}, "text"),
+			"outputSchema": obj(map[string]interface{}{
+				"noted":   map[string]interface{}{"type": "boolean", "description": "True: the claim is kept. It is not in the wiki."},
+				"noteId":  map[string]interface{}{"type": "string", "description": "The note the claim is kept as."},
+				"created": map[string]interface{}{"type": "boolean", "description": "False when the space already held this text, so nothing new was written."},
+				"readBy":  map[string]interface{}{"type": "string", "description": "What reads the note against the session's records, in the server's words."},
+				"challenged": obj(map[string]interface{}{
+					"status":      map[string]interface{}{"type": "string", "enum": []string{"applied", "pending", "refused"}, "description": "refused: the entry is not flagged, and reasons say why. Anything else: it is. The note is kept either way."},
+					"changesetId": map[string]interface{}{"type": []string{"string", "null"}},
+					"opId":        map[string]interface{}{"type": []string{"string", "null"}},
+					"entryId":     map[string]interface{}{"type": []string{"string", "null"}},
+					"reasons":     map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "object"}},
+				}, "status"),
+			}, "noted", "noteId", "created", "readBy"),
+			// It keeps a claim, and at most flags an entry for the owner to answer: nothing is taken away.
+			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
+		},
 	}
 }
 
@@ -306,6 +359,7 @@ var wikiToolNames = map[string]bool{
 	"wiki_search":  true,
 	"wiki_get":     true,
 	"wiki_propose": true,
+	"wiki_note":    true,
 }
 
 // callWikiTool runs one wiki tool for the session this server runs in, and reports whether it
@@ -463,6 +517,21 @@ func runWikiTool(t *Transport, caller cliOrchestrationContext, name string, args
 			return wikiAnswer{}, fmt.Errorf("wiki_propose: the server's answer is not the shape this build reads: %w", err)
 		}
 		return wikiAnswer{Text: describeWikiPropose(answer, wikiOpNamesOf(ops), dryRun), Data: answer}, nil
+
+	case "wiki_note":
+		body, err := wikiNoteBody(args)
+		if err != nil {
+			return wikiAnswer{}, err
+		}
+		raw, err := t.writeWikiNote(caller.sessionID, body)
+		if err != nil {
+			return wikiAnswer{}, wikiNoteCallError(err)
+		}
+		var answer wikiSessionNoteAnswer
+		if err := json.Unmarshal(raw, &answer); err != nil {
+			return wikiAnswer{}, fmt.Errorf("wiki_note: the server's answer is not the shape this build reads: %w", err)
+		}
+		return wikiAnswer{Text: describeWikiNote(answer), Data: answer}, nil
 	}
 	return wikiAnswer{}, fmt.Errorf("unknown wiki tool %q", name)
 }
@@ -523,6 +592,40 @@ type wikiProposeAnswer struct {
 	// nothing of it asks a model of this session's provider. Absent under the default runner mode, and the
 	// wording this side answers with is unchanged wherever it is absent.
 	ServedBy string `json:"servedBy"`
+}
+
+// wikiSessionNoteAnswer is `POST /api/runner/wiki/notes` (contract `agentSurface.note.answer`). challenged is passed
+// through whole: it is the server's own account of an op, in the wire shape wiki_propose's ops have.
+type wikiSessionNoteAnswer struct {
+	Noted      bool                   `json:"noted"`
+	NoteID     string                 `json:"noteId"`
+	Created    bool                   `json:"created"`
+	ReadBy     string                 `json:"readBy"`
+	Challenged map[string]interface{} `json:"challenged,omitempty"`
+}
+
+// wikiNoteBody reads a note's arguments into the door's body. What the limits say a request would be
+// refused for is said here too, before it is sent; the server holds the rest, and names each field.
+func wikiNoteBody(args map[string]interface{}) (map[string]interface{}, error) {
+	text := strings.TrimSpace(getString(args, "text"))
+	if text == "" {
+		return nil, fmt.Errorf("text is required: one claim, in one or two sentences")
+	}
+	if count := utf8.RuneCountInString(text); count > wikiNoteTextMaxChars {
+		return nil, fmt.Errorf("text is %d characters, and a note is at most %d: one claim, in one or two sentences", count, wikiNoteTextMaxChars)
+	}
+	paths := uniqueStrings(trimmed(getStringSlice(args, "paths")))
+	if len(paths) > wikiNotePathsMax {
+		return nil, fmt.Errorf("paths takes at most %d, got %d: name the ones the claim is about", wikiNotePathsMax, len(paths))
+	}
+	body := map[string]interface{}{"text": text}
+	if len(paths) > 0 {
+		body["paths"] = paths
+	}
+	if corrects := strings.TrimSpace(getString(args, "corrects")); corrects != "" {
+		body["corrects"] = corrects
+	}
+	return body, nil
 }
 
 // wikiOpsArg reads ops: an array of objects, or that array sent as a JSON string, which models do.
@@ -701,6 +804,35 @@ func describeWikiPropose(answer wikiProposeAnswer, names []string, dryRun bool) 
 	if wikiOpsCount(answer.Ops, "pending") > 0 {
 		out.WriteString("Report what is pending as a proposal, never as a saved entry.\n")
 	}
+	return out.String()
+}
+
+// describeWikiNote says what a note is in the terms that decide what the agent may say of it: it is kept, and it
+// is not knowledge. What it corrects is told apart, since that takes effect now, or does not.
+func describeWikiNote(answer wikiSessionNoteAnswer) string {
+	var out strings.Builder
+	if answer.Created {
+		fmt.Fprintf(&out, "Noted as %s.", answer.NoteID)
+	} else {
+		fmt.Fprintf(&out, "The space already holds this text as note %s, so nothing new was written.", answer.NoteID)
+	}
+	fmt.Fprintf(&out, " It is not in the wiki yet and may never be: maintenance reads a note against the records of the "+
+		"session that wrote it, and writes an entry only if they bear it out. Read by: %s.", answer.ReadBy)
+	if answer.Challenged == nil {
+		return out.String()
+	}
+	if status, _ := answer.Challenged["status"].(string); status != "refused" {
+		entry, _ := answer.Challenged["entryId"].(string)
+		fmt.Fprintf(&out, "\nEntry %s is flagged now: it is challenged, and the owner answers that in Review.", entry)
+		return out.String()
+	}
+	out.WriteString("\nThe entry it corrects was NOT flagged:")
+	for _, reason := range wikiMapSlice(answer.Challenged["reasons"]) {
+		code, _ := reason["code"].(string)
+		message, _ := reason["message"].(string)
+		out.WriteString(" " + strings.TrimSpace(code+" "+message))
+	}
+	out.WriteString(" Find its id with wiki_search; the same note sent again with the right id writes no second note.")
 	return out.String()
 }
 
@@ -939,6 +1071,18 @@ func wikiCallError(action string, err error) error {
 	return fmt.Errorf("%s: %w", action, err)
 }
 
+// wikiNoteCallError is wikiCallError for wiki_note, whose door is newer than the rest of the wiki's: a server that
+// has the wiki and not this route answers a plain 404 too, and it is not true of it that nothing can be read or
+// proposed there. So it is told apart: this binary is newer than its server, which is what the answer has to say.
+func wikiNoteCallError(err error) error {
+	if wikiDoorMissing(err) {
+		return fmt.Errorf("wiki_note: this Orbit server is too old for wiki_note (it answered 404 for POST " +
+			"/api/runner/wiki/notes), so the note was NOT recorded, and any entry it corrects was not flagged. " +
+			"Upgrade the Orbit server; until then tell the user what you learned, or propose it with wiki_propose")
+	}
+	return wikiCallError("wiki_note", err)
+}
+
 // refusalCodeOf and refusalMessageOf pull a wiki refusal's code and sentence out of a response the
 // transport wrapped, so one id's failure can be shown beside the ids that were read.
 func refusalCodeOf(err error) string {
@@ -965,5 +1109,5 @@ func refusalMessageOf(err error) string {
 
 // ── Transport ───────────────────────────────────────────────────────────────────────────────────
 
-// searchWiki, getWikiEntry and proposeWikiChangeset live in transport.go with the other ops; the
+// searchWiki, getWikiEntry, proposeWikiChangeset and writeWikiNote live in transport.go with the other ops; the
 // header these calls carry is the calling session's, which is what the door resolves the space from.

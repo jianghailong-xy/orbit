@@ -702,7 +702,7 @@ export class WikiMaintenance {
       });
       // A note named and gone since says nothing, and the session's own writes do not stand in for it.
       const read = noteIds.length > 0 && notes.length === 0
-        ? { claude: false, seen: 0, skipped: 0, overCap: 0, heldOut: 0, lines: [], file: null }
+        ? { claude: false, seen: 0, notes: 0, skipped: 0, overCap: 0, heldOut: 0, lines: [], file: null }
         : await this.notesOf(records, literals, undefined, notes);
       dossiers.push({ ...await buildDossier(this.prisma, records, { literals }), unchanged: false, notes: read });
     }
@@ -710,18 +710,19 @@ export class WikiMaintenance {
   }
 
   /**
-   * What a session's memory writes come to. A session that wrote none, which is most of them, makes no second file;
-   * one held out makes the plain one again, and hands nothing on. With notes named for it, those are what it claimed.
+   * What a session's memory writes and `wiki_note`s come to. A session that made neither, which is most of them, makes no
+   * second file; one held out with no `wiki_note` makes the plain one again, and hands nothing on. With notes named for it,
+   * those are what it claimed.
    */
   private async notesOf(records: DossierRecords, literals: readonly string[], maxTokens?: number, notes: readonly DossierImportedNote[] = []): Promise<WikiDossierNotes> {
     const { session } = records;
     const claude = (session.engine ?? session.provider) === 'claude';
-    if (notes.length === 0 && !records.events.some((event) => event.memoryWrite)) {
-      return { claude, seen: 0, skipped: 0, overCap: 0, heldOut: 0, lines: [], file: null };
+    if (notes.length === 0 && !records.events.some((event) => event.memoryWrite) && !records.wikiNotes?.length) {
+      return { claude, seen: 0, notes: 0, skipped: 0, overCap: 0, heldOut: 0, lines: [], file: null };
     }
     const { text, sources, claims } = await buildDossier(this.prisma, records, { literals, maxTokens, claims: true, notes });
-    const { seen, skipped, overCap, heldOut, lines } = claims!;
-    return { claude, seen, skipped, overCap, heldOut, lines, file: lines.length > 0 ? { text, sources } : null };
+    const { seen, notes: wikiNotes, skipped, overCap, heldOut, lines } = claims!;
+    return { claude, seen, notes: wikiNotes, skipped, overCap, heldOut, lines, file: lines.length > 0 ? { text, sources } : null };
   }
 
   /** The furthest position handed out, and each dossier's sources and hash — never its text, nor its spans' words. */

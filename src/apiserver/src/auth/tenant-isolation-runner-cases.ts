@@ -1225,6 +1225,20 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     (mine) => ({ params: {}, body: { ops: [{ op: 'challenge', entryId: mine.wikiEntryId, reason: 'the census challenges it' }], rationale: 'the census', dryRun: true } }),
     (of) => of.runner.wikiSessionId,
   ),
+  // A note about another account's entry: kept as the caller's own, and the entry answered as one that does not exist.
+  'POST /runner/wiki/notes body corrects': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: {},
+      headers: calling(mine.runner.wikiSessionId),
+      body: { text: 'The census says this entry is wrong.', corrects: of.wikiEntryId },
+    }),
+  },
+  'POST /runner/wiki/notes header x-orbit-session-id': fromTheirSession(
+    RUNNER,
+    () => ({ params: {}, body: { text: 'The census notes this.' } }),
+    (of) => of.runner.wikiSessionId,
+  ),
   ...Object.fromEntries(Object.entries(wikiRequests()).map(([route, own]) => [
     `${route} header x-orbit-session-id`,
     fromTheirSession(RUNNER, own, (of) => of.runner.wikiSessionId),

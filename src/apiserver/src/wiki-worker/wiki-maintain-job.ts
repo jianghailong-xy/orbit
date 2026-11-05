@@ -396,7 +396,7 @@ class WikiMaintainRun {
     offTopic: 0,
     entries: { extracted: 0, kept: 0, dropped: 0, foreign: 0, principles: 0 },
     claims: {
-      claudeSessions: 0, seen: 0, skipped: 0, overCap: 0, heldOut: 0, shown: 0, narrowed: 0, contradicted: 0, absent: 0, notDurable: 0,
+      claudeSessions: 0, seen: 0, notes: 0, skipped: 0, overCap: 0, heldOut: 0, shown: 0, narrowed: 0, contradicted: 0, absent: 0, notDurable: 0,
       unanswered: 0, entries: 0, duplicates: 0,
     },
     ops: { proposed: 0, recorded: 0, refused: 0, selfCheckDropped: 0, heldBack: 0, heldBackByBreaker: 0, applied: 0, waiting: 0 },
@@ -999,6 +999,7 @@ class WikiMaintainRun {
       if (!notes) continue;
       if (notes.claude) claims.claudeSessions += 1;
       claims.seen += notes.seen;
+      claims.notes += notes.notes;
       claims.skipped += notes.skipped;
       claims.overCap += notes.overCap;
       claims.heldOut += notes.heldOut;
@@ -1018,7 +1019,7 @@ class WikiMaintainRun {
     });
     if (files.length > 0) {
       this.jobContext.log(`checked the agent's notes of ${files.length} session(s): ${ops.length} entr(ies) from ${claims.shown} shown and `
-        + `${claims.narrowed} narrowed, of ${claims.seen} write(s) to memory files`);
+        + `${claims.narrowed} narrowed, of ${claims.seen} write(s) to memory files and ${claims.notes} wiki note(s)`);
     }
     return ops;
   }

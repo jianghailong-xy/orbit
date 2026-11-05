@@ -202,6 +202,17 @@ memory 里有一条：`release.sh next` 会直接打 tag。owner 当时只说了
 
 存表而不是只靠工具调用记录，是因为 CLI 调用在事件流里只是一次 Bash。
 
+**实现时定下的（任务 `34rozWZl2qENSjLHzt5PQ`，协调者可改）：**
+
+- **留出不管 note。** §3.2 的留出是为了量 memory，`wiki_note` 的回答又说了会有运行读它。所以留出的 session 只留出 memory 写入，它的 note 照常核对。这种 op 的 `promptedBy` 是 `{ noteId, file: "wiki_note" }`，M8 分得开。
+- **`seen` 只算 memory 写入。** note 单独记在 `report.claims.notes`，否则几条 note 就能盖住 §8 的写入量告警。
+- **记 note 的调用不进任何案卷，也不算 `observed`。** 否则工具调用记录和 `orbit wiki note` 的 Bash 记录都会把声明原话变成它自己的第一手出处。第二次回放定下的 14 个工具名单没动，这是单独的判定（`wikiCallWritesNote`）。
+- **note 没有跳过规则，排序算 feedback，受每份 6 条的上限。** 所以一个 session 记满 15 条时，最多 6 条进案卷，其余计入 `overCap`。
+- **`readBy` 按实情回答。** space 没开维护、正文来自别处时不说“下次维护”。
+- **同样的正文归先写的一方。** 后写的 session 回答 `created: false`，它的案卷里读不到这条。
+
+**实测（2026-11-05，隔离栈）：** 两个真实 Codex 0.166 session，一个 `dontAsk`（`orbit__wiki_note` 和 `orbit wiki note` 各记一条，再用 `corrects` 记一条），一个 `auto`（只用工具，这个模式的 shell 没有网络）。下一次维护里 4 条 note 都成了 S 案卷的 C 行，抽取案卷里一条都没有，也没有记 note 的工具行。`report.claims`：`notes` 4、`seen` 0、`shown` 4、`entries` 4。`corrects` 当场把条目标为 challenged。System model 是脚本回答的假模型，只证明案卷和流程，不证明模型判得对。另一次运行里，`auto` 那个 session 正好落在留出一侧，它的 note 同样进了案卷。
+
 工具说明（英文，会随工具进上下文）：
 
 ```text
@@ -622,7 +633,7 @@ memory 进了抽取，就不能再拿它评召回率。所以留 10% 的 session
 | M1 抽查 | 按证据类别抽查条目对错（§6.1） | 不改产品代码 | 每类错误率写回本文，决定 R2 是否照上 |
 | P2 声明和回放 | 声明自己的案卷和只核对声明的一遍（S），没有调用方；跑 §6.2 | `wiki-dossier.ts`、`wiki-maintain.ts`，回放脚本不进仓库 | 第二次回放 G1、G2、G3、G5 全过（§6.2），上线用这个做法 |
 | P3 上线 | 维护作业在 A 之后跑 S，A 不变；留出 10%；`promptedBy` 和封顶；`report.claims`；写入量告警 | `wiki-maintain-job.ts`、`wiki.service.ts`、`wiki.ts`，迁移 0471 | 留出组满 30 个 session 后对比（§6.4） |
-| P4 `wiki_note` | 工具、CLI、路由、`session_id` 迁移 | `wiki_tools.go`、`wiki_cli.go`、`runner-wiki.controller.ts`，runner 发版 | 非 Claude session 记的 note 进入案卷 |
+| P4 `wiki_note` | 工具、CLI、路由、`session_id` 迁移 0472 | `wiki_tools.go`、`wiki_cli.go`、`runner-wiki.controller.ts`，runner 发版 | 非 Claude session 记的 note 进入案卷 |
 | P5 历史回填 | §5 | `wiki-maintain-job.ts`、`wiki-backfill.cli.ts` | 试点过门槛后全量，收尾降级 |
 
 - **依赖：** P0、M1、P2 可以同时开始，回放脚本自己按 R2 分类，不等 P1。P1 依赖 M1。P3 依赖 P1、P2。P4、P5 依赖 P3。
