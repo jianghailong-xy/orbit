@@ -31,7 +31,7 @@ import { Textarea } from './ui/Textarea';
 import { Tooltip } from './ui/Tooltip';
 import { Fragment, lazy, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import Markdown from 'react-markdown';
+import Markdown from './Markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import { api, getShareLink, type ModelHintLevel, type ModelHintOption, type TaskRunRoute } from '../api';

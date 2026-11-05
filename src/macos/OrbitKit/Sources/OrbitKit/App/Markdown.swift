@@ -55,7 +55,7 @@ public enum MarkdownBlock: Equatable, Sendable {
 
 /// Parse a Markdown string into renderable blocks via swift-markdown's GFM parser.
 public func parseMarkdownBlocks(_ source: String) -> [MarkdownBlock] {
-    let document = Document(parsing: source)
+    let document = Document(parsing: mendCjkBold(source))
     return document.children.flatMap(blocks(from:))
 }
 

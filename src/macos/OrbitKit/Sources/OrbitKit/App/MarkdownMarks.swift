@@ -37,7 +37,8 @@ enum MarkdownMarks {
 
         func putBack(_ text: String) -> String {
             var restored = text
-            for (index, span) in spans.enumerated() {
+            // Last held first: a link can hold a code span that was held before it.
+            for (index, span) in spans.enumerated().reversed() {
                 restored = restored.replacingOccurrences(of: "\u{E000}\(index)\u{E000}", with: span)
             }
             return restored

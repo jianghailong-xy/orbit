@@ -262,4 +262,77 @@ final class MarkdownTests: XCTestCase {
         assertSplit("## Title", stable: "", tail: "## Title")
         assertSplit("## Title\n\nbody", stable: "## Title\n\n", tail: "body")
     }
+
+    // MARK: bold that CJK punctuation leaves drawn with its stars
+    //
+    // The same inputs as the web `cjkBold.test.ts` and Android's `CjkBoldTest`, so the three read one rule.
+
+    func testMendCjkBoldMovesTheMarkThatKeepsTheStarsDrawn() {
+        for (markdown, mended) in [("**做法：**照上个项目的办法", "**做法**：照上个项目的办法"),
+                                   ("这是**“重点”**内容", "这是“**重点**”内容"),
+                                   ("**注意：**run this", "**注意**：run this"),
+                                   ("**note:**中文", "**note**:中文"),
+                                   ("- **跑哪一版？**我的建议", "- **跑哪一版**？我的建议"),
+                                   ("**做法（注意）：**照", "**做法（注意）**：照"),
+                                   ("**运行 `npm test`：**然后", "**运行 `npm test`**：然后"),
+                                   ("**好**的：**做法：**照", "**好**的：**做法**：照"),
+                                   ("**涨幅 10%**以上", "**涨幅 10**%以上"),
+                                   ("用**C++**写", "用**C+**+写"),
+                                   ("这是**✅完成**内容", "这是✅**完成**内容"),
+                                   ("**a *b*：**c", "**a *b***：c"),
+                                   ("**[做法](orbit-task:34q)：**照", "**[做法](orbit-task:34q)**：照"),
+                                   ("**[`a*b`](u)：**照", "**[`a*b`](u)**：照"),
+                                   ("```\ncode\n```\n**做法：**照", "```\ncode\n```\n**做法**：照"),
+                                   ("**做法：**照\r\n**注意：**看", "**做法**：照\r\n**注意**：看")] {
+            XCTAssertEqual(mendCjkBold(markdown), mended)
+        }
+    }
+
+    func testMendCjkBoldLeavesAloneWhatIsNotThisMisfire() {
+        for markdown in ["**note:**word",                 // no CJK at the marks
+                         "a**-1 和 b**2",                  // a power
+                         "值**-1 和 b**2",                 // a power beside CJK
+                         "src/tasks/**和 lib/**目录",       // paths
+                         "目录**/b 和 c**/d",              // a path beside CJK
+                         "目录**.ts 和 lib/**.js",         // a glob on a file name
+                         "**做法：** 照",                  // already flanking, a space outside
+                         "**做法：**，照",                 // already flanking, punctuation outside
+                         "**做法：**",                     // already flanking, the end of the line
+                         "**做法**：照",                   // already flanking, no mark inside
+                         "`**做法：**照`",                 // a code span
+                         "**[做法](https://a.com)**照",    // a link
+                         "**![图](a.png)**照",             // an image
+                         "这是**![图](a.png)**照",         // an image after CJK
+                         "**[做法][ref]**照",              // a reference link
+                         "这是**![图][ref]**照",           // a reference image after CJK
+                         "<https://a.com/**做法：**照>",   // stars in an autolink's address
+                         "**做法[^1]**后面",               // a footnote
+                         "**看 <https://a.com>**照",       // an autolink
+                         "**a&amp;**照",                   // an entity
+                         "**做法\\:**照",                  // an escaped mark
+                         "**做法\\**照",                   // an escaped backslash, not its star
+                         "**做法：**`x`",                  // already flanking, code outside
+                         "**做法：**[链接](u)",            // already flanking, a link outside
+                         "\\*\\*做法：\\*\\*照",           // escaped stars
+                         "\\**做法：**照",                 // an escaped star
+                         "***做法：**照",                  // three stars opening
+                         "** BUILD SUCCEEDED **，然后",    // stars with spaces inside
+                         "这是**「 重点**内容",            // a space would take the mark's place
+                         "***做法：***照",                 // bold and italic
+                         "**：**照",                       // nothing left to be bold
+                         "没有星号：这里",                 // no stars
+                         "```\n**做法：**照\n```",         // a fenced block
+                         "~~~\n**做法：**照\n~~~",         // a tilde fence
+                         "> ```\n> **做法：**照\n> ```",   // a fence in a quote
+                         "```\n**做法：**照"] {            // a fence cut off
+            XCTAssertEqual(mendCjkBold(markdown), markdown)
+        }
+    }
+
+    /// Through the parser the view reads: the marks now close, so the paragraph's text comes out as
+    /// bold swift-markdown itself formatted, and not as a line it escaped.
+    func testTheParserReadsTheMendedBold() {
+        XCTAssertEqual(parseMarkdownBlocks("**做法：**照上个项目的办法"), [.paragraph(text: "**做法**：照上个项目的办法")])
+        XCTAssertEqual(parseMarkdownBlocks("这是**“重点”**内容"), [.paragraph(text: "这是“**重点**”内容")])
+    }
 }

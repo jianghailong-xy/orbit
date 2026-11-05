@@ -44,7 +44,7 @@ internal const val COPY_TEXT_LIMIT = 200_000
 /** Native text/links shared by the transcript and Wiki/details. Raw HTML remains literal text. */
 @Composable
 fun MarkdownText(source: String, modifier: Modifier = Modifier, open: (String) -> Unit = {}) {
-    val nodes = remember(source) { markdownParser.parse(source).children() }
+    val nodes = remember(source) { markdownParser.parse(mendCjkBold(source)).children() }
     SelectionContainer(modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { nodes.forEach { MarkdownNode(it, open) } }
     }

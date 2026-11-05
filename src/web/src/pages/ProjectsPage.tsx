@@ -10,7 +10,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import Markdown from 'react-markdown';
+import Markdown from '../components/Markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import { ApiError, api, restoreSession } from '../api';

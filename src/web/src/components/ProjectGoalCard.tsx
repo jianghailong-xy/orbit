@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import { AimOutlined } from '@ant-design/icons';
-import Markdown from 'react-markdown';
+import Markdown from './Markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
