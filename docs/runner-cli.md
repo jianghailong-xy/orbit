@@ -256,9 +256,11 @@ at `/v1/messages`. What decides which endpoint a session actually talks to:
   `ANTHROPIC_AUTH_TOKEN` out of them, or every session on that machine or project goes where they say.
 - The URL is resolved on the machine the session runs on: `http://127.0.0.1:8000` is that runner's own port.
   Start the session on an agent whose runner hosts the endpoint (`orbit agent list` shows each agent's runner).
-- `contextWindow` reaches Claude Code as the model's real window (`CLAUDE_CODE_MAX_CONTEXT_TOKENS`), so
-  auto-compact keeps the session inside what the server was started with (`--max-model-len`). Without it Claude
-  Code assumes 200k for a model it does not know.
+- `contextWindow` reaches Claude Code as the model's real window (`CLAUDE_CODE_MAX_CONTEXT_TOKENS`), less an
+  eighth held back, so auto-compact keeps the session inside what the server was started with
+  (`--max-model-len`) — including the compaction request the CLI sends when it reaches its own line, which is
+  larger than the conversation that triggered it. Without it Claude Code assumes 200k for a model it does not
+  know.
 - Claude Code sends an effort (`output_config.effort`) for a model it does not recognise — `high` when the
   session sets none — and vLLM hands it to the chat template as `reasoning_effort`. A template that takes only
   some levels fails every request: Qwen3.8's accepts `xhigh`, `medium` and `low`, and anything else is
