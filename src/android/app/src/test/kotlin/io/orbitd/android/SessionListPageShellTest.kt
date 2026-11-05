@@ -142,7 +142,7 @@ class SessionListPageShellTest {
         compose.onNode(plain).openRowMenu()
         await { exists(hasText("Complete") and hasAnyAncestor(isDialog())) }
         compose.onNode(hasText("Complete") and hasAnyAncestor(isDialog())).assertIsEnabled()
-        compose.onNode(hasText("Rename") and hasAnyAncestor(isDialog())).assertIsEnabled()
+        compose.onNode(hasText("Rename…") and hasAnyAncestor(isDialog())).assertIsEnabled()
         compose.onAllNodesWithText("Refresh the directory before making changes.").assertCountEquals(0)
         compose.onNode(hasText("Close") and hasAnyAncestor(isDialog())).performClick()
         compose.waitForIdle()

@@ -51,7 +51,7 @@ class TrashShellTest {
         await { exists(hasText("Fixture runner · 1 running")) }
         val answer = CompletableDeferred<Unit>()
         NavShell.holdDelete = answer
-        rowAction("Plain notes", "Move to Trash")
+        rowAction("Plain notes", "Delete")
         await { NavShell.calls.any { it == "DELETE sessions/${NavShell.PLAIN}" } }
         compose.onAllNodes(hasRowMenu("Options for Plain notes")).assertCountEquals(0)
         compose.onAllNodesWithText("Fixture runner · 1 running").assertCountEquals(0)
@@ -79,8 +79,8 @@ class TrashShellTest {
         signIn(); openAlpha()
         val first = CompletableDeferred<Unit>(); val second = CompletableDeferred<Unit>()
         NavShell.holdDeletes[NavShell.PLAIN] = first; NavShell.holdDeletes[NavShell.SESSION] = second
-        rowAction("Plain notes", "Move to Trash")
-        rowAction("Review navigation", "Move to Trash")
+        rowAction("Plain notes", "Delete")
+        rowAction("Review navigation", "Delete")
         await { NavShell.calls.any { it == "DELETE sessions/${NavShell.PLAIN}" } && NavShell.calls.any { it == "DELETE sessions/${NavShell.SESSION}" } }
         compose.onAllNodes(hasRowMenu("Options for Plain notes")).assertCountEquals(0)
         compose.onAllNodes(hasRowMenu("Options for Review navigation")).assertCountEquals(0)
@@ -101,7 +101,7 @@ class TrashShellTest {
         NavShell.refuse = 409 to "The session is busy."
         val answer = CompletableDeferred<Unit>()
         NavShell.holdDelete = answer
-        rowAction("Plain notes", "Move to Trash")
+        rowAction("Plain notes", "Delete")
         await { NavShell.calls.any { it == "DELETE sessions/${NavShell.PLAIN}" } }
         compose.onAllNodes(hasRowMenu("Options for Plain notes")).assertCountEquals(0)
         answer.complete(Unit)
@@ -117,7 +117,7 @@ class TrashShellTest {
         await { exists(hasRowMenu("Options for Plain notes")) }
         val behind = CompletableDeferred<Unit>()
         NavShell.holdOpen = behind
-        rowAction("Plain notes", "Move to Trash")
+        rowAction("Plain notes", "Delete")
         await { toastShows("Undo") }
         assertFalse(app().trashing.ids.value.isEmpty())
         compose.onNode(hasText("Undo") and hasAnyAncestor(hasTestTag("toast"))).performClick()

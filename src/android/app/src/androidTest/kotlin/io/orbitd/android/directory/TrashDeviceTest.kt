@@ -215,8 +215,9 @@ class TrashDeviceTest {
 
     private fun rowAction(session: String) {
         compose.onNode(hasRowMenu("Options for $session")).performScrollTo().openRowMenu(); settle()
-        await { exists(hasText("Move to Trash") and hasAnyAncestor(isDialog())) }
-        compose.onNode(hasText("Move to Trash") and hasAnyAncestor(isDialog())).performScrollTo().performClick()
+        // A row's long press names it as iOS's does; the session page's ⋯ keeps Move to Trash.
+        await { exists(hasText("Delete") and hasAnyAncestor(isDialog())) }
+        compose.onNode(hasText("Delete") and hasAnyAncestor(isDialog())).performScrollTo().performClick()
     }
     private fun toastShows(text: String) = exists(hasText(text) and hasAnyAncestor(hasTestTag("toast")))
     /** The open card's own Dismiss; folded into its pill after six seconds, a tap on the pill shows it whole first (a tap on an open

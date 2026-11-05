@@ -234,11 +234,11 @@ class ProjectSessionsShellTest {
         compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
         await { exists(hasRowMenu("Options for Wire tests")) }
         compose.onNode(hasRowMenu("Options for Wire tests")).openRowMenu()
-        await { exists(hasText("Rename") and hasAnyAncestor(isDialog())) }
+        await { exists(hasText("Rename…") and hasAnyAncestor(isDialog())) }
         assertFalse(dialogButtons().contains("Move…"))
         compose.onNode(hasText("Close") and hasAnyAncestor(isDialog())).performClick()
         compose.onNode(hasRowMenu("Options for Coordinate launch")).openRowMenu()
-        await { exists(hasText("Rename") and hasAnyAncestor(isDialog())) }
+        await { exists(hasText("Rename…") and hasAnyAncestor(isDialog())) }
         assertTrue(dialogButtons().contains("Move…"))
     }
 
@@ -354,7 +354,7 @@ class ProjectSessionsShellTest {
         await { exists(hasText("Project · 4 sessions")) && exists(hasRowMenu("Options for Wire tests")) }
         val answer = CompletableDeferred<Unit>()
         ProjectShell.holdDelete = answer
-        memberAction("Wire tests", "Move to Trash")
+        memberAction("Wire tests", "Delete")
         settled { ProjectShell.calls.any { it == "DELETE sessions/${ProjectShell.WORKER}" } }
         compose.onAllNodes(hasRowMenu("Options for Wire tests")).assertCountEquals(0)
         await { exists(hasText("Project · 3 sessions")) }
@@ -379,7 +379,7 @@ class ProjectSessionsShellTest {
         ProjectShell.holdMembers = null
         // Drawn from the app's own Open list while the page's read is out.
         await { exists(hasRowMenu("Options for Wire tests")) }
-        memberAction("Wire tests", "Move to Trash")
+        memberAction("Wire tests", "Delete")
         await { toastShows("Moved to Trash") }
         settled { app().trashing.ids.value.isEmpty() && app().trashing.releases == 1L }
         compose.onAllNodes(hasRowMenu("Options for Wire tests")).assertCountEquals(0)

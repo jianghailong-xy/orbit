@@ -99,7 +99,7 @@ internal object SessionListTime {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () -> Unit,
-    deleted: Boolean = false, watching: WatchSessionSummary? = null, onOptions: () -> Unit) {
+    deleted: Boolean = false, watching: WatchSessionSummary? = null, actions: List<CustomAccessibilityAction> = emptyList(), onOptions: () -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val recaps = LocalSessionRecaps.current
     val line = remember(session, deleted, watching, recaps, machine) {
@@ -108,7 +108,7 @@ internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () 
     val word = remember(session, watching) { SessionHeader.statusWord(session, watching) }
     Column(Modifier.fillMaxWidth()
         .combinedClickable(role = Role.Button, onLongClickLabel = "Options for ${session.name}", onLongClick = onOptions, onClick = onOpen)
-        .semantics { stateDescription = word }
+        .semantics { stateDescription = word; if (actions.isNotEmpty()) customActions = actions }
         .padding(horizontal = 16.dp, vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(session.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)

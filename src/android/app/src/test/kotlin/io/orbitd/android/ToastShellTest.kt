@@ -66,7 +66,7 @@ class ToastShellTest {
 
     @Test fun movingToTrashIsAToastWithUndoRatherThanADialog() {
         signIn(); openAlpha()
-        rowAction("Plain notes", "Move to Trash")
+        rowAction("Plain notes", "Delete")
         await { toastShows("Moved to Trash") }
         toast("Undo").assertExists()
         compose.onAllNodesWithText("Plain notes is in Trash.").assertCountEquals(0)

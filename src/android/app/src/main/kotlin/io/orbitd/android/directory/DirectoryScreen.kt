@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListItemInfo
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -67,6 +68,10 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
     var action by remember { mutableStateOf<DirectoryDialog?>(null) }
     var projectMenu by remember { mutableStateOf<SessionProjectRow?>(null) }
     var pulling by remember { mutableStateOf(false) }
+    val swipe = remember { RowSwipeState() }
+    RowSwipeBack(swipe)
+    val refreshed by rememberUpdatedState(refresh)
+    val rowWrites = remember(api) { SessionActions(api, app) { refreshed() } }
     var pinnedCollapsed by rememberPinnedCollapsed()
     val sidebar by rememberProjectSidebar(api, revision)
     val asks by app.realtime.directoryAsks.collectAsState()
@@ -167,16 +172,25 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
                                         else -> ListHeading(group.title)
                                     }
                                 }
-                                if (!pinned || !pinnedCollapsed) items(group.sessions, key = { it.id }) { session ->
+                                if (!pinned || !pinnedCollapsed) itemsIndexed(group.sessions, key = { _, session -> session.id }) { index, session ->
                                     val project = content.projects[session.id]
-                                    if (project != null) SessionProjectRowView(project, { open(OrbitRoute(Destination.PROJECT_SESSIONS, project.projectId, workspace, origin = Origin.LIST)) }) {
-                                        projectMenu = project
+                                    if (project != null) {
+                                        val rowActions = SessionRowActionList.projectRowActions(project, pin = { rowWrites.pin(it.id, it.pinnedAt == null) }, move = { action = DirectoryDialog.Move(it) })
+                                        SwipeRow(session.id, swipe, rowActions) {
+                                            SessionProjectRowView(project, { open(OrbitRoute(Destination.PROJECT_SESSIONS, project.projectId, workspace, origin = Origin.LIST)) }, rowActions.accessibility) {
+                                                projectMenu = project
+                                            }
+                                        }
+                                    } else {
+                                        val rowActions = SessionRowActionList.rowActions(session, view, rowWrites) { action = it }
+                                        SwipeRow(session.id, swipe, rowActions) {
+                                            SessionRow(session, machine, { open(OrbitRoute(Destination.SESSION, session.id, workspace, folderId)) },
+                                                deleted = view == SessionView.TRASH, watching = watching[watchKey(session.id)], actions = rowActions.accessibility) {
+                                                action = DirectoryDialog.SessionMenu(session, view)
+                                            }
+                                        }
                                     }
-                                    else SessionRow(session, machine, { open(OrbitRoute(Destination.SESSION, session.id, workspace, folderId)) },
-                                        deleted = view == SessionView.TRASH, watching = watching[watchKey(session.id)]) {
-                                        action = DirectoryDialog.SessionMenu(session, view)
-                                    }
-                                    RowDivider()
+                                    RowDivider(hidden = swipe.hidesDivider(session.id, group.sessions.getOrNull(index + 1)?.id))
                                 }
                             }
                             // iOS's overlay on an empty list: Loading…, or that there is nothing. A read that failed says so.
@@ -218,7 +232,7 @@ private val SEARCH_FIELD_ROOM = 84.dp
 
 /** The hairline between a list's rows, from the rows' leading edge. */
 @Composable
-internal fun RowDivider() = HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+internal fun RowDivider(hidden: Boolean = false) = HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (hidden) 0f else 0.5f))
 
 @Composable
 fun SearchScreen(api: DirectoryApi, open: (OrbitRoute) -> Unit) {

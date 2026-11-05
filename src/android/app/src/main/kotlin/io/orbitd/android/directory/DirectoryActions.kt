@@ -12,7 +12,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.net.ApiError
-import io.orbitd.android.core.protocol.SessionAction
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.projects.failureReason
 import io.orbitd.android.toast.OrbitToasts
@@ -122,26 +121,12 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
                     when (dialog) {
                         is DirectoryDialog.SessionMenu -> {
                             val s = dialog.session
-                            if (dialog.view != SessionView.TRASH) {
-                                ActionButton("Rename", canWrite) { setDialog(DirectoryDialog.Rename(s)) }
-                                ActionButton(if (s.pinnedAt == null) "Pin" else "Unpin", canWrite) { perform { api.pin(s.id, s.pinnedAt == null) } }
-                                ActionButton("Tags…", canWrite) { setDialog(DirectoryDialog.Tags(s)) }
-                            }
-                            val positive = if (dialog.view == SessionView.OPEN) SessionAction.COMPLETE else SessionAction.RESTORE
-                            val allowed = data.fresh && s.capabilities?.allows(positive) == true
-                            ActionButton(if (positive == SessionAction.COMPLETE) "Complete" else "Move to Open", !busy && allowed) {
-                                setDialog(null)
-                                if (positive == SessionAction.COMPLETE) actions.complete(s.id, s.title) else actions.restore(s.id, s.title)
-                            }
-                            if (!allowed) Text("This action isn't available in the current session state.", style = MaterialTheme.typography.bodySmall)
-                            if (dialog.view != SessionView.TRASH) {
-                                ActionButton("Share…", canWrite) { setDialog(DirectoryDialog.Share(s)) }
-                                // A project's members are listed where its coordinator is, so of its sessions only the coordinator offers Move… (A05-6).
-                                if (s.projectMembership?.isCoordinator != false) ActionButton("Move…", canWrite) { setDialog(DirectoryDialog.Move(s)) }
-                            }
-                            ActionButton(if (dialog.view == SessionView.TRASH) "Delete Permanently…" else "Move to Trash", canWrite) {
-                                if (dialog.view == SessionView.TRASH) setDialog(DirectoryDialog.Purge(s))
-                                else { setDialog(null); actions.trash(s.id, s.title) }
+                            SessionRowActionList.menu(s, dialog.view).forEach { item ->
+                                if (item.destructive) HorizontalDivider()
+                                ActionButton(item.menuTitle, !busy && SessionRowActionList.enabled(item, s), danger = item.destructive) {
+                                    setDialog(null)
+                                    SessionRowActionList.press(item, s, actions, setDialog)
+                                }
                             }
                         }
                         is DirectoryDialog.Rename -> {
@@ -215,8 +200,9 @@ private fun MoveChoices(session: DirectorySession, api: DirectoryApi, enabled: B
 }
 
 @Composable
-internal fun ActionButton(text: String, enabled: Boolean, action: () -> Unit) {
-    TextButton(onClick = action, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(text) }
+internal fun ActionButton(text: String, enabled: Boolean, danger: Boolean = false, action: () -> Unit) {
+    TextButton(onClick = action, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        colors = if (danger) ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error) else ButtonDefaults.textButtonColors()) { Text(text) }
 }
 
 /** A question the directory asks before a press it cannot take back: the title, what happens, and the press beside Cancel. */

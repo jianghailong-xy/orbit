@@ -81,11 +81,11 @@ import kotlinx.serialization.json.JsonObject
  * project's sessions; a long press the row's menu. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun SessionProjectRowView(row: SessionProjectRow, onOpen: () -> Unit, onOptions: () -> Unit) {
+internal fun SessionProjectRowView(row: SessionProjectRow, onOpen: () -> Unit, actions: List<CustomAccessibilityAction> = emptyList(), onOptions: () -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val words = SessionProjectCopy.statusWords(row)
     Column(Modifier.fillMaxWidth().combinedClickable(role = Role.Button, onLongClickLabel = "Options for ${row.title}", onLongClick = onOptions, onClick = onOpen)
-        .semantics { stateDescription = words }.testTag("project-row:${row.projectId}").padding(horizontal = 16.dp, vertical = 11.dp),
+        .semantics { stateDescription = words; if (actions.isNotEmpty()) customActions = actions }.testTag("project-row:${row.projectId}").padding(horizontal = 16.dp, vertical = 11.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(row.title, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
@@ -359,12 +359,20 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
             Icon(painterResource(R.drawable.ic_grid), SessionProjectCopy.openProject)
         }
     }
+    // A member's swipe, one row open at a time; its writes read the page's members again behind them, as its menu's do.
+    val swipe = remember { RowSwipeState() }
+    RowSwipeBack(swipe)
+    val reload by rememberUpdatedState { scope.launch { loadMembers() } }
+    val rowWrites = remember(api) { SessionActions(api, app) { app.realtime.refreshDirectory(); reload() } }
     @Composable
     fun MemberRow(session: DirectorySession) {
         val view = if (session.effectiveLifecycleState == "COMPLETED") SessionView.COMPLETED else SessionView.OPEN
-        SessionRow(session, data.machineName(session.workspace), { open(OrbitRoute(Destination.SESSION, session.id, route.workspaceId, origin = Origin.LIST)) },
-            watching = watches.summaries[watchKey(session.id)]) {
-            action = DirectoryDialog.SessionMenu(session, view)
+        val rowActions = SessionRowActionList.rowActions(session, view, rowWrites) { action = it }
+        SwipeRow(session.id, swipe, rowActions) {
+            SessionRow(session, data.machineName(session.workspace), { open(OrbitRoute(Destination.SESSION, session.id, route.workspaceId, origin = Origin.LIST)) },
+                watching = watches.summaries[watchKey(session.id)], actions = rowActions.accessibility) {
+                action = DirectoryDialog.SessionMenu(session, view)
+            }
         }
     }
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = { refresh() }, modifier = Modifier.fillMaxSize().testTag("project-sessions")) {
