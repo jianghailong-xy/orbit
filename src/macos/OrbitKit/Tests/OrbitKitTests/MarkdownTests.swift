@@ -265,9 +265,9 @@ final class MarkdownTests: XCTestCase {
 
     // MARK: bold that CJK punctuation leaves drawn with its stars
     //
-    // The same inputs as the web `cjkBold.test.ts` and Android's `CjkBoldTest`, so the three read one rule.
+    // The same inputs as the web `cjkMarkdown.test.ts` and Android's `CjkMarkdownTest`, so the three read one rule.
 
-    func testMendCjkBoldMovesTheMarkThatKeepsTheStarsDrawn() {
+    func testTheMendMovesTheMarkThatKeepsTheStarsDrawn() {
         for (markdown, mended) in [("**做法：**照上个项目的办法", "**做法**：照上个项目的办法"),
                                    ("这是**“重点”**内容", "这是“**重点**”内容"),
                                    ("**注意：**run this", "**注意**：run this"),
@@ -284,11 +284,11 @@ final class MarkdownTests: XCTestCase {
                                    ("**[`a*b`](u)：**照", "**[`a*b`](u)**：照"),
                                    ("```\ncode\n```\n**做法：**照", "```\ncode\n```\n**做法**：照"),
                                    ("**做法：**照\r\n**注意：**看", "**做法**：照\r\n**注意**：看")] {
-            XCTAssertEqual(mendCjkBold(markdown), mended)
+            XCTAssertEqual(mendCjkMarkdown(markdown), mended)
         }
     }
 
-    func testMendCjkBoldLeavesAloneWhatIsNotThisMisfire() {
+    func testTheMendLeavesAloneWhatIsNotThisMisfire() {
         for markdown in ["**note:**word",                 // no CJK at the marks
                          "a**-1 和 b**2",                  // a power
                          "值**-1 和 b**2",                 // a power beside CJK
@@ -325,7 +325,7 @@ final class MarkdownTests: XCTestCase {
                          "~~~\n**做法：**照\n~~~",         // a tilde fence
                          "> ```\n> **做法：**照\n> ```",   // a fence in a quote
                          "```\n**做法：**照"] {            // a fence cut off
-            XCTAssertEqual(mendCjkBold(markdown), markdown)
+            XCTAssertEqual(mendCjkMarkdown(markdown), markdown)
         }
     }
 
@@ -334,5 +334,51 @@ final class MarkdownTests: XCTestCase {
     func testTheParserReadsTheMendedBold() {
         XCTAssertEqual(parseMarkdownBlocks("**做法：**照上个项目的办法"), [.paragraph(text: "**做法**：照上个项目的办法")])
         XCTAssertEqual(parseMarkdownBlocks("这是**“重点”**内容"), [.paragraph(text: "这是“**重点**”内容")])
+    }
+
+    // MARK: a bare URL that CJK runs straight on from
+
+    func testTheMendEndsABareUrlWhereTheAddressEnds() {
+        for (markdown, mended) in [("打开 https://orbitd.io，也就是你的账号。", "打开 <https://orbitd.io>，也就是你的账号。"),
+                                   ("地址 **http://217.216.108.220:2087**（IPv4 明文", "地址 **<http://217.216.108.220:2087>**（IPv4 明文"),
+                                   ("**http://192.168.1.12:8765/**，点“下载”", "**<http://192.168.1.12:8765/>**，点“下载”"),
+                                   ("http://localhost:2376看看", "<http://localhost:2376>看看"),
+                                   ("https://a.com/docs查看说明", "<https://a.com/docs>查看说明"),
+                                   ("https://zh.wikipedia.org/wiki/中文，然后", "<https://zh.wikipedia.org/wiki/中文>，然后"),
+                                   ("https://zh.wikipedia.org/wiki/中文_语言。", "<https://zh.wikipedia.org/wiki/中文_语言>。"),
+                                   ("(see http://a.com)，然后", "(see <http://a.com>)，然后"),
+                                   ("http://a.com/x_(y)，然后", "<http://a.com/x_(y)>，然后"),
+                                   ("http://a.com.，然后", "<http://a.com>.，然后"),
+                                   ("“http://a.com”是地址", "“<http://a.com>”是地址"),
+                                   ("地址http://a.com，然后", "地址<http://a.com>，然后"),
+                                   ("http://a.com?x=1&y=2，然后", "<http://a.com?x=1&y=2>，然后"),
+                                   ("**看 http://a.com：**然后", "**看 <http://a.com>**：然后"),
+                                   ("http://a.com/**/b，然后**做法：**照", "<http://a.com/**/b>，然后**做法**：照")] {
+            XCTAssertEqual(mendCjkMarkdown(markdown), mended)
+        }
+    }
+
+    func testTheMendLeavesAloneWhatIsNotABareUrlToEnd() {
+        for markdown in ["plain http://a.com/x then words",          // one that stops at a space
+                         "https://zh.wikipedia.org/wiki/中文 是页面", // a path segment that opens on CJK
+                         "xhttp://a.com，然后",                       // a scheme inside a word
+                         "http://，然后",                             // no address
+                         "http://**，然后",                           // no address, only marks
+                         "`http://a.com，然后`",                      // a code span
+                         "[链接](http://a.com/路径，然后)",            // a link's address
+                         "[http://a.com，然后](http://a.com)",        // a link's text
+                         "![图](http://a.com/图，一)",                 // an image's address
+                         "<http://a.com，然后>",                      // an autolink
+                         "[ref]: http://a.com/路径，然后",             // a reference definition
+                         "```\nhttp://a.com，然后\n```"] {            // a fenced block
+            XCTAssertEqual(mendCjkMarkdown(markdown), markdown)
+        }
+    }
+
+    /// Through the parser the view reads: an explicit link, so the view's detector leaves it alone
+    /// (`LinkDetection.linkifying` skips text that already holds a link), and bold that closes.
+    func testTheParserReadsTheMendedUrl() {
+        XCTAssertEqual(parseMarkdownBlocks("打开 https://orbitd.io，也就是"), [.paragraph(text: "打开 <https://orbitd.io>，也就是")])
+        XCTAssertEqual(parseMarkdownBlocks("地址 **http://a.com:2087**（IPv4"), [.paragraph(text: "地址 **<http://a.com:2087>**（IPv4")])
     }
 }

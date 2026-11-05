@@ -1,7 +1,7 @@
 import ReactMarkdown, { type Options } from 'react-markdown';
-import { mendCjkBold } from '../lib/cjkBold';
+import { mendCjkMarkdown } from '../lib/cjkMarkdown';
 
-/** `react-markdown`, reading bold that CJK punctuation would leave drawn with its stars. */
+/** `react-markdown`, reading the bold and the bare URLs that CJK running straight on from them would break. */
 export default function Markdown({ children, ...options }: Options) {
-  return <ReactMarkdown {...options}>{children ? mendCjkBold(children) : children}</ReactMarkdown>;
+  return <ReactMarkdown {...options}>{children ? mendCjkMarkdown(children) : children}</ReactMarkdown>;
 }

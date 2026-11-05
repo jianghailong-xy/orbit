@@ -1,5 +1,6 @@
 package io.orbitd.android.text
 
+import org.commonmark.node.Link
 import org.commonmark.node.Node
 import org.commonmark.node.StrongEmphasis
 import org.commonmark.node.Text
@@ -8,14 +9,15 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The same inputs as the web `cjkBold.test.ts` and OrbitKit's `MarkdownTests`, so the three read one rule. */
-class CjkBoldTest {
-    private class Read(var bold: Int = 0, var text: String = "")
+/** The same inputs as the web `cjkMarkdown.test.ts` and OrbitKit's `MarkdownTests`, so the three read one rule. */
+class CjkMarkdownTest {
+    private class Read(var bold: Int = 0, var text: String = "", val links: MutableList<String> = mutableListOf())
 
     private fun read(markdown: String): Read {
         val read = Read()
         fun walk(node: Node) {
             if (node is StrongEmphasis) read.bold += 1
+            if (node is Link) read.links += node.destination
             if (node is Text) read.text += node.literal
             node.children().forEach(::walk)
         }
@@ -42,7 +44,7 @@ class CjkBoldTest {
             "```\ncode\n```\n**做法：**照" to "```\ncode\n```\n**做法**：照",
             "**做法：**照\r\n**注意：**看" to "**做法**：照\r\n**注意**：看",
         ).forEach { (markdown, mended) ->
-            assertEquals(mended, mendCjkBold(markdown))
+            assertEquals(mended, mendCjkMarkdown(markdown))
             // The parser's own reading, before and after: the same words, now bold and with no stars.
             val before = read(markdown)
             val after = read(mended)
@@ -91,6 +93,46 @@ class CjkBoldTest {
             "~~~\n**做法：**照\n~~~", // a tilde fence
             "> ```\n> **做法：**照\n> ```", // a fence in a quote
             "```\n**做法：**照", // a fence cut off
-        ).forEach { assertEquals(it, mendCjkBold(it)) }
+        ).forEach { assertEquals(it, mendCjkMarkdown(it)) }
+    }
+
+    @Test fun endsABareUrlWhereTheAddressEnds() {
+        listOf(
+            Triple("打开 https://orbitd.io，也就是你的账号。", "打开 <https://orbitd.io>，也就是你的账号。", "https://orbitd.io"),
+            Triple("地址 **http://217.216.108.220:2087**（IPv4 明文", "地址 **<http://217.216.108.220:2087>**（IPv4 明文", "http://217.216.108.220:2087"),
+            Triple("**http://192.168.1.12:8765/**，点“下载”", "**<http://192.168.1.12:8765/>**，点“下载”", "http://192.168.1.12:8765/"),
+            Triple("http://localhost:2376看看", "<http://localhost:2376>看看", "http://localhost:2376"),
+            Triple("https://a.com/docs查看说明", "<https://a.com/docs>查看说明", "https://a.com/docs"),
+            Triple("https://zh.wikipedia.org/wiki/中文，然后", "<https://zh.wikipedia.org/wiki/中文>，然后", "https://zh.wikipedia.org/wiki/中文"),
+            Triple("https://zh.wikipedia.org/wiki/中文_语言。", "<https://zh.wikipedia.org/wiki/中文_语言>。", "https://zh.wikipedia.org/wiki/中文_语言"),
+            Triple("(see http://a.com)，然后", "(see <http://a.com>)，然后", "http://a.com"),
+            Triple("http://a.com/x_(y)，然后", "<http://a.com/x_(y)>，然后", "http://a.com/x_(y)"),
+            Triple("http://a.com.，然后", "<http://a.com>.，然后", "http://a.com"),
+            Triple("“http://a.com”是地址", "“<http://a.com>”是地址", "http://a.com"),
+            Triple("地址http://a.com，然后", "地址<http://a.com>，然后", "http://a.com"),
+            Triple("http://a.com?x=1&y=2，然后", "<http://a.com?x=1&y=2>，然后", "http://a.com?x=1&y=2"),
+            Triple("**看 http://a.com：**然后", "**看 <http://a.com>**：然后", "http://a.com"),
+            Triple("http://a.com/**/b，然后**做法：**照", "<http://a.com/**/b>，然后**做法**：照", "http://a.com/**/b"),
+        ).forEach { (markdown, mended, link) ->
+            assertEquals(mended, mendCjkMarkdown(markdown))
+            assertEquals("the parser's link in $mended", listOf(link), read(mended).links)
+        }
+    }
+
+    @Test fun leavesAloneWhatIsNotABareUrlToEnd() {
+        listOf(
+            "plain http://a.com/x then words", // one that stops at a space
+            "https://zh.wikipedia.org/wiki/中文 是页面", // a path segment that opens on CJK
+            "xhttp://a.com，然后", // a scheme inside a word
+            "http://，然后", // no address
+            "http://**，然后", // no address, only marks
+            "`http://a.com，然后`", // a code span
+            "[链接](http://a.com/路径，然后)", // a link's address
+            "[http://a.com，然后](http://a.com)", // a link's text
+            "![图](http://a.com/图，一)", // an image's address
+            "<http://a.com，然后>", // an autolink
+            "[ref]: http://a.com/路径，然后", // a reference definition
+            "```\nhttp://a.com，然后\n```", // a fenced block
+        ).forEach { assertEquals(it, mendCjkMarkdown(it)) }
     }
 }

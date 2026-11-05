@@ -18,6 +18,11 @@ enum MarkdownMarks {
     struct HeldCode {
         private var spans: [String] = []
 
+        mutating func hold(_ span: String) -> String {
+            spans.append(span)
+            return "\u{E000}\(spans.count - 1)\u{E000}"
+        }
+
         /// One pass over the text, so a span is never read out of what was already held.
         mutating func hold(_ pattern: NSRegularExpression?, group: Int = 2, in text: String) -> String {
             guard let pattern else { return text }
@@ -27,8 +32,7 @@ enum MarkdownMarks {
                 guard let whole = Range(match.range, in: text),
                       let code = Range(match.range(at: group), in: text) else { continue }
                 held += text[cursor..<whole.lowerBound]
-                held += "\u{E000}\(spans.count)\u{E000}"
-                spans.append(String(text[code]))
+                held += hold(String(text[code]))
                 cursor = whole.upperBound
             }
             held += text[cursor...]

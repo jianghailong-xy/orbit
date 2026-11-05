@@ -5,14 +5,15 @@ import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
 import { describe, expect, it } from 'vitest';
 import Markdown from '../components/Markdown';
-import { mendCjkBold } from './cjkBold';
+import { mendCjkMarkdown } from './cjkMarkdown';
 
-// The same inputs as OrbitKit's MarkdownTests and Android's CjkBoldTest, so the three read one rule.
+// The same inputs as OrbitKit's MarkdownTests and Android's CjkMarkdownTest, so the three read one rule.
 const parser = unified().use(remarkParse).use(remarkGfm);
 const read = (md: string) => {
-  const found = { bold: 0, text: '' };
+  const found = { bold: 0, text: '', links: [] as string[] };
   const walk = (node: any) => {
     if (node.type === 'strong') found.bold += 1;
+    if (node.type === 'link') found.links.push(node.url);
     if (typeof node.value === 'string') found.text += node.value;
     (node.children ?? []).forEach(walk);
   };
@@ -20,7 +21,7 @@ const read = (md: string) => {
   return found;
 };
 
-describe('mendCjkBold', () => {
+describe('mendCjkMarkdown: bold', () => {
   it.each([
     ['**做法：**照上个项目的办法', '**做法**：照上个项目的办法'],
     ['这是**“重点”**内容', '这是“**重点**”内容'],
@@ -39,7 +40,7 @@ describe('mendCjkBold', () => {
     ['```\ncode\n```\n**做法：**照', '```\ncode\n```\n**做法**：照'],
     ['**做法：**照\r\n**注意：**看', '**做法**：照\r\n**注意**：看'],
   ])('moves the mark that keeps the stars drawn: %s', (md, mended) => {
-    expect(mendCjkBold(md)).toBe(mended);
+    expect(mendCjkMarkdown(md)).toBe(mended);
     // The parser's own reading, before and after: the same words, now bold and with no stars.
     const before = read(md);
     const after = read(mended);
@@ -87,7 +88,7 @@ describe('mendCjkBold', () => {
     ['a fence in a quote', '> ```\n> **做法：**照\n> ```'],
     ['a fence cut off', '```\n**做法：**照'],
   ])('leaves alone %s', (_, md) => {
-    expect(mendCjkBold(md)).toBe(md);
+    expect(mendCjkMarkdown(md)).toBe(md);
   });
 
   it('draws the bubble’s bold, with every word and no stars', () => {
@@ -97,5 +98,55 @@ describe('mendCjkBold', () => {
 
   it('passes nothing to draw through', () => {
     expect(renderToStaticMarkup(createElement(Markdown))).toBe('');
+  });
+});
+
+describe('mendCjkMarkdown: a bare URL', () => {
+  it.each([
+    ['打开 https://orbitd.io，也就是你的账号。', '打开 <https://orbitd.io>，也就是你的账号。', 'https://orbitd.io'],
+    ['地址 **http://217.216.108.220:2087**（IPv4 明文', '地址 **<http://217.216.108.220:2087>**（IPv4 明文', 'http://217.216.108.220:2087'],
+    ['**http://192.168.1.12:8765/**，点“下载”', '**<http://192.168.1.12:8765/>**，点“下载”', 'http://192.168.1.12:8765/'],
+    ['http://localhost:2376看看', '<http://localhost:2376>看看', 'http://localhost:2376'],
+    ['https://a.com/docs查看说明', '<https://a.com/docs>查看说明', 'https://a.com/docs'],
+    ['https://zh.wikipedia.org/wiki/中文，然后', '<https://zh.wikipedia.org/wiki/中文>，然后', 'https://zh.wikipedia.org/wiki/中文'],
+    ['https://zh.wikipedia.org/wiki/中文_语言。', '<https://zh.wikipedia.org/wiki/中文_语言>。', 'https://zh.wikipedia.org/wiki/中文_语言'],
+    ['(see http://a.com)，然后', '(see <http://a.com>)，然后', 'http://a.com'],
+    ['http://a.com/x_(y)，然后', '<http://a.com/x_(y)>，然后', 'http://a.com/x_(y)'],
+    ['http://a.com.，然后', '<http://a.com>.，然后', 'http://a.com'],
+    ['“http://a.com”是地址', '“<http://a.com>”是地址', 'http://a.com'],
+    ['地址http://a.com，然后', '地址<http://a.com>，然后', 'http://a.com'],
+    ['http://a.com?x=1&y=2，然后', '<http://a.com?x=1&y=2>，然后', 'http://a.com?x=1&y=2'],
+    ['**看 http://a.com：**然后', '**看 <http://a.com>**：然后', 'http://a.com'],
+    ['http://a.com/**/b，然后**做法：**照', '<http://a.com/**/b>，然后**做法**：照', 'http://a.com/**/b'],
+  ])('ends the link where the address ends: %s', (md, mended, link) => {
+    expect(mendCjkMarkdown(md)).toBe(mended);
+    // The parser's own reading, before and after: the same words, and a link with only the address.
+    const before = read(md);
+    const after = read(mended);
+    expect(before.links[0]).not.toBe(link);
+    expect(after.links).toEqual([link]);
+    expect(after.text.replaceAll('**', '')).toBe(before.text.replaceAll('**', ''));
+  });
+
+  it.each([
+    ['one that stops at a space', 'plain http://a.com/x then words'],
+    ['a path segment that opens on CJK', 'https://zh.wikipedia.org/wiki/中文 是页面'],
+    ['a scheme inside a word', 'xhttp://a.com，然后'],
+    ['no address', 'http://，然后'],
+    ['no address, only marks', 'http://**，然后'],
+    ['a code span', '`http://a.com，然后`'],
+    ['a link’s address', '[链接](http://a.com/路径，然后)'],
+    ['a link’s text', '[http://a.com，然后](http://a.com)'],
+    ['an image’s address', '![图](http://a.com/图，一)'],
+    ['an autolink', '<http://a.com，然后>'],
+    ['a reference definition', '[ref]: http://a.com/路径，然后'],
+    ['a fenced block', '```\nhttp://a.com，然后\n```'],
+  ])('leaves alone %s', (_, md) => {
+    expect(mendCjkMarkdown(md)).toBe(md);
+  });
+
+  it('draws the link with only the address, and the sentence after it', () => {
+    const html = renderToStaticMarkup(createElement(Markdown, null, '打开 https://orbitd.io，也就是你的账号。'));
+    expect(html).toBe('<p>打开 <a href="https://orbitd.io">https://orbitd.io</a>，也就是你的账号。</p>');
   });
 });

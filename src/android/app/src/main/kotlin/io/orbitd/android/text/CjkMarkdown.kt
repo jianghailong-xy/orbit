@@ -1,13 +1,19 @@
 package io.orbitd.android.text
 
-/* Bold that CommonMark leaves drawn with its stars. A closing `**` with punctuation on its inside closes only if whitespace or
- * punctuation stands on its outside, and an opening one mirrors that: a rule written for languages that put a space after a colon,
- * so a CJK sentence that runs straight on from a bold phrase ending in `：` reaches the reader as it was typed.
+/* Markdown that reads wrongly because CJK runs straight on from it, with no space between, mended in the source before a parser
+ * reads it. The parsers stay as they are, so the three clients read one rule (web `lib/cjkMarkdown.ts`, OrbitKit `mendCjkMarkdown`).
+ * Never in code.
  *
- * Moving one punctuation mark across the `**` makes it flank and draws the same words: the bold just stops a mark short. The source
- * changes and the parser stays as it is, so the three clients read one rule (web `lib/cjkBold.ts`, OrbitKit `mendCjkBold`). Only
- * where CJK stands at the marks, the one place this rule misfires, and never in code. ICU's `\s`, which the Swift matches with, is
- * spelled out so the JVM and the device read whitespace alike. */
+ * Bold. CommonMark closes a `**` with punctuation on its inside only if whitespace or punctuation stands on its outside, and an
+ * opening one mirrors that: a rule written for languages that put a space after a colon, so a CJK sentence that runs straight on
+ * from a bold phrase ending in `：` reaches the reader with its stars. Moving one punctuation mark across the `**` makes it flank and
+ * draws the same words: the bold just stops a mark short. Only where CJK stands at the marks, the one place this rule misfires.
+ *
+ * A bare URL. Autolinking takes one on through the sentence after it. Written as `<https://orbitd.io>` it ends where the address does
+ * and draws the same words. An address ends at CJK punctuation, and at a CJK letter unless that letter opens a path segment, as in
+ * `/wiki/中文`.
+ *
+ * ICU's `\s`, which the Swift matches with, is spelled out so the JVM and the device read whitespace alike. */
 
 private const val SPACE = "\\t\\n\\f\\r\\p{Z}"
 private val HOLD = Char(0xE000)
@@ -16,7 +22,15 @@ private val CODE_SPAN = Regex("(?<!`)(`+)(?!`).*?[^`]\\1(?!`)")
 
 // What a mark must not be moved out of, held with the code: a link's or an image's `)`, a reference link's `]`, a tag's `>`, an
 // entity's `;` and the mark an escape is for.
-private val WHOLE = Regex("!?\\[[^\\]\\n]*\\]\\([^)\\n]*\\)|!?\\[[^\\]\\n]*\\]\\[[^\\]\\n]*\\]|<[A-Za-z/!?][^>\\n]*>|&#?[A-Za-z0-9]+;|\\\\[!-/:-@\\[-`{-~]")
+private val WHOLE = Regex("^[ \\t]*\\[[^\\]\\n]*\\]:[ \\t]*[^$SPACE]+|!?\\[[^\\]\\n]*\\]\\([^)\\n]*\\)|!?\\[[^\\]\\n]*\\]\\[[^\\]\\n]*\\]|<[A-Za-z/!?][^>\\n]*>|&#?[A-Za-z0-9]+;|\\\\[!-/:-@\\[-`{-~]")
+
+private const val URL_MARK = "\\x{2010}-\\x{2027}\\x{3000}-\\x{303F}\\x{FE30}-\\x{FE4F}\\x{FF00}-\\x{FFEF}"
+private const val CJK_LETTER = "\\x{2E80}-\\x{2FFF}\\x{3040}-\\x{9FFF}\\x{AC00}-\\x{D7AF}\\x{F900}-\\x{FAFF}\\x{20000}-\\x{3FFFF}"
+private val BARE_URL = Regex("(?<![A-Za-z])https?://(?:[!-;=?-~]|(?<=/)[$CJK_LETTER][^$SPACE<$URL_MARK]*)+")
+private val ENDS_A_URL = Regex("^[$URL_MARK$CJK_LETTER]")
+
+// What GFM leaves off the end of a bare URL as the sentence's, not the address's.
+private val URL_TAIL = Regex("[?!.,:;*_~'\"]+\\z")
 
 // A pair read left to right, so a closing `**` is never taken for the next pair's opening one.
 private val BOLD = Regex("(?<!\\*)\\*\\*(?![$SPACE*])((?:[^*]|\\*(?!\\*))+?)(?<![$SPACE])\\*\\*(?!\\*)")
@@ -33,13 +47,30 @@ private val WORD = Regex("^[^$SPACE\\p{P}\\x{E000}]")
 private val CJK = Regex("[\\x{2E80}-\\x{9FFF}\\x{AC00}-\\x{D7AF}\\x{F900}-\\x{FAFF}\\x{FE30}-\\x{FE4F}\\x{FF00}-\\x{FFEF}\\x{20000}-\\x{3FFFF}]")
 private val SPACE_AT_AN_END = Regex("^[$SPACE]|[$SPACE]\\z")
 
+private fun mightNeedMending(text: String) = "**" in text || "://" in text
+
+/** The address in [url]: what is left when the sentence's marks and an unmatched `)` come off its end. */
+private fun address(url: String): String {
+    var kept = URL_TAIL.replace(url, "")
+    while (kept.endsWith(")") && kept.count { it == ')' } > kept.count { it == '(' }) kept = URL_TAIL.replace(kept.dropLast(1), "")
+    return kept
+}
+
 private fun misflanks(inside: String, outside: String) =
     SENTENCE_MARK.containsMatchIn(inside) && WORD.containsMatchIn(outside) && (CJK.containsMatchIn(inside) || CJK.containsMatchIn(outside))
 
 private fun mendLine(line: String): String {
     val code = mutableListOf<String>()
-    val hold = { span: MatchResult -> code += span.value; "$HOLD${code.size - 1}$HOLD" }
-    val held = WHOLE.replace(CODE_SPAN.replace(line, hold), hold)
+    val holdText = { span: String -> code += span; "$HOLD${code.size - 1}$HOLD" }
+    val hold = { span: MatchResult -> holdText(span.value) }
+    val whole = WHOLE.replace(CODE_SPAN.replace(line, hold), hold)
+    val held = BARE_URL.replace(whole) { match ->
+        val url = match.value
+        val kept = address(url)
+        if (ENDS_A_URL.containsMatchIn(whole.substring(match.range.last + 1)) && !kept.endsWith("://")) {
+            holdText("<$kept>") + url.substring(kept.length)
+        } else url
+    }
     var mended = BOLD.replace(held) { pair ->
         val inner = pair.groupValues[1]
         val first = FIRST.find(inner)?.value.orEmpty()
@@ -57,8 +88,8 @@ private fun mendLine(line: String): String {
     return mended
 }
 
-internal fun mendCjkBold(markdown: String): String {
-    if ("**" !in markdown) return markdown
+internal fun mendCjkMarkdown(markdown: String): String {
+    if (!mightNeedMending(markdown)) return markdown
     var open = ""
     return markdown.split("\n").joinToString("\n") { line ->
         val found = FENCE.find(line)
@@ -73,7 +104,7 @@ internal fun mendCjkBold(markdown: String): String {
                 open = mark
                 line
             }
-            "**" in line -> mendLine(line)
+            mightNeedMending(line) -> mendLine(line)
             else -> line
         }
     }
