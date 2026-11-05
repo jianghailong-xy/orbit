@@ -50,11 +50,12 @@ import { approvalParts, hasText, partsText, runEventParts, toolCallParts, toolOu
  * NEVER STORED. The text is handed to the maintenance run and forgotten; what is kept is the sources — each
  * span's place, never its words — and the hash (`wiki_dossier`, hard constraint 4).
  *
- * THE AGENT'S NOTES, WHEN ASKED FOR (`DossierOptions.claims`, docs/wiki-memory-claims-design.md §3.1 and §3.2). A
+ * THE AGENT'S NOTES, WHEN ASKED FOR (`DossierOptions.claims`, docs/wiki-memory-claims-design.md §3.1 and §6.2). A
  * write to a memory file is what the agent believed at that moment: a question for the case to answer, never a
- * source. Asked for, it is a `C1 claim:` line at its moment in the timeline, which no source can name, and the
- * records that bear on it are carried first. Not asked for, or with no write to read, the text is the one this
- * file always made, byte for byte.
+ * source. Asked for, the text is another file altogether, for the pass that does nothing but check those notes:
+ * each one a `C1 claim:` line at its moment in the timeline, which no source can name, the owner's words, and the
+ * records that bear on each note. Not asked for, or with no write to read, the text is the one this file always
+ * made, byte for byte.
  */
 
 // ── The records one session's dossier is made from ──────────────────────────────────────────────
@@ -213,8 +214,12 @@ export const WIKI_DOSSIER_CLAIMS = {
   /** The most claims one dossier carries, and the length of one. */
   perDossierMax: 6,
   lineMaxChars: 600,
-  /** The share of the budget the claims and the records bearing on them may take, from what ordinary windows get. */
-  budgetShare: 0.25,
+  /** The share of the budget the owner's words may take: what is left goes to the records that bear on each note. */
+  ownerShare: 0.35,
+  /** Around one note: the records that name its code words, and the lines right before and after it. */
+  namingLinesMax: 12,
+  linesBefore: 8,
+  linesAfter: 3,
   /** The most code words read from one claim, and the most results read to find them in. */
   wordsPerClaimMax: 16,
   resultsReadMax: 200,
@@ -1276,9 +1281,10 @@ function lineNaming(text: string, words: readonly string[], redact: (text: strin
 }
 
 /**
- * For each note, the records before it that name its code words, best first: the owner's words and the tool lines
- * that do not write a file. A word many lines name says less than a word few do, so a line weighs what each word
- * it names is worth; of equals, the nearest to the note.
+ * For each note, the lines to carry for it, best first. The records before it that name its code words: the owner's
+ * words and the tool lines that do not write a file. A word many lines name says less than a word few do, so a line
+ * weighs what each word it names is worth; of equals, the nearest to the note. And by turns with those, the lines
+ * right around it, nearest first, for a note that names little: what the agent had just seen is what it wrote down.
  */
 function evidenceFor(lines: readonly Line[], claims: readonly number[]): number[][] {
   return claims.map((at) => {
@@ -1294,7 +1300,15 @@ function evidenceFor(lines: readonly Line[], claims: readonly number[]): number[
       for (const word of named) lineCount.set(word, (lineCount.get(word) ?? 0) + 1);
     }
     const weight = (i: number) => namedBy.get(i)!.reduce((sum, word) => sum + 1 / lineCount.get(word)!, 0);
-    return [...namedBy.keys()].sort((a, b) => weight(b) - weight(a) || b - a);
+    const naming = [...namedBy.keys()].sort((a, b) => weight(b) - weight(a) || b - a).slice(0, WIKI_DOSSIER_CLAIMS.namingLinesMax);
+    const before: number[] = [];
+    for (let i = at - 1; i >= 0 && before.length < WIKI_DOSSIER_CLAIMS.linesBefore; i -= 1) if (lines[i]!.sp !== 'claim') before.push(i);
+    const after: number[] = [];
+    for (let i = at + 1; i < lines.length && after.length < WIKI_DOSSIER_CLAIMS.linesAfter; i += 1) if (lines[i]!.sp !== 'claim') after.push(i);
+    const near = [...before, ...after];
+    return Array.from({ length: Math.max(naming.length, near.length) }, (_, i) => [naming[i], near[i]])
+      .flat()
+      .filter((i): i is number => i !== undefined);
   });
 }
 
@@ -1444,9 +1458,8 @@ interface Packed {
 /**
  * The header and the lines, packed into `budget` tokens (pack.py `pack_v2`): the owner's words and
  * the session's closing reply first, then windows around the signals, highest first, then the agent's
- * longer replies — and rendered back in time order, a gap marked by how many lines it left out. A note is taken
- * before them all and the records that bear on it right after the mandatory lines, the two together within
- * `WIKI_DOSSIER_CLAIMS.budgetShare` of the budget, so what they take comes out of the windows.
+ * longer replies — and rendered back in time order, a gap marked by how many lines it left out. Lines that hold
+ * the agent's notes are packed otherwise (`claims` below): the notes, the owner's words, what bears on each note.
  */
 function pack(header: string, all: Line[], budget: number): Packed {
   const lines = scored(all);
@@ -1480,22 +1493,71 @@ function pack(header: string, all: Line[], budget: number): Packed {
     return true;
   };
   const capFor = (line: Line) => (line.sp === 'agent' ? caps.agent : caps.other);
-  const costOf = (i: number, cap: number) => wikiEstimateTokens(render(lines[i]!, cap).text) + 6;
 
-  // The notes, the feedback first and then the newest: what does not fit their share is left out and counted.
-  let claimRoom = Math.floor(budget * WIKI_DOSSIER_CLAIMS.budgetShare);
+  const finish = (): Packed => {
+    const renderAll = (): Packed => {
+      const out = [header, ''];
+      const carried: Packed['carried'] = [];
+      let previous = -1;
+      for (const i of [...chosen.keys()].sort((a, b) => a - b)) {
+        if (i > previous + 1 && previous >= 0) out.push(`   … (${i - previous - 1} lines omitted)`);
+        const line = lines[i]!;
+        const words = chosen.get(i)!;
+        out.push(`${line.ref} ${line.sp}: ${words.text.replace(/\n/g, '\n    ')}`);
+        carried.push({ line, words });
+        previous = i;
+      }
+      if (previous >= 0 && previous < n - 1) out.push(`   … (${n - 1 - previous} lines omitted)`);
+      const text = out.join('\n');
+      return { text, carried, tokens: wikiEstimateTokens(text), truncated: false };
+    };
+    let packed = renderAll();
+    // The estimate above is per line; the budget is for the whole text. What does not fit is taken off
+    // in the reverse of the order it was put in, so what goes first is what mattered least.
+    while (packed.tokens > budget && takenOrder.length > 0) {
+      chosen.delete(takenOrder.pop()!);
+      packed = renderAll();
+    }
+    if (packed.tokens > budget) {
+      // Only a header longer than the whole budget gets here: cut it, and say so.
+      packed = { ...packed, text: cutToTokens(packed.text, budget), tokens: 0 };
+      packed.tokens = wikiEstimateTokens(packed.text);
+    }
+    for (const words of chosen.values()) if (words.text.endsWith('…[cut]')) cut = true;
+    packed.truncated = chosen.size < n || cut;
+    return packed;
+  };
+
   const claims: number[] = [];
   lines.forEach((line, i) => {
     if (line.sp === 'claim') claims.push(i);
   });
-  claims.sort((a, b) => Number(lines[b]!.claim!.feedback) - Number(lines[a]!.claim!.feedback) || b - a);
-  const claimsTaken = claims.filter((i) => {
-    const cap = lines[i]!.text.length;
-    const cost = costOf(i, cap);
-    if (cost > claimRoom || !take(i, cap)) return false;
-    claimRoom -= cost;
-    return true;
-  });
+  if (claims.length > 0) {
+    // The notes, the feedback first and then the newest: what does not fit is left out and counted.
+    claims.sort((a, b) => Number(lines[b]!.claim!.feedback) - Number(lines[a]!.claim!.feedback) || b - a);
+    const notes = claims.filter((i) => take(i, lines[i]!.text.length));
+    // The task's opening, to say what the work was, and the owner's words, the strongest first, within their share.
+    const opening = lines.findIndex((line) => line.sp === 'taskprompt');
+    if (opening >= 0) take(opening, caps.other);
+    let ownerRoom = Math.floor(budget * WIKI_DOSSIER_CLAIMS.ownerShare);
+    const owners = lines
+      .map((line, i) => ({ line, i }))
+      .filter(({ line }) => OWNER_SPEAKERS.includes(line.sp) || line.decision)
+      .sort((a, b) => b.line.score - a.line.score || b.i - a.i);
+    for (const { i } of owners) {
+      const cost = wikiEstimateTokens(render(lines[i]!, caps.final).text) + 6;
+      if (cost <= ownerRoom && take(i, caps.final)) ownerRoom -= cost;
+    }
+    // Then what bears on each note, a line for every note in turn, so that no one note takes the whole file.
+    const evidence = evidenceFor(lines, notes);
+    for (let round = 0; evidence.some((hits) => round < hits.length); round += 1) {
+      for (const hits of evidence) {
+        const line = hits[round];
+        if (line !== undefined) take(line, capFor(lines[line]!));
+      }
+    }
+    return finish();
+  }
 
   let lastAgent = -1;
   lines.forEach((line, i) => {
@@ -1517,31 +1579,9 @@ function pack(header: string, all: Line[], budget: number): Packed {
 
   const keepInWindow = (j: number, center: number): boolean => {
     const line = lines[j]!;
-    if (line.sp === 'claim') return false;
     if (j === center || line.sp !== 'tool') return true;
     return Boolean(line.tool?.err) || line.sig.includes('irreversible') || line.sig.includes('fixed') || lines[center]!.sp === 'tool';
   };
-  // What bears on each note, a window from every note in turn, so that no one note takes the whole share.
-  const evidence = evidenceFor(lines, claimsTaken);
-  for (let round = 0; claimRoom > 0 && evidence.some((hits) => round < hits.length); round += 1) {
-    for (const hits of evidence) {
-      const center = hits[round];
-      if (center === undefined) continue;
-      const radius = lines[center]!.sp === 'tool' ? 1 : 0;
-      let indexes: number[] = [];
-      for (let j = Math.max(0, center - radius); j <= Math.min(n - 1, center + radius); j += 1) {
-        if (keepInWindow(j, center) && !chosen.has(j)) indexes.push(j);
-      }
-      const costs = (list: number[]) => list.reduce((sum, j) => sum + costOf(j, capFor(lines[j]!)), 0);
-      if (costs(indexes) > claimRoom) indexes = indexes.filter((j) => j === center);
-      if (indexes.length === 0 || costs(indexes) > claimRoom) continue;
-      for (const j of indexes) {
-        const cost = costOf(j, capFor(lines[j]!));
-        if (take(j, capFor(lines[j]!))) claimRoom -= cost;
-      }
-    }
-  }
-
   const windows: Array<{ lo: number; hi: number; score: number; center: number }> = [];
   lines.forEach((line, i) => {
     if (line.score < 1.5) return;
@@ -1577,37 +1617,7 @@ function pack(header: string, all: Line[], budget: number): Packed {
     take(i, caps.agent);
   }
 
-  const renderAll = (): Packed => {
-    const out = [header, ''];
-    const carried: Packed['carried'] = [];
-    let previous = -1;
-    for (const i of [...chosen.keys()].sort((a, b) => a - b)) {
-      if (i > previous + 1 && previous >= 0) out.push(`   … (${i - previous - 1} lines omitted)`);
-      const line = lines[i]!;
-      const words = chosen.get(i)!;
-      out.push(`${line.ref} ${line.sp}: ${words.text.replace(/\n/g, '\n    ')}`);
-      carried.push({ line, words });
-      previous = i;
-    }
-    if (previous >= 0 && previous < n - 1) out.push(`   … (${n - 1 - previous} lines omitted)`);
-    const text = out.join('\n');
-    return { text, carried, tokens: wikiEstimateTokens(text), truncated: false };
-  };
-  let packed = renderAll();
-  // The estimate above is per line; the budget is for the whole text. What does not fit is taken off
-  // in the reverse of the order it was put in, so what goes first is what mattered least.
-  while (packed.tokens > budget && takenOrder.length > 0) {
-    chosen.delete(takenOrder.pop()!);
-    packed = renderAll();
-  }
-  if (packed.tokens > budget) {
-    // Only a header longer than the whole budget gets here: cut it, and say so.
-    packed = { ...packed, text: cutToTokens(packed.text, budget), tokens: 0 };
-    packed.tokens = wikiEstimateTokens(packed.text);
-  }
-  for (const words of chosen.values()) if (words.text.endsWith('…[cut]')) cut = true;
-  packed.truncated = chosen.size < n || cut;
-  return packed;
+  return finish();
 }
 
 /** `text` cut at the last line break that keeps it within `budget` estimated tokens. */
@@ -1765,9 +1775,9 @@ export interface DossierOptions {
   /** Tokens the dossier may take. The contract's 8,000 unless a test names a smaller one. */
   maxTokens?: number;
   /**
-   * Carry the agent's notes: the writes to memory files as `C1 claim:` lines, and the records that bear on them
-   * first (docs/wiki-memory-claims-design.md §3.1, §3.2). Off by default; a dossier with no note to carry is
-   * the same bytes either way.
+   * Make the file of the pass that only checks the agent's notes: the writes to memory files as `C1 claim:` lines,
+   * the owner's words and the records that bear on each note, and nothing else (docs/wiki-memory-claims-design.md
+   * §3.1, §6.2). Off by default; a session with no note to carry gets the same bytes either way, and no pass.
    */
   claims?: boolean;
 }

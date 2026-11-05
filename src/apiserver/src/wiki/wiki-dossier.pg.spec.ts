@@ -52,6 +52,7 @@ import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
+import { wikiMaintainCheckClaims, wikiMaintainLines } from '../wiki-worker/wiki-maintain';
 import { wikiMaintainJobPrincipal } from '../wiki-worker/wiki-maintain-job';
 import { WikiController } from './wiki.controller';
 import { buildDossier, loadDossierRecords, storedDossierSources, wikiClaimsHeldOut, WIKI_DOSSIER_CLAIMS } from './wiki-dossier';
@@ -1480,7 +1481,7 @@ test("the agent's notes come from the real rows when asked for, and a run's page
     talk = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id, status: 'SUCCEEDED', lastTurnAt: minutesAgo(20) });
   }
   const library = '/root/.claude/projects/-root-orbit/memory';
-  await turn(h, talk, 'Why did the release tag on its own?', { at: minutesAgo(59) });
+  const turned = await turn(h, talk, 'Why did the release tag on its own?', { at: minutesAgo(59) });
   const long = `${'a line of the log\n'.repeat(120)}tagging v0.1.2-beta.104 because parseVersion ran release.sh\n${'another line\n'.repeat(120)}the end`;
   const result = await tool(h, talk, 'Bash', { command: 'bash scripts/release-dry.sh' }, long, { at: minutesAgo(58) });
   // A result in blocks is read as any reader of the record reads it: its text, not its JSON.
@@ -1529,6 +1530,48 @@ test("the agent's notes come from the real rows when asked for, and a run's page
     assert.ok(spans.some((span) => span.text.includes('parseVersion')), `the line of ${call.name} says where its words are`);
     for (const span of spans) assert.equal(text.slice(span.start, span.end).join(''), span.text, 'word for word, at the place it names');
   }
+
+  // The pass over that file: a fake model's answer, held to the records by the same check every proposal meets.
+  const lines = wikiMaintainLines(on);
+  const refOf = (id: string) => on.sources.find((source) => source.id === id)!.ref;
+  const asked = refOf(turned);
+  const released = refOf(result.toolCallId);
+  const answer = JSON.stringify({
+    notes: [
+      { note: 'C1', outcome: 'shown', shownBy: [released, asked] },
+      { note: 'C2', outcome: 'absent', shownBy: [] },
+      { note: 'C3', outcome: 'not_durable', shownBy: [] },
+      { note: 'C4', outcome: 'absent', shownBy: [] },
+    ],
+    entries: [{
+      note: 'C1', kind: 'pitfall', title: `parseVersion tags at once ${randomUUID().slice(0, 8)}`, summary: 'Running the release script tags at once.', topic: 'testing',
+      trigger: { paths: [], commands: ['bash scripts/release-dry.sh'], errorSignature: '' }, symptom: 'A tag appears.', cause: 'parseVersion runs release.sh.', fix: 'Read the tag first.',
+      sources: [{ ref: released, quote: 'tagging v0.1.2-beta.104 because parseVersion ran release.sh' }],
+    }],
+  });
+  const pass = await wikiMaintainCheckClaims({
+    dossier: on,
+    refs: on.claims!.lines.map((line) => line.ref),
+    context: { title: 'orbit', repo: { urlNorm: 'github.com/acme/app' }, topics: [] },
+    about: '',
+    repo: null,
+    ask: async () => answer,
+  });
+  assert.equal(lines.get(released)?.author, 'tool');
+  assert.deepEqual(pass.citedByModel, [1], 'the model cited the tool line');
+  assert.deepEqual(pass.ops.map((op) => op.note), ['C1'], 'one entry, from the note it shows');
+  const body = pass.ops[0]!.body as { sources: Array<{ kind: WikiSourceKind; ref: string; quote?: string }> };
+  assert.deepEqual(body.sources.map((source) => source.ref), [result.toolCallId, turned], 'and the owner\'s line it named beside it');
+  const principal = wikiMaintainJobPrincipal(owner.id, randomUUID());
+  const classes = await Promise.all(body.sources.map(async (source) => (await h.service.sourceText(h.prisma, principal, source))?.evidenceClass));
+  assert.deepEqual(classes, ['observed', 'owner_words'], 'both first-hand, by the class every reader of a source reads');
+  const checked = await h.service.submitChangeset(principal, spaceId, {
+    dryRun: true,
+    idempotencyKey: `claims-pass-${randomUUID()}`,
+    rationale: 'an entry of the pass that only checks notes',
+    ops: [pass.ops[0]!.body],
+  }) as { ops: Array<{ status: string; reasons?: Array<{ code: string }> }> };
+  assert.notEqual(checked.ops[0]!.status, 'refused', `what the pass wrote stands against the records: ${JSON.stringify(checked.ops[0])}`);
 
   // Asked for or not, what a line can cite is the records it always could.
   const off = await buildDossier(h.prisma, records, { literals: [literal] });

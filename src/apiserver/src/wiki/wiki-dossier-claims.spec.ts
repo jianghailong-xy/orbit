@@ -7,7 +7,9 @@ import { wikiEstimateTokens, WIKI_MAINTENANCE_JOB } from '@orbit/shared';
 import { parseWikiImportAnswer } from '../wiki-worker/wiki-import-extract';
 import {
   buildWikiMaintainOps,
+  wikiMaintainCheckClaims,
   wikiMaintainCiteShownBy,
+  wikiMaintainClaimsPrompt,
   wikiMaintainLines,
   wikiMaintainNoteAnswers,
   wikiMaintainPrompt,
@@ -24,9 +26,9 @@ import {
 } from './wiki-dossier';
 
 /**
- * The agent's notes in a dossier (docs/wiki-memory-claims-design.md §3.1 to §3.3), from records held in memory: what
- * counts as a write, what is skipped, the caps, the budget, the evidence, and that nothing can cite a note. The
- * reads of real rows are `wiki-dossier.pg.spec.ts`'s.
+ * The pass that only checks the agent's notes (docs/wiki-memory-claims-design.md §3.1, §6.2), from records held in
+ * memory: what counts as a write, what is skipped, the caps, the budget, the evidence, that nothing can cite a note,
+ * and what the pass keeps of an answer. The reads of real rows are `wiki-dossier.pg.spec.ts`'s.
  *
  * Off is the promise everything else stands on, so the bytes are pinned: the digests below were read from the code
  * as it was before the switch existed, on these same records (commit 47ae19fbb).
@@ -195,7 +197,18 @@ test('off, the dossier and the prompt are the bytes they were before the switch 
   assert.doesNotMatch(off.text, /storage-port/u, 'a memory write is left out as it always was');
 
   assert.equal(sha256(wikiMaintainPrompt(CONTEXT, 'A small service.', off.text)), GOLDEN_OFF.promptSha256);
-  assert.equal(wikiMaintainPrompt(CONTEXT, 'A small service.', off.text, { claims: false }), wikiMaintainPrompt(CONTEXT, 'A small service.', off.text));
+});
+
+test('the pass on leaves the case file and its prompt the same bytes: the notes\' file is another file, from the same records', async () => {
+  const s = goldenSession();
+  const records = s.records();
+  const file = await buildDossier(s.reader(), records, { literals: LITERALS, claims: true });
+  assert.notEqual(file.text, (await build(s)).text);
+  const after = await buildDossier(s.reader(), records, { literals: LITERALS });
+  assert.equal(sha256(after.text), GOLDEN_OFF.textSha256);
+  assert.equal(after.hash, GOLDEN_OFF.hash);
+  assert.equal(sha256(wikiMaintainPrompt(CONTEXT, 'A small service.', after.text)), GOLDEN_OFF.promptSha256);
+  assert.ok(!('claims' in after));
 });
 
 test('on, a session with no note to carry is the same bytes as off', async () => {
@@ -297,57 +310,57 @@ test('at most 6 notes of 600 characters: the feedback first, then the newest, an
 
 // ── The budget (§3.2) ───────────────────────────────────────────────────────────────────────────
 
-test('the notes and their evidence take at most 25% of the budget, from the windows, and never the owner\'s words', async () => {
+test('the file is the notes, the owner\'s words within their share, and what bears on each note, within the budget', async () => {
   const s = new Records();
-  // Far more evidence than a quarter of the budget holds, and owner lines that have to stay.
+  // Far more evidence than the budget holds, and more of the owner than their share.
   for (let n = 0; n < 200; n += 1) {
-    s.tool('Bash', { command: `npm run check ${n}` }, 'SHARED_MARKER', moment(1, n / 4));
-    if (n % 50 === 0) s.owner(`From now on always run the check on module ${n}.`, moment(1, n / 4));
+    s.tool('Bash', { command: `npm run check ${n}` }, `SHARED_MARKER ${'x'.repeat(300)}`, moment(1, n / 4));
+    if (n % 10 === 0) s.owner(`From now on always run the check on module ${n}. ${'And keep it short. '.repeat(60)}`, moment(1, n / 4));
   }
   const chinese = (n: number) => `第${n}条记录说明 SHARED_MARKER 在模块里的行为，${'这是一段很长的说明文字用来测试预算上限，'.repeat(40)}`;
   for (let n = 0; n < 6; n += 1) s.write(`note-${n}.md`, chinese(n), moment(5, n));
 
   const dossier = await build(s, { claims: true });
-  const off = await build(s);
-  const quarter = WIKI_DOSSIER_CLAIMS.budgetShare * 8000;
   const lines = dossier.text.split('\n');
   const costOf = (line: string) => wikiEstimateTokens(line.slice(line.indexOf(': ') + 2)) + 6;
-  const claimLines = lines.filter((line) => /^C\d+ claim: /u.test(line));
-  const toolLines = lines.filter((line) => /^L\d+ tool: /u.test(line));
-  const spent = [...claimLines, ...toolLines].reduce((sum, line) => sum + costOf(line), 0);
-  assert.equal(claimLines.length, 4, 'four long Chinese notes fill most of the quarter');
-  assert.equal(dossier.claims?.overCap, 2, 'and the two that do not fit are counted');
-  assert.deepEqual(dossier.claims?.lines.map((line) => line.file), ['note-2.md', 'note-3.md', 'note-4.md', 'note-5.md'], 'the newest are the ones kept');
-  assert.ok(spent <= quarter, `the notes and the evidence cost ${spent} of ${quarter}`);
-  assert.ok(toolLines.length > 0, 'and what the notes left of it goes to the evidence');
+  const spentOn = (pattern: RegExp) => lines.filter((line) => pattern.test(line)).reduce((sum, line) => sum + costOf(line), 0);
+  assert.equal(lines.filter((line) => /^C\d+ claim: /u.test(line)).length, 6, 'six long Chinese notes all stay');
+  assert.equal(dossier.claims?.overCap, 0);
+  assert.ok(lines.some((line) => /^L\d+ owner: /u.test(line)), 'the owner\'s words are there');
+  assert.ok(spentOn(/^L\d+ owner: /u) <= WIKI_DOSSIER_CLAIMS.ownerShare * 8000 + 50, `the owner's words cost ${spentOn(/^L\d+ owner: /u)}`);
+  assert.ok(lines.filter((line) => /^L\d+ tool: /u.test(line)).length > 0, 'and what the rest holds goes to the evidence');
   assert.ok(wikiEstimateTokens(dossier.text) <= 8000, 'the whole stays within the budget');
-  for (const owner of off.text.split('\n').filter((line) => /^L\d+ owner: /u.test(line))) {
-    assert.ok(lines.some((line) => line.endsWith(owner.slice(owner.indexOf(': ') + 2))), `the owner's words stay: ${owner}`);
-  }
-
-  // With notes short enough to leave room, the evidence comes up to the share and no further.
-  const short = new Records();
-  for (let n = 0; n < 200; n += 1) {
-    short.tool('Bash', { command: `npm run check -- src/app/module-${n}.ts` }, `Checked SHARED_MARKER in ${'x'.repeat(300)}`, moment(1, n / 4));
-  }
-  short.write('note.md', 'SHARED_MARKER is what every module check prints first.', moment(5));
-  const roomy = await build(short, { claims: true });
-  const roomyLines = roomy.text.split('\n').filter((line) => /^(?:L\d+ tool|C\d+ claim): /u.test(line));
-  const roomySpent = roomyLines.reduce((sum, line) => sum + costOf(line), 0);
-  assert.ok(roomySpent <= quarter && roomySpent > quarter * 0.9, `the share is spent and not passed: ${roomySpent} of ${quarter}`);
-  assert.ok(wikiEstimateTokens(roomy.text) < wikiEstimateTokens(off.text) + 8000);
 });
 
-test('a smaller budget holds its share too', async () => {
+test('a smaller budget holds too, and a note that does not fit is left out and counted', async () => {
   const s = new Records();
   for (let n = 0; n < 40; n += 1) s.tool('Bash', { command: `npm run check -- module-${n}` }, `SHARED_MARKER ${n} ${'x'.repeat(200)}`, moment(1, n));
   for (let n = 0; n < 6; n += 1) s.write(`note-${n}.md`, `SHARED_MARKER note ${n}: ${'words about it '.repeat(30)}`, moment(5, n));
-  const dossier = await build(s, { claims: true, maxTokens: 1_000 });
-  const spent = dossier.text.split('\n').filter((line) => /^(?:L\d+ tool|C\d+ claim): /u.test(line))
-    .reduce((sum, line) => sum + wikiEstimateTokens(line.slice(line.indexOf(': ') + 2)) + 6, 0);
-  assert.ok(spent <= 250, `${spent} of 250`);
-  assert.ok(wikiEstimateTokens(dossier.text) <= 1_000);
+  const dossier = await build(s, { claims: true, maxTokens: 500 });
+  assert.ok(wikiEstimateTokens(dossier.text) <= 500);
   assert.ok((dossier.claims?.overCap ?? 0) > 0);
+  assert.equal((dossier.claims?.lines.length ?? 0) + (dossier.claims?.overCap ?? 0), 6);
+});
+
+test('nothing else is carried: a surprise, a failure or a long reply far from the notes stays out of their file', async () => {
+  const s = new Records();
+  s.text('assistant', `It turns out the far away cache is the real cause of something else. ${'more words '.repeat(40)}`, moment(1));
+  s.tool('Bash', { command: 'make far-away' }, 'Exit code 1\nfar away failure', moment(1, 1), { isError: true });
+  s.tool('Bash', { command: 'make far-away' }, 'far away success', moment(1, 2));
+  for (let n = 0; n < 12; n += 1) s.tool('Bash', { command: `npm run step-${n}` }, `step ${n}`, moment(2, n));
+  s.write('port.md', 'STORAGE_PORT is read at import, before the fixture sets it.', moment(3));
+  s.text('assistant', 'Noted, and that is the end of the work.', moment(4));
+  s.text('assistant', 'A second closing word.', moment(4, 1));
+  s.text('assistant', 'A third closing word.', moment(4, 2));
+  s.text('assistant', 'A fourth closing word stays out.', moment(4, 3));
+  const off = await build(s);
+  assert.match(off.text, /far away cache/u, 'the case file carries it');
+  const file = await build(s, { claims: true });
+  assert.doesNotMatch(file.text, /far away|far-away/u);
+  assert.doesNotMatch(file.text, /A fourth closing word/u, 'three lines after a note, and no more');
+  assert.match(file.text, /A third closing word/u);
+  assert.doesNotMatch(file.text, /step-3 /u, 'eight lines before a note, and no more');
+  assert.match(file.text, /step-4 /u);
 });
 
 // ── The evidence (§3.2) ─────────────────────────────────────────────────────────────────────────
@@ -363,7 +376,7 @@ test('what bears on a note is carried: the tool line that names its words, and t
   const read = s.tool('Read', { file_path: 'scripts/lib/next.ts' }, `first\nexport const X = 1;\nrelease.sh next parses the version\nlast`, moment(6));
   const after = s.tool('Read', { file_path: 'scripts/lib/after.ts' }, 'more', moment(7));
   s.write('release.md', 'The script `release.sh next` tags at once; parseVersion is not a dry run.', moment(8));
-  s.tool('Bash', { command: 'node --print parseVersion' }, 'a later call that names the same word', moment(9));
+  s.tool('Bash', { command: 'node --print parseVersion' }, 'a first line\nparseVersion is named in the middle\na last line', moment(9));
 
   const off = await build(s);
   assert.doesNotMatch(off.text, /tagging v0\.1\.2/u, 'off, the result line is nowhere');
@@ -386,7 +399,8 @@ test('what bears on a note is carried: the tool line that names its words, and t
   assert.match(dossier.text, /read scripts\/lib\/next\.ts → ok: release\.sh next parses the version/u, 'a read shows the line that names the words, where a read shows nothing');
   assert.ok(line(read), 'and stands as a line of its own, not folded into its neighbours');
   assert.ok(line(before) && line(after), 'with its neighbours in the window');
-  assert.doesNotMatch(dossier.text, /node --print/u, 'a call after the note is no evidence for it');
+  assert.match(dossier.text, /\$ node --print parseVersion → ok: a first line/u, 'a call right after the note is carried');
+  assert.doesNotMatch(dossier.text, /parseVersion is named in the middle/u, 'with the line it always had: what comes after a note is no evidence for its words');
   assert.ok(!dossier.sources.some((source) => source.ref.startsWith('C')), 'and a note is no source');
 });
 
@@ -438,15 +452,11 @@ test('a note is no line of the case file: citing it drops the entry, and what th
   assert.ok(!('note' in wrongNote!), 'a note the case does not carry is not taken');
   assert.ok(!('note' in noNote!));
 
-  // The prompt: everything it always said, and then the notes.
-  const plain = wikiMaintainPrompt(CONTEXT, 'A small service.', dossier.text);
-  const withNotes = wikiMaintainPrompt(CONTEXT, 'A small service.', dossier.text, { claims: true });
-  const end = '==== END OF CASE FILE ====\n';
-  assert.equal(withNotes.slice(0, withNotes.indexOf(end)), plain.slice(0, plain.indexOf(end)), 'not a byte of the rest changes');
-  assert.ok(plain.endsWith(`${end}Output the JSON array now.`));
-  assert.match(withNotes, /THE AGENT'S NOTES: C lines are notes/u);
-  assert.match(withNotes, /Never cite a C line\./u);
-  assert.ok(withNotes.endsWith('{"notes": [{"note": "C1", "outcome": "shown", "shownBy": ["L12"]}], "entries": [{"note": "C1", "kind": ...}, {"kind": ...}]}.\nOutput the JSON object now.'));
+  // The prompt says what a note is, and holds the file.
+  const prompt = wikiMaintainClaimsPrompt(CONTEXT, 'A small service.', dossier.text);
+  assert.match(prompt, /- claim: a note the agent wrote to its own memory\. It is what the agent believed, not evidence/u);
+  assert.match(prompt, /A C line is never a source/u);
+  assert.ok(prompt.endsWith(`==== CASE FILE ====\n${dossier.text}\n==== END OF CASE FILE ====\nOutput the JSON object now.`));
 
   // The answer the prompt asks for reads as entries, and its notes beside them.
   const answer = JSON.stringify({ notes: [{ note: 'C1', outcome: 'shown', shownBy: ['L2'] }], entries: [entry('Comes from the note', [{ ref: 'L2', quote: 'connect ECONNREFUSED 127.0.0.1:9000' }], 'C1')] });
@@ -475,6 +485,10 @@ test('an entry from a note also cites the first-hand lines the model said show i
     ['L4', { text: '$ npm run build → ok', kind: 'tool_call', id: 'call-4', author: 'tool', spans: [] }],
     ['L5', { text: '$ npm run lint → ok', kind: 'tool_call', id: 'call-5', author: 'tool', spans: [] }],
     ['L6', { text: 'Go on.', kind: 'task_comment', id: 'comment-6', author: 'comment', spans: [] }],
+    ['L7', { text: 'edit src/app.ts → ok', kind: 'tool_call', id: 'call-7', author: 'tool', spans: [] }],
+    ['L8', { text: 'write ×2: a.md, b.md', kind: 'tool_call', id: 'call-8', author: 'tool', spans: [] }],
+    ['L10', { text: 'A note on the task.', kind: 'task_comment', id: 'comment-10', author: 'comment-owner', spans: [] }],
+    ['L11', { text: 'Hello.', kind: 'turn', id: 'turn-11', author: 'user', spans: [] }],
   ]);
   const op = (note: string | undefined, sources: Array<Record<string, unknown>>) => ({ body: { op: 'add', entry: {}, sources }, topic: '', session: 's', title: 't', ...(note ? { note } : {}) });
   const fromNote = op('C1', [{ kind: 'event', ref: 'event-3', quote: 'The port is read at import.' }]);
@@ -482,7 +496,7 @@ test('an entry from a note also cites the first-hand lines the model said show i
   const plain = op(undefined, [{ kind: 'event', ref: 'event-3' }]);
   const unnamed = op('C3', [{ kind: 'event', ref: 'event-3' }]);
   wikiMaintainCiteShownBy([fromNote, already, plain, unnamed], new Map([
-    ['C1', { outcome: 'shown' as const, shownBy: ['L3', 'L9', 'L1', 'L6', 'L2', 'L4', 'L5'] }],
+    ['C1', { outcome: 'shown' as const, shownBy: ['L3', 'L9', 'L7', 'L8', 'L10', 'L11', 'L1', 'L6', 'L2', 'L4', 'L5'] }],
     ['C2', { outcome: 'narrowed' as const, shownBy: ['L2'] }],
     ['C3', { outcome: 'shown' as const, shownBy: [] }],
   ]), lines);
@@ -490,10 +504,125 @@ test('an entry from a note also cites the first-hand lines the model said show i
     { kind: 'event', ref: 'event-3', quote: 'The port is read at import.' },
     { kind: 'turn', ref: 'turn-1', quote: 'Why does it fail?', locator: { start: 0, end: 17 } },
     { kind: 'tool_call', ref: 'call-2' },
-  ], 'the first two first-hand lines it names: an agent line, a comment and a line the case does not have are passed over, and only the owner\'s words are quoted');
+  ], 'the first two first-hand lines it names: an agent line, a file write, a comment, a user line and a line the case does not have are passed over, and only the owner\'s words are quoted');
   assert.deepEqual(already.body.sources, [{ kind: 'tool_call', ref: 'call-2' }], 'a record it already cites is not cited twice');
   assert.deepEqual(plain.body.sources, [{ kind: 'event', ref: 'event-3' }], 'an entry from no note is left as it is');
   assert.deepEqual(unnamed.body.sources, [{ kind: 'event', ref: 'event-3' }], 'and so is one whose note names no line');
+});
+
+// ── The pass (§6.2) ──────────────────────────────────────────────────────────────
+
+/** A session with two notes, and the file made of it. */
+async function twoNotes() {
+  const s = new Records();
+  s.owner('Why does the upload test fail?', moment(1));
+  s.tool('Bash', { command: 'npm test' }, 'Error: connect ECONNREFUSED 127.0.0.1:9000', moment(2), { isError: true });
+  s.tool('Edit', { file_path: 'src/api/fixture.ts', old_string: 'a', new_string: 'b' }, 'File updated', moment(3));
+  s.text('assistant', 'The port is read at import.', moment(4));
+  s.write('port.md', 'The upload test fails with ECONNREFUSED 127.0.0.1:9000 because the port is read at import.', moment(5));
+  s.write('other.md', 'The upload service retries three times before it gives up.', moment(6));
+  const dossier = await build(s, { claims: true });
+  assert.deepEqual(dossier.claims?.lines.map((line) => line.ref), ['C1', 'C2']);
+  const quoted = (ref: string) => [...wikiMaintainLines(dossier)].find(([, line]) => line.text.includes(ref))![0];
+  return { dossier, refs: ['C1', 'C2'], failure: quoted('ECONNREFUSED'), reply: quoted('read at import'), edit: quoted('edit ') };
+}
+
+/** The pass over `answers`, one a call, keeping the prompts it asked with. */
+async function run(file: Awaited<ReturnType<typeof twoNotes>>, answers: Array<string | null>) {
+  const asked: Array<{ prompt: string; again: boolean }> = [];
+  const result = await wikiMaintainCheckClaims({
+    dossier: file.dossier,
+    refs: file.refs,
+    context: CONTEXT,
+    about: 'A small service.',
+    repo: ANCHORS,
+    ask: async (prompt, again) => {
+      asked.push({ prompt, again });
+      return answers.shift() ?? null;
+    },
+  });
+  return { ...result, asked };
+}
+
+test('the pass keeps one entry for each note answered shown or narrowed, and nothing else', async () => {
+  const file = await twoNotes();
+  const source = { ref: file.failure, quote: 'connect ECONNREFUSED 127.0.0.1:9000' };
+  const answer = JSON.stringify({
+    notes: [{ note: 'C1', outcome: 'shown', shownBy: [file.failure] }, { note: 'C2', outcome: 'absent', shownBy: [] }],
+    entries: [
+      entry('From a note it shows', [source], 'C1'),
+      entry('A second from the same note', [source], 'C1'),
+      entry('From a note it says is absent', [source], 'C2'),
+      entry('From no note at all', [source]),
+    ],
+  });
+  const result = await run(file, [answer]);
+  assert.deepEqual(result.ops.map((op) => op.title), ['From a note it shows']);
+  assert.deepEqual(result.leftOut, { noNote: 1, noteNotShown: 1, secondOfNote: 1 });
+  assert.equal(result.retried, false, 'nothing to ask again');
+  assert.equal(result.asked.length, 1);
+  assert.equal(result.asked[0]!.prompt, wikiMaintainClaimsPrompt(CONTEXT, 'A small service.', file.dossier.text));
+  assert.deepEqual([...result.notes.keys()], ['C1', 'C2']);
+  assert.equal(result.notes.get('C1')?.outcome, 'shown');
+  assert.equal(result.notes.get('C2')?.outcome, 'absent');
+});
+
+test('the pass adds the first-hand lines of shownBy to what the model cited, and says how many it cited itself', async () => {
+  const file = await twoNotes();
+  const answer = JSON.stringify({
+    notes: [{ note: 'C1', outcome: 'narrowed', shownBy: [file.reply, file.edit, file.failure] }, { note: 'C2', outcome: 'not_durable', shownBy: [] }],
+    entries: [entry('Cited from the agent', [{ ref: file.reply, quote: 'The port is read at import.' }], 'C1')],
+  });
+  const result = await run(file, [answer]);
+  assert.deepEqual(result.citedByModel, [1]);
+  const lines = wikiMaintainLines(file.dossier);
+  const sources = result.ops[0]!.body.sources as Array<{ ref: string }>;
+  assert.deepEqual(sources.map((one) => one.ref), [lines.get(file.reply)!.id, lines.get(file.failure)!.id], 'the failure is added, the file write is not');
+  assert.ok(!JSON.stringify(result.ops[0]!.body).includes('"note"'), 'and the note is no part of what is proposed');
+});
+
+test('a note answered shown with no entry is asked for once more, and the first answer of a note stands', async () => {
+  const file = await twoNotes();
+  const source = { ref: file.failure, quote: 'connect ECONNREFUSED 127.0.0.1:9000' };
+  const first = JSON.stringify({ notes: [{ note: 'C1', outcome: 'shown', shownBy: [file.failure] }], entries: [] });
+  const second = JSON.stringify({
+    notes: [{ note: 'C1', outcome: 'absent', shownBy: [] }, { note: 'C2', outcome: 'not_durable', shownBy: [] }],
+    entries: [entry('Written when asked', [source], 'C1')],
+  });
+  const result = await run(file, [first, second]);
+  assert.equal(result.retried, true);
+  assert.equal(result.asked[1]!.again, true);
+  assert.match(result.asked[1]!.prompt, /note C1 was answered shown or narrowed and has no entry/u);
+  assert.ok(result.asked[1]!.prompt.startsWith(result.asked[0]!.prompt));
+  assert.deepEqual(result.ops.map((op) => op.title), ['Written when asked']);
+  assert.equal(result.notes.get('C1')?.outcome, 'shown', 'the first said of a note stands');
+  assert.equal(result.notes.get('C2')?.outcome, 'not_durable', 'and a note the first left open takes the second');
+});
+
+test('an entry that cites a C line is dropped and asked for again; an answer that cannot be had leaves what there was', async () => {
+  const file = await twoNotes();
+  const answer = JSON.stringify({
+    notes: [{ note: 'C1', outcome: 'shown', shownBy: ['C1'] }, { note: 'C2', outcome: 'absent', shownBy: [] }],
+    entries: [entry('Cites its own note', [{ ref: 'C1', quote: 'The upload test fails with ECONNREFUSED' }], 'C1')],
+  });
+  const result = await run(file, [answer, null]);
+  assert.deepEqual(result.ops, []);
+  assert.equal(result.built?.dropped, 1);
+  assert.match(result.asked[1]!.prompt, /source ref C1 is not a line of the case file/u);
+
+  const broken = await run(file, ['not JSON at all', null]);
+  assert.deepEqual(broken.ops, []);
+  assert.equal(broken.retried, true);
+  assert.equal(broken.notes.get('C1')?.outcome, 'unanswered', 'nobody asks a third time');
+  assert.match(broken.asked[1]!.prompt, /not a valid JSON object of notes and flat entry objects/u);
+});
+
+test('a case about something else is said once and takes nothing', async () => {
+  const result = await run(await twoNotes(), ['{"offTopic": true}']);
+  assert.equal(result.offTopic, true);
+  assert.deepEqual(result.ops, []);
+  assert.equal(result.asked.length, 1);
+  assert.equal(result.notes.get('C1')?.outcome, 'unanswered');
 });
 
 // ── Held out, and the same twice (§3.2) ─────────────────────────────────────────────────────────
