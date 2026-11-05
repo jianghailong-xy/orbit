@@ -658,7 +658,9 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
 
   // ── 7 ──────────────────────────────────────────────────────────────────────────────────────────────────
   await t.test('7. a revoked runner, a disabled account and a body naming a landing are refused, with nothing written', async () => {
-    const refused = async (attempt: Promise<unknown>, status: number, code: string) => {
+    // The beat starts only once `before` is read. A beat already running can be refused during that read, with nothing
+    // listening yet: the test runner fails this case on the unhandled rejection, and the next one finds the account disabled.
+    const refused = async (attempt: () => Promise<unknown>, status: number, code: string) => {
       const before = await presence();
       await assert.rejects(attempt, (error: HttpException) => {
         assert.equal(error.getStatus(), status);
@@ -669,7 +671,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     };
     // A token minted with a credential the runner no longer holds: its token was rotated.
     const rotatedOut = runnerLinkCredential(sha256('the credential before a rotation'));
-    await refused(beat({}, link(rotatedOut)), 401, 'RUNNER_LINK_TOKEN_REVOKED');
+    await refused(() => beat({}, link(rotatedOut)), 401, 'RUNNER_LINK_TOKEN_REVOKED');
     // The runner the token names was deleted.
     const goneToken = `link-heartbeat-gone-${randomUUID()}`;
     const gone = randomUUID();
@@ -682,7 +684,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     );
     // The account is disabled: 403, as over HTTPS, until it is enabled again.
     await sql.query(`UPDATE "user" SET disabled_at = now() WHERE id = $1`, [ownerId]);
-    await refused(beat(), 403, 'ACCOUNT_DISABLED');
+    await refused(() => beat(), 403, 'ACCOUNT_DISABLED');
     await sql.query(`UPDATE "user" SET disabled_at = NULL WHERE id = $1`, [ownerId]);
     // A LANDING session is the platform's: a body naming one is refused whole (§2.9 LS6).
     const landing = randomUUID();
@@ -692,7 +694,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
         sessionKind: 'LANDING', status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
       },
     });
-    await refused(beat({ expiredCommitErrors: [{ sessionId: landing, operationId: randomUUID() }] }), 409, 'SESSION_IS_PLATFORM_DRIVEN');
+    await refused(() => beat({ expiredCommitErrors: [{ sessionId: landing, operationId: randomUUID() }] }), 409, 'SESSION_IS_PLATFORM_DRIVEN');
     assert.equal(isFull((await beat()).answer), false, 'and the runner beats on as before');
   });
 
