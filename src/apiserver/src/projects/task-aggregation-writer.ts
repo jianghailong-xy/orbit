@@ -26,6 +26,7 @@ import {
   AggregationTaskFact,
   AggregationTaskStatus,
   PlannedTaskAggregation,
+  planTaskAggregation,
 } from './task-aggregation';
 import { taskRetirement } from '../tasks/task-supersession';
 import {
@@ -171,6 +172,29 @@ export async function collectAggregationScope(
     })),
     truncated: false,
   };
+}
+
+/**
+ * Which tasks a write would settle: what the plan `recomputeAggregates` runs once that write has committed moves to DONE over
+ * the facts as the write leaves them, and would not have moved over the facts as they stand. A PASS settles the subject that
+ * declares VERIFICATION_PASSED when the check is its newest; cancelling or deleting a newer check leaves an older PASS the newest;
+ * a policy moved onto a PASS already there reads it. Which of those holds is the plan's to say, so the answer cannot drift from
+ * what the write goes on to do, and a scope too big to plan settles nothing here as it settles nothing there.
+ *
+ * Only what this write adds: a run reporting its own task FAILED settles nothing, whatever the plan already wanted of somebody else.
+ */
+export async function tasksSettledBy(
+  db: AggregationScopeTransaction,
+  ownerId: string,
+  seedTaskIds: readonly string[],
+  leaves: (facts: AggregationTaskFact[]) => AggregationTaskFact[],
+): Promise<string[]> {
+  const scope = await collectAggregationScope(db, ownerId, seedTaskIds);
+  if (scope.truncated) return [];
+  const movedToDone = (facts: AggregationTaskFact[]): string[] =>
+    planTaskAggregation(facts).aggregations.filter((move) => move.to === 'DONE').map((move) => move.taskId);
+  const already = new Set(movedToDone(scope.facts));
+  return movedToDone(leaves(scope.facts)).filter((taskId) => !already.has(taskId));
 }
 
 /**

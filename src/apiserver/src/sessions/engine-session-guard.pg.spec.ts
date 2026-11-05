@@ -326,6 +326,10 @@ const RUNNER_DRIVERS: Readonly<Record<string, Drive>> = {
     s.api.uploadFile({ id: w.runnerId, ownerId: w.ownerId } as never, id, undefined, {}),
   'POST /runner/sessions/:id/file-bundles': (s, w, id) =>
     s.runnerFiles.createBundle({ id: w.runnerId, ownerId: w.ownerId } as never, id, { name: 'folder', files: [] }),
+  'PUT /runner/sessions/:id/files/:fileId/pin': (s, w, id) =>
+    s.runnerFiles.pin({ id: w.runnerId, ownerId: w.ownerId } as never, id, randomUUID()),
+  'DELETE /runner/sessions/:id/files/:fileId/pin': (s, w, id) =>
+    s.runnerFiles.unpin({ id: w.runnerId, ownerId: w.ownerId } as never, id, randomUUID()),
   'POST /runner/sessions/:id/artifacts/result': (s, w, id) =>
     s.api.artifactResult({ id: w.runnerId, ownerId: w.ownerId } as never, id, { requestId: randomUUID() } as never),
   'POST /runner/sessions/:id/approvals': (s, w, id) =>

@@ -32,6 +32,7 @@ const fileTestSession = "session-1"
 type fakeFile struct {
 	id, name, mimeType, label, sha string
 	kind                           string
+	pinned                         bool
 	data                           []byte
 }
 
@@ -56,6 +57,11 @@ type fakeFileServer struct {
 	corrupt bool
 	// absent is a server from before these doors: every route but the attachments' answers Nest's 404.
 	absent bool
+	// report is what this server read out of an upload sent with `as`, and note what it says when it read nothing.
+	report map[string]interface{}
+	note   string
+	// pinRefusal is what the pin door answers instead of pinning, as a server does for a file whose bytes have gone.
+	pinRefusal string
 	*httptest.Server
 }
 
@@ -76,10 +82,15 @@ func (f *fakeFileServer) nestNotFound(w http.ResponseWriter, r *http.Request) {
 }
 
 func (f *fakeFileServer) view(file *fakeFile) map[string]interface{} {
-	return map[string]interface{}{
+	view := map[string]interface{}{
 		"id": file.id, "publicId": file.id, "kind": file.kind, "name": file.name, "label": file.label,
 		"mimeType": file.mimeType, "sizeBytes": len(file.data), "sha256": file.sha, "createdAt": "2026-11-02T00:00:00.000Z",
+		"expiresAt": "2026-11-16T00:00:00.000Z", "expiredAt": nil, "pinnedAt": nil,
 	}
+	if file.pinned {
+		view["pinnedAt"] = "2026-11-03T00:00:00.000Z"
+	}
+	return view
 }
 
 func (f *fakeFileServer) keep(name, mimeType, label, kind string, data []byte) *fakeFile {
@@ -94,6 +105,29 @@ func (f *fakeFileServer) keep(name, mimeType, label, kind string, data []byte) *
 }
 
 var fileRoute = regexp.MustCompile(`^/api/runner/sessions/([^/]+)/(files|file-bundles|attachments)(?:/([^/]+))?$`)
+
+var filePinRoute = regexp.MustCompile(`^/api/runner/sessions/[^/]+/files/([^/]+)/pin$`)
+
+func (f *fakeFileServer) pin(w http.ResponseWriter, r *http.Request, id string) {
+	w.Header().Set("content-type", "application/json")
+	if f.absent {
+		f.nestNotFound(w, r)
+		return
+	}
+	if f.pinRefusal != "" {
+		w.WriteHeader(http.StatusGone)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"message": f.pinRefusal, "error": "Gone", "statusCode": 410})
+		return
+	}
+	file := f.files[id]
+	if file == nil {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"message": "file not found in this session", "statusCode": 404})
+		return
+	}
+	file.pinned = r.Method == http.MethodPut
+	_ = json.NewEncoder(w).Encode(f.view(file))
+}
 
 func (f *fakeFileServer) serve(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
@@ -113,6 +147,10 @@ func (f *fakeFileServer) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		f.listQueries = append(f.listQueries, r.URL.RawQuery)
 		_, _ = w.Write([]byte(f.listAnswer))
+		return
+	}
+	if m := filePinRoute.FindStringSubmatch(r.URL.Path); m != nil {
+		f.pin(w, r, m[1])
 		return
 	}
 	m := fileRoute.FindStringSubmatch(r.URL.Path)
@@ -190,6 +228,13 @@ func (f *fakeFileServer) upload(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	view := f.view(file)
 	view["id"] = "00000000-0000-7000-8000-" + fmt.Sprintf("%012d", f.next) // the machine door's own spelling
+	view["testReport"] = nil
+	if fields["as"] != "" {
+		view["testReport"] = f.report
+		if f.note != "" {
+			view["note"] = f.note
+		}
+	}
 	_ = json.NewEncoder(w).Encode(view)
 }
 
@@ -335,6 +380,107 @@ func TestFileUploadKeepsOneFileAndSaysWhatItIs(t *testing.T) {
 	}
 	if got.MimeType != "application/json" {
 		t.Errorf("mimeType = %q", got.MimeType)
+	}
+}
+
+func TestFileUploadAsATestReportAnswersWhatTheServerRead(t *testing.T) {
+	api := newFakeFileServer(t)
+	api.report = map[string]interface{}{"format": "playwright", "total": 3, "passed": 1, "failed": 1, "skipped": 1, "failedNames": []string{"a"}}
+	s := api.mcp(t)
+	path := writeTestFile(t, filepath.Join(inCheckout(t), "report.json"), `{"suites":[]}`)
+
+	got := fileResult(t, s, "file_upload", map[string]interface{}{"path": path, "as": "test-report"})
+
+	if sent := api.fields[0]["as"]; sent != "test-report" {
+		t.Errorf("as sent = %q", sent)
+	}
+	if got.TestReport["format"] != "playwright" || got.TestReport["failed"] != float64(1) {
+		t.Errorf("testReport = %v", got.TestReport)
+	}
+	if got.Note != "" {
+		t.Errorf("note = %q: a summary needs no explaining", got.Note)
+	}
+}
+
+func TestFileUploadAsATestReportPassesOnWhyThereIsNoSummary(t *testing.T) {
+	api := newFakeFileServer(t)
+	api.note = "Not a Playwright JSON or JUnit XML report, so this was kept as a plain file, with no test summary."
+	s := api.mcp(t)
+	path := writeTestFile(t, filepath.Join(inCheckout(t), "notes.txt"), "all passed")
+
+	got := fileResult(t, s, "file_upload", map[string]interface{}{"path": path, "as": "test-report"})
+
+	if got.Note != api.note || got.TestReport != nil || got.ID == "" {
+		t.Errorf("answer = %+v", got)
+	}
+}
+
+// A server from before `as` drops the field and answers as it always did. The file is kept, and an answer that said
+// nothing would read as a summary that went missing.
+func TestFileUploadAsATestReportOnAnOlderServerSaysSo(t *testing.T) {
+	api := newFakeFileServer(t)
+	s := api.mcp(t)
+	path := writeTestFile(t, filepath.Join(inCheckout(t), "report.json"), `{"suites":[]}`)
+
+	if got := fileResult(t, s, "file_upload", map[string]interface{}{"path": path, "as": "test-report"}); got.Note != fileReportOldServerNote {
+		t.Errorf("note = %q", got.Note)
+	}
+	if got := fileResult(t, s, "file_upload", map[string]interface{}{"path": path}); got.Note != "" {
+		t.Errorf("an upload that asked for nothing owes no note: %q", got.Note)
+	}
+}
+
+func TestFileUploadOfAFolderAsATestReportKeepsAPlainBundleAndSaysSo(t *testing.T) {
+	api := newFakeFileServer(t)
+	s := api.mcp(t)
+	root := filepath.Join(inCheckout(t), "results")
+	writeTestFile(t, filepath.Join(root, "TEST-a.xml"), "<testsuite/>")
+
+	got := fileResult(t, s, "file_upload", map[string]interface{}{"path": root, "as": "test-report"})
+
+	if got.Kind != "bundle" || got.Note != fileReportFolderNote {
+		t.Errorf("answer = %+v", got)
+	}
+	for _, sent := range api.fields {
+		if sent["as"] != "" {
+			t.Errorf("a file of the folder went as a report: %v", sent)
+		}
+	}
+}
+
+func TestFileUploadRefusesAnyOtherAsBeforeSendingAnything(t *testing.T) {
+	api := newFakeFileServer(t)
+	s := api.mcp(t)
+	path := writeTestFile(t, filepath.Join(inCheckout(t), "report.json"), "{}")
+
+	text := fileToolText(t, s, "file_upload", map[string]interface{}{"path": path, "as": "coverage"}, true)
+
+	if !strings.Contains(text, `as can only be "test-report"`) {
+		t.Errorf("refusal = %q", text)
+	}
+	if len(api.calls) != 0 {
+		t.Errorf("sent %v", api.calls)
+	}
+}
+
+func TestFileListShowsAReportsSummaryAndNoEmptyOne(t *testing.T) {
+	api := newFakeFileServer(t)
+	s := api.mcp(t)
+	api.listAnswer = `{"files":[{"id":"file1","publicId":"file1","kind":"file","sha256":"aa","testReport":{"format":"junit","total":1}},{"id":"file2","publicId":"file2","kind":"file","sha256":"bb","testReport":null}],"truncated":false}`
+
+	text := fileToolText(t, s, "file_list", map[string]interface{}{"sessionId": fileTestSession}, false)
+
+	var got struct {
+		Files []map[string]interface{} `json:"files"`
+	}
+	if err := json.Unmarshal([]byte(text), &got); err != nil {
+		t.Fatalf("%v in %s", err, text)
+	}
+	if report, _ := got.Files[0]["testReport"].(map[string]interface{}); report["format"] != "junit" {
+		t.Errorf("first row = %v", got.Files[0])
+	}
+	if _, present := got.Files[1]["testReport"]; present {
+		t.Errorf("a file with no summary shows a null one: %v", got.Files[1])
 	}
 }
 
@@ -909,6 +1055,27 @@ func TestFileUploadAndFetchNeedASession(t *testing.T) {
 	}
 }
 
+func TestFileCLIUploadsAsATestReport(t *testing.T) {
+	api := newFakeFileServer(t)
+	api.report = map[string]interface{}{"format": "junit", "total": 1}
+	configureCLITestRunner(t, api.URL)
+	t.Setenv("ORBIT_SESSION_ID", fileTestSession)
+	chdirForTest(t, t.TempDir())
+	path := writeTestFile(t, filepath.Join(inCheckout(t), "junit.xml"), "<testsuite/>")
+
+	var out bytes.Buffer
+	if err := cmdFileCLI([]string{"upload", path, "--as", "test-report", "--json"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	var uploaded fileAnswer
+	if err := json.Unmarshal(out.Bytes(), &uploaded); err != nil {
+		t.Fatalf("%v: %s", err, out.String())
+	}
+	if api.fields[0]["as"] != "test-report" || uploaded.TestReport["format"] != "junit" {
+		t.Errorf("sent %v, answered %+v", api.fields[0], uploaded)
+	}
+}
+
 func TestFileCLIUploadsFetchesAndLists(t *testing.T) {
 	api := newFakeFileServer(t)
 	api.listAnswer = `{"files":[{"id":"file1","publicId":"file1","kind":"file","sha256":"aa"}],"truncated":false}`
@@ -1003,13 +1170,14 @@ func TestCapabilitiesListTheFileCommands(t *testing.T) {
 	}
 	t.Setenv("ORBIT_SESSION_ID", fileTestSession)
 	inside := has(buildCLICapabilities("/usr/local/bin/orbit"))
-	if len(inside) != 3 {
+	if len(inside) != 4 {
 		t.Fatalf("inside a session: %v", inside)
 	}
 	for tool, argv := range map[string]string{
 		"file_upload": "/usr/local/bin/orbit file upload",
 		"file_fetch":  "/usr/local/bin/orbit file fetch",
 		"file_list":   "/usr/local/bin/orbit file list",
+		"file_pin":    "/usr/local/bin/orbit file pin",
 	} {
 		if got := strings.Join(inside[tool].Argv, " "); got != argv {
 			t.Errorf("%s argv = %q, want %q", tool, got, argv)
@@ -1018,13 +1186,80 @@ func TestCapabilitiesListTheFileCommands(t *testing.T) {
 			t.Errorf("%s carries no description or schema: %+v", tool, inside[tool])
 		}
 	}
-	if !inside["file_upload"].Mutates || inside["file_fetch"].Mutates || inside["file_list"].Mutates {
-		t.Errorf("only an upload changes anything in Orbit: %+v", inside)
+	if !inside["file_upload"].Mutates || !inside["file_pin"].Mutates || inside["file_fetch"].Mutates || inside["file_list"].Mutates {
+		t.Errorf("only an upload and a pin change anything in Orbit: %+v", inside)
 	}
 	t.Setenv("ORBIT_SESSION_ID", "")
 	outside := has(buildCLICapabilities("/usr/local/bin/orbit"))
 	if _, listed := outside["file_list"]; !listed || len(outside) != 1 {
 		t.Errorf("outside a session only list has anything to act on: %v", outside)
+	}
+}
+
+func TestFilePinPinsAndUnpinsAndSaysWhatItDid(t *testing.T) {
+	api := newFakeFileServer(t)
+	s := api.mcp(t)
+	kept := fileResult(t, s, "file_upload", map[string]interface{}{"path": writeTestFile(t, filepath.Join(inCheckout(t), "a.txt"), "a")})
+	if kept.ExpiresAt != "2026-11-16T00:00:00.000Z" || kept.PinnedAt != "" {
+		t.Errorf("an upload says when it expires and that it is not pinned: %+v", kept)
+	}
+
+	pinned := fileResult(t, s, "file_pin", map[string]interface{}{"id": kept.ID})
+	if pinned.ID != kept.ID || pinned.PinnedAt == "" {
+		t.Errorf("file_pin answered %+v", pinned)
+	}
+	if want := "PUT /api/runner/sessions/session-1/files/" + kept.ID + "/pin"; api.calls[len(api.calls)-1] != want {
+		t.Errorf("calls = %v, want it to end with %s", api.calls, want)
+	}
+	unpinned := fileResult(t, s, "file_pin", map[string]interface{}{"id": kept.ID, "unpin": true})
+	if unpinned.PinnedAt != "" {
+		t.Errorf("file_pin with unpin answered %+v", unpinned)
+	}
+	if want := "DELETE /api/runner/sessions/session-1/files/" + kept.ID + "/pin"; api.calls[len(api.calls)-1] != want {
+		t.Errorf("calls = %v, want it to end with %s", api.calls, want)
+	}
+	if text := fileToolText(t, s, "file_pin", map[string]interface{}{"id": "nothing"}, true); !strings.Contains(text, "file not found in this session") {
+		t.Errorf("a file that is not there is told: %s", text)
+	}
+	if text := fileToolText(t, s, "file_pin", map[string]interface{}{"id": "../other"}, true); strings.Contains(text, "/pin") {
+		t.Errorf("an id that is no path segment goes nowhere: %s", text)
+	}
+
+	api.pinRefusal = "this file expired and its bytes have been deleted, so it cannot be pinned; upload it again"
+	if text := fileToolText(t, s, "file_pin", map[string]interface{}{"id": kept.ID}, true); !strings.Contains(text, "its bytes have been deleted") {
+		t.Errorf("the server's reason reaches the agent: %s", text)
+	}
+}
+
+func TestFileUploadPinKeepsTheFileEvenIfThePinDoesNotTake(t *testing.T) {
+	api := newFakeFileServer(t)
+	s := api.mcp(t)
+	dir := inCheckout(t)
+	got := fileResult(t, s, "file_upload", map[string]interface{}{"path": writeTestFile(t, filepath.Join(dir, "a.txt"), "a"), "pin": true})
+	if got.PinnedAt == "" || !api.files[got.ID].pinned {
+		t.Errorf("upload with pin answered %+v", got)
+	}
+	if got.Note != "" {
+		t.Errorf("note = %q", got.Note)
+	}
+	if plain := fileResult(t, s, "file_upload", map[string]interface{}{"path": writeTestFile(t, filepath.Join(dir, "b.txt"), "b")}); plain.PinnedAt != "" {
+		t.Errorf("only when asked: %+v", plain)
+	}
+
+	folder := filepath.Join(dir, "shots")
+	writeTestFile(t, filepath.Join(folder, "one.txt"), "one")
+	bundle := fileResult(t, s, "file_upload", map[string]interface{}{"path": folder, "pin": true})
+	if bundle.Kind != "bundle" || bundle.PinnedAt == "" || len(bundle.Files) != 1 {
+		t.Errorf("a folder is pinned as its bundle, and still lists its files: %+v", bundle)
+	}
+
+	api.pinRefusal = "no"
+	kept := fileResult(t, s, "file_upload", map[string]interface{}{"path": writeTestFile(t, filepath.Join(dir, "c.txt"), "c"), "pin": true})
+	if kept.ID == "" || kept.SHA256 == "" || kept.PinnedAt != "" {
+		t.Errorf("the file is answered all the same: %+v", kept)
+	}
+	if !strings.Contains(kept.Note, "kept but not pinned") {
+		t.Errorf("and the note says what is left to do: %q", kept.Note)
 	}
 }
 
@@ -1060,7 +1295,7 @@ func TestLinkModeDoesNotTakeTheFileToolsAgentRoutes(t *testing.T) {
 	if _, ok := linkDaemonRoute("POST", "/runner/sessions/abc/files"); !ok {
 		t.Error("the upload is the controller's, so it is on the list")
 	}
-	for _, call := range []string{"GET /runner/files?taskId=t", "GET /runner/sessions/abc/files/f", "POST /runner/sessions/abc/file-bundles"} {
+	for _, call := range []string{"GET /runner/files?taskId=t", "GET /runner/sessions/abc/files/f", "POST /runner/sessions/abc/file-bundles", "PUT /runner/sessions/abc/files/f/pin", "DELETE /runner/sessions/abc/files/f/pin"} {
 		method, path, _ := strings.Cut(call, " ")
 		if route, ok := linkDaemonRoute(method, path); ok {
 			t.Errorf("%s matched the daemon route %s", call, route)
@@ -1308,7 +1543,7 @@ func TestFileUploadReadsTheSessionsOwnDirectories(t *testing.T) {
 	_ = host
 }
 
-// The root is the working directory itself, unless the session's own checkout is around it.
+// With no worktree the root is the working directory itself, and with one it is the worktree, wherever in it a call is made.
 func TestFileUploadFromASubdirectory(t *testing.T) {
 	api := newFakeFileServer(t)
 	host := newFileScopeHost(t)

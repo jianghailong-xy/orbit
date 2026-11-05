@@ -106,7 +106,7 @@ struct AutoRetryCardView: View {
             .font(.orbitLabel)
             .foregroundStyle(.secondary)
             .environment(\.openURL, OpenURLAction { url in
-                guard url == Self.startElsewhereURL else { return .systemAction }
+                guard url == Self.startElsewhereURL else { return .leaving(url) }
                 startElsewhere()
                 return .handled
             })

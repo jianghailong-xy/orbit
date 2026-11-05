@@ -17,7 +17,8 @@ import XCTest
 ///  - the body reads the ROW, through `EvidenceDecisions`;
 ///  - the console reads the queue in every conversation — with the ruler's reads, and on its own in
 ///    one that coordinates nothing — delivers `cardRows` as questions, and presses the door with the
-///    request `EvidenceDecisions.request` builds;
+///    request `EvidenceDecisions.request` builds, whichever of the queue and the project comes back
+///    first;
 ///  - a version waiting for a paused coordinator gets the same card, drawn folded, whose Decide it
 ///    myself opens this card in the review sheet, and one handed over is drawn as one line — and
 ///    neither is counted by the bar;
@@ -158,7 +159,7 @@ final class EvidenceDecisionWiringTests: XCTestCase {
         let console = try source(Self.consolePath)
         let refresh = try section(console, from: "func refreshEvidenceDecisions(force: Bool = false) async {",
                                   to: "/// Answer one revision of a task's evidence at the decision door")
-        XCTAssertTrue(refresh.contains("guard !isDraft, !loadingEvidence else { return }"),
+        XCTAssertTrue(refresh.contains("guard !isDraft else { return }"),
                       "every conversation reads it, not only a coordinator: a task a session "
                           + "dispatched outside any project has its card in a session that coordinates nothing")
         XCTAssertTrue(refresh.contains("api.pendingEvidenceDecisions(decidingSessionID: sessionID)"),
@@ -178,6 +179,96 @@ final class EvidenceDecisionWiringTests: XCTestCase {
                       "the bar stops counting a card that went stale, by OrbitKit's rule")
         XCTAssertTrue(console.contains("EvidenceDecisions.standing(queue: evidenceDecisions, projectId: projectID, sessionId: sessionID,"),
                       "and a card's standing is re-derived through the same filter, for this conversation")
+    }
+
+    /// A console opened cold learns what its cards are drawn from by two reads, and either can come
+    /// back first: the queue, kicked when the composer adopts the list row, and the project, from
+    /// `loadContext`. When the queue won, its rows were dropped and nothing read them again: 7 of 10
+    /// launches on the iPhone simulator drew no card (T7's probe, run 41509823402).
+    ///
+    /// `ConsoleModel` does not compile here, so this walks that order through its source and
+    /// OrbitKit's own filter, one step at a time, with no other event after the project lands. Steps
+    /// 1 to 3 pin the order itself; step 4 is what the order needs from the console.
+    func testAQueueReadThatBeatsTheProjectStillDrawsItsCard() throws {
+        let console = try source(Self.consolePath)
+        let project = "34JdnRJOxuG05yi0TpLq4"
+        let here = "34JbyLO3TvHgOmBBHLgZu"
+        let row = EvidenceDecisionRow(
+            taskId: "34LMiluvx0jK63cj8arWl", title: "P4.3", projectId: project, ownerCard: nil,
+            criterion: nil, evidenceRevision: "2", ageSeconds: 300, claim: "Done.", gaps: [], citations: [],
+            decidability: EvidenceDecisionDecidability(decidable: true, refusal: nil),
+            independence: EvidenceDecisionIndependence(independent: true, disqualification: nil))
+        let queue = EvidenceDecisionQueue(decidingSessionId: here, count: 1, pending: [row])
+
+        // 1. The list row's count kicks the read, before anything here knows the project.
+        let adopt = try section(console, from: "func adoptServerSnapshot(_ session: Session?) {",
+                                to: "private func runMoment(")
+        XCTAssertTrue(adopt.contains("Task { [weak self] in await self?.refreshEvidenceDecisions(force: true) }"),
+                      "a row whose count moved, in a console that knows no project yet, reads the queue")
+
+        // 2. It comes back first: the queue is kept, and with no project its row draws nothing.
+        let read = try section(console, from: "func refreshEvidenceDecisions(force: Bool = false) async {",
+                               to: "/// Answer one revision of a task's evidence at the decision door")
+        XCTAssertTrue(read.contains("evidenceDecisions = queue"), "the read keeps what it was told")
+        XCTAssertTrue(read.contains("lastEvidenceRead = Date()"), "and starts the throttle")
+        XCTAssertTrue(EvidenceDecisions.cardRows(queue: queue, projectId: nil, sessionId: here).isEmpty,
+                      "a row of a project this console does not know yet gets no card")
+
+        // 3. The project lands. The read it kicks is not forced, so the throttle skips it: no request
+        // can bring the row back, and a landing that forced one would spend a read on every open.
+        let landing = try section(console, from: "projectID = s.projectId", to: "taskID = s.taskId")
+        XCTAssertTrue(landing.contains("if projectID != nil { Task { [weak self] in await self?.refreshRulerQuestions() } }"),
+                      "the read the project's landing kicks")
+        XCTAssertFalse(landing.contains("force: true"), "and it stays subject to the throttle")
+
+        // 4. So the landing draws the queue the read left, and now the row is this console's card.
+        XCTAssertTrue(landing.contains("adoptEvidenceQueue(evidenceDecisions)"),
+                      "with the project known, the queue a read already brought back has to be drawn: "
+                          + "nothing else re-reads it until a reconnect or the row's count moves")
+        XCTAssertTrue(read.contains("private func adoptEvidenceQueue(_ queue: EvidenceDecisionQueue) {"),
+                      "one adoption, for a read and for the landing alike")
+        XCTAssertEqual(EvidenceDecisions.cardRows(queue: queue, projectId: project, sessionId: here), [row],
+                       "the same queue, once the project is known, is this conversation's card")
+    }
+
+    /// A forced read means something just moved, and the read on its way may have been answered before
+    /// it did. Dropped, the card waited for the next event, which may not come. `ConsoleModel` does not
+    /// compile here, so this walks the order through its source: the moved row's force finds a read on
+    /// its way, is owed, and is read when that read is back.
+    func testAForcedEvidenceReadIsOwedWhileAnotherIsOnItsWay() throws {
+        let console = try source(Self.consolePath)
+        let read = try section(console, from: "func refreshEvidenceDecisions(force: Bool = false) async {",
+                               to: "/// Draw what a read of the queue lists for this conversation.")
+        let inFlight = try XCTUnwrap(read.range(of: "if loadingEvidence {"), "a read on its way is what is asked about")
+        let owed = try XCTUnwrap(read.range(of: "if force { evidenceReadOwed = true }"), "and a force is remembered")
+        XCTAssertLessThan(inFlight.lowerBound, owed.lowerBound)
+        let throttle = try XCTUnwrap(read.range(of: "if !force, Date().timeIntervalSince(lastEvidenceRead)"))
+        XCTAssertLessThan(owed.lowerBound, throttle.lowerBound,
+                          "and that comes before the throttle, which a forced read does not answer to")
+        let loop = try section(read, from: "repeat {", to: "} while evidenceReadOwed && !Task.isCancelled")
+        XCTAssertTrue(loop.contains("evidenceReadOwed = false"), "each read pays what was owed before it asks")
+        XCTAssertTrue(loop.contains("api.pendingEvidenceDecisions(decidingSessionID: sessionID)"),
+                      "and the read that is owed is the same read")
+        XCTAssertTrue(loop.contains("adoptEvidenceQueue(queue)"), "drawn the same way")
+    }
+
+    /// The row names the project and the task, and `loadContext` reads it once. A first read that did not
+    /// come back left both nil, so no project card and no owner confirmation, until the console was
+    /// restarted: a reconnect re-read everything but the row.
+    func testARowThatWasNotReadIsReadAgainOnAReconnectAndOnTheMinute() throws {
+        let console = try source(Self.consolePath)
+        let load = try section(console, from: "private func loadContext() async {", to: "adoptServerSnapshot(s)")
+        let read = try XCTUnwrap(load.range(of: "guard let s = try? await api.session(sessionID) else { return }"))
+        let marked = try XCTUnwrap(load.range(of: "contextLoaded = true"), "only a read that came back counts")
+        XCTAssertLessThan(read.lowerBound, marked.lowerBound)
+        XCTAssertTrue(load.contains("guard !loadingContext else { return }"), "and one read at a time")
+        let again = try section(console, from: "private func loadContextIfUnread() async {",
+                                to: "/// List seeds and the later detail read")
+        XCTAssertTrue(again.contains("if !contextLoaded { await loadContext() }"), "read again until it is known")
+        let run = try section(console, from: "func run() async {", to: "isReconnect = true")
+        XCTAssertTrue(run.contains("await self?.loadContextIfUnread()"), "on a reconnect")
+        let minute = try section(console, from: "runnerPollTask = Task { [weak self] in", to: "evidencePollTask = Task")
+        XCTAssertTrue(minute.contains("await self.loadContextIfUnread()"), "and on the minute: the stream may never drop")
     }
 
     /// The arming half of the handoff, on the console's side: the press hands the ROW over and
@@ -320,7 +411,7 @@ final class EvidenceDecisionWiringTests: XCTestCase {
         let console = try source(Self.consolePath)
         let refresh = try section(console, from: "func refreshEvidenceDecisions(force: Bool = false) async {",
                                   to: "/// Answer one revision of a task's evidence at the decision door")
-        XCTAssertTrue(refresh.contains("for sent in EvidenceDecisions.sentRows(queue: queue, projectId: projectID) {\n                deliver(.evidenceDecision(taskID: sent.taskId, evidenceRevision: sent.evidenceRevision))"),
+        XCTAssertTrue(refresh.contains("for sent in EvidenceDecisions.sentRows(queue: queue, projectId: projectID) {\n            deliver(.evidenceDecision(taskID: sent.taskId, evidenceRevision: sent.evidenceRevision))"),
                       "a version handed to the coordinator is delivered as the evidence card")
         XCTAssertTrue(refresh.contains("for row in EvidenceDecisions.coordinatorQueueRows(queue: queue, projectId: projectID,"),
                       "and so is one waiting for it, under the card filter's own rule")

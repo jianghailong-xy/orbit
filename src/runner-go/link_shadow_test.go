@@ -245,6 +245,12 @@ func TestLinkShadowTapLeavesTheWorkPathAsItWas(t *testing.T) {
 	}
 	stop := s.start()
 	defer stop()
+	// The shadow starts offline, where it drops mirrors, and the heartbeat can beat it to its first dial. From the
+	// dial on they wait in its queue.
+	linkWaitFor(t, 10*time.Second, "the shadow to reach the gateway", func() bool {
+		conns, _, _, _ := g.snapshot()
+		return len(conns) > 0
+	})
 	got := calls(tapped)
 	if strings.Join(got, "\n") != strings.Join(plain, "\n") {
 		t.Fatalf("through the tap:\n%s\nwithout it:\n%s", strings.Join(got, "\n"), strings.Join(plain, "\n"))

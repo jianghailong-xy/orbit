@@ -149,6 +149,17 @@ class CursorEnginePageTest {
         assertEquals("cursor", fixture.loginBodies.last()["engine"]?.jsonPrimitive?.content)
     }
 
+    /** A link that is not an https page gets no link card: nothing opens it, and nothing copies it. */
+    @Test fun aLinkThatIsNotHttpsIsNotOffered() {
+        twoAccounts()
+        fixture.loginStarted = """{"status":"awaiting_approval","engine":"cursor","url":"vbscript:msgbox(0)","expiresAt":"${at(23)}"}"""
+        page("engine:cursor")
+        click(hasText("Add Account") and hasClickAction())
+        await(AccountCopy.WAITING_FOR_APPROVAL)
+        assertEquals(0, shown(CursorCopy.OPEN_SITE))
+        assertEquals(0, shown(CursorCopy.COPY_LINK))
+    }
+
     /** iOS 3 ⑦⑧: Sign In Again on a signed-in account is the same link card, for this account. */
     @Test fun signInAgainOffersTheSameLinkForThisAccount() {
         twoAccounts()

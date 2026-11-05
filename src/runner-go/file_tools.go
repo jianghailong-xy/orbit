@@ -43,6 +43,18 @@ const (
 	fileLabelMaxChars      = 200
 )
 
+// fileAsTestReport is the one thing `as` can ask of an upload: to be read as a test report (apiserver files/test-report.ts).
+const fileAsTestReport = "test-report"
+
+// What file_upload says of an `as` that was not honoured, beside the file that was kept all the same. The third such
+// sentence is the server's own, for a file that is no report.
+const (
+	fileReportFolderNote = `A folder is kept as a plain bundle, with no test summary: as "test-report" reads one report ` +
+		`file, so upload the report itself to get one.`
+	fileReportOldServerNote = "This Orbit server does not read test reports, so this was kept as a plain file, with no " +
+		"test summary. Upgrade the Orbit server to get one."
+)
+
 // fileCallTimeout is how long one file may take to travel. Longer than the attachments' 35 seconds, which were chosen
 // for a screenshot: this one may be 25 MiB on a home connection.
 const fileCallTimeout = 2 * time.Minute
@@ -64,6 +76,13 @@ type sessionFile struct {
 	SizeBytes int64  `json:"sizeBytes"`
 	SHA256    string `json:"sha256"`
 	CreatedAt string `json:"createdAt"`
+	// When it expires, when it did, and when it was pinned, which keeps it past that date. Empty where there is no such date.
+	ExpiresAt string `json:"expiresAt"`
+	ExpiredAt string `json:"expiredAt"`
+	PinnedAt  string `json:"pinnedAt"`
+	// What the server read out of a test report, passed on as it came: a binary can be older than the fields in it.
+	TestReport map[string]interface{} `json:"testReport"`
+	Note       string                 `json:"note"`
 }
 
 func (f sessionFile) id() string {
@@ -88,18 +107,28 @@ type fileAnswer struct {
 	SHA256    string `json:"sha256,omitempty"`
 	Link      string `json:"link"`
 	CreatedAt string `json:"createdAt,omitempty"`
+	// When it expires, unless evidence holds it or it is pinned; when it did; and when it was pinned.
+	ExpiresAt string `json:"expiresAt,omitempty"`
+	ExpiredAt string `json:"expiredAt,omitempty"`
+	PinnedAt  string `json:"pinnedAt,omitempty"`
 	// Where file_fetch put it.
 	Path string `json:"path,omitempty"`
 	// A bundle's files, by path: from file_upload, or from file_fetch out of its manifest.
 	Files []fileBundleFile `json:"files,omitempty"`
 	// What file_upload found in the folder and did not keep, so that nothing is left out without saying so.
 	Skipped []skippedFile `json:"skipped,omitempty"`
+	// What file_upload --as test-report read out of the file: on this file for good, so every tool shows it.
+	TestReport map[string]interface{} `json:"testReport,omitempty"`
+	// Why an upload told it was a test report has no summary. The file was kept all the same.
+	Note string `json:"note,omitempty"`
 }
 
 func answerFor(f sessionFile) fileAnswer {
 	return fileAnswer{
 		ID: f.id(), Kind: f.Kind, Name: f.Name, Label: f.Label, MimeType: f.MimeType,
 		SizeBytes: f.SizeBytes, SHA256: f.SHA256, Link: fileLink(f.id()), CreatedAt: f.CreatedAt,
+		ExpiresAt: f.ExpiresAt, ExpiredAt: f.ExpiredAt, PinnedAt: f.PinnedAt,
+		TestReport: f.TestReport, Note: f.Note,
 	}
 }
 
@@ -211,6 +240,17 @@ func (t *Transport) describeFile(sessionID, fileID string) (sessionFile, error) 
 	return out, err
 }
 
+// setFilePinned pins one file, or takes its pin away. A folder bundle's id covers the files in it.
+func (t *Transport) setFilePinned(sessionID, fileID string, pinned bool) (sessionFile, error) {
+	method := http.MethodPut
+	if !pinned {
+		method = http.MethodDelete
+	}
+	var out sessionFile
+	err := t.do(nil, method, "/runner/sessions/"+sessionID+"/files/"+url.PathEscape(fileID)+"/pin", nil, &out, taskOpTimeout)
+	return out, err
+}
+
 func (t *Transport) listFiles(filter url.Values) (json.RawMessage, error) {
 	var out json.RawMessage
 	err := t.do(nil, http.MethodGet, "/runner/files?"+filter.Encode(), nil, &out, taskOpTimeout)
@@ -261,7 +301,7 @@ func (t *Transport) downloadFile(parent context.Context, sessionID, fileID, name
 // ── The tools ───────────────────────────────────────────────────────────────────────────────────
 
 // fileToolNames is the set callFileTool answers for.
-var fileToolNames = map[string]bool{"file_upload": true, "file_fetch": true, "file_list": true}
+var fileToolNames = map[string]bool{"file_upload": true, "file_fetch": true, "file_list": true, "file_pin": true}
 
 // fileToolContext is who a file tool acts for, the session it is called from when there is one, and how long it has.
 type fileToolContext struct {
@@ -299,9 +339,16 @@ func runFileTool(t *Transport, tool fileToolContext, name string, args map[strin
 	var err error
 	switch name {
 	case "file_upload":
-		answer, err = uploadPath(t, tool, getString(args, "path"), getString(args, "taskId"), getString(args, "label"))
+		var kept fileAnswer
+		kept, err = uploadPath(t, tool, getString(args, "path"), getString(args, "taskId"), getString(args, "label"), getString(args, "as"))
+		if err == nil && getBool(args, "pin") {
+			kept = pinKept(t, tool, kept)
+		}
+		answer = kept
 	case "file_fetch":
 		answer, err = fetchFile(t, tool, getString(args, "id"))
+	case "file_pin":
+		answer, err = pinFile(t, tool, getString(args, "id"), getBool(args, "unpin"))
 	case "file_list":
 		return listSessionFiles(t, tool, getString(args, "taskId"), getString(args, "sessionId"), getString(args, "evidenceId"))
 	default:
@@ -361,8 +408,9 @@ func fileCallError(action string, err error) error {
 	return fmt.Errorf("%s: %w", action, err)
 }
 
-// uploadPath is file_upload: a file, or a directory as one bundle.
-func uploadPath(t *Transport, tool fileToolContext, path, taskID, label string) (fileAnswer, error) {
+// uploadPath is file_upload: a file, or a directory as one bundle. `as` never costs an upload: what cannot be read as it
+// asks is kept all the same, and the answer's note says so.
+func uploadPath(t *Transport, tool fileToolContext, path, taskID, label, as string) (fileAnswer, error) {
 	var out fileAnswer
 	sessionID, err := fileSessionOf(tool, "file_upload")
 	if err != nil {
@@ -374,6 +422,9 @@ func uploadPath(t *Transport, tool fileToolContext, path, taskID, label string) 
 	// Here rather than left to the server, which would say so only after a whole folder had been uploaded.
 	if utf8.RuneCountInString(label) > fileLabelMaxChars || strings.ContainsFunc(label, unicode.IsControl) {
 		return out, fmt.Errorf("file_upload: a label is at most %d characters, with no control characters", fileLabelMaxChars)
+	}
+	if as != "" && as != fileAsTestReport {
+		return out, fmt.Errorf("file_upload: as can only be %q, not %q", fileAsTestReport, as)
 	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -398,10 +449,17 @@ func uploadPath(t *Transport, tool fileToolContext, path, taskID, label string) 
 		fields["taskId"] = taskID
 	}
 	if info.IsDir() {
-		return uploadFolder(t, tool, sessionID, abs, real, scope, label, fields)
+		out, err = uploadFolder(t, tool, sessionID, abs, real, scope, label, fields)
+		if err == nil && as != "" {
+			out.Note = fileReportFolderNote
+		}
+		return out, err
 	}
 	if label != "" {
 		fields["label"] = label
+	}
+	if as != "" {
+		fields["as"] = as
 	}
 	file, opened, err := scope.open(real)
 	var refused *localFileRefused
@@ -427,24 +485,45 @@ func uploadPath(t *Transport, tool fileToolContext, path, taskID, label string) 
 	if err != nil {
 		return out, fileCallError("file_upload "+abs, err)
 	}
-	return answerFor(uploaded), nil
+	out = answerFor(uploaded)
+	// A server that reads reports answers a summary or a note. One from before them drops the field and answers neither.
+	if as != "" && out.TestReport == nil && out.Note == "" {
+		out.Note = fileReportOldServerNote
+	}
+	return out, nil
 }
 
-// newFileUploadScope is what file_upload may read: this session's own directories, and the working directory it was
-// called from. Nothing the session can write decides it, so no repository's configuration does: git would read that from
-// the checkout. A working directory that is / or holds the home directory is no root, so the rule fails closed whatever
-// directory an engine starts this process in, and a refused path can still go through the uploads directory.
+// newFileUploadScope is what file_upload may read: this session's own directories and, in a session with no worktree,
+// the working directory it was called from, which is that session's checkout. Nothing the session can write decides it,
+// so no repository's configuration does: git would read that from the checkout. A working directory that is / or holds
+// the home directory is no root, so the rule fails closed whatever directory an engine starts this process in, and a
+// refused path can still go through the uploads directory.
 //
-// That last rule is where this is narrower than a reply's links. Those are held to the session's execDir however broad
-// it is, with Orbit's own directory still refused (session.go): the engine can read there anyway in such a session, and
-// refusing would take away ordinary reply images. So in a session running at / or in a home directory, a reply's link
+// A session with a worktree has no use for its working directory, which could not be relied on anyway: a process sees
+// where a directory leads and not what it was called.
+//
+// The rule on / and homes is where this is narrower than a reply's links. Those are held to the session's execDir however
+// broad it is, with Orbit's own directory still refused (session.go): the engine can read there anyway in such a session,
+// and refusing would take away ordinary reply images. So in a session running at / or in a home directory, a reply's link
 // reaches that directory and file_upload does not.
 func newFileUploadScope(sessionID string) localFileScope {
+	dirs := artifactRequestRoots(sessionID)
 	cwd, err := os.Getwd()
-	if err != nil || !usableAsARoot(cwd) {
-		return newLocalFileScope(artifactRequestRoots(sessionID))
+	if err != nil || hasOwnWorktree(sessionID) || !usableAsARoot(cwd) {
+		return newLocalFileScope(dirs)
 	}
-	return newLocalFileScope(artifactRequestRoots(sessionID), cwd)
+	return newLocalFileScope(dirs, cwd)
+}
+
+// hasOwnWorktree reports whether anything stands at this session's worktree, under any spelling of its id. Whatever it
+// is, the session is not one that runs in the owner's directory, even when sessionRoot takes no root from it.
+func hasOwnWorktree(sessionID string) bool {
+	for _, dir := range artifactRequestRoots(sessionID)[1:] {
+		if _, err := os.Lstat(dir); !errors.Is(err, fs.ErrNotExist) {
+			return true
+		}
+	}
+	return false
 }
 
 // usableAsARoot reports whether a working directory is narrower than the home it runs in. Both homes count, because the
@@ -452,6 +531,10 @@ func newFileUploadScope(sessionID string) localFileScope {
 func usableAsARoot(cwd string) bool {
 	real := realPath(cwd)
 	if real == string(filepath.Separator) {
+		return false
+	}
+	here, err := os.Stat(real)
+	if err != nil {
 		return false
 	}
 	homes := []string{machineHome()}
@@ -465,7 +548,7 @@ func usableAsARoot(cwd string) bool {
 		return false
 	}
 	for _, home := range homes {
-		if pathInsideAny(realPath(home), real) {
+		if insideDirectory(realPath(home), here) {
 			return false
 		}
 	}
@@ -719,6 +802,39 @@ func fetchFile(t *Transport, tool fileToolContext, id string) (fileAnswer, error
 	return out, nil
 }
 
+// pinFile is file_pin: a file this session may read stays past the date it would expire on, or goes back to that date.
+func pinFile(t *Transport, tool fileToolContext, id string, unpin bool) (fileAnswer, error) {
+	var out fileAnswer
+	sessionID, err := fileSessionOf(tool, "file_pin")
+	if err != nil {
+		return out, err
+	}
+	if err := validatePathSegmentID(id); err != nil {
+		return out, fmt.Errorf("file_pin: %w", err)
+	}
+	file, err := t.setFilePinned(sessionID, id, !unpin)
+	if err != nil {
+		return out, fileCallError("file_pin "+id, err)
+	}
+	return answerFor(file), nil
+}
+
+// pinKept pins what file_upload has just kept. A pin that does not take costs no upload, so the file is answered all the
+// same, and its note says what is left to do.
+func pinKept(t *Transport, tool fileToolContext, kept fileAnswer) fileAnswer {
+	pinned, err := pinFile(t, tool, kept.ID, false)
+	if err != nil {
+		note := "The file was kept but not pinned: " + err.Error()
+		if kept.Note != "" {
+			note = kept.Note + " " + note
+		}
+		kept.Note = note
+		return kept
+	}
+	kept.PinnedAt = pinned.PinnedAt
+	return kept
+}
+
 // listSessionFiles is file_list: one task's, one session's or one evidence version's, and this session's when none is
 // named. Rows come from the server as they are and are given their links here.
 func listSessionFiles(t *Transport, tool fileToolContext, taskID, sessionID, evidenceID string) (json.RawMessage, error) {
@@ -769,7 +885,10 @@ func fileToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 				"![name](link) for an image or [name](link) for anything else. A directory becomes one folder bundle with " +
 				"a manifest of its relative paths, and each file is listed with its own id. Symbolic links are not " +
 				"followed; they, empty files and anything else that cannot be kept are listed under skipped. One file may " +
-				"be 25 MiB and a folder " + strconv.Itoa(fileBundleMaxFiles) + " files; a folder over either is refused whole.",
+				"be 25 MiB and a folder " + strconv.Itoa(fileBundleMaxFiles) + " files; a folder over either is refused whole. " +
+				"A file expires 14 days after upload unless evidence cites it; once a version citing it is sent back or " +
+				"replaced, 30 days after that. Its name, size, sha256 and test summary stay; only the bytes go. Use pin or " +
+				"file_pin for a file that has to outlast that.",
 			"inputSchema": obj(map[string]interface{}{
 				"path": map[string]interface{}{
 					"type": "string",
@@ -789,6 +908,18 @@ func fileToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 					"maxLength":   fileLabelMaxChars,
 					"description": "What this is, in a few words, kept with the file. On a directory it is the bundle's.",
 				},
+				"as": map[string]interface{}{
+					"type": "string",
+					"enum": []string{fileAsTestReport},
+					"description": "test-report reads one Playwright JSON or JUnit XML report and keeps a summary with the " +
+						"file, answered as testReport: total, passed, failed, skipped, duration, and failed and skipped test " +
+						"names. It stays after the file expires, and evidence citing the file shows it. Anything else, a " +
+						"directory included, is kept as a plain file and note says so.",
+				},
+				"pin": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Keep it past the date it would expire on, as file_pin does. On a directory it covers the whole bundle.",
+				},
 			}, "path"),
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
@@ -806,6 +937,24 @@ func fileToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 				},
 			}, "id"),
 			// It changes nothing in Orbit, and it does write a file here.
+			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
+		},
+		{
+			"name": "file_pin",
+			"description": "Keep a file past the date it would expire on, or with unpin let that date apply again: one " +
+				"this session uploaded, or one cited by completion evidence this session judges. A folder bundle's id covers " +
+				"the files in it. Pinning an expired file brings it back while its bytes are still kept, and says so if they " +
+				"have gone.",
+			"inputSchema": obj(map[string]interface{}{
+				"id": map[string]interface{}{
+					"type":        "string",
+					"description": "The file's or the bundle's id, as file_upload or file_list gave it.",
+				},
+				"unpin": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Take the pin away. If its date has passed, the file expires at the next cleanup, within the hour.",
+				},
+			}, "id"),
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
 		{

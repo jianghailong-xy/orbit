@@ -41,6 +41,7 @@ output into a public report: expanded values can contain secrets.
 | `APNS_TEAM_ID` | Required when APNs is enabled; otherwise empty | Apple developer team identifier. | No; redact in public diagnostics | Recreate API |
 | `APNS_BUNDLE_ID` | Optional; `io.orbitd.app` | APNs topic matching the iOS application's bundle ID. | No | Recreate API |
 | `ORBIT_SOURCE_SHA` | Optional in a Git checkout; required without Git metadata | Full lowercase 40-character source commit stamped into downloadable runner binaries at web-image build time. | No | Rebuild web for each source revision |
+| `ORBIT_FILES_QUOTA_BYTES` | Optional; empty means no limit | The most one account may keep in Orbit Files, in bytes, each content counted once. Past it an upload is refused with `413` and the code `FILE_QUOTA_EXCEEDED`. For a hosted instance; a self-hosted deployment needs none. | No | Recreate API |
 
 Use the host names `ORBIT_WATCHES_MODE` and `ORBIT_WIKI_MODE`, not `ORBIT_WATCHES` or `ORBIT_WIKI`:
 agent sessions already carry the latter variables, and shell precedence could accidentally change a
@@ -171,10 +172,10 @@ credential changes and the API connection rather than deleting or reinitializing
 | `PGHOST` | Backup service fixes `/var/run/postgresql` | Backup connection over the shared Unix socket. | No | Recreate backup service after editing Compose |
 | `PGUSER` | Backup service fixes `orbit` | Database role running the backup; matches the bootstrap superuser. | No | Recreate backup service; coordinate database role changes |
 | `PGDATABASE` | Backup service fixes `postgres` | Maintenance database for backup commands. | No | Recreate backup service after editing Compose |
-| `ORBIT_BASE_BACKUP_INTERVAL` | Optional; `86400` seconds | Time between base backups. | No | Recreate `pgbackup` |
-| `ORBIT_BASE_BACKUP_KEEP` | Optional; `2` | Number of base backups retained; retention bounds available recovery history. | No | Recreate `pgbackup` |
+| `ORBIT_BASE_BACKUP_INTERVAL` | Optional; `86400` seconds | Time between base backups. With `ORBIT_BASE_BACKUP_KEEP` it says how far back a retained backup reaches: an expired file's bytes go no sooner than max(7 days, interval × (keep + 1)) after its tombstone. | No | Recreate `pgbackup` and `apiserver` |
+| `ORBIT_BASE_BACKUP_KEEP` | Optional; `2` | Number of base backups retained; retention bounds available recovery history. With the interval, it also sets that grace period. | No | Recreate `pgbackup` and `apiserver` |
 | `ORBIT_BACKUP_MIN_FREE_MB` | Optional; `2048` MiB | Minimum free space to leave; a backup that cannot meet it is skipped with an error. | No | Recreate `pgbackup` |
-| `ORBIT_BACKUP_SYNC_TARGET` | Optional; empty means local only | SSH rsync destination dedicated to the archive. The mirror deletes unrelated destination files. | No; redact private host/path | Recreate `pgbackup` |
+| `ORBIT_BACKUP_SYNC_TARGET` | Optional; empty means local only | SSH rsync destination dedicated to the archive. The mirror deletes unrelated destination files. `./data/files` is copied beside it, to `<target>-files`, so the SSH user must be able to create that directory too. | No; redact private host/path | Recreate `pgbackup` |
 | `ORBIT_BACKUP_SYNC_SSH_PORT` | Optional; `22` | SSH port for the off-host mirror. | No | Recreate `pgbackup` |
 | `ORBIT_BACKUP_SSH_DIR` | Optional; `/root/.ssh` | Host directory mounted read-only at `/ssh`, containing `id_rsa` and `known_hosts` for the mirror. | Contents include a private key | Recreate `pgbackup`; keep host-key checking enabled |
 

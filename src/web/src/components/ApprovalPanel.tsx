@@ -8,6 +8,7 @@ import { ReviewCard } from './ReviewCard';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { ENTER_HINT, SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
 import { buildBatchGraph, describeShape } from '../lib/batchGraph';
+import { rehypeCodeWords } from '../lib/codeWords';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { markdownToPlainLines } from '../lib/markdownText';
 import { mainBranchName } from '../lib/projectStart';
@@ -71,7 +72,9 @@ export const decliningPrefix = (toolName: string | null | undefined): string =>
           ? 'Leaving the check as it is: '
           : toolName === 'orbit_runner_delete' || toolName === 'orbit_agent_delete'
             ? 'Keeping it: '
-            : 'Not creating: ';
+            : toolName === 'orbit_agent_update'
+              ? 'Leaving it as it is: '
+              : 'Not creating: ';
 
 /** What the empty composer asks for while a decline is armed. */
 export const DECLINE_PLACEHOLDER = 'Say what to do instead…';
@@ -343,6 +346,82 @@ function deleteInput(a: ApprovalInfo, now: number): DeleteInput | null {
   };
 }
 
+/**
+ * Orbit's asks before a session writes what decides a workspace's next session (agent_create and
+ * agent_update naming its variables, folder, system prompts, runner or worktree setting). The server
+ * files the card with its own reading of the workspace, and writes only against a card a person
+ * answered (`runner-workspace-approval.ts`), so like every ask Orbit raises for itself it is never
+ * waived by a rule. It shows each variable's name and its value in full: the owner decides by reading
+ * them, and the server erases the values from the card once it is answered.
+ */
+const isWorkspaceCreate = (a: ApprovalInfo): boolean => a.toolName === 'orbit_agent_create';
+const isWorkspaceUpdate = (a: ApprovalInfo): boolean => a.toolName === 'orbit_agent_update';
+
+/** What the yes reaches, under the facts. macOS/iOS: `Approvals.workspaceWriteNote`; Android: `WorkspaceWriteCards.note`. */
+export const WORKSPACE_WRITE_NOTE =
+  'Every later session in this workspace starts with this, in any permission mode. ' +
+  'A variable can run code as soon as the engine starts.';
+
+interface WorkspaceWriteInput {
+  creating: boolean;
+  name: string;
+  /** The runner it is on, or a new one goes on. */
+  status: string;
+  /** Its folder as it stands. */
+  workDir: string | null;
+  /** The variables it would hold, by name: null when the write leaves them alone. */
+  env: Array<{ name: string; value: string }> | null;
+  /** The variables on it now that the write takes away, since it replaces the whole map. */
+  envRemoved: string[];
+  /** The rest of the write, in the order a person decides in. */
+  fields: Array<{ caption: string; value: string }>;
+}
+
+function workspaceWriteInput(a: ApprovalInfo): WorkspaceWriteInput | null {
+  const creating = isWorkspaceCreate(a);
+  if (!creating && !isWorkspaceUpdate(a)) return null;
+  const obj = (a.input ?? {}) as Record<string, unknown>;
+  // A server that predates this card files what the asker sent: the plain card shows all of that.
+  if (obj.changes === null || typeof obj.changes !== 'object') return null;
+  const changes = obj.changes as Record<string, unknown>;
+  const text = (v: unknown): string => (typeof v === 'string' ? v : '');
+  const runnerName = (v: unknown): string => {
+    const row = (v ?? {}) as Record<string, unknown>;
+    return text(row.displayName) || text(row.name);
+  };
+  const host = runnerName(obj.runner);
+  // An empty string is a field being cleared, which a blank block on a card would not say.
+  const written = (v: unknown): string => text(v) || 'Cleared';
+  const fields: WorkspaceWriteInput['fields'] = [];
+  if (changes.workDir !== undefined) fields.push({ caption: 'Working directory', value: written(changes.workDir) });
+  if (changes.systemPrompt !== undefined) fields.push({ caption: 'System prompt', value: written(changes.systemPrompt) });
+  if (changes.appendSystemPrompt !== undefined) fields.push({ caption: 'Appended system prompt', value: written(changes.appendSystemPrompt) });
+  if (changes.runner !== undefined) fields.push({ caption: 'Runner', value: runnerName(changes.runner) });
+  if (changes.enableWorktree !== undefined) {
+    fields.push({
+      caption: 'Worktree',
+      value: changes.enableWorktree === true ? 'Each session gets its own git worktree' : 'Sessions run in the shared folder',
+    });
+  }
+  if (!creating && changes.name !== undefined) fields.push({ caption: 'Name', value: written(changes.name) });
+  if (changes.description !== undefined) fields.push({ caption: 'Description', value: written(changes.description) });
+  if (changes.defaultMergeTarget !== undefined) fields.push({ caption: 'Merge target', value: written(changes.defaultMergeTarget) });
+  const env = changes.env;
+  return {
+    creating,
+    name: text(obj.name),
+    status: host ? `On ${host}` : 'On no runner',
+    workDir: text(obj.workDir) || null,
+    env: env !== null && typeof env === 'object'
+      ? Object.entries(env as Record<string, unknown>)
+          .map(([name, value]) => ({ name, value: text(value) }))
+          .sort((x, y) => (x.name < y.name ? -1 : x.name > y.name ? 1 : 0))
+      : null,
+    envRemoved: Array.isArray(obj.envRemoved) ? obj.envRemoved.map(text) : [],
+    fields,
+  };
+}
+
 interface BlockerResolveInput {
   projectTitle: string;
   /** What the blocker asks for — the sentence written for a person to act on. */
@@ -437,8 +516,10 @@ function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
   //
   // Nor a delete, for the same reason: the server deletes only on a card a person answered, so a
   // standing yes would answer nothing — and each delete is a different runner or workspace anyway.
+  // Nor a workspace write, which the server takes on the same terms, and each one writes other values.
   if (isTaskCreate(a) || isProjectCreate(a) || isBlockerResolve(a) || isProviderWrite(a)
-    || isSkipMergeCheck(a) || isMergeCheckChange(a) || isRunnerDelete(a) || isWorkspaceDelete(a)) {
+    || isSkipMergeCheck(a) || isMergeCheckChange(a) || isRunnerDelete(a) || isWorkspaceDelete(a)
+    || isWorkspaceCreate(a) || isWorkspaceUpdate(a)) {
     return [];
   }
   if (a.toolName === 'Bash') {
@@ -544,6 +625,7 @@ export function ApprovalPanel({
   const skipCheck = skipMergeCheckInput(approval);
   const mergeCheck = mergeCheckChangeInput(approval);
   const deleting = deleteInput(approval, Date.now());
+  const writing = workspaceWriteInput(approval);
   // What the composer's bar would name as the thing not being done: the proposal's own subject, and
   // never the tool's name, which says nothing about what is not being created. Null for everything
   // that is not one of Orbit's own asks — a plan, a tool call — which keeps its one-press Reject.
@@ -561,6 +643,8 @@ export function ApprovalPanel({
             ? `${mergeCheck.projectTitle || 'this project'}'s merge check`
           : deleting
             ? (deleting.name || `this ${deleting.noun}`)
+          : writing
+            ? (writing.name || 'this workspace')
             : null;
   const heading = isPlan(approval)
           ? '📋 Confirm: exit plan mode and proceed with this plan?'
@@ -582,7 +666,9 @@ export function ApprovalPanel({
                       ? `🔧 Confirm: change the merge check of ${mergeCheck.projectTitle || 'this project'}?`
                       : deleting
                         ? `🗑 Confirm: delete ${deleting.noun} “${deleting.name || `this ${deleting.noun}`}”?`
-                        : `🔓 Approve tool call: ${approval.toolName}`;
+                        : writing
+                          ? `⚙️ Confirm: ${writing.creating ? 'create' : 'change'} workspace “${writing.name || 'this workspace'}”?`
+                          : `🔓 Approve tool call: ${approval.toolName}`;
   return (
     <ReviewCard enabled={compact} title={heading}
       summary={markdownToPlainLines(plan || create?.prose || '')}
@@ -593,10 +679,11 @@ export function ApprovalPanel({
         {heading}
       </div>
       {/* A create is read top to bottom like a plan, so it grows instead of scrolling. */}
-      <div className={`approval-body${plan || create || blocker || skipCheck || mergeCheck || deleting ? ' is-plan' : ''}`}>
+      <div className={`approval-body${plan || create || blocker || skipCheck || mergeCheck || deleting || writing ? ' is-plan' : ''}`}>
         {plan ? (
           <Markdown
             remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeCodeWords]}
             urlTransform={referenceUrlTransform}
             components={{ a: ReferenceLink }}
           >
@@ -616,6 +703,8 @@ export function ApprovalPanel({
           <MergeCheckChangeBody input={mergeCheck} />
         ) : deleting ? (
           <DeleteBody input={deleting} />
+        ) : writing ? (
+          <WorkspaceWriteBody input={writing} />
         ) : (
           <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
         )}
@@ -645,7 +734,9 @@ export function ApprovalPanel({
                         ? 'Change the check'
                         : deleting
                           ? 'Delete it'
-                          : 'Approve'}
+                          : writing
+                            ? (writing.creating ? 'Create it' : 'Save changes')
+                            : 'Approve'}
           {keys && <span className="approval-kbd">{ENTER_HINT}</span>}
         </CardActionButton>
         {/* A second yes, beside the first rather than in its place: the press above stays the
@@ -715,6 +806,7 @@ function BlockerResolveBody({ input }: { input: BlockerResolveInput }): JSX.Elem
       {about && <p className="dag-approval-caption">{about}</p>}
       <Markdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeCodeWords]}
         urlTransform={referenceUrlTransform}
         components={{ a: ReferenceLink }}
       >
@@ -723,6 +815,7 @@ function BlockerResolveBody({ input }: { input: BlockerResolveInput }): JSX.Elem
       <p className="dag-approval-caption">The agent says it no longer blocks</p>
       <Markdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeCodeWords]}
         urlTransform={referenceUrlTransform}
         components={{ a: ReferenceLink }}
       >
@@ -755,6 +848,7 @@ function SkipMergeCheckBody({ input }: { input: SkipMergeCheckInput }): JSX.Elem
       <p className="dag-approval-caption">The agent says this red is the check&rsquo;s, not the work&rsquo;s</p>
       <Markdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeCodeWords]}
         urlTransform={referenceUrlTransform}
         components={{ a: ReferenceLink }}
       >
@@ -799,6 +893,40 @@ function DeleteBody({ input }: { input: DeleteInput }): JSX.Element {
           ? 'This removes the runner and its workspaces from your account. Re-register the machine to add it back.'
           : 'The workspace leaves your list but is not erased — its sessions and tasks are kept and stay linked to it.'}
       </p>
+    </div>
+  );
+}
+
+/**
+ * What a workspace write does, in the server's words: which workspace and where it stands, each
+ * variable by name and value, what a write of the variables takes away, then the rest of what changes.
+ * A value is on its own line in full: a value cut short would be a yes to something nobody read.
+ */
+function WorkspaceWriteBody({ input }: { input: WorkspaceWriteInput }): JSX.Element {
+  return (
+    <div className="dag-approval">
+      <p className="dag-approval-note">{input.status}</p>
+      {input.workDir && <pre className="approval-input">{input.workDir}</pre>}
+      {input.env && (
+        <>
+          <p className="dag-approval-caption">Environment variables</p>
+          {input.env.length > 0
+            ? input.env.map(({ name, value }) => (
+                <pre key={name} className="approval-input">{`${name}=${value}`}</pre>
+              ))
+            : <p className="dag-approval-foot">No variables</p>}
+        </>
+      )}
+      {input.envRemoved.length > 0 && (
+        <>
+          <p className="dag-approval-caption">Variables removed</p>
+          <pre className="approval-input">{input.envRemoved.join('\n')}</pre>
+        </>
+      )}
+      {input.fields.map(({ caption, value }) => (
+        <Command key={caption} label={caption} command={value} />
+      ))}
+      <p className="create-criteria-note">{WORKSPACE_WRITE_NOTE}</p>
     </div>
   );
 }
@@ -875,6 +1003,7 @@ function CreateBody({ input }: { input: CreateInput }): JSX.Element {
           </summary>
           <Markdown
             remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeCodeWords]}
             urlTransform={referenceUrlTransform}
             components={{ a: ReferenceLink }}
           >
@@ -889,6 +1018,7 @@ function CreateBody({ input }: { input: CreateInput }): JSX.Element {
             <>
               <Markdown
                 remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeCodeWords]}
                 urlTransform={referenceUrlTransform}
                 components={{ a: ReferenceLink }}
               >

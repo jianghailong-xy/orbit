@@ -7,7 +7,8 @@ import {
   landingFailureClass,
   openItemKindForJobState,
 } from './project-integration-job';
-import { openItemActions, openItemMessage } from './project-open-item';
+import { openItemDoorMessageNames } from './open-item-doors';
+import { openItemActions, openItemMessage, openItemRequiredAction } from './project-open-item';
 import { COORDINATOR_AUTHORITY, refuseHumanOnlyAction } from './coordinator-authority';
 import { promotionPrincipalRefusal } from './project-promotion';
 import { ownerConfirmationPrincipalRefusal } from '../tasks/task-owner-confirmation';
@@ -576,6 +577,47 @@ test('a blocked candidate\'s item names the door that checks it again, and that 
   // `decidePromotionRetry` answers a conflict with 409, so a conflict's cell holds no re-check door
   // and the message names none — the sync task is the whole of the recipe here.
   assert.doesNotMatch(conflicted, /integration_retry/);
+});
+
+test('§10.5 O-L8: an out-of-date runner\'s item adds one sentence after the error code and one next step, and offers the same doors', () => {
+  const missing = {
+    id: '01a0f5c9-0000-7000-8000-00000000000a',
+    kind: 'INTEGRATION_ERROR',
+    title: 'Integration error: merging “Backfill order stats” into develop',
+    projectId: PROJECT,
+    taskId: null,
+    promotionId: CANDIDATE,
+    payload: {
+      jobKind: 'CHECK_PROMOTION',
+      errorCode: 'SOURCE_BRANCH_MISSING',
+      errorDetail: { ref: 'refs/heads/orbit/backfill' },
+      failureClass: 'ERROR',
+      generation: 1,
+    },
+  };
+  const outdated = { ...missing, payload: { ...missing.payload, outdatedRunner: 'DeskMac' } };
+  const errorCode = 'The integration job ended with an error: SOURCE_BRANCH_MISSING.\n';
+
+  // The text with the field is the text without it, plus exactly this sentence in exactly this place.
+  assert.equal(openItemMessage(outdated), openItemMessage(missing).replace(errorCode, `${errorCode}Runner DeskMac does not declare `
+    + 'integration-observe/v1, so it looked for this task\'s branch on the remote by name. That says nothing about whether '
+    + 'the task has work to land. Update the runner, then run integration_retry on this candidate.\n'));
+
+  // It names `integration_retry`, so the cell it is written in has to hold that door.
+  const row = { kind: 'INTEGRATION_ERROR', assignee: 'COORDINATOR', taskId: null, promotionId: CANDIDATE, fuseEpisodeId: null };
+  assert.equal(openItemDoorMessageNames({ ...row, payload: outdated.payload }).retryMcp, 'integration_retry');
+
+  for (const assignee of ['COORDINATOR', 'OWNER']) {
+    const today = { ...row, assignee, askable: true, payload: missing.payload };
+    const named = { ...today, payload: outdated.payload };
+    assert.equal(openItemRequiredAction(named), 'Update runner DeskMac, then run this check again.');
+    assert.equal(openItemRequiredAction(today),
+      'The project branch cannot reach main until this integration is repaired — re-run it or ask the coordinator to fix it.');
+    assert.deepEqual(openItemActions(named), openItemActions(today), `the ${assignee.toLowerCase()}'s presses do not move`);
+    assert.ok(openItemActions(named).includes('RETRY'), 'and they include the rerun the sentence asks for');
+    // What is already in motion still comes first.
+    assert.equal(openItemRequiredAction({ ...named, state: 'RESOLVED' }), 'This item is already settled — no action is required.');
+  }
 });
 
 test('a task landing\'s item says the rerun leaves it open and handled, and how it ends either way', () => {

@@ -13,7 +13,8 @@
  * reaching an entry whose only Chinese is an alias, a path reaching an entry through its anchor or
  * its pitfall trigger, an entry that both legs found ranking above one only the keyword leg did,
  * tenant and space isolation on both doors, the match reasons the contract lists, and the semantic
- * placeholder changing nothing.
+ * placeholder changing nothing. And what the read fix added: the keyword leg's last pass, and the
+ * `wiki_exposure` row a session's search or read leaves, which a failed write does not cost the read.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-search.pg.spec.ts
  *
@@ -39,7 +40,8 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
 import { WikiController } from './wiki.controller';
-import { compareRanked, looksLikePath, pathQueries, rrfFuse, usageOf, WikiRetrieval } from './wiki-retrieval';
+import { broaden, normalizeSearchQuery } from '../sessions/search-query';
+import { anyWordPatterns, compareRanked, looksLikePath, pathQueries, rrfFuse, usageOf, WikiRetrieval } from './wiki-retrieval';
 import { WikiService } from './wiki.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -392,6 +394,32 @@ test('the fusion and the tiebreak order hits the way the design says', () => {
   assert.deepEqual(pathQueries('a query', ['./src/web', 'src/web']), ['src/web'], 'a caller names them');
 });
 
+test('the last keyword pass asks about the words that take part, and session search is not asked', () => {
+  const groups = (q: string): string[][] | null => anyWordPatterns(normalizeSearchQuery(q)!);
+
+  assert.deepEqual(groups('session stuck after restart'), [['%session%'], ['%stuck%'], ['%after%'], ['%restart%']]);
+  assert.deepEqual(groups('go to the runner'), [['%the%'], ['%runner%']], 'a Latin word under three characters takes no part');
+  // One word that takes part is not a question about the query: it only finds what holds that word.
+  assert.equal(groups('wiki'), null);
+  assert.equal(groups('cache 5m'), null, 'a Latin pair does not count, so only one word takes part');
+  assert.equal(groups('go to'), null);
+  assert.equal(groups('go to runner'), null);
+  // A CJK pair is a word: most of what a Chinese query splits into.
+  assert.deepEqual(groups('会话 列表'), [['%会话%'], ['%列表%']]);
+  assert.deepEqual(groups('会话 curl'), [['%会话%'], ['%curl%']]);
+  assert.deepEqual(groups('日本語のテスト 会话'), [['%日本語%'], ['%テスト%'], ['%会话%']]);
+  // A word past the dictionary is its adjacent pairs, any of which will do.
+  assert.deepEqual(groups('数据库优化 runner'), [['%数据%'], ['%库优%', '%优化%'], ['%runner%']]);
+  // Two characters only count when both are CJK.
+  assert.equal(groups('A股 runner'), null);
+  // A word is matched literally, however the first two passes spell it.
+  assert.deepEqual(groups('100% snake_case'), [['%100\\%%'], ['%snake\\_case%']]);
+
+  // The second pass still asks for every word, and that pass is all session search ever asks.
+  const session = normalizeSearchQuery('go to the runner')!;
+  assert.deepEqual(broaden(session)?.patterns, [['%go%'], ['%to%'], ['%the%'], ['%runner%']]);
+});
+
 // ── the two-legged search ───────────────────────────────────────────────────────────────────────
 
 test('0307 · the wiki search path', { skip, concurrency: 1, timeout: 300_000 }, async (t) => {
@@ -695,6 +723,209 @@ test('0307 · the wiki search path', { skip, concurrency: 1, timeout: 300_000 },
     );
     const confirmed = await ownerSearch(h, owner, { q: 'TEXT', space: here, trust: 'confirmed' });
     assert.deepEqual(hitsOf(confirmed), [], 'nothing this owner wrote is merely confirmed');
+  });
+
+  await t.test('with no entry holding every word, the ones holding the most come first', async () => {
+    const most = await ownerEntry(h, owner, here, {
+      kind: 'pitfall',
+      title: 'A quokka wombat stalls after a numbat',
+      summary: 'Three of the words, and the only entry with three.',
+      fields: { trigger: { paths: ['src/apiserver/src/'], commands: ['quokka'] }, symptom: 'It stalls.', cause: 'Timing.', fix: 'Wait.' },
+    });
+    const fewest = await ownerEntry(h, owner, here, {
+      kind: 'concept',
+      title: 'A numbat',
+      summary: 'One of the words.',
+      fields: { definition: 'A numbat is a marsupial.', boundaries: 'Only itself.' },
+    });
+    const between = await ownerEntry(h, owner, here, {
+      kind: 'concept',
+      title: 'A wombat',
+      summary: 'Two of the words, one of them only in its fields.',
+      fields: { definition: 'A wombat lives beside a quokka.', boundaries: 'Only itself.' },
+    });
+    const none = await ownerEntry(h, owner, here, {
+      kind: 'concept',
+      title: 'A platypus',
+      summary: 'None of the words, though it ends in go.',
+      fields: { definition: 'A platypus lays eggs.', boundaries: 'Only itself.' },
+    });
+
+    // The phrase is nowhere, and neither is any entry with all four words: this query found nothing
+    // before the last pass.
+    const q = 'quokka wombat numbat bilby';
+    const answer = await sessionSearch(h, machine, mine, { q });
+    assert.deepEqual(
+      hitsOf(answer).map((hit) => hit.id),
+      [most, between, fewest],
+      `most words first, and an entry with none is not an answer: ${JSON.stringify(answer.body)}`,
+    );
+    assert.deepEqual(hitFor(answer, most, 'the entry with three').match, ['keyword'], 'it is still the keyword leg');
+    assert.equal(hitsOf(answer).some((hit) => hit.id === none), false);
+    assert.equal((await ownerSearch(h, owner, { q, space: here })).body.hits.length, 3, 'the owner door asks the same');
+
+    // A pass found something, so the last pass is not asked: the entry with every word stands alone.
+    const whole = await sessionSearch(h, machine, mine, { q: 'wombat quokka' });
+    assert.deepEqual(hitsOf(whole).map((hit) => hit.id).sort(), [most, between].sort(), 'every word found these');
+    assert.equal(hitsOf(whole).some((hit) => hit.id === fewest), false);
+
+    // A word under the floor neither finds an entry nor is what keeps one out.
+    const short = await sessionSearch(h, machine, mine, { q: 'go numbat bilby' });
+    assert.deepEqual(hitsOf(short).map((hit) => hit.id).sort(), [most, fewest].sort(), `only numbat found these: ${JSON.stringify(short.body)}`);
+    const nothing = await sessionSearch(h, machine, mine, { q: 'go to' });
+    assert.deepEqual(hitsOf(nothing), [], 'nothing clears the floor, so nothing is asked');
+    // One word left is not enough to ask about: numbat is in two entries, and this finds neither.
+    const alone = await sessionSearch(h, machine, mine, { q: 'go numbat' });
+    assert.deepEqual(hitsOf(alone), [], `one word takes part, so the last pass is not asked: ${JSON.stringify(alone.body)}`);
+
+    // A CJK pair takes part: 闭集 is only in the convention, and 知识 only in the alias of the concept.
+    const chinese = await sessionSearch(h, machine, mine, { q: '闭集 知识' });
+    assert.deepEqual(hitsOf(chinese).map((hit) => hit.id).sort(), [closedSets, spaceEntry].sort(), `each pair found its entry: ${JSON.stringify(chinese.body)}`);
+    // And counts like any other word: the entry holding the pair and the Latin word comes first.
+    const both = await ownerEntry(h, owner, here, {
+      kind: 'concept',
+      title: '闭集 and a wallaby',
+      summary: 'Both of the words.',
+      fields: { definition: 'A wallaby beside a 闭集.', boundaries: 'Only itself.' },
+    });
+    const mixed = await sessionSearch(h, machine, mine, { q: '闭集 wallaby bilby' });
+    assert.equal(hitsOf(mixed)[0]?.id, both, `the entry holding both words leads: ${JSON.stringify(mixed.body)}`);
+    assert.ok(hitsOf(mixed).some((hit) => hit.id === closedSets), 'and the one holding only the pair is still found');
+
+    // A wildcard in a word is a character, not a match for every entry.
+    const wild = await sessionSearch(h, machine, mine, { q: '%%% ___' });
+    assert.deepEqual(hitsOf(wild), [], `no entry holds those characters: ${JSON.stringify(wild.body)}`);
+
+    // The filters are the same hard filter: another space's, and a kind not asked for, stay out.
+    const pitfalls = await sessionSearch(h, machine, mine, { q, kind: 'pitfall' });
+    assert.deepEqual(hitsOf(pitfalls).map((hit) => hit.id), [most]);
+    const elsewhereWord = await sessionSearch(h, machine, mine, { q: 'aurora staging bilby' });
+    assert.equal(hitsOf(elsewhereWord).some((hit) => hit.id === elsewhereEntry), false, 'another space is not in the last pass either');
+  });
+
+  await t.test('a session\'s search and read leave a row each, and nobody else\'s do', async () => {
+    const rows = async (sessionId: string | null, channel: string) =>
+      h.prisma.wikiExposure.findMany({
+        where: { sessionId, channel, entry: { spaceId: toUuid(here) } },
+        select: { ownerId: true, entryId: true, revision: true, sessionId: true, channel: true },
+      });
+    const reader = await session(h, owner.id, ws, machine.id, 'the session whose reads are recorded');
+    const call_ = (route: string): Promise<Answer> =>
+      call(h, { runner: machine.token, headers: { 'x-orbit-session-id': reader } }, 'GET', route);
+    const record = (entryId: string, channel: string, revision = 1) => ({
+      ownerId: owner.id, entryId: toUuid(entryId), revision, sessionId: reader, channel,
+    });
+
+    const searchesSoFar = async (): Promise<number> => {
+      const space_ = await call(h, { bearer: owner.bearer }, 'GET', `/wiki/spaces/${here}?include=usage`);
+      expectStatus(space_, 200, 'the space with its usage');
+      return space_.body.usage.searches as number;
+    };
+    const searchesBefore = await searchesSoFar();
+
+    // One row per entry the search returned, under the channel it came by.
+    const found = await sessionSearch(h, machine, reader, { q: 'run-pg-spec.sh' });
+    assert.ok(hitsOf(found).length >= 2, `a search with more than one hit: ${JSON.stringify(found.body)}`);
+    // All under one moment, which is what lets the home page count them as the one search they were.
+    const moments = await h.prisma.wikiExposure.findMany({ where: { sessionId: reader, channel: 'search' }, select: { at: true } });
+    assert.equal(new Set(moments.map((row) => row.at.getTime())).size, 1, 'the rows of one search share their at');
+    assert.equal(await searchesSoFar(), searchesBefore + 1, 'a search that returned several entries is one search');
+    assert.deepEqual(
+      (await rows(reader, 'search')).map((row) => row.entryId).sort(),
+      hitsOf(found).map((hit) => toUuid(hit.id)).sort(),
+      'one row per entry returned',
+    );
+    assert.deepEqual(
+      (await rows(reader, 'search')).find((row) => row.entryId === toUuid(recipe)),
+      record(recipe, 'search'),
+      'the row names who, what and which revision',
+    );
+
+    // A read leaves one, and it names the revision the entry is at now.
+    const edited = await call(h, { bearer: owner.bearer }, 'POST', `/wiki/spaces/${here}/changesets`, {
+      rationale: 'the owner corrects it',
+      ops: [{ op: 'amend', entryId: recipe, baseRevision: 1, changes: { summary: 'Builds the tree, migrates a template and runs the spec.' } }],
+    });
+    expectStatus(edited, 200, 'the owner amends the recipe');
+    expectStatus(await call_(`/runner/wiki/entries/${recipe}`), 200, 'the session reads the recipe');
+    assert.deepEqual(await rows(reader, 'get'), [record(recipe, 'get', 2)]);
+
+    // What was not given is not recorded: no hits, an entry it may not read, and an entry nobody has.
+    const before = await h.prisma.wikiExposure.count({ where: { sessionId: reader } });
+    assert.deepEqual(hitsOf(await sessionSearch(h, machine, reader, { q: 'zzzqqqxxx' })), []);
+    assert.equal((await call_(`/runner/wiki/entries/${elsewhereEntry}`)).status, 404, "another space's entry");
+    assert.equal((await call_(`/runner/wiki/entries/${randomUUID()}`)).status, 404, 'no such entry');
+    assert.equal(await h.prisma.wikiExposure.count({ where: { sessionId: reader } }), before);
+
+    // A person's reads are not exposures (`exposureRules.people`).
+    const total = await h.prisma.wikiExposure.count({ where: { ownerId: owner.id } });
+    assert.ok(hitsOf(await ownerSearch(h, owner, { q: 'run-pg-spec.sh', space: here })).length > 0);
+    expectStatus(await call(h, { bearer: owner.bearer }, 'GET', `/wiki/entries/${recipe}`), 200, 'the owner reads the recipe');
+    assert.equal(await h.prisma.wikiExposure.count({ where: { ownerId: owner.id } }), total);
+  });
+
+  await t.test('what the last pass found leaves the rows any other search leaves', async () => {
+    const holdsTwo = await ownerEntry(h, owner, here, {
+      kind: 'concept',
+      title: 'A tapir beside a dugong',
+      summary: 'Two of the words.',
+      fields: { definition: 'A tapir and a dugong share a pen.', boundaries: 'Only itself.' },
+    });
+    const holdsOne = await ownerEntry(h, owner, here, {
+      kind: 'concept',
+      title: 'A dugong',
+      summary: 'One of the words.',
+      fields: { definition: 'A dugong grazes on seagrass.', boundaries: 'Only itself.' },
+    });
+    // Each search is a session of its own, so the rows it reads are that search's and no other's.
+    const searched = async (q: string): Promise<string[]> => {
+      const reader = await session(h, owner.id, ws, machine.id, `the session that searched for ${q}`);
+      const hits = hitsOf(await sessionSearch(h, machine, reader, { q })).map((hit) => hit.id);
+      const rows = await h.prisma.wikiExposure.findMany({ where: { sessionId: reader } });
+      assert.deepEqual(rows.map((row) => row.entryId).sort(), hits.map((id) => toUuid(id)).sort(), `one row per entry returned for ${q}`);
+      for (const row of rows) {
+        assert.deepEqual([row.ownerId, row.channel, row.revision], [owner.id, 'search', 1], `the row names who, how and which revision for ${q}`);
+      }
+      assert.equal(new Set(rows.map((row) => row.at.getTime())).size, 1, `the rows of one search share their at for ${q}`);
+      return hits;
+    };
+
+    // Neither the phrase nor every word can return an entry that holds one word of three.
+    assert.deepEqual(await searched('tapir dugong bilby'), [holdsTwo, holdsOne], 'most words first');
+    // A CJK pair gets here the same way: no entry holds both pairs, and this answer has an entry for each.
+    const chinese = await searched('闭集 知识');
+    assert.ok(chinese.includes(closedSets) && chinese.includes(spaceEntry), `each pair found its entry: ${chinese.join()}`);
+  });
+
+  await t.test('a record that cannot be written costs the read nothing', async () => {
+    const reader = await session(h, owner.id, ws, machine.id, 'the session whose record fails');
+    // A real refusal from the real table: PostgreSQL turns the door's INSERT down with 23514, whatever
+    // the rows, and the rows already in the table are not rechecked.
+    await h.sql.query(
+      `ALTER TABLE "wiki_exposure" ADD CONSTRAINT "spec_refuses_reads" CHECK ("channel" = 'push') NOT VALID`,
+    );
+    try {
+      const refused = await h.sql
+        .query(
+          `INSERT INTO "wiki_exposure"("id","owner_id","entry_id","revision","session_id","channel")
+           VALUES ($1,$2,$3,1,$4,'search')`,
+          [randomUUID(), owner.id, toUuid(recipe), reader],
+        )
+        .then(() => null, (error: { code?: string }) => error.code);
+      assert.equal(refused, '23514', 'the write really is refused while this case runs');
+
+      const found = await sessionSearch(h, machine, reader, { q: 'run-pg-spec.sh' });
+      assert.ok(hitsOf(found).some((hit) => hit.id === recipe), `the search still answers: ${JSON.stringify(found.body)}`);
+      const read = await call(h, { runner: machine.token, headers: { 'x-orbit-session-id': reader } }, 'GET', `/runner/wiki/entries/${recipe}`);
+      expectStatus(read, 200, 'the read still answers');
+      assert.equal(read.body.id, recipe);
+      assert.equal(await h.prisma.wikiExposure.count({ where: { sessionId: reader } }), 0, 'and neither left a row');
+    } finally {
+      await h.sql.query(`ALTER TABLE "wiki_exposure" DROP CONSTRAINT "spec_refuses_reads"`);
+    }
+    // And the next read is recorded: the failure held nothing shut.
+    await sessionSearch(h, machine, reader, { q: 'run-pg-spec.sh' });
+    assert.ok((await h.prisma.wikiExposure.count({ where: { sessionId: reader, channel: 'search' } })) > 0);
   });
 
   // The fixture, read back through the database once at the end: an assertion that a search found

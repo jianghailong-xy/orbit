@@ -330,6 +330,16 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     request: (of) => ({ params: { id: of.runner.machineSessionId, fileId: of.runner.sessionAttachmentId } }),
     nested: ['fileId'],
   },
+  'PUT /runner/sessions/:id/files/:fileId/pin': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.machineSessionId, fileId: of.runner.sessionAttachmentId } }),
+    nested: ['fileId'],
+  },
+  'DELETE /runner/sessions/:id/files/:fileId/pin': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.machineSessionId, fileId: of.runner.sessionAttachmentId } }),
+    nested: ['fileId'],
+  },
   'POST /runner/sessions/:id/file-bundles': {
     as: RUNNER,
     request: (of) => ({
@@ -976,6 +986,7 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
   'POST /runner/tasks/batch-pin body taskIds[]': { as: RUNNER, request: (of, mine) => ({ params: {}, body: { taskIds: [mine.taskId, of.taskId], model: 'census' } }) },
   'POST /runner/tasks/batch-pin body projectId': { as: RUNNER, request: (of) => ({ params: {}, body: { projectId: of.projectId, model: 'census' } }) },
   'POST /runner/tasks/batch-pin body listId': { as: RUNNER, request: (of) => ({ params: {}, body: { listId: of.listId, model: 'census' } }) },
+  'POST /runner/tasks/batch-pin header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({ params: {}, body: { taskIds: [mine.taskId], model: 'census' } })),
   'PATCH /runner/tasks/:id body assigneeId': { as: RUNNER, request: (of, mine) => ({ params: { id: mine.taskId }, body: { assigneeId: of.workspaceId } }) },
   'PATCH /runner/tasks/:id body listId': { as: RUNNER, request: (of, mine) => ({ params: { id: mine.taskId }, body: { listId: of.listId } }) },
   'PATCH /runner/tasks/:id body projectId': { as: RUNNER, request: (of, mine) => ({ params: { id: mine.taskId }, body: { projectId: of.projectId } }) },
@@ -1004,6 +1015,16 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     as: RUNNER,
     request: (of, mine) => ({ params: { id: mine.taskId }, body: { dependsOnTaskId: of.dependencyTaskId } }),
   },
+  'POST /runner/tasks/:id/dependencies header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({
+    params: { id: mine.taskId }, body: { dependsOnTaskId: mine.dependencyTaskId },
+  })),
+  // An edge that is not there: the answer is the task, and this one has no comment to name its tenant.
+  'DELETE /runner/tasks/:id/dependencies/:dependsOnTaskId header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({
+    params: { id: mine.dependencyTaskId, dependsOnTaskId: mine.taskId },
+  })),
+  'POST /runner/tasks/:id/progress header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({
+    params: { id: mine.taskId }, body: { phase: 'census' },
+  })),
   'POST /runner/tasks/:id/comments body mentions[]': {
     as: RUNNER,
     request: (of, mine) => ({ params: { id: mine.taskId }, body: { body: 'from the census', mentions: [of.workspaceId] } }),
@@ -1030,6 +1051,9 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     as: RUNNER,
     request: (of, mine) => ({ params: { id: mine.listId }, body: { ops: [{ op: 'add', taskId: of.runner.listTaskId, dependsOnTaskId: mine.dependencyTaskId }] } }),
   },
+  'POST /runner/task-lists/:id/dag-apply header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({
+    params: { id: mine.listId }, body: { ops: [{ op: 'add', taskId: mine.runner.listTaskId, dependsOnTaskId: mine.dependencyTaskId }] },
+  })),
   'POST /runner/task-lists/:id/dag-apply body ops[].dependsOnTaskId': {
     as: RUNNER,
     request: (of, mine) => ({ params: { id: mine.listId }, body: { ops: [{ op: 'add', taskId: mine.runner.listTaskId, dependsOnTaskId: of.dependencyTaskId }] } }),
@@ -1201,6 +1225,20 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     (mine) => ({ params: {}, body: { ops: [{ op: 'challenge', entryId: mine.wikiEntryId, reason: 'the census challenges it' }], rationale: 'the census', dryRun: true } }),
     (of) => of.runner.wikiSessionId,
   ),
+  // A note about another account's entry: kept as the caller's own, and the entry answered as one that does not exist.
+  'POST /runner/wiki/notes body corrects': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: {},
+      headers: calling(mine.runner.wikiSessionId),
+      body: { text: 'The census says this entry is wrong.', corrects: of.wikiEntryId },
+    }),
+  },
+  'POST /runner/wiki/notes header x-orbit-session-id': fromTheirSession(
+    RUNNER,
+    () => ({ params: {}, body: { text: 'The census notes this.' } }),
+    (of) => of.runner.wikiSessionId,
+  ),
   ...Object.fromEntries(Object.entries(wikiRequests()).map(([route, own]) => [
     `${route} header x-orbit-session-id`,
     fromTheirSession(RUNNER, own, (of) => of.runner.wikiSessionId),
@@ -1320,6 +1358,14 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     + '(runner-sessions.controller.ts:222)',
     
   // ── tasks ───────────────────────────────────────────────────────────────────────────────────────
+  'DELETE /runner/tasks/:id header x-orbit-session-id':
+    'looked up only by the id and the caller\'s owner, so another account\'s session is not found and the request reads '
+    + 'as one naming none, and the only task it can delete is the caller\'s own the path names. Read rather than sent: '
+    + 'each send would take away the task the next one needs (verifier-write-authority.ts:88)',
+  'DELETE /runner/task-lists/:id header x-orbit-session-id':
+    'looked up only by the id and the caller\'s owner, so another account\'s session is not found and the request reads '
+    + 'as one naming none, and the only list it can delete is the caller\'s own the path names. Read rather than sent: '
+    + 'each send would take away the list the next one needs (session-reach.ts:167)',
   'POST /runner/tasks/:id/execute body triggerId':
     'an idempotency key the caller makes up for one press: it keys only the caller\'s own run receipt '
     + '(tasks.service.ts:12768)',
@@ -1413,19 +1459,19 @@ export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly str
   },
   'POST /runner/workspaces body (the body)': {
     reads: ['body runnerId'],
-    reading: 'whitelisted field by field; the one id is the runner the workspace runs on (runner-agents.controller.ts:106)',
+    reading: 'whitelisted field by field; the one id is the runner the workspace runs on (runner-agents.controller.ts:110)',
   },
   'POST /runner/agents body (the body)': {
     reads: ['body runnerId'],
-    reading: 'the same body under the workspaces\' pre-rename name (runner-agents.controller.ts:106)',
+    reading: 'the same body under the workspaces\' pre-rename name (runner-agents.controller.ts:110)',
   },
   'PATCH /runner/workspaces/:id body (the body)': {
     reads: ['body runnerId'],
-    reading: 'whitelisted as on create; the one id is the runner to move it to (runner-agents.controller.ts:127)',
+    reading: 'whitelisted as on create; the one id is the runner to move it to (runner-agents.controller.ts:136)',
   },
   'PATCH /runner/agents/:id body (the body)': {
     reads: ['body runnerId'],
-    reading: 'the same body under the workspaces\' pre-rename name (runner-agents.controller.ts:127)',
+    reading: 'the same body under the workspaces\' pre-rename name (runner-agents.controller.ts:136)',
   },
   'GET /runner/region-check request': {
     reads: [],

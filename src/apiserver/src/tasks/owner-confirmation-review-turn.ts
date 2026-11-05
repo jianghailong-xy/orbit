@@ -8,7 +8,7 @@ import {
   type ConfirmationNeedsYouItem,
 } from '@orbit/shared';
 import { derivedUuid } from '../projects/project-dispatch-identity';
-import { attribute } from '../sessions/session-message';
+import { attribute, readBlockSender } from '../sessions/session-message';
 import {
   CONFIRMATION_RETURN_TURN_KEY_PREFIX,
   OWNER_CONFIRMATION_ANSWERS_TURN_KEY_PREFIX,
@@ -277,11 +277,12 @@ async function readReturnForTurn(db: Db, recordId: string) {
     select: {
       id: true,
       kind: true,
+      ownerId: true,
       taskId: true,
       requestId: true,
       reason: true,
       body: true,
-      review: { select: { reviewerSessionId: true } },
+      review: { select: { reviewerSessionId: true, request: { select: { sessionId: true } } } },
     },
   });
   if (!record || record.kind !== 'RETURN') return null;
@@ -291,6 +292,7 @@ async function readReturnForTurn(db: Db, recordId: string) {
     : null;
   return {
     ...record,
+    runSessionId: record.review.request.sessionId,
     reviewerSessionId,
     reviewerTitle: reviewer?.title ?? null,
     problems: ((record.body ?? {}) as { problems?: ConfirmationReviewItem[] }).problems ?? [],
@@ -300,7 +302,8 @@ async function readReturnForTurn(db: Db, recordId: string) {
 /**
  * B3: the block the run is handed its reviewer's return with. Who the reviewer is comes from the
  * review row — the session the request was put to (S1) — and not from anything the caller sent, so
- * the signature is the platform's.
+ * the signature is the platform's. So are `from-session`, `from-mode` and the sentence a narrower
+ * sender's message carries (session-message.ts): this turn has no sender to say them from.
  */
 export async function appendConfirmationReturnContext(
   db: Db,
@@ -311,15 +314,20 @@ export async function appendConfirmationReturnContext(
   if (!recordId) return content;
   const returned = await readReturnForTurn(db, recordId);
   if (!returned) return content;
+  const from = returned.reviewerSessionId
+    ? await readBlockSender(db, returned.ownerId, returned.reviewerSessionId, returned.runSessionId)
+    : null;
   const attributes = [
     `task="${uuidToBase62(returned.taskId)}"`,
     `request-id="${returned.requestId}"`,
     `reviewer-session="${returned.reviewerSessionId ? uuidToBase62(returned.reviewerSessionId) : ''}"`,
     `reviewer-title="${attribute(returned.reviewerTitle ?? '')}"`,
+    ...(from?.attributes ?? []),
   ];
   const block = [
     `<orbit-confirmation-return ${attributes.join(' ')}>`,
     'Your report for this task was sent back by its reviewer, not by the account owner. The owner was not asked.',
+    ...(from?.lines ?? []),
     `Reason: ${returned.reason ?? ''}`,
     'Problems:',
     ...returned.problems.map((problem) => `- ${problem.text}${problem.evidenceRefs?.length ? ` (${problem.evidenceRefs.join('; ')})` : ''}`),

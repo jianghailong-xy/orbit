@@ -172,7 +172,7 @@ describe('the way into Machines & models (docs/mocks/machines-and-models, 02)', 
 });
 
 describe('the order of the cards', () => {
-  it('reads how sessions start, then where agents run, then the alerts and the look, then sharing', () => {
+  it('reads how sessions start, then where agents run, then the alerts and the look, then what is stored, then sharing', () => {
     // The phones open with Machines & models instead and keep the session cards on a page of their own
     // (SettingsHome and SessionSettings in OrbitKit, docs/mocks/ios-settings-order); this page keeps its
     // order. Access tokens comes last: the web's alone until the apps list tokens too.
@@ -184,6 +184,7 @@ describe('the order of the cards', () => {
       'Machines & models',
       'Notifications',
       'Appearance',
+      'Storage',
       'Sharing',
       'Access tokens',
     ]);

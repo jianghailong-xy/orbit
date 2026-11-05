@@ -28,6 +28,7 @@ import type { Request, Response } from 'express';
 import { plainToInstance } from 'class-transformer';
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
+import { deriveSessionCapabilities, type SessionCapabilityFields } from '../sessions/session-state';
 import { readWorktreeArtifactRequest, worktreeFileAnswerKey } from '../sessions/worktree-artifact';
 import { branchName } from '../projects/project-criterion-landing';
 import { TasksService } from '../tasks/tasks.service';
@@ -204,7 +205,7 @@ import { CreateTaskBatchItemDto } from '../tasks/dto';
 import { TASK_CRITERION_SHAPE_ADVICE_CODE } from '../tasks/task-criterion-shape-advice';
 import { recapAfterSettle } from '../sessions/recap';
 import { enqueueTurnSuggestion } from '../sessions/turn-suggestion';
-import { normalizeStoredRememberRules } from '../sessions/remember-rules';
+import { normalizeStoredRememberRules, reachesPastOneMcpTool } from '../sessions/remember-rules';
 import {
   APPROVAL_ABANDONED_STATUS,
   reapApprovalsOfEndedTurns,
@@ -212,6 +213,7 @@ import {
   reapApprovalsOfReturnedCalls,
   reapApprovalsOfReturnedCallsIn,
 } from '../sessions/abandoned-approvals';
+import { WORKSPACE_WRITE_APPROVAL_TOOL_NAMES, withoutEnvValuesInToolUse } from '../sessions/workspace-write-card-values';
 import {
   CURRENT_WORK_INTERRUPTED,
   CURRENT_WORK_INTERRUPTED_REASON,
@@ -293,7 +295,7 @@ import {
   assertEngineSessionById as assertEngineSessionRowById,
   SESSION_KIND_LANDING,
 } from '../sessions/engine-session';
-import { appendSessionMessageContext } from '../sessions/session-message';
+import { appendSessionMessageContext, readBriefSender } from '../sessions/session-message';
 import { SessionRequestService } from '../sessions/session-request.service';
 import {
   appendSessionRepliesContext,
@@ -445,6 +447,7 @@ import {
   AUTO_ALLOWED_MESSAGE,
   dispatchAllowedTools,
   ruleCoversApproval,
+  ruleCoversBackgroundJobCard,
   serverMatchedRuntime,
 } from '../common/permission-rules';
 import {
@@ -486,6 +489,8 @@ import {
 } from '../providers/session-engine';
 import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
 import { DELETE_APPROVAL_TOOL_NAMES, deleteCardInput } from './runner-delete-approval';
+import { sanitizeWorkspaceWrite } from './runner-agents.controller';
+import { workspaceWriteCardInput } from './runner-workspace-approval';
 import { authorizeManagedRunnerInstance, reauthorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import {
@@ -526,6 +531,23 @@ export function loginRelayTimeoutMs(engine: string | null | undefined): number {
 function reportedLoginUrl(url: unknown): string | null {
   return typeof url === 'string' ? url.split(/\p{Cc}/u)[0] : null;
 }
+
+/**
+ * Whether a reported sign-in link is an https page, the only thing a client is ever sent to for a
+ * sign-in. Every engine's is: the runner reads nothing else out of a CLI's output (runner-go login.go,
+ * antigravity_google_login.go, cursor_account_slot.go), so no other scheme has a real sign-in behind it.
+ */
+function isHttpsLoginUrl(url: string): boolean {
+  try {
+    return new URL(url).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/** The failure of a sign-in whose link was not kept. Fixed words: it never repeats what was reported. */
+export const LOGIN_LINK_REFUSED = "This runner reported a sign-in link that isn't https, so it was not opened. Check the machine, then try again.";
+
 // Same contract for installs, against the runner's engineInstallTimeout (10 min) plus the
 // heartbeat it takes to pick the request up.
 const INSTALL_RELAY_TIMEOUT_MS = 12 * 60_000;
@@ -956,6 +978,22 @@ const ANSWERS_USER_TURN: ReadonlySet<RunEventType> = new Set([
   RunEventType.ASSISTANT,
   RunEventType.RESULT,
 ]);
+/**
+ * Whether a session whose checkout `worktrees-removable` keeps is at rest on this runner, its next
+ * message resuming it there. PENDING and RUNNING are not at rest: one of those is being handed to an
+ * engine. An unassigned session is not this runner's to say that about. What `deriveSessionCapabilities`
+ * calls a live session NOT_TERMINAL is a session a message simply reaches, and RUNNER_OFFLINE is this
+ * reading no runner row, the asker being that runner; every other reason there refuses a resume.
+ */
+function restsResumableOn(
+  runnerId: string,
+  session: Omit<SessionCapabilityFields, 'assignedRunner'> & { status: RunStatus },
+): boolean {
+  if (session.assignedRunnerId !== runnerId) return false;
+  if (session.status === RunStatus.PENDING || session.status === RunStatus.RUNNING) return false;
+  const { resumeBlockedReason: blocked } = deriveSessionCapabilities({ ...session, assignedRunner: null });
+  return blocked === null || blocked === 'NOT_TERMINAL' || blocked === 'RUNNER_OFFLINE';
+}
 const RUNNER_CAPABILITIES_HEADER = 'x-orbit-runner-capabilities';
 // Distinct from the named-capability header above: this one advertises which built-in
 // runtimes the runner binary can actually drive (runner 0.1.82+).
@@ -3443,7 +3481,11 @@ export class RunnerApiController {
     if (attempt && Number.isNaN(attempt.getTime())) {
       throw new BadRequestException('attempt must be the start this reports on');
     }
-    const waiting = status === 'awaiting_code' || status === 'awaiting_approval';
+    const linked = status === 'awaiting_code' || status === 'awaiting_approval';
+    const link = linked ? reportedLoginUrl(body.url) : null;
+    // A link that is not an https page ends the sign-in here, unkept, whatever else the report says.
+    const refused = link !== null && !isHttpsLoginUrl(link);
+    const waiting = linked && !refused;
     // When the link stops working, and why a sign-in failed: only what each can be is kept — a real
     // instant, and a reason this control plane knows — and nothing else rides on them. A runner newer
     // than this has its report taken all the same, without them.
@@ -3452,14 +3494,14 @@ export class RunnerApiController {
     const { count } = await this.prisma.runner.updateMany({
       where: { id: runner.id, ...(attempt ? { loginAt: attempt, loginStatus: { not: 'cancelling' } } : {}) },
       data: {
-        loginStatus: status,
+        loginStatus: refused ? 'failed' : status,
         // A retry after a rejected code republishes the same still-valid URL, so just take
         // what the runner reported (reportedLoginUrl); clear any code still queued behind it either way.
-        loginUrl: waiting ? reportedLoginUrl(body.url) : null,
+        loginUrl: waiting ? link : null,
         // Only the device flow carries one, and it dies with the attempt it belongs to.
-        loginUserCode: status === 'awaiting_approval' ? (body.userCode ?? null) : null,
+        loginUserCode: waiting && status === 'awaiting_approval' ? (body.userCode ?? null) : null,
         loginCode: null,
-        loginMessage: body.message ?? null,
+        loginMessage: refused ? LOGIN_LINK_REFUSED : (body.message ?? null),
         // How long the link at loginUrl lasts, kept while it waits and dropped with it.
         loginExpiresAt: waiting && expiresAt && !Number.isNaN(expiresAt.getTime()) ? expiresAt : null,
         loginReason: status === 'failed' ? reason : null,
@@ -5279,7 +5321,14 @@ export class RunnerApiController {
               t.senderSessionId,
               content,
               await readRequestForBlock(tx, sessionId, t.id),
+              sessionId,
             )) ?? content;
+          } else if (sessionContext) {
+            // A paused run's brief a narrower session pressed `task_start` for says so the same way (§2.2).
+            const pressedBy = await readBriefSender(tx, sessionContext.ownerId, t.clientTurnId, sessionId);
+            if (pressedBy) {
+              content = (await appendSessionMessageContext(tx, sessionContext.ownerId, pressedBy, content, null, sessionId)) ?? content;
+            }
           }
           // A list's console also carries back what the control plane noticed while nobody was
           // talking to it. Piggybacked here rather than pushed as its own turn — see
@@ -5684,7 +5733,10 @@ export class RunnerApiController {
           toolName: stripNul(dto.toolName),
           input: await this.cardInput(session.ownerId, stripNul(dto.toolName), dto.input, { runnerId: runner.id, sessionId },
             dto.acceptsStartAfterCreate === true),
-          toolUseId: toolUseId ?? null,
+          // Empty is no id at all, as the lookup above reads it. Stored as '', the session's second such
+          // card would fail on approval_session_id_tool_use_id_key, and the runner answers a card it
+          // could not file with a refusal nobody gave.
+          toolUseId: toolUseId || null,
           turnId: openingTurn?.id ?? null,
           backgroundJobId: backgroundJobId === '' ? null : backgroundJobId,
           ...(allowedMessage
@@ -5762,6 +5814,12 @@ export class RunnerApiController {
     // session's own, is refused before it is filed, since no answer to it could be acted on.
     const deleting = await deleteCardInput(this.prisma, { ownerId, ...asker }, toolName, input);
     if (deleting) return deleting as unknown as Prisma.InputJsonValue;
+    // So does a workspace write's, and the write goes through only against it (runner-workspace-approval.ts).
+    if (WORKSPACE_WRITE_APPROVAL_TOOL_NAMES.has(toolName)) {
+      const write = sanitizeWorkspaceWrite(PublicIdPipe.forFields('runnerId').transform(input, { type: 'body' }));
+      const writing = await workspaceWriteCardInput(this.prisma, { ownerId, runnerId: asker.runnerId }, toolName, input.agentId, write);
+      return writing as unknown as Prisma.InputJsonValue;
+    }
     if (toolName !== RunnerApiController.taskCreateApprovalToolName) return input as Prisma.InputJsonValue;
     const { acceptsStartAfterCreate: _assertedByTheAsker, ...body } = input;
     const card = acceptsStartAfterCreate ? { ...body, acceptsStartAfterCreate: true } : body;
@@ -5803,15 +5861,27 @@ export class RunnerApiController {
     // Deleting a runner or a workspace is asked every time; the delete routes refuse a card no person
     // answered, so a rule that answered it would only turn the owner's "always" into a refusal.
     if (DELETE_APPROVAL_TOOL_NAMES.has(dto.toolName)) return false;
+    // The same for a workspace write: each one is its own question, about values no rule has read.
+    if (WORKSPACE_WRITE_APPROVAL_TOOL_NAMES.has(dto.toolName)) return false;
+    // A card that names only a server may be about any of its tools, and a rule cannot have been
+    // given for a tool nobody named.
+    if (reachesPastOneMcpTool(dto.toolName)) return false;
+    // A shell command asked about from a runner-hosted job is the runner's gate asking on the job's
+    // behalf (runner-go background_gate.go), whichever engine the session runs on. No engine has been
+    // through it, so no engine's rule has been applied to it, and a person's "always allow" on such a
+    // card reaches the next one only through here.
+    const backgroundJob = dto.toolName === 'Bash' && !!stripNul(dto.backgroundJobId ?? '').trim();
     // It is the engine that will run the command, so the grant is judged by the session's own —
     // not by the label its credential was given. One nobody can place is asked about.
-    const runtime = await sessionEngine(this.prisma, session);
-    if (!runtime || !serverMatchedRuntime(runtime)) return false;
+    const runtime = backgroundJob ? null : await sessionEngine(this.prisma, session);
+    if (!backgroundJob && (!runtime || !serverMatchedRuntime(runtime))) return false;
     const rules = await this.prisma.workspacePermissionRule.findMany({
       where: { workspaceId: session.workspaceId },
       select: { toolName: true, ruleContent: true },
     });
-    return ruleCoversApproval(runtime, dto.toolName, dto.input, rules);
+    return runtime
+      ? ruleCoversApproval(runtime, dto.toolName, dto.input, rules)
+      : ruleCoversBackgroundJobCard(dto.input, rules);
   }
 
   /** Long-poll one approval until a human decides (window elapsed undecided → PENDING). */
@@ -7408,6 +7478,17 @@ export class RunnerApiController {
         `pending confirmation reviews of ${sessionId} were not delivered: `
         + `${error instanceof Error ? error.message : error}`,
       ));
+      // And a task's run that this turn left with nothing to do and its task still owed something:
+      // nothing else tells its coordinator so (projects/task-run-stopped.producer.ts).
+      if (
+        !finalized.failSession
+        && finalized.status === RunStatus.AWAITING_INPUT
+        && 'taskId' in finalized
+        && finalized.taskId
+        && dto.turnId
+      ) {
+        await this.tasks?.deliverRunStoppedAfterCommit(sessionId, { turnId: dto.turnId });
+      }
       this.realtime.publishSessionUpdated(sessionId);
       // T5: this turn's numbers, events and tool calls are committed now, so its spend is a fact.
       // A steer settles only its own row and books no turn, cost or tool call.
@@ -7571,7 +7652,7 @@ export class RunnerApiController {
     // replaces the runner's top-level monotonic seq with the live-only seq 0 sentinel (retaining
     // it as payload.snapshotSeq for snapshot ordering). An older client that ignores the unknown
     // event therefore cannot advance its durable resume cursor past an event we never store.
-    const events = stripNul(batch?.events ?? []).map(normalizeToolOutputEvent);
+    const events = stripNul(batch?.events ?? []).map(normalizeToolOutputEvent).map(withoutEnvValuesInToolUse);
     await this.ingestEvents(runner, sessionId, leaseOwner, events);
     return { ok: true };
   }
@@ -8667,11 +8748,14 @@ export class RunnerApiController {
     // sessions at once, which ones coordinate a project with the coordinator on, which is the first
     // thing the fuse asks, and the only sessions it goes on for.
     const fused = !merged || merged.coordinator;
-    if (durable.some((e) => e.type === RunEventType.TURN_END && !e.turnId)) {
+    const engineTurnEnd = durable.find((e) => e.type === RunEventType.TURN_END && !e.turnId);
+    if (engineTurnEnd) {
       // A turn nobody delivered is one the engine started itself (a background task reporting in,
       // a scheduled wake-up). It never reaches /turn-complete, so this is where its recap is asked
       // for; without it the list kept the recap from before the turn that wrote the conclusion.
       void this.recapAfterTurn(sessionId);
+      // And where such a turn's run is found to have stopped, for the same reason.
+      await this.tasks?.deliverRunStoppedAfterCommit(sessionId, { engineTurnEndSeq: engineTurnEnd.seq });
       if (fused) await this.fuse?.afterCoordinatorSpend(sessionId, 'run_event');
     } else if (events.some((e) => e.type === RunEventType.TOOL_USE)) {
       if (fused) await this.fuse?.afterCoordinatorSpend(sessionId, 'tool_call');
@@ -9250,7 +9334,13 @@ export class RunnerApiController {
    *  neither Completed nor deleted, and is still assigned to this runner — it stays resumable, so
    *  idle-parked sessions survive a runner restart. Everything else (Completed, deleted, missing,
    *  or moved to a workspace on another runner — docs/session-folders-move-design.md §5.4) is
-   *  removable leftover. The runner keeps a checkout's branch, and never removes a dirty one. */
+   *  removable leftover. The runner keeps a checkout's branch, and never removes a dirty one.
+   *
+   *  `resumable` is a second answer, about the sessions that are kept: the ones at rest here, whose
+   *  next message brings them back through a new checkout of the branch named beside them. All it
+   *  says is that; a runner short of disk decides from the checkout itself whether one of them can go
+   *  (docs/runner-troubleshooting.md). A runner that predates it reads `removable` alone, which
+   *  this does not change. */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/worktrees-removable')
   async worktreesRemovable(
@@ -9273,11 +9363,28 @@ export class RunnerApiController {
             deletedAt: null,
             OR: [{ assignedRunnerId: null }, { assignedRunnerId: runner.id }],
           },
-          select: { id: true },
+          select: {
+            id: true,
+            status: true,
+            completedAt: true,
+            archivedAt: true,
+            deletedAt: true,
+            cancelRequestedAt: true,
+            startedAt: true,
+            numTurns: true,
+            runtimeSessionId: true,
+            assignedRunnerId: true,
+            branch: true,
+          },
         })
       : [];
     const keep = new Set(keepRows.map((r) => r.id));
-    return { removable: ids.filter((id) => !keep.has(id)) };
+    return {
+      removable: ids.filter((id) => !keep.has(id)),
+      resumable: keepRows.flatMap((r) =>
+        r.branch != null && restsResumableOn(runner.id, r) ? [{ id: r.id, branch: r.branch }] : [],
+      ),
+    };
   }
 
   /** Outcome of a heartbeat-delivered MergeCommand — persist it so the worktree status bar

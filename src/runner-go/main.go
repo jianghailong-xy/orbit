@@ -727,6 +727,9 @@ func startService(cfg *RunnerConfig, proxyVars []envVar) registerOutcome {
 		return serviceNotOnline
 	}
 	printServiceStarted(svc.how)
+	for _, note := range svc.notes {
+		fmt.Println("      " + note)
+	}
 	return serviceOnline
 }
 
@@ -1129,6 +1132,9 @@ func resumeCommand(sessionID, sessionDir string, meta *sessionMeta) (*exec.Cmd, 
 	}
 	if meta.WorkDir != "" {
 		cmd.Dir = expandTilde(meta.WorkDir)
+		if notice := absentCheckoutNotice(sessionID, cmd.Dir); notice != "" {
+			return nil, errors.New(notice)
+		}
 	}
 	return cmd, nil
 }

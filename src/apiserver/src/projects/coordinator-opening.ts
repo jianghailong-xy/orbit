@@ -43,6 +43,14 @@ export function coordinatorSessionTitle(projectTitle: string): string {
  * traceability, not a hard human-presence boundary, so the opening names both the route and its
  * actual guarantee.
  *
+ * It says how a criteria edit is filed and what the project's DONE reads, because T6 is older than
+ * the hold (2026-09-09) and saying only "not yours to decide" taught two wrong things (seen
+ * 2026-09-17 and 2026-11-04). "Only the owner can write": a coordinator left the owner a to-do with
+ * nothing to press, since what they answer is the card an agent's edit puts up. "The platform judges
+ * these words": `deriveProjectDone` compares no criterion's words with any work. The rule was already
+ * in `project_update`'s description, which a Claude session does not load until it looks the tool
+ * up, and a coordinator sure it cannot write has no reason to.
+ *
  * It also says what to do with the work a coordinator turns up: file it under this project, or —
  * when it is a body of work of its own — open a project for it. That second half used to be
  * forbidden here: the coordinator's half of the runner-side rule that stopped offering the
@@ -116,16 +124,28 @@ function renderCoordinatorInstructions(
     + 'and says so in the result. That session knows nothing of the background here: the goal, acceptance criteria and '
     + 'instructions you write are everything it starts from — write them so they stand on their own, and if you cannot, '
     + 'do not open it yet.\n\n'
-    + 'Two things are not yours to decide: changing this project’s acceptance criteria, and recording this project as DONE. '
+    + 'Two things are not yours to decide: a change to this project’s acceptance criteria that does not plainly tighten '
+    + 'them, and recording this project as DONE. '
     + 'The acceptance criteria are the ruler this project’s completion is judged by, and whoever changes the ruler can '
     + 'make any conclusion true; '
     + 'the project’s DONE is the statement “the goal was reached” itself, and if it is wrong, nothing downstream asks again. '
-    + 'Both are recorded through the account owner’s channel — say clearly what should change and what is still missing, '
-    + 'and let the account owner at the screen decide. '
-    + 'HUMAN_ONLY here means role separation and a trail per action, not a cryptographic proof by the server that a real '
-    + 'person is present. '
+    + 'Both are recorded through the account owner’s channel, and the asking is yours: say clearly what should change and '
+    + 'what is still missing, file it as below, and let the account owner at the screen decide. '
+    + 'Keeping them with the account owner means role separation and a trail per action, not a cryptographic proof by the '
+    + 'server that a real person is present. '
     + 'The DONE meant here is the project’s own, not that of any of its tasks: whether a task is done goes by the '
     + 'completion criterion it declared.\n\n'
+    + 'To change the criteria, do not ask the account owner to edit them: send the complete set with project_update '
+    + '(acceptanceCriteriaItems). An edit that plainly tightens them, such as adding a criterion, applies at once, and '
+    + 'the account owner confirms the new set again; any other edit, such as rewording or dropping a criterion, is held '
+    + 'as a proposal, and the account owner approves or refuses it on a card. Once a criterion’s words have moved, the '
+    + 'tasks serving it declare it again with task_update (criterionKey), or it stops counting as met.\n\n'
+    + 'Orbit never compares a criterion’s words with the work. It records this project DONE by itself once the tasks '
+    + 'serving every criterion are done by the completion criteria they declared, their work is on main, no session '
+    + 'producing a criterion’s evidence also wrote it, and the account owner’s confirmation names the criteria as they '
+    + 'stand. The words are for whoever judges the work, so words that no longer describe it hold nothing up: this '
+    + 'project can be recorded DONE against a sentence nobody met. When the words and the work part, file the change. '
+    + 'When this project is finished and Orbit cannot prove it, ask with project_request_done.\n\n'
     + (coordinatorEnabled
       ? 'This project has Automatic on, so whether a task is done is yours to judge, not something the account owner '
         + 'confirms card by card: the platform judges EXECUTABLE and VERIFICATION by itself; for EVIDENCE_JUDGMENT you '
@@ -167,7 +187,8 @@ function renderCoordinatorInstructions(
         + 'Only three kinds of matter need the account owner: changing or confirming the acceptance criteria; authorizing '
         + 'a launch or an irreversible step in advance; and a trade-off that truly needs the account owner’s decision. '
         + 'Send each decision as a question with ask_owner, each with the default you recommend; where you can move '
-        + 'forward on the default, move forward on it rather than stopping to wait.\n\n'
+        + 'forward on the default, move forward on it rather than stopping to wait. '
+        + 'A change to the criteria is the exception: file it with project_update, and its card is the question.\n\n'
       : '')
     + 'Do not go looking for tools you were not given: listing or deleting projects, opening another coordinator '
     + 'session and directing a runner directly are not in your hands.'

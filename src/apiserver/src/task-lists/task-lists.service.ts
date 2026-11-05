@@ -849,13 +849,20 @@ export class TaskListsService {
    * this is a compound operation and not a cascade: the intent is transferred onto the tasks
    * first (they are the only rows that survive), and only then does the list go.
    */
-  async remove(ownerId: string, id: string) {
+  async remove(ownerId: string, id: string, actingSessionId?: string) {
     await this.get(ownerId, id);
     // Read while the tasks still point at the list — after the delete they are unfindable by it.
     const running = await this.prisma.session.findMany({
       where: { ownerId, task: { listId: id }, status: { in: TASK_OCCUPYING } },
       select: { id: true },
     });
+    // Every one of these is ended below, so a session that may not end one of them may not do it from here
+    // (sessions/session-reach.ts). A person's own delete names no session.
+    if (actingSessionId) {
+      for (const session of running) {
+        await this.sessions.assertMayReach(ownerId, actingSessionId, session.id, 'deleteList');
+      }
+    }
     // Only the automatic dispatch goes: status and dependency edges are left alone, so a
     // detached task is still there to read and still startable by hand.
     //

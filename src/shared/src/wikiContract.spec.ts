@@ -26,6 +26,8 @@ import {
   WIKI_GIT_ANCHOR_TYPES,
   WIKI_KINDS,
   WIKI_LIMITS,
+  WIKI_NOTE_READ_BY,
+  WIKI_NOTE_RULES,
   WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
   WIKI_MAINTENANCE_LOOKBACK_DAYS,
   WIKI_MAINTENANCE_RULES,
@@ -46,6 +48,8 @@ import {
   WIKI_SOURCE_STATES,
   WIKI_TRUST_LEVELS,
   WIKI_UNSET_REVIEW_MODE,
+  WIKI_EVIDENCE_CLASSES,
+  WIKI_FIRST_HAND_EVIDENCE,
   WIKI_VERIFICATION_EVIDENCE,
   WIKI_VERIFICATION_VERDICTS,
   WIKI_VOUCHED_TRUST,
@@ -63,7 +67,15 @@ import {
   wikiReviewEffect,
   wikiSpaceSettings,
   wikiTieredBasis,
+  wikiCallReadsWiki,
+  wikiCallWritesNote,
+  wikiEvidenceClass,
+  WIKI_NOTE_REPEAT_MIN_CHARS,
+  wikiFirstHandForNote,
+  wikiRepeatsNote,
+  wikiStrongestEvidenceClass,
   wikiVerdictEffect,
+  wikiVerificationEvidence,
   wikiVerdictTrust,
 } from './wiki';
 import {
@@ -85,6 +97,7 @@ import {
   WIKI_MAINTENANCE_DUE,
   WIKI_MAINTENANCE_FAILURE_KINDS,
   WIKI_MAINTENANCE_HELD_REASONS,
+  WIKI_BACKFILL,
   WIKI_MAINTAIN_JOB,
   WIKI_MAINTENANCE_JOB,
   wikiMaintenanceBehind,
@@ -256,6 +269,7 @@ describe('wiki contract', () => {
       CONTRACT.storage.reviewModeMigration,
       CONTRACT.storage.verificationMigration,
       CONTRACT.storage.evidenceMigration,
+      CONTRACT.storage.secondHandMigration,
     ]) {
       expect(existsSync(path.join(ROOT, file)), `${file} does not exist`).toBe(true);
     }
@@ -615,6 +629,138 @@ describe('wiki contract', () => {
     for (const key of keysOf(pool)) expect(CONTRACT.articles.reads.article).toMatch(new RegExp(`\\(${key}\\b`, 'u'));
   });
 
+  it('reads where a source\'s words came from by one table, and caps only what rests on a note (design section 6.1)', () => {
+    const classes = CONTRACT.reviewModes.verification.evidence.classes;
+    expect(classes.order).toEqual([...WIKI_EVIDENCE_CLASSES]);
+    for (const name of WIKI_EVIDENCE_CLASSES) expect(typeof classes[name], `${name} says what it counts`).toBe('string');
+    expect(classes.firstHand).toEqual([...WIKI_FIRST_HAND_EVIDENCE]);
+    expect(classes.function).toMatch(/wikiEvidenceClass/u);
+    expect(classes.strongest).toMatch(/wikiStrongestEvidenceClass/u);
+
+    const call = (toolName: string | null, command: string | null = null) => ({ toolName, command });
+    const of = (record: Parameters<typeof wikiEvidenceClass>[0]) => wikiEvidenceClass(record);
+    const event = (eventType: string, tool = call(null)) => of({ kind: 'event', eventType, ...tool });
+    const turn = (over: Partial<Extract<Parameters<typeof wikiEvidenceClass>[0], { kind: 'turn' }>> = {}) => of({
+      kind: 'turn', ownerWords: false, turnKind: 'message', clientTurnId: 'a-key', orbitAuthored: false,
+      senderSessionId: null, sessionTaskId: null, sessionParentId: null, ...over,
+    });
+    // Observed: what a tool showed, and the records nobody wrote by hand.
+    expect(of({ kind: 'tool_call', ...call('Bash', 'npm test') })).toBe('observed');
+    expect(event('tool_use', call('Read'))).toBe('observed');
+    expect(event('tool_result', call('Bash', 'npm test'))).toBe('observed');
+    expect(event('tool_result'), 'a result with no call beside it').toBe('observed');
+    for (const type of ['background_task', 'error']) expect(event(type)).toBe('observed');
+    for (const kind of ['commit', 'merge_receipt'] as const) expect(of({ kind })).toBe('observed');
+    // A tool that writes a file holds the agent's own words, under each engine's name for it.
+    for (const tool of ['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'apply_patch', 'ApplyPatch']) {
+      expect(of({ kind: 'tool_call', ...call(tool) }), tool).toBe('agent_words');
+      expect(event('tool_use', call(tool)), tool).toBe('agent_words');
+      expect(event('tool_result', call(tool)), tool).toBe('agent_words');
+    }
+    // A read of the wiki is not observed, under any engine's name or through the CLI.
+    for (const tool of ['mcp__orbit__wiki_search', 'mcp__orbit__wiki_get', 'orbit__wiki_search', 'orbit__wiki_get', 'wiki_search', 'wiki_get']) {
+      expect(wikiCallReadsWiki(tool, null), tool).toBe(true);
+      expect(of({ kind: 'tool_call', ...call(tool) }), tool).toBe('agent_words');
+    }
+    for (const command of [
+      'orbit wiki search release',
+      'orbit wiki get 34abc --json',
+      "'/usr/local/bin/orbit' wiki search release | head",
+      '/root/.orbit/bin/orbit wiki get 34abc',
+      'cd src && orbit wiki search "a phrase"',
+      'found=$(orbit wiki get 34abc)',
+      'bash -c "orbit wiki search release"',
+      'echo start\norbit wiki get 34abc',
+    ]) {
+      expect(wikiCallReadsWiki('Bash', command), command).toBe(true);
+      expect(of({ kind: 'tool_call', ...call('Bash', command) }), command).toBe('agent_words');
+    }
+    // Writing to the wiki, its help, and anything else named nearly the same are not reads of it.
+    for (const [tool, command] of [
+      ['mcp__orbit__wiki_propose', null],
+      ['wiki_searcher', null],
+      ['Bash', 'orbit wiki propose --file ops.json'],
+      ['Bash', 'orbit wiki --help'],
+      ['Bash', 'orbit wiki search-index'],
+      ['Bash', 'neworbit wiki get 34abc'],
+      ['Bash', 'npm test'],
+      [null, null],
+    ] as const) {
+      expect(wikiCallReadsWiki(tool, command), `${tool} ${command}`).toBe(false);
+    }
+    expect(of({ kind: 'tool_call', ...call('mcp__orbit__wiki_check') })).toBe('observed');
+    // The owner's words.
+    expect(turn({ ownerWords: true })).toBe('owner_words');
+    expect(of({ kind: 'approval', ownerWords: true })).toBe('owner_words');
+    expect(of({ kind: 'owner_decision' })).toBe('owner_words');
+    // An agent's words.
+    for (const type of ['assistant', 'thinking']) expect(event(type)).toBe('agent_words');
+    expect(turn({ senderSessionId: 'another' })).toBe('agent_words');
+    expect(turn({ clientTurnId: 'initial-1', sessionParentId: 'parent' })).toBe('agent_words');
+    expect(event('tool_use'), 'a call that names no tool').toBe('agent_words');
+    expect(of({ kind: 'tool_call', ...call(null) })).toBe('agent_words');
+    // A person's words nothing says are the owner's.
+    expect(turn()).toBe('no_intent_words');
+    expect(turn({ turnKind: 'steer' })).toBe('no_intent_words');
+    expect(turn({ clientTurnId: 'initial-1' }), 'a top-level opening').toBe('no_intent_words');
+    expect(event('user')).toBe('no_intent_words');
+    expect(of({ kind: 'approval', ownerWords: false })).toBe('no_intent_words');
+    // Task text, the owner's included.
+    expect(turn({ clientTurnId: 'initial-1', sessionTaskId: 'task' })).toBe('task_text');
+    expect(turn({ clientTurnId: 'initial-1', sessionTaskId: 'task', sessionParentId: 'parent' })).toBe('task_text');
+    for (const kind of ['task', 'task_comment'] as const) expect(of({ kind })).toBe('task_text');
+    // What Orbit or a shell wrote.
+    expect(turn({ orbitAuthored: true })).toBe('orbit_or_shell');
+    for (const turnKind of ['shell', 'interrupt']) expect(turn({ turnKind })).toBe('orbit_or_shell');
+    for (const type of ['turn_end', 'system']) expect(event(type)).toBe('orbit_or_shell');
+    expect(of({ kind: 'note' })).toBe('memory');
+    // What the agent itself typed into a tool is not what happened, however its engine files the tool.
+    const agentInput = CONTRACT.reviewModes.verification.evidence.classes.agentInputTools as string[];
+    expect(agentInput).toEqual([
+      'project_send', 'task_comment', 'session_send', 'session_reply', 'session_create', 'task_create', 'task_create_batch',
+      'task_update', 'task_evidence_submit', 'wiki_propose', 'notify', 'SendMessage', 'Agent', 'Task',
+    ]);
+    for (const name of agentInput) {
+      for (const toolName of [name, `mcp__orbit__${name}`, `orbit__${name}`]) {
+        expect(of({ kind: 'tool_call', toolName, command: null }), toolName).toBe('agent_words');
+        for (const eventType of ['tool_use', 'tool_result']) expect(of({ kind: 'event', eventType, toolName, command: null }), toolName).toBe('agent_words');
+      }
+    }
+    expect(of({ kind: 'tool_call', toolName: 'mcp__orbit__bg_run', command: null })).toBe('observed');
+
+    // A record that repeats 60 characters of a note in a row is the note read again, unless the words are the owner's.
+    const said = 'The upload test fails with ECONNREFUSED because the port is read at import, before the fixture sets it.';
+    expect(WIKI_NOTE_REPEAT_MIN_CHARS).toBe(60);
+    expect(wikiRepeatsNote(`saved: ${said.slice(0, 59)}!`, said)).toBe(false);
+    expect(wikiRepeatsNote(`saved: ${said.slice(0, 60)}!`, said)).toBe(true);
+    expect(wikiRepeatsNote(`**The upload**  test\nfails with \`ECONNREFUSED\` because the port is read at import`, said)).toBe(true);
+    expect(wikiRepeatsNote(said, 'A note of fewer than sixty characters.')).toBe(false);
+    expect(wikiFirstHandForNote('observed', 'npm test: 12 passing', said)).toBe(true);
+    expect(wikiFirstHandForNote('observed', said, said)).toBe(false);
+    expect(wikiFirstHandForNote('observed', said, null)).toBe(true);
+    expect(wikiFirstHandForNote('owner_words', said, said)).toBe(true);
+    for (const other of WIKI_EVIDENCE_CLASSES.filter((one) => !WIKI_FIRST_HAND_EVIDENCE.includes(one))) {
+      expect(wikiFirstHandForNote(other, 'something else', said), other).toBe(false);
+    }
+
+    // An op's class is its strongest source's, and only memory alone is second-hand.
+    expect(wikiStrongestEvidenceClass([])).toBeNull();
+    expect(wikiStrongestEvidenceClass(['memory', 'task_text', 'agent_words'])).toBe('agent_words');
+    expect(wikiStrongestEvidenceClass(['memory', 'observed'])).toBe('observed');
+    expect(wikiVerificationEvidence([])).toBe('unreadable');
+    expect(wikiVerificationEvidence(['memory'])).toBe('second_hand');
+    expect(wikiVerificationEvidence(['memory', 'memory'])).toBe('second_hand');
+    for (const name of WIKI_EVIDENCE_CLASSES.filter((one) => one !== 'memory')) {
+      expect(wikiVerificationEvidence([name]), name).toBe('readable');
+      expect(wikiVerificationEvidence(['memory', name]), `a note and ${name}`).toBe('readable');
+    }
+    // The dossier and the import say so too.
+    expect(CONTRACT.maintenance.dossier.wikiReads).toMatch(/wikiCallReadsWiki/u);
+    expect(CONTRACT.effectPolicy.taintedRule).toMatch(/originSessionId/u);
+    expect(CONTRACT.effectPolicy.taintedRule).toMatch(/runtime_session_id/u);
+    expect(CONTRACT.import.source).toMatch(/evidence\.secondHand/u);
+  });
+
   it('holds a verdict to what its verifier could read, and a tainted op to unreviewed (revision 4)', () => {
     const evidence = CONTRACT.reviewModes.verification.evidence;
     expect(evidence.values).toEqual([...WIKI_VERIFICATION_EVIDENCE]);
@@ -625,6 +771,9 @@ describe('wiki contract', () => {
     expect(evidence.text).toMatch(/the same text a submission's quote is checked against/u);
     const verdictEffect = (verdict: (typeof WIKI_VERIFICATION_VERDICTS)[number], tainted: boolean, readable: boolean) =>
       wikiVerdictEffect({ verdict, tainted, evidence: readable ? 'readable' : 'unreadable' });
+    // The migration admits exactly the words the contract lists.
+    const widened = readFileSync(path.join(ROOT, CONTRACT.storage.secondHandMigration), 'utf8');
+    expect(widened).toContain(`IN (${evidence.values.map((value: string) => `'${value}'`).join(', ')})`);
     // Readable and not tainted: revision 3, word for word.
     expect(verdictEffect('supported', false, true)).toEqual({ trust: 'auto', reinforce: false, counted: true });
     expect(verdictEffect('partial', false, true)).toEqual({ trust: 'unreviewed', reinforce: false, counted: true });
@@ -646,6 +795,19 @@ describe('wiki contract', () => {
     for (const verdict of WIKI_VERIFICATION_VERDICTS) {
       expect(WIKI_PUSHABLE_TRUST, `a tainted ${verdict}`).not.toContain(verdictEffect(verdict, true, true).trust);
     }
+    // Only a note to read: its supported is no more than unreviewed, unsupported still rejects, a duplicate still reinforces, and every one counts.
+    const secondHand = (verdict: (typeof WIKI_VERIFICATION_VERDICTS)[number], tainted = false) =>
+      wikiVerdictEffect({ verdict, tainted, evidence: 'second_hand' });
+    expect(secondHand('supported')).toEqual({ trust: 'unreviewed', reinforce: false, counted: true });
+    expect(secondHand('partial')).toEqual({ trust: 'unreviewed', reinforce: false, counted: true });
+    expect(secondHand('unsupported')).toEqual({ trust: null, reinforce: false, counted: true });
+    expect(secondHand('duplicate')).toEqual({ trust: null, reinforce: true, counted: true });
+    expect(secondHand('duplicate', true)).toEqual({ trust: null, reinforce: false, counted: true });
+    for (const verdict of WIKI_VERIFICATION_VERDICTS) {
+      expect(WIKI_PUSHABLE_TRUST, `a second-hand ${verdict}`).not.toContain(secondHand(verdict).trust);
+    }
+    expect(evidence.secondHand).toMatch(/count toward the fallback/u);
+    expect(CONTRACT.reviewModes.verification.fallback).toMatch(/One that read only a note \(evidence\.secondHand\) is in it/u);
     // The fallback leaves out what could not be read; the reopening sends it back, and is nobody's but the owner's and the import's.
     expect(CONTRACT.reviewModes.verification.fallback).toMatch(/out of the window altogether/u);
     const reopen = CONTRACT.reviewModes.verification.reopen;
@@ -978,6 +1140,25 @@ describe('wiki contract', () => {
     expect(job.run.failure).toMatch(/Before the ops are recorded — any step up to propose — the cursor does not move/u);
     expect(job.run.failure).toMatch(/the run still ends failed, and the report says so \(cursorAdvanced\)/u);
     expect(job.report).toMatch(/cursorAdvanced/u);
+    expect(job.report).toMatch(/claims \{claudeSessions, seen, notes, skipped, overCap, heldOut, shown, narrowed, contradicted, absent, notDurable, unanswered, entries, duplicates\}/u);
+    expect(at('claims')).toBe(at('extract') + 1);
+    expect(at('self-check')).toBe(at('claims') + 1);
+    expect(job.server.claims.order).toMatch(/verified first and whole/u);
+    expect(CONTRACT.maintenance.dossier.memory).toMatch(/neither reads it nor hears of it/u);
+    expect(CONTRACT.maintenance.dossier.memory).toMatch(/% 10 === 0/u);
+    expect(CONTRACT.opRules.promptedBy).toMatch(/refused for its shape \(WIKI_SCHEMA\)/u);
+    // The backfill's numbers, held to its block: and what it leaves alone, which is the whole of why it is a run of its own.
+    const backfill = job.server.backfill;
+    expect(backfill.rules).toEqual(WIKI_BACKFILL);
+    expect(CONTRACT.opRules.promptedBy).toMatch(/\{ noteId, file \} for an imported note a backfill named/u);
+    expect(backfill.steps).toMatch(/No page of the cursor's is read/u);
+    expect(backfill.steps).toMatch(/It moves no cursor, writes no document/u);
+    expect(backfill.dossier).toMatch(/No wiki_dossier row is written or made/u);
+    expect(backfill.oldEntries).toMatch(/for origin maintenance alone/u);
+    expect(backfill.downgrade.rule).toMatch(/promptedEvidenceOf/u);
+    expect(backfill.downgrade.command).toMatch(/by default only reports/u);
+    expect(job.report).toMatch(/backfill \{reason, unread, heldBack\}/u);
+    expect(existsSync(path.join(__dirname, '../../..', CONTRACT.storage.promptedByMigration))).toBe(true);
     const report: WikiMaintenanceReport = { sessions: 0, dossiers: 0, unchanged: 0, offTopic: 0,
       entries: { extracted: 0, kept: 0, dropped: 0, foreign: 0, principles: 0 },
       ops: { proposed: 0, recorded: 0, refused: 0, selfCheckDropped: 0, heldBack: 0, heldBackByBreaker: 0, applied: 0, waiting: 0 },
@@ -1038,6 +1219,9 @@ describe('wiki contract', () => {
     expect(health.notify.afterFailures).toBe(WIKI_MAINTENANCE_HEALTH.notifyAfterFailures);
     expect(health.notify.once).toMatch(/exactly afterFailures/u);
     expect(health.notify.reset).toMatch(/back to 0/u);
+    expect(health.notifyNoNotes.afterRuns).toBe(WIKI_MAINTENANCE_HEALTH.notifyNoNotesAfterRuns);
+    expect(health.notifyNoNotes.minSessions).toBe(WIKI_MAINTENANCE_HEALTH.notifyNoNotesMinSessions);
+    expect(health.notifyNoNotes.once).toMatch(/exactly afterRuns long/u);
     // The looks win in the order the contract lists them.
     const now = new Date('2026-09-28T12:00:00.000Z');
     const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 3_600_000).toISOString();
@@ -1459,15 +1643,17 @@ describe('wiki contract', () => {
     expect(status('WIKI_OWNER_CHANNEL_ONLY')).toBe(403);
   });
 
-  it('gives agents three tools and two doors, and no way to decide', () => {
+  it('gives agents four tools and two doors, and no way to decide', () => {
     const surface = CONTRACT.agentSurface;
-    expect(surface.tools).toEqual(['wiki_search', 'wiki_get', 'wiki_propose']);
+    expect(surface.tools).toEqual(['wiki_search', 'wiki_get', 'wiki_propose', 'wiki_note']);
     expect(keysOf(surface.toolSpecs)).toEqual(surface.tools);
     expect(keysOf(surface.cli)).toEqual(surface.tools);
     expect(surface.toolSpecs.wiki_search.readOnly).toBe(true);
     expect(surface.toolSpecs.wiki_get.readOnly).toBe(true);
     expect(surface.toolSpecs.wiki_propose.readOnly).toBe(false);
     expect(surface.toolSpecs.wiki_propose.destructive).toBe(false);
+    expect(surface.toolSpecs.wiki_note.readOnly).toBe(false);
+    expect(surface.toolSpecs.wiki_note.destructive).toBe(false);
     for (const tool of surface.tools) expect(tool).not.toMatch(/accept|confirm|decide|delete/u);
 
     expect(keysOf(surface.doors)).toEqual(['user', 'runner']);
@@ -1485,7 +1671,57 @@ describe('wiki contract', () => {
     expect(surface.decide.route).toBe(CONTRACT.effectPolicy.decide.route);
     expect(runner.some((route) => /decide/u.test(route))).toBe(false);
     expect(surface.decide.sessionHeader).toMatch(/WIKI_OWNER_CHANNEL_ONLY/u);
-    expect(surface.proposeDescription).toMatch(/waits for the owner's review/u);
+    expect(surface.proposeDescription).toMatch(/depends on the space's review mode/u);
+    expect(surface.proposeDescription).not.toMatch(/waits for the owner's review/u);
+  });
+
+  it('gives a session a note: a claim for maintenance to check, not a write to the wiki (design section 4)', () => {
+    const surface = CONTRACT.agentSurface;
+    expect(surface.note.rules).toEqual({ ...WIKI_NOTE_RULES });
+    expect(surface.note.route).toBe('POST /api/runner/wiki/notes');
+    expect(surface.doors.runner.routes).toContain(surface.note.route);
+    expect(keysOf(surface.toolSpecs.wiki_note.params)).toEqual(['text', 'paths', 'corrects']);
+    expect(surface.noteDescription).toMatch(/so it is not in the wiki yet and may never be/u);
+    expect(surface.noteDescription).toMatch(/pass corrects with its id: the entry is flagged at once/u);
+    expect(surface.note.review).toMatch(/no op/u);
+    expect(surface.note.who).toMatch(/WIKI_SESSION_EXCLUDED/u);
+    for (const readBy of Object.values(WIKI_NOTE_READ_BY)) expect(surface.note.answer).toContain(readBy);
+    expect(existsSync(path.join(__dirname, '../../..', CONTRACT.storage.noteSessionMigration))).toBe(true);
+    expect(CONTRACT.opRules.promptedBy).toMatch(/a session's wiki_note \(agentSurface\.note\)/u);
+    expect(CONTRACT.maintenance.dossier.memory).toMatch(/a held-out session keeps them/u);
+
+    // A note is filed under each engine's name for the tool, and through the CLI wherever a shell runs it.
+    const call = (toolName: string | null, command: string | null = null) => ({ toolName, command });
+    expect(CONTRACT.maintenance.dossier.noteCalls).toMatch(/wikiCallWritesNote/u);
+    for (const tool of ['mcp__orbit__wiki_note', 'orbit__wiki_note', 'wiki_note']) {
+      expect(wikiCallWritesNote(tool, null), tool).toBe(true);
+      expect(wikiEvidenceClass({ kind: 'tool_call', ...call(tool) }), tool).toBe('agent_words');
+      expect(wikiEvidenceClass({ kind: 'event', eventType: 'tool_use', ...call(tool) }), tool).toBe('agent_words');
+    }
+    for (const command of [
+      'orbit wiki note "the port is read at import"',
+      "'/usr/local/bin/orbit' wiki note --text-file - < note.txt",
+      '/root/.orbit/bin/orbit wiki note x --json',
+      'cd src && orbit wiki note x',
+      'bash -c "orbit wiki note x"',
+    ]) {
+      expect(wikiCallWritesNote('Bash', command), command).toBe(true);
+      expect(wikiEvidenceClass({ kind: 'tool_call', ...call('Bash', command) }), command).toBe('agent_words');
+    }
+    // Reading the wiki, its help, and anything named nearly the same file nothing.
+    for (const [tool, command] of [
+      ['mcp__orbit__wiki_notes', null],
+      ['wiki_note_taker', null],
+      ['mcp__orbit__wiki_get', null],
+      ['Bash', 'orbit wiki notes'],
+      ['Bash', 'orbit wiki note-all'],
+      ['Bash', 'orbit wiki --help'],
+      ['Bash', 'neworbit wiki note x'],
+      ['Bash', 'cat docs/wiki-note.md'],
+      [null, null],
+    ] as const) {
+      expect(wikiCallWritesNote(tool, command), `${tool} ${command}`).toBe(false);
+    }
   });
 
   it('announces a change by the space\'s id alone', () => {

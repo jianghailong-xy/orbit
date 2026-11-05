@@ -156,3 +156,21 @@ public enum ReferenceLink {
         return (kind, String(url.absoluteString.dropFirst(scheme.count + 1)))
     }
 }
+
+/// Which links may leave the app for the system. A link in an agent's Markdown can name anything, and
+/// the system hands a `file:` URL or a custom scheme to whatever claims it, so only the web and mail go
+/// out: the list Android keeps in `rememberReaderLinkHandler`. The app's own `orbit:` goes too, because
+/// it comes straight back (`onOpenURL`).
+public enum ExternalLink {
+    public static func mayLeaveTheApp(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        return ["https", "http", "mailto", DeepLink.scheme].contains(scheme)
+    }
+
+    /// Whether a link in Markdown goes nowhere, and should be drawn as prose rather than as a link
+    /// whose tap could only do nothing. The app's own `orbit-…` links never leave and are not dead: an
+    /// `OpenURLAction` or the link door answers them.
+    public static func isDead(_ url: URL) -> Bool {
+        !mayLeaveTheApp(url) && url.scheme?.lowercased().hasPrefix("orbit-") != true
+    }
+}

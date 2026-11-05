@@ -121,6 +121,7 @@ func TestBackgroundShellHoldsTheWorktreeUntilItEnds(t *testing.T) {
 	defer bg.stopAll()
 	dir := t.TempDir()
 
+	bg.noteToolUse("toolu_A", "Bash", map[string]interface{}{"run_in_background": true})
 	bg.onToolResult("toolu_A", "Command running in background with ID: bei1. Output is being"+
 		" written to: "+filepath.Join(dir, "bei1.output")+". Use BashOutput to read it.")
 	bg.startTail("toolu_B", "bei2", filepath.Join(dir, "bei2.output"), false) // a user `!`-shell

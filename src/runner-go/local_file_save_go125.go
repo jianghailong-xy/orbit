@@ -76,7 +76,7 @@ func enterLocalDir(dir *os.Root, name string) (*os.Root, error) {
 	if !before.IsDir() {
 		return nil, errLocalPathChanged
 	}
-	next, err := dir.OpenRoot(name)
+	next, err := dir.OpenRoot(asDirectory(name))
 	if err != nil {
 		return nil, err
 	}

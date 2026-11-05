@@ -87,7 +87,9 @@ const PROMPT_WITHOUT_INSTRUCTIONS =
   'acceptance criteria project_get returns), checks (each {kind, ref}, kind one of ' +
   "TOOL_CALL / COMMIT / ARTIFACT, ref pointing at a row already recorded under this task's sessions; at " +
   'least one must resolve, or the whole submission is refused), and gaps (what this evidence could not ' +
-  'establish; an empty array if nothing). A TOOL_CALL may also carry command/succeeded, which the server ' +
+  'establish; an empty array if nothing). Run the checks you will cite with bg_run and cite the job id it ' +
+  'returns (bgj_...) as a TOOL_CALL ref: a commit sha resolves only once Orbit has recorded it for this task, ' +
+  'and a repository path does not resolve at all. A TOOL_CALL may also carry command/succeeded, which the server ' +
   "checks byte for byte against the cited tool_call. Do not copy a command's raw output into the evidence " +
   '— Orbit has stored it already; work answered by an exit code alone belongs to EXECUTABLE acceptance, ' +
   'not here. Do not use task_comment in place of submitting evidence, and do not write status — DONE is ' +
@@ -129,7 +131,9 @@ test('instructions are spliced between the task description and the reporting pr
       'acceptance criteria project_get returns), checks (each {kind, ref}, kind one of ' +
       "TOOL_CALL / COMMIT / ARTIFACT, ref pointing at a row already recorded under this task's sessions; at " +
       'least one must resolve, or the whole submission is refused), and gaps (what this evidence could not ' +
-      'establish; an empty array if nothing). A TOOL_CALL may also carry command/succeeded, which the server ' +
+      'establish; an empty array if nothing). Run the checks you will cite with bg_run and cite the job id it ' +
+      'returns (bgj_...) as a TOOL_CALL ref: a commit sha resolves only once Orbit has recorded it for this task, ' +
+      'and a repository path does not resolve at all. A TOOL_CALL may also carry command/succeeded, which the server ' +
       "checks byte for byte against the cited tool_call. Do not copy a command's raw output into the evidence " +
       '— Orbit has stored it already; work answered by an exit code alone belongs to EXECUTABLE acceptance, ' +
       'not here. Do not use task_comment in place of submitting evidence, and do not write status — DONE is ' +

@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { inertObjectUrl, openUserFile, saveUserFile, userFileUrl } from './userFile';
+import { inertObjectUrl, isRasterImage, openUserFile, saveUserFile, userFileUrl } from './userFile';
 
 const made: Blob[] = [];
 let saved: { href: string; name: string }[] = [];
@@ -27,6 +27,16 @@ const NOT_SHOWN = [
   'text/html', 'application/xhtml+xml', 'image/svg+xml', 'text/xml', 'application/xml', 'text/plain', 'application/json',
   'text/javascript', '', 'application/octet-stream',
 ];
+
+describe('isRasterImage', () => {
+  it.each(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/bmp', 'IMAGE/PNG; name=shot.png'])('is true of %s', (type) => {
+    expect(isRasterImage(type)).toBe(true);
+  });
+
+  it.each([...NOT_SHOWN, 'application/pdf', 'image/png, text/html', 'image/'])('is false of %s', (type) => {
+    expect(isRasterImage(type)).toBe(false);
+  });
+});
 
 describe('inertObjectUrl', () => {
   it.each(SHOWN)('keeps %s, a type that may be shown', (type) => {

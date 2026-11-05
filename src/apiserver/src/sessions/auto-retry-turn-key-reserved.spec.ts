@@ -51,6 +51,8 @@ function doors() {
       return { ok: true as const };
     },
     assertHostedByRunner: async () => undefined,
+    // The rule on who may reach whom is sessions/session-reach.pg.spec.ts's, not this spec's.
+    assertMayReach: async () => ({ narrower: false }),
   };
   // The failure card's Retry asks the server to re-send; it names no key at all (criterion 19).
   const autoRetry = {

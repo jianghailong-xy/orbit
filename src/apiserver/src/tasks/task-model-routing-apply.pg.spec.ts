@@ -566,6 +566,8 @@ test('the switch is the owner\'s: the user API turns it on and off, the agent to
         workspaces,
         { assert: async () => 'orchestrating-session' } as unknown as RunnerOrchestrationAuthorizer,
         quiet(),
+        // None of these writes names a field the owner's card covers, so nothing reads this.
+        {} as never,
       );
       const spawned = await agents.createWorkspace(runner, 'orchestrating-session', 'credential', {
         name: 'agent-made', modelRouting: true,

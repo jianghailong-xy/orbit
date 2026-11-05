@@ -2,6 +2,8 @@ import { BadRequestException, ConflictException, ForbiddenException } from '@nes
 import type { Prisma as PrismaTypes } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
 import { criterionKeyOf } from '../projects/project-acceptance';
+import { SESSION_ENDING_SELECT, sessionHasEnded } from '../projects/project-open-item';
+import { assertMayEndWorkingRuns, assertSessionMayReach } from '../sessions/session-reach';
 import {
   type CriterionStandingTask,
   definitionIdFromKey,
@@ -9,6 +11,7 @@ import {
   heldToProjectCriterion,
   quotesDeclaredCriterion,
 } from './task-evidence-envelope';
+import { taskOfRunBehind } from './verifier-write-authority';
 
 /**
  * The four checks `task_evidence_decide` makes, and the codes it makes them under.
@@ -36,8 +39,14 @@ import {
  *     task — and that grant is the entire reason a CONFIRM here is a check rather than a signature
  *     on one's own homework. Nor may a session that acts for another project decide it: a task's
  *     evidence is its project's to decide, and the project it was moved out of no longer is that.
+ *     Nor may a run decide evidence that is not addressed to it (`runDecisionDisqualification`):
+ *     not having done the work makes a session independent, not the one to settle it.
  *  4. **A rejection says what to do next.** SEND_BACK carries a note; the task is not written to at
  *     all, so it stays OPEN and waits for the next evidence revision.
+ *  5. **The decider may do this to the run.** A CONFIRM that settles the task ends the run working it,
+ *     and a SEND_BACK gives the run that submitted a turn with the decider's words, so a session
+ *     held back from either (sessions/session-reach.ts) is held back from it here. Asked last, of a
+ *     decision about to be written (`assertDecisionMayReachRuns`).
  *
  * Every refusal carries a `requiredAction`, because a decider who is refused is holding an opinion
  * and needs to be told where to put it.
@@ -55,6 +64,8 @@ export const REQUIRES_INDEPENDENT_SESSION_CODE = 'EVIDENCE_JUDGMENT_REQUIRES_IND
 export const REQUIRES_INDEPENDENT_SESSION_ACTION = 'DECIDE_FROM_A_SESSION_THAT_DID_NOT_DO_THIS_WORK';
 export const TASK_IN_ANOTHER_PROJECT_CODE = 'EVIDENCE_JUDGMENT_TASK_IN_ANOTHER_PROJECT';
 export const TASK_IN_ANOTHER_PROJECT_ACTION = 'DECIDE_FROM_THE_PROJECT_THE_TASK_IS_IN';
+export const RUN_MAY_NOT_DECIDE_CODE = 'EVIDENCE_JUDGMENT_FROM_RUN_REFUSED';
+export const RUN_MAY_NOT_DECIDE_ACTION = 'ASK_THE_COORDINATOR_OR_THE_OWNER';
 export const SEND_BACK_NOTE_CODE = 'EVIDENCE_JUDGMENT_SEND_BACK_REQUIRES_NOTE';
 export const SEND_BACK_NOTE_ACTION = 'SAY_WHAT_THE_NEXT_EVIDENCE_REVISION_MUST_SHOW';
 
@@ -363,13 +374,65 @@ export async function assertDecidingSessionInTaskProject(
 }
 
 /**
- * Whether this task's evidence is this session's to judge, which is what lets it read the files that evidence cites
- * (docs/orbit-files-design.md §2.7).
+ * Check 3's third half: a run answers for its own task, and another task's evidence is addressed to it only by name.
  *
- * Narrower than the door, on purpose. The door asks who may not answer and takes an answer from everybody else, which is
- * the right question for an answer: it is recorded under a name and anyone can read why. Asked of bytes it would hand
- * every cited file to every unrelated session of the account. So this asks who the evidence is addressed to, and the door's
- * independence check still comes first: the session that did the work judges nothing. Four readers:
+ * Without this the door took an answer from any run that did not do the work, and a CONFIRM is what settles the task, so
+ * one run could settle a sibling and with it a criterion of the project. So a run (`taskOfRunBehind`) decides only what
+ * `sessionJudgesEvidence` addresses to it: the subject of the task it verifies, and a task in no project that it dispatched.
+ * Everybody else the door takes as it did: the project's coordinator and judgment sessions are no run, and neither is a
+ * conversation nobody's run opened. The account owner pressing a card in the app is not asked this at all, whichever session
+ * the press names: the owner decides there, not that session.
+ *
+ * A conversation a run opened answers as that run, so it is refused the run's own task here, where independence has nothing
+ * to say about it: the check there reads the session's own task, and this conversation has none.
+ *
+ * The same two-function shape as independence, for the same reason: the pending read asks it without being refused.
+ */
+export async function runDecisionDisqualification(
+  tx: PrismaTypes.TransactionClient,
+  scope: { ownerId: string; taskId: string },
+  session: { id: string; taskId: string | null },
+): Promise<string | null> {
+  const runs = await taskOfRunBehind(tx, scope.ownerId, session.id);
+  if (runs === null) return null;
+  if (runs === scope.taskId) {
+    return session.taskId === scope.taskId
+      ? 'this session is a run of the task it is deciding'
+      : 'this session was opened by a run of the task it is deciding, and answers as that run';
+  }
+  if (await sessionJudgesEvidence(tx, scope, session)) return null;
+  return session.taskId === null
+    ? 'this session was opened by a run of another task, and answers as that run'
+    : 'this session is a run of another task';
+}
+
+export async function assertRunMayDecide(
+  tx: PrismaTypes.TransactionClient,
+  scope: { ownerId: string; taskId: string },
+  session: { id: string; taskId: string | null },
+): Promise<void> {
+  const why = await runDecisionDisqualification(tx, scope, session);
+  if (!why) return;
+  throw new ForbiddenException({
+    code: RUN_MAY_NOT_DECIDE_CODE,
+    kind: 'REFUSAL',
+    message:
+      `${why}; nothing was written. A task's evidence is decided by the project's coordinator or a judgment session opened `
+      + 'for the project, by the session that dispatched a task in no project, by a run of a task that verifies this one, '
+      + 'or by the account owner in the app. Ask one of them',
+    requiredAction: RUN_MAY_NOT_DECIDE_ACTION,
+  });
+}
+
+/**
+ * Whether this task's evidence is this session's to judge, which is what lets it read the files that evidence cites
+ * (docs/orbit-files-design.md §2.7), and what lets a run decide it (`runDecisionDisqualification`).
+ *
+ * For a session that is no run, narrower than the door, on purpose. The door asks who may not answer and takes an answer
+ * from everybody else, which is the right question for an answer: it is recorded under a name and anyone can read why. Asked
+ * of bytes it would hand every cited file to every unrelated session of the account. So this asks who the evidence is
+ * addressed to, and the door's independence check still comes first: the session that did the work judges nothing. Four
+ * readers:
  *
  *  - the conversation the task's project is coordinated from now, which is delivered each revision to decide;
  *  - a judgment session opened for that project (`decidingSessionProject` reads them as acting for it);
@@ -401,6 +464,35 @@ export async function sessionJudgesEvidence(
     where: { projectId: task.projectId, sessionId: session.id, status: 'SESSION_OPENED' },
   });
   return judgments > 0;
+}
+
+/**
+ * Check 5. What this decision is about to do to a run is held to what the deciding session may do to that run.
+ *
+ * A CONFIRM asks only when it settles the task, and of the runs working it now, whichever of them submitted. A SEND_BACK
+ * asks of the session that submitted, and only when it would give that session a turn: `deliverSendBack` never brings back a
+ * session that has ended, so the note then stays on the revision and nothing reaches anybody. The account owner's press in the
+ * app is not asked: the caller does not call this for one.
+ */
+export async function assertDecisionMayReachRuns(
+  tx: PrismaTypes.TransactionClient,
+  scope: { ownerId: string; taskId: string },
+  decidingSessionId: string,
+  answer: { decision: EvidenceDecisionValue; settlesTheTask: boolean; submittedBy: string },
+): Promise<void> {
+  if (answer.decision === 'CONFIRM') {
+    if (answer.settlesTheTask) {
+      await assertMayEndWorkingRuns(tx, scope.ownerId, decidingSessionId, scope.taskId, 'confirmEvidence');
+    }
+    return;
+  }
+  const run = await tx.session.findFirst({
+    where: { id: answer.submittedBy, ownerId: scope.ownerId },
+    select: SESSION_ENDING_SELECT,
+  });
+  if (run && !sessionHasEnded(run) && run.cancelRequestedAt === null) {
+    await assertSessionMayReach(tx, scope.ownerId, decidingSessionId, answer.submittedBy, 'sendBackEvidence');
+  }
 }
 
 /** Check 4's other half: a rejection nobody can act on leaves the next revision nothing to aim at. */

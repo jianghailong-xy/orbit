@@ -2,7 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { CreatorType, Prisma, TaskStatus } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
-import { FilesService } from '../files/files.service';
+import { settleCitedFileExpiry } from '../files/file-retention';
+import { FilesService, type EvidenceFileList } from '../files/files.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -18,7 +19,9 @@ import {
   assertCriterionUnmoved,
   assertCurrentEvidenceRevision,
   assertDecidingSessionInTaskProject,
+  assertDecisionMayReachRuns,
   assertIndependentDecidingSession,
+  assertRunMayDecide,
   decisionNote,
 } from './task-evidence-decision';
 import {
@@ -43,7 +46,9 @@ import { ownerDecidesInTheRun, ownerEvidenceCard } from './evidence-review';
 import { ownerConfirmationPrincipalRefusal, type OwnerConfirmationPrincipal } from './task-owner-confirmation';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { completionEvidenceRevisedFact } from '../projects/completion-input';
+import { storeDerivedProjectStatus } from '../projects/project-done-derived';
 import { deliveredIdentityAtDone, enqueueForDoneTask } from '../projects/project-integration-job';
+import { SessionsService } from '../sessions/sessions.service';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -101,6 +106,7 @@ interface LockedSubmissionTask extends LockedCriterionTask {
  */
 interface LockedDecisionTask {
   projectId: string | null;
+  status: TaskStatus;
   completionCriterion: TaskCompletionCriterionValue;
   criterionDefinitionId: string | null;
   criterionRevision: number | null;
@@ -257,8 +263,9 @@ function decisionResponse(row: DecisionRow): TaskEvidenceDecisionDto {
  * no device outbox, no worker. What came back is the ANSWER — `decide` records one independent
  * session's CONFIRM or SEND_BACK as one row, and a CONFIRM of the current revision is the fact the
  * shared evaluator projects onto DONE. Submitting is still only a claim: `submit` derives no
- * status, reads no Task status to decide whether to accept one, and the rows it appends stay
- * immutable.
+ * task status, reads no Task status to decide whether to accept one, and the rows it appends stay
+ * immutable. After their commits both re-project the status of the task's project, because a
+ * revision and its decision are inputs to it (`reprojectProjectStatus`).
  */
 @Injectable()
 export class TaskCompletionEvidenceService {
@@ -272,6 +279,10 @@ export class TaskCompletionEvidenceService {
     @Optional() private readonly realtime?: RealtimeService,
     @Optional() private readonly evidenceReviews?: EvidenceReviewService,
     @Optional() files?: FilesService,
+    /** Where the coordinator is told when this edge reopens an owner's DONE. Last and optional for
+     *  the reason the router above is: the fixtures that build this service by hand are about the
+     *  ledger. The module provides it. */
+    @Optional() private readonly sessions?: SessionsService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -398,13 +409,29 @@ export class TaskCompletionEvidenceService {
           include: evidenceInclude,
         });
         // Each cited file, and each file of a cited bundle, names the newest revision citing it. That is what says it
-        // is evidence at all (`FilesService.readableInSession`) and which revision's fate is its own (§2.8).
+        // is evidence at all (`FilesService.readableInSession`) and which revision's fate is its own (§2.8). A file with a
+        // tombstone is no longer one a version can hold, so it is refused whole, with these rows locked: the sweep waits
+        // for this commit or has already written the tombstone this finds.
         if (fileIds.length > 0) {
-          await tx.attachment.updateMany({
-            where: { ownerId, OR: [{ id: { in: fileIds } }, { fileBundleId: { in: fileIds } }] },
-            data: { evidenceId: evidence.id },
+          const cited = { ownerId, OR: [{ id: { in: fileIds } }, { fileBundleId: { in: fileIds } }] };
+          await tx.attachment.updateMany({ where: { ...cited, expiredAt: null }, data: { evidenceId: evidence.id } });
+          const expired = await tx.attachment.findMany({
+            where: { ...cited, expiredAt: { not: null } },
+            select: { fileName: true },
+            take: 5,
           });
+          if (expired.length > 0) {
+            throw new ConflictException({
+              code: 'EVIDENCE_FILE_EXPIRED',
+              message:
+                `evidence.checks cites a file that has expired (${expired.map(({ fileName }) => fileName ?? 'a pasted image').join(', ')}); `
+                + 'nothing was written. Upload it again and cite the new id, or pin the file first if its bytes are still kept',
+              requiredAction: 'UPLOAD_THE_FILE_AGAIN',
+            });
+          }
         }
+        // This version holds what it cites, and the one before it no longer does.
+        await settleCitedFileExpiry(tx, { ownerId, taskId });
       }
 
       if (idempotencyKey) {
@@ -422,6 +449,8 @@ export class TaskCompletionEvidenceService {
         projectId: task.projectId,
       };
     }, loggedRetry(this.logger, 'taskCompletionEvidence.submit'));
+
+    await this.reprojectProjectStatus(ownerId, committed.projectId);
 
     try {
       // The revision itself is the trigger. A source Session may still be RUNNING or
@@ -647,6 +676,7 @@ export class TaskCompletionEvidenceService {
         },
         include: evidenceInclude,
       });
+      await settleCitedFileExpiry(tx, { ownerId, taskId });
       await tx.taskCompletionEvidenceIdempotency.create({
         data: { id: randomUUID(), taskId, idempotencyKey, evidenceId: evidence.id },
       });
@@ -696,9 +726,12 @@ export class TaskCompletionEvidenceService {
    * session can read why.
    *
    * The four checks run in the order authority, subject, standard: may this caller answer at all
-   * (independent of the work, and acting for the project the task is in), is it answering the
+   * (independent of the work, acting for the project the task is in, and no run the evidence is
+   * not addressed to), is it answering the
    * version that is actually open, and is the standard it is answering still the one stated. A
-   * refusal at any of them writes nothing.
+   * refusal at any of them writes nothing. A version already answered answers next, as it did. Last
+   * of all, of a decision about to be written, what it would do to a run
+   * (`assertDecisionMayReachRuns`), which a press in the app is not asked.
    */
   async decide(
     ownerId: string,
@@ -724,6 +757,8 @@ export class TaskCompletionEvidenceService {
     const answered = BigInt(input.evidenceRevision);
     // Outside the transaction: a missing note reads no row, so it need not hold the Task mutex.
     const note = decisionNote(input.decision, input.note);
+    const ownerInTheApp = principal !== undefined
+      && ownerConfirmationPrincipalRefusal(ownerId, principal) === null;
 
     const committed = await withTransactionRetry(this.prisma, async (tx) => {
       // The same Task mutex submission takes. It is what makes check 1 a compare-and-set: a
@@ -731,6 +766,7 @@ export class TaskCompletionEvidenceService {
       // and it is the lock the derived status below is written under.
       const [task] = await tx.$queryRaw<LockedDecisionTask[]>(Prisma.sql`
         SELECT "project_id" AS "projectId",
+               "status",
                "completion_criterion"::text AS "completionCriterion",
                "criterion_definition_id" AS "criterionDefinitionId",
                "criterion_revision" AS "criterionRevision",
@@ -750,19 +786,20 @@ export class TaskCompletionEvidenceService {
       // deciding the owner card of a task in no project that has no dispatching session, in the run
       // that card is drawn in — the only conversation left to draw it in. The owner decides there,
       // not the run; every other session that did the work is refused exactly as before.
-      const ownerInTheApp = principal !== undefined
-        && ownerConfirmationPrincipalRefusal(ownerId, principal) === null;
       if (!(await ownerDecidesInTheRun(tx, { ownerId, taskId }, decidingSession.id, ownerInTheApp))) {
         await assertIndependentDecidingSession(tx, { ownerId, taskId }, decidingSession);
       }
       // And it acts for the project the task is in NOW: a confirmed move takes the undecided
       // evidence with the task, and the project it left decides it no more.
       await assertDecidingSessionInTaskProject(tx, { ownerId, projectId: task.projectId }, decidingSession);
+      // And a run decides only what is addressed to it. The owner in the app decides whichever
+      // session the press names, so this is not asked of a press.
+      if (!ownerInTheApp) await assertRunMayDecide(tx, { ownerId, taskId }, decidingSession);
 
       const latest = await tx.taskCompletionEvidence.findFirst({
         where: { taskId },
         orderBy: { revision: 'desc' },
-        select: { id: true, revision: true, criterionRevision: true, evidenceDigest: true, evidence: true },
+        select: { id: true, revision: true, criterionRevision: true, evidenceDigest: true, evidence: true, sourceSessionId: true },
       });
       if (!latest) throw new NotFoundException('this task has no completion evidence to decide');
       assertCurrentEvidenceRevision(answered, latest.revision);
@@ -792,7 +829,24 @@ export class TaskCompletionEvidenceService {
         }
         // A replay answers with the receipt the first attempt got. Whatever that decision derived
         // was derived then, under this same lock, so nothing is re-derived here.
-        return { decision: decisionResponse(existing), completed: false };
+        return { decision: decisionResponse(existing), completed: false, projectId: task.projectId };
+      }
+
+      // The derivation, and the only thing this door writes outside its own row. It asks the
+      // task's OWN declared criterion: evidence submitted against an EXECUTABLE or VERIFICATION
+      // task is recorded and answered like any other, and completes nothing, because those two are
+      // settled by facts of their own.
+      const completed = deriveTaskCompletionStatus({
+        completionCriterion: task.completionCriterion,
+        latestEvidenceRevision: latest.revision,
+        confirmedEvidenceRevision: input.decision === 'CONFIRM' ? latest.revision : null,
+      });
+      if (!ownerInTheApp) {
+        await assertDecisionMayReachRuns(tx, { ownerId, taskId }, decidingSession.id, {
+          decision: input.decision,
+          settlesTheTask: completed != null && (task.status === TaskStatus.OPEN || task.status === TaskStatus.IN_PROGRESS),
+          submittedBy: latest.sourceSessionId,
+        });
       }
 
       const written = await tx.taskEvidenceDecision.create({
@@ -814,16 +868,9 @@ export class TaskCompletionEvidenceService {
         },
         include: decisionInclude,
       });
+      // A send-back starts the 30 days of what this version cites, and a CONFIRM holds it until the task goes (§2.8).
+      await settleCitedFileExpiry(tx, { ownerId, taskId });
 
-      // The derivation, and the only thing this door writes outside its own row. It asks the
-      // task's OWN declared criterion: evidence submitted against an EXECUTABLE or VERIFICATION
-      // task is recorded and answered like any other, and completes nothing, because those two are
-      // settled by facts of their own.
-      const completed = deriveTaskCompletionStatus({
-        completionCriterion: task.completionCriterion,
-        latestEvidenceRevision: latest.revision,
-        confirmedEvidenceRevision: written.decision === 'CONFIRM' ? latest.revision : null,
-      });
       let settled = false;
       if (completed != null) {
         // The criterion and the pending statuses are repeated in the write even though the row is
@@ -853,8 +900,10 @@ export class TaskCompletionEvidenceService {
             ? { userId: actor.id }
             : { sessionId: decidingSession.id });
       }
-      return { decision: decisionResponse(written), completed: settled };
+      return { decision: decisionResponse(written), completed: settled, projectId: task.projectId };
     }, loggedRetry(this.logger, 'taskCompletionEvidence.decide'));
+
+    await this.reprojectProjectStatus(ownerId, committed.projectId);
 
     // A decided revision leaves the pending-decisions read, and a CONFIRM may have settled the task
     // besides: the same nudge a submission sends, after the same commit.
@@ -869,7 +918,7 @@ export class TaskCompletionEvidenceService {
     // goes on submit; a fault is logged and never reported as a failed decision, the note staying
     // readable on the revision in `list`.
     if (committed.decision.decision === 'SEND_BACK') {
-      await this.evidenceReviews?.deliverSendBack(ownerId, taskId, committed.decision.id)
+      await this.evidenceReviews?.deliverSendBack(ownerId, taskId, committed.decision.id, ownerInTheApp ? null : input.decidingSessionId)
         .catch((error) => this.logger.warn(`send-back of task ${taskId} was not handed to its run: `
           + `${error instanceof Error ? error.message : error}`));
     }
@@ -884,6 +933,32 @@ export class TaskCompletionEvidenceService {
       });
     }
     return committed.decision;
+  }
+
+  /**
+   * Re-project `project.status`, because a revision and its decision are both inputs to it: a new
+   * revision leaves the CONFIRM a criterion stood on answering a version that was replaced, and a
+   * CONFIRM of a task already DONE settles the criterion again with no task write anywhere. Until
+   * 2026-11-03 neither re-projected, so a project stored DONE stayed DONE until a merge receipt or
+   * a task write happened along, and R8 refuses every session's task writes while it is DONE.
+   *
+   * Before anything is told about the write, so that whoever is handed this revision next reads the
+   * project it is now about. After the commit and outside the transaction, for the reason
+   * `storeDerivedProjectStatus` gives. Logged, never raised: the evidence is recorded either way, and
+   * the next edge re-derives the same answer from the same rows.
+   *
+   * Behind the router check, as the projection's edges on the task and merge-receipt writers are: a
+   * fixture that wires no router is about the ledger, and did not ask for its project's column to
+   * be re-decided.
+   */
+  private async reprojectProjectStatus(ownerId: string, projectId: string | null): Promise<void> {
+    if (!projectId || !this.completionInputs) return;
+    await storeDerivedProjectStatus(this.prisma, ownerId, projectId, {
+      sessions: this.sessions,
+    }).catch((error) =>
+      this.logger.warn(`derived project status not re-projected after completion evidence: ${
+        error instanceof Error ? error.message : error}`),
+    );
   }
 
   /**
@@ -959,5 +1034,12 @@ export class TaskCompletionEvidenceService {
         : undefined));
     }
     return revisions;
+  }
+
+  /** What one version cites, read from rows: `FilesService.evidenceFiles` says how. */
+  citedFiles(ownerId: string, taskId: string, revision: string, offset = '0'): Promise<EvidenceFileList> {
+    const start = /^\d{1,9}$/.test(offset) ? Number(offset) : null;
+    if (start === null) throw new BadRequestException('offset must be a whole number of files');
+    return this.files.evidenceFiles(ownerId, taskId, revision, start);
   }
 }

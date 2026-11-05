@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { CreatorType } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
@@ -80,5 +80,17 @@ export class TaskCompletionEvidenceController {
   @Get()
   list(@CurrentUser() user: AuthUser, @Param('taskId', PublicIdPipe) taskId: string) {
     return this.evidence.list(user.userId, taskId);
+  }
+
+  /** What one version cites, a page at a time, for the card that shows it (`FilesService.evidenceFiles`). */
+  @PatScope('tasks:read', { workspaceConfinable: { params: { taskId: 'task' } } })
+  @Get(':revision/files')
+  files(
+    @CurrentUser() user: AuthUser,
+    @Param('taskId', PublicIdPipe) taskId: string,
+    @Param('revision') revision: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.evidence.citedFiles(user.userId, taskId, revision, offset);
   }
 }

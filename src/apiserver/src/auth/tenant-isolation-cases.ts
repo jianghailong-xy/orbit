@@ -242,6 +242,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   // ── attachments ──────────────────────────────────────────────────────────────────────────────
   'GET /attachments/:id': { request: (of) => ({ params: { id: of.attachmentId } }) },
   'DELETE /attachments/:id': { request: (of) => ({ params: { id: of.spare.attachmentId } }) },
+  'PUT /attachments/:id/pin': { request: (of) => ({ params: { id: of.spare.attachmentId } }) },
+  'DELETE /attachments/:id/pin': { request: (of) => ({ params: { id: of.spare.attachmentId } }) },
 
   // ── projects ─────────────────────────────────────────────────────────────────────────────────
   'GET /projects/:id': { request: (of) => ({ params: { id: of.projectId } }) },
@@ -635,6 +637,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'PUT /tasks/:id/share': { request: (of) => ({ params: { id: of.taskId }, body: {} }) },
   'DELETE /tasks/:id/share': { request: (of) => ({ params: { id: of.taskId } }) },
   'GET /tasks/:taskId/evidence': { request: (of) => ({ params: { taskId: of.evidenceTaskId } }) },
+  'GET /tasks/:taskId/evidence/:revision/files': { request: (of) => ({ params: { taskId: of.evidenceTaskId, revision: '1' } }) },
   'POST /tasks/:taskId/evidence': {
     request: (of) => ({
       params: { taskId: of.evidenceTaskId },

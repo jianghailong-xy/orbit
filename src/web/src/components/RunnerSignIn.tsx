@@ -37,6 +37,21 @@ export function kimiSiteOf(url: string | null | undefined): KimiRegion | null {
   return null;
 }
 
+/** The page a sign-in may open, or null: only ever an https page, whatever the runner reported. Checked
+ *  here as well as where the report lands (RunnerApiController.loginResult), at the one place that opens
+ *  it. The address comes back as the browser reads it, so what is checked is what is opened. */
+export function signInPage(url: string | null | undefined): string | null {
+  try {
+    const page = new URL(url ?? '');
+    return page.protocol === 'https:' ? page.href : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The failure of a sign-in whose link this card will not open (`signInPage`). */
+export const SIGN_IN_LINK_REFUSED = "This runner reported a sign-in link that isn't https, so it was not opened. Check the machine, then try again.";
+
 /** The CLI's own name, as its vendor spells it. Shared with a machine's engine rows (RunnerEngines)
  *  so the same machine never gets two names for the same binary. */
 export const ENGINE_NAME: Record<LoginEngine, string> = {
@@ -281,6 +296,10 @@ export function RunnerSignIn({
   const ownAccount = adding ? startedHere : account === undefined || s?.account === account;
   const mine = !s?.engine || (s.engine === engine && ownAccount);
   const reported = mine ? (s?.status ?? null) : null;
+  const page = signInPage(s?.url);
+  // A link this card will not open ends the sign-in here, whatever the row still says: the tab it
+  // parked closes and the card says why, as for any other failure.
+  const refused = inFlight(reported) && !!s?.url && !page;
   // done/failed stay on the runner until the *next* sign-in starts, so they describe the last
   // attempt rather than whether that machine's credentials are good now. A card raised by a later
   // failure would open on "Signed in — this runner is ready" left over from a sign-in that has
@@ -288,7 +307,8 @@ export function RunnerSignIn({
   // signed out. So an outcome is only reported if this card watched the sign-in that produced it;
   // one already finished when the card arrives is history, and the card opens on its button, the
   // same as for a runner that has never signed in from the browser.
-  const status = watched || inFlight(reported) ? reported : null;
+  const status = refused ? 'failed' : watched || inFlight(reported) ? reported : null;
+  const failure = refused ? SIGN_IN_LINK_REFUSED : s?.message;
   const err = (start.error ?? submit.error) as Error | undefined;
 
   useEffect(() => {
@@ -362,18 +382,21 @@ export function RunnerSignIn({
       dropTab();
       return;
     }
-    if (!s?.url) return;
+    if (!page) return;
     const w = tab.current;
     tab.current = null;
-    if (!w.closed) w.location.replace(s.url);
-  }, [mine, status, s?.url]);
+    if (w.closed) return;
+    // The page it is going to has no business reaching back to the one that parked it.
+    w.opener = null;
+    w.location.replace(page);
+  }, [mine, status, page]);
 
   // A card that goes away mid-flow can never point its tab anywhere.
   useEffect(() => dropTab, []);
 
   // Cursor CLI's link stops working about 23 minutes after the runner relays it (expiresAt): the card
   // counts down to it, a minute at a time.
-  const cursorLink = engine === 'cursor' && status === 'awaiting_approval' && !!s?.url;
+  const cursorLink = engine === 'cursor' && status === 'awaiting_approval' && !!page;
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => {
     if (!cursorLink) return;
@@ -431,9 +454,9 @@ export function RunnerSignIn({
   // Cursor CLI's `agent login` prints one link and waits on it (docs/cursor-runtime-contract.md §9):
   // nothing comes back through here — the runner sees the sign-in finish — so the card offers the link,
   // in this browser or another, says how long it lasts, and waits.
-  if (cursorLink && s?.url) {
-    const signInUrl = s.url;
-    const left = s.expiresAt ? Math.ceil((Date.parse(s.expiresAt) - clock) / 60_000) : null;
+  if (cursorLink && page) {
+    const signInUrl = page;
+    const left = s?.expiresAt ? Math.ceil((Date.parse(s.expiresAt) - clock) / 60_000) : null;
     return (
       <div className="rsi">
         <div className="rsi-hint">
@@ -478,11 +501,11 @@ export function RunnerSignIn({
   // both halves and wait for the CLI to finish approving itself. The code comes first, and the one
   // press both copies it and opens the page it goes into (VS Code's "Copy & Continue to GitHub"), so
   // what is left over there is a paste.
-  if (status === 'awaiting_approval' && s?.url) {
+  if (status === 'awaiting_approval' && page) {
     // Kimi's page belongs to one of its two sites, named so the user knows which account it wants.
-    const site = engine === 'kimi' ? kimiSiteOf(s.url) : null;
+    const site = engine === 'kimi' ? kimiSiteOf(page) : null;
     const other: KimiRegion = site === 'global' ? 'mainland-cn' : 'global';
-    const userCode = s.userCode;
+    const userCode = s?.userCode;
     const cancelLink = (
       <button className="rsi-link" onClick={() => cancel.mutate()} type="button">
         Cancel
@@ -510,7 +533,7 @@ export function RunnerSignIn({
         <div className="rsi-usercode">{userCode}</div>
         <a
           className="rsi-open"
-          href={s.url}
+          href={page}
           target="_blank"
           rel="noopener noreferrer"
           onClick={() => {
@@ -545,13 +568,13 @@ export function RunnerSignIn({
     );
   }
 
-  if (status === 'awaiting_code' && s?.url) {
-    const signInUrl = s.url;
+  if (status === 'awaiting_code' && page) {
+    const signInUrl = page;
     return (
       <div className="rsi">
         {/* A rejected code lands back here with the SAME url still valid — the CLI keeps waiting
             on that challenge — so the message is what tells the user anything changed. */}
-        {s.message && <div className="rsi-warn">{s.message}</div>}
+        {s?.message && <div className="rsi-warn">{s.message}</div>}
         <div className="rsi-actions">
           <a className="rsi-open" href={signInUrl} target="_blank" rel="noopener noreferrer">
             <ExportOutlined /> Open the sign-in page
@@ -609,7 +632,7 @@ export function RunnerSignIn({
   if (engine === 'kimi') {
     return (
       <div className="rsi">
-        {status === 'failed' && s?.message && <div className="rsi-warn">{s.message}</div>}
+        {status === 'failed' && failure && <div className="rsi-warn">{failure}</div>}
         {err && <div className="rsi-warn">{err.message}</div>}
         <div className="rsi-q">Which Kimi account are you signing in with?</div>
         <div className="rsi-sites">
@@ -651,7 +674,7 @@ export function RunnerSignIn({
   return (
     <div className="rsi">
       {engine === 'antigravity' && <GoogleSignInTerms />}
-      {status === 'failed' && s?.message && <div className="rsi-warn">{s.message}</div>}
+      {status === 'failed' && failure && <div className="rsi-warn">{failure}</div>}
       {err && <div className="rsi-warn">{err.message}</div>}
       <div className="rsi-actions">
         <button

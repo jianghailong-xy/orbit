@@ -354,7 +354,7 @@ v1 **不新建这张表**，而是把 `agent_id` **保序重指向**到新的 `a
 | `provider` / `providerBuiltin` | Session **create** | 只读。**Session 的 provider 终生固定**（运行时线程属于开它的 CLI），这是既有约束，v1 不改 |
 | `requiredCapabilities` | Session **create** | 只读 |
 | `resolution` | Session **create** | 只读 |
-| `permissionMode` | Session **create** | 只读。create 时 materialize 账号默认，冻结的是这次运行的**权限意图**；只有已知 runner 根本无法启动的组合可在 create 时安全收窄（例如 root runner 上 `Bypass` → `Don't Ask`）。依赖实际 model 的 `Auto` → `Default` 由 Queue 在 claim 物化 model 后派生，不回写本列 |
+| `permissionMode` | Session **create** | 只读。create 时 materialize 账号默认，冻结的是这次运行的**权限意图**；只有已知 runner 根本无法启动的组合可在 create 时安全收窄（例如 root runner 上 `Bypass` → `Auto`）。依赖实际 model 的 `Auto` → `Default` 由 Queue 在 claim 物化 model 后派生，不回写本列 |
 | `model` | **首次 claim**（既有行为，保留） | 首次 claim 后只读。既有例外保留：模型被 runtime 彻底下架（`retiredPin`）时改写一次 |
 | `effort` | **首次 claim** | 同 `model` |
 | `snapshotFrozenAt` | Session **create** | 一旦非 null，**上表中冻结时刻为 Session create 的那九列**进入只读。它**不**封 `model` / `effort` —— 那两列的封条是首次 claim，见 S4 |
@@ -675,7 +675,7 @@ Task 的 `assigneeAgentId` 写入时必须全部通过，任一失败即 400/403
 | REST `/agents` | **Agent**（新表） | v1 新增 |
 | REST `/projects/:id/team` | **Project Member** | v1 新增 |
 | REST `/projects/:id/workspaces` | **Project Workspace** | v1 新增 |
-| MCP `agent_list` / `agent_create` / `agent_update` | **Workspace**（Legacy agent alias） | **冻结 + deprecated**，行为一字不改 |
+| MCP `agent_list` / `agent_create` / `agent_update` | **Workspace**（Legacy agent alias） | **deprecated**，指向不变。写 `env`、`workDir`、`systemPrompt`、`appendSystemPrompt`、`runnerId`、`enableWorktree` 要所有者的卡片（`runner-api/runner-workspace-approval.ts`），其余行为不变 |
 | CLI `orbit agent …` | **Workspace**（Legacy agent alias） | **冻结 + deprecated** |
 | CLI `orbit workspace …` | Workspace | v1 新增，`orbit agent` 的推荐拼法 |
 | MCP `team_list` / `team_add` / `team_remove`、CLI `orbit project team …` | Project Member + Agent | v1 新增 |

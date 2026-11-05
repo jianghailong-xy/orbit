@@ -2821,17 +2821,20 @@ model Attachment {
   // Original upload filename. The runner writes a non-image/-PDF upload to the worktree
   // under this name and references it to claude. Null for legacy rows and pasted images.
   fileName  String?           @map("file_name")
-  // Raw bytes (bytea) of a row written before Orbit Files (0462). NULL on a row whose bytes are in
-  // the file store under `sha256`; attachment_bytes_present holds every row to one of the two.
+  // Raw bytes (bytea) of a row written before Orbit Files (0462). NULL on a row whose bytes are only
+  // in the file store under `sha256`; attachment_bytes_present holds every row to one of the two.
+  // A row the copy has reached has both, until the clear (files/attachment-migration.ts).
   data      Bytes?
   /// The bytes' sha256, 64 lowercase hex (0462, docs/orbit-files-design.md §2.1): this row's bytes
   /// are the file_blob of that name, kept once however many rows name them (files/files.service.ts).
-  /// NULL on a row whose bytes are still in `data`.
+  /// NULL on a row whose bytes are only in `data`.
   sha256    String?
   blob      FileBlob?         @relation(fields: [sha256], references: [sha256], onDelete: Restrict)
   /// Columns of the retention rules (§2.8), folder bundles (§2.2) and FILE evidence (§2.4), created by
   /// 0462 for the tasks that build those. NULL: the row follows its session or task, as every attachment
-  /// did before them.
+  /// did before them. Of the retention rules (files/file-retention.ts): `retention` says the row can expire,
+  /// `expiresAt` when, NULL while evidence holds it; `expiredAt` is its tombstone; `pinnedAt` keeps it past
+  /// `expiresAt` for as long as it is set.
   retention String?
   expiresAt DateTime?         @map("expires_at")
   expiredAt DateTime?         @map("expired_at")
@@ -2841,6 +2844,10 @@ model Attachment {
   /// What `file_upload` was told this file is (0464, §2.3), in the caller's own words, beside
   /// `fileName`, which only says what it was called. NULL on every other row.
   label     String?
+  /// What `file_upload --as test-report` read out of this file (0465, §2.5, files/test-report.ts): its
+  /// counts, duration and failed and skipped names. Metadata, so it outlives the bytes when they
+  /// expire (§2.8). NULL on every other row.
+  testReportSummary Json?   @map("test_report_summary")
   createdAt DateTime          @default(now()) @map("created_at")
 
   @@index([ownerId])
@@ -2848,6 +2855,8 @@ model Attachment {
   @@index([turnId])
   @@index([taskId])
   @@index([sha256])
+  // Two more indexes are in migration 0466 and not here, because schema.prisma cannot express a partial index:
+  // attachment_expiry_due_idx (expires_at, rows with a due date and no tombstone), attachment_evidence_idx (evidence_id).
   @@map("attachment")
 }
 
@@ -2862,6 +2871,14 @@ model FileBlob {
   storage          String
   /// The last time an upload stored these bytes or found them already stored.
   lastReferencedAt DateTime     @default(now()) @map("last_referenced_at")
+  /// When the retention sweep first found no attachment row still holding these bytes (0466, §2.8,
+  /// files/file-retention.ts). The grace period before they may go runs from here.
+  releasedAt       DateTime?    @map("released_at")
+  /// When the store's bytes went. The row stays, because attachment rows keep naming it, and an
+  /// upload of the same content keeps the bytes again and clears this.
+  bytesDeletedAt   DateTime?    @map("bytes_deleted_at")
+  /// From when the backup sidecar may remove them from the off-host copy (scripts/pg-backup.sh).
+  offHostPruneAt   DateTime?    @map("off_host_prune_at")
   attachments      Attachment[]
 
   @@map("file_blob")
@@ -2936,6 +2953,13 @@ model Project {
   doneCriteriaDigest String?   @map("done_criteria_digest") @db.Char(64)
   /// The gaps the owner accepted when recording it done, as the card sent them (`AcceptedGap[]`).
   acceptedGaps       Json      @default("[]") @map("accepted_gaps")
+
+  /// The account owner's Reopen project (migration 0469): when they pressed it, and what it was
+  /// pressed over, the seal of the criteria and each task serving one by a digest of its facts
+  /// (`project-done-derived.ts`). While those have not moved, the projection does not store DONE over
+  /// the press. Null while no press is on record, and present together.
+  reopenedAt    DateTime? @map("reopened_at") @db.Timestamptz(3)
+  reopenedFacts Json?     @map("reopened_facts")
 
   /// The session this project is coordinated from — one durable conversation per project.
   ///
@@ -5657,6 +5681,8 @@ model TaskCompletionEvidence {
   @@unique([taskId, revision], map: "task_completion_evidence_task_revision_key")
   @@unique([taskId, actorType, actorId, sourceSessionId, criterionRevision, evidenceDigest], map: "task_completion_evidence_stable_fact_key")
   @@index([taskId, submittedAt, id], map: "task_completion_evidence_task_submitted_idx")
+  // One more index is in migration 0468 and not here, because schema.prisma cannot express a partial index:
+  // task_completion_evidence_cites_files_idx (id, the versions citing a file).
   @@map("task_completion_evidence")
 }
 
@@ -7581,9 +7607,13 @@ model WikiNote {
   contentSha256 String   @map("content_sha256") @db.Char(64)
   /// Whether the redactor took anything out.
   redacted      Boolean  @default(false)
+  /// The session whose `wiki_note` this is (migration 0472): read back as a claim in that session's dossier. Null for a
+  /// file `orbit wiki import` read, which is no session's. No foreign key: a note outlives what it names, as a source's ref does.
+  sessionId     String?  @map("session_id") @db.Uuid
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@unique([spaceId, contentSha256], map: "wiki_note_space_id_content_sha256_key")
+  @@index([sessionId], map: "wiki_note_session_id_idx")
   @@map("wiki_note")
 }
 
@@ -7643,6 +7673,9 @@ model WikiChangesetOp {
   /// Near neighbours found when it was proposed, shown on its Review card.
   similar      Json       @default("[]")
   tainted      Boolean    @default(false)
+  /// The agent's note the op came from, `{ eventId, file }` (0471): the server's own field, which no door takes from
+  /// a caller and which is no source. NULL for every op but those of a maintenance run's pass over the notes.
+  promptedBy   Json?      @map("prompted_by")
 
   /// `pending` | `accepted` | `edited` | `rejected` | `auto_applied` | `conflict` | `expired` |
   /// `withdrawn` | `verifying`. Only `pending` and `verifying` — an Automatic space's op waiting for
@@ -7752,7 +7785,8 @@ model WikiMaintenanceRun {
   taskId          String?   @unique(map: "wiki_maintenance_run_task_id_key") @map("task_id") @db.Uuid
   /// The wiki_job that ran it (0401): a history reference with no foreign key, as task_id is.
   jobId           String?   @map("job_id") @db.Uuid
-  /// `backlog` | `age` for a task the trigger made; NULL for a run of a task somebody else put in the list.
+  /// `backlog` | `age` for a run the trigger made; NULL for a run of a task somebody else put in the list, or a backfill's
+  /// job, which no fact made (contracts/wiki.contract.json `maintenance.job.server.backfill`).
   due             String?
   backlog         Int       @default(0)
   pendingSessions Int       @default(0) @map("pending_sessions")

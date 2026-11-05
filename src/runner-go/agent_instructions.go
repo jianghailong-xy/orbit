@@ -100,6 +100,7 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches bool) s
 		orbitProjectInstructions(insideRecordedWork) +
 		orbitProgressInstructions(insideRecordedWork) +
 		orbitWaitInstructionsFor(watches) +
+		orbitWikiPathInstructions +
 		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: their inputs are schema-checked and " +
 		"they need no shell. The Orbit CLI at `" + command + "` is for shell composition (pipes, scripts, bulk input) and " +
 		"work that outlives this turn. Inside a session both attribute the task to you, so either is fine; the CLI needs " +
@@ -132,6 +133,13 @@ const orbitReplyFileInstructions = "To hand the user a file, link it in your rep
 const orbitEvidenceFileInstructions = "For evidence, cite a command's output by its tool call rather than saving a log, " +
 	"and keep screenshots and reports with file_upload rather than in the repository: it reads those same two " +
 	"directories and returns a link that also works in a reply, and an id to cite as a FILE check.\n\n"
+
+// orbitWikiPathInstructions sends an agent to the wiki at the moment it can use what is there: searches by
+// path found nothing 3 times in 21 up to 2026-11-02, where multi-word ones did 124 times in 188
+// (docs/wiki-memory-claims-design.md). "If your tool list has it" because this text goes to every session, and
+// an account with the wiki off has no such tool (wikiToolDescriptors). ASCII like the rest of the paragraph.
+const orbitWikiPathInstructions = "Before changing a file, use wiki_search with its path to look up known pitfalls, " +
+	"if your tool list has it.\n\n"
 
 // orbitWaitInstructions routes a wait on Orbit's own work to a watch. An agent told to "wait for these
 // tasks" otherwise writes the loop it knows, sleep plus task_get or `orbit task get`, which holds its turn
@@ -279,14 +287,14 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		// learned is not a power over anybody else's session, so it needs no orchestration grant —
 		// and the agent most likely to learn something worth recording is the plain single-session
 		// one. The commands themselves need ORBIT_SESSION_ID, which a session has.
-		// verify asks the server to verify the session's own proposals and waits for its verdicts: no
-		// more of a power.
-		for _, action := range []string{"search", "get", "propose", "verify"} {
+		// verify asks the server to verify the session's own proposals and waits for its verdicts, and note
+		// leaves a claim for maintenance to check against the session's own records: no more of a power.
+		for _, action := range []string{"search", "get", "propose", "verify", "note"} {
 			rules = append(rules, "Bash("+command+" wiki "+action+" *)")
 		}
 		// Every file verb: keeping and reading back your own files is no power over anybody else's session, and the
 		// instructions send every agent here for its evidence.
-		for _, action := range []string{"upload", "fetch", "list"} {
+		for _, action := range []string{"upload", "fetch", "list", "pin"} {
 			rules = append(rules, "Bash("+command+" file "+action+" *)")
 		}
 		// import hands the server, for a space its owner named, files the owner asked for, and the
@@ -318,8 +326,9 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 				rules = append(rules, "Bash("+command+" session "+action+" *)")
 			}
 			// The agent verbs ride the same gate and have no headless form: no service-token scope
-			// names them, so they are advertised only where a live session has the grant. A delete is
-			// put on a confirmation card in front of the owner first, and the server refuses it without one.
+			// names them, so they are advertised only where a live session has the grant. A delete, and a
+			// write of what decides the agent's next session, are put on a confirmation card in front of the
+			// owner first, and the server refuses them without one.
 			for _, action := range []string{"list", "create", "update", "delete"} {
 				rules = append(rules, "Bash("+command+" agent "+action+" *)")
 			}

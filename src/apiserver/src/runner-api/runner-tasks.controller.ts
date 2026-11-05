@@ -201,8 +201,12 @@ export class RunnerTasksController {
    * its `updated_at` (the project list's `lastActivityAt`) is not bumped for a no-op.
    */
   @Post('tasks/batch-pin')
-  pinTasks(@CurrentRunner() runner: Runner, @Body() dto: BatchPinTasksDto) {
-    return this.tasks.pinMany(runner.ownerId, dto);
+  pinTasks(
+    @CurrentRunner() runner: Runner,
+    @Body() dto: BatchPinTasksDto,
+    @Headers('x-orbit-session-id') sessionId?: string,
+  ) {
+    return this.tasks.pinMany(runner.ownerId, dto, sessionId);
   }
 
   /**
@@ -251,9 +255,18 @@ export class RunnerTasksController {
     return this.tasks.update(runner.ownerId, id, dto, sessionId);
   }
 
+  /**
+   * A runner older than the one that names its session here sends none on this door or on the
+   * dependency doors below, and reads as the owner, as it always did. The refusals they answer a run
+   * with take effect on the runner release that names it.
+   */
   @Delete('tasks/:id')
-  deleteTask(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
-    return this.tasks.remove(runner.ownerId, id);
+  deleteTask(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Headers('x-orbit-session-id') sessionId?: string,
+  ) {
+    return this.tasks.remove(runner.ownerId, id, sessionId);
   }
 
   /**
@@ -285,8 +298,9 @@ export class RunnerTasksController {
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: AddDependencyDto,
+    @Headers('x-orbit-session-id') sessionId?: string,
   ) {
-    return this.tasks.addDependency(runner.ownerId, id, dto.dependsOnTaskId);
+    return this.tasks.addDependency(runner.ownerId, id, dto.dependsOnTaskId, sessionId);
   }
 
   @Delete('tasks/:id/dependencies/:dependsOnTaskId')
@@ -294,8 +308,9 @@ export class RunnerTasksController {
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) id: string,
     @Param('dependsOnTaskId', PublicIdPipe) dependsOnTaskId: string,
+    @Headers('x-orbit-session-id') sessionId?: string,
   ) {
-    return this.tasks.removeDependency(runner.ownerId, id, dependsOnTaskId);
+    return this.tasks.removeDependency(runner.ownerId, id, dependsOnTaskId, sessionId);
   }
 
   @Post('tasks/:id/comments')
@@ -409,15 +424,17 @@ export class RunnerTasksController {
 
   /**
    * Apply that batch. Called only after the human allowed it, and re-validated here rather than
-   * trusting the preview: an approval happens at human speed and the graph may have moved.
+   * trusting the preview: an approval happens at human speed and the graph may have moved. From a
+   * run, an edit of a verifier's dependencies needs that card to be here as well.
    */
   @Post('task-lists/:id/dag-apply')
   applyDag(
     @CurrentRunner() runner: Runner,
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: ProposeDagDto,
+    @Headers('x-orbit-session-id') sessionId?: string,
   ) {
-    return this.tasks.applyDag(runner.ownerId, id, dto.ops);
+    return this.tasks.applyDag(runner.ownerId, id, dto.ops, sessionId);
   }
 
   /**
@@ -425,7 +442,12 @@ export class RunnerTasksController {
    * cascading — so this discards the grouping and its policy revisions, not the work.
    */
   @Delete('task-lists/:id')
-  deleteList(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
-    return this.taskLists.remove(runner.ownerId, id);
+  deleteList(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    // A runner that names no session here reads as the owner, as on the task delete above.
+    @Headers('x-orbit-session-id') sessionId?: string,
+  ) {
+    return this.taskLists.remove(runner.ownerId, id, sessionId);
   }
 }

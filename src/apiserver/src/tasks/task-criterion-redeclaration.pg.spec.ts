@@ -235,6 +235,38 @@ test('a task’s criterion declaration can be made, corrected and taken back aft
         'exactly one clause went out: the mark this door exists to clear, and nothing else');
     });
 
+  // A criterion reworded late is reworded over work already finished, and that work holds the
+  // project back until it declares again, so the coordinator's opening tells it to. The door has
+  // to take a task that has ended, and must not reopen it.
+  await t.test('finished work can re-declare too, and stays finished', async () => {
+    let late = await state(goal, 3, 'the wording finished work was declared against');
+    const task = await fileTask('work that ended before its criterion was reworded', {
+      projectId: goal,
+      criterionKey: late.key,
+      completionCriterion: 'EXECUTABLE',
+      acceptanceCommand: 'true',
+      acceptanceExpectedExitCode: 0,
+    });
+    // The way `runnerApi.turnComplete` settles an EXECUTABLE task, through 0193/0230's DONE fence.
+    await sql.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1::uuid`, [task.id]);
+    assert.deepEqual(await clausesHolding(goal, late.id), [],
+      'finished, and declared against the words that stand: nothing holds this criterion up');
+
+    late = await reword(late, 'the wording it was reworded to after the work ended');
+    assert.deepEqual(await clausesHolding(goal, late.id), ['DECLARATION_STALE'],
+      'the only thing wrong with the finished work is the wording it was declared against');
+
+    await service.update(ownerId, task.id, { criterionKey: late.key } as never);
+
+    assert.equal((await declarationOf(task.id)).criterion_revision, late.revision);
+    assert.deepEqual(await clausesHolding(goal, late.id), [],
+      'declaring it again is all it took: the criterion is met under its new words');
+    const { rows } = await sql.query<{ status: string }>(
+      `SELECT "status" FROM "task" WHERE "id" = $1::uuid`, [task.id],
+    );
+    assert.equal(rows[0].status, 'DONE');
+  });
+
   // ═══ 3. taking the declaration back ═══════════════════════════════════════════════════════
   await t.test('null releases the relation and leaves the work standing', async () => {
     // Clearing something that was never declared is the common shape and must not be an error: a

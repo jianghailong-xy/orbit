@@ -30,7 +30,7 @@ file under `app/realtime`; it does not replace those entrypoints.
 | --- | --- |
 | `handle` | Captured A03 identity. A consumer must match it with the current `AuthState.SignedIn.handle` by identity before showing account data. |
 | `directory` | Nullable full REST snapshot; non-null cached rows may be shown while stale. |
-| `directoryRefreshing`, `directoryFresh`, `directoryError` | REST progress, freshness and failure. Failure retains old rows. |
+| `directoryRefreshing`, `directoryFresh`, `directoryError` | REST progress, freshness and failure. Failure retains old rows. An account event withdraws neither of the first two: the directory is read again behind the rows, and a read the event overtakes still lands. Only `refreshDirectory()` or `rereadDirectory()` outranks a read on the wire, which may have left before the write they follow. A connect withdraws `directoryFresh` until a read that left after it lands; one that left before lands its rows but is not fresh. |
 | `directoryCached` | `directory` is the copy restored from the device cache, not yet replaced by a REST read. P01's fully-drawn line reports it as `source=cache`. |
 | `controlConnection`, `controlError` | Account SSE status, separate from REST success. |
 | `session` | Selected session's transcript, pending-state snapshot, freshness, connection and error. |

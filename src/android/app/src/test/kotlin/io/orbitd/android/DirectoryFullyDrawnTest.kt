@@ -16,7 +16,7 @@ import io.orbitd.android.core.realtime.SseFrame
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -111,6 +111,18 @@ class DirectoryFullyDrawnTest {
         assertEquals(listOf("v=1 ev=p01_fully_drawn source=network rows=2"), perf())
     }
 
+    /** An account with work running, and no copy on the device (a large directory is not cached): the stream is open and an
+     * account event arrives while each read is on the wire. Its rows are still drawn, and the page does not go on loading. */
+    @Test fun aColdStartWhoseEveryReadAnEventOvertakesStillDrawsItsRows() {
+        ColdStart.overtaken = true
+        launch()
+        await { shows("Loading workspaces and sessions…") }
+        ColdStart.network.complete(Unit)
+        await { shows("Server Alpha") && rows(ColdStart.ALPHA) }
+        await { !shows("Loading workspaces and sessions…") }
+        ColdStart.overtaken = false
+    }
+
     @Test fun eachActivityReportsOnce() {
         ColdStart.cache = ColdStart.CACHED
         launch()
@@ -188,10 +200,16 @@ internal object ColdStart {
     @Volatile var cache: String? = null
     @Volatile var cacheRead = CompletableDeferred(Unit)
     @Volatile var network = CompletableDeferred<Unit>()
+    /** An account event reaches the store while each directory read is on the wire: the read waits for it to be handled. */
+    @Volatile var overtaken = false
+    private val overtaking = Channel<CompletableDeferred<Unit>>(Channel.UNLIMITED)
     /** The path of every request sent to the server. */
     val sent = CopyOnWriteArrayList<String>()
 
-    fun reset() { cache = null; cacheRead = CompletableDeferred(Unit); network = CompletableDeferred(); sent.clear() }
+    fun reset() {
+        cache = null; cacheRead = CompletableDeferred(Unit); network = CompletableDeferred(); overtaken = false; sent.clear()
+        while (overtaking.tryReceive().isSuccess) Unit
+    }
 
     private fun workspace(id: String, name: String, position: Int) =
         """{"id":"$id","name":"$name","runnerId":"r1","enabled":true,"position":$position,"createdAt":"2026-10-01T01:00:00.000Z"}"""
@@ -208,6 +226,7 @@ internal object ColdStart {
         val path = request.api.path.joinToString("/")
         sent += path
         network.await()
+        if (path == "workspaces" && overtaken) CompletableDeferred<Unit>().also { overtaking.send(it) }.await()
         when {
             path == "users/me" -> ok("""{"id":"u1","email":"owner@a05g.test","name":"Owner"}""")
             path == "workspaces" -> ok("[${workspace(ALPHA, "Server Alpha", 0)},${workspace("34A05gWorkspace00004", "Server Delta", 1)}]")
@@ -222,7 +241,10 @@ internal object ColdStart {
         override suspend fun stream(request: HttpRequest, onOpen: suspend () -> Unit, onFrame: suspend (SseFrame) -> Unit) {
             network.await()
             onOpen()
-            awaitCancellation()
+            for (handled in overtaking) {
+                onFrame(SseFrame("""{"type":"session.updated","sessionId":"","data":{}}""", null, null))
+                handled.complete(Unit)
+            }
         }
     }
 

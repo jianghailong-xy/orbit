@@ -114,6 +114,8 @@ evidence.
   revision as a platform turn of its own (`evidence-send-back:v1:<decisionId>`, delivered the way
   the review is), so the next attempt learns what it has to show without anybody relaying it; the
   decision, note included, is also on the revision in `task_evidence_list` for any session to read.
+  A session narrower than the run that decision would end or hand the note to is held to
+  `docs/session-request-reply-contract.md` §2.5.
 - **Back to the owner.** While the dispatching session holds the revision, nobody else is asked: no
   card, no count. It holds it while the delivery turn exists, that session has not ended, and 30
   minutes have not passed since the delivery — read at read time, nothing scheduled. After that, or

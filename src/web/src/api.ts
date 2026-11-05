@@ -28,6 +28,8 @@ import type {
 import type { ProjectPanoramaBuckets, ProjectPanoramaShape } from './components/ProjectPanoramaHeader';
 import type { ProjectDependencyGraphResponse } from './lib/projectDependencyGraph';
 import type { CodexLogin } from './lib/codexLogin';
+import { ExpiredAttachmentError, type EvidenceFilePinAnswer } from './lib/evidenceFiles';
+import type { TrashHold } from './lib/trashNote';
 import { userFileUrl } from './lib/userFile';
 import { clearTranscriptStore, setTranscriptUser } from './lib/transcriptStore';
 import type { Me } from './lib/queries';
@@ -656,15 +658,28 @@ export const deleteAttachment = async (id: string): Promise<void> => {
   }
 };
 
+/** The bytes a read of attachment `id` came back with, as a blob. */
+async function attachmentBlob(res: Response, id: string): Promise<Blob> {
+  if (res.status === 410) {
+    const body = (await res.json().catch(() => null)) as { expiredAt?: unknown } | null;
+    throw new ExpiredAttachmentError(typeof body?.expiredAt === 'string' ? body.expiredAt : null);
+  }
+  if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
+  return res.blob();
+}
+
 /** Fetch an attachment's bytes as a blob object URL, for rendering a past turn's image in
  *  the transcript after reload. The download endpoint is bearer-guarded, so an `<img src>`
  *  pointing straight at it would 401 — fetch with the token, then hand back an object URL
  *  the caller must revoke (lib/userFile.ts says what kind: an SVG's is a data: URL). */
 export const fetchAttachmentObjectUrl = async (id: string): Promise<string> => {
   const res = await authedFetch(`/api/attachments/${encodeURIComponent(id)}`);
-  if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
-  return userFileUrl(await res.blob());
+  return userFileUrl(await attachmentBlob(res, id));
 };
+
+/** Pin a file, or take its pin away. A pin brings back a file with a tombstone whose bytes remain; once they have gone, 410. */
+export const setAttachmentPinned = (id: string, pinned: boolean): Promise<EvidenceFilePinAnswer> =>
+  api<EvidenceFilePinAnswer>(`/attachments/${encodeURIComponent(id)}/pin`, { method: pinned ? 'PUT' : 'DELETE' });
 
 export const fetchSessionArtifactObjectUrl = async (sessionId: string, artifactPath: string): Promise<string> => {
   const res = await authedFetch(
@@ -1675,8 +1690,7 @@ export const sharedAttachmentUrl = (token: string, id: string): string =>
  *  (no bearer). Caller revokes it. Mirrors fetchAttachmentObjectUrl for the shared page. */
 export const fetchSharedAttachmentObjectUrl = async (token: string, id: string): Promise<string> => {
   const res = await fetch(sharedAttachmentUrl(token, id));
-  if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
-  return userFileUrl(await res.blob());
+  return userFileUrl(await attachmentBlob(res, id));
 };
 
 export const fetchSharedArtifactObjectUrl = async (token: string, artifactPath: string): Promise<string> => {
@@ -1795,6 +1809,8 @@ export interface SessionDetail {
   /** A LANDING session's subject view (§2.9 LS1/LS6): its attempt, phase, checks, liveness,
    *  timeline and todos. Present on a landing and on the pre-generated id before its row exists. */
   landing?: SessionLandingView | null;
+  /** What keeps this session in Trash past its 30 days, when it is there. Optional, because an older server does not send it. */
+  trashHold?: TrashHold | null;
   /** Latest run outcome and sidebar lifecycle location are independent product dimensions. */
   runState?: string;
   lifecycleState?: string;

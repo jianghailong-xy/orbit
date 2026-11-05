@@ -31,6 +31,7 @@ export const COORDINATOR_DELIVERY_SENTENCES: Readonly<Record<CoordinatorDelivery
   DEPENDENT_READY: 'Can start now: {task}',
   TASK_DISPATCH_REFUSED: 'Could not start: {task}',
   PROJECT_BLOCKER_RAISED: 'Blocker raised: {task}',
+  TASK_RUN_STOPPED: 'Run stopped: {task}',
   CRITERION_UNLANDED: 'Work not on main yet: {count}',
   ACCEPTANCE_LANDED: '{count} landed',
   ACCEPTANCE_LANDED_HELD: '{count} landed, Done held back',

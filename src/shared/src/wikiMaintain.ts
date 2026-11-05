@@ -36,8 +36,11 @@ export const WIKI_MAINTAIN_JOB = {
    * 2026-10-10).
    */
   priority: 0,
-  /** The queue's steps: extraction, and the one plan change a run may propose; `plan_*` is the plan's wait limit. */
-  steps: { extract: 'extract', planProposal: 'plan_proposal' },
+  /**
+   * The queue's steps: extraction, the pass that only checks the agent's notes, and the one plan change a run may
+   * propose; `plan_*` is the plan's wait limit.
+   */
+  steps: { extract: 'extract', claims: 'claims', planProposal: 'plan_proposal' },
   /** One extraction's max_tokens: an 8k-token dossier's at most six entries, the import's own budget. */
   extractMaxTokens: 8192,
   /** One plan proposal's max_tokens: a document's new sections in the plan's line format (the runner's 32,000). */
@@ -69,6 +72,21 @@ export const WIKI_MAINTAIN_JOB = {
   anchorDiffsMax: 4,
   /** The directories under docs/ that hold no design document (`maintenance.job.docs.excluded`). */
   docsExcluded: ['docs/mocks/', 'docs/evidence/'],
+} as const;
+
+/**
+ * A backfill (contract `maintenance.job.server.backfill`, docs/wiki-memory-claims-design.md section 5): a `maintain` job
+ * over sessions somebody named, for what their agents wrote before the notes pass existed, and the downgrade that closes it.
+ */
+export const WIKI_BACKFILL = {
+  /** The most sessions one job names. */
+  sessionsMax: 20,
+  /** Why it is run, said in words: required, and at most this long. */
+  reasonMaxChars: 500,
+  /** The entries one transaction of the downgrade writes, with its one `activity` row. */
+  downgradeBatch: 50,
+  /** The `activity` row a batch of the downgrade leaves: it writes no revision, so this is its only trail. */
+  downgradeActivity: 'wiki.note_entries.downgraded',
 } as const;
 
 /**
@@ -143,6 +161,31 @@ export function wikiMaintenanceRunSessions(input: { mode: WikiReviewMode; active
 }
 
 /** What a run reports when it ends, kept as it was said (contract `maintenance.job.report`). */
+/** What a run's pass over the agent's notes came to, over the dossiers it extracted from (`maintenance.job.report`). */
+export type WikiMaintenanceClaimsReport = {
+  /** Of those dossiers, the sessions that ran on Claude: what `seen` being 0 says something about. */
+  claudeSessions: number;
+  /** The writes to memory files, and of those: what said too little, and what a held-out session kept out. */
+  seen: number;
+  skipped: number;
+  heldOut: number;
+  /** The session's `wiki_note`s, apart from `seen`, whose going quiet is what the run watches for. Absent from a run before them. */
+  notes: number;
+  /** What passed the cap, of either. */
+  overCap: number;
+  /** What the model said of each note carried; `unanswered` when it did not say, or its answer could not be had. */
+  shown: number;
+  narrowed: number;
+  contradicted: number;
+  absent: number;
+  notDurable: number;
+  unanswered: number;
+  /** The pass's ops the run recorded. */
+  entries: number;
+  /** The pass's ops verified as duplicates since the run began, of its own and of what it adopted. */
+  duplicates: number;
+};
+
 export interface WikiMaintenanceReport {
   /** The step the run stopped at, when it did not succeed. */
   stoppedAt?: string;
@@ -157,6 +200,13 @@ export interface WikiMaintenanceReport {
   unchanged: number;
   offTopic: number;
   entries: { extracted: number; kept: number; dropped: number; foreign: number; principles: number };
+  /** The pass that only checks the agent's notes (`maintenance.job.report`); absent from a run before it was wired in. */
+  claims?: WikiMaintenanceClaimsReport;
+  /**
+   * A backfill's own part (`maintenance.job.server.backfill`): why it ran, and the sessions it named that it did not finish,
+   * which have no cursor to come back to them and are named again: those it could no longer read, and those its breaker held back.
+   */
+  backfill?: { reason: string; unread: string[]; heldBack: string[] };
   /** `heldBack` is what the review queue's quotas held back; `heldBackByBreaker` what the run's circuit breaker did. */
   ops: {
     proposed: number;

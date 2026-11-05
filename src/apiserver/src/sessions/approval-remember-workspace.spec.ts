@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { reachesPastOneMcpTool } from './remember-rules';
 import { SessionsService } from './sessions.service';
 
 // "Always allow" has to outlive the session it was answered in, or it is re-taught once per
@@ -110,4 +111,54 @@ test('a rule that would forge a second grant is not stored', async () => {
     rememberRules: [{ toolName: 'Bash', ruleContent: 'npm test:*),Bash(rm -rf /:*' }],
   });
   assert.deepEqual(created, []);
+});
+
+test('an "always allow" on one MCP tool remembers that tool', async () => {
+  const { service, created } = makeService({ workspaceId: 'w1' });
+  await service.decideApproval('owner-1', 's1', 'a1', {
+    behavior: 'allow',
+    rememberRules: [{ toolName: 'mcp__orbit__bg_list' }],
+  });
+  assert.deepEqual(created[0].data, [
+    {
+      workspaceId: 'w1',
+      toolName: 'mcp__orbit__bg_list',
+      ruleContent: '',
+      createdById: 'owner-1',
+      approvalId: 'a1',
+    },
+  ]);
+});
+
+test('an "always allow" stores nothing that reaches past one MCP tool, and still allows', async () => {
+  for (const toolName of ['mcp__orbit', 'mcp__orbit__*', 'mcp__*']) {
+    const { service, created } = makeService({ workspaceId: 'w1' });
+    const info = await service.decideApproval('owner-1', 's1', 'a1', {
+      behavior: 'allow',
+      rememberRules: [{ toolName }],
+    });
+    assert.equal(info.status, 'ALLOWED', toolName);
+    assert.deepEqual(created, [], toolName);
+  }
+});
+
+test('a rule that reaches past one MCP tool does not take the rest of the answer with it', async () => {
+  const { service, created } = makeService({ workspaceId: 'w1' });
+  await service.decideApproval('owner-1', 's1', 'a1', {
+    behavior: 'allow',
+    rememberRules: [{ toolName: 'mcp__orbit' }, { toolName: 'Bash', ruleContent: 'npm test:*' }, { toolName: 'Edit' }],
+  });
+  assert.deepEqual(
+    (created[0].data as { toolName: string }[]).map((rule) => rule.toolName),
+    ['Bash', 'Edit'],
+  );
+});
+
+test('what counts as reaching past one MCP tool', () => {
+  for (const name of ['mcp__orbit', 'mcp__orbit__', 'mcp__orbit__*', 'mcp__orbit__bg*', 'mcp__*', 'mcp__*__bg_run']) {
+    assert.equal(reachesPastOneMcpTool(name), true, name);
+  }
+  for (const name of ['mcp__orbit__bg_run', 'mcp__a__b__c', 'mcp__acme__dotted.tool', 'Bash', 'Edit', 'orbit_task_create', 'mcp', 'mcpish', 'mcp_x']) {
+    assert.equal(reachesPastOneMcpTool(name), false, name);
+  }
 });

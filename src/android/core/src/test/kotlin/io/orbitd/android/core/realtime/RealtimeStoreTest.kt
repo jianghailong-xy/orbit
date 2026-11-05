@@ -557,6 +557,122 @@ class RealtimeStoreTest {
         assertEquals("after the write", store.state.value.directory!!.sessions["open"]!![0].text("title"))
     }
 
+    /** An account with work running is never quiet for as long as its lists take to read. A read an account event overtakes is
+     * still the newest there is, so it lands and the directory is read again behind it. Dropped, no read ever landed, and a
+     * phone with no copy of its directory sat on the spinner with nothing wrong to show. */
+    @Test fun aReadAccountEventsAlwaysOvertakeStillLands() = runTest {
+        val rig = Rig(this)
+        var held = CompletableDeferred<Unit>()
+        rig.heldDirectory = held
+        val (_, store) = rig.start()
+        assertNull(store.state.value.directory)
+        repeat(4) { round ->
+            rig.streams.control().emit("""{"type":"session.updated","sessionId":"s2","data":{}}""")
+            runCurrent()
+            rig.title = "read $round"
+            val next = CompletableDeferred<Unit>()
+            rig.heldDirectory = next
+            held.complete(Unit); runCurrent()
+            held = next
+            assertNotNull("read $round was overtaken and is still what there is to show", store.state.value.directory)
+        }
+        assertEquals("the rows keep moving behind the events", "read 2", store.state.value.directory!!.sessions["open"]!![0].text("title"))
+    }
+
+    /** A write's re-read still outranks an event: the read from before the write stays dropped when an event overtook it as well. */
+    @Test fun aReadFromBeforeAWriteIsDroppedEvenWhenAnAccountEventOvertookItToo() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        val earlier = CompletableDeferred<Unit>()
+        rig.title = "before the write"; rig.heldDirectory = earlier
+        store.refreshDirectory(); runCurrent()
+        rig.streams.control().emit("""{"type":"session.updated","sessionId":"s2","data":{}}""")
+        val behind = CompletableDeferred<Unit>()
+        rig.title = "after the write"; rig.heldDirectory = behind
+        val reread = async { store.rereadDirectory() }
+        runCurrent()
+        earlier.complete(Unit); runCurrent()
+        assertFalse(reread.isCompleted)
+        assertEquals("not published", "original", store.state.value.directory!!.sessions["open"]!![0].text("title"))
+        behind.complete(Unit); runCurrent()
+        assertTrue(reread.isCompleted)
+        assertEquals("after the write", store.state.value.directory!!.sessions["open"]!![0].text("title"))
+    }
+
+    /** An event says the rows are about to move, not that they stopped being good: nothing that draws from them goes back to
+     * loading for it (`NewSessionComposer` blanks on `fresh`). On a busy account each of those would last as long as a read. */
+    @Test fun anAccountEventReadsTheDirectoryAgainBehindTheRowsInPlace() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        val read = CompletableDeferred<Unit>()
+        rig.title = "moved"; rig.heldDirectory = read
+        rig.streams.control().emit("""{"type":"session.updated","sessionId":"s2","data":{}}""")
+        runCurrent()
+        assertTrue(store.state.value.directoryFresh)
+        assertFalse(store.state.value.directoryRefreshing)
+        read.complete(Unit); runCurrent()
+        assertEquals("moved", store.state.value.directory!!.sessions["open"]!![0].text("title"))
+    }
+
+    /** Nothing is replayed across a drop, so `fresh` takes a read that left after the stream opened (P06 `reconciled`). One from
+     * before lands its rows, which are still the newest there are, and leaves the page loading the connection's own. */
+    @Test fun aReadFromBeforeTheStreamOpenedLandsItsRowsButIsNotTheConnectionsRead() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        val before = CompletableDeferred<Unit>()
+        rig.title = "before the stream"; rig.heldDirectory = before
+        store.refreshDirectory(); runCurrent()
+        val behind = CompletableDeferred<Unit>()
+        rig.title = "behind the stream"; rig.heldDirectory = behind
+        rig.streams.control().frames.close()
+        advanceTimeBy(301); runCurrent()
+        assertEquals(ConnectionState.CONNECTED, store.state.value.controlConnection)
+        before.complete(Unit); runCurrent()
+        assertEquals("before the stream", store.state.value.directory!!.sessions["open"]!![0].text("title"))
+        assertFalse(store.state.value.directoryFresh)
+        assertTrue(store.state.value.directoryRefreshing)
+        behind.complete(Unit); runCurrent()
+        assertEquals("behind the stream", store.state.value.directory!!.sessions["open"]!![0].text("title"))
+        assertTrue(store.state.value.directoryFresh)
+        assertFalse(store.state.value.directoryRefreshing)
+    }
+
+    /** A read can land with the stream down, and be fresh for as long as that lasts. It does not stand in for the next connection's. */
+    @Test fun aReadThatLandedWhileTheStreamWasDownDoesNotStandInForTheConnectionsRead() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        val quiet = CompletableDeferred<Unit>()
+        rig.heldDirectory = quiet
+        rig.streams.control().emit("""{"type":"session.updated","sessionId":"s2","data":{}}""")
+        runCurrent()
+        rig.streams.control().frames.close(); runCurrent()
+        assertEquals(ConnectionState.BACKOFF, store.state.value.controlConnection)
+        quiet.complete(Unit); runCurrent()
+        val own = CompletableDeferred<Unit>()
+        rig.heldDirectory = own
+        advanceTimeBy(301); runCurrent()
+        assertEquals(ConnectionState.CONNECTED, store.state.value.controlConnection)
+        assertFalse(store.state.value.directoryFresh)
+        assertTrue(store.state.value.directoryRefreshing)
+        own.complete(Unit); runCurrent()
+        assertTrue(store.state.value.directoryFresh)
+        assertFalse(store.state.value.directoryRefreshing)
+    }
+
+    /** Asked for (Refresh, or behind a write) it is a read the page shows, as it is when the connection comes back. */
+    @Test fun aReadSomeoneAskedForStillShows() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        val read = CompletableDeferred<Unit>()
+        rig.heldDirectory = read
+        store.refreshDirectory(); runCurrent()
+        assertFalse(store.state.value.directoryFresh)
+        assertTrue(store.state.value.directoryRefreshing)
+        read.complete(Unit); runCurrent()
+        assertTrue(store.state.value.directoryFresh)
+        assertFalse(store.state.value.directoryRefreshing)
+    }
+
     /** In the background no read can land: the re-read waits for the first one of the next connection. */
     @Test fun aRereadAskedInTheBackgroundReturnsWithTheNextConnectionsRead() = runTest {
         val rig = Rig(this)

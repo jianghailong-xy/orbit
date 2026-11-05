@@ -1008,7 +1008,9 @@ test('(12) a send-back’s note is handed to the run, and is on the revision for
       assert.equal(notice.senderSessionId, null, 'the platform’s words, not the coordinator’s');
       assert.ok((notice.content ?? '').includes('日志里要有一次干净运行六个场景全 PASS 的输出'));
       assert.match(notice.content ?? '', /sent back by the session that reviewed it/);
-      assert.match(notice.content ?? '', new RegExp(`<orbit-evidence-send-back task="${uuidToBase62(w.taskId)}" revision="1">`));
+      assert.match(notice.content ?? '', new RegExp(
+        `<orbit-evidence-send-back task="${uuidToBase62(w.taskId)}" revision="1" from-session="${uuidToBase62(w.coordinatorSessionId!)}" from-mode="[A-Za-z]+">`,
+      ));
 
       // And it is on the revision in the list read, for the coordinator and anybody else.
       const [listed] = await stack.evidence.list(w.ownerId, w.taskId);

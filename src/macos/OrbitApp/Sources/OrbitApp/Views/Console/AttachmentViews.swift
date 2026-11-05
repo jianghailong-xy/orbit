@@ -44,6 +44,8 @@ struct ChatAttachmentImage: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
                     .imageTap(onTap, sourceID: sourceID, ns: ns)
+            } else if let expired = store.expiry(attachment.id) {
+                ExpiredAttachmentFace(at: expired.expiredAt).frame(width: 120, height: 90)
             } else if store.isNotImage(attachment.id) {
                 ChatAttachmentFile(attachment: attachment)   // not an image after all
             } else {
@@ -69,7 +71,32 @@ struct ChatAttachmentFile: View {
 
     private var name: String { attachment.name ?? "file" }
 
+    /// Its bytes have gone, so there is nothing to press or to try again.
+    private func expiredChip(_ expired: ExpiredAttachment) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "paperclip")
+            Text(name).lineLimit(1).truncationMode(.middle)
+            Text("· \(EvidenceFiles.expiredLine(expired.expiredAt))").fixedSize()
+        }
+        .foregroundStyle(.secondary)
+        .font(.orbitLabel)
+        .padding(.vertical, 4).padding(.horizontal, 8)
+        .frame(maxWidth: 280, alignment: .leading)
+        .background(.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8).strokeBorder(.secondary.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+        }
+    }
+
     var body: some View {
+        if let expired = store.expiry(attachment.id) {
+            expiredChip(expired)
+        } else {
+            chip
+        }
+    }
+
+    private var chip: some View {
         Button { fetch() } label: {
             HStack(spacing: 6) {
                 if fetching {
@@ -97,7 +124,7 @@ struct ChatAttachmentFile: View {
             title: name,
             isMarkdown: textPreview?.isMarkdown ?? false,
             onOpenFile: {
-                if let previewData, !FileHandoff.deliver(previewData, named: name) {
+                if let previewData, !FileHandoff.deliver(previewData, named: name, app: app) {
                     app?.showToast("Couldn't open that file", detail: name, tone: .error)
                 }
             }
@@ -105,20 +132,23 @@ struct ChatAttachmentFile: View {
     }
 
     /// Attachments and generated file links use the same text reader; other formats keep the
-    /// platform's share sheet on iOS and the file's own application on a Mac.
+    /// platform's share sheet on iOS and go through `FileHandoff`'s list on a Mac.
     private func fetch() {
         guard !fetching else { return }
         fetching = true
         Task {
             defer { fetching = false }
             guard let data = await store.data(for: attachment.id) else {
-                app?.showToast("Couldn't open that file", detail: name, tone: .error)
+                // Told its bytes went, the chip says so; anything else may come back.
+                if store.expiry(attachment.id) == nil {
+                    app?.showToast("Couldn't open that file", detail: name, tone: .error)
+                }
                 return
             }
             if let preview = TextFilePreview(data: data, fileName: name) {
                 previewData = data
                 textPreview = preview
-            } else if !FileHandoff.deliver(data, named: name) {
+            } else if !FileHandoff.deliver(data, named: name, app: app) {
                 app?.showToast("Couldn't open that file", detail: name, tone: .error)
             }
         }
@@ -151,6 +181,8 @@ struct ChatAttachmentThumb: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
                     .imageTap(onTap, sourceID: sourceID, ns: ns)
+            } else if let expired = store.expiry(attachment.id) {
+                ExpiredAttachmentFace(at: expired.expiredAt).frame(width: Self.side, height: Self.side)
             } else if store.isNotImage(attachment.id) {
                 ChatAttachmentFile(attachment: attachment)   // not an image after all
             } else {

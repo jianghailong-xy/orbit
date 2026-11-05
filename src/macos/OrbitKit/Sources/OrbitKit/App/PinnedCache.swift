@@ -33,6 +33,12 @@ public final class PinnedCache<Object: AnyObject> {
         if pins[key] != nil { held[key] = object }
     }
 
+    /// What is known of `key` no longer holds. A pin on it stays, and answers whatever is inserted next.
+    public func removeObject(forKey key: String) {
+        cache.removeObject(forKey: NSString(string: key))
+        held[key] = nil
+    }
+
     /// Something has started using `key`. Until the matching `unpin`, its object — cached now, or
     /// inserted later — stays answerable. Pins count, so two users of one key each release their own.
     public func pin(_ key: String) {

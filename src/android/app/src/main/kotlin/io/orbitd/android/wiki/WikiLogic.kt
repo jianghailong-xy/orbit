@@ -520,11 +520,11 @@ internal object WikiModeLogic {
         return Banner(WikiTone.MUTED, WikiCopy.trustLabel("unreviewed"), WikiModeCopy.bannerUnreviewed)
     }
     fun whereUsedNote(status: String?, trust: String?) = if (status == "active" && trust == "unreviewed") WikiModeCopy.notSentUnreviewed else null
-    fun checkedLine(verdict: String?, model: String?, tainted: Boolean, who: String?, `when`: String?): String {
+    fun checkedLine(verdict: String?, model: String?, tainted: Boolean, who: String?, `when`: String?, evidence: String? = null): String {
         val parts = mutableListOf<String>()
         if (verdict != null && model != null) {
             parts += "Checked by $model: ${WikiModeCopy.verdictWord(verdict)}"
-            if (tainted) parts += WikiModeCopy.cappedAtUnreviewed
+            if (tainted || evidenceCaps(evidence)) parts += WikiModeCopy.cappedAtUnreviewed
         }
         if (who != null) parts += `when`?.let { "$who, $it" } ?: who
         return parts.joinToString(" · ")
@@ -555,13 +555,15 @@ internal object WikiModeLogic {
         return RunSummary(run.counts.applied, run.counts.auto, run.counts.unreviewed, run.counts.rejectedByCheck, run.counts.toReview,
             added, amended, reinforced, run.revertible, run.revert?.adds ?: 0, run.revert?.amends ?: 0)
     }
+    /** A verdict that what it could read held at Unreviewed, whatever it said (the web's `wikiEvidenceCaps`). */
+    private fun evidenceCaps(evidence: String?) = evidence == "second_hand" || evidence == "unreadable"
     private fun runRow(op: WikiChangesetOp, entries: Map<String, WikiEntry>): RunRow {
         val entryId = if (op.op == "add" || op.op == "supersede") op.resultEntryId ?: op.entryId else op.entryId
         val entry = entryId?.let { entries[wikiKey(it)] }
         val draft = op.payload["entry"] ?: op.payload["changes"]
         val verdictTrust = when (op.verification?.verdict) { "supported" -> "auto"; "partial" -> "unreviewed"; else -> null }
         val trust = if (entry != null) (if (entry.status == "active") entry.trust else null)
-            else if (op.tainted == true && verdictTrust != null) "unreviewed" else verdictTrust
+            else if ((op.tainted == true || evidenceCaps(op.verification?.evidence)) && verdictTrust != null) "unreviewed" else verdictTrust
         return RunRow(op, entryId, entry?.title ?: draft["title"].text() ?: "—", entry?.summary ?: draft["summary"].text() ?: "", trust)
     }
     fun runCounts(summary: RunSummary): List<String> = buildList {

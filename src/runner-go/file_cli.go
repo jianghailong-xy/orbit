@@ -9,18 +9,19 @@ import (
 )
 
 // `orbit file upload|fetch|list`: the CLI half of the file tools (file_tools.go), for shell composition and for an
-// engine with no MCP. Upload and fetch act for the session they run in, so they have no form at a terminal outside one
-// and are listed only inside one. Listing names what it lists, so it runs anywhere the runner credential does.
+// engine with no MCP. Upload, fetch and pin act for the session they run in, so they have no form at a terminal outside
+// one and are listed only inside one. Listing names what it lists, so it runs anywhere the runner credential does.
 
 const fileHelp = `orbit file — keep files in Orbit instead of in the repository
 
 Usage:
-  orbit file upload <path> [--task-id ID] [--label TEXT] [--json]
+  orbit file upload <path> [--task-id ID] [--label TEXT] [--as test-report] [--pin] [--json]
   orbit file fetch <id> [--json]
   orbit file list [--task-id ID | --session-id ID | --evidence-id ID] [--json]
+  orbit file pin <id> [--unpin] [--json]
 
 Screenshots and reports go here rather than into a commit. Every file has an id, a sha256 and an
-orbit-attachment: link to put in a reply. upload and fetch act for the session they run in
+orbit-attachment: link to put in a reply. upload, fetch and pin act for the session they run in
 (ORBIT_SESSION_ID): a file stays with the session that uploads it, and arrives in that session's
 uploads directory, outside the checkout.
 Run 'orbit file <command> --help' for options.
@@ -30,7 +31,7 @@ var fileActionHelp = map[string]string{
 	"upload": `orbit file upload — keep a file or a folder in Orbit
 
 Usage:
-  orbit file upload <path> [--task-id ID] [--label TEXT] [--json]
+  orbit file upload <path> [--task-id ID] [--label TEXT] [--as test-report] [--pin] [--json]
 
 Options:
   [path]                   The file or directory, absolute or relative to here. Required. Its real
@@ -43,7 +44,16 @@ Options:
                            input, use task_create's attachmentIds; a folder goes file by file
   --label TEXT             What this is, in a few words (up to ` + strconv.Itoa(fileLabelMaxChars) + ` characters). On a directory
                            it is the bundle's
+  --as test-report         Read one Playwright JSON or JUnit XML report and keep a summary with the
+                           file, answered as "testReport": total, passed, failed, skipped, duration,
+                           and failed and skipped test names. It stays after the file expires, and
+                           evidence citing the file shows it. Anything else, a directory included,
+                           is kept as a plain file and "note" says so
+  --pin                    Keep it past the date it would expire on, as orbit file pin does
   --json
+
+A file expires 14 days after upload unless evidence cites it; once a version citing it is sent back
+or replaced, 30 days after that. Its name, size, sha256 and test summary stay; only the bytes go.
 
 The answer has the id, sha256, sizeBytes and an orbit-attachment: link to put in a reply. A directory
 becomes one folder bundle with a manifest of its relative paths, and each file is listed with its
@@ -82,19 +92,36 @@ it lists the session it runs in. A folder is one row of kind "bundle": fetch it 
 inside. This says what exists; fetch reads this session's own files and those cited by evidence it
 judges.
 `,
+	"pin": `orbit file pin — keep a file past the date it would expire on
+
+Usage:
+  orbit file pin <id> [--unpin] [--json]
+
+Options:
+  [id]                     The file's or the bundle's id, as upload or list gave it. Required
+  --unpin                  Take the pin away. If its date has passed, the file expires at the next
+                           cleanup, within the hour
+  --json
+
+One of this session's own files, or one cited by evidence it judges. A bundle's id covers the files
+in it. Pinning an expired file brings it back while its bytes are still kept, and says so if they
+have gone.
+`,
 }
 
-// fileCLICapabilities are the file tools' commands. upload and fetch are SessionOnly: a terminal outside a session has
-// no session for a file to stay with, or uploads directory for one to arrive in.
+// fileCLICapabilities are the file tools' commands. upload, fetch and pin are SessionOnly: a terminal outside a session
+// has no session for a file to stay with, or uploads directory for one to arrive in.
 var fileCLICapabilities = []cliCapabilitySpec{
 	{
 		Tool:  "file_upload",
 		Argv:  []string{"orbit", "file", "upload"},
-		Usage: "orbit file upload <path> [--task-id ID] [--label TEXT] [--json]",
+		Usage: "orbit file upload <path> [--task-id ID] [--label TEXT] [--as test-report] [--pin] [--json]",
 		Arguments: []string{
 			"[path] (required; a file or a directory)",
 			"--task-id <id> (this session's own task; any other is refused)",
 			"--label <text>",
+			"--as test-report (keep a summary of a Playwright JSON or JUnit XML report)",
+			"--pin (keep it past the date it would expire on)",
 			"--json",
 		},
 		Mutates:     true,
@@ -105,6 +132,14 @@ var fileCLICapabilities = []cliCapabilitySpec{
 		Argv:        []string{"orbit", "file", "fetch"},
 		Usage:       "orbit file fetch <id> [--json]",
 		Arguments:   []string{"[id] (required; a file's or a bundle's)", "--json"},
+		SessionOnly: true,
+	},
+	{
+		Tool:        "file_pin",
+		Argv:        []string{"orbit", "file", "pin"},
+		Usage:       "orbit file pin <id> [--unpin] [--json]",
+		Arguments:   []string{"[id] (required; a file's or a bundle's)", "--unpin", "--json"},
+		Mutates:     true,
 		SessionOnly: true,
 	},
 	{
@@ -148,11 +183,16 @@ func cmdFileCLI(args []string, out io.Writer) error {
 	}
 	fs := newCLIFlagSet("orbit file " + action)
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
-	var taskID, label, sessionID, evidenceID *string
+	var taskID, label, as, sessionID, evidenceID *string
+	var pin, unpin *bool
 	switch action {
 	case "upload":
 		taskID = fs.String("task-id", "", "this session's own task")
 		label = fs.String("label", "", "what this is")
+		as = fs.String("as", "", "test-report: keep a summary of this report")
+		pin = fs.Bool("pin", false, "keep it past the date it would expire on")
+	case "pin":
+		unpin = fs.Bool("unpin", false, "take the pin away")
 	case "list":
 		taskID = fs.String("task-id", "", "this task's files")
 		sessionID = fs.String("session-id", "", "this session's files")
@@ -170,7 +210,13 @@ func cmdFileCLI(args []string, out io.Writer) error {
 			return fmt.Errorf("orbit file upload takes one path: %s", fileActionHelp["upload"])
 		}
 		tool = "file_upload"
-		toolArgs["path"], toolArgs["taskId"], toolArgs["label"] = positionals[0], *taskID, *label
+		toolArgs["path"], toolArgs["taskId"], toolArgs["label"], toolArgs["as"], toolArgs["pin"] = positionals[0], *taskID, *label, *as, *pin
+	case "pin":
+		if len(positionals) != 1 {
+			return fmt.Errorf("orbit file pin takes one id: %s", fileActionHelp["pin"])
+		}
+		tool = "file_pin"
+		toolArgs["id"], toolArgs["unpin"] = positionals[0], *unpin
 	case "fetch":
 		if len(positionals) != 1 {
 			return fmt.Errorf("orbit file fetch takes one id: %s", fileActionHelp["fetch"])

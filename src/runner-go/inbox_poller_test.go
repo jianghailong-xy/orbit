@@ -1116,7 +1116,9 @@ func TestInboxPollerOverHTTPSIsTheLongPollItWas(t *testing.T) {
 	if held := requests[0].answered.Sub(requests[0].at); held < 25*time.Second {
 		t.Errorf("the long poll was held %s", held)
 	}
-	if gap := requests[1].at.Sub(requests[0].answered); gap > 250*time.Millisecond {
+	// This tells "at once" from the second's wait after a failed poll: that regression's gap is never under
+	// inboxHTTPRetry, so a smaller number would catch nothing more and only measure scheduling delay on a loaded host.
+	if gap := requests[1].at.Sub(requests[0].answered); gap >= inboxHTTPRetry {
 		t.Errorf("the next poll went %s after an empty one", gap)
 	}
 	for i, r := range requests {

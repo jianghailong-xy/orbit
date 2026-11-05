@@ -5,6 +5,7 @@ import {
   HttpCode,
   Param,
   Post,
+  Put,
   Query,
   Res,
   StreamableFile,
@@ -20,7 +21,7 @@ import { PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { FileUploadCleanupInterceptor } from '../files/file-upload-cleanup.interceptor';
 import { FILE_UPLOAD_STORAGE, type FileUpload } from '../files/file-upload-storage';
-import { streamable } from '../files/files.service';
+import { streamable, type FileView, type StorageUsage } from '../files/files.service';
 import { AttachmentsService } from './attachments.service';
 import { MAX_UPLOAD_BYTES } from './attachments.media';
 
@@ -62,6 +63,26 @@ export class AttachmentsController {
     @Param('id', PublicIdPipe) id: string,
   ): Promise<void> {
     return this.attachments.removeTaskInput(user.userId, id);
+  }
+
+  // What Settings shows of this account's files. Ahead of `:id`, which would take `usage` for an id.
+  @PatScope('tasks:read', { workspaceConfinable: false })
+  @Get('usage')
+  usage(@CurrentUser() user: AuthUser): Promise<StorageUsage> {
+    return this.attachments.usage(user.userId);
+  }
+
+  // A pin keeps a file past its date (docs/orbit-files-design.md §2.8), and brings an expired one back while its bytes remain.
+  @PatScope('tasks:write', { workspaceConfinable: false })
+  @Put(':id/pin')
+  pin(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string): Promise<FileView> {
+    return this.attachments.setPinned(user.userId, id, true);
+  }
+
+  @PatScope('tasks:write', { workspaceConfinable: false })
+  @Delete(':id/pin')
+  unpin(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string): Promise<FileView> {
+    return this.attachments.setPinned(user.userId, id, false);
   }
 
   @PatScope('tasks:read', { workspaceConfinable: false })

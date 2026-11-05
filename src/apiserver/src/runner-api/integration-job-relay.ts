@@ -31,7 +31,6 @@ import {
   INTEGRATION_PROGRESS_V2,
   INTEGRATION_PROGRESS_V2_PROTOCOL,
   LandingWorkSessionFacts,
-  MAX_CHECK_OUTPUT_TAIL,
   PROMOTION_AUTOMATIC_LAND,
   REPORTABLE_JOB_PHASES,
   REPORTABLE_JOB_STATES,
@@ -122,6 +121,7 @@ import {
   takenOverText,
 } from '../projects/project-integration-event';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
+import { clipCheckTail, redactCheckOutput, redactFailureDetail } from './check-output-redaction';
 import { orderedIds } from '../common/lock-order';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
@@ -1604,6 +1604,10 @@ async function progressRefusal(
  * A chunk whose seq is already stored is the chunk already stored: the insert is ON CONFLICT DO
  * NOTHING and the answer is still accepted, so a runner that resends after a lost answer does not
  * create a second copy or a failure.
+ *
+ * WHAT IS STORED IS NOT QUITE WHAT WAS SENT: no NUL, which PostgreSQL's text cannot hold and which made
+ * this door answer 500, and nothing `redactCheckOutput` recognises. A chunk is read on its own here, so
+ * a secret split across two of them is the runner's to catch, and it holds output back for that.
  */
 export async function receiveIntegrationJobOutput(
   prisma: PrismaService,
@@ -1673,7 +1677,11 @@ function outputChunk(body: IntegrationJobOutputRequest): {
   if (typeof body.text !== 'string') {
     throw new IntegrationJobRefused('INVALID_RESULT', 'text is the chunk itself');
   }
-  if (Buffer.byteLength(body.text, 'utf8') > INTEGRATION_LOG_MAX_CHUNK_BYTES) {
+  // Measured again once redacted: a marker can be longer than what it replaces, and the table holds
+  // the stored text to this same number. Far past anything a runner's 16 KiB chunk comes to.
+  const tooLong = (text: string): boolean => Buffer.byteLength(text, 'utf8') > INTEGRATION_LOG_MAX_CHUNK_BYTES;
+  const text = tooLong(body.text) ? body.text : redactCheckOutput(body.text);
+  if (tooLong(text)) {
     throw new IntegrationJobRefused(
       'INVALID_RESULT',
       `one chunk carries at most ${INTEGRATION_LOG_MAX_CHUNK_BYTES} bytes`,
@@ -1684,7 +1692,7 @@ function outputChunk(body: IntegrationJobOutputRequest): {
     leaseOwner: body.leaseOwner,
     check: { name, index },
     seq: body.seq,
-    text: body.text,
+    text,
   };
 }
 
@@ -2275,14 +2283,15 @@ export async function applyIntegrationJobResult(
       };
     }
 
-    // J-S3's answer about a branch with nothing of the task's own on it (0300). It is not a landing,
+    // The answer about a branch with nothing of the task's own on it (0300), which a runner gives before
+    // J-S2 since contract revision 33 (§2.4), and from inside J-S3 before that. It is not a landing,
     // so the receipt below is not automatic: what a reader of a receipt asks is "is this task's work
     // on that target", and this answer says the branch it was handed holds none of it. It is written
     // only when the task has no work of its own ANYWHERE — where the honest answer is that there is
     // nothing of this task's to land, which is the fact §2.5 J9 releases dependents on.
     //
     // TWO SPELLINGS REACH HERE, and both are the same fact. A runner of 0300's vintage reports
-    // NOTHING_TO_LAND outright. A runner older than that reports ALREADY_LANDED — which J-S3 reaches
+    // NOTHING_TO_LAND outright. A runner older than that reports ALREADY_LANDED — which its J-S3 reached
     // by asking whether the source tip is contained in the base, and an EMPTY branch is contained in
     // everything: its tip is the commit it forked at. That spelling is recognised from the row rather
     // than from git, because the row holds both halves: a source tip equal to the session's own base
@@ -2471,6 +2480,8 @@ export async function applyIntegrationJobResult(
     }
 
     const checks = clipChecks(body.checks ?? []);
+    // The job row and the item's payload store this, and the item's delivery text quotes it.
+    const errorDetail = redactFailureDetail(body.errorDetail ?? null);
     // J-T13's commits, with the control plane's own reading of each one: whether it arrived from
     // outside the landing queue, and which merge of this account's put it there. Written on the job
     // row — never in `errorDetail`, which is copied verbatim into an item's payload and its
@@ -2558,7 +2569,7 @@ export async function applyIntegrationJobResult(
       checks: checks as unknown as Prisma.InputJsonValue,
       conflicts: (body.conflicts ?? []).slice(0, 200),
       errorCode: body.errorCode ?? undefined,
-      errorDetail: (body.errorDetail ?? undefined) as Prisma.InputJsonValue | undefined,
+      errorDetail: (errorDetail ?? undefined) as Prisma.InputJsonValue | undefined,
       // J-T13's list, enriched above. NULL for every job that did not move the upstream.
       upstreamMovedCommits: (upstreamMovedCommits ?? undefined) as Prisma.InputJsonValue | undefined,
       receiptIds: [...receiptIds, ...promotionReceiptIds, ...recoveredReceiptIds],
@@ -2692,11 +2703,14 @@ export async function applyIntegrationJobResult(
     // `applyPromotionJobResult` kept the answer it had for that reason, and the report is on the job
     // row written above; an item opened about it would be a todo nothing is left to close, escalated
     // to the owner and counted against the project's next candidate by M-T11.
-    const candidateMovedOn = itemKind !== null && job.promotionId !== null
-      && !LIVE_PROMOTION_STATES.includes((await tx.projectPromotion.findUnique({
+    const candidateRow = itemKind !== null && job.promotionId !== null
+      ? await tx.projectPromotion.findUnique({
         where: { id: job.promotionId },
-        select: { state: true },
-      }))?.state as PromotionState);
+        select: { state: true, sourceKind: true, taskId: true },
+      })
+      : null;
+    const candidateMovedOn = itemKind !== null && job.promotionId !== null
+      && !LIVE_PROMOTION_STATES.includes(candidateRow?.state as PromotionState);
     // J-T8: a job somebody asked to stop does not open a card for the work it is stopping. A
     // failure it reports before it gets the stop is a fact about work nobody is waiting for any
     // more — the task was reopened or taken away, the candidate was superseded or retired — and an
@@ -2716,6 +2730,16 @@ export async function applyIntegrationJobResult(
       const mainBranch = job.kind === 'LAND_TASK'
         ? null
         : mainBranchOf(await readProjectCodebase(tx, job.projectId));
+      // §10.5 O-L8: a TASK_BRANCH candidate's merge is its task's, and a promotion's job row names no
+      // task, so the title comes through the candidate. `task_id` is a history reference there too.
+      const candidateTask = candidateRow?.sourceKind === 'TASK_BRANCH' && candidateRow.taskId
+        ? await tx.task.findFirst({ where: { id: candidateRow.taskId }, select: { title: true } })
+        : null;
+      // §10.5 O-L8: a runner that does not declare integration-observe/v1 is handed this check with no
+      // commit (`handOut`), so all this code says is that the branch is not on the remote by that name.
+      const outdatedRunner = checkedSourceKind === 'TASK_BRANCH' && body.errorCode === 'SOURCE_BRANCH_MISSING' && job.runnerId
+        ? await outdatedRunnerName(tx, job.runnerId)
+        : null;
       // §4.2 / §2.9 LS1: the landing session this attempt belongs to. Read from the landing row —
       // its session id is pre-generated when the subject opens, so it exists even before the claim
       // inserted the session itself. The item's card opens it (`OPEN_LANDING`).
@@ -2734,7 +2758,8 @@ export async function applyIntegrationJobResult(
         sessionId: job.sessionId,
         promotionId: job.promotionId,
         state: state as 'CONFLICT' | 'CHECK_FAILED' | 'ERROR',
-        title: integrationItemTitle(state, job.kind, task?.title ?? 'a task', mainBranch),
+        title: integrationItemTitle(state, job.kind, task?.title ?? candidateTask?.title ?? 'a task', mainBranch,
+          candidateRow?.sourceKind ?? null),
         dedupeKey: integrationDedupeKey(state, job.id),
         // §4.7 H4: when this job is a rerun whose item the clock handed to the owner while it ran, the
         // failure it opens stays theirs — the coordinator's rerun does not carry the decision back.
@@ -2747,10 +2772,12 @@ export async function applyIntegrationJobResult(
           conflicts: body.conflicts ?? [],
           checks,
           errorCode: body.errorCode ?? null,
-          errorDetail: body.errorDetail ?? null,
+          errorDetail,
           // J-T13: at the payload's TOP level, a field of its own — the delivery text's generator
           // does not read it, so the replay it does stays byte-for-byte the same.
           upstreamMovedCommits,
+          outdatedRunner,
+          candidateSourceKind: candidateRow?.sourceKind ?? null,
           // §4.2 / §2.9: the same rule for the landing session and the round it failed in — the
           // card reads them, the delivery text never does.
           landingSessionId,
@@ -3467,6 +3494,10 @@ function fullyAppliedComment(input: {
     /** J-T13's commits, when a LAND_PROMOTION ended because the upstream moved under it. Its own
      *  top-level field, never inside `errorDetail` (which the delivery text quotes verbatim). */
     upstreamMovedCommits: UpstreamMovedCommitsEnriched | null;
+    /** §10.5 O-L8: the runner a TASK_BRANCH check's SOURCE_BRANCH_MISSING came from, when it is out of date. */
+    outdatedRunner: string | null;
+    /** §10.5 O-L8: the source of the candidate this job is about, when it is about one. */
+    candidateSourceKind: string | null;
     /** §2.9 LS1: the landing session this attempt belongs to; null for a job with no subject.
      *  Top-level, never inside `errorDetail`, and never read by the delivery text (G6). */
     landingSessionId: string | null;
@@ -3502,6 +3533,9 @@ function fullyAppliedComment(input: {
     // so these never go inside it.
     landingSessionId: detail.landingSessionId,
     round: detail.round,
+    // §10.5 O-L8: a candidate that is one task's branch, recorded for the words its item is written in.
+    // The delivery text reads this one, so a project branch's payload stays without it (G6).
+    ...(detail.candidateSourceKind === 'TASK_BRANCH' ? { sourceKind: detail.candidateSourceKind } : {}),
     ...(detail.retry ? { retry: detail.retry } : {}),
     ...(detail.skippedCheck ? { skippedCheck: detail.skippedCheck } : {}),
   };
@@ -3532,17 +3566,28 @@ function fullyAppliedComment(input: {
     errorCode: detail.errorCode,
     errorDetail: detail.errorDetail,
     ...(detail.upstreamMovedCommits ? { upstreamMovedCommits: detail.upstreamMovedCommits } : {}),
+    ...(detail.outdatedRunner ? { outdatedRunner: detail.outdatedRunner } : {}),
     ...classified,
   };
+}
+
+/**
+ * §10.5 O-L8: the name to put on the item when this runner does not declare integration-observe/v1 at
+ * this moment — its display name, else its name — or null when it does, or is gone.
+ */
+async function outdatedRunnerName(tx: Prisma.TransactionClient, runnerId: string): Promise<string | null> {
+  const runner = await tx.runner.findFirst({
+    where: { id: runnerId },
+    select: { name: true, displayName: true, capabilities: true },
+  });
+  if (!runner || runner.capabilities.includes(INTEGRATION_OBSERVE_CLAIM)) return null;
+  return runner.displayName || runner.name;
 }
 
 /** The runner clips its own output, and this clips it again: a row is not a log file. */
 function clipChecks(checks: IntegrationCheckResult[]): IntegrationCheckResult[] {
   return checks.slice(0, 8).map((check) => ({
     ...check,
-    outputTail: typeof check.outputTail === 'string'
-      // eslint-disable-next-line no-control-regex
-      ? check.outputTail.replace(/ /g, '').slice(-MAX_CHECK_OUTPUT_TAIL)
-      : '',
+    outputTail: typeof check.outputTail === 'string' ? clipCheckTail(check.outputTail) : '',
   }));
 }

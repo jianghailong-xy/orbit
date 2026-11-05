@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import type { FileUpload } from '../files/file-upload-storage';
-import { FilesService, type OpenedFile } from '../files/files.service';
+import { FilesService, type FileView, type OpenedFile, type StorageUsage } from '../files/files.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertEngineSession } from '../sessions/engine-session';
 import { assertValidUpload } from './attachments.media';
@@ -93,6 +93,18 @@ export class AttachmentsService {
    */
   async getForOwner(ownerId: string, id: string): Promise<OpenedFile> {
     const file = await this.files.open({ id, ownerId });
+    if (!file) throw new NotFoundException('attachment not found');
+    return file;
+  }
+
+  /** What this account keeps (§2.10), for its Settings. */
+  usage(ownerId: string): Promise<StorageUsage> {
+    return this.files.usage(ownerId);
+  }
+
+  /** Pin one of this account's files or take its pin away; another account's is the same 404 as one that is not there. */
+  async setPinned(ownerId: string, id: string, pinned: boolean): Promise<FileView> {
+    const file = await this.files.setPinned({ id, ownerId }, pinned);
     if (!file) throw new NotFoundException('attachment not found');
     return file;
   }

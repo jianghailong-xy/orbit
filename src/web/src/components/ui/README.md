@@ -168,7 +168,7 @@ field.current?.setSelectionRange(position, position);
 
 `ImagePreview`（`ImagePreview.tsx` + `.css`）和 `Image`（`Image.tsx` + `.css`）替代被替换组件库的 `Image.PreviewGroup` 与 `Image`。
 
-- `ImagePreview`：受控的全屏看图层。props 有 `open`、`onClose`（关闭键、Esc、按遮罩时调用；按图片本身不关闭）、`items`（`{ src, alt }`）、`current` 与 `onCurrentChange`。`group` 表示一组可翻页的图片：图片下方显示“n / 总数”；多于一张时两侧有上一张/下一张按钮，并响应 ←/→，到两端即停。`origin` 是打开时放大的起点（视口坐标，即按下的缩略图中心）。
+- `ImagePreview`：受控的全屏看图层。props 有 `open`、`onClose`（关闭键、Esc、按遮罩时调用；按图片本身不关闭）、`items`（`{ src, alt }`）、`current` 与 `onCurrentChange`。`group` 表示一组可翻页的图片：图片下方显示“n / 总数”；多于一张时两侧有上一张/下一张按钮，并响应 ←/→，到两端即停。`origin` 是打开时放大的起点（视口坐标，即按下的缩略图中心）。`position` 改写位置文字（证据文件的 `3 of 8`）。`caption` 是位置文字下面的一段说明（证据文件的路径、大小、尺寸和 sha256），给了它，图片就让出底部的空间，只在说明之上显示。`actions` 是接在缩放键后面的按钮（证据文件的 Download）。`items` 里的 `src` 可以先空着：字节还在读时显示空框，读到后再填上。
 - 外观同被替换预览：45% 黑遮罩，图片最大为窗口宽度和 70% 高度。右上角的关闭键和两侧的切换键都是 42px 圆键，距边 12px，10% 黑底，悬停时 20%。距底部 32px 处，是 65% 白的位置文字，下面是一排 42px 按钮组成的胶囊：上下翻转、左右翻转、左转、右转、缩小、放大。
 - 缩放（按钮、滚轮、双击）、拖动、双指缩放与拖动、松开后的回弹，都沿用被替换预览的算法（rc-image，MIT，见 `rc-image.LICENSE`）：每次缩放 1.5 倍，范围 1–50 倍。翻页时新图以原尺寸立即出现。
 - 基于 Base UI Dialog，模态焦点、Esc、文档滚动锁与弹层层级沿用本目录约定：顶层 z-index 为 1080（被替换预览的 1000+80），在 Orbit 弹层内按层递增。打开时焦点在关闭键（同被替换预览），关闭后回到打开前的位置。打开期间登记为通知的挂载层。

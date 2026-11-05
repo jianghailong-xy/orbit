@@ -225,11 +225,17 @@ const cases = [
     replaceScript('  if [ -d "$FILES_DIR" ] && [ -z "$(ls -A "$FILES_DIR" | grep -vx tmp)" ]; then\n    return 0\n  fi\n', '')],
   ['a missing files directory taken for an empty one', 'a files directory that is not there is still tried',
     replaceScript('if [ -d "$FILES_DIR" ] && [ -z', 'if [ -z')],
+  // Orbit Files' quota and grace period of 2026-11-03 (task T9): pgbackup's two retention values with pgbackup's own
+  // defaults, so that the grace period and the backups read one number, and no other line beside them.
+  ['the grace period reading another default than pgbackup', 'nothing beyond the approved configuration was added',
+    replace('      ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-2}"\n      # Optional: managed runners', '      ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-1}"\n      # Optional: managed runners')],
+  ['a quota set for every deployment', 'nothing beyond the approved configuration was added',
+    replace('ORBIT_FILES_QUOTA_BYTES: "${ORBIT_FILES_QUOTA_BYTES:-}"', 'ORBIT_FILES_QUOTA_BYTES: "${ORBIT_FILES_QUOTA_BYTES:-1073741824}"')],
   // The mirror's --delete on an empty or wrong mount, which would clear the only off-host copy.
   ['a mirror of an archive with no base backup', 'the mirror refuses an archive that cannot be the real one',
-    replaceScript('if [ -z "$(list_backups)" ] || [ -z "$(ls -A "$WAL_DIR")" ]; then', 'if [ -z "$(ls -A "$WAL_DIR")" ]; then')],
+    replaceScript('if [ -z "$(list_backups)" ] || [ -z "$(ls -A "$WAL_DIR" | segment_lines)" ]; then', 'if [ -z "$(ls -A "$WAL_DIR" | segment_lines)" ]; then')],
   ['a mirror of an archive with no WAL', 'the mirror refuses an archive that cannot be the real one',
-    replaceScript('if [ -z "$(list_backups)" ] || [ -z "$(ls -A "$WAL_DIR")" ]; then', 'if [ -z "$(list_backups)" ]; then')],
+    replaceScript('if [ -z "$(list_backups)" ] || [ -z "$(ls -A "$WAL_DIR" | segment_lines)" ]; then', 'if [ -z "$(list_backups)" ]; then')],
   ['a base backup cut short that stays', 'a base backup cut short by a stopped container does not outlive it',
     replaceScript('rm -rf "$BASE_DIR"/.staging-*\n', '')],
 ];

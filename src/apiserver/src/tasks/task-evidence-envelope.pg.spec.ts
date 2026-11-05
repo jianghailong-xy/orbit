@@ -329,6 +329,19 @@ suite('the evidence envelope is checked against rows, and the receipt says what 
       'EVIDENCE_NO_RESOLVABLE_CITATION',
       'CITE_THIS_TASKS_OWN_ROWS',
     );
+    // What it says is what gets a run out: the handle that resolves, and why waiting will not help.
+    await assert.rejects(
+      submit(envelope({
+        criterion: { key, text: CRITERION_TEXT },
+        checks: [{ kind: 'COMMIT', ref: 'a'.repeat(40) }, { kind: 'ARTIFACT', ref: 'docs/evidence/audit.json' }],
+      }), 'names-the-handle'),
+      (error: unknown) => {
+        const { message } = (error as BadRequestException).getResponse() as { message: string };
+        assert.match(message, /Run the checks with bg_run and cite the job id it returns \(bgj_\.\.\.\) as a TOOL_CALL ref/);
+        assert.match(message, /submitting the same refs again later will not help/);
+        return true;
+      },
+    );
     // Citing nothing at all is the same fact said more briefly, and gets the same answer.
     await refusal(
       submit(envelope({ criterion: { key, text: CRITERION_TEXT }, checks: [] }), 'empty-checks'),

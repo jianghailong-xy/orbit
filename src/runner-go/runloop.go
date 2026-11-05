@@ -41,9 +41,10 @@ const (
 
 // On shutdown the runner stops claiming, signals each session to drain, and waits up
 // to this long for in-flight turns to finish + ack before exiting. Idle sessions detach
-// immediately; only a mid-turn session consumes any of this budget. Keep systemd's
-// TimeoutStopSec comfortably above it (see service.go) so we exit before any SIGKILL.
-const shutdownDrainTimeout = 100 * time.Second
+// immediately; only a mid-turn session consumes any of this budget. The service manager's
+// stop limit stays above the whole stop (shutdown_drain.go, THE BUDGETS) so we exit before
+// any SIGKILL.
+var shutdownDrainTimeout = hostStopBudget.drain
 
 type runLoopStopReason uint8
 
@@ -478,10 +479,15 @@ const worktreeGCInterval = 5 * time.Minute
 // sweep would delete the checkouts it is about to reattach to. A reclaim that set sessions aside
 // is the same hazard — those rows have no local supervisor either — so the deferred retry is
 // what arms it.
+//
+// That schedule is the first half's, and it does not change. The second half (gcResumableCheckouts) runs on it
+// too, except while resumableWaitUntil is ahead (sweepResumable). That is in memory on purpose: a restart looks
+// at once.
 type worktreeSweeper struct {
-	interval time.Duration
-	armed    bool
-	nextAt   time.Time
+	interval           time.Duration
+	armed              bool
+	nextAt             time.Time
+	resumableWaitUntil time.Time
 }
 
 // due reports whether a sweep should run now, advancing the schedule when it says yes. An unarmed
@@ -493,6 +499,25 @@ func (s *worktreeSweeper) due(now time.Time) bool {
 	}
 	s.nextAt = now.Add(s.interval)
 	return true
+}
+
+// sweepResumable runs the second half of a sweep, unless a look that found nothing is still waiting out its
+// resumableSweepWait, which only a disk back above its floor ends early. A reading that failed says nothing about
+// the disk, so it leaves the wait as it is. This decides when anybody looks and never what may go.
+func (s *worktreeSweeper) sweepResumable(t *Transport, pool *sessionPool, pressure worktreeGCPressure) {
+	if pool.clock.Now().Before(s.resumableWaitUntil) {
+		pressure = pressure.again()
+		if !pressure.measured || pressure.belowFloor() {
+			return
+		}
+		s.resumableWaitUntil = time.Time{}
+	}
+	if !gcResumableCheckouts(t, pool, pressure) {
+		return
+	}
+	s.resumableWaitUntil = pool.clock.Now().Add(resumableSweepWait)
+	logln(fmt.Sprintf("gc: no resumable checkout can go and the disk is still under its floor; not looking again until %s, or sooner once the disk is back above its floor",
+		s.resumableWaitUntil.UTC().Format(time.RFC3339)))
 }
 
 // reclaimMissingSessions repairs both startup state and an ambiguous claim
@@ -698,6 +723,9 @@ func manualWorktreeCommandAllowed(operationID, leaseOwner, processOwner string) 
 // checked out.
 func settleSessionCheckout(job *ClaimedSession, execDir string) {
 	if job.WT != nil {
+		if checkoutAbsent(job.WT.Path) {
+			return // a session at rest: its next claim does this (restoreAbsentCheckout)
+		}
 		uncommitParkCheckpoint(job.WT)
 	}
 	syncManagedVolume("the session's checkout", execDir)
@@ -1900,6 +1928,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 		}
 		if initiallyActive {
+			// A cold supervisor may stand on a checkout that is not on disk (setupSupervisorCheckout, or
+			// the sweep took it since): it comes back before the supervisor wakes in it.
+			restoreAbsentCheckout(pool, job)
 			if _, ok := pool.activatePrepared(job, stageCredential); ok {
 				return // warm reuse, or wake a cold supervisor for transparent resume
 			}
@@ -1928,7 +1959,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// The branch this session merges into, so branchMergedInto's "already merged" check
 		// judges the target the Merge button names rather than main (see mergeTargetBySession).
 		rememberMergeTarget(job.SessionID, job.MergeTarget)
-		execDir := setupWorktree(job, sessionExecDir(job.WorkDir))
+		execDir := pool.setupSupervisorCheckout(job, sessionExecDir(job.WorkDir), initiallyActive)
 		settleSessionCheckout(job, execDir)
 		jobCtx, cancel := context.WithCancel(context.Background())
 		s, added := pool.register(job, cancel, initiallyActive)
@@ -2041,7 +2072,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	}
 	if worktreeGC.due(time.Now()) {
 		liveSet := pool.ids()
-		gcWorktrees(t, liveSet, measureWorktreePressure(diskFloorMb.Load()))
+		pressure := measureWorktreePressure(diskFloorMb.Load())
+		gcWorktrees(t, liveSet, pressure)
+		worktreeGC.sweepResumable(t, pool, pressure)
 		gcUploads(liveSet)
 	}
 
@@ -2119,7 +2152,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// out is exactly when its disk gets tight. It costs one round trip plus a directory
 		// listing when nothing is due, and the claim long-poll guarantees a lap every 35 seconds.
 		if worktreeGC.due(time.Now()) {
-			gcWorktrees(t, pool.ids(), measureWorktreePressure(diskFloorMb.Load()))
+			pressure := measureWorktreePressure(diskFloorMb.Load())
+			gcWorktrees(t, pool.ids(), pressure)
+			worktreeGC.sweepResumable(t, pool, pressure)
 		}
 		// Saturation, counted against everything this machine is doing rather than
 		// against turn permits alone: a parked session whose runner-hosted build is
@@ -2250,8 +2285,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// in-flight turn would get the very session we're trying to preserve marked FAILED.
 	// Cover provider drain, both release backstops, the final event flush, and a racing
 	// terminal finalization — and the heartbeat's own operations, which keep it beating too
-	// until they are done or stopped (shutdownSequence). systemd's stop timeout and a managed
-	// Pod's termination grace both remain above this whole envelope.
+	// until they are done or stopped (shutdownSequence). The service manager's stop limit
+	// remains above this whole envelope (THE BUDGETS, shutdown_drain.go).
 	drainStart := time.Now()
 	drainDeadline := drainStart.Add(shutdownSupervisorTimeout)
 	// A landing being handed back is sent until the deadline and no longer: past it, the lease
@@ -2305,6 +2340,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// sessions handed on for one is ended now, as a runner stop ends every job it hosts.
 		endHandedOn()
 	}
+	logln(fmt.Sprintf("stop finished after %s: %d session supervisor(s) and %d heartbeat operation(s) left behind",
+		time.Since(drainStart).Round(100*time.Millisecond), left.sessions, left.operations))
 	return restart, endHandedOn
 }
 

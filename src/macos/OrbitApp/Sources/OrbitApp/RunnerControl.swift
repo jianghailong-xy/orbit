@@ -44,6 +44,11 @@ final class RunnerControl {
     /// stopped service still counts as installed (so the UI shows Start, not "Install service").
     var serviceInstalled: Bool { FileManager.default.fileExists(atPath: paths.plistFile.path) }
 
+    /// Where launchd has the agent on disk: its plist says (`LaunchdPlist.domain`).
+    private var domain: String {
+        LaunchdPlist.domain(installed: try? String(contentsOf: paths.plistFile, encoding: .utf8), uid: uid)
+    }
+
     /// Re-read config + log, query the service state, and (if enrolled) the server-side record.
     func refresh() async {
         config = RunnerEnvironment.readConfig(at: paths)
@@ -63,17 +68,23 @@ final class RunnerControl {
             await installService()
             return
         }
-        _ = await Self.launchctl(Launchctl.bootstrap(uid: uid, plistPath: paths.plistFile.path))
+        _ = await Self.launchctl(Launchctl.bootstrap(domain: domain, plistPath: paths.plistFile.path))
         await refresh()
     }
 
+    // bootout and kickstart wait for the runner to leave, and with work in flight it first finishes
+    // what it can: up to a minute (`LaunchdPlist.exitTimeOut`).
     func stop() async {
-        _ = await Self.launchctl(Launchctl.bootout(uid: uid, plistPath: paths.plistFile.path))
+        message = "Stopping. A runner with work in flight can take up to a minute."
+        _ = await Self.launchctl(Launchctl.bootout(domain: domain, plistPath: paths.plistFile.path))
+        message = nil
         await refresh()
     }
 
     func restart() async {
-        _ = await Self.launchctl(Launchctl.kickstartRestart(uid: uid))
+        message = "Restarting. A runner with work in flight can take up to a minute."
+        _ = await Self.launchctl(Launchctl.kickstartRestart(domain: domain))
+        message = nil
         await refresh()
     }
 
@@ -90,6 +101,7 @@ final class RunnerControl {
         installError = nil
         message = nil
         defer { installing = false }
+        let staleDomain = domain   // the plist below replaces the record of where the old agent is
         do {
             let machine = Self.machineArchitecture()
             guard let platformKey = RunnerDownload.platformKey(machine: machine) else {
@@ -115,8 +127,8 @@ final class RunnerControl {
         }
         // bootout any stale instance first so a reinstall replaces it cleanly; bootstrap loads +
         // starts (RunAtLoad). bootout failing (nothing loaded) is expected and ignored.
-        _ = await Self.launchctl(Launchctl.bootout(uid: uid, plistPath: paths.plistFile.path))
-        let r = await Self.launchctl(Launchctl.bootstrap(uid: uid, plistPath: paths.plistFile.path))
+        _ = await Self.launchctl(Launchctl.bootout(domain: staleDomain, plistPath: paths.plistFile.path))
+        let r = await Self.launchctl(Launchctl.bootstrap(domain: domain, plistPath: paths.plistFile.path))
         await refresh()
         if status.running {
             message = "Runner service installed and started."
@@ -136,28 +148,56 @@ final class RunnerControl {
         }
     }
 
-    /// Launch-time upkeep for a Mac an older app enrolled. That app bundled the runner, so its
-    /// LaunchAgent set ORBIT_NO_SELFUPDATE and the app put its own runner back whenever the
-    /// versions differed. This rewrites the plist from today's template, keeping its binary,
-    /// ORBIT_HOME, HOME, PATH and log (`LaunchdPlist.migrated`), and reloads the service if it's
-    /// loaded. The binary isn't replaced: the runner updates it at its next check. No-op when no
-    /// service is installed, once rewritten, and for the CLI's plist. A stopped service picks the
-    /// new plist up at its next start.
+    /// Launch-time upkeep for a Mac an older app enrolled. That app either bundled the runner, so its
+    /// LaunchAgent set ORBIT_NO_SELFUPDATE and the app put its own runner back whenever the versions
+    /// differed, or wrote a plist with no ExitTimeOut, so launchd kills the runner 5 s into any stop.
+    /// This rewrites the plist (`LaunchdPlist.migrated`) and reloads the service if it's loaded. The
+    /// binary isn't replaced: the runner updates it at its next check. No-op when no service is
+    /// installed, once rewritten, and for the CLI's plist. A stopped service picks the new plist up at
+    /// its next start.
+    ///
+    /// The plist is written once the runner has drained, so an app that quits during the drain has
+    /// changed nothing and the next launch starts over.
     func migrateLaunchAgent() async {
         let installed = try? String(contentsOf: paths.plistFile, encoding: .utf8)   // nil: no service
         guard let plist = LaunchdPlist.migrated(from: installed) else { return }
-        do { try Data(plist.utf8).write(to: paths.plistFile) } catch { return }
         let list = await Self.launchctl(Launchctl.list())
-        guard Launchctl.parseList(list.output).loaded else { return }
+        let service = Launchctl.parseList(list.output)
+        guard service.loaded else {
+            try? Data(plist.utf8).write(to: paths.plistFile)
+            return
+        }
         let plistPath = paths.plistFile.path
-        _ = await Self.launchctl(Launchctl.bootout(uid: uid, plistPath: plistPath))
+        let domain = self.domain
+        let bootedOut = await Self.drainAndBootOut(domain: domain, plistPath: plistPath, pid: service.pid)
+        try? Data(plist.utf8).write(to: paths.plistFile)
+        // Nothing to boot out: the owner stopped the runner while it drained, and it stays stopped.
+        guard bootedOut else { return }
         // bootout can return while the runner is still draining, and bootstrap fails until it has
-        // exited (launchd SIGKILLs it after 20s by default), so keep trying a little longer.
+        // exited, so keep trying a little longer.
         for _ in 0..<30 {
-            if await Self.launchctl(Launchctl.bootstrap(uid: uid, plistPath: plistPath)).status == 0 { break }
+            if await Self.launchctl(Launchctl.bootstrap(domain: domain, plistPath: plistPath)).status == 0 { break }
             try? await Task.sleep(nanoseconds: 1_000_000_000)
         }
         await refresh()
+    }
+
+    /// The reload is launchd's own stop, which the plist being replaced may limit to 5 s. A SIGTERM from
+    /// here starts no clock, so the runner finishes what it can and leaves: within 3 minutes, for a runner
+    /// from before Macs had a stop budget of their own. launchd then starts it again at once (KeepAlive),
+    /// and that one heartbeats and is handed work within half a second (measured), so the bootout has to
+    /// go the moment the first has left, before there is anything to cut off. Off the main actor, which
+    /// is busy while the app launches. Returns whether there was a service to boot out.
+    nonisolated private static func drainAndBootOut(domain: String, plistPath: String, pid: Int?) async -> Bool {
+        await Task.detached {
+            if let pid, await launchctl(Launchctl.terminate(domain: domain)).status == 0 {
+                let giveUp = Date().addingTimeInterval(180)
+                while kill(pid_t(pid), 0) == 0, Date() < giveUp {
+                    try? await Task.sleep(nanoseconds: 50_000_000)
+                }
+            }
+            return await launchctl(Launchctl.bootout(domain: domain, plistPath: plistPath)).status == 0
+        }.value
     }
 
     /// One-app enrollment: start the device flow, self-approve (we're the signed-in user), poll

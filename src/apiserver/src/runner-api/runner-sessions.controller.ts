@@ -368,6 +368,9 @@ export class RunnerSessionsController {
     const provided = dto.clientTurnId?.trim();
     assertClientTurnIdNotReserved(provided);
     const clientTurnId = provided || randomUUID();
+    // Who may write to this session at all (session-reach.ts), before anything is revived or charged. A
+    // headless credential has no mode to compare, so it is not asked.
+    if (senderSessionId) await this.sessions.assertMayReach(runner.ownerId, senderSessionId, id, 'message', provided);
     // Deliberately NO explicit `intent`: this endpoint sends the same unqualified message every
     // other client sends, and the server decides from the live turn whether it joins the turn now
     // running or queues as the next one. Naming CURRENT_WORK here made the verb useless against
@@ -482,6 +485,9 @@ export class RunnerSessionsController {
     const provided = dto?.clientTurnId?.trim();
     assertClientTurnIdNotReserved(provided);
     const clientTurnId = provided || randomUUID();
+    // With a message or without, one door and one rule (session-reach.ts): stopping a session's turn is as
+    // much what a narrower session may not do as writing it the next one.
+    await this.sessions.assertMayReach(runner.ownerId, senderSessionId, id, followUp ? 'interruptWithMessage' : 'interrupt');
     return this.sessions.interrupt(
       runner.ownerId,
       id,
@@ -514,7 +520,8 @@ export class RunnerSessionsController {
     @Body() dto: { targetBranch?: string; waitSeconds?: number },
   ) {
     this.assertNoServiceToken(grant);
-    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    const caller = await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    await this.sessions.assertMayReach(runner.ownerId, caller, id, 'merge');
     // A Merge pressed from a session (§10.6 O-R3): recorded with the operation, so a landing it makes
     // on a PLATFORM project's main is put in front of the owner.
     return this.sessions.mergeToMain(runner.ownerId, id, dto.targetBranch, dto.waitSeconds, { requestedBy: 'AGENT' });
@@ -571,7 +578,8 @@ export class RunnerSessionsController {
     @Param('id', PublicIdPipe) id: string,
   ) {
     this.assertNoServiceToken(grant);
-    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    const caller = await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    await this.sessions.assertMayReach(runner.ownerId, caller, id, 'end');
     // TH2/AU2: a live attempt's ending is the worker's to write. Another agent ending it here
     // would settle the session with no outcome and no checkpoint, and "what actually failed" would
     // stop having an answer for every generation after this one.
@@ -592,7 +600,8 @@ export class RunnerSessionsController {
     @Param('id', PublicIdPipe) id: string,
   ) {
     this.assertNoServiceToken(grant);
-    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    const caller = await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    await this.sessions.assertMayReach(runner.ownerId, caller, id, 'complete');
     // The single most expensive action in the incident: a coordinator that disliked a run and
     // completed it. That is not a close — it is a result with no ending written over one that had
     // one, and the session lands as CANCELLED with nothing left to learn from.
@@ -612,7 +621,8 @@ export class RunnerSessionsController {
     @Param('id', PublicIdPipe) id: string,
   ) {
     this.assertNoServiceToken(grant);
-    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    const caller = await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    await this.sessions.assertMayReach(runner.ownerId, caller, id, 'delete');
     await this.attempts.assertMayEndSession(
       runner.ownerId,
       id,

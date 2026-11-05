@@ -124,6 +124,9 @@ func startLink(cfg *RunnerConfig, t *Transport) func() {
 	}
 }
 
+// linkCloseWait is how long a stopping runner waits for the link's connection to end, past the stop's envelope.
+const linkCloseWait = 5 * time.Second
+
 // linkMode is the link mode of the daemon's transport t: where the control plane says its work goes, the work
 // connection, the hints its long polls wait on, and what each session's resume needs.
 type linkMode struct {
@@ -311,7 +314,7 @@ func (m *linkMode) close() {
 	m.closed = true
 	m.updateLocked("")
 	m.mu.Unlock()
-	m.work.wait(5 * time.Second)
+	m.work.wait(linkCloseWait)
 	m.events.close()
 }
 

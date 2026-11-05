@@ -5,10 +5,12 @@ import { ownerEvidenceCard, reviewerHolds, type OwnerEvidenceCard } from './evid
 import {
   CRITERION_MOVED_ACTION,
   REQUIRES_INDEPENDENT_SESSION_ACTION,
+  RUN_MAY_NOT_DECIDE_ACTION,
   TASK_IN_ANOTHER_PROJECT_ACTION,
   criterionStandingRefusal,
   decidingSessionDisqualification,
   decidingSessionProject,
+  runDecisionDisqualification,
   taskProjectDisqualification,
 } from './task-evidence-decision';
 import {
@@ -16,6 +18,7 @@ import {
   storedEvidenceEnvelope,
   type EvidenceCitation,
 } from './task-evidence-envelope';
+import { taskOfRunBehind } from './verifier-write-authority';
 
 /**
  * What a coordinator session is being asked to decide, derived from the ledger every time it is
@@ -256,6 +259,23 @@ export interface RecordedEvidenceDecision {
   decidedAt: Date;
   /** USER when the owner pressed the card; AGENT when a run of this session called the door. */
   decidedByType: CreatorType;
+  /** Whether the version it answered cites a file, which is all a receipt needs to offer that version's files. */
+  citesFiles: boolean;
+}
+
+/**
+ * Which of these versions cite a file. This rides every poll of the pending read, and a coordinator's receipts can be hundreds,
+ * so it is answered from migration 0468's partial index and opens no envelope. That index is proved by this exact predicate:
+ * change one and the other goes with it, or the read falls back to reading every envelope in the table.
+ */
+async function versionsCitingFiles(tx: PrismaTypes.TransactionClient, ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const rows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id
+      FROM task_completion_evidence
+     WHERE id = ANY(${ids}::uuid[])
+       AND evidence @> '{"checks":[{"kind":"FILE"}]}'::jsonb`;
+  return new Set(rows.map((row) => row.id));
 }
 
 function ageSeconds(readAt: Date, submittedAt: Date): number {
@@ -397,9 +417,9 @@ async function unansweredLatestEvidence(
  * was still handed all of them. Now it decides whether the row reaches this reader at all, which
  * is what makes this a read for one session rather than a copy of the account posted through
  * every open window.
- * The predicates are the door's own (`criterionStandingRefusal`, `decidingSessionDisqualification`)
- * for the reason they always were: a second opinion here is drift, and drift is how a queue comes
- * to promise a decision the door refuses.
+ * The predicates are the door's own (`criterionStandingRefusal`, `decidingSessionDisqualification`,
+ * `runDecisionDisqualification`) for the reason they always were: a second opinion here is drift,
+ * and drift is how a queue comes to promise a decision the door refuses.
  */
 export async function readPendingEvidenceJudgments(
   tx: PrismaTypes.TransactionClient,
@@ -415,6 +435,8 @@ export async function readPendingEvidenceJudgments(
   // The project this reader acts for, read once: the door refuses it a task filed under another
   // (`assertDecidingSessionInTaskProject`) — a task moved away included — so this read does too.
   const actsFor = await decidingSessionProject(tx, ownerId, decidingSession.id);
+  // Read once, so that a reader who is no run, which nearly all of them are, pays for it once.
+  const readsAsARun = await taskOfRunBehind(tx, ownerId, decidingSession.id);
   for (const {
     task, latest, heldByCoordinator, coordinatorPlace, dispatching, heldByReviewer, ownerCard,
   } of unanswered) {
@@ -425,6 +447,12 @@ export async function readPendingEvidenceJudgments(
       decidingSession,
     );
     const elsewhere = taskProjectDisqualification(task.projectId, actsFor);
+    // A run decides only what is addressed to it (`runDecisionDisqualification`), so a row of a
+    // sibling is not a question put to one. An owner card is the owner's own press, which the door
+    // does not ask this of, so a row that has one is not asked it here.
+    const asARun = ownerCard || readsAsARun === null
+      ? null
+      : await runDecisionDisqualification(tx, { ownerId, taskId: task.id }, decidingSession);
     // A row in no project is asked of the one conversation its owner card is drawn in. That card
     // decides as its dispatching session wherever it is drawn, so there that session is the one the
     // door's independence question is about; with no dispatching session it is the owner's own
@@ -440,8 +468,8 @@ export async function readPendingEvidenceJudgments(
           : await decidingSessionDisqualification(
             tx, { ownerId, taskId: task.id }, { id: dispatching.id, taskId: dispatching.taskId },
           );
-    // What the door would refuse this reader, in the door's order: the work first, then the project.
-    const refusedHere = independenceOf ?? elsewhere;
+    // What the door would refuse this reader, in the door's order: the work, the project, a run.
+    const refusedHere = independenceOf ?? elsewhere ?? asARun;
     // Asked of the door's own predicate rather than re-derived from `envelope` above: whether a
     // decision can be recorded is the door's question, and a second opinion here is exactly the
     // drift that would put an undecidable row back among the answerable ones.
@@ -470,7 +498,9 @@ export async function readPendingEvidenceJudgments(
         disqualification: refusedHere,
         requiredAction: independenceOf !== null
           ? REQUIRES_INDEPENDENT_SESSION_ACTION
-          : elsewhere !== null ? TASK_IN_ANOTHER_PROJECT_ACTION : null,
+          : elsewhere !== null
+            ? TASK_IN_ANOTHER_PROJECT_ACTION
+            : asARun !== null ? RUN_MAY_NOT_DECIDE_ACTION : null,
       },
       ownerCard,
     };
@@ -499,7 +529,7 @@ export async function readPendingEvidenceJudgments(
     // One its project's coordinator holds, or that waits for it, is asked of nobody; the
     // conversation that coordinator IS is shown which of the two it is, and nobody else.
     if (standing === null) {
-      if (disqualification === null && elsewhere === null && !heldByCoordinator) pending.push(row);
+      if (disqualification === null && elsewhere === null && asARun === null && !heldByCoordinator) pending.push(row);
       else if (
         coordinatorPlace?.place === 'WAITING'
         && coordinatorPlace.coordinatorSessionId === decidingSession.id
@@ -549,9 +579,10 @@ export async function readPendingEvidenceJudgments(
       decidedAt: true,
       decidedByType: true,
       task: { select: { id: true, title: true, projectId: true } },
-      evidence: { select: { revision: true } },
+      evidence: { select: { id: true, revision: true } },
     },
   });
+  const citing = await versionsCitingFiles(tx, recorded.map((row) => row.evidence.id));
 
   return {
     readAt,
@@ -571,6 +602,7 @@ export async function readPendingEvidenceJudgments(
       note: row.note,
       decidedAt: row.decidedAt,
       decidedByType: row.decidedByType,
+      citesFiles: citing.has(row.evidence.id),
     })),
   };
 }

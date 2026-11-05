@@ -63,8 +63,95 @@ written (`.staging-*`) are excluded, host keys are checked against the mounted `
 a failure is logged (`ERROR: off-host sync … failed`) without interrupting local backups. The
 sidecar installs `rsync`/`openssh-client` at start, so it needs to reach an Alpine mirror once
 per container start; without that it says so and keeps backing up locally. It refuses to mirror an
-archive with no base backup or no WAL (`ERROR: refusing off-host sync …`), so an empty or wrong mount
-cannot clear the target.
+archive with no base backup or no finished WAL segment (`ERROR: refusing off-host sync …`), so an empty or
+wrong mount cannot clear the target.
+
+A target sharing a segment with this archive keeps it through `--delete`. One sharing none, on a first sync or fallen behind
+past retention, is sent `wal/` first, on its own and deleting nothing, and only then gets that mirror. A target therefore
+holds a finished segment before it holds a base backup, and keeps one from then on, so a sync cut short at any point is
+carried on by the next poll with nobody acting.
+
+`--delete` does not take the target's last base backup before another has landed. A target holding one of this archive's base
+backups whole keeps that one through `--delete`, which can then make room first: at the default `ORBIT_BASE_BACKUP_KEEP=2`, a
+target in step always holds one. A target holding base backups and none of those whole (`ORBIT_BASE_BACKUP_KEEP=1`, fallen behind
+past retention, or the one it shares only partly there) is sent the whole archive first, deleting nothing, and `--delete` runs
+only if that finished. For that round its disk needs room for what it holds and the whole archive at once. At
+`ORBIT_BASE_BACKUP_KEEP=1` that is every new base backup, so give that disk room for two.
+
+**A target that cannot hold both stops until a person acts.** Nothing is deleted, the old base backups stay whole, and the same
+failure is logged every poll:
+
+```text
+ERROR: off-host sync to … failed: … No space left on device … Nothing was deleted: the target cannot hold its old base backups and this archive at once, and the old ones stay until the new ones have landed. Free room on the backup host, or take the old ones off that disk by hand, and the next poll carries on.
+```
+
+While it lasts the mirror does not follow this archive: WAL keeps landing until it fills the disk too, but the new base backup
+does not, and WAL trimmed here since the last sync never reaches the target. There are two ways out, and the next poll takes up
+either with nobody else acting. Free room on that disk, enough for both, and the old base backups go only after the new ones
+have landed. Or take the old base backups off that disk by hand, when it can never hold both: that is a person's choice to have no
+complete base backup on the target until the next sync has finished, which is why the sidecar does not make it.
+
+**It also reads the target first, and leaves another cluster's archive alone.** A new cluster has a real
+base backup and real WAL of its own, so one started before a restore would otherwise replace the only copy
+of the old history. Each poll, before `--delete`, the sidecar lists the target's `wal/` and `base/`:
+
+| What the target holds | What happens |
+| --- | --- |
+| Nothing in `base/` and no finished segment, or the directory is not there yet | A first install: it syncs |
+| Anything in `base/` and no finished segment | Refused: nothing there says whose it is, whatever it is called |
+| Segments whose smallest has this cluster's system identifier | The same cluster, restored or back after an outage too: it syncs |
+| Segments with another system identifier | Refused |
+| WAL further on than here, on a later timeline or a later segment | Refused: `--delete` would remove it |
+| A `wal/` or `base/` it cannot list all of, or something else in its place | A failure: nothing is sent or deleted |
+
+It also refuses if the newest WAL here is not this running cluster's own, which is what a new cluster started
+over an archive copied back looks like. A restored cluster keeps its system identifier on every timeline, so
+it syncs as usual. The identifier is read from the segment's own first page, so this works on a mirror made
+before this check, and writes no marker on the target. A new `initdb` is a new cluster however it comes about: moving to a
+new major version by dump and restore or by `pg_upgrade` gives it a new identifier, and the old mirror has to be moved aside.
+
+This script does not leave a base backup with no finished segment beside it. A sidecar older than this check could: it sent
+`base/` first, and deleted old segments before new ones landed, so a sync it had cut short can look like that. Such a
+target is refused like any other and has to be moved aside by hand, as below, because nothing there can say it is this
+cluster's. A mirror whose last sync finished holds WAL, so it is not this case.
+
+The read happens on every poll, before every `--delete`, because a listing's name, size and time say nothing of whose a file
+is. It fetches that one segment whole: about 17 KB for a segment closed nearly empty, and around 12 MB for a full one, so at
+most about 1 GB a day at one poll every 15 minutes. A torn copy sorts first and holds no identifier, so the next smallest is
+read instead, three at most; if none of the three holds one the target is refused as `cluster unknown`.
+
+A refusal is `ERROR: refusing off-host sync …`, every poll until it is dealt with, and says why. It costs nothing
+else: base backups carry on, and so does the [files copy](#attachment-files), which deletes nothing that way. To deal
+with one:
+
+- **This host replaces the old one:** restore from the target first ([Restore on a replacement host](#restore-on-a-replacement-host)).
+- **That archive really is to go:** move it aside on the backup host. An empty target is a first install, so the next
+  poll syncs, and nothing is deleted until you delete what you moved.
+
+  ```bash
+  ssh backup-host mv /data/backup/orbit-pg-archive /data/backup/orbit-pg-archive.old
+  ```
+
+**A target it cannot read is not an empty one.** Only a path that is not there reads as empty. Anything else that stops the
+listing, such as a directory the ssh user may not read, is logged every poll until it is put right on the backup host, with what
+rsync said:
+
+```text
+ERROR: off-host sync to … failed: could not read the target: …
+```
+
+The mirror sends and deletes nothing that round. Base backups carry on, and so does the [files copy](#attachment-files). What the ssh client
+prints on the way, such as OpenSSH's warning about a server with no post-quantum key exchange, is not read as part of a listing or
+counted as a change, and reaches the log only with a failure.
+
+rsync exits with the same code for a path that is not there as for one it may not read, so when a listing fails the sidecar asks
+again with `--ignore-missing-args`, and goes by the answer rather than the wording. That option needs rsync 3.1.0 or newer on the
+backup host. Behind an older one, or a restricted command that fails on a missing path itself, as Debian's `rrsync` does, a first
+install logs `could not read the target` until you create the target's `wal/` and `base/` by hand.
+
+The sidecar runs the script it started with, so a newer `scripts/pg-backup.sh` does nothing until the container is
+recreated. `/upgrade` does that when the two differ; by hand it is `docker compose up -d --no-deps --force-recreate
+pgbackup`. A target already in use goes on syncing as before.
 
 ### Attachment files
 
@@ -81,11 +168,38 @@ It goes beside the target and not under it because the mirror's `--delete` would
 is nothing more to set, but the ssh user has to be able to create that directory: if it cannot write to
 the target's parent, create the directory by hand once.
 
-The copy is `rsync -a` with no `--delete`, so it only grows: a Postgres backup still retained may name
-bytes the live database has let go of. Uploads still arriving (`tmp/`) are excluded. A failure is logged
+The copy is `rsync -a` with no `--delete`, because a Postgres backup still retained may name bytes the
+live database has let go of. Uploads still arriving (`tmp/`) are excluded. A failure is logged
 like the mirror's (`ERROR: off-host sync … failed`), does not touch base backups or the mirror, and is
 retried on the next poll. The archive goes first, because bytes are stored before the row naming them
 commits: a round that finishes leaves the copy with the bytes of every row in the mirrored WAL.
+
+#### How the copy is pruned
+
+Files agents upload expire, and their bytes then go in steps, each a grace period after the last. The grace period is
+max(7 days, `ORBIT_BASE_BACKUP_INTERVAL` × (`ORBIT_BASE_BACKUP_KEEP` + 1)), so at least as long as a retained backup reaches
+back: a backup stays until `ORBIT_BASE_BACKUP_KEEP` newer ones have finished, and each round takes a little longer than the
+interval, which the one more covers. Base backups that stop being taken, for lack of disk or with the sidecar down, keep the
+old ones longer than that. Restoring one of those can find rows without their bytes, which the
+[check below](#restore-the-attachment-files) lists.
+
+| When | What happens |
+| --- | --- |
+| The file's date | A tombstone on its row (`expired_at`). Name, size, sha256 and test summary stay, and so do the bytes, here and in the copy |
+| One grace period after the last row naming those bytes got its tombstone | The bytes go from `./data/files` (`file_blob.bytes_deleted_at`) |
+| One grace period after that | The bytes go from the off-host copy (`file_blob.off_host_prune_at`) |
+
+The sidecar prunes at most once per base backup interval, and only in a round where the mirror took this archive. It
+asks the database which names are due, lists the copy, and removes those names and nothing else: `pruned N file(s) from …`.
+It is not a `--delete` of what `./data/files` lacks, so an empty or unmounted directory cannot empty the copy. If
+`./data/files` is empty or not mounted it refuses even those names (`ERROR: refusing to prune …`), and it skips a name whose
+bytes are back here because the same content was uploaded again.
+
+That order is what makes a restore safe. A database restored to any moment a retained backup reaches expects the bytes that
+had not gone by that moment, and the copy keeps them a whole grace period longer, which is at least as far back as any backup
+reaches. Without an off-host target, `./data/files` alone still holds the bytes of every file that had no tombstone at that
+moment. With `ORBIT_FILES_BACKEND=s3` the bytes go from the bucket and nothing is pruned from the copy: use the bucket's own
+versioning or lifecycle rules for anything older. Neither attachment rows nor `file_blob` rows are deleted by any of this.
 
 - **With no target,** `./data/files` is the only copy of those bytes. Postgres does not hold them and no
   local backup does, so they are lost with the disk.
@@ -106,8 +220,9 @@ pointed at a mount of the mirror). Follow these steps in order:
 1. Put `.env` back **without `ORBIT_BACKUP_SYNC_TARGET`**. With it unset the sidecar makes no off-host
    copy, so nothing on this host can touch the mirror until the restore is done.
 2. Copy the archive back **before the first `docker compose up -d`**. A new cluster has a real archive
-   of its own, which the sidecar does not refuse, and with a target set the mirror's `--delete` would
-   replace the old archive with it.
+   of its own, and starting one first gives you a database and a `data/pg-archive` you have to move aside
+   again. The sidecar [refuses to mirror it](#the-off-host-mirror) over the old archive even with a target
+   set, but that is a guard, not a step to rely on.
 
    ```bash
    mkdir -p data
@@ -194,13 +309,19 @@ rsync -a backup-host:/data/backup/orbit-pg-archive-files/ data/files/
 
 Either way, check that every row finds its bytes. Nothing printed means they all do; a `missing` line
 is an attachment that was uploaded too shortly before the loss to reach the copy, and it cannot be
-read. Then bring back the rest:
+read. Bytes the database says have gone (`bytes_deleted_at`, an expired file past its grace period) are left out, since
+nothing expects them. Then bring back the rest:
 
 ```bash
-docker exec orbit-postgres psql -U orbit -d orbit -Atc "select sha256 from file_blob where storage = 'local'" |
+docker exec orbit-postgres psql -U orbit -d orbit -Atc "select sha256 from file_blob where storage = 'local' and bytes_deleted_at is null" |
   while read -r sha; do [ -f "data/files/${sha:0:2}/$sha" ] || echo "missing $sha"; done
 docker compose up -d              # bring the rest back
 ```
+
+A point-in-time restore can bring back a row with a tombstone whose bytes went after the moment you restored to. If
+`./data/files` survived, copy the off-host copy over it as above: it keeps those bytes for a grace period, and the copy
+adds them without touching anything else. Such a file already read as expired at that moment, so nothing that was live
+depends on them.
 
 The copy has no `tmp/`, and the apiserver makes it again at the next upload. With
 `ORBIT_FILES_BACKEND=s3` there is nothing to copy back: start the deployment on the same bucket, whose

@@ -129,3 +129,56 @@ test('a session with no workspace has no standing grants to consult', async () =
 
   assert.equal(res.status, 'PENDING');
 });
+
+const askAboutJob = (command: string) => ({
+  toolName: 'Bash',
+  input: { command, cwd: '/repo', kind: 'job' },
+  toolUseId: 'bgj_0123456789ab',
+  backgroundJobId: 'bgj_0123456789ab',
+});
+
+test('the runner gate card for a background job is answered from the rules on every engine', async () => {
+  // Claude matches its own native calls, but no engine has seen this question: the runner asks it, so a
+  // person's "always allow" on it reaches the next job only through here.
+  for (const provider of [
+    AgentProvider.CLAUDE,
+    AgentProvider.CODEX,
+    AgentProvider.KIMI,
+    AgentProvider.OPENCODE,
+    AgentProvider.ANTIGRAVITY,
+    AgentProvider.DSH,
+    AgentProvider.CURSOR,
+  ]) {
+    const covered = harness({ provider }, NPM_TEST);
+    const res = await covered.controller.createApproval(runner, SESSION, askAboutJob('npm test'));
+    assert.equal(res.status, 'ALLOWED', provider);
+    assert.deepEqual(covered.published, [], provider);
+    assert.equal(covered.created[0].backgroundJobId, 'bgj_0123456789ab', provider);
+
+    // The same reading of the rule as any other: every sub-command, nothing a prefix cannot describe.
+    for (const command of ['npm test; curl x | sh', 'npm test > out.txt', 'npm run build']) {
+      const asked = harness({ provider }, NPM_TEST);
+      const answer = await asked.controller.createApproval(runner, SESSION, askAboutJob(command));
+      assert.equal(answer.status, 'PENDING', `${provider}: ${command}`);
+      assert.equal(asked.published.length, 1, `${provider}: ${command}`);
+    }
+  }
+});
+
+test('a tool-wide rule does not answer a background job, and neither does a rule on the tool it came through', async () => {
+  for (const rules of [
+    [{ toolName: 'Bash', ruleContent: '' }],
+    [{ toolName: 'mcp__orbit__bg_run', ruleContent: '' }],
+    [{ toolName: 'mcp__orbit__*', ruleContent: '' }],
+  ]) {
+    const h = harness({ provider: AgentProvider.CLAUDE }, rules);
+    const res = await h.controller.createApproval(runner, SESSION, askAboutJob('npm test'));
+    assert.equal(res.status, 'PENDING', JSON.stringify(rules));
+  }
+});
+
+test('a session with no workspace has no standing grant for a background job either', async () => {
+  const h = harness({ provider: AgentProvider.CLAUDE, workspaceId: null }, NPM_TEST);
+  const res = await h.controller.createApproval(runner, SESSION, askAboutJob('npm test'));
+  assert.equal(res.status, 'PENDING');
+});

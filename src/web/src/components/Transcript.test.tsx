@@ -1706,7 +1706,7 @@ describe('hand-typed Markdown', () => {
     );
 
     expect(html).toContain('<h2>Goal</h2>');
-    expect(html).toContain('<code>tdp-prose</code>');
+    expect(html).toContain('<code><span class="code-word">tdp-prose</span></code>');
     expect(html).toContain('<li>one</li>');
     // The two adjacent prose lines are one paragraph — without hard breaks CommonMark
     // would join them with a space.

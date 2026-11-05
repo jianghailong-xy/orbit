@@ -1,4 +1,4 @@
-import { Body, Controller, ForbiddenException, Get, NotFoundException, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import type { Runner } from '@prisma/client';
 import { PublicIdPipe } from '../common/public-id';
 import { CreateFileBundleDto } from '../files/file-tools.dto';
@@ -45,6 +45,33 @@ export class RunnerFilesController {
   ) {
     const session = await this.hostedSession(runner, sessionId);
     const file = await this.files.describeFile(await this.files.readableInSession(session, fileId));
+    if (!file) throw new NotFoundException('file not found in this session');
+    return file;
+  }
+
+  /** `file_pin`: a file this session may read stays past its date (§2.8). */
+  @Put('sessions/:id/files/:fileId/pin')
+  pin(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Param('fileId', PublicIdPipe) fileId: string,
+  ) {
+    return this.setPinned(runner, sessionId, fileId, true);
+  }
+
+  /** `file_pin` with `unpin`: the file goes back to the date its references give it. */
+  @Delete('sessions/:id/files/:fileId/pin')
+  unpin(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Param('fileId', PublicIdPipe) fileId: string,
+  ) {
+    return this.setPinned(runner, sessionId, fileId, false);
+  }
+
+  private async setPinned(runner: Runner, sessionId: string, fileId: string, pinned: boolean) {
+    const session = await this.hostedSession(runner, sessionId);
+    const file = await this.files.setPinned(await this.files.readableInSession(session, fileId), pinned);
     if (!file) throw new NotFoundException('file not found in this session');
     return file;
   }

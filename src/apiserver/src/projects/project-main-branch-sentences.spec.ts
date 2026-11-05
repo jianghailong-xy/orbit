@@ -187,3 +187,23 @@ test('the item a failed merge opens is titled as before on main, and with no rep
       'Checks failed on the combined tree: Fix the login');
   }
 });
+
+test('§10.5 O-L8: a failed merge of a task’s branch is titled after that task, in all three failures, and a project branch keeps its title', () => {
+  const failures: Array<[string, string]> = [
+    ['CONFLICT', 'Merge conflict'],
+    ['CHECK_FAILED', 'Checks failed on the combined tree'],
+    ['ERROR', 'Integration error'],
+  ];
+  for (const kind of ['CHECK_PROMOTION', 'LAND_PROMOTION']) {
+    for (const [state, opening] of failures) {
+      assert.equal(integrationItemTitle(state, kind, 'Backfill order stats', 'develop', 'TASK_BRANCH'),
+        `${opening}: merging “Backfill order stats” into develop`, `${kind} ${state}, on develop`);
+      assert.equal(integrationItemTitle(state, kind, 'Backfill order stats', null, 'TASK_BRANCH'),
+        `${opening}: merging “Backfill order stats” into main`, `${kind} ${state}, no repository bound`);
+    }
+    for (const [state, before, onMaster] of FAILED_MERGES) {
+      assert.equal(integrationItemTitle(state, kind, 'a task', 'main', 'PROJECT_BRANCH'), before, `${kind} ${state}, on main`);
+      assert.equal(integrationItemTitle(state, kind, 'a task', 'master', 'PROJECT_BRANCH'), onMaster, `${kind} ${state}, on master`);
+    }
+  }
+});

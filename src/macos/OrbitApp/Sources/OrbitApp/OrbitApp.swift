@@ -30,9 +30,9 @@ struct OrbitApp: App {
                 // an `orbit-task:`-style scheme, and a page URL of this deployment is a page this app
                 // has. A project is answered from a read (its coordinator session), which is why the
                 // decision is the model's and not a switch over the URL. Every other URL keeps the
-                // system action.
+                // system action if it may leave the app.
                 .environment(\.openURL, OpenURLAction { url in
-                    model.openOrbitLink(url) ? .handled : .systemAction
+                    model.openOrbitLink(url) ? .handled : .leaving(url)
                 })
                 .onChange(of: scenePhase) { _, phase in
                     // Checkpoint open transcripts when the app leaves the foreground.

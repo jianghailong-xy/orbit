@@ -72,12 +72,14 @@ import { WikiDocsController } from '../wiki/wiki-docs.controller';
 // says otherwise". An allowlist would let a param nobody classified through unchecked. UUID
 // exceptions are route-specific below: a generic `requestId` exemption would also silently exempt
 // future public request-row addresses.
-const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version', 'account', 'slug', 'engine', 'part']);
+const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version', 'account', 'slug', 'engine', 'part', 'revision']);
 // `part` is an article's number within its topic (0 the article or overview, 1… its subtopic
 // parts): GET /wiki/spaces/:id/articles/:slug/:part, an integer ParseIntPipe guards.
 // `engine` is a provider name (`claude`, `codex`), the engine whose account store a removal is
 // about: DELETE /runners/:id/accounts/:engine/:account. The service refuses anything that is not a
 // login engine — an id here would be addressed as a name no engine answers to.
+// `revision` is an evidence revision's number within its task: GET /tasks/:taskId/evidence/:revision/files, digits that
+// `FilesService.evidenceFiles` reads as a bigint, and a 404 for anything else.
 
 const OPAQUE_PARAM_ROUTES: Readonly<Record<string, string>> = {};
 

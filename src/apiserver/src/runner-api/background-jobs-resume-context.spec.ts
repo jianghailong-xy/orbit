@@ -227,6 +227,43 @@ test('a resumed delivery carries the jobs still running and the ones that ended 
   assert.match(text, /7/, 'the failed job must report the exit code it actually had');
 });
 
+test('a job still waiting for the owner is not described as if its command were running', async () => {
+  const waiting = jobEvent(2, WHILE_AWAY, {
+    shellId: 'bgj_waiting',
+    toolUseId: 'bgj_waiting',
+    status: 'running',
+    kind: 'job',
+    command: 'npm publish',
+    outputPath: LIVE_PATH,
+    waitingForOwner: true,
+  });
+  const { dequeue } = harness({ events: [waiting, launched(3, 'bgj_started', 'npm run build', DONE_PATH)] });
+
+  const text = (await dequeue(SESSION_ID, RUNNER_ID, LEASE_GENERATION))?.content ?? '';
+
+  assert.match(text, /bgj_waiting[^\n]*not started yet: it waits for the owner's answer/);
+  assert.doesNotMatch(text, /bgj_started[^\n]*not started yet/);
+});
+
+test('once the owner has allowed it, the same job reads as running', async () => {
+  const report = (seq: number, waitingForOwner: boolean) =>
+    jobEvent(seq, WHILE_AWAY, {
+      shellId: 'bgj_allowed',
+      toolUseId: 'bgj_allowed',
+      status: 'running',
+      kind: 'job',
+      command: 'npm test',
+      outputPath: LIVE_PATH,
+      ...(waitingForOwner ? { waitingForOwner } : {}),
+    });
+  const { dequeue } = harness({ events: [report(2, true), report(3, false)] });
+
+  const text = (await dequeue(SESSION_ID, RUNNER_ID, LEASE_GENERATION))?.content ?? '';
+
+  assert.match(text, /bgj_allowed/);
+  assert.doesNotMatch(text, /not started yet/);
+});
+
 test('the block is said once per engine, not on every turn that engine then takes', async () => {
   const { dequeue, content } = harness({
     events: mixedJobs(),

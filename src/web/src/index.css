@@ -695,10 +695,10 @@ button.toast--pill:focus-visible {
   font-weight: 600;
   color: var(--text-1);
 }
-/* The rail's middle: the fixed entries stay put, and under them Workspaces and Projects scroll as
-   one (.tp-lists), unless every workspace fits with the Projects head still showing under them:
-   then the workspaces stay put too and only Projects scrolls (.pin-workspaces, which
-   TasksSidePanel sets from its measurements). */
+/* The rail's middle: the fixed entries stay put, and under them the groups scroll as one
+   (.tp-lists), unless every workspace and wiki fits with the Projects head still showing under them:
+   then those stay put too and only Projects scrolls (.pin-workspaces, which TasksSidePanel sets from
+   its measurements). */
 .tp-scroll {
   flex: 1;
   min-height: 0;
@@ -732,6 +732,10 @@ button.toast--pill:focus-visible {
   flex: none;
 }
 .tp-lists.pin-workspaces > .tp-group-workspaces {
+  overflow: hidden;
+  scrollbar-gutter: stable;
+}
+.tp-lists.pin-workspaces > .tp-group-wiki {
   overflow: hidden;
   scrollbar-gutter: stable;
 }
@@ -3439,6 +3443,8 @@ button.toast--pill:focus-visible {
 
 /* ---- Agent detail view (conversation pane) ---- */
 .workspace-view {
+  /* The conversation's reading width (indexCss.conversationWidth.test.ts): the width a 1440px window shows already. */
+  --conversation-width: 800px;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -4541,8 +4547,10 @@ button.toast--pill:focus-visible {
 /* The conversation ends in a fade, not a rule: the composer card has its own edge, and a message
    cut off at the bottom dissolves into the card instead of being sliced through above it. The
    padding is the fade's room, so at the live tail nothing sits in it. Only the conversation's
-   scroller: the session list and an exported transcript share the class. */
+   scroller: the session list and an exported transcript share the class. Its inline padding stands the whole
+   column in the middle of a wide pane, its scrollbar left on the pane's edge, and is nothing on a narrower one. */
 .workspace-scroll-wrap > .workspace-sessions {
+  padding-inline: max(0px, calc((100% - var(--conversation-width)) / 2));
   padding-bottom: 20px;
   mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
 }
@@ -6498,6 +6506,9 @@ button.toast--pill:focus-visible {
 }
 .workspace-composer {
   flex: none;
+  width: 100%;
+  max-width: var(--conversation-width);
+  margin-inline: auto;
 }
 /* Where this task's current run is — the composer's answer to "you are not the run that has
    this task any more", and the transcript card's. One rule set for both, because a reader meeting
@@ -8282,6 +8293,24 @@ button.chat-jump-start:hover {
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.06);
 }
+/* What a file whose bytes have gone leaves where its picture was: the grey dashed tile an evidence card draws. */
+.chat-expired {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 120px;
+  height: 90px;
+  margin: 10px 0;
+  padding: 4px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--fill-muted);
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.3;
+  text-align: center;
+}
 /* A result image whose bytes the server dropped from the preview (see MAX_IMAGE_PAYLOAD): the card
    opens on the image block, so until the untrimmed payload lands there is a picture-shaped hole
    where the picture is going. Reserve that slot — the cap .chat-result .chat-image itself lands
@@ -8807,9 +8836,23 @@ button.chat-jump-start:hover {
 .chat-file.is-error:hover {
   background: var(--error-bg);
 }
+.chat-file.is-expired {
+  border-style: dashed;
+  border-color: var(--border);
+  background: var(--fill-muted);
+  color: var(--text-3);
+  cursor: default;
+}
+.chat-file.is-expired:hover {
+  background: var(--fill-muted);
+}
 .chat-file-name {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-file-expired {
+  flex: none;
   white-space: nowrap;
 }
 /* Sticky "your prompt" bar: sits flush under the header (outside the scroll area, so no
@@ -9132,7 +9175,7 @@ button.chat-jump-start:hover {
   word-break: break-word;
 }
 /* Assistant turns are long-form Markdown — render them as a document (no bubble,
-   spanning the full session width) rather than a chat pill; only short
+   spanning the conversation's column) rather than a chat pill; only short
    user/streaming-raw turns keep a bubble. max-width:none overrides .chat-msg's
    80% cap (equal specificity, but later, so this wins). */
 .chat-assistant {
@@ -10074,6 +10117,14 @@ button.chat-jump-start:hover {
   padding: 0;
   font-size: 12.5px;
 }
+/* Inline code in prose, a conversation's or a wiki document's (lib/codeWords): a word stays whole, and a line may end
+   before the code. */
+.code-word {
+  white-space: nowrap;
+}
+.code-break::before {
+  content: '\200B';
+}
 .md table {
   border-collapse: separate;
   border-spacing: 0;
@@ -10082,6 +10133,22 @@ button.chat-jump-start:hover {
   overflow: hidden;
   margin: 8px 0;
   font-size: 13px;
+}
+/* Whole words of code can make a table wider than the column (lib/codeWords): it scrolls on its own, as a code block does. */
+.md-table-scroll {
+  max-width: 100%;
+  margin: 8px 0;
+  overflow-x: auto;
+}
+.md-table-scroll > table {
+  margin: 0;
+}
+/* Those words take the table's room first, and `.md`'s `overflow-wrap: anywhere` lets prose beside them narrow to one
+   character a line: on a phone a sentence stood as a column of twenty lines. So a table with code may be wider than a
+   narrow column and scroll, and a small one stays its own size. Every other table is sized as it always was. */
+.md-table-scroll:has(.code-word) > table {
+  width: max-content;
+  max-width: max(100%, 40em);
 }
 .md th,
 .md td {
@@ -24836,9 +24903,6 @@ button.project-open-item-action:disabled {
 .wk-art code, .wk-fncard code, .wk-fnlist code {
   font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; font-size: .86em;
   background: var(--fill-inset); border-radius: 4px; padding: 1px 4px; overflow-wrap: anywhere; }
-/* WikiWords: a word of code stays whole, and a line may end before the code. */
-.wk-code-word { white-space: nowrap; }
-.wk-code-break::before { content: '\200B'; }
 .wk-fn { font-size: 11px; line-height: 0; vertical-align: 5px; margin: 0 2px 0 -2px; white-space: nowrap; }
 /* A word joiner, so no line starts with a marker: drawn here, because in the text a reader would copy it. */
 .wk-fn::before { content: '\2060'; }

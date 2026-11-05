@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { base62ToUuid, uuidToBase62 } from '@orbit/shared';
 import type { ImageSize } from '../files/image-size';
+import { testReportLine, type TestReportSummary } from '../files/test-report';
 
 /**
  * The four-field envelope `task_evidence_submit` writes, and the three layers that check it.
@@ -89,6 +90,12 @@ export interface EvidenceCitation {
   /** A resolved FILE citation of an image only: its size in pixels. */
   width?: number;
   height?: number;
+  /**
+   * A resolved FILE citation of a test report (`file_upload --as test-report`) only: what it says, for a card to show. Read
+   * off the row, so it is here after the file has expired. It is derived from the bytes `sha256` binds and stays out of the
+   * check, so it is no part of the evidence digest.
+   */
+  testReport?: TestReportSummary;
 }
 
 export interface EvidenceCriterionMatch {
@@ -294,6 +301,7 @@ interface CitedFile {
   sha256: string;
   /** On a manifest, what its folder holds. */
   bundle: { fileCount: number; totalBytes: number } | null;
+  testReport: TestReportSummary | null;
 }
 
 type FoundRow = {
@@ -405,6 +413,7 @@ async function resolveFile(
       fileBundleId: true,
       sessionId: true,
       taskId: true,
+      testReportSummary: true,
       session: { select: { taskId: true } },
     },
   });
@@ -426,6 +435,7 @@ async function resolveFile(
       sizeBytes: row.sizeBytes,
       sha256: row.sha256,
       bundle: folder && { fileCount: folder._count._all, totalBytes: folder._sum.sizeBytes ?? 0 },
+      testReport: row.testReportSummary as unknown as TestReportSummary | null,
     },
   };
 }
@@ -451,13 +461,17 @@ function labelLine(text: string, max: number): string {
 }
 
 /** "412 KB", "3.4 MB": the way `formatFileSize` on the web states a size, so a label and a card agree. */
-function fileSize(bytes: number): string {
+export function fileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
-/** `shot.png · 412 KB · image/png · 1280×800`, or for a folder bundle `9 files · 1.8 MB`. */
+/**
+ * `shot.png · 412 KB · image/png · 1280×800`, for a folder bundle `9 files · 1.8 MB`, and for a test report
+ * `report.json · 12 KB · application/json · Playwright · 46 passed · 0 failed · 2 skipped`.
+ */
 function fileLabel(file: CitedFile, check: EvidenceCheck): string {
   if (file.bundle) {
     const { fileCount, totalBytes } = file.bundle;
@@ -468,6 +482,7 @@ function fileLabel(file: CitedFile, check: EvidenceCheck): string {
     fileSize(file.sizeBytes),
     file.mimeType,
     ...(check.width && check.height ? [`${check.width}×${check.height}`] : []),
+    ...(file.testReport ? [testReportLine(file.testReport)] : []),
   ].join(' · ');
 }
 
@@ -510,6 +525,7 @@ function resolvedCitation(check: EvidenceCheck, row: FoundRow): EvidenceCitation
     citation.width = check.width;
     citation.height = check.height;
   }
+  if (row.file?.testReport) citation.testReport = row.file.testReport;
   return citation;
 }
 
@@ -594,7 +610,10 @@ export async function resolveEvidenceCitations(
     refuseCitation(
       'EVIDENCE_NO_RESOLVABLE_CITATION',
       'no citation in this envelope resolves to a row of this task; nothing was written. Evidence '
-      + 'is a claim plus a handle somebody else can pull — without one it is a report',
+      + 'is a claim plus a handle somebody else can pull — without one it is a report. Run the checks with '
+      + 'bg_run and cite the job id it returns (bgj_...) as a TOOL_CALL ref. A commit sha resolves only once '
+      + 'Orbit has recorded it for this task, and a repository path or a session id does not resolve at all, '
+      + 'so submitting the same refs again later will not help',
       'CITE_THIS_TASKS_OWN_ROWS',
     );
   }

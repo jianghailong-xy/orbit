@@ -11,12 +11,13 @@ import type { Runner } from '../components/TasksSidePanel';
 import { isLoginPool } from '../lib/codexLogin';
 import { routeId } from '../lib/idCodec';
 import { providerPoolsQuery, type ProviderPool } from '../lib/providerPools';
-import { meQuery, runnersQuery, workspacesQuery, type Me, type UserPreferences } from '../lib/queries';
+import { meQuery, runnersQuery, storageUsageQuery, workspacesQuery, type Me, type StorageUsage, type UserPreferences } from '../lib/queries';
 import { noCliSignedIn, type AttentionWorkspace } from '../lib/runnerAttention';
 import { accountPoolList, poolAccessQuery, sharedPoolsQuery } from '../lib/sharedPools';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { useToast } from '../lib/toast';
 import { DEFAULT_PERMISSION_MODE, MODE_OPTIONS } from '../lib/workspaceDefaults';
+import { formatFileSize } from '../lib/worktreeFile';
 
 // One labelled row: title + hint on the left, the control on the right.
 function Field({ label, hint, children }: { label: string; hint: ReactNode; children: ReactNode }) {
@@ -102,6 +103,83 @@ function MachinesAndModels() {
       >
         <Button onClick={() => navigate('/infrastructure')}>Manage</Button>
       </Field>
+    </Card>
+  );
+}
+
+/** A week as its Monday reads, in the zone the server counted it in. */
+function weekLabel(weekStart: string): string {
+  return new Date(`${weekStart}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+/** A heading and the rows under it, each a name and a size. Nothing at all when there are no rows. */
+function UsageRows({ title, rows }: { title: string; rows: { key: string; name: string; size: string }[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <div style={{ padding: '10px 0' }}>
+      <div>{title}</div>
+      {rows.map(({ key, name, size }) => (
+        <div
+          key={key}
+          style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 4, fontSize: 12, color: 'var(--text-3)' }}
+        >
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+          <span style={{ flex: 'none' }}>{size}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** How much a file count and a size come to, the quota beside the size where there is one. */
+function storedValue({ totalBytes, fileCount, quotaBytes }: StorageUsage): string {
+  const size = quotaBytes === null ? formatFileSize(totalBytes) : `${formatFileSize(totalBytes)} of ${formatFileSize(quotaBytes)}`;
+  return `${size} · ${fileCount.toLocaleString('en-US')} ${fileCount === 1 ? 'file' : 'files'}`;
+}
+
+/** What this account keeps in Orbit Files: read when the page opens, and only here. */
+function StorageCard() {
+  const { data: usage, isError } = useQuery(storageUsageQuery());
+  const full = usage && usage.quotaBytes !== null && usage.totalBytes >= usage.quotaBytes;
+  return (
+    <Card title="Storage" style={{ marginBottom: 16 }}>
+      <Field
+        label="Stored files"
+        hint={
+          <>
+            Each file counts once, however many sessions use it. Files agents upload expire after 14 days unless evidence keeps them.
+            {full && (
+              <div className="settings-storage-full" style={{ marginTop: 4, fontSize: 13, color: 'var(--warning)' }}>
+                Your storage is full, so new uploads are refused. Older uploads free up room as they expire.
+              </div>
+            )}
+          </>
+        }
+      >
+        <div className="settings-storage-value" style={{ color: 'var(--text-2)' }}>
+          {usage ? storedValue(usage) : isError ? 'Could not read this' : '…'}
+        </div>
+      </Field>
+      {usage && (
+        <>
+          <UsageRows
+            title="Largest projects"
+            rows={usage.projects.map(({ projectId, title, bytes }) => ({ key: projectId, name: title, size: formatFileSize(bytes) }))}
+          />
+          <UsageRows
+            title="Largest tasks"
+            rows={usage.tasks.map(({ taskId, title, bytes }) => ({ key: taskId, name: title, size: formatFileSize(bytes) }))}
+          />
+          <UsageRows
+            title="Added each week"
+            rows={[...usage.weeks].reverse().map(({ weekStart, bytes }) => ({
+              key: weekStart,
+              name: `Week of ${weekLabel(weekStart)}`,
+              size: formatFileSize(bytes),
+            }))}
+          />
+        </>
+      )}
     </Card>
   );
 }
@@ -246,6 +324,8 @@ export function SettingsPage() {
           />
         </Field>
       </Card>
+
+      <StorageCard />
 
       <Card title="Sharing">
         <Field

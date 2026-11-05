@@ -1,4 +1,4 @@
-import { WIKI_REVIEW_RULES, type WikiVerificationEvidence } from '@orbit/shared';
+import { WIKI_REVIEW_RULES, wikiFirstHandForNote, wikiVerificationEvidence, type WikiEvidenceClass, type WikiVerificationEvidence } from '@orbit/shared';
 import { redactSecrets } from '../common/secret-redaction';
 
 /**
@@ -77,6 +77,23 @@ function contentText(content: unknown): string | null {
   if (!Array.isArray(content)) return null;
   const parts = content.map((block) => field(block, 'text')).filter(hasText);
   return parts.length > 0 ? parts.join('\n') : null;
+}
+
+/** The shell command in a tool's input, whichever tool carried it. */
+export function callCommand(input: unknown): string | null {
+  const command = field(input, 'command');
+  return typeof command === 'string' ? command : null;
+}
+
+/** What a tool_use event says of its call, and which call a tool_result is the result of. */
+export function eventCall(type: string, payload: unknown): { toolName: string | null; command: string | null; toolUseId: string | null } {
+  const name = field(payload, 'name');
+  const resultOf = field(payload, 'toolUseId');
+  return {
+    toolName: type === 'tool_use' && typeof name === 'string' ? name : null,
+    command: type === 'tool_use' ? callCommand(field(payload, 'input')) : null,
+    toolUseId: type === 'tool_result' && typeof resultOf === 'string' ? resultOf : null,
+  };
 }
 
 /** The parts of the text one run event carries: none when it carries none. */
@@ -183,7 +200,37 @@ export function verifierText(text: string | null, literals: readonly string[]): 
   return { text: chars.slice(0, max).join(''), truncated: chars.length > max };
 }
 
-/** The evidence mark of an op: readable when at least one of its sources has text. */
-export function evidenceOf(texts: ReadonlyArray<string | null>): WikiVerificationEvidence {
-  return texts.some(hasText) ? 'readable' : 'unreadable';
+/** The evidence mark of an op: what the sources its verifier could read come to (`wikiVerificationEvidence`). */
+export function evidenceOf(sources: ReadonlyArray<{ text: string | null; evidenceClass: WikiEvidenceClass | null }>): WikiVerificationEvidence {
+  return wikiVerificationEvidence(sources.flatMap((source) => (hasText(source.text) && source.evidenceClass !== null ? [source.evidenceClass] : [])));
+}
+
+/**
+ * The evidence mark of an op that came from an agent's note (contract `reviewModes.verification.evidence.promptedBy`):
+ * with no source its verifier could read first-hand for that note, what it read says no more than the note did.
+ */
+export function promptedEvidenceOf(
+  sources: ReadonlyArray<{ text: string | null; evidenceClass: WikiEvidenceClass | null }>,
+  note: string | null,
+): WikiVerificationEvidence {
+  const evidence = evidenceOf(sources);
+  if (evidence !== 'readable') return evidence;
+  const firstHand = sources.some(({ text, evidenceClass }) => hasText(text) && evidenceClass !== null && wikiFirstHandForNote(evidenceClass, text!, note));
+  return firstHand ? evidence : 'second_hand';
+}
+
+/**
+ * The session a memory file says it came from: `originSessionId` in its frontmatter, at the top level or
+ * under `metadata:`, as the engine's own id for that session. Only in the frontmatter: a note's body can
+ * talk about another session's id. Null for a file with no frontmatter, or none that says.
+ */
+export function noteOriginSessionId(text: string): string | null {
+  const lines = text.split('\n');
+  if (lines[0]?.trim() !== '---') return null;
+  const end = lines.findIndex((line, at) => at > 0 && line.trim() === '---');
+  for (const line of lines.slice(1, Math.max(end, 1))) {
+    const said = /^\s*originSessionId\s*:\s*["']?([^\s"']+)["']?\s*$/u.exec(line);
+    if (said) return said[1];
+  }
+  return null;
 }

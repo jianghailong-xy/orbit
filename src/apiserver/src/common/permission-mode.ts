@@ -1,4 +1,5 @@
-import { PermissionMode } from '@orbit/shared';
+import { ForbiddenException } from '@nestjs/common';
+import { AgentProvider, ENGINE_CLI_NAMES, PermissionMode } from '@orbit/shared';
 
 /**
  * How much freedom a run gets when nobody said.
@@ -51,4 +52,115 @@ export function resolvePermissionMode(
     accountDefaultPermissionMode(owner) ??
     DEFAULT_PERMISSION_MODE
   );
+}
+
+/**
+ * What a session in each mode may not start. A session that may do less than another may not start
+ * that other, or the wider session does for it what it may not do itself. Auto and Bypass start
+ * anything, so they are not here.
+ *
+ * Every comparison is of the STORED mode, on both sides, which is not always what the owner chose:
+ * moving a session to a model with no Auto writes Default back onto it (SessionsService.updateConfig).
+ */
+const WIDER_THAN: Readonly<Partial<Record<string, ReadonlySet<string>>>> = {
+  [PermissionMode.PLAN]: new Set([
+    PermissionMode.DEFAULT,
+    PermissionMode.ACCEPT_EDITS,
+    PermissionMode.AUTO,
+    PermissionMode.DONT_ASK,
+    PermissionMode.BYPASS,
+  ]),
+  [PermissionMode.DEFAULT]: new Set([PermissionMode.AUTO, PermissionMode.BYPASS]),
+  [PermissionMode.ACCEPT_EDITS]: new Set([PermissionMode.AUTO, PermissionMode.BYPASS]),
+  [PermissionMode.DONT_ASK]: new Set([PermissionMode.BYPASS]),
+};
+
+/** Whether a session in this mode is limited in what it may start. */
+export function modeLimitsWhatItStarts(mode: string): boolean {
+  return WIDER_THAN[mode] !== undefined;
+}
+
+/**
+ * Whether a mode, on this engine, does what Bypass does: everything is run, nothing is reviewed, and
+ * no sandbox is around it (`derivePermissionSemantics`). Codex takes no allowlist, so its Don't Ask is
+ * `danger-full-access` with approvals off; Kimi, OpenCode and Antigravity run Auto as their own
+ * allow-everything mode. A mode on an engine nobody has named yet is judged by its name.
+ */
+function runsAsBypass(mode: string, engine: string | null): boolean {
+  if (mode === PermissionMode.DONT_ASK) return engine === AgentProvider.CODEX;
+  if (mode === PermissionMode.AUTO) {
+    return engine === AgentProvider.KIMI || engine === AgentProvider.OPENCODE || engine === AgentProvider.ANTIGRAVITY;
+  }
+  return false;
+}
+
+/** The session starting another: its stored mode and its engine. */
+export interface SessionModeStarter {
+  mode: string;
+  engine: string | null;
+}
+
+/**
+ * The one comparison. What a child may do is judged by what it will really do on its engine, and what
+ * its starter may start by the starter's stored mode. A Codex session in Don't Ask starting another is
+ * the one exception: the two are the same thing, so neither is wider.
+ */
+export function isWiderThanStarter(starter: SessionModeStarter, mode: string, engine: string | null): boolean {
+  const wider = WIDER_THAN[starter.mode];
+  if (!wider) return false;
+  if (mode === starter.mode && engine !== null && engine === starter.engine) return false;
+  return wider.has(runsAsBypass(mode, engine) ? PermissionMode.BYPASS : mode);
+}
+
+/** What a session may name for one it starts on this engine, in the order the pickers show them. */
+export function modesItMayStart(starter: SessionModeStarter, engine: string | null): PermissionMode[] {
+  return Object.values(PermissionMode).filter((mode) => !isWiderThanStarter(starter, mode, engine));
+}
+
+export const PERMISSION_MODE_WIDER_THAN_SESSION = 'PERMISSION_MODE_WIDER_THAN_SESSION';
+
+/** What a mode comes to on an engine that runs it as Bypass, said after the sentence naming it. */
+export function whatItRunsAs(mode: string, engine: string | null): string {
+  return runsAsBypass(mode, engine)
+    ? ` On ${ENGINE_CLI_NAMES[engine as AgentProvider]} that mode runs as ${PermissionMode.BYPASS}: nothing is reviewed or sandboxed.`
+    : '';
+}
+
+/** The refusal every door answers with: what was asked for, and `next`, the door's own way forward. */
+export function widerModeRefusal(
+  starterMode: string,
+  mode: string,
+  engine: string | null,
+  next: string,
+): ForbiddenException {
+  return new ForbiddenException({
+    statusCode: 403,
+    error: 'Forbidden',
+    code: PERMISSION_MODE_WIDER_THAN_SESSION,
+    message: `This session runs in "${starterMode}", so a session it starts may not run in "${mode}".${whatItRunsAs(mode, engine)} ${next}`,
+  });
+}
+
+export const SESSION_WIDER_THAN_CALLER = 'SESSION_WIDER_THAN_CALLER';
+
+/**
+ * The same refusal for a session that already exists (sessions/session-reach.ts): `act` finishes
+ * "may not ...", and `next` is what this caller can do instead.
+ */
+export function widerSessionRefusal(
+  callerMode: string,
+  target: string,
+  mode: string,
+  engine: string | null,
+  act: string,
+  next: string,
+): ForbiddenException {
+  return new ForbiddenException({
+    statusCode: 403,
+    error: 'Forbidden',
+    code: SESSION_WIDER_THAN_CALLER,
+    message:
+      `This session runs in "${callerMode}", and session ${target} runs in "${mode}", which is wider, so this session may `
+      + `not ${act}. Nothing was changed.${whatItRunsAs(mode, engine)} ${next}`,
+  });
 }

@@ -22,6 +22,16 @@ export interface SessionMessageCard {
   /** The task the sending session runs, absent when it runs none. */
   fromTaskId?: string;
   /**
+   * The sending session's stored mode (`from-mode` in the block), absent on an event stored before the
+   * card carried it.
+   */
+  fromMode?: string;
+  /**
+   * The sender runs narrower than the session it wrote to, by the server's own comparison: what the
+   * block says in a sentence. Absent when it does not.
+   */
+  fromModeNarrower?: true;
+  /**
    * The request this message is, when the sender asked for a reply (`expectReply`,
    * docs/session-request-reply-contract.md §3) — the request's public id, absent on every message
    * that asked for none. Its state is not here: a stored event never changes, and the state does, so

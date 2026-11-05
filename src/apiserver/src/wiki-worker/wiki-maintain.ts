@@ -6,6 +6,8 @@ import {
   type WikiDossierSource,
   type WikiDossierSpan,
   type WikiReviewMode,
+  wikiRepeatsNote,
+  type WikiPromptedBy,
 } from '@orbit/shared';
 import {
   answerField,
@@ -18,6 +20,7 @@ import {
   wikiImportRequiredFields,
   wikiImportText,
   wikiImportTextList,
+  parseWikiImportAnswer,
   type WikiImportAnswerEntry,
   type WikiImportNote,
   WIKI_IMPORT_FENCE,
@@ -71,43 +74,19 @@ export function wikiMaintainTopicsOf(topics: ReadonlyArray<{ slug: string; title
   return topics.map((topic) => ({ slug: topic.slug, title: topic.title, description: topic.description ?? '' }));
 }
 
-/**
- * The demo's extraction prompt (prompts.py EXTRACT_INSTRUCTIONS, the A2+6 run: at most six entries, the
- * few-shot example), for this space's repository: the model is told which repository the case is about and
- * what it is, and to say so when the case is about something else.
- */
-export function wikiMaintainPrompt(context: WikiMaintainPromptContext, about: string, dossier: string): string {
-  // filepath.Base of the repository URL, as the Go prompt read it.
-  const trimmed = context.repo.urlNorm.replace(/\/+$/u, '');
-  const name = context.repo.urlNorm !== '' ? trimmed.slice(trimmed.lastIndexOf('/') + 1) : context.title;
-  let scope = `THE REPOSITORY: ${JSON.stringify(name)}`;
-  if (context.repo.urlNorm !== '') scope += ` (${context.repo.urlNorm})`;
-  if (about !== '') scope += ` — ${about}`;
-  let topics = '';
-  for (const topic of context.topics) topics += `- ${topic.slug}: ${topic.description !== '' ? topic.description : topic.title}\n`;
-  return `Below is a CASE FILE: a compressed timeline of one piece of work in the "${name}" repository (one task, possibly retried, or one standalone chat session).
-${scope}
-Each line starts with a ref (like L37) and a speaker:
-- owner: the human account owner (their words carry the most weight); user: a message most likely typed by the owner
+/** Who speaks in a case file: the lines of the extraction prompt's legend. */
+const WIKI_MAINTAIN_SPEAKERS = `- owner: the human account owner (their words carry the most weight); user: a message most likely typed by the owner
 - sender / parent: a message from another agent (a coordinator) — not the owner
 - taskprompt: the task's opening prompt (title, description) written by the owner or a coordinator
 - agent: the coding agent's reply; think: sentences from the agent's private reasoning; sub-agent: a helper agent
 - tool: a tool call and its result ("ERR:" marks a failure, "×N" folds repeated reads/edits)
-- comment / merge / blocker / openitem / system: task records
-"… (N lines omitted)" marks lines left out.
+- comment / merge / blocker / openitem / system: task records`;
 
-FIRST: if this case is not about the repository above and the way it is developed — another product, a personal errand, a conversation about something else — output exactly {"offTopic": true} and nothing else.
+/** The answer for a case about something else. */
+const WIKI_MAINTAIN_OFF_TOPIC = `FIRST: if this case is not about the repository above and the way it is developed — another product, a personal errand, a conversation about something else — output exactly {"offTopic": true} and nothing else.`;
 
-TASK: extract the knowledge from this case that would change how a future agent works in this repository and that it could NOT learn by reading the code for one minute:
-- owner rules and corrections (how the owner wants things done) -> convention (or principle, if it is a general value with a reason)
-- decisions the owner made, with the alternatives and why they were rejected -> decision
-- traps and surprises: something behaved differently than expected, with the cause and the fix -> pitfall
-- a multi-step procedure that was run and verified to work -> recipe
-- the meaning of a project-specific term or mechanism that is easy to get wrong -> concept
-Do NOT extract: task progress or status reports, what was built, one-off facts about this task only, generic programming advice, or anything the code states plainly. Prefer fewer, stronger entries. If there is nothing worth keeping, output [].
-
-OUTPUT: a JSON array (at most ${WIKI_MAINTENANCE_JOB.entriesPerSessionMax} objects), nothing else — no prose, no code fence. Each object is FLAT:
-{"kind": "principle|convention|decision|pitfall|recipe|concept",
+/** An entry as the model is to write it, with what its kind asks for and the rules it is held to. */
+const WIKI_MAINTAIN_ENTRY_SHAPE = `{"kind": "principle|convention|decision|pitfall|recipe|concept",
  "title": "<= 60 chars, states the knowledge itself (not the task)",
  "summary": "one or two short sentences a future agent can act on",
  "topic": one topic key from the TOPIC TABLE,
@@ -125,7 +104,46 @@ The kind's own fields (all required; be terse: each text field is one short sent
 RULES:
 - sources: 1 or 2 per entry. The quote is a contiguous span copied character for character from the line with that ref (<= 150 chars, no "…", no paraphrase, no translation). Quote the words the line carries from its record, never the case file's own markers ("$ ", "→ ok:", "ERR:", "(steer)", "…[cut]", "×N"). Never quote a span holding [redacted]. Prefer spans without double-quote characters; if one is unavoidable, escape it as \\".
 - Write titles and text fields in English, whatever language the case is in; keep code, paths and commands verbatim.
-- Only put a path in anchors if it appears in the case and is a path of this repository; never invent paths or shas.
+- Only put a path in anchors if it appears in the case and is a path of this repository; never invent paths or shas.`;
+
+/** The repository and the topics, as a prompt names them. */
+function wikiMaintainPromptScope(context: WikiMaintainPromptContext, about: string): { name: string; scope: string; topics: string } {
+  // filepath.Base of the repository URL, as the Go prompt read it.
+  const trimmed = context.repo.urlNorm.replace(/\/+$/u, '');
+  const name = context.repo.urlNorm !== '' ? trimmed.slice(trimmed.lastIndexOf('/') + 1) : context.title;
+  let scope = `THE REPOSITORY: ${JSON.stringify(name)}`;
+  if (context.repo.urlNorm !== '') scope += ` (${context.repo.urlNorm})`;
+  if (about !== '') scope += ` — ${about}`;
+  let topics = '';
+  for (const topic of context.topics) topics += `- ${topic.slug}: ${topic.description !== '' ? topic.description : topic.title}\n`;
+  return { name, scope, topics };
+}
+
+/**
+ * The demo's extraction prompt (prompts.py EXTRACT_INSTRUCTIONS, the A2+6 run: at most six entries, the
+ * few-shot example), for this space's repository: the model is told which repository the case is about and
+ * what it is, and to say so when the case is about something else.
+ */
+export function wikiMaintainPrompt(context: WikiMaintainPromptContext, about: string, dossier: string): string {
+  const { name, scope, topics } = wikiMaintainPromptScope(context, about);
+  return `Below is a CASE FILE: a compressed timeline of one piece of work in the "${name}" repository (one task, possibly retried, or one standalone chat session).
+${scope}
+Each line starts with a ref (like L37) and a speaker:
+${WIKI_MAINTAIN_SPEAKERS}
+"… (N lines omitted)" marks lines left out.
+
+${WIKI_MAINTAIN_OFF_TOPIC}
+
+TASK: extract the knowledge from this case that would change how a future agent works in this repository and that it could NOT learn by reading the code for one minute:
+- owner rules and corrections (how the owner wants things done) -> convention (or principle, if it is a general value with a reason)
+- decisions the owner made, with the alternatives and why they were rejected -> decision
+- traps and surprises: something behaved differently than expected, with the cause and the fix -> pitfall
+- a multi-step procedure that was run and verified to work -> recipe
+- the meaning of a project-specific term or mechanism that is easy to get wrong -> concept
+Do NOT extract: task progress or status reports, what was built, one-off facts about this task only, generic programming advice, or anything the code states plainly. Prefer fewer, stronger entries. If there is nothing worth keeping, output [].
+
+OUTPUT: a JSON array (at most ${WIKI_MAINTENANCE_JOB.entriesPerSessionMax} objects), nothing else — no prose, no code fence. Each object is FLAT:
+${WIKI_MAINTAIN_ENTRY_SHAPE}
 
 TOPIC TABLE:
 ${topics}
@@ -153,6 +171,256 @@ A case about something other than the repository above -> {"offTopic": true}
 ${dossier}
 ==== END OF CASE FILE ====
 Output the JSON array now.`;
+}
+
+/** What the model may say became of a note (§3.3), in the words the prompt gives it. */
+export const WIKI_MAINTAIN_NOTE_OUTCOMES = ['shown', 'narrowed', 'contradicted', 'absent', 'not_durable'] as const;
+
+/** A note's outcome, or `unanswered`: the model did not say, or not so that it can be read, and nobody asks again. */
+export type WikiMaintainNoteOutcome = (typeof WIKI_MAINTAIN_NOTE_OUTCOMES)[number] | 'unanswered';
+
+/** What the model said of one note: its outcome, and the lines it named as showing it. */
+export interface WikiMaintainNoteAnswer {
+  outcome: WikiMaintainNoteOutcome;
+  shownBy: string[];
+}
+
+/** The most lines `wikiMaintainCiteShownBy` adds to an entry's sources. */
+const WIKI_MAINTAIN_NOTE_SOURCES_ADDED = 2;
+
+/**
+ * What the model said of each of the case's notes, read from wherever in its answer it said so: each
+ * `{"note": "C1", "outcome": "shown", "shownBy": ["L12"]}` is a flat object of its own, so a broken entry beside it
+ * costs it nothing. The first it said of a note counts; a note it does not name is `unanswered`.
+ */
+export function wikiMaintainNoteAnswers(answer: string, refs: readonly string[]): Map<string, WikiMaintainNoteAnswer> {
+  const answers = new Map<string, WikiMaintainNoteAnswer>(refs.map((ref) => [ref, { outcome: 'unanswered', shownBy: [] }]));
+  for (const [flat] of answer.matchAll(/\{[^{}]*\}/gu)) {
+    let said: unknown;
+    try {
+      said = JSON.parse(flat);
+    } catch {
+      continue;
+    }
+    if (!wikiImportIsObject(said)) continue;
+    const note = answerField(said, 'note');
+    const outcome = answerField(said, 'outcome');
+    if (typeof note !== 'string' || typeof outcome !== 'string' || answers.get(note)?.outcome !== 'unanswered') continue;
+    if (!(WIKI_MAINTAIN_NOTE_OUTCOMES as readonly string[]).includes(outcome)) continue;
+    answers.set(note, { outcome: outcome as WikiMaintainNoteOutcome, shownBy: wikiImportTextList(answerField(said, 'shownBy')) });
+  }
+  return answers;
+}
+
+/**
+ * The speakers whose lines may say what happened or what the owner said. This only picks which of the lines the model
+ * named to add; what a source counts as is `wikiEvidenceClass`'s to say, from its record, when it is read.
+ */
+const FIRST_HAND_SPEAKERS = new Set(['tool', 'merge', 'owner', 'blocker']);
+/** The speakers whose words are the owner's: a source of theirs is quoted, or it does not read as their words. */
+const OWNER_SPEAKERS = new Set(['owner', 'blocker']);
+/** A tool line that wrote a file: what the agent wrote, not what happened (`wikiEvidenceClass`). */
+const WRITE_TOOL_LINE = /^(?:edit|write|multiedit|notebookedit)(?: | ×)/u;
+
+/**
+ * An entry that came from a note also cites what the model said shows that note: it names the lines in `shownBy`
+ * and then often writes the entry from the agent's reply about them, which only says what the agent believed. At
+ * most `WIKI_MAINTAIN_NOTE_SOURCES_ADDED` first-hand lines are added to an op's sources, each one's record cited as
+ * any other, and the verdict is still the verifier's, from those records.
+ */
+export function wikiMaintainCiteShownBy(
+  ops: readonly WikiMaintainOp[],
+  notes: ReadonlyMap<string, WikiMaintainNoteAnswer>,
+  lines: ReadonlyMap<string, WikiMaintainLine>,
+  noteWords: ReadonlyMap<string, string> = new Map(),
+): void {
+  for (const op of ops) {
+    const shownBy = op.note ? notes.get(op.note)?.shownBy ?? [] : [];
+    const noted = op.note ? noteWords.get(op.note) : undefined;
+    const sources = op.body.sources as Array<Record<string, unknown>>;
+    const cited = new Set(sources.map((source) => `${String(source.kind)}:${String(source.ref)}`));
+    let added = 0;
+    for (const ref of shownBy) {
+      const line = lines.get(ref);
+      if (!line || !FIRST_HAND_SPEAKERS.has(line.author) || WRITE_TOOL_LINE.test(line.text) || cited.has(`${line.kind}:${line.id}`)) continue;
+      // A tool line that repeats the note shows that the note was read somewhere, not that it holds (`wikiFirstHandForNote`).
+      if (line.author === 'tool' && noted !== undefined && wikiRepeatsNote(line.text, noted)) continue;
+      if (added === WIKI_MAINTAIN_NOTE_SOURCES_ADDED) break;
+      const source: Record<string, unknown> = { kind: line.kind, ref: line.id };
+      const words = OWNER_SPEAKERS.has(line.author) ? line.spans.find((span) => (span.text ?? '').trim() !== '')?.text : undefined;
+      const placed = words ? wikiMaintainPlace(line.spans, cutRunes(words, WIKI_MAINTAIN_JOB.quoteMaxChars)) : null;
+      if (placed) {
+        source.quote = placed.words;
+        source.locator = { start: placed.start, end: placed.end };
+      }
+      sources.push(source);
+      cited.add(`${line.kind}:${line.id}`);
+      added += 1;
+    }
+  }
+}
+
+/** A case file's notes as its `C1 claim:` lines say them, by ref, the lines that continue one included. */
+function wikiMaintainNoteWords(text: string): Map<string, string> {
+  const words = new Map<string, string>();
+  let current = '';
+  for (const raw of text.split('\n')) {
+    const head = /^(C\d+) claim: (.*)$/u.exec(raw);
+    if (head) {
+      current = head[1];
+      words.set(current, head[2]);
+    } else if (current !== '' && raw.startsWith(WIKI_MAINTAIN_CONTINUATION)) {
+      words.set(current, `${words.get(current)}\n${raw.slice(WIKI_MAINTAIN_CONTINUATION.length)}`);
+    } else {
+      current = '';
+    }
+  }
+  return words;
+}
+
+// ── The pass that only checks the agent's notes (docs/wiki-memory-claims-design.md §6.2) ─────────
+
+/** The whole system prompt of a call of that pass. */
+export const WIKI_MAINTAIN_CLAIMS_SYSTEM_PROMPT = 'You check what a coding agent wrote to its own memory against the record of its work, '
+  + 'and compile what holds up into wiki entries. You output only a JSON object.';
+
+/**
+ * The prompt of the pass: no extraction from the case at large, which `wikiMaintainPrompt` does on its own file. Each
+ * note is a question for the lines to answer, and an entry is written only from a note they show.
+ */
+export function wikiMaintainClaimsPrompt(context: WikiMaintainPromptContext, about: string, dossier: string): string {
+  const { name, scope, topics } = wikiMaintainPromptScope(context, about);
+  return `Below is a CASE FILE: what a coding agent wrote to its own memory during one piece of work in the "${name}" repository, among the lines of the work that bear on it.
+${scope}
+Each line starts with a ref (like L37 or C1) and a speaker:
+- claim: a note the agent wrote to its own memory. It is what the agent believed, not evidence
+${WIKI_MAINTAIN_SPEAKERS}
+"… (N lines omitted)" marks lines left out.
+
+${WIKI_MAINTAIN_OFF_TOPIC}
+
+TASK: check each note (each C line) against the L lines, and keep only what holds up and is worth keeping. First ask of each note whether it holds anything that would change how a future agent works in this repository and that it could NOT learn by reading the code for one minute. If not, its outcome is not_durable, whatever the lines show. Otherwise give it one of the others:
+- shown: a tool or owner line shows the very thing the note says. Name those lines in "shownBy".
+- narrowed: such lines show part of what the note says. Name them, and keep only that part.
+- contradicted: the lines show otherwise.
+- absent: the lines neither show nor refute it. A line on the same subject that does not show this very thing is absent. So is a note that only an agent, think, sender, parent or taskprompt line repeats: those lines say what someone believed, and the note is what the agent believed.
+- not_durable: task progress or status reports, what was built, where something lives, one-off facts about this task only, generic programming advice, or anything the code states plainly.
+Then write one entry for each note you answered shown or narrowed, from what its lines show. A note that says several things still gets one entry: the one thing in it a future agent would most need, and that its lines show. Write no other entry: nothing from a note answered contradicted, absent or not_durable, and nothing from lines no note is about.
+
+OUTPUT: one JSON object, nothing else — no prose, no code fence. "notes" has one object for every C line, and comes first. "entries" has one object for every note answered shown or narrowed, and each starts with that note's "note":
+{"notes": [{"note": "C1", "outcome": "shown", "shownBy": ["L12", "L15"]}, {"note": "C2", "outcome": "absent", "shownBy": []}],
+ "entries": [{"note": "C1", "kind": ...}]}
+Each object in "entries" is FLAT:
+${WIKI_MAINTAIN_ENTRY_SHAPE}
+- An entry cites the lines of its note's "shownBy". A C line is never a source: citing one drops the entry.
+
+TOPIC TABLE:
+${topics}
+EXAMPLE (a fictional repository, for format only):
+CASE: Fix the flaky upload test
+task · 1 session(s) · 2025-03-02 → 2025-03-02 · task status DONE · completion EXECUTABLE
+
+L6 tool: $ npm test -w api -- upload.spec.ts → ERR: Exit code 1 … Error: connect ECONNREFUSED 127.0.0.1:9000
+L7 think: Turns out STORAGE_PORT is read when the module is imported, before the fixture sets it.
+L8 tool: edit src/api/test/storage-fixture.ts → ok
+L9 tool: $ npm test -w api -- upload.spec.ts → ok: 14 passing
+C1 claim: The upload test fails with ECONNREFUSED 127.0.0.1:9000 until the fixture returns the url.
+C2 claim: The upload service retries three times before it gives up.
+C3 claim: Task 12 is done and merged.
+OUTPUT:
+{"notes":[{"note":"C1","outcome":"shown","shownBy":["L6","L9"]},{"note":"C2","outcome":"absent","shownBy":[]},{"note":"C3","outcome":"not_durable","shownBy":[]}],
+ "entries":[{"note":"C1","kind":"pitfall","title":"The upload test needs the url from the fixture","summary":"The upload test fails with ECONNREFUSED 127.0.0.1:9000 until the fixture returns the url.","topic":"testing","trigger":{"paths":["src/api/test/storage-fixture.ts"],"commands":["npm test -w api -- upload.spec.ts"],"errorSignature":"connect ECONNREFUSED 127.0.0.1:9000"},"symptom":"The upload test fails with ECONNREFUSED 127.0.0.1:9000","cause":"The test connects before it has the fixture's address","fix":"The fixture returns the url, and the test takes the address from it","anchors":{"paths":["src/api/test/storage-fixture.ts"],"commits":[]},"sources":[{"ref":"L6","quote":"Error: connect ECONNREFUSED 127.0.0.1:9000"},{"ref":"L9","quote":"14 passing"}],"verified":true}]}
+
+==== CASE FILE ====
+${dossier}
+==== END OF CASE FILE ====
+Output the JSON object now.`;
+}
+
+/** Ask once more, naming what did not hold up and which notes the answer owes an entry. */
+function wikiMaintainClaimsRetrySuffix(answer: string, parsed: boolean, built: WikiMaintainBuilt, owed: readonly string[]): string {
+  const problems = [
+    ...(parsed ? [] : ['the output was not a valid JSON object of notes and flat entry objects']),
+    ...built.problems.slice(0, 12),
+    ...owed.map((ref) => `note ${ref} was answered shown or narrowed and has no entry: write it, or answer it again as absent`),
+  ];
+  const before = parsed ? cutRunes(JSON.stringify(built.rejected), 6000) : wikiImportLastRunes(answer, 3000);
+  return `\n\nYOUR ANSWER DID NOT HOLD UP:\n${before}\n\nPROBLEMS:\n- ${problems.join('\n- ')}\n`
+    + 'Output the JSON object again: "notes" as before, for every C line, and in "entries" ONLY the corrected entries and the ones '
+    + 'still owed, each with its "note" (flat objects as specified; copy quotes exactly from the cited line; fill every required '
+    + 'field). Drop an entry you cannot support. Output the JSON object only.';
+}
+
+/** What the pass came to for one session. */
+export interface WikiMaintainClaimsRun {
+  offTopic: boolean;
+  /** What the model said of each note the file carries. */
+  notes: Map<string, WikiMaintainNoteAnswer>;
+  /** One op for a note at most, each from a note answered shown or narrowed. */
+  ops: WikiMaintainOp[];
+  built: WikiMaintainBuilt | null;
+  retried: boolean;
+  /** The entries that held up and were not kept: no note, a note not shown, a second one of a note. */
+  leftOut: { noNote: number; noteNotShown: number; secondOfNote: number };
+  /** The ops as the model cited them, before the lines of `shownBy` were added: how many sources each had. */
+  citedByModel: number[];
+}
+
+/**
+ * The pass, for one file: the model's answer, checked as an extraction's is, the notes it answered read beside the
+ * entries, and asked for once more when something did not hold up or a note it says is shown has no entry. `ask` answers
+ * null for a second answer that cannot be had; a first one that cannot be had is the caller's failure, as in `extract`.
+ * A note is taken from the first answer that says, so that nobody talks the model into a better outcome by asking again.
+ */
+export async function wikiMaintainCheckClaims(input: {
+  dossier: Pick<WikiDossier, 'text' | 'sources' | 'sessionId'>;
+  refs: readonly string[];
+  context: WikiMaintainPromptContext;
+  about: string;
+  repo: WikiMaintainRepoGate | null;
+  ask: (prompt: string, again: boolean) => Promise<string | null>;
+  now?: Date;
+}): Promise<WikiMaintainClaimsRun> {
+  const { dossier, refs, context, about, repo, ask, now } = input;
+  const lines = wikiMaintainLines(dossier);
+  const build = (entries: readonly WikiImportAnswerEntry[]) => buildWikiMaintainOps(entries, dossier, lines, repo, context.topics, now);
+  const prompt = wikiMaintainClaimsPrompt(context, about, dossier.text);
+  const leftOut = { noNote: 0, noteNotShown: 0, secondOfNote: 0 };
+  const first = (await ask(prompt, false)) ?? '';
+  const notes = wikiMaintainNoteAnswers(first, refs);
+  if (wikiMaintainOffTopic(first)) return { offTopic: true, notes, ops: [], built: null, retried: false, leftOut, citedByModel: [] };
+  const parsed = parseWikiImportAnswer(first);
+  const built = build(parsed ?? []);
+  const holds = (ref: string): boolean => {
+    const outcome = notes.get(ref)?.outcome;
+    return outcome === 'shown' || outcome === 'narrowed';
+  };
+  const owed = refs.filter((ref) => holds(ref) && !built.ops.some((op) => op.note === ref));
+  const retried = parsed === null || built.problems.length > 0 || owed.length > 0;
+  if (retried) {
+    const again = await ask(prompt + wikiMaintainClaimsRetrySuffix(first, parsed !== null, built, owed), true);
+    if (again !== null) {
+      for (const [ref, said] of wikiMaintainNoteAnswers(again, refs)) {
+        if (notes.get(ref)?.outcome === 'unanswered') notes.set(ref, said);
+      }
+      const second = parseWikiImportAnswer(again);
+      if (second !== null) mergeWikiMaintainBuilt(built, build(second));
+    }
+  }
+  const taken = new Set<string>();
+  const ops = built.ops.filter((op) => {
+    if (!op.note) leftOut.noNote += 1;
+    else if (!holds(op.note)) leftOut.noteNotShown += 1;
+    else if (taken.has(op.note)) leftOut.secondOfNote += 1;
+    else {
+      taken.add(op.note);
+      return true;
+    }
+    return false;
+  });
+  const citedByModel = ops.map((op) => (op.body.sources as unknown[]).length);
+  wikiMaintainCiteShownBy(ops, notes, lines, wikiMaintainNoteWords(dossier.text));
+  return { offTopic: false, notes, ops, built, retried, leftOut, citedByModel };
 }
 
 /** The model saying the session is not about this repository: `{"offTopic": true}`. */
@@ -305,6 +573,10 @@ export interface WikiMaintainOp {
   topic: string;
   session: string;
   title: string;
+  /** The note of the case file the entry came from (`C1`), when the model said and the case carries it. Not a source. */
+  note?: string;
+  /** The write that note is, for the op to keep: set by the run on the ops of the pass that checks the notes. */
+  promptedBy?: WikiPromptedBy;
 }
 
 /** Why an op is here, and what was wrong with the rest of an answer: the runner's `wikiMaintainBuilt`. */
@@ -409,7 +681,10 @@ export function buildWikiMaintainOps(
       continue;
     }
     built.titles.add(title.toLowerCase());
-    built.ops.push({ body: { op: 'add', entry: draft, sources }, topic, session: dossier.sessionId, title });
+    const op: WikiMaintainOp = { body: { op: 'add', entry: draft, sources }, topic, session: dossier.sessionId, title };
+    const noted = wikiImportText(item.note, 20);
+    if (/^C\d+$/u.test(noted) && dossier.text.includes(`\n${noted} claim: `)) op.note = noted;
+    built.ops.push(op);
   }
   return built;
 }

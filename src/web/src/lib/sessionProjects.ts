@@ -277,6 +277,7 @@ export const SESSION_LANDINGS_COPY = {
   MERGED_INTO: 'merged into',
   TODAY: 'today',
   NOTHING_LANDED_TODAY: 'Nothing landed today',
+  NO_LANDINGS_YET: 'No landings yet',
   NOW: 'Now',
   ORBIT_RUNS_THESE_LANDINGS: 'Orbit runs these landings — nothing to type here.',
 } as const;

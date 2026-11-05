@@ -593,6 +593,9 @@ type IntegrationJobCommand struct {
 	outputEvery      time.Duration
 	outputChunkBytes int
 	outputRedactor   *integrationOutputRedactor
+	// onInterrupted is told when the runner's stop has ended a job that staged a scratch worktree, before
+	// that worktree is removed (runIntegrationJobAndReport). Never on the wire.
+	onInterrupted func(phase string)
 }
 
 // IntegrationObserveTask is one task an OBSERVE_LANDING looks for (§10.6 O-S2): the commit its work
@@ -1227,6 +1230,9 @@ type ClaimedSession struct {
 	Provider  string          `json:"provider,omitempty"`
 	Prompt    string          `json:"prompt"`
 	Agent     AgentExecConfig `json:"agent"`
+	// liveMode is the session's permission mode as the goroutines serving its socket read it
+	// (background_gate.go); nil until that service starts.
+	liveMode *sessionLiveMode
 	// WorkDir is the coding engine's cwd for this session, from the session's agent.
 	WorkDir          string `json:"workDir,omitempty"`
 	SessionUUID      string `json:"sessionUuid"`
@@ -1668,9 +1674,10 @@ type RunFinalizeRequest struct {
 // RunFinalizeResponse is the control plane's reply when the runner finalizes a run through
 // /runner/sessions/:id/finalize. KeepCheckout is false only when the Session is Completed or
 // in Trash; for any resumable end it is true, so the isolated worktree checkout is preserved
-// for the resume. False means the checkout has become ELIGIBLE for reclamation, not that the
-// runner removes it here: gcWorktrees re-asks the same judgement (sessions/worktrees-removable)
-// on every sweep and is the only thing that acts on it.
+// for the resume, unless the disk runs short and it has nothing to lose (gcResumableCheckouts).
+// False means the checkout has become ELIGIBLE for reclamation, not that the runner removes it
+// here: gcWorktrees re-asks the same judgement (sessions/worktrees-removable) on every sweep and
+// is the only thing that acts on it.
 type RunFinalizeResponse struct {
 	Ok           bool `json:"ok"`
 	KeepCheckout bool `json:"keepCheckout"`

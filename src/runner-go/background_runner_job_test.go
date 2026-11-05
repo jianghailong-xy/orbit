@@ -340,6 +340,7 @@ func TestEngineOwnedBackgroundShellStillDiesWithItsEngine(t *testing.T) {
 	if err := os.WriteFile(output, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	h.bg.noteToolUse("toolu_A", "Bash", map[string]interface{}{"run_in_background": true})
 	h.bg.onToolResult("toolu_A", "Command running in background with ID: bei1. Output is being"+
 		" written to: "+output+". You will be notified when it completes.")
 

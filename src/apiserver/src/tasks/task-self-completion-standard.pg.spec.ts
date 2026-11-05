@@ -25,11 +25,12 @@
  *
  *  - the task's own run is refused when it moves any part of its own standard: the criterion, the
  *    acceptance pair, the completion policy;
- *  - the SAME request, from an independent run and from the account owner with no run at all, is
- *    accepted — and an independent run still owes the criterion-change door its reason, so the two
+ *  - the SAME request, from the project's coordinator and from the account owner with no run at all,
+ *    is accepted — and the coordinator still owes the criterion-change door its reason, so the two
  *    doors are shown composing rather than one masking the other;
+ *  - the run of another task is refused it too (`run-write-authority.pg.spec.ts` holds that door);
  *  - the existing remedy is still open: a project-less EVIDENCE_JUDGMENT row, the shape that used
- *    to be a deadlock, can still be re-declared EXECUTABLE by anybody except its own run;
+ *    to be a deadlock, can still be re-declared EXECUTABLE by the coordinator or the owner;
  *  - the budget is deliberately NOT part of the standard. A run may still raise its own
  *    `acceptanceTimeoutSeconds`, because that bounds how long the declared command may run without
  *    changing what the command has to report — and restating the standard it already carries is
@@ -196,13 +197,29 @@ suite('a task\'s own run cannot rewrite the standard it is measured by', async (
     return { taskId, ownRun };
   }
 
-  /** A run that is doing OTHER work: the independent session every control below acts as. */
+  /** A run that is doing OTHER work, which may not restate this standard either. */
   const elsewhere = await work({
     title: 'unrelated work in the same goal',
     projectId: goalId,
     completionCriterion: 'EVIDENCE_JUDGMENT',
   });
-  const independentRun = elsewhere.ownRun;
+  /** The project's coordinator, doing none of this work: the session every control below acts as. */
+  const coordinator = randomUUID();
+  await prisma.session.create({
+    data: {
+      id: coordinator,
+      ownerId,
+      creatorId: ownerId,
+      workspaceId,
+      assignedRunnerId: runnerId,
+      title: 'coordinating the goal',
+      prompt: 'coordinate',
+      provider: 'claude',
+      status: RunStatus.RUNNING,
+      dispatchOrigin: SessionDispatchOrigin.USER,
+    },
+  });
+  await prisma.project.update({ where: { id: goalId }, data: { coordinatorSessionId: coordinator } });
 
   /** The refused call's body, with a real assertion that it WAS refused. */
   async function refusalOf(run: () => Promise<unknown>): Promise<RefusalView> {
@@ -239,7 +256,7 @@ suite('a task\'s own run cannot rewrite the standard it is measured by', async (
     assert.equal(body.requiredAction, SELF_REWRITE_ACTION);
     assert.deepEqual(body.rewritten, moved, 'the refusal names WHICH parts of the standard moved');
     const message = body.message ?? '';
-    assert.match(message, /any session other than this task's run/,
+    assert.match(message, /the project's coordinator, a judgment session and the account owner/,
       'the refusal must name who can still make this edit');
     assert.match(message, /account owner/,
       'and the account owner, who reaches this service with no run at all');
@@ -282,25 +299,39 @@ suite('a task\'s own run cannot rewrite the standard it is measured by', async (
     });
 
   // ═══ 2. the control that makes case 1 about WHO rather than about the edit ═════════════════
-  await t.test('an independent run makes the identical edit — after answering the other door',
+  await t.test('the run of another task may not make this edit either', async () => {
+    const subject = await work({
+      title: 'the same work, restated by a run of something else',
+      projectId: goalId,
+      completionCriterion: 'EVIDENCE_JUDGMENT',
+    });
+    const before = await standardOf(subject.taskId);
+    const refused = await refusalOf(() => service.update(
+      ownerId, subject.taskId, { ...REDECLARE_AS_EXECUTABLE } as never, elsewhere.ownRun,
+    ));
+    assert.equal(refused.code, 'COMPLETION_STANDARD_FROM_RUN_REFUSED');
+    assert.deepEqual(await standardOf(subject.taskId), before, 'and nothing moved');
+  });
+
+  await t.test('the project\'s coordinator makes the identical edit — after answering the other door',
     async () => {
       const subject = await work({
-        title: 'the same work, restated by a run that is not doing it',
+        title: 'the same work, restated by the session that coordinates it',
         projectId: goalId,
         completionCriterion: 'EVIDENCE_JUDGMENT',
       });
 
-      // The two doors compose rather than one masking the other: an independent session is past
-      // the independence question and straight into the one about explaining itself.
+      // The two doors compose rather than one masking the other: the coordinator is past the
+      // independence question and straight into the one about explaining itself.
       const { completionCriterionOverrideReason: _reason, ...silent } = REDECLARE_AS_EXECUTABLE;
       const unexplained = await refusalOf(() => service.update(
-        ownerId, subject.taskId, { ...silent } as never, independentRun,
+        ownerId, subject.taskId, { ...silent } as never, coordinator,
       ));
       assert.equal(unexplained.code, UNEXPLAINED_CODE,
         'an independent session is asked WHY, which is the door beside this one');
 
       await service.update(
-        ownerId, subject.taskId, { ...REDECLARE_AS_EXECUTABLE } as never, independentRun,
+        ownerId, subject.taskId, { ...REDECLARE_AS_EXECUTABLE } as never, coordinator,
       );
 
       assert.deepEqual(await standardOf(subject.taskId), {
@@ -438,7 +469,7 @@ suite('a task\'s own run cannot rewrite the standard it is measured by', async (
   // A project-less EVIDENCE_JUDGMENT row is the shape that used to be a deadlock, and re-declaring
   // it EXECUTABLE is one of the two ways out. A wall that closed that path for everybody would
   // have replaced a bypass with a trap.
-  await t.test('a project-less EVIDENCE_JUDGMENT row is still rescuable — by anybody but its run',
+  await t.test('a project-less EVIDENCE_JUDGMENT row is still rescuable — by the coordinator or the owner',
     async () => {
       const stranded = await work({
         title: 'standalone work filed under no goal at all',
@@ -453,7 +484,7 @@ suite('a task\'s own run cannot rewrite the standard it is measured by', async (
         ['completionCriterion', 'acceptanceCommand', 'acceptanceExpectedExitCode']);
 
       await service.update(
-        ownerId, stranded.taskId, { ...REDECLARE_AS_EXECUTABLE } as never, independentRun,
+        ownerId, stranded.taskId, { ...REDECLARE_AS_EXECUTABLE } as never, coordinator,
       );
 
       assert.deepEqual(await standardOf(stranded.taskId), {
@@ -462,6 +493,6 @@ suite('a task\'s own run cannot rewrite the standard it is measured by', async (
         acceptance_command: CHOSEN_COMMAND,
         acceptance_expected_exit_code: 0,
         acceptance_timeout_seconds: null,
-      }, 'the way out of the old deadlock stays open to every session that did not do the work');
+      }, 'the way out of the old deadlock stays open to the coordinator');
     });
 });

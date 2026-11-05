@@ -128,7 +128,6 @@ async function poll(
   const res = {
     setHeader: (name: string, value: string) => { headers[name.toLowerCase()] = value; },
     status: (code: number) => { status = code; return res; },
-    end: () => res,
   };
   const body = await controller.list(
     { userId: f.ownerId } as never,

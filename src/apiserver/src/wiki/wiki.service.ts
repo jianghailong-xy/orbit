@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, HttpException, Injectable, Logg
 import { Prisma } from '@prisma/client';
 import {
   KIND_SPECS,
+  WIKI_BACKFILL,
   WIKI_CHALLENGE_ANSWERS,
   WIKI_DEFAULT_SPACE_SETTINGS,
   WIKI_KINDS,
@@ -19,10 +20,12 @@ import {
   validateWikiSources,
   toUuid,
   uuidToBase62,
+  wikiEvidenceClass,
   wikiReviewEffect,
   wikiSpaceSettings,
   wikiTieredBasis,
   wikiVerdictEffect,
+  type WikiPromptedBy,
   type WikiAnchor,
   type WikiAnchorInput,
   type WikiAnchorOutcome,
@@ -35,6 +38,7 @@ import {
   type WikiEntryChanges,
   type WikiEntryKind,
   type WikiEntryStatus,
+  type WikiEvidenceClass,
   type WikiFieldError,
   type WikiKind,
   type WikiOp,
@@ -74,7 +78,7 @@ import {
   type AnchorReportEntry,
 } from './wiki-anchors';
 import { docWithdrawReason, withdrawDocSentences } from './wiki-doc-withdrawal';
-import { mergeReceiptText, ownerResolutionText } from './wiki-dossier';
+import { memoryWriteWords, mergeReceiptText, ownerResolutionText } from './wiki-dossier';
 import { wikiMaintenanceRunChanges } from './wiki-maintenance-breaker';
 import {
   ChangesetNeighbours,
@@ -94,7 +98,19 @@ import { canonicalRepoUrl } from '../projects/project-integration-line';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { approvalText, evidenceOf, readBeforeRevision4, runEventText, toolCallText, verifierText } from './wiki-verify-evidence';
+import {
+  approvalText,
+  callCommand,
+  evidenceOf,
+  eventCall,
+  hasText,
+  noteOriginSessionId,
+  promptedEvidenceOf,
+  readBeforeRevision4,
+  runEventText,
+  toolCallText,
+  verifierText,
+} from './wiki-verify-evidence';
 import { enqueueWikiVerifyJob, wikiVerifyJobNeeded } from './wiki-verify-jobs';
 import { entryAppliedBy } from './wiki-run-reads';
 import { wikiSpaceWorkspaces, wikiWorkspacesOfSpaces } from './wiki-workspaces';
@@ -324,6 +340,8 @@ interface PreparedOp {
   payload: Record<string, unknown>;
   similar: WikiSimilar[];
   tainted: boolean;
+  /** The agent's note the op came from: the server's own word (`submitChangeset`), and null for every other op. */
+  promptedBy?: WikiPromptedBy | null;
   /** The effect policy's answer (§4.2), under the space's review mode: does this op take effect before the owner sees it? */
   applied: boolean;
   /**
@@ -357,10 +375,11 @@ interface PreparedOp {
  * exactly one writer. `reopen` is the one way back out of a rejection: a lineage a verdict rejected
  * without being able to read its sources, proposed again (`reviewModes.verification.reopen`).
  * `anchor_check` is not a wiki op either: it is what a maintenance run's re-verification found
- * (`recordAnchorChecks`), and it can move an entry's trust, which is why it comes here too.
+ * (`recordAnchorChecks`), and it can move an entry's trust, which is why it comes here too. `downgrade` is
+ * neither: it is the close of a history backfill (`downgradeNoteEntries`), which moves an entry's trust alone.
  */
 interface WikiApplyInstruction {
-  op: WikiOp | 'promote' | 'confirm' | 'reject' | 'reopen' | 'anchor_check';
+  op: WikiOp | 'promote' | 'confirm' | 'reject' | 'reopen' | 'anchor_check' | 'downgrade';
   entryId: string | null;
   draft: PreparedDraft | null;
   changes: WikiEntryChanges | null;
@@ -405,6 +424,25 @@ interface ChangesetBudget {
   breakerScope: WikiBreakerReading['scope'];
   /** How many ops the space's review mode had applied before this one: what the spot-check draw counts. */
   appliedByModeBefore: number;
+}
+
+/**
+ * What the close of a history backfill read and did (contract `maintenance.job.server.backfill.downgrade`): the printed
+ * report. `examined` is every live `auto` entry with a live note source on its current revision, `firstHand` those it leaves
+ * alone, `noFirstHand` those without, with their ids and kinds, whether or not this call was asked to write. `downgraded` is
+ * what it wrote, `moved` what it no longer could, because the entry had changed since it was read.
+ */
+export interface WikiNoteDowngradeReport {
+  spaceId: string;
+  apply: boolean;
+  examined: number;
+  firstHand: number;
+  noFirstHand: number;
+  downgraded: number;
+  moved: number;
+  batches: number;
+  byKind: Record<string, number>;
+  entryIds: string[];
 }
 
 /** A revert's restorations, by entry: the sources of the revision each amend puts back. */
@@ -528,6 +566,26 @@ export function isOwnerTurn(turn: { kind: string; sendIntent: string | null; cli
 function isOwnerAnswer(approval: { toolName: string; status: string; answers: unknown; decidedById: string | null }): boolean {
   return approval.toolName === 'AskUserQuestion' && approval.status === 'ALLOWED' && approval.answers !== null
     && approval.decidedById !== null;
+}
+
+/** Where a conversation turn's words came from (`wikiEvidenceClass`). */
+function turnEvidenceClass(turn: {
+  kind: string;
+  sendIntent: string | null;
+  clientTurnId: string;
+  senderSessionId: string | null;
+  session: { taskId: string | null; parentSessionId: string | null };
+}): WikiEvidenceClass {
+  return wikiEvidenceClass({
+    kind: 'turn',
+    ownerWords: isOwnerTurn(turn),
+    turnKind: turn.kind,
+    clientTurnId: turn.clientTurnId,
+    orbitAuthored: isOrbitAuthoredTurn(turn.clientTurnId),
+    senderSessionId: turn.senderSessionId,
+    sessionTaskId: turn.session.taskId,
+    sessionParentId: turn.session.parentSessionId,
+  });
 }
 
 /**
@@ -1206,6 +1264,12 @@ export class WikiService {
     principal: WikiPrincipal,
     spaceId: string,
     input: WikiProposeInput,
+    /**
+     * What only the server's own maintenance run says of its ops, by their place in `input.ops` (contract
+     * `opRules.promptedBy`). Beside the input rather than in it: no door hands it on, so an op that carries the field is
+     * refused for its shape whoever sends it.
+     */
+    serverSays: { promptedBy?: ReadonlyArray<WikiPromptedBy | null> } = {},
   ): Promise<Record<string, unknown>> {
     const space = await this.requireSpace(principal.ownerId, spaceId);
     const ops = input.ops;
@@ -1238,7 +1302,7 @@ export class WikiService {
           const replay = await this.replayIdempotent(tx, principal.ownerId, input.idempotencyKey, requestSha256!);
           if (replay) return replay;
         }
-        return this.recordChangeset(tx, principal, space, ops, input, requestSha256, literals, null, neighbours);
+        return this.recordChangeset(tx, principal, space, ops, input, requestSha256, literals, null, neighbours, serverSays.promptedBy);
       },
       loggedRetry(this.logger, 'wiki.submitChangeset', { transaction: CHANGESET_TRANSACTION }),
     );
@@ -1373,6 +1437,7 @@ export class WikiService {
     literals: readonly string[],
     restorations: Restorations | null = null,
     neighbours: ChangesetNeighbours | null = null,
+    promptedBy: ReadonlyArray<WikiPromptedBy | null> = [],
   ): Promise<Record<string, unknown>> {
     const dryRun = input.dryRun === true;
     const lookups = neighbours ? await neighbours.recheck(tx, principal.ownerId) : null;
@@ -1464,6 +1529,11 @@ export class WikiService {
           );
         }
         const prepared = await this.prepareOp(tx, principal, space.id, seq, ops[seq], budget, literals, lookups);
+        prepared.promptedBy = promptedBy[seq] ?? null;
+        // A note a backfill read again: what was drawn from it is what this op may turn out to repeat, whatever words it says it in.
+        if (principal.origin === 'maintenance' && prepared.promptedBy && 'noteId' in prepared.promptedBy) {
+          prepared.similar = await this.withEntriesOfNote(tx, principal.ownerId, space.id, prepared, prepared.promptedBy.noteId);
+        }
         if (prepared.byMode?.mode === 'tiered') {
           // Tiered's spot check (`reviewModes.spotChecks`): one in every block of the ops it applies at
           // once, drawn by position. Automatic applies nothing here — its verdicts draw theirs, when the
@@ -1717,6 +1787,7 @@ export class WikiService {
               // What Automatic took is not applied yet: its verdict names the mode when it applies it.
               appliedByMode: prepared.applied ? (prepared.byMode?.mode ?? null) : null,
               spotCheck: prepared.spotCheck,
+              promptedBy: prepared.promptedBy ? { ...prepared.promptedBy } : Prisma.DbNull,
             },
             select: { id: true },
           })
@@ -2186,7 +2257,7 @@ export class WikiService {
   async listVerifications(
     principal: WikiPrincipal,
     spaceId: string,
-    options: { after?: string | null; limit?: number; adopt?: boolean } = {},
+    options: { after?: string | null; limit?: number; adopt?: boolean; promptedBy?: boolean } = {},
   ): Promise<{ spaceId: string; mode: WikiReviewMode; items: WikiVerificationItem[]; next: string | null }> {
     const space = await this.requireSpace(principal.ownerId, spaceId);
     const asked = Number.isFinite(options.limit) ? Math.trunc(options.limit as number) : 20;
@@ -2211,6 +2282,7 @@ export class WikiService {
         ownerId: principal.ownerId,
         decision: 'verifying',
         ...(after ? { id: { gt: after } } : {}),
+        ...(options.promptedBy === undefined ? {} : { promptedBy: options.promptedBy ? { not: Prisma.AnyNull } : { equals: Prisma.AnyNull } }),
         changeset: { spaceId: space.id, ...scope },
       },
       // uuid(7): the id order is the order the ops were recorded in, and the partial index 0312 made.
@@ -2224,6 +2296,7 @@ export class WikiService {
         resultEntryId: true,
         payload: true,
         similar: true,
+        promptedBy: true,
         changeset: { select: { sessionId: true } },
       },
     });
@@ -2255,6 +2328,7 @@ export class WikiService {
       resultEntryId: string | null;
       payload: Prisma.JsonValue;
       similar: Prisma.JsonValue;
+      promptedBy: Prisma.JsonValue;
       changeset: { sessionId: string | null };
     },
     literals: readonly string[],
@@ -2285,7 +2359,7 @@ export class WikiService {
         aliases: (draft.aliases ?? []) as string[],
       };
     }
-    const { sources, evidence } = await this.verifierSources(reader, ownerId, row.changeset.sessionId, payload, literals);
+    const { sources, evidence } = await this.verifierSources(reader, ownerId, row.changeset.sessionId, payload, literals, row.promptedBy);
     // The neighbours as recorded, each as it reads now: a duplicate may only name one still live.
     const recorded = (Array.isArray(row.similar) ? row.similar : []) as unknown as WikiSimilar[];
     const now = recorded.length === 0
@@ -2345,6 +2419,7 @@ export class WikiService {
     sessionId: string | null,
     payload: Record<string, unknown>,
     literals: readonly string[],
+    promptedBy: Prisma.JsonValue = null,
   ): Promise<{
     sources: WikiVerificationItem['sources'];
     evidence: WikiVerificationEvidence;
@@ -2352,23 +2427,41 @@ export class WikiService {
   }> {
     const as: WikiPrincipal = { origin: 'agent', ownerId, userId: null, sessionId, toolCallId: null };
     const sources: WikiVerificationItem['sources'] = [];
+    const read: Array<{ text: string | null; evidenceClass: WikiEvidenceClass | null }> = [];
     const before: Array<string | null> = [];
     for (const raw of rawOpSources(payload)) {
       const cited = raw as { kind: WikiSourceKind; ref?: string; session?: 'self'; seq?: number; quote?: string };
       const found = await this.sourceText(reader, as, cited);
+      const handed = verifierText(found?.text ?? null, literals);
       sources.push({
         kind: cited.kind,
         ref: found?.ref ?? cited.ref ?? '',
         quote: typeof cited.quote === 'string' ? cited.quote : null,
-        ...verifierText(found?.text ?? null, literals),
+        ...handed,
       });
+      read.push({ text: handed.text, evidenceClass: found?.evidenceClass ?? null });
       before.push(found ? readBeforeRevision4({ kind: cited.kind, eventType: found.eventType }, found.text) : null);
     }
     return {
       sources,
-      evidence: evidenceOf(sources.map((source) => source.text)),
-      evidenceBeforeRevision4: evidenceOf(before),
+      evidence: promptedBy === null ? evidenceOf(read) : promptedEvidenceOf(read, await this.promptedNote(reader, ownerId, promptedBy, literals)),
+      evidenceBeforeRevision4: before.some(hasText) ? 'readable' : 'unreadable',
     };
+  }
+
+  /**
+   * The words of the note an op came from, redacted as what they are held against was, read from the write or the row it
+   * names; null when that can no longer be read.
+   */
+  private async promptedNote(reader: Tx, ownerId: string, promptedBy: Prisma.JsonValue, literals: readonly string[]): Promise<string | null> {
+    const by = promptedBy as unknown as WikiPromptedBy;
+    if ('noteId' in by) {
+      const note = await reader.wikiNote.findFirst({ where: { id: by.noteId, ownerId }, select: { text: true } });
+      return note ? redactSecrets(memoryWriteWords({ content: note.text }), { literals }).text : null;
+    }
+    const event = await reader.runEvent.findFirst({ where: { id: by.eventId, session: { ownerId } }, select: { payload: true } });
+    if (!event) return null;
+    return redactSecrets(memoryWriteWords((event.payload as { input?: unknown } | null)?.input), { literals }).text;
   }
 
   /**
@@ -2611,6 +2704,7 @@ export class WikiService {
         payload: true,
         similar: true,
         tainted: true,
+        promptedBy: true,
         decision: true,
         decisionReason: true,
         decidedAt: true,
@@ -2689,9 +2783,11 @@ export class WikiService {
     };
     // What the verifier could read decides how far its verdict reaches, and the server reads it here
     // rather than taking the verifier's word (contract `reviewModes.verification.evidence`): with no
-    // source readable, whatever it said leaves the op no more than unreviewed and is not counted; and a
-    // tainted op is never more than unreviewed, its duplicate adding nothing (`floors.taintedWaits`).
-    const { evidence } = await this.verifierSources(tx, ownerId, op.changeset.sessionId, payload, literals);
+    // source readable, whatever it said leaves the op no more than unreviewed and is not counted; with
+    // only a note's words to read, or an op that came from a note with no first-hand source for it, its
+    // supported is no more than unreviewed and it counts; and a tainted op is never more than unreviewed,
+    // its duplicate adding nothing (`floors.taintedWaits`).
+    const { evidence } = await this.verifierSources(tx, ownerId, op.changeset.sessionId, payload, literals, op.promptedBy);
     let effect = wikiVerdictEffect({ verdict: verdict.verdict, tainted: op.tainted, evidence });
     // An adopted add waited while the space moved on: the entry a later op made of the very same content
     // is the one it duplicates, whatever its verdict would have applied (`verification.adoption.twin`).
@@ -2835,14 +2931,15 @@ export class WikiService {
     const since = settings.reviewModeChangedAt ? new Date(settings.reviewModeChangedAt) : new Date(0);
     const window = WIKI_REVIEW_RULES.verificationWindow;
     // A verdict given when none of its op's sources could be read is out of the window altogether
-    // (`verification.evidence`); one recorded before the server kept the mark is in it, as it was.
+    // (`verification.evidence`); one that read only a note did read text, so it is in, and so is one
+    // recorded before the server kept the mark, as it was.
     const latest = await tx.wikiChangesetOp.findMany({
       where: {
         ownerId,
         verificationVerdict: { not: null },
         verifiedAt: { gte: since },
         changeset: { spaceId },
-        OR: [{ verificationEvidence: null }, { verificationEvidence: 'readable' }],
+        OR: [{ verificationEvidence: null }, { verificationEvidence: { in: ['readable', 'second_hand'] } }],
       },
       orderBy: [{ verifiedAt: 'desc' }, { id: 'desc' }],
       take: window,
@@ -2862,6 +2959,109 @@ export class WikiService {
          AND "owner_id" = ${ownerId}::uuid
          AND "settings"->>'reviewMode' = 'automatic'`;
     return switched === 1 ? { spaceId, title: space.title, unsupported, window } : null;
+  }
+
+  // ── The close of a history backfill (contract `maintenance.job.server.backfill.downgrade`) ──────
+
+  /**
+   * What is left of the old note entries once a history backfill has read their sessions again (design §5): a live `auto`
+   * entry with a live note source on its current revision and no first-hand source there, by the rule a note's op is verified
+   * under ({@link hasFirstHandSource}), goes down to `unreviewed`. No revision: what it says has not changed.
+   *
+   * ASKED, IT ONLY REPORTS. It writes only with `apply`, and then needs why. A run through the same entries again finds nothing
+   * more to write: what it wrote is `auto` no longer, and the rest it leaves alone have a first-hand source.
+   *
+   * IN BATCHES, each in a transaction of its own with its one `activity` row: since it writes no revision, that row is the
+   * only trail of which entries it moved, and why. An entry is judged before its transaction, and written only if it is still
+   * live, `auto` and at that revision. A source a duplicate adds in between moves none of those: that entry goes down all the
+   * same, which errs on the side this exists for, and its owner can confirm it. No model is asked and no repository is read.
+   */
+  async downgradeNoteEntries(
+    ownerId: string,
+    spaceId: string,
+    options: { apply?: boolean; reason?: string; batchSize?: number } = {},
+  ): Promise<WikiNoteDowngradeReport> {
+    const apply = options.apply === true;
+    const reason = (options.reason ?? '').trim();
+    if (apply && reason === '') return refuse('WIKI_SCHEMA', 'a reason is required to write: why these entries go down to unreviewed');
+    const size = options.batchSize ?? WIKI_BACKFILL.downgradeBatch;
+    const literals = await this.envLiterals(this.prisma, ownerId);
+    const reader = this.prisma as unknown as Tx;
+    const report: WikiNoteDowngradeReport = { spaceId, apply, examined: 0, firstHand: 0, noFirstHand: 0, downgraded: 0, moved: 0, batches: 0, byKind: {}, entryIds: [] };
+    let after: string | null = null;
+    for (;;) {
+      const page: Array<{ id: string; kind: string; revision: number }> = await this.prisma.$queryRaw`
+        SELECT e."id" AS "id", e."kind" AS "kind", e."current_revision" AS "revision"
+          FROM "wiki_entry" e
+         WHERE e."owner_id" = ${ownerId}::uuid AND e."space_id" = ${spaceId}::uuid AND e."status" = 'active' AND e."trust" = 'auto'
+           AND (${after}::uuid IS NULL OR e."id" > ${after}::uuid)
+           AND EXISTS (SELECT 1 FROM "wiki_entry_revision" r JOIN "wiki_source" s ON s."revision_id" = r."id"
+                        WHERE r."entry_id" = e."id" AND r."revision" = e."current_revision" AND s."kind" = 'note' AND s."state" = 'live')
+         ORDER BY e."id"
+         LIMIT ${size}::int`;
+      if (page.length === 0) break;
+      report.batches += 1;
+      report.examined += page.length;
+      const due: typeof page = [];
+      for (const entry of page) {
+        if (await this.hasFirstHandSource(reader, ownerId, entry, literals)) report.firstHand += 1;
+        else due.push(entry);
+      }
+      report.noFirstHand += due.length;
+      for (const { id, kind } of due) {
+        report.byKind[kind] = (report.byKind[kind] ?? 0) + 1;
+        report.entryIds.push(id);
+      }
+      if (apply && due.length > 0) {
+        const written = await withTransactionRetry(
+          this.prisma,
+          async (tx) => {
+            const moved: string[] = [];
+            for (const { id, revision } of due) {
+              const done = await this.applyOp(tx, ownerId, spaceId, {
+                op: 'downgrade', entryId: id, draft: null, changes: null, payload: { revision }, sources: [], tainted: false,
+              }, { authorKind: 'system', authorUserId: null, authorSessionId: null, authorToolCallId: null, changesetOpId: null });
+              if (done.revision !== null) moved.push(id);
+            }
+            if (moved.length > 0) {
+              await tx.activity.create({
+                data: { actorId: null, type: WIKI_BACKFILL.downgradeActivity, payload: { userId: ownerId, spaceId, reason, entryIds: moved }, credentialKind: null },
+              });
+            }
+            return moved.length;
+          },
+          loggedRetry(this.logger, 'wiki.downgradeNoteEntries', { transaction: CHANGESET_TRANSACTION }),
+        );
+        report.downgraded += written;
+        report.moved += due.length - written;
+      }
+      after = page[page.length - 1]!.id;
+    }
+    return report;
+  }
+
+  /**
+   * Whether what an entry's current revision cites is first-hand, by the very function a note's op is held to at its verdict
+   * (`promptedEvidenceOf`): a source the verifier could read, of a first-hand class (`wikiEvidenceClass`), and, if it is what
+   * happened, not repeating the note. Each read as a verifier reads it, a turn cited as the calling session's own by the turn
+   * its locator names.
+   */
+  private async hasFirstHandSource(reader: Tx, ownerId: string, entry: { id: string; revision: number }, literals: readonly string[]): Promise<boolean> {
+    const cited = await reader.wikiSource.findMany({
+      where: { ownerId, state: 'live', revision: { entryId: entry.id, revision: entry.revision } },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { kind: true, ref: true, locator: true },
+    });
+    const as: WikiPrincipal = { origin: 'maintenance', ownerId, userId: null, sessionId: null, toolCallId: null };
+    const read: Array<{ text: string | null; evidenceClass: WikiEvidenceClass | null }> = [];
+    const notes: string[] = [];
+    for (const source of cited) {
+      const turnId = source.kind === 'turn' ? (source.locator as { turnId?: unknown } | null)?.turnId : undefined;
+      const found = await this.sourceText(reader, as, { kind: source.kind as WikiSourceKind, ref: typeof turnId === 'string' ? turnId : source.ref });
+      read.push({ text: verifierText(found?.text ?? null, literals).text, evidenceClass: found?.evidenceClass ?? null });
+      if (source.kind === 'note' && found?.text) notes.push(memoryWriteWords({ content: found.text }));
+    }
+    return promptedEvidenceOf(read, redactSecrets(notes.join('\n'), { literals }).text) === 'readable';
   }
 
   // ── Anchor re-verification: what a maintenance run found (contract `anchorRules.verify`) ───────
@@ -3106,6 +3306,7 @@ export class WikiService {
             decision: 'rejected',
             decisionReason: 'not_true',
             verificationVerdict: 'unsupported',
+            // Only for want of text: `second_hand` read what it rejected, as `readable` did, and stands.
             OR: [{ verificationEvidence: null }, { verificationEvidence: 'unreadable' }],
             ...(after ? { id: { gt: after } } : {}),
             changeset: { spaceId: space.id, ...scope },
@@ -3923,6 +4124,18 @@ export class WikiService {
         await this.recomputeFlags(tx, ownerId, instruction.entryId!);
         return { entryId: instruction.entryId!, revision: found.revision };
       }
+      case 'downgrade': {
+        // The close of a history backfill (`downgradeNoteEntries`): the trust alone, and no revision, since what the entry
+        // says has not changed. Only while it is what the judgement read: live, `auto`, at that revision.
+        const { revision } = instruction.payload as { revision: number };
+        const written = await tx.wikiEntry.updateMany({
+          where: { id: instruction.entryId!, ownerId, status: 'active', trust: 'auto', currentRevision: revision },
+          data: { trust: 'unreviewed' },
+        });
+        if (written.count !== 1) return { entryId: instruction.entryId!, revision: null };
+        await this.recomputeFlags(tx, ownerId, instruction.entryId!);
+        return { entryId: instruction.entryId!, revision };
+      }
     }
   }
 
@@ -4141,6 +4354,8 @@ export class WikiService {
     tainted: boolean;
     ownerWords: boolean;
     sessionId: string | null;
+    /** Where the record's words came from (`wikiEvidenceClass`); null for a calling session's turn not stored yet. */
+    evidenceClass: WikiEvidenceClass | null;
   } | null> {
     if (!(WIKI_SOURCE_KINDS as readonly string[]).includes(source.kind)) return null;
     const ownerScoped = { session: { ownerId: principal.ownerId } };
@@ -4148,8 +4363,14 @@ export class WikiService {
     // It never reaches a query as it came: every row below is keyed by a uuid column, and the database answers a
     // value that is not a uuid with an error (P2007), not with no row. A commit names a sha, and is read as written.
     const ref = source.ref === undefined ? null : rowIdOf(source.ref);
-    /** What tells the owner's own turn from anybody else's (`isOwnerTurn`). */
-    const turnAuthor = { kind: true, sendIntent: true, clientTurnId: true } as const;
+    /** What tells the owner's own turn from anybody else's (`isOwnerTurn`), and whose else it is (`turnEvidenceClass`). */
+    const turnAuthor = {
+      kind: true,
+      sendIntent: true,
+      clientTurnId: true,
+      senderSessionId: true,
+      session: { select: { taskId: true, parentSessionId: true } },
+    } as const;
     switch (source.kind) {
       case 'turn': {
         if (source.session === 'self') {
@@ -4166,6 +4387,7 @@ export class WikiService {
             tainted: false,
             ownerWords: turn ? isOwnerTurn(turn) : false,
             sessionId: principal.sessionId,
+            evidenceClass: turn ? turnEvidenceClass(turn) : null,
           };
         }
         if (!ref) return null;
@@ -4180,6 +4402,7 @@ export class WikiService {
           tainted: await this.sessionWasTainted(tx, turn.sessionId),
           ownerWords: isOwnerTurn(turn),
           sessionId: turn.sessionId,
+          evidenceClass: turnEvidenceClass(turn),
         };
       }
       case 'event': {
@@ -4198,6 +4421,7 @@ export class WikiService {
           tainted: await this.sessionWasTainted(tx, event.sessionId),
           ownerWords: false,
           sessionId: event.sessionId,
+          evidenceClass: wikiEvidenceClass({ kind: 'event', eventType: event.type, ...(await this.calledBy(tx, event)) }),
         };
       }
       case 'tool_call': {
@@ -4211,6 +4435,7 @@ export class WikiService {
           tainted: false,
           ownerWords: false,
           sessionId: call.sessionId,
+          evidenceClass: wikiEvidenceClass({ kind: 'tool_call', toolName: call.name, command: callCommand(call.input) }),
         };
       }
       case 'task': {
@@ -4220,7 +4445,14 @@ export class WikiService {
           select: { id: true, title: true, description: true },
         });
         if (!task) return null;
-        return { ref: task.id, text: `${task.title}\n${task.description ?? ''}`, tainted: false, ownerWords: false, sessionId: null };
+        return {
+          ref: task.id,
+          text: `${task.title}\n${task.description ?? ''}`,
+          tainted: false,
+          ownerWords: false,
+          sessionId: null,
+          evidenceClass: wikiEvidenceClass({ kind: 'task' }),
+        };
       }
       case 'task_comment': {
         if (!ref) return null;
@@ -4229,7 +4461,7 @@ export class WikiService {
           select: { id: true, body: true },
         });
         if (!comment) return null;
-        return { ref: comment.id, text: comment.body, tainted: false, ownerWords: false, sessionId: null };
+        return { ref: comment.id, text: comment.body, tainted: false, ownerWords: false, sessionId: null, evidenceClass: wikiEvidenceClass({ kind: 'task_comment' }) };
       }
       case 'approval': {
         if (!ref) return null;
@@ -4244,6 +4476,7 @@ export class WikiService {
           tainted: await this.sessionWasTainted(tx, approval.sessionId),
           ownerWords: isOwnerAnswer(approval),
           sessionId: approval.sessionId,
+          evidenceClass: wikiEvidenceClass({ kind: 'approval', ownerWords: isOwnerAnswer(approval) }),
         };
       }
       case 'merge_receipt': {
@@ -4254,12 +4487,19 @@ export class WikiService {
           select: { id: true, result: true, sourceBranch: true, sourceSha: true, targetBranch: true, targetShaAfter: true, sessionId: true },
         });
         if (!receipt) return null;
-        return { ref: receipt.id, text: mergeReceiptText(receipt), tainted: false, ownerWords: false, sessionId: receipt.sessionId };
+        return {
+          ref: receipt.id,
+          text: mergeReceiptText(receipt),
+          tainted: false,
+          ownerWords: false,
+          sessionId: receipt.sessionId,
+          evidenceClass: wikiEvidenceClass({ kind: 'merge_receipt' }),
+        };
       }
       case 'owner_decision': {
         // A decision the owner recorded: a blocker the owner resolved with a note, what it asked and what
         // they answered, as a dossier line carries them. Not the owner's words for Tiered, whose
-        // `ownerWords` is a message, a steer or an answer and nothing else.
+        // `ownerWords` is a message, a steer or an answer and nothing else; its evidence class is theirs.
         if (!ref) return null;
         const blocker = await tx.projectBlocker.findFirst({
           where: { id: ref, project: { ownerId: principal.ownerId }, resolvedBy: 'USER', resolutionNote: { not: null } },
@@ -4272,6 +4512,7 @@ export class WikiService {
           tainted: false,
           ownerWords: false,
           sessionId: null,
+          evidenceClass: wikiEvidenceClass({ kind: 'owner_decision' }),
         };
       }
       case 'commit': {
@@ -4287,19 +4528,30 @@ export class WikiService {
           select: { id: true },
         });
         if (!receipt) return null;
-        return { ref: sha, text: null, tainted: false, ownerWords: false, sessionId: null };
+        return { ref: sha, text: null, tainted: false, ownerWords: false, sessionId: null, evidenceClass: wikiEvidenceClass({ kind: 'commit' }) };
       }
       case 'note': {
-        // A file `orbit wiki import` registered (contract `import.source`), among this owner's notes
-        // alone: its stored text — redacted before it was kept — and the file it came from. Agent-written
-        // second-hand content, never the owner's own words.
+        // A file `orbit wiki import` registered (contract `import.source`), or a session's `wiki_note`, among
+        // this owner's notes alone: its stored text — redacted before it was kept — and where it came from.
+        // Agent-written second-hand content, never the owner's own words. It belongs to no session for what
+        // "independent sessions" count, whichever one wrote it or its frontmatter names: only the taint reads that one.
         if (!ref) return null;
         const note = await tx.wikiNote.findFirst({
           where: { id: ref, ownerId: principal.ownerId },
-          select: { id: true, path: true, text: true },
+          select: { id: true, path: true, text: true, sessionId: true },
         });
         if (!note) return null;
-        return { ref: note.id, text: note.text, locator: { path: note.path }, tainted: false, ownerWords: false, sessionId: null };
+        return {
+          ref: note.id,
+          text: note.text,
+          locator: { path: note.path },
+          tainted: note.sessionId
+            ? await this.sessionWasTainted(tx, note.sessionId)
+            : await this.noteOriginWasTainted(tx, principal.ownerId, note.text),
+          ownerWords: false,
+          sessionId: null,
+          evidenceClass: wikiEvidenceClass({ kind: 'note' }),
+        };
       }
       default:
         return null;
@@ -4353,6 +4605,41 @@ export class WikiService {
       select: { id: true },
     });
     return call !== null;
+  }
+
+  /**
+   * Did the session a note came from read the web (contract `effectPolicy.taintedRule`)? The memory file says
+   * which: `originSessionId` in its frontmatter, the engine's id for it, which a session keeps in
+   * `runtime_session_id` — and more than one session can carry it, each a stretch of the same conversation.
+   * Looked up among this owner's alone. A note that names none it can find is not tainted: note-only ops are
+   * capped anyway (`second_hand`).
+   */
+  private async noteOriginWasTainted(tx: Tx, ownerId: string, noteText: string): Promise<boolean> {
+    const runtimeSessionId = noteOriginSessionId(noteText);
+    if (runtimeSessionId === null) return false;
+    const sessions = await tx.session.findMany({ where: { ownerId, runtimeSessionId }, select: { id: true } });
+    for (const session of sessions) {
+      if (await this.sessionWasTainted(tx, session.id)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * The call a tool_use or a tool_result event is of, as its evidence class reads it: a tool_use says so
+   * itself, and a tool_result names its call, whose row holds the tool. Nothing for any other event, and
+   * for a result whose call was not recorded.
+   */
+  private async calledBy(tx: Tx, event: { type: string; payload: unknown; sessionId: string }): Promise<{ toolName: string | null; command: string | null }> {
+    const none = { toolName: null, command: null };
+    const named = eventCall(event.type, event.payload);
+    if (event.type === 'tool_use') return named;
+    if (event.type !== 'tool_result' || named.toolUseId === null) return none;
+    const call = await tx.toolCall.findFirst({
+      where: { sessionId: event.sessionId, toolUseId: named.toolUseId },
+      orderBy: { id: 'asc' },
+      select: { name: true, input: true },
+    });
+    return call ? { toolName: call.name, command: callCommand(call.input) } : none;
   }
 
   /**
@@ -4467,6 +4754,27 @@ export class WikiService {
       select: { id: true },
     });
     return revision ? this.sourcesOfRevision(tx, ownerId, revision.id) : [];
+  }
+
+  /**
+   * An op's neighbours with the live entries whose current revision cites this note first (contract
+   * `maintenance.job.server.backfill`): by what they came from and not by their words, so a verdict may name one a trigram
+   * match would not have found. A verdict of duplicate then adds the op's first-hand sources to it, as anywhere.
+   */
+  private async withEntriesOfNote(tx: Tx, ownerId: string, spaceId: string, prepared: PreparedOp, noteId: string): Promise<WikiSimilar[]> {
+    const text = prepared.draft ? `${prepared.draft.title} ${prepared.draft.summary}`.trim() : '';
+    const rows = await tx.$queryRaw<NeighbourRow[]>`
+      SELECT e."id" AS "id", e."kind" AS "kind", e."title" AS "title", e."status" AS "status", e."trust" AS "trust",
+             similarity(wiki_entry_search_text(e."title", e."summary", e."aliases", e."fields"), ${text}::text)::float8 AS "score",
+             NULL AS "rejectedReason"
+        FROM "wiki_source" s
+        JOIN "wiki_entry_revision" r ON r."id" = s."revision_id"
+        JOIN "wiki_entry" e ON e."id" = r."entry_id" AND e."current_revision" = r."revision"
+       WHERE s."owner_id" = ${ownerId}::uuid AND s."kind" = 'note' AND s."ref" = ${noteId} AND s."state" = 'live'
+         AND e."space_id" = ${spaceId}::uuid AND e."status" = 'active'
+       ORDER BY e."recorded_at", e."id"`;
+    const cited = new Set(rows.map((row) => row.id));
+    return [...similarOf(rows, new Map()), ...prepared.similar.filter((near) => !cited.has(near.id))];
   }
 
   /** The sources of an op being applied at decide time, resolved against the session that proposed it. */
@@ -4828,14 +5136,16 @@ export class WikiService {
     const since = new Date(Date.now() - days * 86_400_000);
     const rows = await this.prisma.wikiExposure.findMany({
       where: { ownerId, at: { gte: since }, entry: { spaceId } },
-      select: { entryId: true, sessionId: true, channel: true },
+      select: { entryId: true, sessionId: true, channel: true, at: true },
     });
     const sessions = new Set<string>();
+    // A search writes one row per entry it returned, all with one `at` (`exposureRules.reads`): those rows
+    // are one search here, and each entry still counts it below.
+    const searches = new Set<string>();
     const byEntry = new Map<string, { total: number; pushed: number; searched: number; fetched: number }>();
-    let searches = 0;
     let gets = 0;
     for (const row of rows) {
-      if (row.channel === 'search') searches += 1;
+      if (row.channel === 'search') searches.add(`${row.sessionId}:${row.at.getTime()}`);
       if (row.channel === 'get') gets += 1;
       if (row.channel === 'push' && row.sessionId) sessions.add(row.sessionId);
       const entry = byEntry.get(row.entryId) ?? { total: 0, pushed: 0, searched: 0, fetched: 0 };
@@ -4854,7 +5164,7 @@ export class WikiService {
     return {
       days,
       sessionsPushed: sessions.size,
-      searches,
+      searches: searches.size,
       gets,
       entries: ranked.map(([entryId, counts]) => ({
         entryId,

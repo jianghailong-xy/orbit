@@ -25,6 +25,26 @@ func rewriteLocalMarkdownImages(ctx context.Context, t *Transport, sessionID, te
 	})
 }
 
+// replyFileScope is what a reply may link, from the roots asked for and those of them that exist. The first one asked
+// for, where its relative links start, is the session's working directory, and the second is its uploads directory. Named
+// under Orbit's directory, the working directory counts only when it is in this session's own checkout or uploads: a
+// workspace's workDir can name any path, and what else is there is the machine's or another session's. Anywhere else it
+// is the owner's project directory, which goes as any other root. When it is gone no other root takes its place: they
+// stay what they are, held to their names.
+func replyFileScope(asked, existing []string) localFileScope {
+	workDir := existing[0]
+	if workDir != absPath(asked[0]) {
+		return newLocalFileScope(existing)
+	}
+	if !pathInsideAny(workDir, absPath(machineHome()), realPath(machineHome())) {
+		return newLocalFileScope(existing[1:], workDir)
+	}
+	if len(asked) < 2 || !namedInSessionsOwnDirectory(workDir, asked[1]) {
+		return newLocalFileScope(existing[1:])
+	}
+	return newLocalFileScope(existing)
+}
+
 func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, roots []string, upload artifactUploader) string {
 	if text == "" || upload == nil || len(roots) == 0 {
 		return text
@@ -33,7 +53,7 @@ func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, ro
 	if len(cleanRoots) == 0 {
 		return text
 	}
-	scope := newLocalFileScope(cleanRoots)
+	scope := replyFileScope(roots, cleanRoots)
 	uploaded := map[string]string{}
 	return markdownAttachmentRE.ReplaceAllStringFunc(text, func(match string) string {
 		parts := markdownAttachmentRE.FindStringSubmatch(match)
@@ -79,11 +99,17 @@ func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, ro
 // CODEX_HOME/generated_images, outside both the worktree and the session's uploads dir. A reply
 // linking one of those files would otherwise carry a path only the runner can read (every client
 // renders it as an unreachable file), so it counts as an upload root. Empty when the home can't be
-// resolved; cleanExistingRoots drops that, and any root that doesn't exist yet.
+// resolved, or is named in a session's checkout or uploads, where a root would stand for that whole
+// directory (sessionRoot); cleanExistingRoots drops that, and any root that doesn't exist yet.
 func codexGeneratedImagesDir(env []string, cwd string) string {
 	home, err := effectiveCodexHome(env, cwd)
 	if err != nil {
 		return ""
+	}
+	for _, orbit := range []string{absPath(machineHome()), realPath(machineHome())} {
+		if pathInsideAny(home, filepath.Join(orbit, "worktrees"), filepath.Join(orbit, "uploads")) {
+			return ""
+		}
 	}
 	return filepath.Join(home, "generated_images")
 }

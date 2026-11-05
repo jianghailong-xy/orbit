@@ -586,7 +586,7 @@ EXECUTABLE 判据）——随维护会话在 P11（2026-10-19）删除：维护�
 - 读过网页的会话，其后的 op 标 `tainted`：不能自动生效，审阅卡上有琥珀警示，接受之后才可推送。
 - 知识以 user 级、「参考而非指令」的形式投递，不进 system 层。
 - `wiki_propose` 本身就是一条持久化通道，由 Review、信任闸和污染标记三道闸约束。
-- 顺带建议（不在本方案范围内）：`tasklist_update` / `agent_update` 目前没有确认卡，而且 `ALWAYS_ALLOWED_TOOLS=['mcp__orbit__*']`（`permission-mode.ts:29`）连权限提示都不弹，是另一条二次持久化路径。
+- 顺带建议（不在本方案范围内）：`tasklist_update` 目前没有确认卡，而且 `ALWAYS_ALLOWED_TOOLS=['mcp__orbit__*']`（`permission-mode.ts:30`）连权限提示都不弹，是另一条二次持久化路径。`agent_update` 写 `systemPrompt`、`appendSystemPrompt`、`env` 这些字段现在要所有者的卡片（`runner-api/runner-workspace-approval.ts`）。
 - **渲染**：markdown 净化；不自动加载远程图片，防 CamoLeak 式外泄。
 
 ### 10.4 Rule of Two
@@ -653,6 +653,11 @@ EXECUTABLE 判据）——随维护会话在 P11（2026-10-19）删除：维护�
 ### 12.1 Web（效果图 01–05）
 
 - **侧栏**：TOP 在 Projects 下面新增 `Wiki`，带琥珀待审数（沿用 `tp-count needs-you` 样式）。10-06 改为：数的是「等你」数，即待审提议加上 plan 等你的件数（§12.3.3）。
+  - 11-02 起（owner 定，效果图 `docs/mocks/sidebar-wiki-group`），Workspaces 和 Projects 之间多一组 `Wiki`，写法同 Projects 组：组头是名字、个数和折叠箭头，一个 space 一行，名字按 §12.3.4，琥珀数是这个 space 自己的「等你」数（`wikiWaitingIn`），0 不画。
+  - 放在 Projects 上面：Projects 是长列表，放它下面就滚到最底了。滚动规则不变（`docs/mocks/sidebar-projects-scroll`），这一组算进固定的部分：Workspaces、这一组和 Projects 组头都放得下时只滚 Projects，否则一起滚。
+  - TOP 的 `Wiki` 行留着：它是 W（§12.3.3）、侧栏收起后的入口，也是没有 space 时的入口。
+  - 亮哪一行：屏幕上是哪个 space 就亮它那一行，`/wiki` 不带 slug 时亮默认打开的那个（§12.3.4）；TOP 的 `Wiki` 只在不属于这一组的页面亮，即跨 space 的 Review、不存在的 space，以及这一组折叠时。收起的图标栏没有这一组，所有 wiki 路由都亮 Wiki 图标。
+  - 这一组目前只在 web（桌面侧栏和手机网页的抽屉）；iOS、iPad、macOS、Android 的抽屉还是 §12.2 那一行。
 - **路由**：`/wiki`、`/wiki/:space`、`/wiki/:space/t/:topic`、`/wiki/:space/e/:entry`（右侧抽屉）、`/wiki/review`。10-06 起加 `/wiki/:space/activity`；`/wiki` 不带 slug 时按 §12.3.4 的默认规则打开，不再是第一个 space。
 - **首页**：Principles → Topics 网格 → Recent decisions；右栏依次是 Review、Recently changed、Agents used the wiki。10-06 改为：首页是内容，即原则组和按大类排的文档；Review、Plan、Recent decisions、Recently changed、Agents used 连同状态行都进 Activity 页（§12.3.1–12.3.2，效果图 30、31、33）。
 - **主题页**：Summary（生成的、每句都有脚注、标注生成时的 ref）加上按类型分组的条目。

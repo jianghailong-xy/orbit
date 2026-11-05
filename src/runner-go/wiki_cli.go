@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// `orbit wiki search|get|propose`: the CLI half of the wiki tools (wiki_tools.go), for shell
+// `orbit wiki search|get|propose|note`: the CLI half of the wiki tools (wiki_tools.go), for shell
 // composition inside a session. Like the MCP tools they act for the session they run in — what a
 // session may read is what its bound workspace shares, and a proposal is recorded against it — so
 // there is no headless form: at a terminal outside a session there is nowhere to read from and
@@ -24,13 +24,17 @@ Usage:
   orbit wiki get <id>[,<id>...] [--include WHAT]... [--json]
   orbit wiki propose (--ops JSON | --ops-file -) [--rationale TEXT | --rationale-file -]
                      [--idempotency-key KEY] [--dry-run] [--json]
+  orbit wiki note (<text> | --text TEXT | --text-file -) [--path PATH]... [--corrects ID] [--json]
   orbit wiki import --from <dir|file> --space ID [--max-ops N] [--concurrency N] [--json]
   orbit wiki verify --space ID [--json]
 
 The wiki is this codebase's own knowledge: decisions and what they rejected, pitfalls and their
-fixes, conventions, recipes. You READ it and you PROPOSE to it; you never decide. An agent's write
-is a proposal that waits for the owner in Review — or, in an automatic space, for its verification,
-which the Orbit server runs and 'orbit wiki verify' waits for — so never report one as saved.
+fixes, conventions, recipes. You READ it and you PROPOSE to it; you never decide. Whether an agent's
+write takes effect depends on the space's review mode: in manual it waits for the owner in Review, in
+tiered most adds and amends are live at once, and in automatic it waits for its verification, which
+the Orbit server runs and 'orbit wiki verify' waits for. What is live, other sessions can find. Report
+what each op's status says, and never call a pending op saved. A note is not a write to the wiki at
+all: it is a claim that maintenance checks later against this session's records.
 
 These commands act for the session they run in (ORBIT_SESSION_ID): what it may read is what that
 session's workspace is bound to, and its proposal is recorded against it.
@@ -73,7 +77,7 @@ Options:
 An id this session may not read is reported beside the ones that were. Read the sources before
 relying on an entry: a claim whose sources you cannot open is a claim you cannot check.
 `,
-	"propose": `orbit wiki propose — propose what this session learned, for the owner's review
+	"propose": `orbit wiki propose — propose what this session learned
 
 Usage:
   orbit wiki propose (--ops JSON | --ops-file -) [--rationale TEXT | --rationale-file -]
@@ -92,7 +96,9 @@ Options:
 
 An op is one of add / reinforce / amend / supersede / retire / challenge, and cites the records it
 came from. Record only what someone could not read from the code; a claim you cannot cite is not
-ready. What this writes waits for the owner — do not tell the user it is saved.
+ready. Whether it takes effect depends on the space's review mode, and what has taken effect other
+sessions can find in a search: tell the user what each op's status says, and never call a pending
+op saved.
 
 A source is {"kind": KIND, "ref": REF, "quote": TEXT}, and what REF is depends on the kind:
   turn, event, task, task_comment, approval, merge_receipt, note
@@ -106,6 +112,23 @@ A source is {"kind": KIND, "ref": REF, "quote": TEXT}, and what REF is depends o
   evidence, criterion, url
                    cannot be cited yet
 A ref that names nothing is refused, naming the source as ops[i].sources[j].ref.
+`,
+	"note": `orbit wiki note — tell the wiki something this session learned
+
+Usage:
+  orbit wiki note (<text> | --text TEXT | --text-file -) [--path PATH]... [--corrects ID] [--json]
+
+Options:
+  [text]                   The first argument: the claim, in one or two sentences, at most ` + fmt.Sprint(wikiNoteTextMaxChars) + `
+                           characters. Required, here or as --text or --text-file
+  --text TEXT              The same, for text that starts with a dash
+  --text-file -            Read it from stdin
+  --path PATH              A repo-relative path the claim is about, at most ` + fmt.Sprint(wikiNotePathMaxChars) + ` characters. Repeatable,
+                           at most ` + fmt.Sprint(wikiNotePathsMax) + `
+  --corrects ID            The id of an entry this says is wrong: the entry is flagged at once
+  --json
+
+` + wikiNoteDescription + `
 `,
 	"verify": `orbit wiki verify — have the Orbit server verify what this session proposed into an automatic space
 
@@ -165,6 +188,19 @@ var wikiCLICapabilities = []cliCapabilitySpec{
 			"--rationale <text> | --rationale-file - (required)",
 			"--idempotency-key <key> (required)",
 			"--dry-run (dryRun)",
+			"--json",
+		},
+		Mutates:     true,
+		SessionOnly: true,
+	},
+	{
+		Tool:  "wiki_note",
+		Argv:  []string{"orbit", "wiki", "note"},
+		Usage: "orbit wiki note (<text> | --text TEXT | --text-file -) [--path PATH]... [--corrects ID] [--json]",
+		Arguments: []string{
+			"[text] | --text <text> | --text-file - (required; one claim, at most " + fmt.Sprint(wikiNoteTextMaxChars) + " characters)",
+			"--path <repo-relative path> (paths; repeatable, at most " + fmt.Sprint(wikiNotePathsMax) + ")",
+			"--corrects <entry id>",
 			"--json",
 		},
 		Mutates:     true,
@@ -252,6 +288,8 @@ func cmdWikiCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliWikiGet(args[1:], out, ctx)
 	case "propose":
 		return cliWikiPropose(args[1:], in, out, ctx)
+	case "note":
+		return cliWikiNote(args[1:], in, out, ctx)
 	case "verify":
 		return cliWikiVerify(args[1:], out, ctx)
 	default:
@@ -331,6 +369,26 @@ func cliWikiPropose(args []string, in io.Reader, out io.Writer, ctx cliOrchestra
 		return err
 	}
 	return runWikiCLIAnswer("wiki_propose", toolArgs, out, *jsonOut, ctx)
+}
+
+func cliWikiNote(args []string, in io.Reader, out io.Writer, ctx cliOrchestrationContext) error {
+	fs := newCLIFlagSet("orbit wiki note")
+	text := fs.String("text", "", "the claim, in one or two sentences")
+	textFile := fs.String("text-file", "", "read the claim from stdin (-)")
+	var paths stringList
+	fs.Var(&paths, "path", "a repo-relative path the claim is about")
+	corrects := fs.String("corrects", "", "the id of an entry this says is wrong")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	words, rest := peelLeadingPositionals(args)
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	positional := strings.TrimSpace(strings.Join(append(append([]string{}, words...), fs.Args()...), " "))
+	toolArgs, err := wikiNoteToolArgs(in, fs, positional, *text, *textFile, paths, *corrects)
+	if err != nil {
+		return err
+	}
+	return runWikiCLIAnswer("wiki_note", toolArgs, out, *jsonOut, ctx)
 }
 
 // runWikiCLIAnswer runs one wiki tool for the CLI: the same runWikiTool the MCP door calls, and the
@@ -440,6 +498,27 @@ func wikiProposeToolArgs(in io.Reader, fs *flag.FlagSet, ops, opsFile, rationale
 	args := map[string]interface{}{"ops": body.Ops, "rationale": value, "idempotencyKey": keyValue}
 	if dryRun || body.DryRun {
 		args["dryRun"] = true
+	}
+	return args, nil
+}
+
+func wikiNoteToolArgs(in io.Reader, fs *flag.FlagSet, positional, text, textFile string, paths stringList, corrects string) (map[string]interface{}, error) {
+	given, set, err := readCLIText(in, text, flagWasSet(fs, "text"), textFile, flagWasSet(fs, "text-file"), "text")
+	if err != nil {
+		return nil, err
+	}
+	if set && positional != "" {
+		return nil, fmt.Errorf("the note's text was given twice: as an argument, and as --text or --text-file")
+	}
+	if !set {
+		given = positional
+	}
+	args := map[string]interface{}{"text": given}
+	if len(paths) > 0 {
+		args["paths"] = []string(paths)
+	}
+	if strings.TrimSpace(corrects) != "" {
+		args["corrects"] = corrects
 	}
 	return args, nil
 }

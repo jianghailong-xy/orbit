@@ -256,6 +256,7 @@ struct ApprovalReviewSheet: View {
     let console: ConsoleModel
     let target: ApprovalReviewTarget
     @State private var reviewStatusMessage: String?
+    @State private var evidenceFiles: EvidenceFilesTarget?
 
     /// Whether a press in THIS window answered what the sheet shows, which is what takes the sheet
     /// away. Neither a request that went away underneath the reader nor a record opened from the
@@ -315,6 +316,11 @@ struct ApprovalReviewSheet: View {
             }
             .environment(\.inApprovalReview, true)
             .environment(\.dismissApprovalReview, { dismiss() })
+            // Over this sheet rather than the console's: a view presents one sheet at a time.
+            .environment(\.openEvidenceFiles, { evidenceFiles = $0 })
+            .sheet(item: $evidenceFiles) { target in
+                EvidenceFilesPage(console: console, target: target)
+            }
             .safeAreaInset(edge: .top, spacing: 0) {
                 if let reviewStatusMessage {
                     Text(reviewStatusMessage)

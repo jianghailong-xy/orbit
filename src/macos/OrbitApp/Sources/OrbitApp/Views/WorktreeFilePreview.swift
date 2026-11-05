@@ -9,6 +9,7 @@ import CoreTransferable
 struct WorktreeFilePreview: View {
     let worktree: WorktreeModel
     let file: SessionChangedFile
+    @Environment(AppModel.self) private var app: AppModel?
     @State private var data: Data?
     @State private var image: PlatformImage?
     @State private var dimensions: String?
@@ -65,7 +66,9 @@ struct WorktreeFilePreview: View {
         .fileExporter(isPresented: $exporting,
                       document: WorktreeFileDocument(data: data ?? Data()),
                       contentType: .data, defaultFilename: fileName) { result in
-            if case .failure(let error) = result {
+            do {
+                try DownloadMark.finishSaving(result)
+            } catch {
                 errorTitle = "Couldn't save file"
                 exportError = APIClient.failureReason(error)
             }
@@ -202,7 +205,7 @@ struct WorktreeFilePreview: View {
         #if os(iOS)
         previewTarget = ImagePreviewTarget(index: 0, id: file.path)
         #else
-        if let data, !FileHandoff.deliver(data, named: fileName) {
+        if let data, !FileHandoff.deliver(data, named: fileName, app: app) {
             errorTitle = "Couldn't open image"
             exportError = "The image could not be opened."
         }
@@ -268,7 +271,7 @@ private struct WorktreeSharedFile: Transferable {
                 .appendingPathComponent("orbit-worktree-\(UUID().uuidString)", isDirectory: true)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let url = directory.appendingPathComponent(item.name)
-            try item.data.write(to: url, options: .atomic)
+            try DownloadMark.write(item.data, to: url)
             return SentTransferredFile(url)
         }
     }

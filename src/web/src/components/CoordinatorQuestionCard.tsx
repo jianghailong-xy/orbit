@@ -22,6 +22,7 @@ import { Alert } from './ui/Alert';
 import { Textarea } from './ui/Textarea';
 import { api } from '../api';
 import { decisionReceiptAnchor, type ReceiptPlacement } from '../lib/decisionReceipt';
+import { rehypeCodeWords } from '../lib/codeWords';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { markdownToPlainText } from '../lib/markdownText';
 import { projectOpenItemsQuery } from '../lib/queries';
@@ -207,6 +208,7 @@ export function CoordinatorQuestionCard({
         <div className="coordinator-question-text md">
           <Markdown
             remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeCodeWords]}
             urlTransform={referenceUrlTransform}
             components={{ a: ReferenceLink }}
           >
@@ -590,6 +592,7 @@ export function AnsweredQuestionCard({
           <div className="coordinator-question-text md">
             <Markdown
               remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeCodeWords]}
               urlTransform={referenceUrlTransform}
               components={{ a: ReferenceLink }}
             >

@@ -504,7 +504,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
         assert.equal(notice.status, 'PENDING');
         assert.equal(notice.senderSessionId, null, 'the platform’s words, not another session’s');
         assert.match(notice.content ?? '', new RegExp(
-          `<orbit-evidence-send-back task="${uuidToBase62(again.taskId)}" revision="1">`,
+          `<orbit-evidence-send-back task="${uuidToBase62(again.taskId)}" revision="1" from-session="${uuidToBase62(reviewer)}" from-mode="auto">`,
         ));
         assert.match(notice.content ?? '', /sent back by the session that reviewed it/);
         assert.ok((notice.content ?? '').includes('show the count of images before and after'));

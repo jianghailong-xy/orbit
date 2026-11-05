@@ -19,24 +19,7 @@
          manifest with a name, a start_url, a standalone display and 192px + 512px icons. -->
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>Orbit</title>
-    <script>
-      // Resolve the theme before first paint so dark users never flash a white
-      // screen. Mirrors lib/theme: 'system' follows the OS, else explicit choice.
-      (function () {
-        try {
-          var m = localStorage.getItem('orbit-theme') || 'system';
-          var dark =
-            m === 'dark' ||
-            (m === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-          document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-          // Same first-paint reasoning as the theme above: Safari reads theme-color at
-          // load, so setting it here stops the address bar flashing the wrong shade.
-          // Hexes mirror --bg-base in index.css (also duplicated in lib/theme.tsx).
-          var mc = document.getElementById('theme-color');
-          if (mc) mc.setAttribute('content', dark ? '#202023' : '#ffffff');
-        } catch (e) {}
-      })();
-    </script>
+    <script src="/theme-boot.js"></script>
     <style>
       /* First-paint boot splash: rendered before the JS bundle loads and removed
          by the app once the first-screen data (tasks + runners) has resolved, so
@@ -99,7 +82,7 @@
         color: #8f959e;
       }
       /* Boot splash renders before index.css loads, so its dark variant lives
-         here, keyed off the data-theme set by the inline script above. */
+         here, keyed off the data-theme set by the script above. */
       html[data-theme='dark'] #boot {
         background: #16171a;
       }
@@ -126,29 +109,6 @@
       </div>
     </div>
     <div id="root"></div>
-    <script>
-      // Determinate progress: the bar only ever moves forward as the app reports
-      // real milestones via window.__bootProgress(pct); window.__bootDone() snaps
-      // it to 100% and fades the splash out.
-      (function () {
-        var fill = document.getElementById('boot-fill');
-        var shown = 8;
-        var set = function (pct) {
-          if (pct > shown) shown = pct; // monotonic — never step backwards
-          fill.style.width = shown + '%';
-        };
-        window.__bootProgress = set;
-        window.__bootDone = function () {
-          set(100);
-          var boot = document.getElementById('boot');
-          if (!boot) return;
-          boot.classList.add('hide');
-          setTimeout(function () {
-            boot.remove();
-          }, 320);
-        };
-      })();
-    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

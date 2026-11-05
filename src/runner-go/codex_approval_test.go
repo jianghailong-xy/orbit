@@ -264,7 +264,7 @@ func TestHandleServerRequestAnswersMCPToolConsent(t *testing.T) {
 	if content, ok := result["content"].(map[string]interface{}); !ok || len(content) != 0 {
 		t.Fatalf("content = %#v, want an empty object", result["content"])
 	}
-	if !gotRequest.mcpTool || gotRequest.toolName() != "mcp__orbit" {
+	if !gotRequest.mcpTool || gotRequest.toolName() != "mcp__orbit__task_list" {
 		t.Fatalf("approval request = %+v", gotRequest)
 	}
 	if gotParams["serverName"] != "orbit" {

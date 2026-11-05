@@ -13,7 +13,7 @@ import { CoordinatorJudgmentModule } from './coordinator-judgment.module';
 import { COORDINATOR_WAKE_EVENTS, type TaskSettlement } from './coordinator-wake';
 import type { CriterionLanding } from './project-criterion-landing';
 import { type CriterionCoverage, criterionCoverage, wakeDisposition } from './wake-disposition';
-import { WakeDispositionService } from './wake-disposition.service';
+import { REQUIRED_ACTION, WakeDispositionService } from './wake-disposition.service';
 
 /**
  * The rule that decides whether an authorized wake is worth a judgment session.
@@ -352,4 +352,16 @@ test('the judgment module constructs the one terminal chooser the router asks', 
   // One instance, not one per injection site, for the reason every other provider here is one:
   // "the coordinator gets at most one session per wake" is a claim about a shared ledger.
   assert.equal(context.get(WakeDispositionService), disposition);
+});
+
+// This sentence is delivered to the coordinator as well as put in front of the owner, and it used to
+// say only the owner could change the criteria: the same thing `coordinator-opening.ts` was
+// corrected for, and just as wrong here.
+test('the moved-standard blocker says who decides a criteria change, and who files it', () => {
+  const sentence = REQUIRED_ACTION.ACCEPTANCE_STANDARD_MOVED;
+  assert.match(
+    sentence,
+    /Rewording a criterion is the account owner’s decision: a session files the edit with project_update, and they answer it on a card/,
+  );
+  assert.doesNotMatch(sentence, /only the account owner can change/);
 });

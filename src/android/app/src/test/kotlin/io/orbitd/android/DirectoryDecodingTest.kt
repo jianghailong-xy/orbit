@@ -42,6 +42,15 @@ class DirectoryDecodingTest {
         workspaces = rows(workspaces), sessions = sessions.mapValues { rows(it.value) },
         folders = rows(folders), tags = rows(tags), runners = rows(runners))), trashing)
 
+    /** An owner's thousands of rows are decoded on the main thread: an account event alone sets none of that off, the read behind it does. */
+    @Test fun anAccountEventAloneDecodesNothing() {
+        val snapshot = DirectorySnapshot(sessions = mapOf("open" to rows(sessions.getValue("open"))))
+        val read = RealtimeState(directoryFresh = true, directory = snapshot)
+        val event = read.copy(invalidationRevision = 7, accountEvents = mapOf("session.updated" to 7L))
+        assertEquals(read.directoryFields(), event.directoryFields())
+        assertNotEquals(read.directoryFields(), read.copy(directory = DirectorySnapshot()).directoryFields())
+    }
+
     /** §2.9 LS6: a flat read that happens to carry a LANDING row still decodes — the row's two optional fields are read, and its kind
      * is what the project's pages sort it by. One unknown row must never make the whole directory unreadable. */
     @Test fun aLandingRowInAFlatReadStillDecodes() {

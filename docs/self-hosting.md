@@ -125,6 +125,10 @@ The included gateway serves HTTP. Before exposing Orbit beyond a trusted local h
 - list the proxy's addresses (a CDN's published ranges) in `TRUSTED_PROXIES`, so Orbit sees each visitor's own address
   rather than the proxy's ([configuration](configuration.md));
 - allow long-lived SSE responses without proxy buffering or a short idle timeout;
+- pass on the `Content-Security-Policy` headers of Orbit's pages (`src/web/nginx.conf`), and add no script to the
+  pages: the browser refuses any script but Orbit's own files, so a CDN feature that writes one in (on Cloudflare:
+  Rocket Loader, Zaraz, automatic Web Analytics, JavaScript Detections) reports an error in the console, and can stop
+  the page, until it is turned off;
 - restrict database and control-plane ports so only the gateway can reach them;
 - set `PUBLIC_ORIGIN` to the exact external HTTPS origin and rebuild the web image.
 
@@ -189,17 +193,56 @@ base backups and archived WAL to `./data/pg-archive`.
 - Set `ORBIT_BACKUP_SYNC_TARGET` (plus `ORBIT_BACKUP_SYNC_SSH_PORT` when it is not 22) so the sidecar mirrors
   `./data/pg-archive` to another host over ssh; give it a directory of its own, since the mirror deletes
   anything else there. A same-disk backup does not protect against disk or host loss.
-- The same setting copies `./data/files` to the directory beside the target, `<target>-files`, leaving out `tmp/` and
-  never deleting from it. With no target, `./data/files` is the only copy of those bytes: they are not in Postgres or
+- The same setting copies `./data/files` to the directory beside the target, `<target>-files`, leaving out `tmp/`.
+  With no target, `./data/files` is the only copy of those bytes: they are not in Postgres or
   in any local backup. With `ORBIT_FILES_BACKEND=s3` the bucket holds them, and its versioning or replication is what
   protects them. See [Attachment files](postgres-backup-restore.md#attachment-files).
+- The sidecar reads the target before mirroring, and refuses one holding another cluster's archive, with the reason in
+  its log, rather than replace it: [The off-host mirror](postgres-backup-restore.md#the-off-host-mirror).
+- Files agents keep with `file_upload` expire, which is what stops `./data/files` growing without end:
+  [File retention and quota](#file-retention-and-quota).
+- Uploads pass through `./data/files/tmp`, with either store. A process killed during one leaves its file there. Each
+  apiserver start removes regular files there that have not been written for a day, so that file stays on disk until the
+  first start at least a day later, which on a deployment that rarely restarts can be weeks away.
 - A restore goes Postgres first, then the files, then the apiserver:
   [Restore the attachment files](postgres-backup-restore.md#restore-the-attachment-files). On a replacement host,
-  restore the archive before the first `docker compose up -d`, or the mirror can overwrite your backup:
+  restore the archive before the first `docker compose up -d`, or you have a new, empty cluster to move aside first:
   [Restore on a replacement host](postgres-backup-restore.md#restore-on-a-replacement-host).
 - Periodically perform the verification procedure in the [backup and restore runbook](postgres-backup-restore.md).
 - Monitor container health, free disk, failed backups, runner heartbeat status, and HTTP error rates.
 - Decide an attachment/artifact retention policy appropriate for your deployment.
+
+### File retention and quota
+
+Orbit deletes the bytes of files agents upload with `file_upload`, on these dates. Reply images, your own uploads and task
+attachments are not touched: they stay as long as their session or task.
+
+| A file agents uploaded | Expires |
+| --- | --- |
+| No evidence cites it | 14 days after the upload |
+| Cited by evidence still waiting for a decision | Does not expire |
+| Cited by a version that was sent back or replaced | 30 days after that |
+| Cited by a confirmed version | When the task is deleted, or 14 days after the upload if that is later |
+| Pinned (`file_pin`, `PUT /api/attachments/:id/pin`) | Does not expire |
+
+Where several apply, the latest wins. Expiring writes a tombstone and keeps the file's name, size, sha256 and test summary, so
+evidence stays complete and its cards show an expired placeholder. The bytes go a grace period later, once no row holds them:
+max(7 days, `ORBIT_BASE_BACKUP_INTERVAL` × (`ORBIT_BASE_BACKUP_KEEP` + 1)). The apiserver reads those two values for this, so
+set them where the sidecar reads them, in `.env`, and recreate both services when they change. Pinning a file in its grace
+period brings it back. The sweep runs on one apiserver about once an hour, and says what it did in the apiserver's log.
+
+A session in Trash stays there past its 30 days while one of its files is pinned, or is cited by evidence and has not expired,
+even with a date ahead of it. Everything else in the session stays with it, including its transcript. Its other files still
+expire on their own dates, and a pin still holds the file after its task is deleted. Once nothing holds it, the hourly purge
+takes the session and its rows, an expired file's included, though that file's bytes still have their grace period.
+
+Deleting a session from Trash by hand takes its files with it, pinned or cited. Whichever way a row goes, evidence that cited it
+keeps only the sha256 it recorded, and its card shows an expired placeholder: the name and test summary went with the row.
+
+Settings shows an account's storage, its largest projects and tasks, and what each week added. Set `ORBIT_FILES_QUOTA_BYTES` in
+`.env` to limit what one account may keep; past it an upload is refused with `413` and the code `FILE_QUOTA_EXCEEDED`. A
+self-hosted deployment needs no limit, and has none unless you set one. Each content counts once, an expired file no longer
+counts, and uploads racing at the limit can pass it by at most 25 MiB each.
 
 ## Google sign-in
 
@@ -1420,18 +1463,112 @@ docker compose up -d --wait --no-deps --force-recreate apiserver
 docker compose up -d --wait --no-deps --force-recreate docker-channel
 ```
 
+### Moving old attachments out of Postgres
+
+Attachments uploaded before the `./data/files` mount existed keep their bytes in Postgres. They move to the file store
+(`./data/files`, or the bucket with `ORBIT_FILES_BACKEND=s3`) in two steps: a copy that runs by itself and can be undone,
+and a clear that you run yourself and cannot undo. Attachments stay readable and uploads keep working during both, so
+neither needs downtime.
+
+**The copy.** After each start the apiserver copies those bytes to the file store in the background, at most 100
+attachments or 64 MiB at a time, with a pause of a second in between. The start does not wait for it. Identical bytes are
+stored once. Postgres keeps its copy, so `./data/files` or the bucket needs room for those bytes and nothing is freed
+yet. The copy waits while the disk under `./data/files` has less than 2 GiB free, logs that it is waiting, and carries on
+when there is room. You can stop the apiserver at any time, and the next start carries on from where it got to. If the
+store fails, the apiserver logs the failure and tries again a minute later.
+
+The apiserver logs its progress after each batch. With [several apiservers](#several-apiservers), each one that starts
+with attachments waiting copies them, which does the work more than once but changes nothing else:
+
+```text
+attachment copy: 300 (52428800 bytes) copied this run, 1180 (734003200 bytes) left
+```
+
+To confirm the copy has finished, ask where every attachment's bytes are. This writes nothing:
+
+```bash
+docker compose exec apiserver node src/apiserver/dist/files/attachment-migration.cli.js status
+```
+
+```text
+attachments waiting for the copy: 0 (0 bytes)
+attachments copied and still in Postgres: 1480 (786432000 bytes)
+attachments only in the file store: 2210 (1073741824 bytes)
+```
+
+The copy has finished when none are waiting. Any that an older apiserver wrote afterwards, during an upgrade of
+[several apiservers](#several-apiservers), wait for the next start.
+
+While a copied attachment still has its bytes in Postgres, it stays readable if the file store fails or has lost them:
+the apiserver answers from Postgres and logs a warning naming the attachment, the store and the error, at most once a
+minute for each store. Fix the store when you see this, because the clear refuses those attachments.
+
+**The clear.** This removes the bytes from Postgres, which is the step you can't take back. Run it only when all of these
+are true:
+
+- `status` shows none waiting for the copy.
+- You will not need to go back to an older version: after the clear,
+  [an older version can't read any attachment](#going-back-to-an-older-version).
+- The file store is backed up. Once the bytes leave Postgres they leave every new backup of it too, so `./data/files` is
+  their only copy on this host. With `ORBIT_BACKUP_SYNC_TARGET` set, confirm that the sidecar has copied it to
+  `<target>-files` since the copy finished, as described in
+  [Attachment files](postgres-backup-restore.md#attachment-files). With a bucket, confirm its versioning or replication.
+  Bytes kept in `./data/files` before a move to a bucket stay there, so they need the sidecar's copy either way.
+- The disk has room for what the clear writes. It frees nothing at first: Postgres writes about as much WAL as the bytes
+  it removes, and `./data/pg-archive` keeps that WAL until newer base backups replace the old ones. Have free at least
+  what `status` shows as still in Postgres, plus 2 GiB.
+
+Then run:
+
+```bash
+docker compose exec apiserver node src/apiserver/dist/files/attachment-migration.cli.js clear
+```
+
+For each copied attachment, the command reads the bytes back from the file store and checks them against the sha256 the
+row names. It then checks that the bytes in Postgres are the same content, and only then removes them. It prints its
+progress, then the same counts as `status`. It exits 0 when no attachment has bytes left in Postgres, and 1 otherwise.
+You can stop it at any point and run it again: it carries on with the rows that still have bytes in Postgres, and changes
+nothing on the others. Any attachment it has already cleared stays cleared, so stopping it does not bring back the
+older version for those. It stops by itself, and says so, if the disk under `./data/files` falls below 2 GiB free, so
+that it cannot fill the disk under Postgres; run it again when there is room.
+
+An attachment that fails the check keeps its bytes in Postgres and is reported, and the command moves on to the next:
+
+```text
+refused 0198f6a2-7c3e-7a10-9d2b-5e1c4f0a8b37 (sha256 ab12…): the local file store does not hold these bytes
+```
+
+- **The store does not hold the bytes, or holds other bytes under that name.** Copy them again from Postgres. Remove
+  whatever is at `./data/files/ab/ab12…` (in a bucket, the object `files/ab/ab12…`), take the row back to before the copy,
+  restart the apiserver, and run the clear again once `status` shows none waiting:
+
+  ```bash
+  docker compose exec postgres psql -U orbit -d orbit \
+    -c "UPDATE attachment SET sha256 = NULL WHERE id = '0198f6a2-7c3e-7a10-9d2b-5e1c4f0a8b37'"
+  docker compose restart apiserver
+  ```
+
+- **The store could not be read.** Fix the store and run the clear again.
+- **Its data in Postgres does not hash to this sha256.** The two copies differ, and only you can say which is right. The
+  attachment stays as it is until you do.
+
+The clear leaves the database the same size on disk: Postgres keeps the freed space and reuses it. To give the space back
+to the host, run `VACUUM FULL attachment` in `psql` at a quiet time. Attachments can't be read or written while it runs.
+
 ### Going back to an older version
 
 An apiserver with the `./data/files` mount keeps each new attachment's bytes there (or in the bucket, with
 `ORBIT_FILES_BACKEND=s3`), and Postgres only names them. An older apiserver reads attachment bytes from Postgres alone,
-so going back to one after the upgraded version has accepted uploads has a limit:
+so what it can read after you go back depends on where the bytes are:
 
+- **Until the clear, attachments from before the upgrade work on both versions**, whether or not the copy has reached
+  them, because the copy leaves their bytes in Postgres. So do the ones uploaded while the older version runs.
 - **Attachments uploaded since the upgrade can't be read.** The older version fails on them: opening one, and anything
   else that needs its bytes, such as starting a run of a task that has one as an input.
-- **Their bytes stay safe.** Going back changes nothing in `./data/files` or the bucket, and upgrading again serves
-  those attachments as before.
-- **Attachments from before the upgrade keep working** on both versions, because their bytes are still in Postgres. So
-  do the ones uploaded while the older version runs.
+- **After the clear, an older version can't read any attachment.** It fails on all of them in the same way, however old
+  they are. See [Moving old attachments out of Postgres](#moving-old-attachments-out-of-postgres).
+- **The bytes stay safe.** Going back changes nothing in `./data/files` or the bucket, and upgrading again serves those
+  attachments as before.
 
 A Compose upgrade replaces the apiserver in one step, so in normal operation no older version serves these attachments.
 The exception is [several apiservers](#several-apiservers): the others run the old code until they are recreated, and

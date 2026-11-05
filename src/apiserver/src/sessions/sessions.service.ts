@@ -32,6 +32,7 @@ import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
 import { isOrbitAuthoredTurn } from './orbit-authored-turn';
+import { assertMayMoveRuns, assertSessionMayReach, type SessionAct } from './session-reach';
 import {
   readSteerWithdrawRequest,
   steerWithdrawAnswer,
@@ -128,13 +129,19 @@ import { readTaskRouteSummaries } from '../tasks/task-route-decision';
 import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
 import {
   accountDefaultPermissionMode,
+  DEFAULT_PERMISSION_MODE,
+  isWiderThanStarter,
+  modeLimitsWhatItStarts,
+  modesItMayStart,
   resolvePermissionMode,
+  widerModeRefusal,
 } from '../common/permission-mode';
 import { cursorDefaultPermissionMode } from '../common/permission-semantics';
 import { PatRefusal, refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { orchestrationEnabled } from '../common/orchestration-switch';
 import { normalizePermissionRules } from '../common/permission-rules';
+import { reachesPastOneMcpTool } from './remember-rules';
 import {
   batchActiveTurns,
   runnerActiveTurns,
@@ -165,6 +172,7 @@ import {
 } from './merge-receipt';
 import { RealtimeService } from '../realtime/realtime.service';
 import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
+import { trashHoldOf } from '../files/file-retention';
 import { FilesService } from '../files/files.service';
 import { attachmentDisposition } from '../files/user-file-response';
 import { SESSION_TAG_PALETTE } from '../session-tags/session-tags.service';
@@ -210,6 +218,7 @@ import {
 } from '../common/session-scheduling';
 import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/session-generating';
 import { countLiveApprovals, readByLiveBackgroundJob } from './abandoned-approvals';
+import { holdsWorkspaceWriteValues, withoutEnvValues } from './workspace-write-card-values';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
   normalizeBuiltinPermissionMode,
@@ -474,6 +483,17 @@ function expectedTurnAttachments(
     .map((id) => (stored.includes(id) ? id : resentAttachmentId(sessionId, clientTurnId, id)))
     .sort();
 }
+
+/** The mode a session gets when nobody names one, as create() stores it. */
+function modeOfNoneNamed(owner: { preferences: unknown }, engine: string | null): PermissionMode {
+  const accountDefault = accountDefaultPermissionMode(owner);
+  return engine === AgentProvider.CURSOR
+    ? cursorDefaultPermissionMode(accountDefault)
+    : accountDefault ?? DEFAULT_PERMISSION_MODE;
+}
+
+/** A header value the id middleware could not decode is left as it arrived, and Prisma would 500 on it. */
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Guards the two spawn paths a machine drives — `orbit mcp` / `orbit session create` and the
@@ -1177,13 +1197,14 @@ export class SessionsService {
         throw new BadRequestException(
           `runner "${target.name}" runs as root, and Claude Code refuses "${dto.permissionMode}" ` +
             `under root — the session would exit before its first turn. Use ` +
-            `"${ROOT_FALLBACK_PERMISSION_MODE}", which also never asks.`,
+            `"${ROOT_FALLBACK_PERMISSION_MODE}", which also runs without stopping for a person.`,
         );
       }
       // Substituted into the stored column rather than only at dispatch, so the Mode pill reads
-      // what the session will really do. Narrowing only (Bypass -> Don't Ask, allow -> deny), which
-      // is why this is safe to persist where the general rule is to derive: the account's own
-      // default is untouched, and a session cannot move to a runner that would have honored it.
+      // what the session will really do. Narrowing only (Bypass -> Auto, or Default on a model with
+      // no Auto, which dispatch decides as for any Auto), which is why this is safe to persist where
+      // the general rule is to derive: the account's own default is untouched, and a session cannot
+      // move to a runner that would have honored it.
       if (target?.runsAsRoot) rootRefusedFallback = ROOT_FALLBACK_PERMISSION_MODE;
     }
     // Linking to a task: it must belong to the same user (no cross-tenant linking). The same read
@@ -2172,8 +2193,8 @@ export class SessionsService {
       /** The child's engine, resolved with `provider` as on create (engine-provider.ts). */
       engine?: string;
       provider?: string;
-      /** The child's own permission posture. Omitted, create() materializes the account default —
-       *  the spawn does NOT inherit the parent's mode, which is per-run and not per-tree. */
+      /** The child's own permission posture, never wider than the parent's: a wider one named is
+       *  refused. Omitted, it is the account default, or the parent's own mode where that is wider. */
       permissionMode?: string;
     },
   ): Promise<{
@@ -2191,6 +2212,9 @@ export class SessionsService {
     /** The engine the child runs on, beside the credential it spends. */
     engine: string | null;
     provider: string;
+    /** Only when the account default was wider than the parent: the mode the child got instead, and why. */
+    permissionMode?: string;
+    permissionModeNote?: string;
   }> {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
     assertKnownPermissionMode(dto.permissionMode);
@@ -2201,6 +2225,8 @@ export class SessionsService {
         rootSessionId: true,
         spawnDepth: true,
         workspaceId: true,
+        permissionMode: true,
+        engine: true,
         owner: { select: { preferences: true } },
       },
     });
@@ -2250,6 +2276,13 @@ export class SessionsService {
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
+    // Resolve an @-mentioned workspace name to its id (owner-scoped). An explicit workspaceId wins.
+    const wantId = dto.workspaceId ?? dto.agentId;
+    const wantName = dto.workspaceName ?? dto.agentName;
+    const workspaceId =
+      wantId ?? (wantName ? await this.resolveWorkspaceByName(ownerId, wantName) : undefined);
+    // Before anything is written, so a refused request leaves the parent as it found it.
+    const narrowedTo = await this.assertChildModeOrNarrow(ownerId, parent, dto, workspaceId);
     // A root joins its own tree the first time it spawns; before that it belongs to no tree
     // and must not be counted against one. Nothing else writes this column on the parent, so
     // an unconditional write of the same value is idempotent under concurrent spawns.
@@ -2259,11 +2292,6 @@ export class SessionsService {
         data: { rootSessionId },
       });
     }
-    // Resolve an @-mentioned workspace name to its id (owner-scoped). An explicit workspaceId wins.
-    const wantId = dto.workspaceId ?? dto.agentId;
-    const wantName = dto.workspaceName ?? dto.agentName;
-    const workspaceId =
-      wantId ?? (wantName ? await this.resolveWorkspaceByName(ownerId, wantName) : undefined);
     // Give the child a real effort like a normal new session would (the target workspace's own
     // effort, else the owner's account default). create() normalizes it for the selected runtime
     // model. Without this the child's effort is empty, so a codex child falls back to the
@@ -2280,7 +2308,9 @@ export class SessionsService {
         model: dto.model,
         engine: dto.engine,
         provider: dto.provider,
-        permissionMode: dto.permissionMode,
+        // Named from here on when narrowed, so an engine that cannot keep the mode refuses it as it
+        // refuses any mode named for it, rather than running as something else.
+        permissionMode: narrowedTo ?? dto.permissionMode,
         effort,
       },
       {
@@ -2307,7 +2337,110 @@ export class SessionsService {
       agentName: targetWorkspace?.name ?? null,
       engine: created.engine,
       provider: created.provider,
+      ...(narrowedTo
+        ? {
+            permissionMode: narrowedTo,
+            permissionModeNote:
+              `Started in "${narrowedTo}", this session's own mode: the account default is wider than ` +
+              'this session may start. Where that mode asks, the new session waits on a card for a person.',
+          }
+        : {}),
     };
+  }
+
+  /**
+   * What a session may start, for `spawnFromSession`: a wider mode named is refused, and a default
+   * wider than the parent gives way to the parent's own mode, which is returned. Undefined leaves the
+   * request as it came. An Auto or Bypass parent reads nothing more.
+   */
+  private async assertChildModeOrNarrow(
+    ownerId: string,
+    parent: { permissionMode: string | null; engine: string | null; owner: { preferences: unknown } },
+    dto: { permissionMode?: string; engine?: string; provider?: string; model?: string },
+    workspaceId: string | undefined,
+  ): Promise<string | undefined> {
+    const starter = { mode: resolvePermissionMode(parent.permissionMode, parent.owner), engine: parent.engine };
+    if (!modeLimitsWhatItStarts(starter.mode)) return undefined;
+    const engine = await this.engineOfStart(ownerId, { ...dto, workspaceId });
+    if (dto.permissionMode) {
+      if (!isWiderThanStarter(starter, dto.permissionMode, engine)) return undefined;
+      throw widerModeRefusal(
+        starter.mode,
+        dto.permissionMode,
+        engine,
+        `Name a mode it may start (${modesItMayStart(starter, engine).join(', ')}). For a wider session, ask ` +
+          "the account owner to start it, or to switch this session's mode.",
+      );
+    }
+    return isWiderThanStarter(starter, modeOfNoneNamed(parent.owner, engine), engine) ? starter.mode : undefined;
+  }
+
+  /**
+   * Refuse a session opening a session at the account's default when that default is wider than the
+   * session may start. For a door with no mode to name (`task_start`, `task_update`, a coordinator's
+   * rotation), so `next` is a person's way forward. A caller that is not a session of this owner has
+   * nothing to compare: an owner's own door passes none, and the header it came from attributes, it
+   * does not authorize.
+   */
+  async assertMayStartAtAccountDefault(
+    ownerId: string,
+    actingSessionId: string | undefined,
+    target: { engine?: string | null; provider?: string | null; model?: string | null; workspaceId?: string | null },
+    next: string,
+  ): Promise<void> {
+    if (!actingSessionId || !UUID_SHAPE.test(actingSessionId)) return;
+    const acting = await this.prisma.session.findFirst({
+      where: { id: actingSessionId, ownerId },
+      select: { permissionMode: true, engine: true, owner: { select: { preferences: true } } },
+    });
+    if (!acting) return;
+    const starter = { mode: resolvePermissionMode(acting.permissionMode, acting.owner), engine: acting.engine };
+    if (!modeLimitsWhatItStarts(starter.mode)) return;
+    const engine = await this.engineOfStart(ownerId, target);
+    const mode = modeOfNoneNamed(acting.owner, engine);
+    if (isWiderThanStarter(starter, mode, engine)) throw widerModeRefusal(starter.mode, mode, engine, next);
+  }
+
+  /**
+   * What a session may do to another that already exists (session-reach.ts). Every runner door that gives
+   * a session a turn or ends one asks here, so an MCP call, the CLI and a bare HTTP request meet one check.
+   * A header value the id middleware could not decode names no session of this owner, and `task_start`'s
+   * header is attribution rather than proof, so it is treated as what it is: nobody to compare.
+   */
+  async assertMayReach(
+    ownerId: string,
+    callerSessionId: string,
+    targetSessionId: string,
+    act: SessionAct,
+    clientTurnId?: string,
+  ): Promise<{ narrower: boolean }> {
+    if (!UUID_SHAPE.test(callerSessionId) || !UUID_SHAPE.test(targetSessionId)) return { narrower: false };
+    return assertSessionMayReach(this.prisma, ownerId, callerSessionId, targetSessionId, act, clientTurnId);
+  }
+
+  /** Whether this session may move this task into a project (session-reach.ts), with the same reading of the header. */
+  async assertMayMoveRuns(ownerId: string, callerSessionId: string, taskId: string): Promise<void> {
+    if (UUID_SHAPE.test(callerSessionId)) await assertMayMoveRuns(this.prisma, ownerId, callerSessionId, taskId);
+  }
+
+  /** The engine a session started this way would run on, by create()'s own rule; null when it would be refused there. */
+  private async engineOfStart(
+    ownerId: string,
+    target: { engine?: string | null; provider?: string | null; model?: string | null; workspaceId?: string | null },
+  ): Promise<string | null> {
+    try {
+      const resolved = await resolveEngineProvider(this.engineProviderDeps(), {
+        ownerId,
+        engine: target.engine ?? undefined,
+        provider: target.provider ?? undefined,
+        model: target.model ?? undefined,
+        door: 'session',
+        seed: target.workspaceId ? () => agentProviderSeed(this.prisma, target.workspaceId!) : undefined,
+      });
+      return resolved.engine;
+    } catch {
+      return null;
+    }
   }
 
   /** The effort a normal new session under this workspace would inherit: the workspace's own effort if
@@ -2494,6 +2627,7 @@ export class SessionsService {
         providerBuiltin: true,
         model: true,
         effort: true,
+        permissionMode: true,
         workspaceId: true,
         parentSessionId: true,
         taskId: true,
@@ -4042,6 +4176,8 @@ export class SessionsService {
       // The engine it runs on: its recorded one, else what the old rules derive, null when nobody can
       // tell (docs/provider-engine-contract.md §6.1).
       engine: await sessionEngine(this.prisma, session),
+      // What its Trash note says when a file is keeping it there past the 30 days.
+      trashHold: session.deletedAt ? await trashHoldOf(this.prisma, session.id) : null,
       workspace: session.workspace ? {
         ...session.workspace,
         antigravityKeyAvailableByRunner: assignedRunner ? {
@@ -5585,8 +5721,9 @@ export class SessionsService {
   ): Promise<string[]> {
     const ids = [...new Set(attachmentIds ?? [])];
     if (ids.length === 0) return [];
+    // No expired file: a copy holds the bytes it names, and those are on their way out, or gone.
     const found = await tx.attachment.findMany({
-      where: { id: { in: ids }, ownerId, sessionId },
+      where: { id: { in: ids }, ownerId, sessionId, expiredAt: null },
       select: { id: true, turnId: true },
     });
     if (found.length !== ids.length) {
@@ -8064,12 +8201,20 @@ export class SessionsService {
       }
     }
     const status = dto.behavior === 'allow' ? 'ALLOWED' : 'DENIED';
+    // A workspace write's card holds its variables' values only while it asks (workspace-write-card-values.ts).
+    const answering = await this.prisma.approval.findFirst({
+      where: { id: approvalId, sessionId: id },
+      select: { toolName: true, input: true },
+    });
     // Only the first decision on a still-PENDING approval applies (idempotent).
     const res = await this.prisma.approval.updateMany({
       where: { id: approvalId, sessionId: id, status: 'PENDING' },
       data: {
         status,
         startAfterCreate,
+        ...(answering && holdsWorkspaceWriteValues(answering.toolName)
+          ? { input: withoutEnvValues(answering.input) as Prisma.InputJsonValue }
+          : {}),
         message: dto.message ?? null,
         answers: dto.answers ? (dto.answers as Prisma.InputJsonValue) : Prisma.DbNull,
         // Only an allow can carry "remember same kind" rules; the runner reads them off
@@ -8112,7 +8257,7 @@ export class SessionsService {
     approvalId: string,
     rules: PermissionRule[] | undefined,
   ): Promise<void> {
-    const stored = normalizePermissionRules(rules);
+    const stored = normalizePermissionRules(rules).filter((rule) => !reachesPastOneMcpTool(rule.toolName));
     if (!stored.length) return;
     await this.prisma.workspacePermissionRule.createMany({
       data: stored.map((rule) => ({

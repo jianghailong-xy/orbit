@@ -22,6 +22,7 @@ import { openFuseEpisodeId } from '../projects/project-fuse';
 import { SESSION_ENDING_SELECT, sessionHasEnded } from '../projects/project-open-item';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { assertSessionMayReach } from '../sessions/session-reach';
 import { SessionsService } from '../sessions/sessions.service';
 import { latestOwnerConfirmationRequest } from './owner-confirmation-read';
 import {
@@ -776,5 +777,8 @@ async function returnRoute(
         'this project\'s coordinator is paused, so what it starts is held; the card goes to the owner instead');
     }
   }
+  // B8 row 14: all that is left is giving the run a turn with the reviewer's words, so the reviewer is held to what it may do to
+  // that run (sessions/session-reach.ts). Asked under the locks as well, like every row above. PROBLEMS gives no turn and went above.
+  await assertSessionMayReach(tx, ownerId, session, standing.request.sessionId, 'returnConfirmation');
   return { kind: 'RETURN', standing, input };
 }

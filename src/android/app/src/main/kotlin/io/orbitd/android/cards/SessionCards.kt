@@ -55,7 +55,7 @@ import kotlinx.serialization.json.*
  */
 @Stable
 class SessionCardsModel internal constructor(val handle: SessionHandle, val sessionId: String, val actions: CardActions,
-    private val reviewKey: MutableState<String?>, private val scope: CoroutineScope) {
+    private val reviewKey: MutableState<String?>, private val scope: CoroutineScope, val evidenceFiles: EvidenceFilesStore) {
     var watches by mutableStateOf<List<InteractionCard>>(emptyList()); internal set
     var created by mutableStateOf<JsonObject?>(null); internal set
     var merged by mutableStateOf<List<JsonObject>>(emptyList()); internal set
@@ -118,12 +118,14 @@ class SessionCardsModel internal constructor(val handle: SessionHandle, val sess
 @Composable
 fun rememberSessionCards(app: OrbitApplication, handle: SessionHandle, sessionId: String): SessionCardsModel {
     val review = rememberSaveable(sessionId) { mutableStateOf<String?>(null) }
-    return remember(handle, sessionId) { SessionCardsModel(handle, sessionId, CardActions(app.session, app.realtime, app.processScope), review, app.processScope) }
+    val filesPage = rememberSaveable(sessionId) { mutableStateOf<String?>(null) }
+    return remember(handle, sessionId) { SessionCardsModel(handle, sessionId, CardActions(app.session, app.realtime, app.processScope), review, app.processScope,
+        EvidenceFilesStore(app.session, handle, app.processScope, filesPage)) }
 }
 
 /** The signed-in session the cards belong to, or null while another account, another session or no access is showing. */
 @Composable
-private fun cardSession(): Pair<OrbitApplication, SessionState>? {
+internal fun cardSession(): Pair<OrbitApplication, SessionState>? {
     val resources = LocalReaderResources.current ?: return null
     val app = LocalContext.current.applicationContext as OrbitApplication
     val auth by resources.auth.state.collectAsState()
@@ -147,6 +149,7 @@ fun SessionCardsReads(cards: SessionCardsModel) {
     val wantsPlan = current.any { it.family == CardFamily.START }
     LaunchedEffect(session.fresh, cards.handle, session.id, project, realtime.invalidationRevision, wantsPlan) {
         if (!session.fresh) return@LaunchedEffect
+        cards.evidenceFiles.readAgain()
         val api = CardAuthority(app.session, cards.handle)
         suspend fun read(path: List<String>, query: List<Pair<String, String>> = emptyList()): JsonElement? = try { api.get(path, query) }
             catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
@@ -237,7 +240,7 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                     // A08-17: an exception that became the owner's, or a pause, is its own card (iOS `OwnerItemCardView`).
                     card.family == CardFamily.EXCEPTION -> ExceptionCard(card, fresh, result, mergeCard, open, discuss,
                         review = { promotion -> CardFocus.request(session.id, "promotion:$promotion") }, main = coordinatedMain, submit = submit)
-                    else -> BusinessCard(drawn, fresh, result, open, discuss, submit)
+                    else -> CompositionLocalProvider(LocalEvidenceFiles provides cards.evidenceFiles) { BusinessCard(drawn, fresh, result, open, discuss, submit) }
                 }
             }
         } }
@@ -322,8 +325,9 @@ internal fun CardPreviewView(card: InteractionCard, preview: CardPreview, onOpen
  * The full-height review a preview opens (A08-2; iOS `ApprovalReviewSheet`): the card whole, its buttons pinned under it, a ✕ that
  * closes it. Hosted by the reader outside the transcript's rows; the answers typed in it are kept per card version while it closes
  * and opens again ([states]). After this window's own press it says so — "Sending your answer…", then the record the card became:
- * the card as it was asked, read-only, and where its buttons were, who did what and when; it stays open until closed. A request
- * that went away says that instead of drawing nothing.
+ * the card as it was asked, read-only, and where its buttons were, who did what and when — and about 2 s later it leaves on its own.
+ * A refused answer, an answer from another end and a record opened from the conversation stay until closed. A request that went
+ * away says that instead of drawing nothing, and stays until closed too.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -342,6 +346,14 @@ fun CardReviewSheet(cards: SessionCardsModel, states: SaveableStateHolder, open:
     // Read again as it opens: what it shows is the server's now, not the preview's.
     LaunchedEffect(key) { app.realtime.refreshSession() }
     LaunchedEffect(phase) { if (phase == CardPreviews.Phase.CLOSED) cards.close() }
+    // The record confirms the press, and then the review gets out of the way (the owner's call of 2026-11-02; iOS `ApprovalReviewSheet`).
+    // A coordinator's question never reaches RECORDED, and its record reads the same whoever answered, so only the door taking this
+    // press counts: refused because another end answered first, the card is a record all the same, and that one stays to be read.
+    val answeredHere = phase == CardPreviews.Phase.RECORDED ||
+        press?.verb == CardVerb.OWNER_ANSWER && pressResult.settled && card?.family == CardFamily.QUESTION_RECORD
+    // Closing by hand clears `key`, so this function returns at its top and this effect leaves the composition, timer and all: no timer
+    // outlives its review to close the next one.
+    LaunchedEffect(key, answeredHere) { if (answeredHere) { delay(2_000); cards.close() } }
     val title = when {
         record != null -> record.title
         card == null -> CardPreviews.requestClosed

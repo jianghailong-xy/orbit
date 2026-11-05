@@ -2643,7 +2643,38 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // Orbit Files' label (0464, docs/orbit-files-design.md §2.3): one nullable column on `attachment`, which is not a
       // preserved relation. No `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved
       // triggers/functions is named, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
-      '0464_attachment_label'],
+      '0464_attachment_label',
+      // Orbit Files' test report summary (0465, docs/orbit-files-design.md §2.5): one nullable JSONB column on
+      // `attachment`, which is not a preserved relation. No `task`, `session`, `project` or `project_acceptance_*` object
+      // nor any of the six preserved triggers/functions is named, so it is not another writer of the DONE fence. No
+      // INSERT, UPDATE or DELETE.
+      '0465_attachment_test_report_summary',
+      // 0466 is Orbit Files' retention (docs/orbit-files-design.md §2.8): three nullable columns on `file_blob`, two
+      // partial indexes on `attachment`, and one UPDATE that gives the rows `file_upload` wrote before it, cited by a version
+      // already let go of, the `expires_at` they would have had, reading the ledger's revisions and decisions and writing
+      // neither. No ledger table is written,
+      // and none of the six preserved triggers/functions is named, so it is not another writer of the DONE fence.
+      '0466_file_retention',
+      // 0467 widens `project_coordinator_wake_event_chk` by `TASK_RUN_STOPPED` and changes nothing else: no row is
+      // written, and no `task`, `session`, ledger table or preserved trigger/function is named, so it is not another
+      // writer of the DONE fence.
+      '0467_task_run_stopped_wake',
+      // 0468 is one `CREATE INDEX ... IF NOT EXISTS`, a partial btree beside `task_completion_evidence`: an index is a new
+      // relation of its own, not a rewrite of the table, as with 0283. No row is written, and nothing is altered or dropped, so
+      // the ledger stays append-only and this is not another writer of the DONE fence.
+      '0468_evidence_cites_files_idx',
+      // 0469 adds `project.reopened_at` and `reopened_facts`, both NULL on every existing row, and two CHECKs on
+      // those columns alone: no row is written, and no `task`, `session`, ledger table or preserved trigger/function
+      // is named, so it is not another writer of the DONE fence.
+      '0469_project_owner_reopen',
+      // 0470 widens `wiki_changeset_op_verification_evidence_chk` by `second_hand` and changes nothing else: no row is
+      // written, `wiki_changeset_op` is not a preserved relation, and no `task`, `session`, ledger table or preserved
+      // trigger/function is named, so it is not another writer of the DONE fence.
+      '0470_wiki_verification_second_hand',
+      // A nullable column for what an op's note was, and a CHECK of its shape: nothing to preserve, no row written.
+      '0471_wiki_op_prompted_by',
+      // A nullable column saying which session wrote a note, and its index: nothing to preserve, no row written.
+      '0472_wiki_note_session'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

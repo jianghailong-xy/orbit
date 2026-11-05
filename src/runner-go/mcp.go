@@ -1708,6 +1708,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		body := map[string]interface{}{"name": name}
 		copyIfPresent(body, args, "description", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree", "env", "defaultMergeTarget")
+		if declined, err := askBeforeAgentWrite(s.t, s.sessionID, "", body); err != nil {
+			return toolResult(err.Error(), true)
+		} else if declined != "" {
+			return toolResult("the human rejected this write, and nothing was written: "+declined, false)
+		}
 		raw, err := s.t.createAgent(s.sessionID, s.orchestrationToken, body)
 		if err != nil {
 			return toolResult("create agent failed: "+err.Error(), true)
@@ -1726,6 +1731,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		copyIfPresent(body, args, "name", "description", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree", "env", "defaultMergeTarget")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
+		}
+		if declined, err := askBeforeAgentWrite(s.t, s.sessionID, id, body); err != nil {
+			return toolResult(err.Error(), true)
+		} else if declined != "" {
+			return toolResult("the human rejected this write, and nothing was written: "+declined, false)
 		}
 		raw, err := s.t.updateAgent(s.sessionID, s.orchestrationToken, id, body)
 		if err != nil {
@@ -1829,6 +1839,9 @@ var integrationMergeCheckFields = []string{"mergeCheckCommand", "mergeCheckTimeo
 // waitsForTheOwner says whether a call puts a card in front of the owner and blocks until it is
 // answered.
 func waitsForTheOwner(name string, args map[string]interface{}) bool {
+	if name == "agent_create" || name == "agent_update" {
+		return agentWriteNeedsCard(args)
+	}
 	if name == "project_update" {
 		// An update asks only when it proposes a merge check and nothing else. A title, a goal or a
 		// set of instructions is an agent's own to write; a LINE field is refused by the server
@@ -1862,42 +1875,10 @@ func (s *mcpServer) handOffOwnerWait(name string, args map[string]interface{}) m
 	if socket == "" || token == "" {
 		return refuse("this session has no runner-hosted background job service to hand the wait to")
 	}
-	exe := orbitCLIExecutable()
-	if exe == "" {
-		return refuse("the orbit executable could not be resolved")
-	}
-	params, err := json.Marshal(map[string]interface{}{"name": name, "arguments": args})
+	// Its own operation, not `run`: the gate on `run` is about commands, and this is a question put to a
+	// person, which Plan and Don't Ask may do (bgJobService.startOwnerWait).
+	raw, err := bgSocketCall(socket, token, "owner_wait", map[string]interface{}{"tool": name, "arguments": args})
 	if err != nil {
-		return refuse(err.Error())
-	}
-	request, _ := json.Marshal(rpcRequest{JSONRPC: "2.0", ID: json.RawMessage("1"), Method: "tools/call", Params: params})
-	file, err := os.CreateTemp("", "orbit-mcp-handoff-*.json")
-	if err != nil {
-		return refuse(err.Error())
-	}
-	_, err = file.Write(append(request, '\n'))
-	if closeErr := file.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		_ = os.Remove(file.Name())
-		return refuse(err.Error())
-	}
-	// The job's environment is the runner's, which carries this session and the job's own id but not
-	// the rest of who is asking: the agent the write is attributed to, the current task, the
-	// orchestration switch. They are this server's own, put back as it was started with them. The
-	// timeout is cleared so the job waits as long as the owner takes, and only this tool is served.
-	// The request file is unlinked once open, so nothing is left behind however the job ends.
-	command := fmt.Sprintf("{ rm -f %s && ORBIT_AGENT_ID=%s ORBIT_TASK_ID=%s %s=%s %s=%s %s= %s mcp; } < %s",
-		shellQuote(file.Name()), shellQuote(s.agentID), shellQuote(s.taskID),
-		envMCPOrchestration, orchestrationEnv(s.allowOrchestration), envMCPTools, shellQuote(name), envMCPCallTimeout,
-		shellQuote(exe), shellQuote(file.Name()))
-	raw, err := bgSocketCall(socket, token, "run", map[string]interface{}{
-		"command": command, "kind": bgKindWatch, "wakeOnExit": true,
-		"description": "Orbit " + name + ": waiting for the owner's confirmation",
-	})
-	if err != nil {
-		_ = os.Remove(file.Name())
 		return refuse("handing the wait to a runner-hosted job failed: " + err.Error())
 	}
 	var job struct {
@@ -2975,7 +2956,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"IT STANDS NOW, so re-sending the same key after that criterion was reworded is how work " +
 			"declared against the older wording is brought back up to date — that is what this field " +
 			"is for. The key must be one the task's OWN project states; a task in no project cannot " +
-			"declare one, and neither refusal is silent.",
+			"declare one, and neither refusal is silent. A run writes this for its own task only: " +
+			"another task's is refused with CRITERION_KEY_FROM_RUN_REFUSED, since what a task serves " +
+			"decides whether the criterion is satisfied.",
 	}
 	labelsProp := map[string]interface{}{
 		"type":        "array",
@@ -3362,7 +3345,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_evidence_decide",
-			"description": "Record THIS session's decision about one version of another task's completion evidence: CONFIRM that the evidence settles the criterion it quotes, or SEND_BACK with a note saying what the next revision has to show. It writes one row and the status that row derives (a CONFIRM of an EVIDENCE_JUDGMENT task's current revision settles it DONE); a SEND_BACK's note is then delivered to the run that submitted the revision as a platform message, so the next attempt knows what to show, and the decision — note included — is readable on the revision in task_evidence_list. Five things are checked at decision time and each refusal names what to do instead: the revision you answer must still be the task's LATEST (EVIDENCE_JUDGMENT_EVIDENCE_SUPERSEDED — read task_evidence_list again and decide the current one); the criterion the evidence quotes must still be worded the way the project states it today (EVIDENCE_JUDGMENT_CRITERION_MOVED — the standard moved, so ask for evidence against the new one); this session must not have done the work being judged (EVIDENCE_JUDGMENT_REQUIRES_INDEPENDENT_SESSION — a run cannot decide its own evidence, which is what makes a CONFIRM a check rather than a signature on your own homework); a session that acts for one project — its coordinator, a judgment session opened for it, a run of one of its tasks — must not decide a task that is in another project (EVIDENCE_JUDGMENT_TASK_IN_ANOTHER_PROJECT — a task's evidence is decided from the project it is in now, and a task moved out takes its undecided evidence with it, so the project it left can no longer decide it); and SEND_BACK must carry a note. One version is decided once: answering it again says the same thing or is refused as already decided. Outside a project, the session that filed an EVIDENCE_JUDGMENT task is handed each revision its run submits (an <orbit-evidence-review> message naming the taskId and evidenceRevision): deciding it is that session's job, and the account owner is asked only if it has not decided within 30 minutes or has ended.",
+			"description": "Record THIS session's decision about one version of another task's completion evidence: CONFIRM that the evidence settles the criterion it quotes, or SEND_BACK with a note saying what the next revision has to show. It writes one row and the status that row derives (a CONFIRM of an EVIDENCE_JUDGMENT task's current revision settles it DONE); a SEND_BACK's note is then delivered to the run that submitted the revision as a platform message, so the next attempt knows what to show, and the decision — note included — is readable on the revision in task_evidence_list. Six things are checked at decision time and each refusal names what to do instead: the revision you answer must still be the task's LATEST (EVIDENCE_JUDGMENT_EVIDENCE_SUPERSEDED — read task_evidence_list again and decide the current one); the criterion the evidence quotes must still be worded the way the project states it today (EVIDENCE_JUDGMENT_CRITERION_MOVED — the standard moved, so ask for evidence against the new one); this session must not have done the work being judged (EVIDENCE_JUDGMENT_REQUIRES_INDEPENDENT_SESSION — a run cannot decide its own evidence, which is what makes a CONFIRM a check rather than a signature on your own homework); a session that acts for one project — its coordinator, a judgment session opened for it, a run of one of its tasks — must not decide a task that is in another project (EVIDENCE_JUDGMENT_TASK_IN_ANOTHER_PROJECT — a task's evidence is decided from the project it is in now, and a task moved out takes its undecided evidence with it, so the project it left can no longer decide it); a run of another task, or a conversation a run opened, must not decide it unless the evidence is addressed to that session, as the subject of the task it verifies or a task in no project it dispatched (EVIDENCE_JUDGMENT_FROM_RUN_REFUSED — a task's evidence is decided by the project's coordinator or a judgment session opened for the project, by the session that dispatched a task in no project, by a run of a task that verifies this one, or by the account owner in the app); and SEND_BACK must carry a note. One version is decided once: answering it again says the same thing or is refused as already decided. Outside a project, the session that filed an EVIDENCE_JUDGMENT task is handed each revision its run submits (an <orbit-evidence-review> message naming the taskId and evidenceRevision): deciding it is that session's job, and the account owner is asked only if it has not decided within 30 minutes or has ended.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId": taskIDProp,
 				"decision": map[string]interface{}{
@@ -4244,7 +4227,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_dependency_add",
-			"description": "Add one dependency edge: taskId waits for dependsOnTaskId. The server rejects cross-owner tasks, self-dependencies, duplicate edges, and cycles. Prefer this granular edit after reading task_dependency_graph when preserving every other edge. Point the edge at the SUBJECT, not at its verification task: waiting until A is verified is dependsOnTaskId=A, and once anything checks A the server holds that edge until A's latest check has actually PASSED — a check that finished DONE with a FAIL verdict does not release it, and filing a new check closes the question again. An edge naming the check resolves to the same gate, so older plans keep working; it just reads as being about one run.",
+			"description": "Add one dependency edge: taskId waits for dependsOnTaskId. The server rejects cross-owner tasks, self-dependencies, duplicate edges, and cycles. Prefer this granular edit after reading task_dependency_graph when preserving every other edge. Point the edge at the SUBJECT, not at its verification task: waiting until A is verified is dependsOnTaskId=A, and once anything checks A the server holds that edge until A's latest check has actually PASSED — a check that finished DONE with a FAIL verdict does not release it, and filing a new check closes the question again. An edge naming the check resolves to the same gate, so older plans keep working; it just reads as being about one run. A verifier's own edges are its own run's: another run is refused with VERIFIER_WRITE_FROM_RUN_REFUSED.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId": taskIDProp,
 				"dependsOnTaskId": map[string]interface{}{
@@ -4255,7 +4238,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_dependency_remove",
-			"description": "Idempotently remove one dependency edge from taskId to dependsOnTaskId, leaving every other edge unchanged; an already-absent edge is a no-op. Read task_dependency_graph first when the surrounding DAG is not already known.",
+			"description": "Idempotently remove one dependency edge from taskId to dependsOnTaskId, leaving every other edge unchanged; an already-absent edge is a no-op. Read task_dependency_graph first when the surrounding DAG is not already known. A verifier's own edges are its own run's: another run is refused with VERIFIER_WRITE_FROM_RUN_REFUSED.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId": taskIDProp,
 				"dependsOnTaskId": map[string]interface{}{
@@ -4324,7 +4307,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_update",
-			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, EVIDENCE_JUDGMENT, or OWNER_CONFIRMED path, and an OWNER_CONFIRMED task is confirmed only by the account owner in the Orbit app. A write that lands a task on OWNER_CONFIRMED in no project, or in a project whose Automatic is off — by changing the criterion, the project or the criterion it serves — needs ownerConfirmationReason (stored or sent), or it is refused 409 OWNER_CONFIRMATION_REASON_REQUIRED and nothing is written. FAILED remains writable as a run's conservative self-report. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. `projectId` re-files this task under another project, or null takes it out of every project — how a mis-filing is corrected. The account owner writes it directly; a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for null and PROJECT_SCOPE_MISMATCH for another project unless it asks for the move with `handoff`: the server then files a move request, answers CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING and leaves the task where it is, and the account owner's confirmation moves the task at once, with nothing to send again (read the request with project_crossings; `handoff` says who may ask and which moves are refused). Pass null for assigneeId/listId/parentTaskId/projectId/dueDate/runAt/engine/provider/model/modelHint/modelHintReason to clear them. `codeless: true` declares that the task produces no code, which takes it out of its acceptance criterion's landing: it needs `codelessReason` in the same call, and is refused for a task that already has commits of its own.",
+			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, EVIDENCE_JUDGMENT, or OWNER_CONFIRMED path, and an OWNER_CONFIRMED task is confirmed only by the account owner in the Orbit app. A write that lands a task on OWNER_CONFIRMED in no project, or in a project whose Automatic is off — by changing the criterion, the project or the criterion it serves — needs ownerConfirmationReason (stored or sent), or it is refused 409 OWNER_CONFIRMATION_REASON_REQUIRED and nothing is written. FAILED remains writable as a run's conservative self-report. A run, or a conversation a run opened, may not write completionCriterion, acceptanceCommand, acceptanceExpectedExitCode, completionPolicy or acceptanceCriteria on another task unless it filed that task itself and the task serves no acceptance criterion of its project: it is refused with COMPLETION_STANDARD_FROM_RUN_REFUSED, and the account owner, the project's coordinator or a judgment session can make the edit. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. `projectId` re-files this task under another project, or null takes it out of every project — how a mis-filing is corrected. The account owner writes it directly; a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for null and PROJECT_SCOPE_MISMATCH for another project unless it asks for the move with `handoff`: the server then files a move request, answers CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING and leaves the task where it is, and the account owner's confirmation moves the task at once, with nothing to send again (read the request with project_crossings; `handoff` says who may ask and which moves are refused). Pass null for assigneeId/listId/parentTaskId/projectId/dueDate/runAt/engine/provider/model/modelHint/modelHintReason to clear them. `codeless: true` declares that the task produces no code, which takes it out of its acceptance criterion's landing: it needs `codelessReason` in the same call, and is refused for a task that already has commits of its own.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId":      taskIDProp,
 				"title":       str,
@@ -4425,7 +4408,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_delete",
-			"description": "Permanently delete a task. This cannot be undone. Comments and dependency edges are deleted; finished sessions are retained and detached from the task, but a run still in flight is stopped — with the task gone it has no way left to finish. taskId defaults to the current task.",
+			"description": "Permanently delete a task. This cannot be undone. Comments and dependency edges are deleted; finished sessions are retained and detached from the task, but a run still in flight is stopped — with the task gone it has no way left to finish. A run may delete only a task it filed itself, one that serves no acceptance criterion of its project, is not a verifier and has none; anything else is refused with TASK_DELETE_FROM_RUN_REFUSED, and the account owner, the project's coordinator or a judgment session can delete it. taskId defaults to the current task.",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
 		},
 		{
@@ -4680,6 +4663,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"additionalProperties": str,
 			"description":          "Environment variables injected into the agent's engine process, as a flat string→string map. REPLACES the whole map. Existing values are intentionally secret and are not returned by agent_list, so provide the complete desired map.",
 		}
+		// What agent_create and agent_update say about the owner's card. The server refuses these fields
+		// without one, so an agent reads it here rather than in a refusal.
+		agentCardNote := " `env`, `workDir`, `systemPrompt`, `appendSystemPrompt`, `runnerId` and `enableWorktree` decide what this agent's next session runs and where, so a call naming any of them first puts the write — the agent, each variable's name and value, what each field becomes — on a confirmation card in front of the account owner, in every permission mode, and BLOCKS until they answer: nothing is written if they decline. `name`, `description` and `defaultMergeTarget` alone need no card."
+
 		mergeTargetProp := map[string]interface{}{
 			"type":        "string",
 			"description": "Branch this agent's sessions merge into by default. Omit to leave the runner's auto-detect (main, else master).",
@@ -4712,7 +4699,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"permissionMode": map[string]interface{}{
 						"type":        "string",
 						"enum":        offeredPermissionModes(),
-						"description": strings.TrimSpace("How much the sub-session may do without a human: \"plan\" investigates and proposes without touching anything, \"default\" asks before each unapproved action, \"acceptEdits\" pre-approves file edits only, \"auto\" lets the model decide when to ask, \"dontAsk\"/\"bypassPermissions\" never ask. Omit to use the owner's account default. A mode that asks parks the sub-session on an approval card until a human answers, so pick one only if someone is watching. " + rootWithheldPermissionModeNote()),
+						"description": strings.TrimSpace("How much the sub-session may do without a human: \"plan\" investigates and proposes without touching anything, \"default\" asks before each unapproved action, \"acceptEdits\" pre-approves file edits only, \"auto\" lets the model decide when to ask and is the mode for unattended work that has to run commands, \"dontAsk\" never asks but refuses anything not already approved, commands and background jobs included, \"bypassPermissions\" never asks and allows everything. Omit to use the owner's account default. It can never be wider than this session's own mode: a wider mode is refused, and when the default is wider the sub-session runs in this session's own mode. A mode that asks parks the sub-session on an approval card until a human answers, so pick one only if someone is watching. " + rootWithheldPermissionModeNote()),
 					},
 					"wait": map[string]interface{}{"type": "boolean", "description": "Wait for the new session's first turn to settle and return its full state inline: up to about 10 minutes, less when this session was itself spawned by a wait. The wait is recorded on Orbit's server as a watch before it starts, so when that time runs out or the connection drops, the call returns the session as last seen with the watch under \"watch\", and the watch wakes this session when the turn settles; end your turn then instead of polling. If the server does not record the watch, the result says no server-held watch backs the wait, and a refused watch returns at once. Default false: returns immediately."},
 				}, "prompt"),
@@ -4788,7 +4775,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "agent_create",
-				"description": "Create a new agent/workspace under this owner, bound to the current runner unless runnerId is given — e.g. to stand up a specialized sub-agent to delegate to. An agent has no engine or provider of its own, so pass `engine` and/or `provider` to session_create when a session needs a specific one. NOTE: the orchestration permission cannot be set here; only a human can grant it in the web UI.",
+				"description": "Create a new agent/workspace under this owner, bound to the current runner unless runnerId is given — e.g. to stand up a specialized sub-agent to delegate to. An agent has no engine or provider of its own, so pass `engine` and/or `provider` to session_create when a session needs a specific one. NOTE: the orchestration permission cannot be set here; only a human can grant it in the web UI." + agentCardNote,
 				"inputSchema": obj(map[string]interface{}{
 					"name":               str,
 					"description":        str,
@@ -4803,7 +4790,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "agent_update",
-				"description": "Update an existing agent's fields (name, system prompt, workDir, etc.). An agent has no engine or provider to set — those are per session. Cannot change the orchestration permission (human-only, web UI).",
+				"description": "Update an existing agent's fields (name, system prompt, workDir, etc.). An agent has no engine or provider to set — those are per session. Cannot change the orchestration permission (human-only, web UI)." + agentCardNote,
 				"inputSchema": obj(map[string]interface{}{
 					"agentId":            map[string]interface{}{"type": "string", "description": "Agent id to update."},
 					"name":               str,

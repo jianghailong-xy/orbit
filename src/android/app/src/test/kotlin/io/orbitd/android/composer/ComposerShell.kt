@@ -40,6 +40,8 @@ internal object ComposerShell {
     @Volatile var around: JsonObject? = null
     /** Holds every GET …/events/page until it completes, suspended rather than blocking a thread: a transcript still on its way. */
     @Volatile var pageGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+    /** The same for any request (`METHOD path` → gate): a read a test wants still out while the page draws without it. */
+    val gates = ConcurrentHashMap<String, kotlinx.coroutines.CompletableDeferred<Unit>>()
     /** GET …/retry-message. */
     @Volatile var retryMessage = """{"text":""}"""
     /** Attachment bytes by id. */
@@ -49,7 +51,7 @@ internal object ComposerShell {
 
     fun reset() {
         while (frames.tryReceive().isSuccess) Unit
-        calls.clear(); bodies.clear(); answers.clear(); disk.clear()
+        calls.clear(); bodies.clear(); answers.clear(); gates.clear(); disk.clear()
         session = emptyMap(); workspace = emptyMap(); providers = "[]"; pools = "[]"; sharedPools = "[]"
         events = emptyList(); around = null; pageGate = null; retryMessage = """{"text":""}"""; attachments = emptyMap()
         runner = obj("""{"id":"$RUNNER","name":"Fixture runner","online":true,"status":"ONLINE","version":"0.1.230",
@@ -79,6 +81,7 @@ internal object ComposerShell {
         calls += "$method $path" + if (query.isEmpty()) "" else "?$query"
         if (method != "GET") bodies += "$method $path" to (api.body?.decodeToString() ?: "")
         if (path == "sessions/$SESSION/events/page") pageGate?.await()
+        gates["$method $path"]?.await()
         answers["$method $path"]?.let { return@HttpTransport it() }
         val attachment = api.path.takeIf { it.size == 2 && it[0] == "attachments" }?.get(1)
         when {

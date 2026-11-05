@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -80,7 +81,9 @@ func TestPhantomShellIdIsNotAWorktreeHolder(t *testing.T) {
 	defer bg.stopAll()
 
 	for i, content := range phantomToolResults {
-		bg.onToolResult(fmt.Sprintf("toolu_%d", i), content)
+		id := fmt.Sprintf("toolu_%d", i)
+		bg.noteToolUse(id, "Bash", map[string]interface{}{"run_in_background": true})
+		bg.onToolResult(id, content)
 	}
 
 	bg.mu.Lock()
@@ -119,10 +122,15 @@ func TestRealEngineOwnedShellStillHoldsTheWorktree(t *testing.T) {
 	bg := newBgTailer(context.Background(), events.emit, p.worktreeHoldsFor("realbg"))
 	defer bg.stopAll()
 
-	output := filepath.Join(t.TempDir(), "bei75180m.output")
+	output := filepath.Join(realPath(t.TempDir()), "claude-"+strconv.Itoa(os.Getuid()), "-project", "engine-session", "tasks", "bei75180m.output")
+	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(output, []byte("[1/4] compiling\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	bg.noteEngineSession("engine-session")
+	bg.noteToolUse("toolu_real", "Bash", map[string]interface{}{"run_in_background": true})
 	bg.onToolResult("toolu_real", "Command running in background with ID: bei75180m. Output is being"+
 		" written to: "+output+". You will be notified when it completes.")
 

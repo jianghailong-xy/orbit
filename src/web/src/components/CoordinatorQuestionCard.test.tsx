@@ -81,6 +81,12 @@ function markup(ui: JSX.Element): string {
 }
 
 describe('what the card says', () => {
+  it('keeps a word of its code whole, as a reply does (lib/codeWords)', () => {
+    const asked = { ...row().question!, question: 'Which first, 参数、`--enable_part_writer` or the other?' };
+    const html = markup(<CoordinatorQuestionCard projectId={PROJECT_ID} row={row({ question: asked })} now={NOW} />);
+    expect(html).toContain('<span class="code-break"></span><code><span class="code-word">--enable_part_writer</span></code>');
+  });
+
   it('asks the question, marked as the platform’s and not an agent’s', () => {
     const html = markup(<CoordinatorQuestionCard projectId={PROJECT_ID} row={row()} now={NOW} />);
     expect(html).toContain(COORDINATOR_QUESTION_HEADING);

@@ -1334,6 +1334,7 @@ final class ConsoleModel {
                 try? await Task.sleep(nanoseconds: 60_000_000_000)
                 guard let self, !Task.isCancelled else { return }
                 await self.refreshRunner()
+                await self.loadContextIfUnread()
             }
         }
         evidencePollTask = Task { [weak self] in
@@ -1457,6 +1458,9 @@ final class ConsoleModel {
                 // without this, a failed read would stay failed until the console was opened again,
                 // and a quota read before the phone slept would stay that old.
                 Task { [weak self] in await self?.refreshRunner() }
+                // And the row, if the one read of it this console opened with never came back: it is
+                // what names the project and the task, and so what any of the reads above are for.
+                Task { [weak self] in await self?.loadContextIfUnread() }
             }
             isReconnect = true
             // Close a large gap over compressed REST pages BEFORE the stream opens — see
@@ -2127,7 +2131,11 @@ final class ConsoleModel {
     /// resumable session's pills seed its next resume, and without it the Mode pill would stick
     /// at the hardcoded `.default` instead of the mode the session actually uses.
     private func loadContext() async {
+        guard !loadingContext else { return }
+        loadingContext = true
+        defer { loadingContext = false }
         guard let s = try? await api.session(sessionID) else { return }
+        contextLoaded = true
         adoptServerSnapshot(s)
         agentName = s.agent?.name
         // Adopt the owning agent's id too (a console opened by session id may have been created
@@ -2136,7 +2144,12 @@ final class ConsoleModel {
         // The project this conversation coordinates, if any. It is what decides whether the
         // standing questions that project puts to its owner are asked here at all — an ordinary
         // session has no project and makes none of those reads.
+        let projectMoved = projectID != s.projectId
         projectID = s.projectId
+        // The queue's first read can already be back: the list row's count kicks it, before anything
+        // here knew the project, so it dropped that project's rows and the read below is throttled
+        // for having just been made. The queue it left is drawn now, with no request of its own.
+        if projectMoved, let evidenceDecisions { adoptEvidenceQueue(evidenceDecisions) }
         if projectID != nil { Task { [weak self] in await self?.refreshRulerQuestions() } }
         // A conversation that coordinates nothing can still hold an evidence card: a task it
         // dispatched outside any project is settled here, and the owner's card for it is drawn
@@ -2240,6 +2253,14 @@ final class ConsoleModel {
         if live, modelSelectionRevision.isPristine {
             syncedConfig = (modelID, permissionMode.rawValue, effort.rawValue, fastMode)
         }
+    }
+
+    /// `loadContext`, once more, when its first read of the row did not come back. That read is the only
+    /// one that names the project and the task, so until it does this console draws no project card and
+    /// asks no owner confirmation. Asked on a reconnect and on the minute, which is all that moves here
+    /// when the stream never dropped.
+    private func loadContextIfUnread() async {
+        if !contextLoaded { await loadContext() }
     }
 
     /// List seeds and the later detail read resolve the same settings. A model-less session keeps
@@ -4118,6 +4139,10 @@ final class ConsoleModel {
     /// the same reason. A card is drawn only for the rows `EvidenceDecisions.cardRows` keeps: this
     /// project's, and ones the door would take an answer to from here.
     private(set) var evidenceDecisions: EvidenceDecisionQueue?
+    /// What each version of evidence drawn here cites, by `task#revision` (`evidenceFileRead`).
+    private var evidenceFileReads: [String: EvidenceFileRead] = [:]
+    /// The files with a press of their pin on its way.
+    private(set) var pinningEvidenceFiles: Set<String> = []
     /// Where this conversation stands as the coordinator its project's queued evidence waits for —
     /// paused, or back — read off its own row each time the row is adopted (`adoptServerSnapshot`):
     /// the line every waiting version carries (`EvidenceDecisions.pauseLine`). Paused for a reason
@@ -4220,6 +4245,10 @@ final class ConsoleModel {
     /// ordinary conversation, and then nothing below ever asks about a confirmation: the card is
     /// drawn in the run's own session and nowhere else.
     private(set) var taskID: String?
+    /// Whether `loadContext` has read the row that says what `projectID` and `taskID` are. Without it
+    /// those two being nil says nothing about the conversation (`loadContextIfUnread`).
+    private var contextLoaded = false
+    private var loadingContext = false
     /// What that task is waiting on from its owner, as `GET /tasks/:id/owner-confirmation` publishes
     /// it, or nil while the read has not come back. Nil is NOT "nothing is waiting" — it is
     /// `unread`, which shows a delivered card with dead buttons rather than one that quietly claims
@@ -4263,6 +4292,8 @@ final class ConsoleModel {
     private var lastRulerRead = Date.distantPast
     /// The evidence read's own pair: it runs in every conversation, not only a coordinator's.
     private var loadingEvidence = false
+    /// A forced read was asked for while another was on its way (`refreshEvidenceDecisions`).
+    private var evidenceReadOwed = false
     private var lastEvidenceRead = Date.distantPast
     /// Web's card re-reads on a 20s timer. This one re-reads on the events that can change the
     /// answer — context load, reconnect, the card appearing, a press — with this as the floor
@@ -5173,39 +5204,57 @@ final class ConsoleModel {
     /// dispatched outside any project has its owner card in that session, or in the task's run once
     /// that one is in Trash, and the read names which (`EvidenceDecisionRow.ownerCard`). Asked with
     /// the ruler's reads (`refreshRulerQuestions`), and on its own where those are not made.
+    ///
+    /// A forced read is asked for because something just moved, and the read on its way may have been
+    /// answered before it did. So it is owed rather than dropped: nothing else re-reads until the next
+    /// event, and there may not be one.
     func refreshEvidenceDecisions(force: Bool = false) async {
-        guard !isDraft, !loadingEvidence else { return }
+        guard !isDraft else { return }
+        if loadingEvidence {
+            if force { evidenceReadOwed = true }
+            return
+        }
         if !force, Date().timeIntervalSince(lastEvidenceRead) < Self.rulerReadThrottle { return }
         loadingEvidence = true
         defer { loadingEvidence = false }
-        // Scoped to THIS session: every row says whether the door would take an answer from here.
-        if let queue = try? await api.pendingEvidenceDecisions(decidingSessionID: sessionID) {
-            evidenceDecisions = queue
-            for row in EvidenceDecisions.cardRows(queue: queue, projectId: projectID, sessionId: sessionID) {
-                let kind = DeliveredDecisionCard.Kind.evidenceDecision(taskID: row.taskId,
-                                                                       evidenceRevision: row.evidenceRevision)
-                engagedEvidence.insert(DeliveredDecisionCard(kind: kind).id)
-                deliver(kind)
+        repeat {
+            evidenceReadOwed = false
+            // Scoped to THIS session: every row says whether the door would take an answer from here.
+            if let queue = try? await api.pendingEvidenceDecisions(decidingSessionID: sessionID) {
+                evidenceDecisions = queue
+                adoptEvidenceQueue(queue)
+                lastEvidenceRead = Date()
             }
-            // The versions this conversation's coordinator holds or is owed, in the slot today's
-            // card goes in and the same kind of card: one per version, which the card draws as one
-            // line once it is handed over, folded while it waits, and as the question it is if it
-            // becomes the reader's (`EvidenceDecisions.standing`), keeping its place throughout.
-            for sent in EvidenceDecisions.sentRows(queue: queue, projectId: projectID) {
-                deliver(.evidenceDecision(taskID: sent.taskId, evidenceRevision: sent.evidenceRevision))
-            }
-            for row in EvidenceDecisions.coordinatorQueueRows(queue: queue, projectId: projectID,
-                                                              sessionId: sessionID) {
-                deliver(.evidenceDecision(taskID: row.taskId, evidenceRevision: row.evidenceRevision))
-            }
-            decisionCards.removeAll { card in
-                guard case .evidenceDecision(let taskID, let evidenceRevision) = card.kind else { return false }
-                return EvidenceDecisions.letsGo(evidenceStanding(taskID, evidenceRevision),
-                                                engaged: engagedEvidence.contains(card.id))
-            }
-            adoptEvidenceReceipts(queue)
-            lastEvidenceRead = Date()
+        } while evidenceReadOwed && !Task.isCancelled
+    }
+
+    /// Draw what a read of the queue lists for this conversation. Which rows those are depends on
+    /// the project as well, which arrives by a read of its own in either order, so `loadContext`
+    /// asks for this again when the project lands.
+    private func adoptEvidenceQueue(_ queue: EvidenceDecisionQueue) {
+        for row in EvidenceDecisions.cardRows(queue: queue, projectId: projectID, sessionId: sessionID) {
+            let kind = DeliveredDecisionCard.Kind.evidenceDecision(taskID: row.taskId,
+                                                                   evidenceRevision: row.evidenceRevision)
+            engagedEvidence.insert(DeliveredDecisionCard(kind: kind).id)
+            deliver(kind)
         }
+        // The versions this conversation's coordinator holds or is owed, in the slot today's
+        // card goes in and the same kind of card: one per version, which the card draws as one
+        // line once it is handed over, folded while it waits, and as the question it is if it
+        // becomes the reader's (`EvidenceDecisions.standing`), keeping its place throughout.
+        for sent in EvidenceDecisions.sentRows(queue: queue, projectId: projectID) {
+            deliver(.evidenceDecision(taskID: sent.taskId, evidenceRevision: sent.evidenceRevision))
+        }
+        for row in EvidenceDecisions.coordinatorQueueRows(queue: queue, projectId: projectID,
+                                                          sessionId: sessionID) {
+            deliver(.evidenceDecision(taskID: row.taskId, evidenceRevision: row.evidenceRevision))
+        }
+        decisionCards.removeAll { card in
+            guard case .evidenceDecision(let taskID, let evidenceRevision) = card.kind else { return false }
+            return EvidenceDecisions.letsGo(evidenceStanding(taskID, evidenceRevision),
+                                            engaged: engagedEvidence.contains(card.id))
+        }
+        adoptEvidenceReceipts(queue)
     }
 
     /// Decide it myself: the reader opened a version that waits for the coordinator, to decide it
@@ -5239,6 +5288,69 @@ final class ConsoleModel {
             statusMessage = "That decision was not recorded — \(APIClient.failureReason(error))."
         }
         await refreshRulerQuestions(force: true)
+    }
+
+    /// Where this console's read of what one version of evidence cites stands: the card and the page it
+    /// opens read one list, and a List re-creates a card's row as it scrolls.
+    func evidenceFileRead(taskID: String, revision: String) -> EvidenceFileRead {
+        evidenceFileReads["\(taskID)#\(revision)"] ?? EvidenceFileRead()
+    }
+
+    /// The list's first page, once it is read, and otherwise another go. A card with no FILE citation
+    /// never reaches here (`EvidenceFiles.citesFiles`).
+    func readEvidenceFiles(taskID: String, revision: String) async {
+        let key = "\(taskID)#\(revision)"
+        let read = evidenceFileRead(taskID: taskID, revision: revision)
+        guard read.list == nil, !read.reading else { return }
+        evidenceFileReads[key] = EvidenceFileRead(unread: read.unread, reading: true)
+        do {
+            let page = try await api.evidenceFiles(taskID: taskID, revision: revision)
+            evidenceFileReads[key] = EvidenceFileRead(list: EvidenceFileList(page))
+        } catch {
+            evidenceFileReads[key] = EvidenceFileRead(unread: true)
+        }
+    }
+
+    /// The list's next page, on the press that asks for it: nothing is cut, and what was read stays.
+    func readMoreEvidenceFiles(taskID: String, revision: String) async {
+        let key = "\(taskID)#\(revision)"
+        let read = evidenceFileRead(taskID: taskID, revision: revision)
+        guard let list = read.list, let offset = list.nextOffset, !read.reading else { return }
+        evidenceFileReads[key] = EvidenceFileRead(list: list, reading: true)
+        do {
+            let page = try await api.evidenceFiles(taskID: taskID, revision: revision, offset: offset)
+            // The list as it stands now: a pin pressed while the page was on its way stays.
+            let current = evidenceFileRead(taskID: taskID, revision: revision).list ?? list
+            evidenceFileReads[key] = EvidenceFileRead(list: current.appending(page))
+        } catch {
+            let current = evidenceFileRead(taskID: taskID, revision: revision).list ?? list
+            evidenceFileReads[key] = EvidenceFileRead(list: current, unread: true)
+        }
+    }
+
+    /// Press a file's pin, either way. A file can be cited by several versions of its task, so the answer
+    /// goes into every list read of that task. Told its bytes have gone since the list was read, the file
+    /// stops offering a pin. False when the press did not go through, which the caller says out loud.
+    func pressEvidenceFilePin(taskID: String, file: EvidenceFile) async -> Bool {
+        guard !pinningEvidenceFiles.contains(file.id) else { return true }
+        pinningEvidenceFiles.insert(file.id)
+        defer { pinningEvidenceFiles.remove(file.id) }
+        do {
+            let answer = try await api.setAttachmentPinned(file.id, pinned: !EvidenceFiles.isPinned(file))
+            changeEvidenceFile(taskID: taskID, file.id) { $0.withPin(answer) }
+            await attachments.cameBack(file.id)
+            return true
+        } catch {
+            if ExpiredAttachment(error) != nil { changeEvidenceFile(taskID: taskID, file.id) { $0.notPinnable() } }
+            return false
+        }
+    }
+
+    private func changeEvidenceFile(taskID: String, _ id: String, _ change: (EvidenceFile) -> EvidenceFile) {
+        for (key, read) in evidenceFileReads where key.hasPrefix("\(taskID)#") {
+            guard let list = read.list else { continue }
+            evidenceFileReads[key] = EvidenceFileRead(list: list.updating(id, change), unread: read.unread, reading: read.reading)
+        }
     }
 
     /// Confirm the standard set as it stands. The digest is what makes this a confirmation of the

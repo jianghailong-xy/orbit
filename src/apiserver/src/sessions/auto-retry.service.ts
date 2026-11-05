@@ -1067,7 +1067,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     const requestId = message.turnId
       ? (await readTurnRequestIds(this.prisma, session.id, [message.turnId])).get(message.turnId)
       : undefined;
-    const card = await readSessionMessageCard(this.prisma, ownerId, message.senderSessionId, requestId);
+    const card = await readSessionMessageCard(this.prisma, ownerId, message.senderSessionId, requestId, session.id);
     return card ? { text: message.content, sessionMessage: card } : { text: message.content };
   }
 
@@ -1505,8 +1505,9 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     sessionId: string,
     turnId: string,
   ): Promise<string[]> {
+    // No expired file: a copy holds the bytes it names, and those are on their way out, or gone.
     const sent = await this.prisma.attachment.findMany({
-      where: { sessionId, turnId },
+      where: { sessionId, turnId, expiredAt: null },
       orderBy: { createdAt: 'asc' },
     });
     const copies: string[] = [];
