@@ -275,13 +275,13 @@ ${WIKI_MAINTAIN_SPEAKERS}
 
 ${WIKI_MAINTAIN_OFF_TOPIC}
 
-TASK: check each note (each C line) against the L lines, and keep only what holds up. Give each note exactly one outcome:
+TASK: check each note (each C line) against the L lines, and keep only what holds up and is worth keeping. First ask of each note whether it holds anything that would change how a future agent works in this repository and that it could NOT learn by reading the code for one minute. If not, its outcome is not_durable, whatever the lines show. Otherwise give it one of the others:
 - shown: a tool or owner line shows the very thing the note says. Name those lines in "shownBy".
 - narrowed: such lines show part of what the note says. Name them, and keep only that part.
 - contradicted: the lines show otherwise.
 - absent: the lines neither show nor refute it. A line on the same subject that does not show this very thing is absent. So is a note that only an agent, think, sender, parent or taskprompt line repeats: those lines say what someone believed, and the note is what the agent believed.
-- not_durable: progress, status, one task's detail, or anything a future agent could learn by reading the code for one minute.
-Then write one entry for each note you answered shown or narrowed, from what its lines show. Write no other entry: nothing from a note answered contradicted, absent or not_durable, and nothing from lines no note is about.
+- not_durable: task progress or status reports, what was built, where something lives, one-off facts about this task only, generic programming advice, or anything the code states plainly.
+Then write one entry for each note you answered shown or narrowed, from what its lines show. A note that says several things still gets one entry: the one thing in it a future agent would most need, and that its lines show. Write no other entry: nothing from a note answered contradicted, absent or not_durable, and nothing from lines no note is about.
 
 OUTPUT: one JSON object, nothing else — no prose, no code fence. "notes" has one object for every C line, and comes first. "entries" has one object for every note answered shown or narrowed, and each starts with that note's "note":
 {"notes": [{"note": "C1", "outcome": "shown", "shownBy": ["L12", "L15"]}, {"note": "C2", "outcome": "absent", "shownBy": []}],
