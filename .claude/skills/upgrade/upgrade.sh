@@ -216,14 +216,20 @@ link_env() {
     sed -E "s/^\"(.*)\"[[:space:]]*\$/\\1/; s/^'(.*)'[[:space:]]*\$/\\1/"
 }
 
+# Whether the profiles Compose takes, the shell's or .env's last line, list runner-link.
+link_profile_on() {
+  printf '%s\n' "${COMPOSE_PROFILES:-$(link_env COMPOSE_PROFILES)}" | tr ',' '\n' | tr -d ' ' | grep -x runner-link >/dev/null
+}
+
 # new, managed or operator, read without writing. A name exported in this shell counts as .env does, since Compose
-# prefers it. compgen lists names alone, so no value passes through a pipe.
+# prefers it. compgen lists names alone, so no value passes through a pipe. A same-origin link whose profile was taken out
+# was turned off by hand, and is the operator's to turn on again.
 link_state() {
-  if [ "$(link_env RUNNER_LINK_URL)" = same-origin ]; then
+  if [ "$(link_env RUNNER_LINK_URL)" = same-origin ] && ! compgen -e | grep '^RUNNER_LINK_' >/dev/null && link_profile_on; then
     echo managed
   elif compgen -e | grep '^RUNNER_LINK_' >/dev/null \
     || { [ -f .env ] && grep -E "^[[:space:]]*(export[[:space:]]+)?RUNNER_LINK_[A-Z0-9_]+[[:space:]]*=[[:space:]]*(\"[^\"]|'[^']|[^\"'[:space:]#])" .env >/dev/null; } \
-    || link_env COMPOSE_PROFILES | tr ',' '\n' | tr -d ' ' | grep -x runner-link >/dev/null; then
+    || link_profile_on; then
     echo operator
   else
     echo new
@@ -237,9 +243,7 @@ link_gaps() {
     RUNNER_LINK_NATS_APISERVER_SEED RUNNER_LINK_NATS_APISERVER_KEY RUNNER_LINK_NATS_GATEWAY_SEED RUNNER_LINK_NATS_GATEWAY_KEY; do
     if [ -z "${!name:-}" ] && [ -z "$(link_env "$name")" ]; then printf ' %s' "$name"; fi
   done
-  if ! printf '%s,%s\n' "${COMPOSE_PROFILES:-}" "$(link_env COMPOSE_PROFILES)" | tr ',' '\n' | tr -d ' ' | grep -x runner-link >/dev/null; then
-    printf ' %s' "COMPOSE_PROFILES(runner-link)"
-  fi
+  if ! link_profile_on; then printf ' %s' "COMPOSE_PROFILES(runner-link)"; fi
 }
 
 link_status() {

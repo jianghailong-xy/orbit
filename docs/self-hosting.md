@@ -1759,8 +1759,7 @@ until then they fail on an attachment uploaded through the first one.
 **The runner link, going back.** A version from before the link's default setup reads `RUNNER_LINK_URL=same-origin` as
 no link: it logs that the value is not a `ws://` or `wss://` address, and its runners work over HTTPS. Its `link-gateway`
 has no certificate to start with and restarts over and over, which harms nothing; take `runner-link` out of
-`COMPOSE_PROFILES` to stop it, and put it back before you upgrade again. A version that serves runners only over the link
-has no way back to one that does not, except through the HTTPS path the older version still has.
+`COMPOSE_PROFILES` to stop it, and put it back before you upgrade again.
 
 ## Production checklist
 

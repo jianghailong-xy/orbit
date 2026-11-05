@@ -277,6 +277,20 @@ for (const upgrade of UPGRADES) {
     assert.equal(readFileSync(fixture.envFile, 'utf8'), after);
   });
 
+  test(`${upgrade}: a same-origin link whose profile was taken out by hand is left off, with a warning`, (t) => {
+    const fixture = makeFixture(t);
+    writeFileSync(fixture.envFile, BEFORE_LINK);
+    assert.equal(fixture.run(upgrade, ['--no-pull']).status, 0);
+    const off = readFileSync(fixture.envFile, 'utf8').replace(/\nCOMPOSE_PROFILES=runner-link\n/, '\n');
+    writeFileSync(fixture.envFile, off);
+    const run = fixture.run(upgrade, ['--no-pull']);
+    assert.equal(run.status, 0, run.output);
+    assert.match(run.stderr, /warning: this deployment set up its own link, and \.env has no value for: COMPOSE_PROFILES\(runner-link\)/);
+    assert.equal(readFileSync(fixture.envFile, 'utf8'), off);
+    assert.ok(!fixture.calls().some((call) => LINK_BUILD.test(call) || LINK_UP.test(call)));
+    assertNoSecretShown(fixture, run);
+  });
+
   test(`${upgrade}: a name set empty is not a link, and a name exported in the shell is an operator's`, (t) => {
     const empty = makeFixture(t);
     writeFileSync(empty.envFile, `${BEFORE_LINK}RUNNER_LINK_URL=\nRUNNER_LINK_SIGNING_KEY=""\n`);
