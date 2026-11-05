@@ -598,8 +598,9 @@ those two stay on HTTP(S) in every build, so an upgrade of the server brings run
 updates itself within 10 minutes; a busy one waits for its turns to end.
 
 A [managed runner](#managed-runners) never updates itself either: it takes the new image with its next container, made
-when it wakes after it next sleeps ([What an upgrade does](#what-an-upgrade-does)). Until then it runs the binary its
-container started with, as a runner with self-update off does.
+when it wakes after it next sleeps, or, for one from before 0.1.237 on a build that serves runners only over the link, when
+the manager replaces it ([What an upgrade does](#what-an-upgrade-does)). Until then it runs the binary its container
+started with, as a runner with self-update off does.
 
 A runner with self-update off (`ORBIT_NO_SELFUPDATE`, or an install directory it cannot write to):
 
