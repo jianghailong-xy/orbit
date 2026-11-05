@@ -48,7 +48,8 @@ import { isRunnerLinkGateway, RUNNER_LINK, type RunnerLinkConfig, type RunnerLin
  *
  * What changes for a link call is what the protocol says (proto `Rpc`): the four routes that long-poll
  * over HTTPS — the claim, the inbox, the wake and an approval's decision — answer at once, as if asked
- * with `wait=0`, because a hint tells the runner when to ask; every error carries `code`, `retryable` and
+ * with `wait=0`, because a hint tells the runner when to ask (a claim that lost a row lock asks again itself first, for
+ * a few seconds at most, QueueService.claimSessionForRunner); every error carries `code`, `retryable` and
  * a retry hint (common/runner-link-error.filter.ts); and the inbox hands a turn whose answer was lost back
  * to the process that leased it as soon as it says it is not running it (RunnerApiController.inbox), or
  * sends the fetch again under its request id.
