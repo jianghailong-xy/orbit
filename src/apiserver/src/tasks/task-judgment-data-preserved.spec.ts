@@ -2670,7 +2670,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0470 widens `wiki_changeset_op_verification_evidence_chk` by `second_hand` and changes nothing else: no row is
       // written, `wiki_changeset_op` is not a preserved relation, and no `task`, `session`, ledger table or preserved
       // trigger/function is named, so it is not another writer of the DONE fence.
-      '0470_wiki_verification_second_hand'],
+      '0470_wiki_verification_second_hand',
+      // A nullable column for what an op's note was, and a CHECK of its shape: nothing to preserve, no row written.
+      '0471_wiki_op_prompted_by'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

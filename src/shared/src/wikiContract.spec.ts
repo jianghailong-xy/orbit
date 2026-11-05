@@ -67,6 +67,9 @@ import {
   wikiTieredBasis,
   wikiCallReadsWiki,
   wikiEvidenceClass,
+  WIKI_NOTE_REPEAT_MIN_CHARS,
+  wikiFirstHandForNote,
+  wikiRepeatsNote,
   wikiStrongestEvidenceClass,
   wikiVerdictEffect,
   wikiVerificationEvidence,
@@ -681,7 +684,7 @@ describe('wiki contract', () => {
     ] as const) {
       expect(wikiCallReadsWiki(tool, command), `${tool} ${command}`).toBe(false);
     }
-    expect(of({ kind: 'tool_call', ...call('mcp__orbit__wiki_propose') })).toBe('observed');
+    expect(of({ kind: 'tool_call', ...call('mcp__orbit__wiki_check') })).toBe('observed');
     // The owner's words.
     expect(turn({ ownerWords: true })).toBe('owner_words');
     expect(of({ kind: 'approval', ownerWords: true })).toBe('owner_words');
@@ -707,6 +710,34 @@ describe('wiki contract', () => {
     for (const turnKind of ['shell', 'interrupt']) expect(turn({ turnKind })).toBe('orbit_or_shell');
     for (const type of ['turn_end', 'system']) expect(event(type)).toBe('orbit_or_shell');
     expect(of({ kind: 'note' })).toBe('memory');
+    // What the agent itself typed into a tool is not what happened, however its engine files the tool.
+    const agentInput = CONTRACT.reviewModes.verification.evidence.classes.agentInputTools as string[];
+    expect(agentInput).toEqual([
+      'project_send', 'task_comment', 'session_send', 'session_reply', 'session_create', 'task_create', 'task_create_batch',
+      'task_update', 'task_evidence_submit', 'wiki_propose', 'notify', 'SendMessage', 'Agent', 'Task',
+    ]);
+    for (const name of agentInput) {
+      for (const toolName of [name, `mcp__orbit__${name}`, `orbit__${name}`]) {
+        expect(of({ kind: 'tool_call', toolName, command: null }), toolName).toBe('agent_words');
+        for (const eventType of ['tool_use', 'tool_result']) expect(of({ kind: 'event', eventType, toolName, command: null }), toolName).toBe('agent_words');
+      }
+    }
+    expect(of({ kind: 'tool_call', toolName: 'mcp__orbit__bg_run', command: null })).toBe('observed');
+
+    // A record that repeats 60 characters of a note in a row is the note read again, unless the words are the owner's.
+    const said = 'The upload test fails with ECONNREFUSED because the port is read at import, before the fixture sets it.';
+    expect(WIKI_NOTE_REPEAT_MIN_CHARS).toBe(60);
+    expect(wikiRepeatsNote(`saved: ${said.slice(0, 59)}!`, said)).toBe(false);
+    expect(wikiRepeatsNote(`saved: ${said.slice(0, 60)}!`, said)).toBe(true);
+    expect(wikiRepeatsNote(`**The upload**  test\nfails with \`ECONNREFUSED\` because the port is read at import`, said)).toBe(true);
+    expect(wikiRepeatsNote(said, 'A note of fewer than sixty characters.')).toBe(false);
+    expect(wikiFirstHandForNote('observed', 'npm test: 12 passing', said)).toBe(true);
+    expect(wikiFirstHandForNote('observed', said, said)).toBe(false);
+    expect(wikiFirstHandForNote('observed', said, null)).toBe(true);
+    expect(wikiFirstHandForNote('owner_words', said, said)).toBe(true);
+    for (const other of WIKI_EVIDENCE_CLASSES.filter((one) => !WIKI_FIRST_HAND_EVIDENCE.includes(one))) {
+      expect(wikiFirstHandForNote(other, 'something else', said), other).toBe(false);
+    }
 
     // An op's class is its strongest source's, and only memory alone is second-hand.
     expect(wikiStrongestEvidenceClass([])).toBeNull();
@@ -1105,6 +1136,14 @@ describe('wiki contract', () => {
     expect(job.run.failure).toMatch(/Before the ops are recorded — any step up to propose — the cursor does not move/u);
     expect(job.run.failure).toMatch(/the run still ends failed, and the report says so \(cursorAdvanced\)/u);
     expect(job.report).toMatch(/cursorAdvanced/u);
+    expect(job.report).toMatch(/claims \{claudeSessions, seen, skipped, overCap, heldOut, shown, narrowed, contradicted, absent, notDurable, unanswered, entries, duplicates\}/u);
+    expect(at('claims')).toBe(at('extract') + 1);
+    expect(at('self-check')).toBe(at('claims') + 1);
+    expect(job.server.claims.order).toMatch(/verified first and whole/u);
+    expect(CONTRACT.maintenance.dossier.memory).toMatch(/neither reads it nor hears of it/u);
+    expect(CONTRACT.maintenance.dossier.memory).toMatch(/% 10 === 0/u);
+    expect(CONTRACT.opRules.promptedBy).toMatch(/refused for its shape \(WIKI_SCHEMA\)/u);
+    expect(existsSync(path.join(__dirname, '../../..', CONTRACT.storage.promptedByMigration))).toBe(true);
     const report: WikiMaintenanceReport = { sessions: 0, dossiers: 0, unchanged: 0, offTopic: 0,
       entries: { extracted: 0, kept: 0, dropped: 0, foreign: 0, principles: 0 },
       ops: { proposed: 0, recorded: 0, refused: 0, selfCheckDropped: 0, heldBack: 0, heldBackByBreaker: 0, applied: 0, waiting: 0 },
@@ -1165,6 +1204,9 @@ describe('wiki contract', () => {
     expect(health.notify.afterFailures).toBe(WIKI_MAINTENANCE_HEALTH.notifyAfterFailures);
     expect(health.notify.once).toMatch(/exactly afterFailures/u);
     expect(health.notify.reset).toMatch(/back to 0/u);
+    expect(health.notifyNoNotes.afterRuns).toBe(WIKI_MAINTENANCE_HEALTH.notifyNoNotesAfterRuns);
+    expect(health.notifyNoNotes.minSessions).toBe(WIKI_MAINTENANCE_HEALTH.notifyNoNotesMinSessions);
+    expect(health.notifyNoNotes.once).toMatch(/exactly afterRuns long/u);
     // The looks win in the order the contract lists them.
     const now = new Date('2026-09-28T12:00:00.000Z');
     const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 3_600_000).toISOString();

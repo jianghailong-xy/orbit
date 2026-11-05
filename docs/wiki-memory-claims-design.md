@@ -9,7 +9,7 @@
 ## 0. 一页结论
 
 1. **关联，但 memory 只当线索。** 一次 memory 写入里有三样东西：agent 判断这条重要（信号）、一句话（声明）、写在哪个 session 的哪一刻（指针）。信号和指针直接用；声明只当待查的问题，永远不当证据。
-2. **不建新流水线。** 写入本来就是 session 事件流里的工具调用，维护作业也已经读过 97% 写过 memory 的 session。只改三处：案卷留下声明，抽取改问法，核对按证据定信任。
+2. **不建新流水线。** 写入本来就是 session 事件流里的工具调用，维护作业也已经读过 97% 写过 memory 的 session。只改三处：另成一份只放声明和相关证据的案卷，抽取之后另跑一遍只核对声明（抽取本身不动），核对按证据定信任。
 3. **agent 的行为不变。** 不加钩子，不发 runner，不加指令。Claude 照常写 memory，服务端自己看得到。
 4. **信任要看第一手证据。** 现在 67% 的生效条目只有 agent 自己的话或 memory 作出处，其中大多数是 `auto`（§1.3）。按 M1 的抽查（§6.1 的判定），以后只有 memory 出处的 op 不再得 `auto`，来自声明的条目没有工具结果或 owner 的原话时也一样，都最多 Unreviewed。否则“从 session 找证据”只会找到 agent 把同一句话又说了一遍。
 5. **只有 Claude 自动关联。** Codex 的 memory 是空闲后后台生成的摘要，默认关闭，里面没有“工作中的 agent 判断这条重要”这个信号。其余引擎用 `wiki_note`。
@@ -113,40 +113,44 @@ Codex 不接，理由有三条：它是后台模型对同一批对话的摘要�
 
 ### 3.2 案卷
 
+**抽取的案卷不变。** 第一次回放把声明放进抽取案卷，没过门槛；第二次 A 的抽取不动，另跑一遍只核对声明（下称 S），全过（§6.2），上线的是后者。声明有自己的一份案卷（`buildDossier(..., { claims: true })`），只给 S 用，下面说的都是这一份。
+
 - **声明行：** 新说话人 `claim`，编号 `C1`、`C2`，放在写入时刻的时间线位置。`wikiMaintainLines` 只认 `L<n>`，`sourcesOf` 也要跳过这种行，所以模型引了 `C1` 也成不了出处。
-- **必留：** 声明和 owner 的话一样必留。
+- **必留：** 先放声明，再放任务开场和 owner 的话。
 - **证据窗：** 声明里的代码词（路径、标识符、反引号片段）在时间线里命中的工具行和 owner 行加分。窗口向前看，因为证据在写入之前。结果中间命中的那一行也放进这一行，现在只放结果的首尾行。前测里 93% 的写入有八成以上代码词在此前的工具记录或用户消息中出现过（§11）。
-- **预算：** 总量仍是 8k，演示里 16k 反而更差（69.5% 对 64.2%）。声明和证据窗最多占 25%，从普通窗口里让。
-- **确定性：** 同样的记录产生同样的文本。没有声明的案卷字节不变，现有 golden fixture 不用动。
-- **留出：** `sha256(sessionId)` 落在 10% 的 session 不放声明（§6）。
+- **预算：** 总量仍是 8k。owner 的话最多占 35%，其余按声明轮流放证据窗。S 案卷平均 4041 token，A 5603（§6.2）。
+- **确定性：** 同样的记录产生同样的文本。A 的案卷和提示逐字节不变，现有 golden fixture 不用动。
+- **留出：** `sha256(sessionId)` 落在 10% 的 session 没有这份案卷，不跑 S（§6）。
 - **排除 wiki 读取：** `wiki_search`、`wiki_get` 的结果不进案卷，否则 wiki 内容可以绕一圈回来当证据。判定在 `wikiCallReadsWiki`（`src/shared/src/wiki.ts`）：各引擎的工具名，加上工具调用和后台任务的命令里跑的 `orbit wiki search`、`orbit wiki get`。
 
-### 3.3 抽取
+### 3.3 抽取和只核对声明的一遍
 
-案卷里有声明时才追加这一段，其余提示不变：
+A 的案卷、提示和调用次数都不变。有声明的 session 在 A 之后另跑一遍 S（`wikiMaintainCheckClaims`，提示在 `wikiMaintainClaimsPrompt`，step `claims`），逐条回答：
 
-```text
-THE AGENT'S NOTES: C lines are notes the agent wrote to its own memory during this work. A note is what the
-agent believed, not evidence. Take each as a question: does the rest of the case show it?
-- shown: the case shows it. Write the entry from what the lines show.
-- narrowed: the case shows part of it. Write only that part.
-- contradicted: the case shows otherwise. Write no entry from the note; if what the case shows is worth keeping, write that.
-- absent: the case neither shows nor refutes it. Write no entry.
-- not_durable: progress, status, or one task's detail. Write no entry.
-Never cite a C line. Cite tool and owner lines first: an agent or think line only says what the agent believed.
-Add "note": "C1" to an entry that came from a note. Because this case has notes, output
-{"entries": [...], "notes": [{"note": "C1", "outcome": "shown"}]}.
-```
+- `shown`：工具行或 owner 行说明的正是这件事，`shownBy` 写这些行。
+- `narrowed`：这些行只说明了一部分，只留这部分。
+- `contradicted`：这些行说明的相反。
+- `absent`：这些行既没说明也没反驳。只有 agent、think 这类行重复这条声明也算。
+- `not_durable`：进度、某个任务的事实，或者看代码一分钟就知道。
 
-- **解析：** `parseWikiImportAnswer` 已经接受 `{entries}`。`notes` 另读，读不出算 `unanswered`，不为它重试。
-- **条目上限：** `entriesPerSessionMax` 仍是 6。门槛 G3 不过再放宽。
-- **追溯：** op 记 `promptedBy`（事件 id 和文件名）。它是服务端字段，agent 传了仍被拒，不算出处，只用于度量和追溯。
-- **报告：** `report.claims = { seen, skipped, overCap, heldOut, shown, narrowed, contradicted, absent, notDurable, unanswered, entries }`。
+每条 `shown` 或 `narrowed` 写一条条目，不写别的条目。
+
+- **解析：** `notes` 从回答里逐个读，读不出算 `unanswered`，不为它重试。模型给不出回答也算 `unanswered`，运行和 A 的 op 不受影响。
+- **引用：** 引用 C 行丢弃。条目自动加上 `shownBy` 里最多两条第一手的行，重复声明原文的工具行不加（§3.4）。
+- **顺序：** A 的 op 先记下、先核对完，再轮到 S。这样 S 的 op 的相似条目里有 A 刚写的，核对时已经生效，重复就走现有的 `duplicate`（把出处加到 A 的条目上）。两边走同一个自检和熔断。回放没量过两边同时写，所以 `report.claims.duplicates` 单独报。
+- **追溯：** op 记 `promptedBy`（事件 id 和文件名）。它是服务端字段，agent 传了仍被拒，不算出处，用于 §3.4 的封顶、度量和追溯。
+- **报告：** `report.claims = { claudeSessions, seen, skipped, overCap, heldOut, shown, narrowed, contradicted, absent, notDurable, unanswered, entries, duplicates }`，只算本次运行有变化的案卷。`entries` 是 S 记下的 op 数，`duplicates` 是 S 的 op 被判 `duplicate` 的条数。S 的 op 计入 `report.ops`，`report.entries` 只算 A。
+- **告警：** 连续 3 次运行都读过至少 20 个 Claude session 而 `seen` 为 0，通知 owner 一次（§8）。
+
+第二次回放的读数：写入 173 次，跳过 2，进案卷 171。S 写过 memory 的 session 每个多 1.44 次抽取调用和 1.03 次核对调用。
 
 ### 3.4 核对
 
 - **读的东西不变：** 条目加被引记录。声明不在其中，核对器不知道条目来自 memory。
 - **证据多一档：** `verification_evidence` 增加 `second_hand`，表示核对器读到的原文全部来自 note。`supported` 落到 Unreviewed，并且计入回退统计，因为模型确实读了文本。`unreadable` 的行为不变。改动在 `wikiVerdictEffect`（`src/shared/src/wiki.ts`）和它的调用处。
+- **来自声明的 op：** 带 `promptedBy` 的 op 没有第一手出处时，证据记 `second_hand`，`supported` 最多 Unreviewed。第一手用证据规则的 `wikiEvidenceClass` 和 `WIKI_FIRST_HAND_EVIDENCE`，不另算一份，还要读得到原文。另有两条：
+  - 工具结果里的 memory 原文（比如读一份存下来的工具结果文件）过得了过滤。`observed` 的出处，交给核对器的原文和声明连续重复 60 个字符以上，就不算这条声明的第一手。owner 的话不受影响。第二次回放按案卷行量到 96 条第一手条目里 2 到 6 条受影响，C 组 1 条外来声明也是这样被“证实”的。这里比的是核对器读到的整条记录，范围比案卷行大，受影响的条数可能更多，上线后看 §6.4 的信任分布。
+  - `project_send`、`task_comment`、`session_send` 这类工具的输入是 agent 写的字，`wikiEvidenceClass` 算 `agent_words`，名单是第二次回放开跑前定的 14 个。第二次回放里只靠这类工具行的第一手条目是 5/96。这只影响 `promptedBy` 的判定，不带 `promptedBy` 的 op 不受影响。
 - **边界：** note 旁边有别的带原文的出处就不算 `second_hand`，不论那条是什么类别。旁边的出处没有原文（空 thinking，库里读不到原文的 commit）时仍算，因为结论读到的不是那条。
 - **污染：** 从记录抽的 op 按记录所在 session 判定污染，这是现成的。note 按 frontmatter 的 `originSessionId` 找到的 session 判定：这个值是引擎的 session id，查 `session.runtime_session_id`，只查本 owner，一个 id 对应多个 session 时任一污染就算。没写或找不到的按未污染，note 反正封顶。
 
@@ -605,8 +609,8 @@ memory 进了抽取，就不能再拿它评召回率。所以留 10% 的 session
 | P0 修读 | 搜索第三轮放宽；记录 search、get exposure；改正工具说明；指令加一句 | `wiki-retrieval.ts`、`wiki_tools.go`、`agent_instructions.go` | §6.3 的原门槛没过，上 V2 是 owner 的决定；读数对照改后的门槛 |
 | P1 证据规则 | R2；note 污染；案卷排除 wiki 读取 | `wiki.ts`、`wiki.service.ts`、`wiki-dossier.ts`、CHECK 迁移 | pg spec 通过；新 op 的信任分布可查 |
 | M1 抽查 | 按证据类别抽查条目对错（§6.1） | 不改产品代码 | 每类错误率写回本文，决定 R2 是否照上 |
-| P2 声明和回放 | 案卷、提示、解析，默认不进生产路径；跑 §6.2 | `wiki-dossier.ts`、`wiki-maintain.ts`，回放脚本不进仓库 | G1 到 G5 的结果写回本文，不过就回来改方案 |
-| P3 上线 | 维护作业打开声明；留出 10%；`report.claims`；写入量告警 | `wiki-maintain-job.ts` | 留出组满 30 个 session 后对比（§6.4） |
+| P2 声明和回放 | 声明自己的案卷和只核对声明的一遍（S），没有调用方；跑 §6.2 | `wiki-dossier.ts`、`wiki-maintain.ts`，回放脚本不进仓库 | 第二次回放 G1、G2、G3、G5 全过（§6.2），上线用这个做法 |
+| P3 上线 | 维护作业在 A 之后跑 S，A 不变；留出 10%；`promptedBy` 和封顶；`report.claims`；写入量告警 | `wiki-maintain-job.ts`、`wiki.service.ts`、`wiki.ts`，迁移 0471 | 留出组满 30 个 session 后对比（§6.4） |
 | P4 `wiki_note` | 工具、CLI、路由、`session_id` 迁移 | `wiki_tools.go`、`wiki_cli.go`、`runner-wiki.controller.ts`，runner 发版 | 非 Claude session 记的 note 进入案卷 |
 | P5 历史回填 | §5 | `wiki-maintain-job.ts`、`wiki-admin.controller.ts` | 试点过门槛后全量，收尾降级 |
 

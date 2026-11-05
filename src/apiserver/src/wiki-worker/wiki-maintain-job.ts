@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { HttpException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import {
   WIKI_ANCHOR_RULES,
   WIKI_DOCS_BUILD_JOB,
@@ -9,6 +10,7 @@ import {
   WIKI_REVIEW_RULES,
   wikiMaintenanceRunSessions,
   type WikiDossier,
+  type WikiMaintenanceClaimsReport,
   type WikiPlanTopic,
   type WikiRepoOpKind,
   type WikiReviewMode,
@@ -37,12 +39,15 @@ import {
   wikiMaintainOffTopic,
   wikiMaintainOutcomeAt,
   wikiMaintainParallel,
+  wikiMaintainCheckClaims,
   wikiMaintainPrompt,
   wikiMaintainRemaining,
   wikiMaintainRetrySuffix,
   wikiMaintainTopicOrder,
   wikiMaintainTopicsOf,
+  WIKI_MAINTAIN_CLAIMS_SYSTEM_PROMPT,
   WIKI_MAINTAIN_SYSTEM_PROMPT,
+  type WikiMaintainClaimsRun,
   type WikiMaintainBatch,
   type WikiMaintainOp,
   type WikiMaintainRepoGate,
@@ -104,7 +109,8 @@ import { verifyWikiOps } from './wiki-verify-job';
  * reads where the run starts and the space's snapshot of origin/main (one `wiki_repo_op`), reads the
  * dossiers since the cursor up to the position the run expects, asks the model about each one — one request
  * per dossier through the queue, four in flight at most — checks every entry against its dossier and the
- * snapshot, asks once more with the reasons the first answer was refused, proposes the ones that hold up by
+ * snapshot, asks once more with the reasons the first answer was refused, checks in a pass of its own what the
+ * sessions' agents wrote to their memory (`checkClaimsAll`), proposes the ones that hold up by
  * topic in batches of thirty with a dry run first and the run's circuit breaker holding back what does not
  * fit, moves the cursor past the sessions whose ops it recorded, verifies its own ops twice and then adopts
  * what ended sessions left waiting, re-checks the anchors through the runner, and writes again only the
@@ -174,6 +180,11 @@ export interface WikiMaintainReport {
   unchanged: number;
   offTopic: number;
   entries: { extracted: number; kept: number; dropped: number; foreign: number; principles: number };
+  /**
+   * The pass that only checks the agent's notes (contract `maintenance.job.report`), apart from `entries`, which stays the
+   * extraction's. Its ops go through the same steps as the extraction's, and count in `ops` with them.
+   */
+  claims: WikiMaintenanceClaimsReport;
   ops: {
     proposed: number;
     recorded: number;
@@ -230,6 +241,8 @@ export interface WikiMaintainDocsReport {
 
 /** The pipeline up to the cursor's advance: what the attempts whose advance was written read, took and recorded. */
 type WikiMaintainPipelineCarry = Pick<WikiMaintainReport, 'sessions' | 'dossiers' | 'unchanged' | 'offTopic' | 'entries' | 'ops'> & {
+  /** Absent from what an attempt from before the pass was wired in carried. */
+  claims?: WikiMaintenanceClaimsReport;
   refused: string[];
   advanced: boolean;
 };
@@ -342,6 +355,10 @@ class WikiMaintainRun {
     unchanged: 0,
     offTopic: 0,
     entries: { extracted: 0, kept: 0, dropped: 0, foreign: 0, principles: 0 },
+    claims: {
+      claudeSessions: 0, seen: 0, skipped: 0, overCap: 0, heldOut: 0, shown: 0, narrowed: 0, contradicted: 0, absent: 0, notDurable: 0,
+      unanswered: 0, entries: 0, duplicates: 0,
+    },
     ops: { proposed: 0, recorded: 0, refused: 0, selfCheckDropped: 0, heldBack: 0, heldBackByBreaker: 0, applied: 0, waiting: 0 },
     tokens: { input: 0, output: 0, calls: 0 },
     seconds: 0,
@@ -479,9 +496,23 @@ class WikiMaintainRun {
       report.unchanged += pipeline.unchanged;
       report.offTopic += pipeline.offTopic;
       report.entries = addCounts(report.entries, pipeline.entries);
+      if (pipeline.claims) report.claims = addCounts(report.claims, pipeline.claims);
       report.ops = addCounts(report.ops, pipeline.ops);
       report.cursorAdvanced = true;
     }
+    // Off the rows, so that a verdict any attempt recorded is counted once, an adopted op's among them.
+    report.claims = {
+      ...report.claims,
+      duplicates: await this.deps.prisma.wikiChangesetOp.count({
+        where: {
+          ownerId: job.ownerId,
+          promptedBy: { not: Prisma.AnyNull },
+          verificationVerdict: 'duplicate',
+          verifiedAt: { gte: this.runStarted },
+          changeset: { spaceId: job.spaceId },
+        },
+      }),
+    };
     const verdicts = this.earlier.verification;
     if (verdicts) {
       const now = report.verification ?? { verified: 0, failed: 0, waitingForNextRun: 0 };
@@ -542,7 +573,7 @@ class WikiMaintainRun {
   private pipelineCarry(): WikiMaintainPipelineCarry {
     const now: WikiMaintainPipelineCarry = {
       sessions: this.report.sessions, dossiers: this.report.dossiers, unchanged: this.report.unchanged, offTopic: this.report.offTopic,
-      entries: { ...this.report.entries }, ops: { ...this.report.ops }, refused: [...this.refused], advanced: this.advanced,
+      entries: { ...this.report.entries }, claims: { ...this.report.claims }, ops: { ...this.report.ops }, refused: [...this.refused], advanced: this.advanced,
     };
     const before = this.earlier.pipeline;
     if (!before) return now;
@@ -552,6 +583,7 @@ class WikiMaintainRun {
       unchanged: before.unchanged + now.unchanged,
       offTopic: before.offTopic + now.offTopic,
       entries: addCounts(before.entries, now.entries),
+      claims: before.claims ? addCounts(before.claims, now.claims!) : now.claims,
       ops: addCounts(before.ops, now.ops),
       refused: [...before.refused, ...now.refused],
       advanced: before.advanced || now.advanced,
@@ -597,12 +629,16 @@ class WikiMaintainRun {
       step = 'dossiers';
       const dossiers = await this.dossiers();
       let ops: WikiMaintainOp[] = [];
+      let noted: WikiMaintainOp[] = [];
       if (dossiers.length > 0) {
         step = 'extract';
         ops = await this.extractAll(dossiers);
+        step = 'claims';
+        noted = await this.checkClaimsAll(dossiers);
       }
       step = 'self-check';
-      let batches = await this.selfCheck(ops);
+      // The extraction's batches first: recorded after them, an op of the notes has what they wrote among its neighbours.
+      let batches = [...await this.selfCheck(ops), ...await this.selfCheck(noted)];
       step = 'breaker';
       batches = this.breaker(batches);
       step = 'propose';
@@ -790,6 +826,7 @@ class WikiMaintainRun {
         after: after === '' ? null : after,
         until: until === '' ? null : until,
         limit,
+        claims: true,
       });
     } catch (error) {
       if (error instanceof WikiRefusalError || error instanceof NotFoundException) {
@@ -873,6 +910,87 @@ class WikiMaintainRun {
     this.report.entries.foreign += built.foreign;
     this.report.entries.principles += built.principles;
     return built.ops.slice(0, WIKI_MAINTENANCE_JOB.entriesPerSessionMax);
+  }
+
+  /**
+   * The pass that only checks the agent's notes, over the sessions whose file carries any and whose extraction this run
+   * did (`maintenance.job.server.claims`). A session held out has no such file. The report says what the writes came to
+   * over all the run's dossiers, whichever of them made a file.
+   */
+  private async checkClaimsAll(dossiers: readonly WikiDossier[]): Promise<WikiMaintainOp[]> {
+    const { claims } = this.report;
+    for (const { notes } of dossiers) {
+      if (!notes) continue;
+      if (notes.claude) claims.claudeSessions += 1;
+      claims.seen += notes.seen;
+      claims.skipped += notes.skipped;
+      claims.overCap += notes.overCap;
+      claims.heldOut += notes.heldOut;
+    }
+    const files = dossiers.filter((dossier) => dossier.notes?.file);
+    const results = new Array<WikiMaintainOp[]>(files.length).fill([]);
+    const failure = await wikiMaintainParallel(files.length, WIKI_MAINTENANCE_JOB.extractConcurrency, async (i) => {
+      results[i] = await this.checkClaims(files[i]);
+    });
+    if (failure !== null) throw failure;
+    const seen = new Set<string>();
+    const ops = results.flat().filter((op) => {
+      const key = op.title.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    if (files.length > 0) {
+      this.jobContext.log(`checked the agent's notes of ${files.length} session(s): ${ops.length} entr(ies) from ${claims.shown} shown and `
+        + `${claims.narrowed} narrowed, of ${claims.seen} write(s) to memory files`);
+    }
+    return ops;
+  }
+
+  /**
+   * One session's notes, checked. An answer the model cannot give leaves them unanswered and costs the run nothing: this
+   * pass adds to what the extraction took, and the extraction's ops do not wait on it. What the platform owes is the
+   * platform's failure, as anywhere else.
+   */
+  private async checkClaims(dossier: WikiDossier): Promise<WikiMaintainOp[]> {
+    const { file, lines } = dossier.notes!;
+    const refs = lines.map((line) => line.ref);
+    const { claims } = this.report;
+    const { sessionId } = dossier;
+    const ask = async (prompt: string, again: boolean): Promise<string | null> => {
+      const unit = again ? `${sessionId}#retry` : sessionId;
+      try {
+        return (await this.ask(WIKI_MAINTAIN_JOB.steps.claims, unit, WIKI_MAINTAIN_CLAIMS_SYSTEM_PROMPT, prompt, WIKI_MAINTAIN_JOB.extractMaxTokens)).text;
+      } catch (error) {
+        if (again && error instanceof WikiJobContentError) return null;
+        throw error;
+      }
+    };
+    let run: WikiMaintainClaimsRun;
+    try {
+      run = await wikiMaintainCheckClaims({
+        dossier: { text: file!.text, sources: file!.sources, sessionId },
+        refs,
+        context: this.context,
+        about: this.snapshot?.about ?? '',
+        repo: this.snapshot?.anchors ?? null,
+        ask,
+      });
+    } catch (error) {
+      if (!(error instanceof WikiJobContentError)) throw error;
+      claims.unanswered += refs.length;
+      this.jobContext.log(`  ${JSON.stringify(cutRunes(dossier.title, 60))}: its notes were not checked — ${error.message}`);
+      return [];
+    }
+    for (const { outcome } of run.notes.values()) {
+      const counted = outcome === 'not_durable' ? 'notDurable' : outcome;
+      claims[counted] += 1;
+    }
+    if (run.offTopic) {
+      this.jobContext.log(`  ${JSON.stringify(cutRunes(dossier.title, 60))}: not about this repository — none of its notes taken`);
+    }
+    const byRef = new Map(lines.map(({ ref, eventId, file: name }) => [ref, { eventId, file: name }]));
+    return run.ops.map((op) => ({ ...op, promptedBy: byRef.get(op.note!) }));
   }
 
   /**
@@ -978,6 +1096,7 @@ class WikiMaintainRun {
       this.report.ops.proposed += batch.ops.length;
       batch.ops.forEach((op, i) => {
         const outcome = wikiMaintainOutcomeAt(answer.ops, i);
+        if (op.promptedBy && (outcome.status === 'applied' || outcome.status === 'pending')) this.report.claims.entries += 1;
         switch (outcome.status) {
           case 'applied':
             this.report.ops.recorded += 1;
@@ -1014,7 +1133,9 @@ class WikiMaintainRun {
     else body.idempotencyKey = `wiki-maintain-${sha256Hex(`${this.runId}\u0000${JSON.stringify(list)}`).slice(0, 32)}`;
     // What the model wrote goes to the shared writer without any U+0000 (contract `jobs.serverWrites`): Postgres keeps
     // none, and a model may copy one out of the code it was shown — the runner gate drops it from a report the same way.
-    const answer = await this.deps.wiki.submitChangeset(wikiMaintainJobPrincipal(job.ownerId, job.id), job.spaceId, stripNul(body));
+    const answer = await this.deps.wiki.submitChangeset(wikiMaintainJobPrincipal(job.ownerId, job.id), job.spaceId, stripNul(body), {
+      promptedBy: ops.map((op) => op.promptedBy ?? null),
+    });
     if (!Array.isArray(answer.ops)) {
       // A request refused whole: the answer carries no op outcomes, and the run stops on it as the runner's did.
       const code = typeof answer.code === 'string' ? answer.code : 'WIKI_SCHEMA';
@@ -1077,21 +1198,31 @@ class WikiMaintainRun {
   private async verifyOwn(): Promise<void> {
     const result = { verified: 0, failed: 0, waitingForNextRun: 0 };
     this.report.verification = result;
-    let refused: Map<string, string> | null = null;
-    for (let pass = 0; pass < 2; pass += 1) {
-      const summary = await verifyWikiOps(this.jobContext, this.deps.wiki, this.deps.model, {
-        sessionId: null,
-        jobId: this.jobContext.job.id,
-        refused,
-        recorded: () => this.verdictRecorded(false),
-      });
-      result.verified += summary.verified;
-      result.failed = summary.failed;
-      if (summary.failed === 0 || summary.stopped !== null) break;
-      refused = new Map();
-      for (const failure of summary.failures) {
-        if (failure.refused !== '') refused.set(failure.opId, failure.refused);
+    // The extraction's ops first and whole: only then is what they wrote live, for a note's op read after them to be a
+    // duplicate of (`maintenance.job.server.claims`). The list says what an entry is when the list is read.
+    for (const promptedBy of [false, true]) {
+      let refused: Map<string, string> | null = null;
+      let failed = 0;
+      let stopped = false;
+      for (let pass = 0; pass < 2; pass += 1) {
+        const summary = await verifyWikiOps(this.jobContext, this.deps.wiki, this.deps.model, {
+          sessionId: null,
+          jobId: this.jobContext.job.id,
+          promptedBy,
+          refused,
+          recorded: () => this.verdictRecorded(false),
+        });
+        result.verified += summary.verified;
+        failed = summary.failed;
+        stopped = summary.stopped !== null;
+        if (summary.failed === 0 || stopped) break;
+        refused = new Map();
+        for (const failure of summary.failures) {
+          if (failure.refused !== '') refused.set(failure.opId, failure.refused);
+        }
       }
+      result.failed += failed;
+      if (stopped) break;
     }
     if (result.failed > 0) {
       result.waitingForNextRun += result.failed;

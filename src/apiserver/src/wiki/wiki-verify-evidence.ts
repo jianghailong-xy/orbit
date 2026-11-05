@@ -1,4 +1,4 @@
-import { WIKI_REVIEW_RULES, wikiVerificationEvidence, type WikiEvidenceClass, type WikiVerificationEvidence } from '@orbit/shared';
+import { WIKI_REVIEW_RULES, wikiFirstHandForNote, wikiVerificationEvidence, type WikiEvidenceClass, type WikiVerificationEvidence } from '@orbit/shared';
 import { redactSecrets } from '../common/secret-redaction';
 
 /**
@@ -203,6 +203,20 @@ export function verifierText(text: string | null, literals: readonly string[]): 
 /** The evidence mark of an op: what the sources its verifier could read come to (`wikiVerificationEvidence`). */
 export function evidenceOf(sources: ReadonlyArray<{ text: string | null; evidenceClass: WikiEvidenceClass | null }>): WikiVerificationEvidence {
   return wikiVerificationEvidence(sources.flatMap((source) => (hasText(source.text) && source.evidenceClass !== null ? [source.evidenceClass] : [])));
+}
+
+/**
+ * The evidence mark of an op that came from an agent's note (contract `reviewModes.verification.evidence.promptedBy`):
+ * with no source its verifier could read first-hand for that note, what it read says no more than the note did.
+ */
+export function promptedEvidenceOf(
+  sources: ReadonlyArray<{ text: string | null; evidenceClass: WikiEvidenceClass | null }>,
+  note: string | null,
+): WikiVerificationEvidence {
+  const evidence = evidenceOf(sources);
+  if (evidence !== 'readable') return evidence;
+  const firstHand = sources.some(({ text, evidenceClass }) => hasText(text) && evidenceClass !== null && wikiFirstHandForNote(evidenceClass, text!, note));
+  return firstHand ? evidence : 'second_hand';
 }
 
 /**

@@ -67,6 +67,8 @@ export interface DossierSessionRow {
   id: string;
   title: string;
   provider: string;
+  /** The CLI that ran it (migration 0414); null on a row from before that, whose provider says. */
+  engine?: string | null;
   model: string | null;
   status: string;
   createdAt: Date;
@@ -250,7 +252,7 @@ const TEXT_NOT_BLANK = '[^\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f
  */
 export async function loadDossierRecords(reader: DossierReader, ownerId: string, sessionId: string): Promise<DossierRecords | null> {
   const [session] = await reader.$queryRaw<DossierSessionRow[]>`
-    SELECT s."id"::text AS "id", s."title", s."provider", s."model", s."status"::text AS "status",
+    SELECT s."id"::text AS "id", s."title", s."provider", s."engine", s."model", s."status"::text AS "status",
            s."created_at" AS "createdAt", s."task_id"::text AS "taskId",
            s."parent_session_id"::text AS "parentSessionId", s."dispatch_origin"::text AS "dispatchOrigin"
       FROM "session" s
@@ -1151,6 +1153,22 @@ function memoryWritten(write: DossierMemoryWrite): { type: string | null; body: 
     body: parts.map((part) => part.body).filter((body) => body !== '').join('\n'),
     added: parts.reduce((sum, part) => sum + part.added, 0),
   };
+}
+
+/**
+ * The words a write to a memory file added, from the input its tool_use event holds, read as a dossier reads them: what
+ * an op that came from that note is held to when its verdict is recorded (`wikiRepeatsNote`).
+ */
+export function memoryWriteWords(input: unknown): string {
+  const fields = (input ?? {}) as Record<string, unknown>;
+  const max = WIKI_DOSSIER_CLAIMS.bodyMaxChars;
+  const cut = (value: unknown): string | null => (typeof value === 'string' ? value.slice(0, max) : null);
+  return memoryWritten({
+    content: cut(fields.content),
+    oldString: cut(fields.old_string),
+    newString: cut(fields.new_string),
+    edits: fields.edits ?? null,
+  }).body;
 }
 
 /**

@@ -6,6 +6,8 @@ import {
   type WikiDossierSource,
   type WikiDossierSpan,
   type WikiReviewMode,
+  wikiRepeatsNote,
+  type WikiPromptedBy,
 } from '@orbit/shared';
 import {
   answerField,
@@ -230,15 +232,19 @@ export function wikiMaintainCiteShownBy(
   ops: readonly WikiMaintainOp[],
   notes: ReadonlyMap<string, WikiMaintainNoteAnswer>,
   lines: ReadonlyMap<string, WikiMaintainLine>,
+  noteWords: ReadonlyMap<string, string> = new Map(),
 ): void {
   for (const op of ops) {
     const shownBy = op.note ? notes.get(op.note)?.shownBy ?? [] : [];
+    const noted = op.note ? noteWords.get(op.note) : undefined;
     const sources = op.body.sources as Array<Record<string, unknown>>;
     const cited = new Set(sources.map((source) => `${String(source.kind)}:${String(source.ref)}`));
     let added = 0;
     for (const ref of shownBy) {
       const line = lines.get(ref);
       if (!line || !FIRST_HAND_SPEAKERS.has(line.author) || WRITE_TOOL_LINE.test(line.text) || cited.has(`${line.kind}:${line.id}`)) continue;
+      // A tool line that repeats the note shows that the note was read somewhere, not that it holds (`wikiFirstHandForNote`).
+      if (line.author === 'tool' && noted !== undefined && wikiRepeatsNote(line.text, noted)) continue;
       if (added === WIKI_MAINTAIN_NOTE_SOURCES_ADDED) break;
       const source: Record<string, unknown> = { kind: line.kind, ref: line.id };
       const words = OWNER_SPEAKERS.has(line.author) ? line.spans.find((span) => (span.text ?? '').trim() !== '')?.text : undefined;
@@ -252,6 +258,24 @@ export function wikiMaintainCiteShownBy(
       added += 1;
     }
   }
+}
+
+/** A case file's notes as its `C1 claim:` lines say them, by ref, the lines that continue one included. */
+function wikiMaintainNoteWords(text: string): Map<string, string> {
+  const words = new Map<string, string>();
+  let current = '';
+  for (const raw of text.split('\n')) {
+    const head = /^(C\d+) claim: (.*)$/u.exec(raw);
+    if (head) {
+      current = head[1];
+      words.set(current, head[2]);
+    } else if (current !== '' && raw.startsWith(WIKI_MAINTAIN_CONTINUATION)) {
+      words.set(current, `${words.get(current)}\n${raw.slice(WIKI_MAINTAIN_CONTINUATION.length)}`);
+    } else {
+      current = '';
+    }
+  }
+  return words;
 }
 
 // ── The pass that only checks the agent's notes (docs/wiki-memory-claims-design.md §6.2) ─────────
@@ -395,7 +419,7 @@ export async function wikiMaintainCheckClaims(input: {
     return false;
   });
   const citedByModel = ops.map((op) => (op.body.sources as unknown[]).length);
-  wikiMaintainCiteShownBy(ops, notes, lines);
+  wikiMaintainCiteShownBy(ops, notes, lines, wikiMaintainNoteWords(dossier.text));
   return { offTopic: false, notes, ops, built, retried, leftOut, citedByModel };
 }
 
@@ -551,6 +575,8 @@ export interface WikiMaintainOp {
   title: string;
   /** The note of the case file the entry came from (`C1`), when the model said and the case carries it. Not a source. */
   note?: string;
+  /** The write that note is, for the op to keep: set by the run on the ops of the pass that checks the notes. */
+  promptedBy?: WikiPromptedBy;
 }
 
 /** Why an op is here, and what was wrong with the rest of an answer: the runner's `wikiMaintainBuilt`. */

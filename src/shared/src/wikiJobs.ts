@@ -85,6 +85,7 @@ export const WIKI_MODEL_QUEUE = {
   defaultWaitLimitSeconds: 900,
   waitLimitSeconds: {
     extract: 180,
+    claims: 180,
     docs: 180,
     import: 600,
     plan: 1200,

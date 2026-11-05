@@ -1336,3 +1336,144 @@ test('evidence · a note is as tainted as the session its frontmatter names, and
     assert.equal(record?.ownerWords, false);
   });
 });
+
+// ── 5. an op that came from an agent's note ──────────────────────────────
+
+test('evidence · an op that came from a note: promptedBy is the server\'s, and with no source first-hand for that note its supported is no more than Unreviewed', { skip, concurrency: 1, timeout: 900_000 }, async (t) => {
+  const h = await boot();
+  const owner = await account(h, 'evidence-prompted');
+  const machine = await runner(h, owner.id);
+  const ws = await workspace(h, owner.id);
+  const space = await modeSpace(h, owner, 'automatic', ws);
+  const records = await session(h, owner.id, ws, machine);
+  const proposer = await session(h, owner.id, ws, machine);
+  const mine = { runner: machine, headers: { 'x-orbit-session-id': proposer } };
+  const as = agent(owner.id, proposer);
+  const reader: WikiPrincipal = { origin: 'maintenance', ownerId: owner.id, userId: null, sessionId: null, toolCallId: null };
+
+  const words = 'The upload test fails with ECONNREFUSED because the port is read at import, before the fixture sets it.';
+  const written = await recordedCall(h, records, 'Write', { file_path: '/home/me/.claude/projects/app/memory/port.md', content: `---\ntype: feedback\n---\n${words}\n` }, 'File created.');
+  const promptedBy = { eventId: written.use, file: 'port.md' };
+  let added = 0;
+  /** An add as the maintenance run proposes one: promptedBy beside the ops, where no door can reach it. */
+  const add = async (sources: unknown[], said: { eventId: string; file: string } | null = promptedBy) => {
+    added += 1;
+    const answer = await h.service.submitChangeset(as, space, { rationale: 'what a note prompted', ops: [{ op: 'add', entry: pitfall(`What a note prompted ${added}`), sources }] }, { promptedBy: [said] });
+    return (answer.ops as Outcome[])[0];
+  };
+  /** The mark the list gives, the mark the verdict stores, and the trust a supported verdict leaves, off the rows. */
+  const verdictOf = async (outcome: Outcome, name: string) => {
+    assert.equal(outcome.waitsFor, 'verification', `${name}: ${JSON.stringify(outcome)}`);
+    const items = await listed(h, owner.id, proposer, space);
+    const listedMark = items.find((item) => toUuid(item.opId) === toUuid(outcome.opId!))?.evidence;
+    const done = await h.service.recordVerifications(as, space, [verdict(outcome.opId!, 'supported')]);
+    assert.equal(done.outcomes[0].status, 'applied', `${name}: ${JSON.stringify(done.outcomes[0])}`);
+    const op = await opRow(h, outcome.opId!);
+    assert.equal(op.verificationEvidence, listedMark, `${name}: the list says first what the verdict stores`);
+    assert.equal((await entryRow(h, outcome.entryId!)).trust, (done.outcomes[0] as { trust?: string }).trust, name);
+    return { mark: op.verificationEvidence, trust: (done.outcomes[0] as { trust?: string }).trust, verdict: op.verificationVerdict };
+  };
+
+  await t.test('an agent cannot send it: on the op it is refused for its shape, and beside the ops it is not read', async () => {
+    const ran = await recordedCall(h, records, 'Bash', { command: 'npm test' }, 'The suite passed: 12 tests.');
+    const sources = [{ kind: 'tool_call', ref: ran.call }];
+    const forged = await call(h, mine, 'POST', '/runner/wiki/changesets', {
+      rationale: 'a forged trail', idempotencyKey: `evidence-${randomUUID()}`,
+      ops: [{ op: 'add', entry: pitfall('A forged note'), sources, promptedBy }],
+    });
+    assert.equal(forged.status, 400, JSON.stringify(forged.body));
+    const refused = (forged.body.ops as Array<{ status: string; reasons: Array<{ code: string; fields?: Array<{ path: string }> }> }>)[0];
+    assert.equal(refused.status, 'refused');
+    assert.equal(refused.reasons[0].code, 'WIKI_SCHEMA');
+    assert.ok(JSON.stringify(refused.reasons[0]).includes('promptedBy'), JSON.stringify(refused.reasons[0]));
+    assert.equal((await h.prisma.wikiEntry.count({ where: { ownerId: owner.id, spaceId: space, title: 'A forged note' } })), 0);
+
+    const beside = await call(h, mine, 'POST', '/runner/wiki/changesets', {
+      rationale: 'a forged trail beside the ops', idempotencyKey: `evidence-${randomUUID()}`, promptedBy: [promptedBy],
+      ops: [{ op: 'add', entry: pitfall('A note named beside the ops'), sources }],
+    });
+    if (beside.status === 200) {
+      const [outcome] = beside.body.ops as Outcome[];
+      assert.equal((await opRow(h, outcome.opId!)).promptedBy, null, 'taken as an op like any other, the trail not read');
+      await h.service.recordVerifications(as, space, [verdict(outcome.opId!, 'unsupported')]);
+    }
+    // The server's word does land, and an op it says nothing of has none.
+    const [own] = [await add(sources)];
+    assert.deepEqual((await opRow(h, own.opId!)).promptedBy, promptedBy);
+    assert.deepEqual((await verdictOf(own, 'first-hand')), { mark: 'readable', trust: 'auto', verdict: 'supported' });
+    const plain = await add(sources, null);
+    assert.equal((await opRow(h, plain.opId!)).promptedBy, null);
+    await verdictOf(plain, 'a plain op');
+  });
+
+  await t.test('with no first-hand source: second_hand, and supported leaves it Unreviewed; with one it is what it is', async () => {
+    const thinking = await event(h, records, 'thinking', { text: 'So the port must be read at import.' });
+    const reply = await event(h, records, 'assistant', { text: 'The port is read at import.' });
+    const owners = await turn(h, records, 'Keep the port out of the fixture.');
+    const ran = await recordedCall(h, records, 'Bash', { command: 'npm test' }, 'connect ECONNREFUSED 127.0.0.1:9000');
+    const wrote = await recordedCall(h, records, 'Edit', { file_path: 'src/app.ts', old_string: 'a', new_string: 'b' }, 'File updated.');
+    const cite = (kind: string, ref: string) => ({ kind, ref });
+    for (const row of [
+      { name: 'a thinking', sources: [cite('event', thinking)], mark: 'second_hand', trust: 'unreviewed' },
+      { name: 'a reply', sources: [cite('event', reply)], mark: 'second_hand', trust: 'unreviewed' },
+      { name: 'a file write', sources: [cite('tool_call', wrote.call)], mark: 'second_hand', trust: 'unreviewed' },
+      { name: 'a reply and a thinking', sources: [cite('event', reply), cite('event', thinking)], mark: 'second_hand', trust: 'unreviewed' },
+      { name: 'a tool\'s result', sources: [cite('event', ran.result)], mark: 'readable', trust: 'auto' },
+      { name: 'a tool\'s row beside a reply', sources: [cite('tool_call', ran.call), cite('event', reply)], mark: 'readable', trust: 'auto' },
+      { name: 'the owner\'s words', sources: [cite('turn', owners)], mark: 'readable', trust: 'auto' },
+    ]) {
+      assert.deepEqual(await verdictOf(await add(row.sources), row.name), { mark: row.mark, trust: row.trust, verdict: 'supported' }, row.name);
+    }
+    // The same record, from no note: as it was.
+    assert.deepEqual(await verdictOf(await add([cite('event', reply)], null), 'a reply from no note'), { mark: 'readable', trust: 'auto', verdict: 'supported' });
+  });
+
+  await t.test('a tool line that repeats the note\'s words 60 characters in a row is not first-hand for it, nor does it lift an op beside it; the owner\'s words are', async () => {
+    const cite = (ref: string) => ({ kind: 'tool_call', ref });
+    const stored = await recordedCall(h, records, 'Read', { file_path: '/tmp/tool-results/1.txt' }, `1\t${words}`);
+    const short = await recordedCall(h, records, 'Read', { file_path: '/tmp/tool-results/2.txt' }, `1\t${words.slice(0, 59)}!`);
+    const marked = await recordedCall(h, records, 'Read', { file_path: '/tmp/tool-results/3.txt' }, `The **upload test** fails with\n  \`ECONNREFUSED\` because the port is read at import`);
+    const typed = await recordedCall(h, records, 'Bash', { command: `git commit -m "${words}"` }, '[main abc1234] 1 file changed');
+    const copied = await turn(h, records, `From now on: ${words}`);
+    assert.equal((await h.service.sourceText(h.prisma as unknown as Prisma.TransactionClient, reader, cite(stored.call) as never))?.evidenceClass, 'observed', 'its class is what it was');
+    assert.deepEqual(await verdictOf(await add([cite(stored.call)]), 'the note read back'), { mark: 'second_hand', trust: 'unreviewed', verdict: 'supported' });
+    assert.deepEqual(await verdictOf(await add([cite(marked.call)]), 'marks and spacing aside'), { mark: 'second_hand', trust: 'unreviewed', verdict: 'supported' });
+    assert.deepEqual(await verdictOf(await add([cite(typed.call)]), 'typed into the command'), { mark: 'second_hand', trust: 'unreviewed', verdict: 'supported' });
+    assert.deepEqual(await verdictOf(await add([cite(short.call)]), '59 characters'), { mark: 'readable', trust: 'auto', verdict: 'supported' });
+    const beside = await recordedCall(h, records, 'Bash', { command: 'npm test' }, 'connect ECONNREFUSED 127.0.0.1:9000');
+    assert.deepEqual(await verdictOf(await add([cite(stored.call), cite(beside.call)]), 'beside what happened'), { mark: 'readable', trust: 'auto', verdict: 'supported' });
+    assert.deepEqual(await verdictOf(await add([{ kind: 'turn', ref: copied }]), 'the owner\'s words the note copies'), { mark: 'readable', trust: 'auto', verdict: 'supported' });
+    // Another note's op, and an op from no note, are not held to these words; a write that cannot be read holds nothing.
+    const other = await recordedCall(h, records, 'Write', { file_path: '/home/me/.claude/projects/app/memory/retry.md', content: 'The upload service retries three times before it gives up on the storage host.' }, 'File created.');
+    assert.deepEqual(await verdictOf(await add([cite(stored.call)], { eventId: other.use, file: 'retry.md' }), 'another note'), { mark: 'readable', trust: 'auto', verdict: 'supported' });
+    assert.deepEqual(await verdictOf(await add([cite(stored.call)], null), 'from no note'), { mark: 'readable', trust: 'auto', verdict: 'supported' });
+    assert.deepEqual(await verdictOf(await add([cite(stored.call)], { eventId: randomUUID(), file: 'gone.md' }), 'a write gone'), { mark: 'readable', trust: 'auto', verdict: 'supported' });
+  });
+
+  await t.test('what the agent typed into a tool is its own words: not first-hand for a note, and an op from no note is as it was', async () => {
+    for (const name of ['mcp__orbit__project_send', 'mcp__orbit__task_comment', 'mcp__orbit__session_send', 'orbit__task_comment', 'task_update', 'SendMessage', 'Agent', 'Task']) {
+      const typed = await recordedCall(h, records, name, { body: 'The suite is green and the fixture holds the port.' }, 'recorded');
+      const cited = { kind: 'tool_call', ref: typed.call };
+      const record = await h.service.sourceText(h.prisma as unknown as Prisma.TransactionClient, reader, cited as never);
+      assert.equal(record?.evidenceClass, 'agent_words', `${name}: its row`);
+      for (const ref of [typed.use, typed.result]) {
+        assert.equal((await h.service.sourceText(h.prisma as unknown as Prisma.TransactionClient, reader, { kind: 'event', ref } as never))?.evidenceClass, 'agent_words', `${name}: its events`);
+      }
+      assert.deepEqual(await verdictOf(await add([cited]), name), { mark: 'second_hand', trust: 'unreviewed', verdict: 'supported' }, name);
+      assert.deepEqual(await verdictOf(await add([cited], null), `${name} from no note`), { mark: 'readable', trust: 'auto', verdict: 'supported' }, name);
+    }
+    const ran = await recordedCall(h, records, 'mcp__orbit__bg_run', { command: 'npm test' }, 'exit 0');
+    assert.deepEqual(await verdictOf(await add([{ kind: 'tool_call', ref: ran.call }]), 'a real run through an MCP tool'), { mark: 'readable', trust: 'auto', verdict: 'supported' });
+  });
+
+  await t.test('the list hands a note\'s ops or the others on their own, and every one when it is not asked', async () => {
+    const ran = await recordedCall(h, records, 'Bash', { command: 'npm test' }, 'exit 0');
+    const noted = await add([{ kind: 'tool_call', ref: ran.call }]);
+    const plain = await add([{ kind: 'tool_call', ref: ran.call }], null);
+    const ids = async (promptedBy?: boolean) => (await h.service.listVerifications(as, space, { promptedBy })).items.map((item) => toUuid(item.opId));
+    assert.deepEqual(await ids(true), [toUuid(noted.opId!)]);
+    assert.deepEqual(await ids(false), [toUuid(plain.opId!)]);
+    assert.deepEqual(await ids(), [toUuid(noted.opId!), toUuid(plain.opId!)]);
+    for (const opId of [noted.opId!, plain.opId!]) await h.service.recordVerifications(as, space, [verdict(opId, 'partial')]);
+  });
+});
