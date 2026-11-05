@@ -892,7 +892,7 @@
   },
 
   "searchMatches": {
-    "keyword": "pg_trgm over wiki_entry_search_text, with the broadening session search uses; when no entry holds every word, a last pass session search does not make: the entries holding any usable word, those holding the most first, then by word_similarity to the whole query. A usable word has at least CONTENT_MIN_CHARS characters. A query with fewer than two usable words does not reach this pass",
+    "keyword": "pg_trgm over wiki_entry_search_text, with the broadening session search uses; when no entry holds every word, a last pass session search does not make: the entries holding any usable word, those holding the most first, then by word_similarity to the whole query. A usable word has at least CONTENT_MIN_CHARS characters, or is a word of exactly two CJK characters. A query with fewer than two usable words does not reach this pass",
     "semantic": "embedding similarity (phase 2, off unless the owner configures an embedding provider)",
     "path": "the query or paths parameter is a prefix of one of the entry's anchor paths or trigger paths"
   },
