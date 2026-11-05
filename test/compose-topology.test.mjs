@@ -113,6 +113,10 @@
 // limit per address, and a bind address on its port, empty unless .env sets it. A deployment that sets neither renders
 // the service with the same config hash as before, so Compose recreates nothing: (o) pins the lines and
 // test/upgrade-runner-link.test.mjs the rendering.
+//
+// Task D2 (34bsPmWGZjo7CPt4BFI5G), which the owner confirmed on 2026-11-05, deletes the HTTPS work path, so the same task's
+// guard (the coordinator's decision of that day) makes the apiserver's signing key required: a deployment with no link gets
+// a refusal from Compose naming what to run, and /upgrade's script reads the requirement as the mark of a link-only build.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -349,7 +353,7 @@ const APPROVED_APISERVER_BLOCKS = [
   // gateway's address and the secret the gateway reads revocations with, each empty unless the host's .env sets it.
   // Listed before the managed runners' because the lines come before theirs in the file.
   [
-    '      RUNNER_LINK_SIGNING_KEY: "${RUNNER_LINK_SIGNING_KEY:-}"',
+    '      RUNNER_LINK_SIGNING_KEY: "${RUNNER_LINK_SIGNING_KEY:?this build serves runners only over the runner link, and this deployment has none. Run .claude/skills/upgrade/upgrade.sh, which sets it up. docs/self-hosting.md, Runner link}"',
     '      RUNNER_LINK_URL: "${RUNNER_LINK_URL:-}"',
     '      RUNNER_LINK_GATEWAY_TOKEN: "${RUNNER_LINK_GATEWAY_TOKEN:-}"',
   ],

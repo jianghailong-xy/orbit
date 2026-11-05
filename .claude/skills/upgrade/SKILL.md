@@ -124,11 +124,9 @@ After the images are built and before the apiserver is recreated, it starts `nat
 `link-gateway`, recreates the web gateway if the `gateway/nginx.conf` it runs is not this
 checkout's (a single-file bind mount Compose does not see change: a moment's break for web
 traffic and streams, once per change), and checks that `/runner-link` reaches the link
-gateway. A failure there stops nothing else: the runners stay on HTTPS, the last lines say
-why, and the script exits 1. In a build whose `docker-compose.yml` requires
-`RUNNER_LINK_SIGNING_KEY`, one with no HTTPS work path, the same failure stops the upgrade
-before the apiserver is recreated. It never writes `RUNNER_LINK_REQUIRED`, which is an
-administrator's.
+gateway. This build's `docker-compose.yml` requires `RUNNER_LINK_SIGNING_KEY`, since it has no
+HTTPS work path, so a failure there stops the upgrade before the apiserver is recreated, and
+the deployment goes on running the build it has.
 
 A pull that changes this script runs the new one, from the start.
 
