@@ -823,12 +823,12 @@ export class ManagedRunnerManager {
    */
   private async stopSilentPrevious(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step | null> {
     if (!this.backend.stopInstance || !instance.previousImage || !instance.running) return null;
+    if (!(await this.linkOnly())) return null;
     const now = this.now();
     const beats = await this.prisma.runner.findUnique({ where: { id: mapping.runnerId }, select: RUNNER_BEATS });
     const beat = runnerLastBeatAt(beats);
     const silenceMs = Math.max(PREVIOUS_IMAGE_SILENCE_MS, this.profile.lifecycle.heartbeatFreshSeconds * 1000);
     if (beat && now.getTime() - beat.getTime() <= silenceMs) return null;
-    if (!(await this.linkOnly())) return null;
     this.log.warn(
       `managed runner ${mapping.id}: READY, its ${this.backend.terms.instance} ${instance.uid} of generation ${mapping.generation} made from a `
         + `previous image (${instance.previousImage}) and silent since ${beat?.toISOString() ?? 'it started'}, on a server that takes runners `

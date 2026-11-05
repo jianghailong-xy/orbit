@@ -17,7 +17,11 @@
  *       made;
  *   (5) the silence a previous image needs: a missed beat, or an outage up to the reaper's hold, is not enough;
  *   (6) a server that still takes the daemon over HTTPS (the cut-over's switch off): nothing is stopped;
- *   (7) asked to sleep while silent on a previous image: the stop ends in sleep, not a new generation.
+ *   (7) asked to sleep while silent on a previous image: the stop ends in sleep, not a new generation;
+ *   (8) a channel too old to say which image a container was made from: an unknown image is never a reason to stop;
+ *   (9) the channel not reached when the stop is asked: nothing is written or made, and the next pass asks again;
+ *  (10) a manager given no link-only answer, as on a build without the cut-over's switch: link-only, though the
+ *       switch's table has no row.
  *
  * Not destructive: every row belongs to a user this run creates, and each world has a pool of its own.
  */
@@ -68,7 +72,8 @@ test('a managed runner on a previous image that a link-only server no longer hea
   });
   await verifyCoordinatorPgIdentity(sql);
 
-  function world() {
+  /** `withSwitch` false: the manager is given no link-only answer, as on a build without the cut-over's switch. */
+  function world({ withSwitch = true } = {}) {
     let profile = testDockerRunnerProfile({ clusterKey: `previous-${randomUUID().slice(0, 8)}` });
     const channel = new FakeDockerChannel(profile.docker.instanceId, profile.runner.image);
     const clock = { ms: Date.now() };
@@ -81,7 +86,8 @@ test('a managed runner on a previous image that a link-only server no longer hea
     const start = () => {
       starts += 1;
       manager = new ManagedRunnerManager(prisma, new DockerBackend(channel, profile), profile, {
-        holder: `previous-replica-${starts}`, now, random: () => 0.5, log: quiet, linkOnly: () => switchOn.linkOnly,
+        holder: `previous-replica-${starts}`, now, random: () => 0.5, log: quiet,
+        ...(withSwitch ? { linkOnly: () => switchOn.linkOnly } : {}),
       });
       const runtime: ManagedRunnerRuntime = { available: true, profile, manager, worker: new ManagedRunnerWorker(manager, 60_000, quiet) };
       service = new ManagedRunnerService(prisma, ON, runtime);
@@ -324,6 +330,60 @@ test('a managed runner on a previous image that a link-only server no longer hea
     assert.deepEqual({ state: asleep.managementState, generation: asleep.generation, podUid: asleep.podUid, proof: (asleep.fencingReceipt as { kind?: string }).kind },
       { state: 'SLEEPING', generation: 2, podUid: null, proof: 'OBSERVED_STOP' });
     assert.deepEqual(w.onTheVolume(mapping.pvcName), []);
+    assert.deepEqual(w.channel.stopRequests, [{ name: `mr-${mapping.runnerId}`, uid: mapping.podUid }]);
+  });
+
+  await t.test('(8) a channel too old to say which image a container was made from: nothing is stopped for its image', async () => {
+    const w = world();
+    const { ownerId, mapping } = await w.readyRunner('old-channel');
+    w.upgrade();
+    // A channel from before the container view carried `image` answers without it.
+    delete (w.channel.containers.get(`mr-${mapping.runnerId}`) as { image?: string | null }).image;
+    w.advance(PREVIOUS_IMAGE_SILENCE_MS * 3);
+    for (let i = 0; i < 3; i += 1) assert.equal(await w.manager.reconcile(mapping.id), 'READY');
+    const after = await w.mappingOf(ownerId);
+    assert.deepEqual({ state: after.managementState, podUid: after.podUid, revision: after.revision },
+      { state: 'READY', podUid: mapping.podUid, revision: mapping.revision });
+    assert.deepEqual(w.channel.stopRequests, []);
+  });
+
+  await t.test('(9) the channel not reached when the stop is asked: nothing is written or made, and the next pass asks again', async () => {
+    const w = world();
+    const { ownerId, mapping } = await w.readyRunner('unreached');
+    const name = `mr-${mapping.runnerId}`;
+    w.upgrade();
+    w.advance(PREVIOUS_IMAGE_SILENCE_MS + 1_000);
+    const unchanged = async (label: string) => {
+      const now = await w.mappingOf(ownerId);
+      assert.deepEqual({ state: now.managementState, podUid: now.podUid, generation: now.generation, revision: now.revision, lastError: now.lastError },
+        { state: 'READY', podUid: mapping.podUid, generation: 1, revision: mapping.revision, lastError: null }, label);
+      assert.equal(w.channel.count('createContainer'), 1, `${label}: nothing made`);
+    };
+    // Never reached: no stop was asked.
+    w.channel.failNext('stopContainer', { kind: 'unreachable-before' });
+    assert.equal(await w.manager.reconcile(mapping.id), 'BACKOFF');
+    await unchanged('not reached');
+    assert.deepEqual([w.channel.stopRequests, w.channel.containers.get(name)!.status], [[], 'running']);
+    // Reached and its answer lost: the container stops, and nothing is read into the lost answer.
+    w.channel.failNext('stopContainer', { kind: 'unreachable-after' });
+    assert.equal(await w.manager.reconcile(mapping.id), 'BACKOFF');
+    await unchanged('answer lost');
+    assert.equal(w.channel.stopRequests.length, 1);
+    // The next pass reads Docker's report of the exit, as for any stop, and the next generation follows.
+    const outcomes = await w.drive(ownerId);
+    assert.equal(outcomes.at(-1), 'READY', outcomes.join(' → '));
+    const made = w.channel.containers.get(name)!;
+    assert.deepEqual([made.request.image, made.generation], [NEXT, 2]);
+  });
+
+  await t.test('(10) a manager given no link-only answer, as on a build without the cut-over\'s switch: link-only, with no switch row', async () => {
+    const { rows } = await sql.query<{ n: number }>('SELECT count(*)::int AS n FROM runner_link_switch');
+    assert.equal(rows[0].n, 0, 'the switch was never switched here: no row, which reads as off where a build still reads it');
+    const w = world({ withSwitch: false });
+    const { mapping } = await w.readyRunner('no-switch');
+    w.upgrade();
+    w.advance(PREVIOUS_IMAGE_SILENCE_MS + 1_000);
+    assert.equal(await w.manager.reconcile(mapping.id), 'READY');
     assert.deepEqual(w.channel.stopRequests, [{ name: `mr-${mapping.runnerId}`, uid: mapping.podUid }]);
   });
 });
