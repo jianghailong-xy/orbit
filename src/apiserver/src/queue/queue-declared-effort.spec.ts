@@ -107,10 +107,11 @@ const QWEN38 = ['low', 'medium', 'xhigh'];
 test('a session with no effort is handed a level its model accepts, not the CLI default', async () => {
   const claimed = await claim({ effort: null, row: vllmRow(QWEN38) });
   assert.equal(claimed.agent.effort, 'xhigh');
-  // The provider's endpoint, not the one typed into the workspace, and the model's own window.
+  // The provider's endpoint, not the one typed into the workspace, and the model's own window less
+  // the compaction reserve the CLI's auto-compact path needs (custom-provider.ts).
   assert.equal(claimed.agent.env?.ANTHROPIC_BASE_URL, 'http://127.0.0.1:8000');
   assert.equal(claimed.agent.env?.ANTHROPIC_AUTH_TOKEN, 'EMPTY');
-  assert.equal(claimed.agent.env?.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '131072');
+  assert.equal(claimed.agent.env?.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '114688');
 });
 
 test("a session's own effort, and its workspace's, are moved onto the declared levels", async () => {
