@@ -245,6 +245,10 @@ describe('sessionLine', () => {
         true,
       ),
     ).toEqual({ text: 'You: 设置按钮的底色很奇怪，请帮我 review', tone: 'preview' });
+    // The row says what the bubble says, marks that are not Markdown's included.
+    expect(
+      sessionLine({ status: 'RUNNING', lastUserText: '把其他的 tea_user_profile_build_*_cnch 也修复了' }, true),
+    ).toEqual({ text: 'You: 把其他的 tea_user_profile_build_*_cnch 也修复了', tone: 'preview' });
   });
 
   /**

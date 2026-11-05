@@ -218,18 +218,27 @@ internal fun DirectorySession.isRunningJob(watching: WatchSessionSummary? = null
 private val DirectorySession.reviewerTitle get() = (confirmationUnderReview?.get("reviewerTitle") as? JsonPrimitive)?.contentOrNull
 
 /** OrbitKit `SessionLine.plainPreview`: a reply flattened into one line of prose — code blocks dropped, a link down to its text
- * and an image to its alt, the common markdown markers gone, whitespace collapsed. ICU's `\s`, which the Swift matches with, is
- * spelled out so the JVM and the device read whitespace alike. */
+ * and an image to its alt, only what Markdown would draw as a mark gone, whitespace collapsed. The `_` and `*` of
+ * `tea_user_*_cnch`, the `~` of `~/.orbit`, the `--` of `--force` and the `#` of `#123` are words someone wrote. ICU's `\s`, which
+ * the Swift matches with, is spelled out so the JVM and the device read whitespace alike. */
 internal fun plainPreview(md: String): String {
     val space = "\\t\\n\\f\\r\\p{Z}"
     var s = md
     s = s.replace(Regex("```[\\s\\S]*?```"), " ")
-    // A code span is matched first and put back as it was, which leaves brackets inside it alone.
-    s = s.replace(Regex("(`[^`]+`)|!\\[([^\\[\\]]*)\\]\\([^)]*\\)")) { it.groups[1]?.value ?: it.groups[2]?.value.orEmpty() }
-    s = s.replace(Regex("(`[^`]+`)|\\[([^\\[\\]]*)\\]\\([^)]*\\)")) { it.groups[1]?.value ?: it.groups[2]?.value.orEmpty() }
-    s = s.replace(Regex("`([^`]+)`")) { it.groupValues[1] }
-    s = s.replace(Regex("(?m)^[#>\\-*$space]+"), "")
-    s = s.replace(Regex("[*_~]"), "")
+    // Inline code is held out of every rule and put back at the end, which leaves the brackets and marks inside it alone. A span
+    // closes on a run of backticks as long as the one that opened it.
+    val code = mutableListOf<String>()
+    s = s.replace(Regex("(?<!`)(`+)(?!`)([\\s\\S]*?[^`])\\1(?!`)")) { code += it.groupValues[2]; "\uE000${code.size - 1}\uE000" }
+    s = s.replace(Regex("!\\[([^\\[\\]]*)\\]\\([^)]*\\)")) { it.groupValues[1] }
+    s = s.replace(Regex("\\[([^\\[\\]]*)\\]\\([^)]*\\)")) { it.groupValues[1] }
+    s = s.replace(Regex("(?m)^[ \\t]*([-*_])[ \\t]*(?:\\1[ \\t]*){2,}$"), "")
+    s = s.replace(Regex("(?m)^(?:[ \\t]*(?:>|(?:#{1,6}|[-*])(?=[ \\t]|$)))+"), "")
+    // Underscores before stars: whether a `_` is a mark depends on what stands beside it as written.
+    s = s.replace(Regex("(?<![\\p{L}\\p{N}_])(_{1,3})(?=[^${space}_])(.*?[^${space}_])\\1(?![\\p{L}\\p{N}_])")) { it.groupValues[2] }
+    s = s.replace(Regex("(\\*{2,3})(?=[^$space*])(.*?[^$space*])\\1")) { it.groupValues[2] }
+    s = s.replace(Regex("\\*(?=[^$space*])(.*?[^$space*])\\*")) { it.groupValues[1] }
+    s = s.replace(Regex("~~(?=[^$space~])(.*?[^$space~])~~")) { it.groupValues[1] }
+    code.forEachIndexed { index, span -> s = s.replace("\uE000$index\uE000", span) }
     s = s.replace(Regex("[$space]+"), " ")
     return s.trim()
 }
