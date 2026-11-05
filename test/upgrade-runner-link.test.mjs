@@ -83,13 +83,12 @@ function makeFixture(t, { linkOnly = false } = {}) {
   // The Dockerfile's context for the commit that names the link gateway's image.
   mkdirSync(path.join(checkout, 'src/link-gateway'), { recursive: true });
   writeFileSync(path.join(checkout, 'src/link-gateway/Dockerfile'), 'FROM scratch\n');
-  if (linkOnly) {
-    const compose = path.join(checkout, 'docker-compose.yml');
-    const text = readFileSync(compose, 'utf8');
-    const line = 'RUNNER_LINK_SIGNING_KEY: "${RUNNER_LINK_SIGNING_KEY:-}"';
-    assert.ok(text.includes(line));
-    writeFileSync(compose, text.replace(line, LINK_ONLY_GUARD));
-  }
+  // Both kinds of build, whichever this repository's docker-compose.yml is now.
+  const compose = path.join(checkout, 'docker-compose.yml');
+  const signingKey = /RUNNER_LINK_SIGNING_KEY: "\$\{RUNNER_LINK_SIGNING_KEY:[-?][^"]*"/;
+  const text = readFileSync(compose, 'utf8');
+  assert.match(text, signingKey);
+  writeFileSync(compose, text.replace(signingKey, linkOnly ? LINK_ONLY_GUARD : 'RUNNER_LINK_SIGNING_KEY: "${RUNNER_LINK_SIGNING_KEY:-}"'));
   const bin = path.join(root, 'bin');
   mkdirSync(bin);
   writeFileSync(path.join(bin, 'docker'), FAKE_DOCKER);
@@ -507,6 +506,7 @@ test('a production-shaped .env renders link-gateway and nats with the config has
   writeFileSync(path.join(dir, '.env'), PRODUCTION_SHAPED);
   const now = readFileSync(path.join(repo, 'docker-compose.yml'), 'utf8');
   writeFileSync(path.join(dir, 'docker-compose.yml'), now);
+  // The apiserver's lines are no part of what this compares, and a production-shaped .env fills them either way.
   const current = compose(dir, ['config', '--hash', 'link-gateway,nats']);
   // The two lines as they were before this change.
   const before = now
