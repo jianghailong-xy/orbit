@@ -7607,9 +7607,13 @@ model WikiNote {
   contentSha256 String   @map("content_sha256") @db.Char(64)
   /// Whether the redactor took anything out.
   redacted      Boolean  @default(false)
+  /// The session whose `wiki_note` this is (migration 0472): read back as a claim in that session's dossier. Null for a
+  /// file `orbit wiki import` read, which is no session's. No foreign key: a note outlives what it names, as a source's ref does.
+  sessionId     String?  @map("session_id") @db.Uuid
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@unique([spaceId, contentSha256], map: "wiki_note_space_id_content_sha256_key")
+  @@index([sessionId], map: "wiki_note_session_id_idx")
   @@map("wiki_note")
 }
 

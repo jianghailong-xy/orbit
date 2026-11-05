@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import {
   WIKI_MAINTENANCE_RULES,
   wikiCallReadsWiki,
+  wikiCallWritesNote,
   wikiEstimateTokens,
   type WikiDossier,
   type WikiDossierSource,
@@ -58,6 +59,8 @@ import { approvalParts, hasText, partsText, runEventParts, toolCallParts, toolOu
  * records that bear on each note. Not asked for, or with no write to read, the text is the one this file always
  * made, byte for byte. A backfill names imported notes as what a session claimed (`DossierOptions.notes`, design §5): they
  * are read by the same rules, and they stand in for the session's writes, whose earlier versions it does not read again.
+ * A session's `wiki_note`s are the same kind of note (design §4), read from their rows: a call that files one is left out of
+ * every dossier, as a read of the wiki is, so that a note cannot come back as a source.
  */
 
 // ── The records one session's dossier is made from ──────────────────────────────────────────────
@@ -100,6 +103,13 @@ export interface DossierApprovalRow {
   input: string | null;
   createdAt: Date;
   decidedAt: Date | null;
+}
+
+/** A `wiki_note` the session wrote (migration 0472): its stored text, redacted when it was kept. */
+export interface DossierWikiNote {
+  id: string;
+  text: string;
+  createdAt: Date;
 }
 
 /** A write to a memory file as the event's input holds it, each text cut to `WIKI_DOSSIER_CLAIMS.bodyMaxChars`. */
@@ -193,6 +203,8 @@ export interface DossierRecords {
   blockers: DossierBlockerRow[];
   /** The session read the web (a WebFetch or WebSearch call): the taint mark (design §4.1 step 9). */
   tainted: boolean;
+  /** Its `wiki_note`s, oldest first: none on records made by hand, as every session before the tool has none. */
+  wikiNotes?: DossierWikiNote[];
 }
 
 /** Tools whose input is described by the columns above; any other tool's input is kept as JSON text. */
@@ -215,7 +227,7 @@ export const WIKI_DOSSIER_CLAIMS = {
   bodyMaxChars: 4_000,
   /** Fewer new characters than this is no claim. */
   addedMinChars: 20,
-  /** The most claims one dossier carries, and the length of one. */
+  /** The most claims one dossier carries, memory writes and `wiki_note`s together, and the length of one. */
   perDossierMax: 6,
   lineMaxChars: 600,
   /** The share of the budget the owner's words may take: what is left goes to the records that bear on each note. */
@@ -401,7 +413,13 @@ export async function loadDossierRecords(reader: DossierReader, ownerId: string,
        AND b."resolution_note" IS NOT NULL AND btrim(b."resolution_note") <> ''
      ORDER BY b."resolved_at", b."id"`;
 
-  return { session, turns, approvals, events, toolCallIds, task, comments, receipts, blockers, tainted };
+  const wikiNotes = await reader.$queryRaw<DossierWikiNote[]>`
+    SELECT n."id"::text AS "id", n."text", n."created_at" AS "createdAt"
+      FROM "wiki_note" n
+     WHERE n."session_id" = ${sessionId}::uuid AND n."owner_id" = ${ownerId}::uuid
+     ORDER BY n."created_at", n."id"`;
+
+  return { session, turns, approvals, events, toolCallIds, task, comments, receipts, blockers, tainted, wikiNotes };
 }
 
 /** The owner's own workspace.env values: redacted literally wherever they appear (design §10.2). */
@@ -905,7 +923,7 @@ function timeline(records: DossierRecords, redact: (text: string) => string, cla
           || (event.bgExit !== null && event.bgExit !== '');
         if (!finished) break;
         const command = redact(event.bgCommand ?? '');
-        if (MEMORY_PATH.test(command) || wikiCallReadsWiki(null, command)) break;
+        if (MEMORY_PATH.test(command) || wikiCallReadsWiki(null, command) || wikiCallWritesNote(null, command)) break;
         const record = held(runEventParts('background_task', { command: event.bgCommand, summary: event.bgSummary }), redact);
         const ok = ['0', 'None', ''].includes(String(event.bgExit ?? '')) && event.bgStatus !== 'failed';
         const exit = event.bgExit === null || event.bgExit === '' ? '' : ` exit=${event.bgExit}`;
@@ -931,6 +949,14 @@ function timeline(records: DossierRecords, redact: (text: string) => string, cla
         break;
       default:
         break;
+    }
+  }
+
+  // The session's `wiki_note`s, each a note at the moment it was written, as a write to a memory file is.
+  for (const note of records.wikiNotes ?? []) {
+    const claim = claims?.chosen.get(note.id);
+    if (claim) {
+      add(note.createdAt, 5, 'claim', own(claim.text), { kind: 'note', id: note.id }, CLAIM_RECORD, { claim });
     }
   }
 
@@ -1014,6 +1040,8 @@ function toolLine(
   if (SKIPPED_TOOLS.has(name)) return null;
   // A read of the wiki, left out with its result: what the wiki said must not come back as a source of what it says.
   if (wikiCallReadsWiki(name, command)) return null;
+  // A note being filed, left out for the same reason: its record says the note's own words.
+  if (wikiCallWritesNote(name, command)) return null;
   const evidence = new EvidenceBuilder();
   const field = (key: string, value: string): Mapped => evidence.add(`input.${key}`, value, key.length + 2);
   let err = String(result?.isError ?? '').toLowerCase() === 'true';
@@ -1092,12 +1120,15 @@ function toolLine(
 
 // ── The agent's notes (docs/wiki-memory-claims-design.md §3.1, §3.2) ───────────────────────────
 
-/** One note a dossier carries: the write or the imported note it is, and its words, redacted and cut. */
+/** One note a dossier carries: the write, the imported note or the `wiki_note` it is, and its words, redacted and cut. */
 interface Claim {
   by: WikiPromptedBy;
   feedback: boolean;
   text: string;
 }
+
+/** What a `wiki_note` is known by where a write is known by its file's name (`WikiPromptedBy`). */
+const WIKI_NOTE_FILE = 'wiki_note';
 
 /** A claim's line has no record behind it: nothing cites it, and no words of it are placed anywhere. */
 const CLAIM_RECORD: { evidence: Evidence; layout: Layout | null } = { evidence: { text: '', fields: [] }, layout: null };
@@ -1116,7 +1147,7 @@ const AFTER_EVERYTHING = new Date(8.64e15);
 
 /** What the session's memory writes came to, before the packer has its say. */
 interface ClaimsRead {
-  /** The notes chosen, by the tool_use event that wrote each. */
+  /** The notes chosen, by the tool_use event that wrote each, or by the `wiki_note`'s own id. */
   chosen: Map<string, Claim>;
   /** The imported notes chosen, with the moment each stands at; none unless a backfill named any. */
   imported: Array<{ id: string; at: Date; claim: Claim }>;
@@ -1125,6 +1156,7 @@ interface ClaimsRead {
   /** When the last chosen note was written, as milliseconds: no later record is its evidence. */
   lastAt: number;
   seen: number;
+  notes: number;
   skipped: number;
   overCap: number;
   heldOut: number;
@@ -1132,11 +1164,14 @@ interface ClaimsRead {
 
 /** A dossier's notes, as a run reports them (`report.claims`) and a proposal traces them (`promptedBy`). */
 export interface DossierClaims {
-  /** The writes to memory files the session made, and of those: what said too little, what passed the cap, what a held-out session kept out. */
+  /** The writes to memory files the session made, and of those: what said too little, and what a held-out session kept out. */
   seen: number;
   skipped: number;
-  overCap: number;
   heldOut: number;
+  /** The `wiki_note`s the session wrote. A session held out still has them read: that is a measure of its memory alone. */
+  notes: number;
+  /** What passed the cap, of either. */
+  overCap: number;
   /** The notes the text carries, in order. */
   lines: Array<{ ref: string } & WikiPromptedBy>;
 }
@@ -1252,10 +1287,13 @@ function chooseClaims<T extends { claim: Claim }>(kept: readonly T[]): T[] {
     .map(({ one }) => one);
 }
 
-/** The session's writes to memory files, read and chosen (§3.1). */
-function memoryClaims(records: DossierRecords, redact: (text: string) => string): Omit<ClaimsRead, 'resultLines'> {
+/**
+ * The session's notes, read and chosen (§3.1): its writes to memory files, unless it is held out, and its `wiki_note`s, which
+ * rank with the feedback: someone chose to tell the wiki this.
+ */
+function memoryClaims(records: DossierRecords, redact: (text: string) => string, heldOut: boolean): Omit<ClaimsRead, 'resultLines'> {
   const typeOf = new Map<string, string | null>();
-  const kept: Array<{ eventId: string; at: number; claim: Claim }> = [];
+  const kept: Array<{ key: string; at: number; claim: Claim }> = [];
   const writes = memoryWrites(records);
   for (const { event, file } of writes) {
     const written = memoryWritten(event.memoryWrite!);
@@ -1263,17 +1301,25 @@ function memoryClaims(records: DossierRecords, redact: (text: string) => string)
     const type = typeof event.memoryWrite!.content === 'string' ? written.type : (typeOf.get(file) ?? null);
     typeOf.set(file, type);
     const claim = claimOf({ eventId: event.id, file }, type, written, redact);
-    if (claim) kept.push({ eventId: event.id, at: event.createdAt.getTime(), claim });
+    if (claim) kept.push({ key: event.id, at: event.createdAt.getTime(), claim });
   }
-  const chosen = chooseClaims(kept);
+  const noted = (records.wikiNotes ?? []).map((note) => ({
+    key: note.id,
+    at: note.createdAt.getTime(),
+    claim: { by: { noteId: note.id, file: WIKI_NOTE_FILE }, feedback: true, text: clip(redact(note.text).trim(), WIKI_DOSSIER_CLAIMS.lineMaxChars) },
+  }));
+  // In the order they were written, which is the events' own when there is nothing to merge them with.
+  const inOrder = heldOut ? noted : noted.length === 0 ? kept : [...kept, ...noted].sort((a, b) => a.at - b.at);
+  const chosen = chooseClaims(inOrder);
   return {
-    chosen: new Map(chosen.map(({ eventId, claim }) => [eventId, claim])),
+    chosen: new Map(chosen.map(({ key, claim }) => [key, claim])),
     imported: [],
     lastAt: chosen.reduce((latest, { at }) => Math.max(latest, at), 0),
     seen: writes.length,
-    skipped: writes.length - kept.length,
-    overCap: kept.length - chosen.length,
-    heldOut: 0,
+    notes: noted.length,
+    skipped: heldOut ? 0 : writes.length - kept.length,
+    overCap: inOrder.length - chosen.length,
+    heldOut: heldOut ? writes.length : 0,
   };
 }
 
@@ -1301,6 +1347,7 @@ function importedClaims(records: DossierRecords, notes: readonly DossierImported
     imported,
     lastAt: imported.reduce((latest, { at }) => Math.max(latest, at.getTime()), 0),
     seen: notes.length,
+    notes: 0,
     skipped: notes.length - kept.length,
     overCap: kept.length - imported.length,
     heldOut: 0,
@@ -1906,21 +1953,22 @@ export async function buildDossier(
     truncated: packed.truncated || text !== packed.text,
     tainted: records.tainted,
     sources,
-    hash: dossierHash(text, sources),
+    hash: dossierHash(text, sources, (records.wikiNotes ?? []).map((note) => note.id)),
     ...(claims ? { claims: carriedClaims(claims, packed) } : {}),
   };
 }
 
-/** A session's notes for its dossier, or none for a session held out. */
+/** A session's notes for its dossier. One held out keeps its `wiki_note`s and no others: what it measures is its memory. */
 async function readClaims(
   reader: DossierReader,
   records: DossierRecords,
   redact: (text: string) => string,
   notes: readonly DossierImportedNote[],
 ): Promise<ClaimsRead> {
-  const read = notes.length > 0 ? importedClaims(records, notes, redact) : memoryClaims(records, redact);
-  if (wikiClaimsHeldOut(records.session.id)) {
-    return { chosen: new Map(), imported: [], resultLines: new Map(), lastAt: 0, seen: read.seen, skipped: 0, overCap: 0, heldOut: read.seen };
+  const heldOut = wikiClaimsHeldOut(records.session.id);
+  const read = notes.length > 0 ? importedClaims(records, notes, redact) : memoryClaims(records, redact, heldOut);
+  if (notes.length > 0 && heldOut) {
+    return { chosen: new Map(), imported: [], resultLines: new Map(), lastAt: 0, seen: read.seen, notes: 0, skipped: 0, overCap: 0, heldOut: read.seen };
   }
   const words = [...new Set([...read.chosen.values(), ...read.imported.map(({ claim }) => claim)].flatMap((claim) => codeWordsOf(claim.text)))];
   return { ...read, resultLines: await claimResultLines(reader, records.session.id, words, redact) };
@@ -1929,16 +1977,22 @@ async function readClaims(
 /** What a dossier says of its notes: the ones the packer kept, and what the rest came to. */
 function carriedClaims(read: ClaimsRead, packed: Packed): DossierClaims {
   const lines = packed.carried.flatMap(({ line }) => (line.claim ? [{ ref: line.ref!, ...line.claim.by }] : []));
-  return { seen: read.seen, skipped: read.skipped, overCap: read.overCap + read.chosen.size + read.imported.length - lines.length, heldOut: read.heldOut, lines };
+  return { seen: read.seen, notes: read.notes, skipped: read.skipped, overCap: read.overCap + read.chosen.size + read.imported.length - lines.length, heldOut: read.heldOut, lines };
 }
 
 /**
  * The hash a dossier is kept by: its text, a NUL, and its sources' records as JSON. The spans are not in it:
  * they are where the same records' words are, and a dossier whose text and records did not change is one
- * the run has already read.
+ * the run has already read. A session's `wiki_note`s are in no text of this kind, and filing one adds no line to it, so
+ * their ids are added to what is hashed: a new note is something the run has not read, and its answer said a run would.
  */
-export function dossierHash(text: string, sources: ReadonlyArray<Pick<WikiDossierSource, 'ref' | 'kind' | 'id'>>): string {
-  return sha256(`${text}\u0000${JSON.stringify(sources.map(({ ref, kind, id }) => ({ ref, kind, id })))}`);
+export function dossierHash(
+  text: string,
+  sources: ReadonlyArray<Pick<WikiDossierSource, 'ref' | 'kind' | 'id'>>,
+  noteIds: readonly string[] = [],
+): string {
+  const records = `${text}\u0000${JSON.stringify(sources.map(({ ref, kind, id }) => ({ ref, kind, id })))}`;
+  return sha256(noteIds.length === 0 ? records : `${records}\u0000${noteIds.join(',')}`);
 }
 
 /**

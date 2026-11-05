@@ -304,16 +304,26 @@ orbit wiki search src/apiserver/src/wiki --limit 5 --json
 orbit wiki get <entry-id>[,<entry-id>...] --include sources --json
 orbit wiki propose --ops '[...]' --rationale "why it is worth recording" --idempotency-key <key> --json
 orbit wiki propose --ops-file ops.json --dry-run --json
+orbit wiki note "release.sh next tags at once: it is no dry run" --path scripts/release.sh --json
+orbit wiki note --text-file - --corrects <entry-id> < correction.txt
 ```
 
-The three verbs are the three MCP tools of the same name (`wiki_search`, `wiki_get`, `wiki_propose`)
-with the same parameters. Each acts for the session it runs in (`ORBIT_SESSION_ID`): what that
+The four verbs are the four MCP tools of the same name (`wiki_search`, `wiki_get`, `wiki_propose`,
+`wiki_note`) with the same parameters. Each acts for the session it runs in (`ORBIT_SESSION_ID`): what that
 session may read is what its bound workspace shares, and its proposal is recorded against it, so
 there is no headless form. `search` and `get` only read. `propose` records a changeset that waits
 for the owner in Review — `--dry-run` checks every op and records nothing — and an agent cannot
 accept, edit, reject, delete or overwrite an entry: deciding is the owner's, and a request carrying
 a session header is refused `WIKI_OWNER_CHANNEL_ONLY` on the decide route. Cite an entry to the
 user as `[title](orbit-wiki:<id>)`, the way every other Orbit thing is cited.
+
+`note` tells the wiki one thing the session learned, and is not in the wiki when it returns: the
+next maintenance run reads it against that session's records, and writes an entry only if they bear
+it out. It takes no place in Review. A session writes at most 15, a text the space already holds is
+not written again, and a session that verifies or judges work is refused. `--corrects <entry-id>`
+also flags that entry at once, for the owner to answer in Review; if that is refused, the answer says
+so and the note is kept. A server older than this command answers that it is too old, and nothing is
+recorded.
 
 A proposal is answered per op — `pending`, `applied`, `conflict` (with the entry's current revision
 and a diff) or `refused` (with the contract's reason codes and, for a schema failure, every field

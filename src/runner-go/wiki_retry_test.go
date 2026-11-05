@@ -435,6 +435,10 @@ func TestWikiRetryResendsOnlyTheWritesTheServerRecordsOnce(t *testing.T) {
 			_, _, err := tr.registerWikiNote("s", "space-1", map[string]interface{}{"path": "memory/a.md", "text": "a fact"})
 			return err
 		}},
+		{"a session's note", "POST /api/runner/wiki/notes", true, 1, func(tr *Transport) error {
+			_, err := tr.writeWikiNote("s", map[string]interface{}{"text": "a fact"})
+			return err
+		}},
 		{"a request to verify", "POST verifications/request", true, 1, func(tr *Transport) error {
 			_, err := tr.requestWikiVerification("s", "space-1")
 			return err

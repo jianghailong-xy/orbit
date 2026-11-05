@@ -2586,7 +2586,7 @@ async function requestsOf(h: Harness, jobId: string): Promise<Array<{ step: stri
 }
 
 const emptyClaims = {
-  claudeSessions: 0, seen: 0, skipped: 0, overCap: 0, heldOut: 0, shown: 0, narrowed: 0, contradicted: 0, absent: 0, notDurable: 0, unanswered: 0, entries: 0, duplicates: 0,
+  claudeSessions: 0, seen: 0, notes: 0, skipped: 0, overCap: 0, heldOut: 0, shown: 0, narrowed: 0, contradicted: 0, absent: 0, notDurable: 0, unanswered: 0, entries: 0, duplicates: 0,
 };
 
 test('the notes pass runs after the extraction for a session with notes alone, leaves the extraction\'s bytes and calls as they are, and reports every note', { skip }, async () => {
@@ -2668,6 +2668,67 @@ test('the notes pass runs after the extraction for a session with notes alone, l
   assert.deepEqual(prompted.map((row) => row.promptedBy), [{ eventId: noted.writes.get('note-1.md'), file: 'note-1.md' }, { eventId: noted.writes.get('note-2.md'), file: 'note-2.md' }]);
   assert.ok(rows.slice(0, 5).every((row) => row.promptedBy === null), 'the extraction\'s were recorded first');
   assert.ok(prompted.every((row) => row.verificationEvidence === 'readable' && row.decision === 'auto_applied'), 'they cite what happened');
+});
+
+test('a session\'s wiki_note reaches the pass whatever its engine, held out or not: its op names the row, and memory writes count apart', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await realFixture(h);
+  const asked = h.model.hits.length;
+  const keep = async (sessionId: string, text: string): Promise<string> => (await h.prisma.wikiNote.create({
+    data: { spaceId: fx.spaceId, ownerId: h.ownerId, path: `session/${sessionId}`, text, contentSha256: createHash('sha256').update(text).digest('hex'), sessionId },
+    select: { id: true },
+  })).id;
+
+  // A Codex session, which has no memory to write: this tool is how it speaks.
+  const said = 'The upload test fails with ECONNREFUSED until the fixture returns the url it listens on.';
+  const codex = await workedSession(h, fx, { engine: 'codex' });
+  const codexNote = await keep(codex.id, said);
+  // A session held out: the note is read, and what it wrote to memory is not.
+  const heldOut = await workedSession(h, fx, { heldOut: true, notes: ['A note the held-out session wrote to memory, which must stay out of every prompt.'] });
+  const heldOutNote = await keep(heldOut.id, 'The fixture reads PORT when it is imported, so setting it afterwards changes nothing.');
+  // A file an import read is no session's claim, and another owner's row is not reachable by its id.
+  await h.prisma.wikiNote.create({
+    data: { spaceId: fx.spaceId, ownerId: h.ownerId, path: 'memory/imported.md', text: 'An imported note that no session wrote.', contentSha256: createHash('sha256').update('imported').digest('hex') },
+  });
+  const plain = await workedSession(h, fx);
+
+  h.model.answer = ({ prompt }) => {
+    if (isExtraction(prompt)) return '[]';
+    if (isNotesPass(prompt)) {
+      // Its own case file's: the prompt's example above it has a C1 too.
+      const claim = /C1 claim: ([^\n]*)/u.exec(prompt.slice(prompt.lastIndexOf('==== CASE FILE ====')))![1]!;
+      return JSON.stringify({
+        notes: [{ note: 'C1', outcome: 'shown', shownBy: [toolLineOf(prompt)] }],
+        entries: [entryOf(fx, prompt, `Checked: ${claim.slice(0, 40)}`, 'C1')],
+      });
+    }
+    return '{"verdict":"supported","reason":"the cited line says this"}';
+  };
+  const which = worker(h);
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded');
+
+  const run = await runRow(h, fx.runId);
+  assert.equal(run.outcome, 'succeeded', String(run.error));
+  const { claims } = run.report as unknown as { claims: Record<string, number> };
+  assert.deepEqual(claims, { ...emptyClaims, claudeSessions: 2, seen: 1, notes: 2, heldOut: 1, shown: 2, entries: 2 }, 'the notes do not count as memory writes');
+
+  const requests = await requestsOf(h, fx.jobId);
+  assert.deepEqual(requests.filter((row) => row.step === 'claims').map((row) => row.unit).sort(), [codex.id, heldOut.id].sort(), 'no pass for a session with no note');
+  assert.ok(!requests.some((row) => row.step === 'claims' && row.unit === plain.id));
+  const prompts = h.model.hits.slice(asked).map((hit) => hit.prompt);
+  assert.ok(prompts.filter(isExtraction).every((prompt) => !prompt.includes(said)), 'no extraction reads a note');
+  const passes = prompts.filter(isNotesPass);
+  assert.ok(passes.some((prompt) => prompt.includes(`C1 claim: ${said}`)), 'the Codex session\'s note is in its file');
+  assert.ok(prompts.every((prompt) => !prompt.includes('held-out session wrote to memory')), 'what it wrote to memory reached nothing');
+  assert.ok(prompts.every((prompt) => !prompt.includes('An imported note that no session wrote')));
+
+  const all = await h.prisma.wikiChangesetOp.findMany({ where: { ownerId: h.ownerId, changeset: { spaceId: fx.spaceId } } });
+  const rows = all.filter((row) => row.promptedBy !== null);
+  assert.deepEqual(rows.map((row) => (row.promptedBy as { noteId: string }).noteId).sort(), [codexNote, heldOutNote].sort());
+  assert.ok(rows.every((row) => row.verificationEvidence === 'readable' && row.decision === 'auto_applied'), 'they cite what happened');
+  const cited = rows.flatMap((row) => ((row.payload as { sources?: Array<{ kind: string }> }).sources ?? []).map((source) => source.kind));
+  assert.ok(cited.length > 0 && !cited.includes('note'), 'the note is no source of its own entry');
 });
 
 test('a note\'s entry that says what the extraction just wrote sees it live at its verdict, and goes the way of a duplicate, counted in the report', { skip }, async () => {

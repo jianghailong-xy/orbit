@@ -2670,6 +2670,14 @@ func (t *Transport) proposeWikiChangeset(sessionID string, body interface{}) (js
 	return out, err
 }
 
+// writeWikiNote keeps what the calling session tells the wiki (`wiki_note`). A note is kept by its content and what it
+// corrects is filed under a key of the note's, so a request that lands twice records once: it is sent again like a read.
+func (t *Transport) writeWikiNote(sessionID string, body interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	_, err := t.doWiki(http.MethodPost, "/runner/wiki/notes", body, &out, taskOpTimeout, sessionHeader(sessionID), true)
+	return out, err
+}
+
 // listWikiVerifications reads one page of the ops the calling session proposed that wait for their
 // verification in a space (`orbit wiki verify`, contract `reviewModes.verification.list`). route is the
 // path after the space.

@@ -241,6 +241,29 @@ export const WIKI_IMPORT_RULES = {
   opsPerRun: 30,
 } as const;
 
+/**
+ * `wiki_note` (contract `agentSurface.note`, docs/wiki-memory-claims-design.md section 4): what a session tells the wiki,
+ * kept as a `note` and read back as a claim of that session. It is no op, so it takes no place in the review queue.
+ */
+export const WIKI_NOTE_RULES = {
+  /** One claim, in one or two sentences. */
+  textMaxChars: 2_000,
+  /** The repo-relative paths it may name, and the length of one: they are appended to its text. */
+  pathsMax: 10,
+  pathMaxChars: 200,
+  /** The notes one session may write: a text the space already holds is no new note, and is not counted. */
+  perSession: 15,
+} as const;
+
+/** Who reads a note, as its answer says (`agentSurface.note.answer`): the server's words, so that they cannot overstate it. */
+export const WIKI_NOTE_READ_BY = {
+  nextRun: 'the next maintenance run',
+  /** A space with maintenance off: nothing reads the session until the owner turns it on. */
+  noRun: 'no maintenance run yet: maintenance is off in this space',
+  /** A text the space already held from another session or an import: it stays theirs, and this session's run does not read it. */
+  elsewhere: "not this session's maintenance run: the space already holds this text from elsewhere",
+} as const;
+
 /** A space's and a topic's slug. */
 export const WIKI_SLUG_PATTERN = '^[a-z0-9]+(?:-[a-z0-9]+)*$';
 
@@ -421,6 +444,19 @@ export function wikiCallReadsWiki(toolName: string | null | undefined, command: 
   return WIKI_READ_TOOL.test(toolName ?? '') || WIKI_READ_COMMAND.test(command ?? '');
 }
 
+/** `wiki_note` as each engine files it, and the same call through the CLI, wherever a shell command runs it. */
+const WIKI_NOTE_TOOL = /(?:^|_)wiki_note$/u;
+const WIKI_NOTE_COMMAND = /(?:^|[\s;&|(`'"/])orbit['"]?\s+wiki\s+note(?![\w-])/u;
+
+/**
+ * Is this call a session filing a note for the wiki? The note is a claim, and a record of filing it says the same words:
+ * it stays out of a dossier (contract `maintenance.dossier.noteCalls`) and is not observed, so that a note cannot come
+ * back as a source of itself.
+ */
+export function wikiCallWritesNote(toolName: string | null | undefined, command: string | null | undefined): boolean {
+  return WIKI_NOTE_TOOL.test(toolName ?? '') || WIKI_NOTE_COMMAND.test(command ?? '');
+}
+
 /**
  * The tools whose input is what the agent typed: a record of calling one shows what it said, not what happened. The list
  * fixed before the second claims replay read anything (docs/wiki-memory-claims-design.md section 6.2), by the name a
@@ -437,7 +473,8 @@ const WIKI_TOOL_FILED_UNDER = /^(?:mcp__.+?__|orbit__)/u;
 function wikiCallObserves(toolName: string, command: string | null): boolean {
   return !WIKI_FILE_WRITE_TOOLS.has(toolName)
     && !WIKI_AGENT_INPUT_TOOLS.has(toolName.replace(WIKI_TOOL_FILED_UNDER, ''))
-    && !wikiCallReadsWiki(toolName, command);
+    && !wikiCallReadsWiki(toolName, command)
+    && !wikiCallWritesNote(toolName, command);
 }
 
 /** The class of one source's record (contract `reviewModes.verification.evidence.classes`). */
@@ -1347,8 +1384,9 @@ export interface WikiCursorState {
 /** `GET /api/runner/wiki/spaces/:id/dossiers`. */
 /**
  * The note an op came from (contract `opRules.promptedBy`): the tool_use event that wrote it, or the imported note a
- * backfill named (`maintenance.job.server.backfill`), and the memory file's name. The server's own field: no op an agent
- * sends can carry it.
+ * backfill named (`maintenance.job.server.backfill`), and the memory file's name; or a session's `wiki_note`, by its row
+ * since one filed through the CLI has no event of its own, with `wiki_note` for a file. The server's own field: no op an
+ * agent sends can carry it.
  */
 export type WikiPromptedBy = { eventId: string; file: string } | { noteId: string; file: string };
 
@@ -1359,7 +1397,9 @@ export type WikiPromptedBy = { eventId: string; file: string } | { noteId: strin
 export interface WikiDossierNotes {
   /** The session ran on Claude, whose memory writes are what the run watches for (`maintenance.health.notifyNoNotes`). */
   claude: boolean;
+  /** Its writes to memory files. Its `wiki_note`s are `notes`, so that they cannot hide those going quiet. */
   seen: number;
+  notes: number;
   skipped: number;
   overCap: number;
   heldOut: number;

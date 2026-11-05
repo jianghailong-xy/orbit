@@ -287,9 +287,9 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		// learned is not a power over anybody else's session, so it needs no orchestration grant —
 		// and the agent most likely to learn something worth recording is the plain single-session
 		// one. The commands themselves need ORBIT_SESSION_ID, which a session has.
-		// verify asks the server to verify the session's own proposals and waits for its verdicts: no
-		// more of a power.
-		for _, action := range []string{"search", "get", "propose", "verify"} {
+		// verify asks the server to verify the session's own proposals and waits for its verdicts, and note
+		// leaves a claim for maintenance to check against the session's own records: no more of a power.
+		for _, action := range []string{"search", "get", "propose", "verify", "note"} {
 			rules = append(rules, "Bash("+command+" wiki "+action+" *)")
 		}
 		// Every file verb: keeping and reading back your own files is no power over anybody else's session, and the

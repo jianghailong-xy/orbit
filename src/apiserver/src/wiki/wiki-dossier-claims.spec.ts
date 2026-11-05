@@ -17,6 +17,7 @@ import {
 } from '../wiki-worker/wiki-maintain';
 import {
   buildDossier,
+  dossierHash,
   wikiClaimsHeldOut,
   WIKI_DOSSIER_CLAIMS,
   type DossierEventRow,
@@ -50,6 +51,7 @@ class Records {
   readonly events: DossierEventRow[] = [];
   readonly turns: DossierRecords['turns'] = [];
   readonly calls: Array<{ id: string; toolUseId: string; name: string; input: unknown; output: unknown }> = [];
+  readonly wikiNotes: NonNullable<DossierRecords['wikiNotes']> = [];
   private next = 1;
 
   constructor(readonly sessionId = '00000000-0000-4000-8000-000000000001') {}
@@ -114,12 +116,20 @@ class Records {
     return this.tool('Edit', { file_path: `${LIBRARY}/${file}`, old_string: before, new_string: after }, 'File updated', at);
   }
 
+  /** A `wiki_note` as its row reads: what the session filed, apart from any call that filed it. */
+  note(text: string, at: Date): string {
+    const id = this.id();
+    this.wikiNotes.push({ id, text, createdAt: at });
+    return id;
+  }
+
   records(): DossierRecords {
     return {
       session: { id: this.sessionId, title: 'a session', provider: 'claude', model: 'claude-opus-5', status: 'SUCCEEDED', createdAt: moment(0), taskId: null, parentSessionId: null, dispatchOrigin: 'USER' },
       turns: this.turns, approvals: [], events: this.events,
       toolCallIds: new Map(this.calls.map((call) => [call.toolUseId, call.id])),
       task: null, comments: [], receipts: [], blockers: [], tainted: false,
+      ...(this.wikiNotes.length > 0 ? { wikiNotes: this.wikiNotes } : {}),
     };
   }
 
@@ -226,14 +236,14 @@ test('on, a session with no note to carry is the same bytes as off', async () =>
   assert.equal(quiet.text, off.text);
   assert.equal(quiet.hash, off.hash);
   assert.deepEqual(quiet.sources, off.sources);
-  assert.deepEqual(quiet.claims, { seen: 0, skipped: 0, overCap: 0, heldOut: 0, lines: [] });
+  assert.deepEqual(quiet.claims, { seen: 0, notes: 0, skipped: 0, overCap: 0, heldOut: 0, lines: [] });
 
   const skippedOnly = new Records();
   skippedOnly.owner('Fix the port.', moment(1));
   skippedOnly.write('me.md', '---\ntype: user\n---\n\nThe owner likes short answers and works in the evening.', moment(2));
   const allSkipped = await build(skippedOnly, { claims: true });
   assert.equal(allSkipped.text, (await build(skippedOnly)).text, 'nor does a write that is skipped change a byte');
-  assert.deepEqual(allSkipped.claims, { seen: 1, skipped: 1, overCap: 0, heldOut: 0, lines: [] });
+  assert.deepEqual(allSkipped.claims, { seen: 1, notes: 0, skipped: 1, overCap: 0, heldOut: 0, lines: [] });
 });
 
 // ── What counts as a write (§3.1) ───────────────────────────────────────────────────────────────
@@ -288,7 +298,7 @@ test('skipped, and counted: a user note, a hub, a write of under 20 new characte
   const kept = s.write('kept.md', 'A short note that passes, with [one link](x.md) at its end.\nRelated: [[other]]\nAnd a third line of prose.', moment(9));
 
   const dossier = await build(s, { claims: true });
-  assert.deepEqual(dossier.claims, { seen: 8, skipped: 7, overCap: 0, heldOut: 0, lines: [{ ref: 'C1', eventId: kept, file: 'kept.md' }] });
+  assert.deepEqual(dossier.claims, { seen: 8, notes: 0, skipped: 7, overCap: 0, heldOut: 0, lines: [{ ref: 'C1', eventId: kept, file: 'kept.md' }] });
   assert.doesNotMatch(dossier.text, /works late|reads Chinese|recommendation in one line|moved here|pointer added|Too short|receives/u);
   assert.match(dossier.text, /C1 claim: A short note that passes/u, 'a link in a note of prose does not make it a hub');
 });
@@ -736,7 +746,7 @@ test('one session in ten is held out, by a digest of its id: it carries no note,
   s.write('port.md', 'STORAGE_PORT is read at import, before the fixture sets it.', moment(2));
   const dossier = await build(s, { claims: true });
   assert.equal(dossier.text, (await build(s)).text);
-  assert.deepEqual(dossier.claims, { seen: 1, skipped: 0, overCap: 0, heldOut: 1, lines: [] });
+  assert.deepEqual(dossier.claims, { seen: 1, notes: 0, skipped: 0, overCap: 0, heldOut: 1, lines: [] });
 });
 
 test('the same records give the same dossier, notes and evidence included', async () => {
@@ -748,4 +758,112 @@ test('the same records give the same dossier, notes and evidence included', asyn
   assert.deepEqual(once.claims, twice.claims);
   assert.match(once.text, /C1 claim: STORAGE_PORT is read at import in `storage-fixture\.ts`\./u);
   assert.ok(WIKI_MAINTENANCE_JOB.entriesPerSessionMax === 6, 'the entry cap is not moved by notes');
+});
+
+// ── A session's wiki_note (docs/wiki-memory-claims-design.md §4) ───────────────────────────────
+
+/** A session with something to read, and no note of any kind. */
+function workedOn(id?: string): Records {
+  const s = new Records(id);
+  s.owner('Fix the upload test.', moment(1));
+  s.tool('Bash', { command: 'npm test -w api -- upload.spec.ts' }, 'Exit code 1\nError: connect ECONNREFUSED 127.0.0.1:9000', moment(2), { isError: true });
+  s.tool('Bash', { command: 'npm test -w api -- upload.spec.ts' }, '# pass 14', moment(3));
+  return s;
+}
+
+const heldOutSession = (): string => {
+  for (let n = 0; ; n += 1) {
+    const id = `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+    if (wikiClaimsHeldOut(id)) return id;
+  }
+};
+
+test('a wiki_note is a claim at its moment, named by its row: no source can cite it, and the extraction never hears of it', async () => {
+  const s = workedOn();
+  const noted = s.note('The upload test needs the url from the fixture.\nPaths: src/api/test/storage-fixture.ts', moment(4));
+  const file = await build(s, { claims: true });
+  assert.match(file.text, /C1 claim: The upload test needs the url from the fixture\.\n {4}Paths: src\/api\/test\/storage-fixture\.ts/u);
+  assert.deepEqual(file.claims, { seen: 0, notes: 1, skipped: 0, overCap: 0, heldOut: 0, lines: [{ ref: 'C1', noteId: noted, file: 'wiki_note' }] });
+  assert.ok(file.sources.length > 0 && file.sources.every((source) => source.kind !== 'note' && !source.ref.startsWith('C')));
+  assert.match(file.text, /ECONNREFUSED/u, 'what bears on it is carried with it');
+
+  const plain = await build(s);
+  assert.ok(!plain.text.includes('needs the url from the fixture'), 'the extraction does not read it');
+  assert.ok(!('claims' in plain));
+});
+
+test('filing a note leaves no line in a dossier, under any engine\'s name or through the CLI, and its record cannot be cited', async () => {
+  const filed = workedOn();
+  const said = 'The upload test needs the url from the fixture, which is what the fixture is for.';
+  filed.tool('mcp__orbit__wiki_note', { text: said }, 'Noted as a-note.', moment(5));
+  filed.tool('orbit__wiki_note', { text: said }, 'Noted as a-note.', moment(6));
+  filed.tool('Bash', { command: `orbit wiki note "${said}" --path src/api/test/storage-fixture.ts` }, 'Noted as a-note.', moment(7));
+  filed.tool('Bash', { command: "'/usr/local/bin/orbit' wiki note --text-file - < note.txt" }, 'Noted as a-note.', moment(8));
+  const clean = workedOn();
+  for (const options of [{}, { claims: true }]) {
+    const [withCalls, without] = [await build(filed, options), await build(clean, options)];
+    assert.equal(withCalls.text, without.text);
+    assert.ok(!withCalls.text.includes(said));
+    assert.deepEqual(withCalls.sources.map((source) => source.id), without.sources.map((source) => source.id));
+  }
+});
+
+test('a note changes a dossier\'s hash and nothing else of it, and a session with none keeps the hash it had', async () => {
+  const before = await build(workedOn());
+  const s = workedOn();
+  s.note('The upload test needs the url from the fixture.', moment(4));
+  const after = await build(s);
+  assert.equal(after.text, before.text);
+  assert.deepEqual(after.sources, before.sources);
+  assert.notEqual(after.hash, before.hash, 'a new note is something the run has not read');
+  assert.equal(before.hash, dossierHash(before.text, before.sources));
+  s.note('A second one, which is something new again.', moment(5));
+  assert.notEqual((await build(s)).hash, after.hash);
+  assert.equal((await build(goldenSession())).hash, GOLDEN_OFF.hash, 'the bytes of a session with no note do not move');
+});
+
+test('a session held out keeps its writes out and its wiki_notes in: the hold-out measures its memory', async () => {
+  const s = workedOn(heldOutSession());
+  s.write('port.md', 'STORAGE_PORT is read at import, before the fixture sets it, which the memory says.', moment(4));
+  assert.deepEqual((await build(s, { claims: true })).claims, { seen: 1, notes: 0, skipped: 0, overCap: 0, heldOut: 1, lines: [] });
+  const noted = s.note('The upload test needs the url from the fixture.', moment(5));
+  const file = await build(s, { claims: true });
+  assert.deepEqual(file.claims, { seen: 1, notes: 1, skipped: 0, overCap: 0, heldOut: 1, lines: [{ ref: 'C1', noteId: noted, file: 'wiki_note' }] });
+  assert.match(file.text, /C1 claim: The upload test needs the url/u);
+  assert.ok(!file.text.includes('STORAGE_PORT is read at import'), 'what it wrote to memory stays out');
+});
+
+test('notes and writes share the cap, in the order they were written: a wiki_note ranks with the feedback, and the rest are counted', async () => {
+  const s = workedOn();
+  const plain = s.write('plain.md', 'A project fact written first, which nothing says is the owner\'s word.', moment(4));
+  const feedback = s.write('owner.md', '---\ntype: feedback\n---\nThe owner said to keep the port out of the fixture.', moment(5));
+  const notes = Array.from({ length: 6 }, (_, n) => s.note(`A note numbered ${n} about the upload test and its fixture.`, moment(6 + n)));
+  const late = s.write('late.md', 'A project fact written last, newer than every note and no feedback.', moment(20));
+  const file = await build(s, { claims: true });
+  assert.equal(file.claims?.seen, 3);
+  assert.equal(file.claims?.notes, 6);
+  assert.equal(file.claims?.overCap, 3);
+  const carried = file.claims!.lines;
+  assert.deepEqual(carried.map((line) => ('noteId' in line ? line.noteId : line.eventId)), notes, 'the six newest of those that rank first, and in time order');
+  assert.ok(!carried.some((line) => 'eventId' in line && [plain, feedback, late].includes(line.eventId)));
+
+  const two = workedOn();
+  two.write('first.md', 'A fact written to memory before the note, with enough words.', moment(4));
+  two.note('The note, between the two writes to memory, with enough words.', moment(5));
+  two.write('second.md', 'A fact written to memory after the note, with enough words.', moment(6));
+  const mixed = await build(two, { claims: true });
+  assert.deepEqual(mixed.claims?.lines.map((line) => line.ref), ['C1', 'C2', 'C3']);
+  assert.match(mixed.text, /C1 claim: A fact written to memory before[\s\S]*C2 claim: The note, between[\s\S]*C3 claim: A fact written to memory after/u);
+});
+
+test('a wiki_note says what it says: no type to skip it, no minimum, and it is cut as any note is', async () => {
+  const s = workedOn();
+  s.note('Short.', moment(4));
+  s.note(`A long one. ${'word '.repeat(300)}`, moment(5));
+  const file = await build(s, { claims: true });
+  assert.equal(file.claims?.skipped, 0);
+  assert.match(file.text, /C1 claim: Short\./u);
+  const cut = /C2 claim: (.*)/u.exec(file.text)![1]!;
+  assert.match(cut, /…\[\+\d+ chars\]$/u, cut.slice(-40));
+  assert.ok(Array.from(cut.replace(/…\[.*$/u, '')).length <= WIKI_DOSSIER_CLAIMS.lineMaxChars);
 });
