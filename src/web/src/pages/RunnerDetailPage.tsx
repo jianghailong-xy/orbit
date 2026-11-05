@@ -49,6 +49,7 @@ import {
   workspaceSessionCountsQuery,
 } from '../lib/queries';
 import { CLAUDE_SESSION_ID_RE, importClaudeSessionAndWait } from '../lib/sessionImport';
+import { AbandonedCheckouts } from '../components/AbandonedCheckouts';
 import { ClaudeHistoryOffer, type ImportMode } from '../components/ClaudeHistoryOffer';
 import { AccountSelect, offersAccount } from '../components/AccountSelect';
 import { AUTO_COMPACT_VARIABLE, AutoCompactSelect, withAutoCompact } from '../components/AutoCompactSelect';
@@ -1583,6 +1584,13 @@ export function RunnerDetailPage() {
               <div className="rd-hint">{runner.online ? RUNNER_ENGINES_FOOTER : RUNNER_ENGINES_OFFLINE_FOOTER}</div>
             )}
           </section>
+
+          {/* What worktree GC may never remove: finished sessions' checkouts that still hold
+              uncommitted work. Renders nothing while there are none. */}
+          <AbandonedCheckouts
+            runnerId={runner.id}
+            canDiscard={runner.capabilities?.includes('abandoned-checkout-v1') === true}
+          />
 
           <section className="rd-section rd-workspaces">
             <div className="rd-section-head">

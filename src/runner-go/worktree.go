@@ -3255,14 +3255,8 @@ func (t *Transport) worktreesResumable(ids []string) (map[string]string, error) 
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	var r struct {
-		Resumable []struct {
-			ID     string `json:"id"`
-			Branch string `json:"branch"`
-		} `json:"resumable"`
-	}
-	if err := t.do(nil, "POST", "/runner/sessions/worktrees-removable",
-		map[string][]string{"ids": ids}, &r, 15*time.Second); err != nil {
+	r, err := t.worktreesJudgement(ids)
+	if err != nil {
 		return nil, err
 	}
 	branches := make(map[string]string, len(r.Resumable))

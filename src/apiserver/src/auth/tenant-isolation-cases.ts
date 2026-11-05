@@ -466,6 +466,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /runners/:id': { request: (of) => ({ params: { id: of.runnerId } }) },
   'PATCH /runners/:id': { request: (of) => ({ params: { id: of.runnerId }, body: { displayName: 'renamed by the census' } }) },
   'DELETE /runners/:id': { request: (of) => ({ params: { id: of.spare.runnerId } }) },
+  // What a machine's finished sessions left behind holding uncommitted work. A's runner is not
+  // B's to read, and one of A's sessions is not a checkout B may ask the diff of.
+  'GET /runners/:id/abandoned-checkouts': { request: (of) => ({ params: { id: of.runnerId } }) },
+  'GET /runners/:id/abandoned-checkouts/:sessionId': {
+    request: (of) => ({ params: { id: of.runnerId, sessionId: of.sessionId } }),
+  },
   'GET /runners/:id/login': { request: (of) => ({ params: { id: of.runnerId } }) },
   'POST /runners/:id/login': { request: (of) => ({ params: { id: of.runnerId }, body: { engine: 'claude' } }) },
   'POST /runners/:id/login/code': { request: (of) => ({ params: { id: of.runnerId }, body: { code: 'census-code' } }) },
@@ -557,6 +563,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     }),
   },
   'POST /sessions/:id/commit': { request: (of) => ({ params: { id: of.sessionId } }) },
+  // Another account's session is not B's to throw work away from, whatever B knows of it.
+  'POST /sessions/:id/checkout/discard': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/adopt-branch': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/retry-message': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/retry-message': { request: (of) => ({ params: { id: of.sessionId }, body: {} }) },

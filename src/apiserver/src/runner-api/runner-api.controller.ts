@@ -124,6 +124,7 @@ import {
   RunnerRegisterRequest,
   RunnerRegisterResponse,
   RunnerRepoCleanupResult,
+  AbandonedCheckoutsRequest,
   SessionCommitResultRequest,
   RunFinalizeRequest,
   RunFinalizeResponse,
@@ -1001,6 +1002,10 @@ const RUNNER_PROVIDERS_HEADER = 'x-orbit-supported-providers';
 export const SESSION_ORCHESTRATION_CREDENTIAL_V1 = 'session-orchestration-credential-v1';
 export const SESSION_TERMINAL_HANDOFF_V1 = 'session-terminal-handoff-v1';
 export const SESSION_WORKTREE_OPS_V1 = 'session-worktree-ops-v1';
+/** The commit relay can also carry `discard`, and the runner scans its checkouts for work no
+ *  branch has. A runner that does not declare it is never handed a discard: it would read the
+ *  command as a plain commit and put the work on the branch instead of throwing it away. */
+export const ABANDONED_CHECKOUT_V1 = 'abandoned-checkout-v1';
 /** Runner signs in the Codex account a login `start` names (`account`, `accountName`). One that
  *  does not would ignore the account and sign in its machine's Default instead. */
 export const CODEX_ACCOUNT_LOGIN_V1 = 'codex-account-login/v1';
@@ -2424,7 +2429,11 @@ export class RunnerApiController {
         // clean up minutes later — the successor process claims these instead.
         if (!draining) {
           mergeRequests = await this.realtime.drainMergeRequests(runner.id, heartbeatLeaseOwner, runnerSupportsCapability(capabilities, SESSION_MERGE_RECOVERY_V1));
-          commitRequests = await this.realtime.drainCommitRequests(runner.id, heartbeatLeaseOwner);
+          commitRequests = await this.realtime.drainCommitRequests(
+            runner.id,
+            heartbeatLeaseOwner,
+            runnerSupportsCapability(capabilities, ABANDONED_CHECKOUT_V1),
+          );
         }
       }
       artifactRequests = await this.realtime.drainArtifactRequests(runner.id);
@@ -9424,6 +9433,90 @@ export class RunnerApiController {
     };
   }
 
+  /** The runner's whole inventory of finished sessions' checkouts that still hold work no
+   *  branch has (docs: the abandoned-checkout half of worktree GC). `checkouts` REPLACES this
+   *  runner's set: one absent here is one the runner no longer finds abandoned. The runner does
+   *  not know a session's status — it reports what `git status` says and which sessions the
+   *  control plane no longer wants a checkout for — so the finished-session test is made here.
+   *
+   *  Only a TERMINAL session is kept. A parked one at rest can be dirty between turns and is not
+   *  abandoned; committing or discarding it would be acting on somebody's live work. The diff
+   *  arrives with the entry (the scan computed it); a body past the runner's patch budget lacks
+   *  `patches`, which the view reports as hasPatches:false rather than as an empty diff. */
+  @UseGuards(RunnerAuthGuard)
+  @Post('abandoned-checkouts')
+  async abandonedCheckouts(
+    @CurrentRunner() runner: { id: string; ownerId?: string },
+    @Body() dto: AbandonedCheckoutsRequest,
+  ): Promise<{ ok: true; kept: number }> {
+    const ownerId = runner.ownerId;
+    if (!ownerId) return { ok: true, kept: 0 };
+    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const reported = (Array.isArray(dto?.checkouts) ? dto.checkouts : [])
+      .slice(0, 2000)
+      .filter((entry) => entry && UUID.test(String(entry.sessionId)));
+    const ids = [...new Set(reported.map((entry) => entry.sessionId))];
+    const finished = ids.length
+      ? new Set(
+          (
+            await this.prisma.session.findMany({
+              where: {
+                id: { in: ids },
+                ownerId,
+                assignedRunnerId: runner.id,
+                status: { in: TERMINAL },
+              },
+              select: { id: true },
+            })
+          ).map((row) => row.id),
+        )
+      : new Set<string>();
+    const kept = reported.filter((entry) => finished.has(entry.sessionId));
+    const observedAt = new Date();
+    await withTransactionRetry(this.prisma, async (tx) => {
+      // Session rows FIRST, then the checkout rows. commitResult locks a session and then deletes
+      // its abandoned_checkout; a sweep that took them the other way round would be the same two
+      // rows in opposite orders, which is the one deadlock shape this repo has actually taken.
+      if (kept.length > 0) {
+        // What the runner SAW is the same fact this column means (its own `git status
+        // --porcelain`), and the commit door admits a finished session on it alone. Recorded
+        // here so an entry can be committed without waiting for another heartbeat.
+        await tx.session.updateMany({
+          where: { id: { in: kept.map((entry) => entry.sessionId) }, worktreeDirty: { not: true } },
+          data: { worktreeDirty: true },
+        });
+      }
+      await tx.abandonedCheckout.deleteMany({
+        where: { runnerId: runner.id, sessionId: { notIn: kept.map((entry) => entry.sessionId) } },
+      });
+      for (const entry of kept) {
+        const files = (Array.isArray(entry.files) ? entry.files : []).slice(0, 2000);
+        const patches = Array.isArray(entry.patches) && entry.patches.length > 0 ? entry.patches : null;
+        await tx.abandonedCheckout.upsert({
+          where: { sessionId: entry.sessionId },
+          create: {
+            ownerId,
+            runnerId: runner.id,
+            sessionId: entry.sessionId,
+            files: files as unknown as Prisma.InputJsonValue,
+            patches: patches === null ? Prisma.DbNull : (patches as unknown as Prisma.InputJsonValue),
+            hasPatches: patches !== null,
+            observedAt,
+          },
+          update: {
+            ownerId,
+            runnerId: runner.id,
+            files: files as unknown as Prisma.InputJsonValue,
+            patches: patches === null ? Prisma.DbNull : (patches as unknown as Prisma.InputJsonValue),
+            hasPatches: patches !== null,
+            observedAt,
+          },
+        });
+      }
+    }, loggedRetry(this.logger, 'runnerApi.abandonedCheckouts'));
+    return { ok: true, kept: kept.length };
+  }
+
   /** Outcome of a heartbeat-delivered MergeCommand — persist it so the worktree status bar
    *  can show merged ✓ / conflict / error. mergedAt + cleared error on success; the message
    *  (git stderr / failed precondition) is kept for conflict/error. `released` is not an
@@ -9747,6 +9840,7 @@ export class RunnerApiController {
       dto?.status !== 'committed' &&
       dto?.status !== 'nochange' &&
       dto?.status !== 'error' &&
+      dto?.status !== 'discarded' &&
       dto?.status !== 'released'
     ) {
       throw new BadRequestException('invalid commit result status');
@@ -9760,7 +9854,10 @@ export class RunnerApiController {
     if (released && !operationId) {
       throw new BadRequestException('released requires the claimed operation');
     }
-    const clean = dto.status === 'committed' || dto.status === 'nochange';
+    // A discarded checkout is as clean as a committed one: nothing uncommitted is left in it, so
+    // the entry that listed it is done and gcWorktrees may now reclaim it.
+    const clean =
+      dto.status === 'committed' || dto.status === 'nochange' || dto.status === 'discarded';
     // Retried whole, on the same claim fence as the merge result above.
     await withTransactionRetry(this.prisma, async (tx) => {
       const locked = await tx.$queryRaw<
@@ -9827,8 +9924,14 @@ export class RunnerApiController {
               ? dto.summary?.trim().slice(0, 1000) || null
               : null,
           ...(clean ? { worktreeDirty: false } : {}),
+          // The work is on the branch (or gone): this checkout is no longer abandoned. The next
+          // scan will say the same; dropping it here is what makes the page answer at once.
+          ...(clean ? { commitAction: null } : {}),
         },
       });
+      if (clean) {
+        await tx.abandonedCheckout.deleteMany({ where: { sessionId } });
+      }
     }, loggedRetry(this.logger, 'runnerApi.commitResult'));
     // Mirror mergeResult: release a message queued behind this commit now that the
     // checkout is free, rather than waiting for the queue's periodic poll.

@@ -903,6 +903,9 @@ model Runner {
   managedWorkload     Json?    @map("managed_workload")
 
   sessions Session[]
+  // Checkouts of this machine's finished sessions that still hold work no branch has, as its
+  // last scan reported them (migration 0474).
+  abandonedCheckouts AbandonedCheckout[]
   // Workspaces `orbit register` minted for this machine (one per project dir + tool).
   workspaces Workspace[]
   // Narrow, revocable credentials minted for headless processes on this machine.
@@ -2041,6 +2044,10 @@ model Session {
   // Same ABA fence as mergeOperationId, for heartbeat-delivered commits.
   commitOperationId    String?   @map("commit_operation_id") @db.Uuid
   commitOperationOwner String?   @map("commit_operation_owner") @db.Uuid
+  // What the queued relay does when it runs (migration 0474): NULL commits the checkout's
+  // uncommitted work onto the branch, 'discard' throws that work away. Only ever 'discard' for a
+  // runner that declares abandoned-checkout-v1 — an older one ignores the flag and commits.
+  commitAction         String?   @map("commit_action")
   // Product lifecycle: completedAt moves an Open session to Completed; deletedAt moves
   // it to Trash. Both retain all data and restore clears them. archivedAt is a temporary
   // rolling-deploy compatibility mirror maintained by migration 0076's database trigger.
@@ -2133,6 +2140,10 @@ model Session {
   coordinatorWakes      ProjectCoordinatorWake[] @relation("CoordinatorJudgmentSession")
   attachments           Attachment[]
   diff                  SessionDiff?
+  /// The checkout this session left behind holding uncommitted work, as the runner last reported
+  /// it (migration 0474). Removed when the work is committed or discarded, or by the next report
+  /// that no longer names it.
+  abandonedCheckout     AbandonedCheckout?
   // Personal colored labels applied to this session (many-to-many via the join table).
   tagLinks              SessionTagLink[]
   // Append-only record of every merge attempted for this session's branch, however it was made.
@@ -2350,6 +2361,39 @@ model SessionDiff {
   session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@map("session_diff")
+}
+
+/// A finished session's checkout that still holds work no branch has (migration 0474).
+///
+/// It exists because removeWorktree refuses such a checkout and nothing else could act on it:
+/// gcWorktrees carried it past every cap forever, and the only copy of the work sat on one
+/// machine's disk with no way to see it, commit it or throw it away. The runner scans its
+/// checkouts and POSTs the whole set (`/runner/abandoned-checkouts`); this table is that set, so
+/// the runner page can show it and offer the two exits. `files` and `patches` are the diff as the
+/// scan computed it (@orbit/shared ChangedFile[] and FilePatch[]). The row goes when the work is
+/// committed or discarded, and on the next report that no longer names the checkout.
+model AbandonedCheckout {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  /// Tenant scope, denormalized for the list query (every read filters by it).
+  ownerId   String   @map("owner_id") @db.Uuid
+  runnerId  String   @map("runner_id") @db.Uuid
+  runner    Runner   @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  sessionId String   @unique @map("session_id") @db.Uuid
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  /// @orbit/shared ChangedFile[]: what the checkout holds against the session's fork point.
+  files     Json
+  /// @orbit/shared FilePatch[]: the same files' unified diffs, when the report had room. Null
+  /// when it did not (the report's patch budget) — the file list is still true.
+  patches   Json?
+  /// Whether `patches` holds anything, so the list query can say so without reading the diff.
+  hasPatches Boolean @default(false) @map("has_patches")
+  /// When the runner's scan found it in this state.
+  observedAt DateTime @map("observed_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([ownerId, runnerId])
+  @@map("abandoned_checkout")
 }
 
 // A personal, colored label the owner can apply to their sessions (Files.app-style Tags).

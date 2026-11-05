@@ -158,6 +158,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     snippet: "assertEngineSessionRow(session);\n    if (session.isolationStatus !== 'worktree' || !session.branch) {",
     note: 'POST /commit',
   },
+  'SessionsService.discardCheckout': {
+    file: 'sessions/sessions.service.ts',
+    snippet: "async discardCheckout(ownerId: string, id: string) {\n    return this.queueCheckoutAction(ownerId, id, 'discard');",
+    note: 'POST /checkout/discard — the same engine-session assertion as POST /commit, made inside the shared queueCheckoutAction before anything is written',
+  },
   'SessionsService.adoptWorktreeBranch': {
     file: 'sessions/sessions.service.ts',
     snippet: "assertEngineSessionRow(session);\n      if (session.isolationStatus !== 'worktree') {",
@@ -294,6 +299,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /sessions/:id/merge-repair': 'SessionsService.startMergeRepair',
   'POST /sessions/:id/merge-receipts': 'MergeReceiptService.record',
   'POST /sessions/:id/commit': 'SessionsService.commitWorktree',
+  'POST /sessions/:id/checkout/discard': 'SessionsService.discardCheckout',
   'POST /sessions/:id/adopt-branch': 'SessionsService.adoptWorktreeBranch',
   'POST /sessions/:id/retry-message': 'AutoRetryService.resendRetryMessage',
   'POST /sessions/:id/auto-retry': 'SessionsService.armAutoRetry',
