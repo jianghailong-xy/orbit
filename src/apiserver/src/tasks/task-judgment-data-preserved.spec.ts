@@ -2674,7 +2674,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // A nullable column for what an op's note was, and a CHECK of its shape: nothing to preserve, no row written.
       '0471_wiki_op_prompted_by',
       // A nullable column saying which session wrote a note, and its index: nothing to preserve, no row written.
-      '0472_wiki_note_session'],
+      '0472_wiki_note_session',
+      // 0473 widens four int4 counts of `usage` to bigint. `usage` is not a preserved relation, every value keeps its
+      // value, and no `task`, `session`, ledger table or preserved trigger/function is named, so it is not another writer
+      // of the DONE fence.
+      '0473_usage_token_counts_bigint'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -1280,6 +1280,29 @@ export function parseRunnerCapabilities(
     .slice(0, 128);
 }
 
+/**
+ * A turn completion without what it merely reports: what decides the turn's outcome and how its
+ * session resumes. An older runner sends no more than this, so the rest is optional everywhere it
+ * is read, and the next turn reports it all again. `branchSha` stays because a confirmation request
+ * is held to it and `storableBranchSha` already refuses what its column could not store.
+ */
+function settlingFields(dto: TurnCompleteRequest): TurnCompleteRequest {
+  const { turnId, leaseOwner, status, result, error, shellExitCode, shellOutput, subtype, runtimeSessionId, branchSha } = dto;
+  return {
+    turnId, leaseOwner, status, result, error, shellExitCode, shellOutput, subtype, runtimeSessionId, branchSha,
+    // Zero says no engine turn ran, which decides whether its message is still owed its delivery.
+    // Any other count books as the one turn a completion is when it reports none.
+    ...(dto.numTurns === 0 ? { numTurns: 0 } : {}),
+  };
+}
+
+/** A fault on one log line: its code, and the last line of a message Prisma opens with a code frame. */
+function faultLine(fault: unknown): string {
+  if (!(fault instanceof Error)) return String(fault);
+  const { code } = fault as Error & { code?: string };
+  return `${code ?? fault.name}: ${fault.message.trim().split('\n').at(-1)}`;
+}
+
 export function parseLeaseGeneration(value?: string, field = 'leaseGeneration'): string | null {
   if (value == null || value === '') return null;
   if (!LEASE_GENERATION_RE.test(value)) {
@@ -6152,16 +6175,16 @@ export class RunnerApiController {
       );
     }
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
-    // Go's legacy `omitempty` encoding can omit an empty changedFiles slice. A new runner's
-    // baseSha still proves that it computed a worktree snapshot, so normalize that shape to the
-    // empty snapshot instead of advancing the base while retaining the previous file list.
-    const changedFilesSnapshot =
-      dto.changedFiles ?? (dto.baseSha !== undefined ? [] : undefined);
     // Retried whole. Every decision — the duplicate-ack check, the park, the merge-state clear, the
     // billing accrual — is taken from the Session row read under its own lock inside the closure,
     // so a re-run cannot accrue against a turn the winner already closed. `dto` is outside, so a
     // retry books the same numbers and not a second set.
-    const finalized = await withTransactionRetry(this.prisma, async (tx) => {
+    const settle = (dto: TurnCompleteRequest) => withTransactionRetry(this.prisma, async (tx) => {
+      // Go's legacy `omitempty` encoding can omit an empty changedFiles slice. A new runner's
+      // baseSha still proves that it computed a worktree snapshot, so normalize that shape to the
+      // empty snapshot instead of advancing the base while retaining the previous file list.
+      const changedFilesSnapshot =
+        dto.changedFiles ?? (dto.baseSha !== undefined ? [] : undefined);
       // Serialize completion with createTurn's enqueue transition. Whichever locks the
       // Session first determines whether a follow-up is already queued; this prevents the
       // lost-wakeup state AWAITING_INPUT + PENDING conversation turn. The same lock also
@@ -7380,6 +7403,20 @@ export class RunnerApiController {
         maxWait: TURN_COMPLETE_TRANSACTION_TIMEOUT_MS,
       },
     }));
+    // What a turn reports must not hold the turn. The runner re-posts a 5xx with no ceiling and the
+    // session takes nothing else until this answers, so a report the database refuses (a count past
+    // its column, twice now: 0347, 0473) is a queue standing still behind a finished turn. A 4xx
+    // would not end that: the runner would drop the completion and, when the turn's lease ran out, be
+    // handed the turn and run it again, at the model's cost, every time. So it settles once more on
+    // what decides the turn alone. A fault that says nothing about the request (a conflict its
+    // retries did not absorb, the database failing, an answer some layer already gave) goes on as it
+    // always did: the re-post carries the whole report.
+    const finalized = await settle(dto).catch((error: unknown) => {
+      const { family } = classifyTransactionFault(error);
+      if (family === 'TRANSIENT' || family === 'RESOURCE' || family === 'ANSWERED') throw error;
+      this.logger.warn(`turn ${dto.turnId} of session ${sessionId} settles without its reports: ${faultLine(error)}`);
+      return settle(settlingFields(dto));
+    });
     // A message refused for the region went back in the queue with its session (§10): no turn ended, so nothing a
     // turn's end hands over is owed. The row and its queue changed, and the runner's slot is free for another session.
     if ('regionHeld' in finalized) {

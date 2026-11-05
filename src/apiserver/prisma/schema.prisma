@@ -2522,10 +2522,10 @@ model LlmUsage {
   sessionId                String   @map("session_id") @db.Uuid
   session                  Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   model                    String
-  inputTokens              Int      @default(0) @map("input_tokens")
-  outputTokens             Int      @default(0) @map("output_tokens")
-  cacheCreationInputTokens Int      @default(0) @map("cache_creation_input_tokens")
-  cacheReadInputTokens     Int      @default(0) @map("cache_read_input_tokens")
+  inputTokens              BigInt   @default(0) @map("input_tokens")
+  outputTokens             BigInt   @default(0) @map("output_tokens")
+  cacheCreationInputTokens BigInt   @default(0) @map("cache_creation_input_tokens")
+  cacheReadInputTokens     BigInt   @default(0) @map("cache_read_input_tokens")
   costUsd                  Float    @default(0) @map("cost_usd")
   createdAt                DateTime @default(now()) @map("created_at")
 
