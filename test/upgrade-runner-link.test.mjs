@@ -263,6 +263,20 @@ for (const upgrade of UPGRADES) {
     }
   });
 
+  test(`${upgrade}: a .env written with CRLF line ends keeps them, and gains a profile line Compose reads`, (t) => {
+    const fixture = makeFixture(t);
+    const before = 'JWT_SECRET="kept"\r\nPROVIDER_SECRET_KEY="kept too"\r\nCOMPOSE_PROFILES=a\r\n';
+    writeFileSync(fixture.envFile, before);
+    const run = fixture.run(upgrade, ['--no-pull']);
+    assert.equal(run.status, 0, run.output);
+    const after = readFileSync(fixture.envFile, 'utf8');
+    assert.ok(after.startsWith(before));
+    assert.match(after, /\nCOMPOSE_PROFILES=a,runner-link\n/);
+    // And the next run finds what this one wrote.
+    assert.equal(fixture.run(upgrade, ['--no-pull']).status, 0);
+    assert.equal(readFileSync(fixture.envFile, 'utf8'), after);
+  });
+
   test(`${upgrade}: a name set empty is not a link, and a name exported in the shell is an operator's`, (t) => {
     const empty = makeFixture(t);
     writeFileSync(empty.envFile, `${BEFORE_LINK}RUNNER_LINK_URL=\nRUNNER_LINK_SIGNING_KEY=""\n`);

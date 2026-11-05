@@ -208,10 +208,11 @@ LINK_ONLY=0
 LINK_FAILURE=""
 LINK_DETAIL=""
 
-# A name's last value in .env, as Compose reads it, without its quotes. Only ever captured, never printed.
+# A name's last value in .env, as Compose reads it, without its quotes or a carriage return. Only ever captured, never
+# printed.
 link_env() {
   [ -f .env ] || return 0
-  sed -nE "s/^[[:space:]]*(export[[:space:]]+)?$1[[:space:]]*=[[:space:]]*//p" .env | tail -n 1 |
+  sed -nE "s/^[[:space:]]*(export[[:space:]]+)?$1[[:space:]]*=[[:space:]]*//p" .env | tail -n 1 | tr -d '\r' |
     sed -E "s/^\"(.*)\"[[:space:]]*\$/\\1/; s/^'(.*)'[[:space:]]*\$/\\1/"
 }
 
