@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma, type ManagedRunnerManagementState } from '@prisma/client';
 import { EventEmitter } from 'events';
@@ -110,6 +111,19 @@ import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/
 import { DISPATCH_PAUSED } from './dispatch-pause';
 import { CLAUDE_REGION_ERROR_PREFIX, claudeRegionHold } from '../runners/runner-region';
 
+/** What a claim attempt answers when another transaction holds the row it picked (FOR UPDATE NOWAIT, 55P03). */
+const LOST_LOCK = Symbol('the claim lost the row lock');
+/**
+ * How long a claim asked with no wait, as every link call is, goes on asking after it lost the row lock. It has no later
+ * round of its own, and the runner asks again only when something says to: its next HeartbeatAck, up to 30 s away. About
+ * 5 s, the round of the long poll over HTTPS, which keeps its own loop. A row held longer is left to that HeartbeatAck.
+ * Between attempts the claim holds no connection and no claim lock, and each attempt is a whole transaction that reads
+ * the real state again, so a pause or another claim that came meanwhile is seen.
+ */
+const LOST_LOCK_RETRY_MS = 5_000;
+const LOST_LOCK_FIRST_WAIT_MS = 50;
+const LOST_LOCK_MAX_WAIT_MS = 1_000;
+
 /** The runner asking for work, as the claim route knows it. */
 export interface ClaimingRunner {
   id: string;
@@ -193,10 +207,17 @@ export class QueueService {
     hungUp?: AbortSignal,
   ): Promise<ClaimedSession | null> {
     const deadline = Date.now() + waitMs;
+    const lockDeadline = Date.now() + LOST_LOCK_RETRY_MS;
+    let lockWait = LOST_LOCK_FIRST_WAIT_MS;
     for (;;) {
       if (hungUp?.aborted) return null;
       const job = await this.trySessionClaim(runner, supportsTerminalHandoff, supportsSourcePin, hungUp);
-      if (job) return job;
+      if (job && job !== LOST_LOCK) return job;
+      if (job === LOST_LOCK && waitMs === 0 && Date.now() < lockDeadline) {
+        await delay(lockWait, undefined, { signal: hungUp }).catch(() => undefined);
+        lockWait = Math.min(lockWait * 2, LOST_LOCK_MAX_WAIT_MS);
+        continue;
+      }
       const remaining = deadline - Date.now();
       if (remaining <= 0) return null;
       await this.waitForSignal(Math.min(remaining, 5000), hungUp);
@@ -371,7 +392,7 @@ export class QueueService {
     supportsTerminalHandoff: boolean,
     supportsSourcePin: boolean,
     hungUp?: AbortSignal,
-  ): Promise<ClaimedSession | null> {
+  ): Promise<ClaimedSession | typeof LOST_LOCK | null> {
     const supportsOpenCode = runner.supportedProviders?.includes(AgentProvider.OPENCODE) ?? false;
     const supportsAntigravity = runner.supportedProviders?.includes(AgentProvider.ANTIGRAVITY) ?? false;
     // A runner that declares dsh but whose engine report does not show the CLI ready
@@ -393,8 +414,8 @@ export class QueueService {
     // Uses FOR UPDATE NOWAIT: when a concurrent transaction (e.g. activateLeases) holds
     // a row lock on the candidate, Postgres immediately raises lock_not_available (55P03)
     // instead of silently skipping the row (SKIP LOCKED) or blocking. The catch clause
-    // returns null so the outer claimSessionForRunner loop waits on the signal and
-    // retries; this prevents lock storms from starving new sessions indefinitely.
+    // returns LOST_LOCK so the outer claimSessionForRunner loop retries; this prevents
+    // lock storms from starving new sessions indefinitely.
     try {
     // Retried whole. A claim is a compare-and-set on rows this closure locks and re-reads: an
     // attempt the server discarded claimed nothing, so a re-run competes from the real state. The
@@ -739,15 +760,15 @@ export class QueueService {
     } catch (err: any) {
       // pg error 55P03 = lock_not_available: FOR UPDATE NOWAIT cannot lock the
       // candidate row because a concurrent transaction (e.g. activateLeases in a
-      // reclaim storm) holds it. Return null so the outer claimSessionForRunner
-      // loop waits on the signal and retries instead of starving forever.
+      // reclaim storm) holds it. Say so, so the outer claimSessionForRunner loop
+      // retries instead of starving forever.
       if (
         err?.code === '55P03' ||
         err?.meta?.code === '55P03' ||
         String(err?.message ?? '').includes('55P03') ||
         String(err?.message ?? '').includes('lock_not_available')
       ) {
-        return null;
+        return LOST_LOCK;
       }
       throw err;
     }
