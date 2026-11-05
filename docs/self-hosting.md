@@ -486,7 +486,7 @@ An upgrade that sets the link up prints these lines:
 ```
 
 **Keep the new `.env` lines with the deployment's other secrets**, in the backup you already keep of `JWT_SECRET` and
-`PROVIDER_SECRET_KEY`. Losing them costs little: replacing them moves every runner to new tokens within the hour.
+`PROVIDER_SECRET_KEY`. Losing them costs little: with new ones in `.env`, runners fetch new tokens by themselves.
 
 **Your first upgrade across this change.** Where `/upgrade`'s script is older than this change and pulls the new commit
 itself, as it does in a checkout on `main`, it finishes the steps it started with: everything upgrades, it says
