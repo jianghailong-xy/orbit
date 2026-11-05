@@ -1,0 +1,1767 @@
+diff --git a/src/android/app/src/androidTest/kotlin/io/orbitd/android/directory/RowSwipeDeviceTest.kt b/src/android/app/src/androidTest/kotlin/io/orbitd/android/directory/RowSwipeDeviceTest.kt
+new file mode 100644
+index 0000000..f38c2b0
+--- /dev/null
++++ b/src/android/app/src/androidTest/kotlin/io/orbitd/android/directory/RowSwipeDeviceTest.kt
+@@ -0,0 +1,489 @@
++package io.orbitd.android.directory
++
++import android.graphics.Bitmap
++import android.os.ParcelFileDescriptor
++import android.os.SystemClock
++import android.view.InputDevice
++import android.view.KeyEvent
++import android.view.MotionEvent
++import androidx.compose.ui.geometry.Rect
++import androidx.compose.ui.test.*
++import androidx.compose.ui.test.junit4.createEmptyComposeRule
++import androidx.core.view.ViewCompat
++import androidx.core.view.WindowInsetsCompat
++import androidx.test.core.app.ActivityScenario
++import androidx.test.ext.junit.runners.AndroidJUnit4
++import androidx.test.platform.app.InstrumentationRegistry
++import io.orbitd.android.MainActivity
++import io.orbitd.android.OrbitApplication
++import io.orbitd.android.core.auth.AuthState
++import io.orbitd.android.core.net.ServerAddress
++import io.orbitd.android.hasRowMenu
++import io.orbitd.android.navigation.ObjectId
++import java.io.File
++import java.time.Instant
++import java.util.concurrent.CopyOnWriteArrayList
++import kotlin.math.roundToInt
++import kotlinx.coroutines.runBlocking
++import okhttp3.mockwebserver.*
++import org.junit.Assert.*
++import org.junit.Rule
++import org.junit.Test
++import org.junit.runner.RunWith
++
++/**
++ * A session row's swipe on a device, by real touches: injected as a touchscreen's events, or sent by `input touchscreen` where the
++ * system's own edge gesture is the point, they go through the system's input pipeline, so the system's Back gesture, the drawer, the
++ * list and the row all see them as they see a finger. Over a controlled HTTP fixture, not a deployment; a step
++ * leaves a frame in files/row-swipe/<theme>, and the requests made in requests.txt.
++ */
++@RunWith(AndroidJUnit4::class)
++class RowSwipeDeviceTest {
++    @get:Rule val compose = createEmptyComposeRule()
++    private lateinit var scenario: ActivityScenario<MainActivity>
++    private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
++    private val app get() = instrumentation.targetContext.applicationContext as OrbitApplication
++    private val theme = InstrumentationRegistry.getArguments().getString("row_swipe_theme") ?: "dark"
++    private val evidence get() = File(app.filesDir, "row-swipe/$theme").also { it.mkdirs() }
++    private val notes = StringBuilder()
++    private val calls = CopyOnWriteArrayList<String>()
++
++    private val orbit = "34RowSwipeWorkspace001"; private val api = "34RowSwipeWorkspace002"; private val launch = "34RowSwipeProjectLaunch"
++    private val release = "34RowSwipeFolderRelease"
++    private val pinned = "34RowSwipeSessionPin01"; private val pricing = "34RowSwipeSessionPrc02"; private val jobs = "34RowSwipeSessionJob03"
++    private val login = "34RowSwipeSessionLog04"; private val postgres = "34RowSwipeSessionPgc05"; private val held = "34RowSwipeSessionHld06"
++    private val notesRow = "34RowSwipeSessionNot07"; private val coordinator = "34RowSwipeSessionCrd08"; private val member = "34RowSwipeSessionMem09"
++    private val filed = "34RowSwipeSessionFld10"; private val shipped = "34RowSwipeSessionShp11"; private val badge = "34RowSwipeSessionBdg12"
++    private val old = "34RowSwipeSessionOld13"; private val scratch = "34RowSwipeSessionSct14"; private val tracker = "34RowSwipeSessionTrk15"
++    private val ids = listOf(orbit, api, launch, release, pinned, pricing, jobs, login, postgres, held, notesRow, coordinator, member, filed, shipped, badge, old, scratch, tracker)
++
++    /** The fixture's lists, moved by the writes it is asked for. */
++    @Volatile private var open = listOf(pinned, pricing, jobs, login, postgres, held, notesRow, coordinator, member, filed, tracker)
++    @Volatile private var completed = listOf(shipped, badge)
++    @Volatile private var trash = listOf(old, scratch)
++    @Volatile private var pins = setOf(pinned)
++
++    @Test fun aRowSwipesAsIosDoes() {
++        runBlocking { app.session.restore() }
++        compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
++        assertTrue("Requires a dedicated signed-out debug installation", app.session.state.value is AuthState.SignedOut)
++        evidence.listFiles()?.forEach { it.delete() }
++        MockWebServer().use { server ->
++            server.dispatcher = fixture()
++            try {
++                runBlocking { app.session.login(ServerAddress.parse(server.url("/").toString(), true), "rows@example.test", "row-swipe-fixture-password") }
++                scenario = ActivityScenario.launch(MainActivity::class.java)
++                compose.waitUntil(30_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
++                await { exists(rowOf("Partition the jobs table")) }
++                note("window ${window()} density ${instrumentation.targetContext.resources.displayMetrics.density} gestures ${gestureInsets()} navigation_mode=${shell("settings get secure navigation_mode").trim()}")
++                note("row heights: ${listOf("Partition the jobs table", "Polish the pricing page").map { bounds(rowOf(it)).height }} px; project row ${bounds(projectRow()).height} px")
++                capture("01-rest")
++
++                // Open · left: Share · Move · Delete, left to right. However long the swipe, it never fires Delete.
++                swipeLeft("Partition the jobs table")
++                await { exists(button("Delete")) }
++                note("buttons: ${listOf("Share", "Move", "Delete").map { bounds(button(it)) }}")
++                capture("02-open-left")
++                val order = listOf("Share", "Move", "Delete").map { compose.onNode(button(it)).fetchSemanticsNode().boundsInWindow.left }
++                assertEquals("left to right the row reads Share · Move · Delete", order.sorted(), order)
++                closeByTapOn("Polish the pricing page")
++                longSwipeLeft("Partition the jobs table")
++                await { exists(button("Delete")) }
++                assertFalse("a long swipe never fires Delete", calls.any { it.startsWith("DELETE") })
++                capture("03-open-left-long-swipe")
++
++                // While one is open a tap on any row only shuts it.
++                closeByTapOn("Polish the pricing page")
++                capture("04-shut-by-a-tap")
++
++                // Open · right: Complete · Pin. A second row opening shuts the first.
++                swipeRight("Partition the jobs table")
++                await { exists(button("Complete")) && exists(button("Pin")) }
++                capture("05-open-right")
++                swipeLeft("Polish the pricing page")
++                await { exists(button("Share")) && !exists(button("Complete")) }
++                capture("06-second-row-shuts-the-first")
++                closeByTapOn("Polish the pricing page")
++
++                // Held past the full-swipe point, the button that will run grows and its neighbour steps aside; letting go runs it.
++                val row = bounds(rowOf("Partition the jobs table"))
++                val lift = drag(row.width * 0.2f, row.width * 0.86f, row.center.y, up = false)
++                capture("07-full-swipe-armed")
++                assertFalse("nothing runs until the finger lifts", calls.any { it.endsWith("/complete") })
++                lift()
++                await { calls.any { it == "POST /api/sessions/$jobs/complete" } }
++                await { toastShows("Session completed") }
++                capture("08-full-swipe-completed")
++                await { !exists(rowOf("Partition the jobs table")) }
++                dismissToasts()
++
++                // A row that can't complete keeps the button, greyed, and a full swipe only opens it.
++                longSwipeRight("Held by a review")
++                await { exists(button("Complete")) }
++                compose.onNode(button("Complete")).assertIsNotEnabled()
++                assertFalse(calls.any { it == "POST /api/sessions/$held/complete" })
++                capture("09-cannot-complete")
++                closeByTapOn("Polish the pricing page")
++
++                // Delete: a press, and the toast offers Undo.
++                swipeLeft("Upgrade the Postgres client")
++                await { exists(button("Delete")) }
++                compose.onNode(button("Delete")).performClick()
++                await { calls.any { it == "DELETE /api/sessions/$postgres" } }
++                await { toastShows("Moved to Trash") }
++                capture("10-delete-pressed")
++                await { !exists(rowOf("Upgrade the Postgres client")) }
++                dismissToasts()
++
++                // Share and Move open their panels.
++                swipeLeft("Polish the pricing page")
++                await { exists(button("Move")) }
++                compose.onNode(button("Move")).performClick()
++                await { exists(hasText("Move session")) }
++                capture("11-move-panel")
++                compose.onNode(hasText("Close")).performClick(); settle()
++                swipeLeft("Polish the pricing page")
++                await { exists(button("Share")) }
++                compose.onNode(button("Share")).performClick()
++                await { exists(hasText("Share session")) }
++                capture("12-share-panel")
++                compose.onNode(hasText("Close")).performClick(); settle()
++
++                // Pinned: Unpin in Pin's place.
++                swipeRight("Release checklist")
++                await { exists(button("Unpin")) }
++                capture("13-pinned-row-right")
++                closeByTapOn("Polish the pricing page")
++
++                // The long press: the same list, with Rename… and Tags… as its own.
++                longPress("Polish the pricing page")
++                await { exists(hasText("Rename…")) }
++                capture("14-long-press-menu")
++                compose.onNode(hasText("Close")).performClick(); settle()
++
++                // A project's row: Pin on one side and Move on the other, on its coordinator.
++                await { exists(projectRow()) }
++                swipeRight(projectRow())
++                await { exists(button("Pin")) && !exists(button("Complete")) }
++                capture("15-project-row-right")
++                closeByTapOn("Polish the pricing page")
++                swipeLeft(projectRow())
++                await { exists(button("Move")) && !exists(button("Delete")) }
++                capture("16-project-row-left")
++                closeByTapOn("Polish the pricing page")
++
++                // The project's sessions page: a member has no Move; its coordinator does.
++                compose.onNode(projectRow()).performClick(); settle()
++                await { exists(hasTestTag("project-sessions")) && exists(rowOf("Wire tests")) }
++                swipeLeft("Wire tests")
++                await { exists(button("Delete")) }
++                assertFalse("a project's member offers no Move", exists(button("Move")))
++                capture("17-member-left-no-move")
++                pressBack(); await { !exists(button("Delete")) }
++                assertTrue("Back shut the row and stayed on the page", exists(hasTestTag("project-sessions")))
++                swipeLeft("Coordinate launch")
++                await { exists(button("Move")) }
++                capture("18-coordinator-left")
++                pressBack(); await { !exists(button("Move")) }
++                pressBack(); await { !exists(hasTestTag("project-sessions")) }
++
++                // A folder's page swipes as the list does.
++                compose.onNodeWithTag("folder-row:$release").performClick(); settle()
++                await { exists(rowOf("Cut the beta")) }
++                swipeRight("Cut the beta")
++                await { exists(button("Complete")) }
++                capture("19-folder-page-right")
++                pressBack(); await { !exists(button("Complete")) }
++                pressBack(); await { exists(rowOf("Polish the pricing page")) }
++
++                // Completed: Move to Open · Pin, and a full swipe moves it back; the other side as Open's.
++                pickScope("Completed")
++                await { exists(rowOf("Shipped docs")) }
++                swipeRight("Shipped docs")
++                await { exists(button("Move to Open")) && exists(button("Pin")) }
++                capture("20-completed-right")
++                closeByTapOn("Fix the push badge")
++                swipeLeft("Shipped docs")
++                await { exists(button("Delete")) && exists(button("Share")) && exists(button("Move")) }
++                capture("21-completed-left")
++                closeByTapOn("Fix the push badge")
++                longSwipeRight("Fix the push badge")
++                await { calls.any { it == "POST /api/sessions/$badge/restore" } }
++                await { toastShows("Moved to Open") }
++                dismissToasts()
++
++                // Trash: Move to Open alone, and Delete Permanently alone, which asks first.
++                pickScope("Trash")
++                await { exists(rowOf("Old experiment")) }
++                swipeRight("Old experiment")
++                await { exists(button("Move to Open")) && !exists(button("Pin")) }
++                capture("22-trash-right")
++                closeByTapOn("Scratch notes")
++                longSwipeLeft("Old experiment")
++                await { exists(button("Delete Permanently")) }
++                assertFalse("a full swipe never purges", calls.any { it.endsWith("/purge") })
++                capture("23-trash-left")
++                compose.onNode(button("Delete Permanently")).performClick()
++                await { exists(hasText("Delete permanently?")) }
++                assertFalse("it asks first", calls.any { it.endsWith("/purge") })
++                capture("24-trash-asks-first")
++                compose.onNode(hasText("Cancel")).performClick(); settle()
++                pickScope("Open")
++                await { exists(rowOf("Polish the pricing page")) }
++
++                // A vertical drag on a row is the list's; the list scrolling shuts an open row.
++                val before = bounds(rowOf("Polish the pricing page"))
++                swipeLeft("Polish the pricing page")
++                await { exists(button("Delete")) }
++                val middle = window().second / 2
++                drag(before.right - 200, middle + 300f, before.right - 190, middle - 300f)
++                await { !exists(button("Delete")) }
++                capture("25-a-scroll-shuts-the-row")
++                drag(before.right - 200, middle - 300f, before.right - 190, middle + 500f)
++
++                // The edges: what the drawer and the system keep (docs/mocks/android-row-swipe).
++                edges()
++
++                note("calls\n" + calls.filter { !it.startsWith("GET") }.joinToString("\n"))
++                File(evidence, "result.txt").writeText("PASS\n")
++            } catch (failure: Throwable) {
++                File(evidence, "failure.txt").writeText(failure.stackTraceToString())
++                runCatching { capture("failure") }
++                throw failure
++            } finally {
++                File(evidence, "notes.txt").writeText(notes.toString())
++                File(evidence, "requests.txt").writeText(calls.joinToString("\n"))
++                runBlocking { app.session.logout() }
++                if (::scenario.isInitialized) scenario.close()
++                app.realtime.selectSession(null)
++            }
++        }
++    }
++
++    /** Where a right swipe starts decides whose it is. The positions are the window's pixels; the strip is 18 dp past the system's gesture inset. */
++    private fun edges() {
++        val density = instrumentation.targetContext.resources.displayMetrics.density
++        val (left, _) = gestureInsets()
++        val row = bounds(rowOf("Polish the pricing page"))
++        val y = row.center.y.roundToInt()
++        val strip = left + (9 * density).roundToInt()
++        note("edge: strip start x=$strip (system inset $left, 18 dp strip)")
++
++        // Just past the system's inset: the drawer.
++        assertFalse("the drawer starts shut", drawerOpen())
++        drag(strip.toFloat(), row.width * 0.75f, y.toFloat())
++        await { drawerOpen() }
++        assertFalse("the row stayed shut", exists(button("Complete")))
++        capture("26-right-swipe-in-the-strip-opens-the-drawer")
++        pressBack(); await { !drawerOpen() }
++
++        // On the row's middle: the row.
++        swipeRight("Polish the pricing page")
++        await { exists(button("Complete")) }
++        assertFalse("the drawer stayed shut", drawerOpen())
++        closeByTapOn("Trace the slow login")
++
++        // On what has no swipe: the drawer, as today.
++        assertFalse("the drawer starts shut", drawerOpen())
++        val folder = bounds(hasTestTag("folder-row:$release"))
++        val folderY = folder.center.y.roundToInt()
++        drag(folder.width * 0.3f, folder.width * 0.85f, folderY.toFloat())
++        await { drawerOpen() }
++        capture("27-right-swipe-on-a-folder-row-opens-the-drawer")
++        pressBack(); await { !drawerOpen() }
++
++        // The system's own edge, where it has one: Back, not the row. With the list as the root there is nothing to go back to and
++        // the system would leave the app, so this is tried over a page pushed on the list.
++        if (left > 0) {
++            compose.onNode(projectRow()).performClick(); settle()
++            await { exists(hasTestTag("project-sessions")) && exists(rowOf("Wire tests")) }
++            val member = bounds(rowOf("Wire tests"))
++            shell("input touchscreen swipe 2 ${member.center.y.roundToInt()} ${(member.width * 0.7f).roundToInt()} ${member.center.y.roundToInt()} 350")
++            await { !exists(hasTestTag("project-sessions")) }
++            assertFalse("the row did not take it", exists(button("Complete")))
++            note("edge: the system's Back took a right swipe from x=2")
++            capture("28-right-swipe-from-the-screen-edge-is-system-back")
++            // And a left swipe from the right edge.
++            compose.onNode(projectRow()).performClick(); settle()
++            await { exists(hasTestTag("project-sessions")) && exists(rowOf("Wire tests")) }
++            val w = window().first
++            shell("input touchscreen swipe ${w - 2} ${member.center.y.roundToInt()} ${(w * 0.3f).roundToInt()} ${member.center.y.roundToInt()} 350")
++            await { !exists(hasTestTag("project-sessions")) }
++            assertFalse("the row did not take it", exists(button("Delete")))
++            note("edge: the system's Back took a left swipe from x=${w - 2}")
++        } else note("edge: no system gesture inset on this navigation mode")
++    }
++
++    // ---- The fixture. ----
++
++    private fun ago(minutes: Long) = Instant.now().minusSeconds(minutes * 60).toString()
++    private fun membership(role: String) = """"projectMembership":{"projectId":"$launch","projectTitle":"Launch","projectStatus":"OPEN","role":"$role"}"""
++    private fun row(id: String, title: String, line: String, minutes: Long, extra: String = "", workspace: String = orbit): String {
++        val lifecycle = when (id) { in completed -> "COMPLETED"; in trash -> "TRASH"; else -> "OPEN" }
++        val canComplete = id != held && lifecycle == "OPEN"
++        return """{"id":"$id","title":"$title","status":"AWAITING_INPUT","runState":"AWAITING_INPUT","lifecycleState":"$lifecycle","agent":{"id":"$workspace","name":"orbit"},
++            "agentId":"$workspace","createdAt":"${ago(6000)}","lastTurnAt":"${ago(minutes)}","pendingApprovals":0,"tags":[],"lastAssistantText":"$line",
++            ${if (id in pins) """"pinnedAt":"${ago(9000)}",""" else ""}
++            "capabilities":{"canComplete":$canComplete,"canRestore":${lifecycle != "OPEN"}}$extra}"""
++    }
++    private fun session(id: String) = when (id) {
++        pinned -> row(id, "Release checklist", "The checklist is posted; two items wait on the store review.", 400)
++        pricing -> row(id, "Polish the pricing page", "The new table is in; checking the narrow layout next.", 6)
++        jobs -> row(id, "Partition the jobs table", "Done: jobs are partitioned by month and the old table is gone.", 25)
++        login -> row(id, "Trace the slow login", "It was the token refresh; the fix is on the branch.", 70)
++        postgres -> row(id, "Upgrade the Postgres client", "Upgraded. Nothing else in the lockfile moved.", 95)
++        held -> row(id, "Held by a review", "Its report is waiting on a reviewer.", 130)
++        notesRow -> row(id, "Write the upgrade notes", "Drafted the notes; waiting on the version number.", 170)
++        coordinator -> row(id, "Coordinate launch", "Three of eight tasks are done.", 15, ",${membership("COORDINATOR")}")
++        member -> row(id, "Wire tests", "All green on the branch.", 40, ",${membership("TASK")}")
++        filed -> row(id, "Cut the beta", "Tagged and building.", 210, ""","folderId":"$release"""")
++        tracker -> row(id, "Sweep the old feature flags", "Removed four flags; two are still read.", 1600)
++        shipped -> row(id, "Shipped docs", "Published.", 3000, ""","completedAt":"${ago(3000)}"""")
++        badge -> row(id, "Fix the push badge", "The count is right now.", 4400, ""","completedAt":"${ago(4400)}"""")
++        old -> row(id, "Old experiment", "Abandoned.", 5000, ""","deletedAt":"${ago(5000)}"""")
++        else -> row(id, "Scratch notes", "Nothing to keep.", 5200, ""","deletedAt":"${ago(5200)}"""")
++    }
++    private fun list(rows: List<String>) = rows.joinToString(",", "[", "]") { session(it) }
++
++    private fun fixture() = object : Dispatcher() {
++        override fun dispatch(request: RecordedRequest): MockResponse {
++            val path = request.requestUrl!!.encodedPath
++            calls += "${request.method} ${request.path}"
++            if (path == "/api/auth/methods") return MockResponse().setResponseCode(404)
++            val parts = path.removePrefix("/api/").split('/').map { part -> ids.firstOrNull { ObjectId.same(it, part) } ?: part }
++            calls[calls.size - 1] = "${request.method} /api/${parts.joinToString("/")}" + (request.requestUrl!!.query?.let { "?$it" } ?: "")
++            val view = request.requestUrl!!.queryParameter("view") ?: "open"
++            val project = request.requestUrl!!.queryParameter("projectId")
++            fun id() = parts[1]
++            val body = when {
++                path == "/api/auth/login" -> """{"accessToken":"row-swipe-access","refreshToken":"row-swipe-refresh","user":{"id":"u1","email":"rows@example.test","name":"Row swipe fixture"}}"""
++                path == "/api/users/me" -> """{"id":"u1","email":"rows@example.test","name":"Row swipe fixture","preferences":{"theme":"$theme"}}"""
++                path == "/api/workspaces" -> """[{"id":"$orbit","name":"orbit","runnerId":"r1","enabled":true,"position":0,"createdAt":"2026-10-01T01:00:00.000Z"},
++                    {"id":"$api","name":"api-server","runnerId":"r1","enabled":true,"position":1,"createdAt":"2026-10-01T02:00:00.000Z"}]"""
++                path == "/api/runners" -> """[{"id":"r1","name":"Fixture runner","online":true}]"""
++                path == "/api/session-folders" -> """[{"id":"$release","workspaceId":"$orbit","name":"Release"}]"""
++                path == "/api/sessions" && project != null -> if (view == "open") list(listOf(coordinator, member).filter { it in open }) else "[]"
++                path == "/api/sessions" -> when (view) { "open" -> list(open); "completed" -> list(completed); "trash" -> list(trash); else -> "[]" }
++                parts[0] == "sessions" && parts.size == 2 && request.method == "DELETE" -> { open = open - id(); completed = completed - id(); trash = trash + id(); "{}" }
++                parts[0] == "sessions" && parts.last() == "purge" -> { trash = trash - id(); "{}" }
++                parts[0] == "sessions" && parts.last() == "complete" -> { open = open - id(); completed = completed + id(); "{}" }
++                parts[0] == "sessions" && parts.last() == "restore" -> { completed = completed - id(); trash = trash - id(); open = open + id(); "{}" }
++                parts[0] == "sessions" && parts.last() == "pin" -> { pins = if (request.method == "POST") pins + id() else pins - id(); "{}" }
++                parts[0] == "sessions" && parts.last() == "move-targets" -> """{"workspaceId":"$orbit","folderId":null,"folders":[{"id":"$release","name":"Release","sessionCount":1}],
++                    "targets":[{"workspaceId":"$api","name":"api-server","folders":[]}]}"""
++                parts[0] == "sessions" && parts.size == 2 && request.method == "GET" -> session(id())
++                parts[0] == "sessions" && parts.last() == "events" -> return heartbeatStream()
++                parts[0] == "sessions" && parts.last() == "page" -> """{"events":[],"hasMore":false,"lastSeq":0,"latestSeq":0}"""
++                path == "/api/events" -> return heartbeatStream()
++                path == "/api/projects/sidebar" -> """[{"id":"$launch","title":"Launch","status":"OPEN","createdAt":"2026-10-01T00:00:00Z","buckets":{"running":0},
++                    "taskCounts":{"done":3,"failed":0,"total":8},"startedAt":"2026-10-02T00:00:00Z"}]"""
++                path == "/api/projects" -> """[{"id":"$launch","title":"Launch","status":"OPEN","goal":"Ship it.","createdAt":"2026-10-01T00:00:00Z"}]"""
++                parts[0] == "projects" -> "{}"
++                parts[0] == "wiki" -> return MockResponse().setResponseCode(404).setHeader("Content-Type", "application/json").setBody("""{"code":"WIKI_DISABLED","message":"The wiki is off."}""")
++                path.endsWith("/logout") -> "{}"
++                request.method == "GET" -> "[]"
++                else -> "{}"
++            }
++            return MockResponse().setHeader("Content-Type", "application/json").setBody(body)
++        }
++    }
++    private fun heartbeatStream() = MockResponse().setHeader("Content-Type", "text/event-stream").setChunkedBody(": connected\n\n".repeat(240), 13)
++        .throttleBody(13, 1, java.util.concurrent.TimeUnit.SECONDS)
++
++    // ---- Touches, through the system's input. ----
++
++    private fun shell(command: String) = instrumentation.uiAutomation.executeShellCommand(command).let { fd -> ParcelFileDescriptor.AutoCloseInputStream(fd).use { it.readBytes().decodeToString() } }
++    /**
++     * A finger's drag, injected into the system's input as a touchscreen's events with their own times: a down, [steps] moves 16 ms apart,
++     * and an up, so a loaded device cannot run them together into a tap, and the velocity is what a finger at that pace has. With [up]
++     * false the finger stays down, and the returned function lifts it.
++     */
++    private fun drag(from: Float, to: Float, y: Float, steps: Int = 12, up: Boolean = true, holdMs: Long = 0): () -> Unit =
++        drag(from, y, to, y, steps, up, holdMs)
++    private fun drag(x1: Float, y1: Float, x2: Float, y2: Float, steps: Int = 12, up: Boolean = true, holdMs: Long = 0): () -> Unit {
++        val automation = instrumentation.uiAutomation
++        val downTime = SystemClock.uptimeMillis()
++        fun send(action: Int, x: Float, y: Float) {
++            val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action, x, y, 0).apply { source = InputDevice.SOURCE_TOUCHSCREEN }
++            assertTrue("the system took the injected touch", automation.injectInputEvent(event, true))
++            event.recycle()
++        }
++        send(MotionEvent.ACTION_DOWN, x1, y1)
++        // A long press is timed on the composition's clock, which the test rule drives: it moves only when told to.
++        if (holdMs > 0) { SystemClock.sleep(holdMs); compose.mainClock.advanceTimeBy(holdMs) }
++        for (i in 1..steps) { SystemClock.sleep(16); send(MotionEvent.ACTION_MOVE, x1 + (x2 - x1) * i / steps, y1 + (y2 - y1) * i / steps) }
++        val lift = { send(MotionEvent.ACTION_UP, x2, y2); settle() }
++        if (up) lift() else { SystemClock.sleep(300); settle() }
++        return lift
++    }
++    private fun swipe(from: Float, to: Float, y: Float) { drag(from, to, y) }
++    private fun swipeLeft(title: String) = swipeLeft(rowOf(title))
++    private fun swipeLeft(row: SemanticsMatcher) { compose.onNode(row).performScrollTo(); val b = bounds(row); swipe(b.width * 0.8f, b.width * 0.35f, b.center.y) }
++    private fun swipeRight(title: String) = swipeRight(rowOf(title))
++    private fun swipeRight(row: SemanticsMatcher) { compose.onNode(row).performScrollTo(); val b = bounds(row); swipe(b.width * 0.25f, b.width * 0.65f, b.center.y) }
++    private fun longSwipeLeft(title: String) { compose.onNode(rowOf(title)).performScrollTo(); val b = bounds(rowOf(title)); swipe(b.width * 0.9f, b.width * 0.1f, b.center.y) }
++    private fun longSwipeRight(title: String) { compose.onNode(rowOf(title)).performScrollTo(); val b = bounds(rowOf(title)); swipe(b.width * 0.15f, b.width * 0.9f, b.center.y) }
++    private fun longPress(title: String) { val c = bounds(rowOf(title)).center; drag(c.x, c.x, c.y, steps = 0, holdMs = 900) }
++    private fun tapOn(row: SemanticsMatcher) { val c = bounds(row).center; drag(c.x, c.x, c.y, steps = 0) }
++    private fun closeByTapOn(title: String) {
++        tapOn(rowOf(title))
++        await { !exists(hasTestTag("row-action:Delete")) && !exists(hasTestTag("row-action:Complete")) && !exists(hasTestTag("row-action:Move to Open")) && !exists(hasTestTag("row-action:Pin")) && !exists(hasTestTag("row-action:Move")) && !exists(hasTestTag("row-action:Delete Permanently")) }
++        assertTrue("the tap opened nothing", exists(rowOf(title)))
++    }
++    private fun pressBack() { instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK); settle() }
++    private fun pickScope(name: String) {
++        compose.onNode(hasContentDescription("Session scope", substring = true)).performClick(); settle()
++        compose.onNode(hasText(name) and hasAnyAncestor(isPopup())).performClick(); settle()
++    }
++
++    // ---- What is on screen. ----
++
++    private fun rowOf(title: String) = hasRowMenu("Options for $title")
++    private fun projectRow() = hasTestTag("project-row:$launch")
++    private fun button(title: String) = hasTestTag("row-action:$title")
++    private fun bounds(matcher: SemanticsMatcher): Rect = compose.onNode(matcher).fetchSemanticsNode().boundsInWindow
++    /** The closed drawer stays composed a sheet's width off screen, so its rows are found either way: open is on screen. Its position,
++     * not its bounds, which are clipped to the window and so read 0 off screen too. */
++    private fun drawerOpen() = compose.onAllNodes(hasText("Tasks")).fetchSemanticsNodes().any { it.positionInWindow.x >= 0f }
++    private fun toastShows(text: String) = exists(hasText(text) and hasAnyAncestor(hasTestTag("toast")))
++    private fun dismissToasts() {
++        val dismiss = hasContentDescription("Dismiss") and hasAnyAncestor(hasTestTag("toast"))
++        compose.waitUntil(20_000) { !exists(hasTestTag("toast")) || exists(dismiss) }
++        if (exists(dismiss)) compose.onAllNodes(dismiss).onFirst().performClick()
++        compose.waitUntil(20_000) { !exists(hasTestTag("toast")) }
++    }
++    private fun window(): Pair<Int, Int> { var size = 0 to 0; scenario.onActivity { size = it.window.decorView.width to it.window.decorView.height }; return size }
++    private fun gestureInsets(): Pair<Int, Int> {
++        var insets = 0 to 0
++        scenario.onActivity { activity ->
++            val g = ViewCompat.getRootWindowInsets(activity.window.decorView)?.getInsets(WindowInsetsCompat.Type.systemGestures())
++            insets = (g?.left ?: 0) to (g?.right ?: 0)
++        }
++        return insets
++    }
++    private fun exists(matcher: SemanticsMatcher) = compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
++    private fun await(condition: () -> Boolean) = compose.waitUntil(30_000, condition)
++    private fun note(line: String) { notes.appendLine(line) }
++    private fun settle() {
++        compose.waitForIdle()
++        instrumentation.waitForIdleSync()
++        instrumentation.uiAutomation.waitForIdle(300, 5_000)
++    }
++    /** The screen once it has stopped changing: two shots in a row alike, since the emulator's frames lag the app under load. */
++    private fun capture(name: String) {
++        compose.waitForIdle()
++        var last: Bitmap? = null
++        var shot: Bitmap? = null
++        for (attempt in 1..12) {
++            SystemClock.sleep(350)
++            val now = instrumentation.uiAutomation.takeScreenshot() ?: continue
++            if (last != null && last.sameAs(now)) { shot = now; break }
++            last?.recycle(); last = now
++        }
++        val frame = shot ?: last ?: run { File(evidence, "$name.missing").writeText("takeScreenshot returned null\n"); return }
++        if (shot == null) note("$name: the screen was still changing after 12 shots")
++        File(evidence, "$name.png").outputStream().use { frame.compress(Bitmap.CompressFormat.PNG, 100, it) }
++        if (last !== frame) last?.recycle()
++        frame.recycle()
++    }
++}
+diff --git a/src/android/app/src/main/kotlin/io/orbitd/android/directory/DirectoryActions.kt b/src/android/app/src/main/kotlin/io/orbitd/android/directory/DirectoryActions.kt
+index 225a6e6..9c9bef5 100644
+--- a/src/android/app/src/main/kotlin/io/orbitd/android/directory/DirectoryActions.kt
++++ b/src/android/app/src/main/kotlin/io/orbitd/android/directory/DirectoryActions.kt
+@@ -12,7 +12,6 @@ import androidx.compose.ui.unit.dp
+ import androidx.compose.ui.platform.LocalContext
+ import io.orbitd.android.OrbitApplication
+ import io.orbitd.android.core.net.ApiError
+-import io.orbitd.android.core.protocol.SessionAction
+ import io.orbitd.android.navigation.ObjectId
+ import io.orbitd.android.projects.failureReason
+ import io.orbitd.android.toast.OrbitToasts
+@@ -122,26 +121,12 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
+                     when (dialog) {
+                         is DirectoryDialog.SessionMenu -> {
+                             val s = dialog.session
+-                            if (dialog.view != SessionView.TRASH) {
+-                                ActionButton("Rename", canWrite) { setDialog(DirectoryDialog.Rename(s)) }
+-                                ActionButton(if (s.pinnedAt == null) "Pin" else "Unpin", canWrite) { perform { api.pin(s.id, s.pinnedAt == null) } }
+-                                ActionButton("Tags…", canWrite) { setDialog(DirectoryDialog.Tags(s)) }
+-                            }
+-                            val positive = if (dialog.view == SessionView.OPEN) SessionAction.COMPLETE else SessionAction.RESTORE
+-                            val allowed = data.fresh && s.capabilities?.allows(positive) == true
+-                            ActionButton(if (positive == SessionAction.COMPLETE) "Complete" else "Move to Open", !busy && allowed) {
+-                                setDialog(null)
+-                                if (positive == SessionAction.COMPLETE) actions.complete(s.id, s.title) else actions.restore(s.id, s.title)
+-                            }
+-                            if (!allowed) Text("This action isn't available in the current session state.", style = MaterialTheme.typography.bodySmall)
+-                            if (dialog.view != SessionView.TRASH) {
+-                                ActionButton("Share…", canWrite) { setDialog(DirectoryDialog.Share(s)) }
+-                                // A project's members are listed where its coordinator is, so of its sessions only the coordinator offers Move… (A05-6).
+-                                if (s.projectMembership?.isCoordinator != false) ActionButton("Move…", canWrite) { setDialog(DirectoryDialog.Move(s)) }
+-                            }
+-                            ActionButton(if (dialog.view == SessionView.TRASH) "Delete Permanently…" else "Move to Trash", canWrite) {
+-                                if (dialog.view == SessionView.TRASH) setDialog(DirectoryDialog.Purge(s))
+-                                else { setDialog(null); actions.trash(s.id, s.title) }
++                            SessionRowActionList.menu(s, dialog.view).forEach { item ->
++                                if (item.destructive) HorizontalDivider()
++                                ActionButton(item.menuTitle, !busy && SessionRowActionList.enabled(item, s), danger = item.destructive) {
++                                    setDialog(null)
++                                    SessionRowActionList.press(item, s, actions, setDialog)
++                                }
+                             }
+                         }
+                         is DirectoryDialog.Rename -> {
+@@ -215,8 +200,9 @@ private fun MoveChoices(session: DirectorySession, api: DirectoryApi, enabled: B
+ }
+ 
+ @Composable
+-internal fun ActionButton(text: String, enabled: Boolean, action: () -> Unit) {
+-    TextButton(onClick = action, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(text) }
++internal fun ActionButton(text: String, enabled: Boolean, danger: Boolean = false, action: () -> Unit) {
++    TextButton(onClick = action, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
++        colors = if (danger) ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error) else ButtonDefaults.textButtonColors()) { Text(text) }
+ }
+ 
+ /** A question the directory asks before a press it cannot take back: the title, what happens, and the press beside Cancel. */
+diff --git a/src/android/app/src/main/kotlin/io/orbitd/android/directory/DirectoryScreen.kt b/src/android/app/src/main/kotlin/io/orbitd/android/directory/DirectoryScreen.kt
+index e95c927..c6db318 100644
+--- a/src/android/app/src/main/kotlin/io/orbitd/android/directory/DirectoryScreen.kt
++++ b/src/android/app/src/main/kotlin/io/orbitd/android/directory/DirectoryScreen.kt
+@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
+ import androidx.compose.foundation.lazy.LazyListItemInfo
+ import androidx.compose.foundation.lazy.LazyListState
+ import androidx.compose.foundation.lazy.items
++import androidx.compose.foundation.lazy.itemsIndexed
+ import androidx.compose.foundation.lazy.rememberLazyListState
+ import androidx.compose.material3.*
+ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+@@ -67,6 +68,10 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
+     var action by remember { mutableStateOf<DirectoryDialog?>(null) }
+     var projectMenu by remember { mutableStateOf<SessionProjectRow?>(null) }
+     var pulling by remember { mutableStateOf(false) }
++    val swipe = remember { RowSwipeState() }
++    RowSwipeBack(swipe)
++    val refreshed by rememberUpdatedState(refresh)
++    val rowWrites = remember(api) { SessionActions(api, app) { refreshed() } }
+     var pinnedCollapsed by rememberPinnedCollapsed()
+     val sidebar by rememberProjectSidebar(api, revision)
+     val asks by app.realtime.directoryAsks.collectAsState()
+@@ -167,16 +172,25 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
+                                         else -> ListHeading(group.title)
+                                     }
+                                 }
+-                                if (!pinned || !pinnedCollapsed) items(group.sessions, key = { it.id }) { session ->
++                                if (!pinned || !pinnedCollapsed) itemsIndexed(group.sessions, key = { _, session -> session.id }) { index, session ->
+                                     val project = content.projects[session.id]
+-                                    if (project != null) SessionProjectRowView(project, { open(OrbitRoute(Destination.PROJECT_SESSIONS, project.projectId, workspace, origin = Origin.LIST)) }) {
+-                                        projectMenu = project
++                                    if (project != null) {
++                                        val rowActions = SessionRowActionList.projectRowActions(project, pin = { rowWrites.pin(it.id, it.pinnedAt == null) }, move = { action = DirectoryDialog.Move(it) })
++                                        SwipeRow(session.id, swipe, rowActions) {
++                                            SessionProjectRowView(project, { open(OrbitRoute(Destination.PROJECT_SESSIONS, project.projectId, workspace, origin = Origin.LIST)) }, rowActions.accessibility) {
++                                                projectMenu = project
++                                            }
++                                        }
++                                    } else {
++                                        val rowActions = SessionRowActionList.rowActions(session, view, rowWrites) { action = it }
++                                        SwipeRow(session.id, swipe, rowActions) {
++                                            SessionRow(session, machine, { open(OrbitRoute(Destination.SESSION, session.id, workspace, folderId)) },
++                                                deleted = view == SessionView.TRASH, watching = watching[watchKey(session.id)], actions = rowActions.accessibility) {
++                                                action = DirectoryDialog.SessionMenu(session, view)
++                                            }
++                                        }
+                                     }
+-                                    else SessionRow(session, machine, { open(OrbitRoute(Destination.SESSION, session.id, workspace, folderId)) },
+-                                        deleted = view == SessionView.TRASH, watching = watching[watchKey(session.id)]) {
+-                                        action = DirectoryDialog.SessionMenu(session, view)
+-                                    }
+-                                    RowDivider()
++                                    RowDivider(hidden = swipe.hidesDivider(session.id, group.sessions.getOrNull(index + 1)?.id))
+                                 }
+                             }
+                             // iOS's overlay on an empty list: Loading…, or that there is nothing. A read that failed says so.
+@@ -218,7 +232,7 @@ private val SEARCH_FIELD_ROOM = 84.dp
+ 
+ /** The hairline between a list's rows, from the rows' leading edge. */
+ @Composable
+-internal fun RowDivider() = HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
++internal fun RowDivider(hidden: Boolean = false) = HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (hidden) 0f else 0.5f))
+ 
+ @Composable
+ fun SearchScreen(api: DirectoryApi, open: (OrbitRoute) -> Unit) {
+diff --git a/src/android/app/src/main/kotlin/io/orbitd/android/directory/RowSwipe.kt b/src/android/app/src/main/kotlin/io/orbitd/android/directory/RowSwipe.kt
+new file mode 100644
+index 0000000..07bbcc3
+--- /dev/null
++++ b/src/android/app/src/main/kotlin/io/orbitd/android/directory/RowSwipe.kt
+@@ -0,0 +1,443 @@
++package io.orbitd.android.directory
++
++import android.view.View
++import androidx.annotation.DrawableRes
++import androidx.activity.compose.BackHandler
++import androidx.compose.animation.core.AnimationSpec
++import androidx.compose.animation.core.animate
++import androidx.compose.animation.core.animateFloatAsState
++import androidx.compose.animation.core.EaseOut
++import androidx.compose.animation.core.snap
++import androidx.compose.animation.core.spring
++import androidx.compose.animation.core.tween
++import androidx.compose.foundation.background
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.gestures.awaitEachGesture
++import androidx.compose.foundation.gestures.awaitFirstDown
++import androidx.compose.foundation.gestures.waitForUpOrCancellation
++import androidx.compose.foundation.interaction.MutableInteractionSource
++import androidx.compose.foundation.interaction.collectIsPressedAsState
++import androidx.compose.foundation.layout.*
++import androidx.compose.foundation.shape.CircleShape
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.material3.Icon
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.runtime.*
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.clipToBounds
++import androidx.compose.ui.draw.drawBehind
++import androidx.compose.ui.geometry.CornerRadius
++import androidx.compose.ui.geometry.Offset
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.graphicsLayer
++import androidx.compose.ui.graphics.luminance
++import androidx.compose.ui.hapticfeedback.HapticFeedbackType
++import androidx.compose.ui.input.pointer.PointerEventPass
++import androidx.compose.ui.input.pointer.PointerInputScope
++import androidx.compose.ui.input.pointer.positionChange
++import androidx.compose.ui.input.pointer.pointerInput
++import androidx.compose.ui.input.pointer.util.VelocityTracker
++import androidx.compose.ui.layout.LayoutCoordinates
++import androidx.compose.ui.layout.onGloballyPositioned
++import androidx.compose.ui.layout.onPlaced
++import androidx.compose.ui.layout.onSizeChanged
++import androidx.compose.ui.layout.positionInWindow
++import androidx.compose.ui.platform.LocalDensity
++import androidx.compose.ui.platform.LocalHapticFeedback
++import androidx.compose.ui.platform.LocalLayoutDirection
++import androidx.compose.ui.platform.LocalView
++import androidx.compose.ui.platform.testTag
++import androidx.compose.ui.res.painterResource
++import androidx.compose.ui.semantics.CustomAccessibilityAction
++import androidx.compose.ui.semantics.Role
++import androidx.compose.ui.text.TextStyle
++import androidx.compose.ui.text.style.TextOverflow
++import androidx.compose.ui.unit.Density
++import androidx.compose.ui.unit.IntOffset
++import androidx.compose.ui.unit.LayoutDirection
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.sp
++import androidx.core.view.ViewCompat
++import androidx.core.view.WindowInsetsCompat
++import kotlin.math.abs
++import kotlin.math.max
++import kotlin.math.min
++import kotlin.math.roundToInt
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.launch
++
++/**
++ * Where a swiped row goes under the finger and when it is let go: OrbitKit `RowSwipeGeometry`, in dp where iOS has points. Offsets are
++ * the row's displacement: positive slides it toward the end to show the leading actions, negative toward the start to show the
++ * trailing ones. A side's width is how far the row slides to show all of its buttons, margins included ([openWidth]).
++ */
++internal data class RowSwipeGeometry(val leadingWidth: Double, val trailingWidth: Double, val rowWidth: Double, val leadingFullSwipe: Boolean) {
++    enum class Rest { CLOSED, LEADING, TRAILING, FULL_SWIPE }
++
++    /** One-to-one up to either side's width, and past it only grudgingly, except toward a full swipe, which follows the finger. */
++    fun dragged(raw: Double): Double = when {
++        raw > leadingWidth -> if (leadingFullSwipe && leadingWidth > 0) raw else leadingWidth + (raw - leadingWidth) * RESISTANCE
++        raw < -trailingWidth -> -trailingWidth + (raw + trailingWidth) * RESISTANCE
++        else -> raw
++    }
++
++    /** Past this, letting go performs the first leading action: over halfway across, and never before a slot beyond the open buttons. */
++    val fullSwipePoint: Double get() = max(leadingWidth + SLOT, rowWidth * 0.6)
++
++    fun isFullSwipe(offset: Double) = leadingFullSwipe && leadingWidth > 0 && offset >= fullSwipePoint
++
++    /** Open if it was more than half way out or flicked outward, shut if it was flicked back or barely moved. */
++    fun rest(offset: Double, velocity: Double): Rest {
++        if (isFullSwipe(offset)) return Rest.FULL_SWIPE
++        if (offset > 0 && leadingWidth > 0) {
++            if (velocity > FLICK) return Rest.LEADING
++            if (velocity < -FLICK) return Rest.CLOSED
++            return if (offset > leadingWidth / 2) Rest.LEADING else Rest.CLOSED
++        }
++        if (offset < 0 && trailingWidth > 0) {
++            if (velocity < -FLICK) return Rest.TRAILING
++            if (velocity > FLICK) return Rest.CLOSED
++            return if (-offset > trailingWidth / 2) Rest.TRAILING else Rest.CLOSED
++        }
++        return Rest.CLOSED
++    }
++
++    /** The offset a rest is drawn at; a full swipe carries the row off the screen. */
++    fun offset(at: Rest): Double = when (at) {
++        Rest.CLOSED -> 0.0
++        Rest.LEADING -> leadingWidth
++        Rest.TRAILING -> -trailingWidth
++        Rest.FULL_SWIPE -> rowWidth
++    }
++
++    companion object {
++        /** Each button sits in a slot this wide (wider only for a title that needs it), [GAP] from the edge, its neighbour and the row. */
++        const val SLOT = 60.0
++        const val GAP = 10.0
++        /** The distance over which a button grows in. */
++        const val GROWTH = 30.0
++        /** How much of a drag past a side's width still moves the row. */
++        private const val RESISTANCE = 0.3
++        /** A lift faster than this, in dp per second, decides the rest by its direction alone. */
++        private const val FLICK = 400.0
++
++        /** Two 60 dp slots make 150, three make 220. */
++        fun openWidth(slots: List<Double>): Double = if (slots.isEmpty()) 0.0 else slots.sum() + GAP * (slots.size + 1)
++
++        /** How far a side's button has grown in, 0 to 1: button [index], counted from the screen edge inward, grows from a dot over the
++         * last [GROWTH] before its slot is clear of the row, so the outermost comes first. */
++        fun reveal(index: Int, slots: List<Double>, revealed: Double): Double {
++            if (index !in slots.indices) return 0.0
++            val clear = openWidth(slots.take(index + 1))
++            return min(1.0, max(0.0, (revealed - (clear - GROWTH)) / GROWTH))
++        }
++
++        /** A button fades in a little ahead of its size. */
++        fun revealOpacity(reveal: Double): Double = if (reveal <= 0) 0.0 else min(1.0, 0.15 + 0.85 * reveal)
++    }
++}
++
++/** A row's action as a swipe's button, a screen reader's custom action and, with its menu's title, a long press's item (iOS `RowSwipeAction`). */
++internal class RowAction(val title: String, @DrawableRes val icon: Int, val tint: RowActionTint, val enabled: Boolean = true, val perform: () -> Unit)
++
++/** The colours iOS 26 draws these in, read off its frames (docs/mocks/android-row-swipe). */
++internal enum class RowActionTint(val light: Long, val dark: Long) {
++    GREEN(0xFF34C759, 0xFF30D158), BLUE(0xFF0088FF, 0xFF0091FF), INDIGO(0xFF6155F5, 0xFF6D7CFF), RED(0xFFFF383C, 0xFFFF4245)
++}
++
++/** A row's swipe actions and full swipe, with what a screen reader gets of them: the ones that are enabled (iOS `accessibilityActions`). */
++internal class RowActions(val leading: List<RowAction>, val trailing: List<RowAction>, val leadingFullSwipe: Boolean) {
++    val accessibility: List<CustomAccessibilityAction> = (leading + trailing).filter { it.enabled }
++        .map { action -> CustomAccessibilityAction(action.title) { action.perform(); true } }
++}
++
++/** The list's half of the swipe (iOS `RowSwipeState`): which row is open. Opening another shuts it, and while one is open a tap on any row
++ * only shuts it. */
++@Stable
++internal class RowSwipeState {
++    var openId by mutableStateOf<Any?>(null)
++    fun hidesDivider(id: Any, below: Any?) = openId != null && (openId == id || openId == below)
++}
++
++/** System Back shuts an open row first, as it does an open drawer. */
++@Composable
++internal fun RowSwipeBack(swipe: RowSwipeState) {
++    BackHandler(enabled = swipe.openId != null) { swipe.openId = null }
++}
++
++private enum class RowSide { LEADING, TRAILING }
++
++/** What a row's swipe holds while it is out, in dp. */
++@Stable
++private class SlidingRow(private val id: Any, private val swipe: RowSwipeState, private val scope: CoroutineScope) {
++    var offset by mutableFloatStateOf(0f)
++    /** [offset] when the finger came down; null while no finger is on the row. */
++    var dragStart by mutableStateOf<Float?>(null)
++    /** The side whose buttons are drawn: the one the row is slid toward, kept until it has shut so the buttons can shrink away with it. */
++    var shownSide by mutableStateOf<RowSide?>(null)
++    var rowWidth by mutableFloatStateOf(0f)
++    val slotWidths = mutableStateMapOf<String, Float>()
++    var actions by mutableStateOf(RowActions(emptyList(), emptyList(), false))
++    /** Carried off by a full swipe: it has let go of being the list's open row, and nothing but its own return puts it back. */
++    var leaving by mutableStateOf(false)
++    /** The side the row came to rest open on: a slot measured only once the row was out (a title wider than the slot) widens it. */
++    private var rest: RowSwipeGeometry.Rest? = null
++    private var motion: Job? = null
++
++    fun slots(side: List<RowAction>) = side.map { (slotWidths[it.title] ?: RowSwipeGeometry.SLOT.toFloat()).toDouble() }
++    val geometry: RowSwipeGeometry get() = RowSwipeGeometry(RowSwipeGeometry.openWidth(slots(actions.leading)), RowSwipeGeometry.openWidth(slots(actions.trailing)),
++        rowWidth.toDouble(), actions.leadingFullSwipe && actions.leading.firstOrNull()?.enabled == true)
++
++    private fun claimOpen() { if (swipe.openId != id) swipe.openId = id }
++
++    fun began() {
++        motion?.cancel()
++        leaving = false
++        rest = null
++        dragStart = offset
++        claimOpen()
++    }
++
++    fun moved(dx: Float) {
++        val start = dragStart ?: return
++        offset = geometry.dragged((start + dx).toDouble()).toFloat()
++        if (offset != 0f) shownSide = if (offset > 0) RowSide.LEADING else RowSide.TRAILING
++    }
++
++    fun ended(dx: Float, velocity: Float) {
++        val start = dragStart ?: return
++        val lifted = geometry.dragged((start + dx).toDouble())
++        dragStart = null
++        settle(geometry.rest(lifted, velocity.toDouble()))
++    }
++
++    private fun slide(to: Float, spec: AnimationSpec<Float>, then: suspend () -> Unit = {}) {
++        motion?.cancel()
++        motion = scope.launch {
++            animate(offset, to, animationSpec = spec) { value, _ -> offset = value }
++            then()
++        }
++    }
++
++    private fun putAway() {
++        if (offset != 0f) return
++        leaving = false
++        shownSide = null
++        if (swipe.openId == id) swipe.openId = null
++    }
++
++    /** Back to where the side it is open on now rests, once its buttons' widths are known. */
++    fun refit() {
++        val open = rest ?: return
++        if (dragStart != null || leaving) return
++        val target = geometry.offset(open).toFloat()
++        if (abs(target - offset) > 0.5f) slide(target, SNAPPY)
++    }
++
++    fun settle(rest: RowSwipeGeometry.Rest) {
++        val target = geometry.offset(rest).toFloat()
++        this.rest = rest.takeIf { it == RowSwipeGeometry.Rest.LEADING || it == RowSwipeGeometry.Rest.TRAILING }
++        when (rest) {
++            RowSwipeGeometry.Rest.LEADING, RowSwipeGeometry.Rest.TRAILING -> {
++                claimOpen()
++                shownSide = if (rest == RowSwipeGeometry.Rest.LEADING) RowSide.LEADING else RowSide.TRAILING
++                slide(target, SNAPPY)
++            }
++            RowSwipeGeometry.Rest.CLOSED -> slide(0f, SHUTTING) { putAway() }
++            RowSwipeGeometry.Rest.FULL_SWIPE -> {
++                leaving = true
++                if (swipe.openId == id) swipe.openId = null
++                val action = actions.leading[0]
++                slide(target, SNAPPY_SHORT) {
++                    action.perform()
++                    // A completed or reopened row leaves the list; one that stays (the request failed) comes back once the list has had its chance to drop it.
++                    delay(500)
++                    slide(0f, SHUTTING) { putAway() }
++                }
++            }
++        }
++    }
++
++    fun forget() {
++        if (swipe.openId == id) swipe.openId = null
++    }
++
++    private companion object {
++        // SwiftUI's springs by their response r: stiffness (2π/r)², damping as given. `.snappy` is r 0.5 with bounce 0.15, `.smooth(0.35)` no bounce.
++        val SNAPPY = spring<Float>(dampingRatio = 0.85f, stiffness = 158f, visibilityThreshold = 0.1f)
++        val SNAPPY_SHORT = spring<Float>(dampingRatio = 0.85f, stiffness = 632f, visibilityThreshold = 0.1f)
++        val SHUTTING = spring<Float>(dampingRatio = 1f, stiffness = 322f, visibilityThreshold = 0.1f)
++    }
++}
++
++/** How far from the edge the drawer keeps a right swipe, past what the system's gesture takes (iOS's open strip is 18 pt). */
++private val EDGE_STRIP = 18.dp
++
++/**
++ * A row that slides aside to show its actions as round buttons (iOS `CircleSwipeRow`): 60 dp slots 10 dp apart, a rounded card of the row
++ * sliding clear of them, and under each slot a 47 dp circle over its title, growing in from a dot as the row slides. Only a drag that
++ * moves more across than up or down starts it, so the list keeps its scroll; one that starts takes the touch from the row's tap, the
++ * list and the drawer. One that starts in the screen's edge leaves the touch to the system's Back and the drawer behind it.
++ * A row with no actions is drawn alone: a drag on it is the drawer's.
++ */
++@Composable
++internal fun SwipeRow(id: Any, swipe: RowSwipeState, actions: RowActions, content: @Composable () -> Unit) {
++    if (actions.leading.isEmpty() && actions.trailing.isEmpty()) return content()
++    val scope = rememberCoroutineScope()
++    val row = remember(id, swipe) { SlidingRow(id, swipe, scope) }
++    row.actions = actions
++    val density = LocalDensity.current
++    val view = LocalView.current
++    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
++    val haptics = LocalHapticFeedback.current
++    val slid by remember(row) { derivedStateOf { row.offset != 0f } }
++    val armed by remember(row) { derivedStateOf { row.dragStart != null && row.geometry.isFullSwipe(row.offset.toDouble()) } }
++    var placed by remember { mutableStateOf<LayoutCoordinates?>(null) }
++
++    LaunchedEffect(armed) { if (armed) haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate) }
++    // Another row opened, or a tap anywhere shut this one.
++    if (slid) LaunchedEffect(swipe.openId) { if (swipe.openId != id && row.dragStart == null && !row.leaving) row.settle(RowSwipeGeometry.Rest.CLOSED) }
++    if (slid) LaunchedEffect(row) { snapshotFlow { row.geometry.leadingWidth to row.geometry.trailingWidth }.collect { row.refit() } }
++    DisposableEffect(row) { onDispose { row.forget() } }
++
++    val card = rowCardColor()
++    val cardShown by remember(row) { derivedStateOf { row.offset != 0f || row.shownSide != null } }
++    val cardAlpha by animateFloatAsState(if (cardShown) 1f else 0f, if (cardShown) snap() else tween(150, easing = EaseOut), label = "card")
++    Box(Modifier.fillMaxWidth().clipToBounds()
++        .onSizeChanged { row.rowWidth = it.width / density.density }
++        .onPlaced { placed = it }
++        // The list moved under an open row, so the row shuts.
++        .then(if (slid) Modifier.shutsWhenMoved(row) else Modifier)
++        .pointerInput(row, rtl) { swipeGesture(row, rtl) { position -> startsInEdge(placed, position, view, rtl, density) } }) {
++        row.shownSide?.let { side ->
++            val listed = if (side == RowSide.LEADING) actions.leading else actions.trailing
++            SwipeButtons(row, listed, side, armed, Modifier.matchParentSize())
++        }
++        Box(Modifier.offset { IntOffset((row.offset * density.density).roundToInt(), 0) }
++            .drawBehind { if (cardAlpha > 0f) drawRoundRect(card, alpha = cardAlpha, cornerRadius = CornerRadius(24.dp.toPx())) }
++            .pointerInput(swipe) { shutsOnTap(swipe) }) { content() }
++    }
++}
++
++/** What the slid row's card is filled with: iOS's `systemGray5`, read off its frames. */
++@Composable
++private fun rowCardColor(): Color = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) Color(0xFF2C2C2E) else Color(0xFFE5E5EA)
++
++private fun Modifier.shutsWhenMoved(row: SlidingRow): Modifier {
++    var top: Float? = null
++    return onGloballyPositioned { coordinates ->
++        val now = coordinates.positionInWindow().y
++        val was = top
++        top = now
++        if (was != null && abs(now - was) > 0.5f && row.dragStart == null && !row.leaving) row.settle(RowSwipeGeometry.Rest.CLOSED)
++    }
++}
++
++private fun startsInEdge(placed: LayoutCoordinates?, position: Offset, view: View, rtl: Boolean, density: Density): Boolean {
++    val x = placed?.takeIf { it.isAttached }?.localToWindow(position)?.x ?: return false
++    val gestures = ViewCompat.getRootWindowInsets(view)?.getInsets(WindowInsetsCompat.Type.systemGestures())
++    val left = gestures?.left ?: 0
++    val right = gestures?.right ?: 0
++    val strip = with(density) { EDGE_STRIP.toPx() }
++    return if (rtl) x >= view.width - right - strip || x < left else x < left + strip || x >= view.width - right
++}
++
++/** While a row is open, a tap on a row only shuts it, so the tap that puts the buttons away never opens a session. */
++private suspend fun PointerInputScope.shutsOnTap(swipe: RowSwipeState) = awaitEachGesture {
++    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
++    if (swipe.openId == null) return@awaitEachGesture
++    val up = waitForUpOrCancellation(PointerEventPass.Initial) ?: return@awaitEachGesture
++    up.consume()
++    swipe.openId = null
++}
++
++private suspend fun PointerInputScope.swipeGesture(row: SlidingRow, rtl: Boolean, startsInEdge: (Offset) -> Boolean) = awaitEachGesture {
++    val down = awaitFirstDown(requireUnconsumed = false)
++    if (startsInEdge(down.position)) return@awaitEachGesture
++    val slop = viewConfiguration.touchSlop
++    var moved = Offset.Zero
++    // Whichever of the row and the list sees its slop passed first has the touch; a drag more up or down than across is the list's.
++    while (true) {
++        val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
++        if (change.isConsumed || !change.pressed) return@awaitEachGesture
++        moved += change.positionChange()
++        if (abs(moved.y) > slop && abs(moved.y) >= abs(moved.x)) return@awaitEachGesture
++        if (abs(moved.x) > slop && abs(moved.x) > abs(moved.y)) { change.consume(); break }
++    }
++    val sign = if (rtl) -1f else 1f
++    val tracker = VelocityTracker()
++    tracker.addPosition(down.uptimeMillis, down.position)
++    var dx = (moved.x - (if (moved.x > 0) slop else -slop)) * sign
++    row.began()
++    row.moved(dx / density)
++    while (true) {
++        val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
++        if (!change.pressed) break
++        tracker.addPosition(change.uptimeMillis, change.position)
++        dx += change.positionChange().x * sign
++        change.consume()
++        row.moved(dx / density)
++    }
++    row.ended(dx / density, tracker.calculateVelocity().x * sign / density)
++}
++
++/** One side's buttons, left to right, with the gap at either end that [RowSwipeGeometry.openWidth] counts. A side lists its actions from
++ * the screen edge inward, so the trailing side lays them out reversed. */
++@Composable
++private fun SwipeButtons(row: SlidingRow, actions: List<RowAction>, side: RowSide, armed: Boolean, modifier: Modifier) {
++    val density = LocalDensity.current
++    Box(modifier, contentAlignment = if (side == RowSide.LEADING) Alignment.CenterStart else Alignment.CenterEnd) {
++        Row(Modifier.padding(horizontal = RowSwipeGeometry.GAP.dp), horizontalArrangement = Arrangement.spacedBy(RowSwipeGeometry.GAP.dp), verticalAlignment = Alignment.CenterVertically) {
++            (if (side == RowSide.LEADING) actions else actions.asReversed()).forEach { action ->
++                key(action.title) {
++                    val index = actions.indexOf(action)
++                    val fullSwipeTarget = armed && side == RowSide.LEADING && index == 0
++                    val reveal by remember(row, index, actions) { derivedStateOf { RowSwipeGeometry.reveal(index, row.slots(actions), abs(row.offset).toDouble()).toFloat() } }
++                    // Like the system's, a button springs after the size the row's position gives it: trailing a fast pull, and overshooting as it lands whole.
++                    val shown by animateFloatAsState(reveal, if (reveal >= 1f) LANDING else FOLLOWING, label = "reveal")
++                    SwipeButton(action, shown, grown = fullSwipeTarget, hidden = armed && !fullSwipeTarget,
++                        onWidth = { row.slotWidths[action.title] = it / density.density }) {
++                        row.settle(RowSwipeGeometry.Rest.CLOSED)
++                        action.perform()
++                    }
++                }
++            }
++        }
++    }
++}
++
++private val FOLLOWING = spring<Float>(dampingRatio = 1f, stiffness = 503f)
++private val CIRCLE = 40.dp
++private val TITLE = TextStyle(fontSize = 12.sp, lineHeight = 14.sp)
++private val LANDING = spring<Float>(dampingRatio = 0.72f, stiffness = 439f)
++
++/** A button's face: the circle of its colour with its symbol, over its title. It dims and shrinks a touch under the finger, and fades when its action is off.
++ * The circle takes the share of the row iOS's does: 40 dp of a 63.5 dp row, where iOS has 47 pt of 75.3. */
++@Composable
++private fun SwipeButton(action: RowAction, reveal: Float, grown: Boolean, hidden: Boolean, onWidth: (Int) -> Unit, press: () -> Unit) {
++    val source = remember { MutableInteractionSource() }
++    val pressed by source.collectIsPressedAsState()
++    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
++    val growth by animateFloatAsState(if (grown) 1.12f else 1f, tween(200), label = "grown")
++    val neighbour by animateFloatAsState(if (hidden) 0f else 1f, tween(200), label = "neighbour")
++    Column(Modifier.widthIn(min = RowSwipeGeometry.SLOT.dp)
++        .onSizeChanged { onWidth(it.width) }
++        .graphicsLayer {
++            val size = maxOf(reveal, 0.01f) * (if (pressed) 0.94f else 1f)
++            scaleX = size; scaleY = size
++            alpha = neighbour * RowSwipeGeometry.revealOpacity(reveal.toDouble()).toFloat() * (if (!action.enabled) 0.4f else if (pressed) 0.7f else 1f)
++        }
++        .clickable(source, indication = null, enabled = action.enabled, role = Role.Button, onClick = press)
++        .testTag("row-action:${action.title}"),
++        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
++        Box(Modifier.size(CIRCLE).graphicsLayer { scaleX = growth; scaleY = growth }
++            .background(Color(if (dark) action.tint.dark else action.tint.light), CircleShape), contentAlignment = Alignment.Center) {
++            Icon(painterResource(action.icon), null, Modifier.size(20.dp), tint = Color.White)
++        }
++        Text(action.title, style = TITLE, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
++    }
++}
+diff --git a/src/android/app/src/main/kotlin/io/orbitd/android/directory/SessionListPage.kt b/src/android/app/src/main/kotlin/io/orbitd/android/directory/SessionListPage.kt
+index 8c032bf..00f0c0d 100644
+--- a/src/android/app/src/main/kotlin/io/orbitd/android/directory/SessionListPage.kt
++++ b/src/android/app/src/main/kotlin/io/orbitd/android/directory/SessionListPage.kt
+@@ -99,7 +99,7 @@ internal object SessionListTime {
+ @OptIn(ExperimentalFoundationApi::class)
+ @Composable
+ internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () -> Unit,
+-    deleted: Boolean = false, watching: WatchSessionSummary? = null, onOptions: () -> Unit) {
++    deleted: Boolean = false, watching: WatchSessionSummary? = null, actions: List<CustomAccessibilityAction> = emptyList(), onOptions: () -> Unit) {
+     val muted = MaterialTheme.colorScheme.onSurfaceVariant
+     val recaps = LocalSessionRecaps.current
+     val line = remember(session, deleted, watching, recaps, machine) {
+@@ -108,7 +108,7 @@ internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: ()
+     val word = remember(session, watching) { SessionHeader.statusWord(session, watching) }
+     Column(Modifier.fillMaxWidth()
+         .combinedClickable(role = Role.Button, onLongClickLabel = "Options for ${session.name}", onLongClick = onOptions, onClick = onOpen)
+-        .semantics { stateDescription = word }
++        .semantics { stateDescription = word; if (actions.isNotEmpty()) customActions = actions }
+         .padding(horizontal = 16.dp, vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+             Text(session.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
+diff --git a/src/android/app/src/main/kotlin/io/orbitd/android/directory/SessionProjectPage.kt b/src/android/app/src/main/kotlin/io/orbitd/android/directory/SessionProjectPage.kt
+index b3a004b..f9c7a3a 100644
+--- a/src/android/app/src/main/kotlin/io/orbitd/android/directory/SessionProjectPage.kt
++++ b/src/android/app/src/main/kotlin/io/orbitd/android/directory/SessionProjectPage.kt
+@@ -81,11 +81,11 @@ import kotlinx.serialization.json.JsonObject
+  * project's sessions; a long press the row's menu. */
+ @OptIn(ExperimentalFoundationApi::class)
+ @Composable
+-internal fun SessionProjectRowView(row: SessionProjectRow, onOpen: () -> Unit, onOptions: () -> Unit) {
++internal fun SessionProjectRowView(row: SessionProjectRow, onOpen: () -> Unit, actions: List<CustomAccessibilityAction> = emptyList(), onOptions: () -> Unit) {
+     val muted = MaterialTheme.colorScheme.onSurfaceVariant
+     val words = SessionProjectCopy.statusWords(row)
+     Column(Modifier.fillMaxWidth().combinedClickable(role = Role.Button, onLongClickLabel = "Options for ${row.title}", onLongClick = onOptions, onClick = onOpen)
+-        .semantics { stateDescription = words }.testTag("project-row:${row.projectId}").padding(horizontal = 16.dp, vertical = 11.dp),
++        .semantics { stateDescription = words; if (actions.isNotEmpty()) customActions = actions }.testTag("project-row:${row.projectId}").padding(horizontal = 16.dp, vertical = 11.dp),
+         verticalArrangement = Arrangement.spacedBy(3.dp)) {
+         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+             Text(row.title, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
+@@ -228,6 +228,10 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
+     var now by remember { mutableStateOf(Instant.now()) }
+     var refreshing by remember { mutableStateOf(false) }
+     var action by remember { mutableStateOf<DirectoryDialog?>(null) }
++    val swipe = remember { RowSwipeState() }
++    RowSwipeBack(swipe)
++    var reloadMembers by remember { mutableStateOf<() -> Unit>({}) }
++    val rowWrites = remember(api) { SessionActions(api, app) { app.realtime.refreshDirectory(); reloadMembers() } }
+     var startSheet by remember { mutableStateOf<StartSheet?>(null) }
+     var showsJobs by remember { mutableStateOf(false) }
+     // The merge into main (iOS `ProjectMergeModel`): this project's candidate and merges, never another project's.
+@@ -309,6 +313,7 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
+         val doc = try { projects.document(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
+         if (doc != null) state.done = doc
+     }
++    reloadMembers = { scope.launch { loadMembers() } }
+     LaunchedEffect(handle, projectId) {
+         // A member on its way to Trash leaves the page on the press, wherever it was pressed, and what the page holds of it goes too
+         // (iOS `hideTrashedSession`): once the move has settled nothing would take it out again.
+@@ -362,9 +367,12 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
+     @Composable
+     fun MemberRow(session: DirectorySession) {
+         val view = if (session.effectiveLifecycleState == "COMPLETED") SessionView.COMPLETED else SessionView.OPEN
+-        SessionRow(session, data.machineName(session.workspace), { open(OrbitRoute(Destination.SESSION, session.id, route.workspaceId, origin = Origin.LIST)) },
+-            watching = watches.summaries[watchKey(session.id)]) {
+-            action = DirectoryDialog.SessionMenu(session, view)
++        val rowActions = SessionRowActionList.rowActions(session, view, rowWrites) { action = it }
++        SwipeRow(session.id, swipe, rowActions) {
++            SessionRow(session, data.machineName(session.workspace), { open(OrbitRoute(Destination.SESSION, session.id, route.workspaceId, origin = Origin.LIST)) },
++                watching = watches.summaries[watchKey(session.id)], actions = rowActions.accessibility) {
++                action = DirectoryDialog.SessionMenu(session, view)
++            }
+         }
+     }
+     PullToRefreshBox(isRefreshing = refreshing, onRefresh = { refresh() }, modifier = Modifier.fillMaxSize().testTag("project-sessions")) {
+diff --git a/src/android/app/src/main/kotlin/io/orbitd/android/directory/SessionRowActions.kt b/src/android/app/src/main/kotlin/io/orbitd/android/directory/SessionRowActions.kt
+new file mode 100644
+index 0000000..296eec1
+--- /dev/null
++++ b/src/android/app/src/main/kotlin/io/orbitd/android/directory/SessionRowActions.kt
+@@ -0,0 +1,84 @@
++package io.orbitd.android.directory
++
++import androidx.annotation.DrawableRes
++import io.orbitd.android.R
++import io.orbitd.android.core.protocol.SessionAction
++
++/** A session row's actions (iOS `SessionRowActions`): what each is called on a swipe and in the long press's menu, and how it draws. */
++internal enum class SessionRowAction(val title: String, val menuTitle: String, @DrawableRes val icon: Int, val tint: RowActionTint, val destructive: Boolean = false) {
++    COMPLETE("Complete", "Complete", R.drawable.ic_row_complete, RowActionTint.GREEN),
++    MOVE_TO_OPEN("Move to Open", "Move to Open", R.drawable.ic_row_restore, RowActionTint.BLUE),
++    PIN("Pin", "Pin", R.drawable.ic_row_pin, RowActionTint.INDIGO),
++    UNPIN("Unpin", "Unpin", R.drawable.ic_row_unpin, RowActionTint.INDIGO),
++    SHARE("Share", "Share…", R.drawable.ic_row_share, RowActionTint.BLUE),
++    MOVE("Move", "Move…", R.drawable.ic_row_folder, RowActionTint.INDIGO),
++    DELETE("Delete", "Delete", R.drawable.ic_row_trash, RowActionTint.RED, destructive = true),
++    DELETE_PERMANENTLY("Delete Permanently", "Delete Permanently", R.drawable.ic_row_trash_slash, RowActionTint.RED, destructive = true),
++    RENAME("Rename…", "Rename…", 0, RowActionTint.INDIGO),
++    TAGS("Tags…", "Tags…", 0, RowActionTint.INDIGO),
++}
++
++/**
++ * The one list a session row's swipe, long press and screen reader are drawn from (iOS `SessionRowActions`). Rename… and Tags… open an
++ * editor rather than performing the action, which is not what a swipe promises, so they are the menu's alone.
++ */
++internal object SessionRowActionList {
++    private fun positive(view: SessionView) = if (view == SessionView.OPEN) SessionRowAction.COMPLETE else SessionRowAction.MOVE_TO_OPEN
++    private fun pin(s: DirectorySession) = if (s.pinnedAt == null) SessionRowAction.PIN else SessionRowAction.UNPIN
++    /** A project's members are listed where its coordinator is, so of its sessions only the coordinator offers Move. */
++    private fun moves(s: DirectorySession) = s.projectMembership?.isCoordinator != false
++
++    /** From the screen edge inward; the first is what a full swipe performs. */
++    fun leading(s: DirectorySession, view: SessionView): List<SessionRowAction> =
++        if (view == SessionView.TRASH) listOf(positive(view)) else listOf(positive(view), pin(s))
++
++    /** From the screen edge inward: left to right the row reads Share · Move · Delete. */
++    fun trailing(s: DirectorySession, view: SessionView): List<SessionRowAction> =
++        if (view == SessionView.TRASH) listOf(SessionRowAction.DELETE_PERMANENTLY)
++        else listOfNotNull(SessionRowAction.DELETE, SessionRowAction.MOVE.takeIf { moves(s) }, SessionRowAction.SHARE)
++
++    fun menu(s: DirectorySession, view: SessionView): List<SessionRowAction> =
++        if (view == SessionView.TRASH) listOf(positive(view), SessionRowAction.DELETE_PERMANENTLY)
++        else listOfNotNull(SessionRowAction.RENAME, pin(s), SessionRowAction.TAGS, positive(view), SessionRowAction.SHARE,
++            SessionRowAction.MOVE.takeIf { moves(s) }, SessionRowAction.DELETE)
++
++    /** A session that has not said what it can do can do it; the server's refusal says otherwise. */
++    fun enabled(action: SessionRowAction, s: DirectorySession): Boolean = when (action) {
++        SessionRowAction.COMPLETE -> s.capabilities?.allows(SessionAction.COMPLETE) ?: true
++        SessionRowAction.MOVE_TO_OPEN -> s.capabilities?.allows(SessionAction.RESTORE) ?: true
++        else -> true
++    }
++
++    /** What a press of [action] does on [s]: the writes are [actions]', the panels the list's, through [setDialog]. */
++    fun press(action: SessionRowAction, s: DirectorySession, actions: SessionActions, setDialog: (DirectoryDialog?) -> Unit) {
++        when (action) {
++            SessionRowAction.COMPLETE -> actions.complete(s.id, s.title)
++            SessionRowAction.MOVE_TO_OPEN -> actions.restore(s.id, s.title)
++            SessionRowAction.PIN -> actions.pin(s.id, true)
++            SessionRowAction.UNPIN -> actions.pin(s.id, false)
++            SessionRowAction.SHARE -> setDialog(DirectoryDialog.Share(s))
++            SessionRowAction.MOVE -> setDialog(DirectoryDialog.Move(s))
++            SessionRowAction.DELETE -> actions.trash(s.id, s.title)
++            SessionRowAction.DELETE_PERMANENTLY -> setDialog(DirectoryDialog.Purge(s))
++            SessionRowAction.RENAME -> setDialog(DirectoryDialog.Rename(s))
++            SessionRowAction.TAGS -> setDialog(DirectoryDialog.Tags(s))
++        }
++    }
++
++    /** The row's swipe and screen reader actions. */
++    fun rowActions(s: DirectorySession, view: SessionView, actions: SessionActions, setDialog: (DirectoryDialog?) -> Unit): RowActions {
++        fun side(listed: List<SessionRowAction>) = listed.map { action ->
++            RowAction(action.title, action.icon, action.tint, enabled(action, s)) { press(action, s, actions, setDialog) }
++        }
++        val leading = leading(s, view)
++        return RowActions(side(leading), side(trailing(s, view)), leadingFullSwipe = enabled(leading.first(), s))
++    }
++
++    /** A project row's (iOS `SessionProjectRowActions`): Pin and Move act on its coordinator, and without one it has neither. */
++    fun projectRowActions(row: SessionProjectRow, pin: (DirectorySession) -> Unit, move: (DirectorySession) -> Unit): RowActions {
++        val coordinator = row.coordinator ?: return RowActions(emptyList(), emptyList(), false)
++        val pinAction = if (coordinator.pinnedAt == null) SessionRowAction.PIN else SessionRowAction.UNPIN
++        return RowActions(listOf(RowAction(pinAction.title, pinAction.icon, pinAction.tint) { pin(coordinator) }),
++            listOf(RowAction(SessionRowAction.MOVE.title, SessionRowAction.MOVE.icon, SessionRowAction.MOVE.tint) { move(coordinator) }), leadingFullSwipe = true)
++    }
++}
+diff --git a/src/android/app/src/main/res/drawable/ic_row_complete.xml b/src/android/app/src/main/res/drawable/ic_row_complete.xml
+new file mode 100644
+index 0000000..5b888f6
+--- /dev/null
++++ b/src/android/app/src/main/res/drawable/ic_row_complete.xml
+@@ -0,0 +1,3 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
++    <path android:fillType="evenOdd" android:fillColor="#FF000000" android:pathData="M12,2.5A9.5,9.5 0,1 1,12,21.5A9.5,9.5 0,1 1,12,2.5Z M16.2,8.1L10.8,14.1L8,11.4L6.8,12.7L10.9,16.6L17.5,9.3Z" />
++</vector>
+diff --git a/src/android/app/src/main/res/drawable/ic_row_folder.xml b/src/android/app/src/main/res/drawable/ic_row_folder.xml
+new file mode 100644
+index 0000000..76996da
+--- /dev/null
++++ b/src/android/app/src/main/res/drawable/ic_row_folder.xml
+@@ -0,0 +1,3 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
++    <path android:fillColor="#FF000000" android:pathData="M4.8,4.5H9.3A1.6,1.6 0,0 1,10.4,5L12.2,6.6H19.2A2.3,2.3 0,0 1,21.5,8.9V17.7A2.3,2.3 0,0 1,19.2,20H4.8A2.3,2.3 0,0 1,2.5,17.7V6.8A2.3,2.3 0,0 1,4.8,4.5Z" />
++</vector>
+diff --git a/src/android/app/src/main/res/drawable/ic_row_pin.xml b/src/android/app/src/main/res/drawable/ic_row_pin.xml
+new file mode 100644
+index 0000000..459eb6c
+--- /dev/null
++++ b/src/android/app/src/main/res/drawable/ic_row_pin.xml
+@@ -0,0 +1,3 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
++    <path android:fillColor="#FF000000" android:pathData="M8.3,2.8H15.7A1.1,1.1 0,0 1,16.3,4.8L15,5.7V10L18.2,13.2A1,1 0,0 1,17.5,14.9H13V20.5L12,22L11,20.5V14.9H6.5A1,1 0,0 1,5.8,13.2L9,10V5.7L7.7,4.8A1.1,1.1 0,0 1,8.3,2.8Z" />
++</vector>
+diff --git a/src/android/app/src/main/res/drawable/ic_row_restore.xml b/src/android/app/src/main/res/drawable/ic_row_restore.xml
+new file mode 100644
+index 0000000..63ee36a
+--- /dev/null
++++ b/src/android/app/src/main/res/drawable/ic_row_restore.xml
+@@ -0,0 +1,4 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
++    <path android:fillColor="#FF000000" android:pathData="M3,13.5H8.2A3.8,3.8 0,0 0,15.8,13.5H21V18.8A2.2,2.2 0,0 1,18.8,21H5.2A2.2,2.2 0,0 1,3,18.8Z" />
++    <path android:pathData="M12,12.5V3.2 M8.3,6.8L12,3.1L15.7,6.8" android:strokeColor="#FF000000" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="@android:color/transparent" />
++</vector>
+diff --git a/src/android/app/src/main/res/drawable/ic_row_share.xml b/src/android/app/src/main/res/drawable/ic_row_share.xml
+new file mode 100644
+index 0000000..82ab5db
+--- /dev/null
++++ b/src/android/app/src/main/res/drawable/ic_row_share.xml
+@@ -0,0 +1,4 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
++    <path android:fillColor="#FF000000" android:pathData="M7.2,8.8H10.1V15.6H13.9V8.8H16.8A2.2,2.2 0,0 1,19,11V19A2.2,2.2 0,0 1,16.8,21.2H7.2A2.2,2.2 0,0 1,5,19V11A2.2,2.2 0,0 1,7.2,8.8Z" />
++    <path android:pathData="M12,14.2V3 M8.6,6.3L12,2.9L15.4,6.3" android:strokeColor="#FF000000" android:strokeWidth="1.9" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="@android:color/transparent" />
++</vector>
+diff --git a/src/android/app/src/main/res/drawable/ic_row_trash.xml b/src/android/app/src/main/res/drawable/ic_row_trash.xml
+new file mode 100644
+index 0000000..00db302
+--- /dev/null
++++ b/src/android/app/src/main/res/drawable/ic_row_trash.xml
+@@ -0,0 +1,4 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
++    <path android:pathData="M4,6.2H20 M9.2,5.9V4.3A1.3,1.3 0,0 1,10.5,3H13.5A1.3,1.3 0,0 1,14.8,4.3V5.9" android:strokeColor="#FF000000" android:strokeWidth="1.8" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="@android:color/transparent" />
++    <path android:fillType="evenOdd" android:fillColor="#FF000000" android:pathData="M5.9,8H18.1L17.3,19.6A2.2,2.2 0,0 1,15.1,21.6H8.9A2.2,2.2 0,0 1,6.7,19.6Z M9,10.4L9.3,18.8H10.7L10.4,10.4Z M15,10.4H13.6L13.3,18.8H14.7Z" />
++</vector>
+diff --git a/src/android/app/src/main/res/drawable/ic_row_trash_slash.xml b/src/android/app/src/main/res/drawable/ic_row_trash_slash.xml
+new file mode 100644
+index 0000000..8c93607
+--- /dev/null
++++ b/src/android/app/src/main/res/drawable/ic_row_trash_slash.xml
+@@ -0,0 +1,8 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
++    <group>
++        <clip-path android:pathData="M2.4,0L24,0L24,21.6Z M0,2.4L21.6,24L0,24Z" />
++        <path android:pathData="M4,6.2H20 M9.2,5.9V4.3A1.3,1.3 0,0 1,10.5,3H13.5A1.3,1.3 0,0 1,14.8,4.3V5.9" android:strokeColor="#FF000000" android:strokeWidth="1.8" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="@android:color/transparent" />
++        <path android:fillType="evenOdd" android:fillColor="#FF000000" android:pathData="M5.9,8H18.1L17.3,19.6A2.2,2.2 0,0 1,15.1,21.6H8.9A2.2,2.2 0,0 1,6.7,19.6Z M9,10.4L9.3,18.8H10.7L10.4,10.4Z M15,10.4H13.6L13.3,18.8H14.7Z" />
++    </group>
++    <path android:pathData="M3.2,3.2L20.8,20.8" android:strokeColor="#FF000000" android:strokeWidth="1.8" android:strokeLineCap="round" android:fillColor="@android:color/transparent" />
++</vector>
+diff --git a/src/android/app/src/main/res/drawable/ic_row_unpin.xml b/src/android/app/src/main/res/drawable/ic_row_unpin.xml
+new file mode 100644
+index 0000000..fabcd97
+--- /dev/null
++++ b/src/android/app/src/main/res/drawable/ic_row_unpin.xml
+@@ -0,0 +1,7 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
++    <group>
++        <clip-path android:pathData="M2.4,0L24,0L24,21.6Z M0,2.4L21.6,24L0,24Z" />
++        <path android:fillColor="#FF000000" android:pathData="M8.3,2.8H15.7A1.1,1.1 0,0 1,16.3,4.8L15,5.7V10L18.2,13.2A1,1 0,0 1,17.5,14.9H13V20.5L12,22L11,20.5V14.9H6.5A1,1 0,0 1,5.8,13.2L9,10V5.7L7.7,4.8A1.1,1.1 0,0 1,8.3,2.8Z" />
++    </group>
++    <path android:pathData="M3.2,3.2L20.8,20.8" android:strokeColor="#FF000000" android:strokeWidth="1.8" android:strokeLineCap="round" android:fillColor="@android:color/transparent" />
++</vector>
+diff --git a/src/android/app/src/test/kotlin/io/orbitd/android/RowSwipeShellTest.kt b/src/android/app/src/test/kotlin/io/orbitd/android/RowSwipeShellTest.kt
+new file mode 100644
+index 0000000..c698e93
+--- /dev/null
++++ b/src/android/app/src/test/kotlin/io/orbitd/android/RowSwipeShellTest.kt
+@@ -0,0 +1,191 @@
++package io.orbitd.android
++
++import androidx.compose.ui.geometry.Offset
++import androidx.compose.ui.semantics.SemanticsActions
++import androidx.compose.ui.semantics.getOrNull
++import androidx.compose.ui.test.*
++import androidx.compose.ui.test.junit4.createAndroidComposeRule
++import androidx.compose.ui.unit.dp
++import io.orbitd.android.core.auth.AuthState
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.runBlocking
++import kotlinx.coroutines.test.UnconfinedTestDispatcher
++import kotlinx.coroutines.test.resetMain
++import kotlinx.coroutines.test.setMain
++import org.junit.Assert.*
++import org.junit.Before
++import org.junit.Rule
++import org.junit.Test
++import org.junit.rules.TestWatcher
++import org.junit.runner.Description
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.annotation.Config
++
++/** A session row's swipe on the production Activity, store and list over [NavShell]: iOS's `SessionRowActions` and `CircleSwipeRow`,
++ * driven by touches on the row (docs/mocks/android-row-swipe). */
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [29], application = NavShellApplication::class, qualifiers = "w411dp-h891dp")
++@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class, ExperimentalTestApi::class)
++class RowSwipeShellTest {
++    @get:Rule(order = 0)
++    val mainDispatcher = object : TestWatcher() {
++        override fun starting(description: Description) { Dispatchers.setMain(UnconfinedTestDispatcher()) }
++        override fun finished(description: Description) { Dispatchers.resetMain() }
++    }
++    @get:Rule(order = 1)
++    val compose = createAndroidComposeRule<MainActivity>()
++
++    @Before fun start() = NavShell.reset()
++
++    private val plain = hasRowMenu("Options for Plain notes")
++    private val review = hasRowMenu("Options for Review navigation")
++    private fun button(title: String) = hasTestTag("row-action:$title")
++    private val anyButton = SemanticsMatcher("a row's swipe button") { node ->
++        node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.startsWith("row-action:") == true
++    }
++
++    @Test fun leftShowsShareMoveDeleteAndRightCompleteAndPin() {
++        signIn(); await { exists(plain) }
++        swipe(plain, 0.8f, 0.3f)
++        await { exists(button("Delete")) }
++        val order = listOf("Share", "Move", "Delete").map { compose.onNode(button(it)).fetchSemanticsNode().boundsInRoot.left }
++        assertEquals("left to right the row reads Share · Move · Delete", order.sorted(), order)
++        assertFalse(exists(button("Complete")))
++        tap(review)
++        await { !exists(anyButton) }
++        swipe(plain, 0.2f, 0.6f)
++        await { exists(button("Complete")) && exists(button("Pin")) }
++        assertTrue(compose.onNode(button("Complete")).fetchSemanticsNode().boundsInRoot.left < compose.onNode(button("Pin")).fetchSemanticsNode().boundsInRoot.left)
++    }
++
++    /** However far and fast the row is pulled left, it comes to rest open and fires nothing: Delete is a press. */
++    @Test fun aLongSwipeLeftOpensAndNeverDeletes() {
++        signIn(); await { exists(plain) }
++        swipe(plain, 0.95f, 0.02f, durationMillis = 120)
++        await { exists(button("Delete")) }
++        assertFalse(NavShell.calls.any { it.startsWith("DELETE") })
++        compose.onNode(button("Delete")).performClick()
++        await { NavShell.calls.any { it == "DELETE sessions/${NavShell.PLAIN}" } }
++        await { toastShows("Moved to Trash") }
++    }
++
++    @Test fun aFullSwipeRightCompletes() {
++        signIn(); await { exists(plain) }
++        swipe(plain, 0.1f, 0.95f)
++        await { NavShell.calls.any { it == "POST sessions/${NavShell.PLAIN}/complete" } }
++        await { toastShows("Session completed") }
++    }
++
++    /** One open at a time; while one is open a tap on any row only shuts it, and opens no session. */
++    @Test fun aTapWhileARowIsOpenOnlyShutsIt() {
++        signIn(); await { exists(plain) }
++        swipe(plain, 0.8f, 0.3f)
++        await { exists(button("Delete")) }
++        swipe(review, 0.2f, 0.6f)
++        await { exists(button("Complete")) && !exists(button("Delete")) }
++        tap(plain)
++        await { !exists(anyButton) }
++        assertTrue("the tap opened nothing", exists(plain) && exists(review))
++        assertFalse(NavShell.calls.any { it.startsWith("GET sessions/${NavShell.PLAIN}/") })
++        // With nothing open, a tap opens it.
++        tap(plain)
++        await { NavShell.calls.any { it.startsWith("GET sessions/${NavShell.PLAIN}") } }
++    }
++
++    /** Back shuts an open row first, as it does an open drawer; the list stays. */
++    @Test fun backShutsAnOpenRowFirst() {
++        signIn(); await { exists(plain) }
++        swipe(plain, 0.8f, 0.3f)
++        await { exists(button("Delete")) }
++        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
++        await { !exists(anyButton) }
++        assertTrue(exists(plain))
++        assertFalse(compose.activity.isFinishing)
++    }
++
++    /** A drag more up than across is the list's. One that starts in the edge strip is the drawer's, and the row stays shut. */
++    @Test fun aVerticalDragOrOneFromTheEdgeLeavesTheRowShut() {
++        signIn(); await { exists(plain) }
++        compose.onNode(plain).performTouchInput { swipe(Offset(width * 0.7f, centerY), Offset(width * 0.75f, centerY - 400f), 200) }
++        compose.waitForIdle()
++        assertFalse(exists(anyButton))
++        assertFalse("the drawer starts shut", drawerOpen())
++        compose.onNode(plain).performTouchInput { swipe(Offset(6.dp.toPx(), centerY), Offset(width * 0.85f, centerY), 250) }
++        await { drawerOpen() }
++        assertFalse(exists(anyButton))
++    }
++
++    @Test fun completedAndTrashOfferTheirOwnSides() {
++        NavShell.lifecycle = mapOf(NavShell.SESSION to "COMPLETED", NavShell.PLAIN to "TRASH")
++        signIn(); await { exists(hasText("No open sessions")) }
++        compose.pickFromSessionOptions("Completed")
++        await { exists(review) }
++        swipe(review, 0.2f, 0.6f)
++        await { exists(button("Move to Open")) && exists(button("Pin")) }
++        // Move to Open's slot is wider than the default one: the row rests clear of both buttons once they are measured.
++        await { clearOf(review, "Pin", leading = true) }
++        tap(review); await { !exists(anyButton) }
++        swipe(review, 0.8f, 0.3f)
++        await { exists(button("Share")) && exists(button("Move")) && exists(button("Delete")) }
++        tap(review); await { !exists(anyButton) }
++        compose.pickFromSessionOptions("Trash")
++        await { exists(plain) }
++        swipe(plain, 0.2f, 0.6f)
++        await { exists(button("Move to Open")) && !exists(button("Pin")) }
++        tap(plain); await { !exists(anyButton) }
++        swipe(plain, 0.95f, 0.02f, durationMillis = 120)
++        await { exists(button("Delete Permanently")) && !exists(button("Share")) }
++        await { clearOf(plain, "Delete Permanently", leading = false) }
++        assertFalse("a full swipe never purges", NavShell.calls.any { it.endsWith("/purge") })
++        compose.onNode(button("Delete Permanently")).performClick()
++        await { exists(hasText("Delete permanently?")) }
++        assertFalse("it asks first", NavShell.calls.any { it.endsWith("/purge") })
++    }
++
++    /** TalkBack is offered the swipe's actions on the row itself, and its long press is still the menu. */
++    @Test fun theRowCarriesItsSwipeActionsForAScreenReader() {
++        signIn(); await { exists(plain) }
++        val node = compose.onNode(plain).fetchSemanticsNode()
++        assertEquals(listOf("Complete", "Pin", "Delete", "Move", "Share"), node.config.getOrNull(SemanticsActions.CustomActions)?.map { it.label })
++        assertEquals("Options for Plain notes", node.config.getOrNull(SemanticsActions.OnLongClick)?.label)
++        compose.onNode(plain).performCustomAccessibilityActionWithLabel("Pin")
++        await { NavShell.calls.any { it == "POST sessions/${NavShell.PLAIN}/pin" } }
++        compose.onNode(plain).performCustomAccessibilityActionWithLabel("Share")
++        await { exists(hasText("Share session")) }
++    }
++
++    @Test fun theLongPressIsTheSameListInIosWords() {
++        signIn(); await { exists(plain) }
++        compose.onNode(plain).openRowMenu()
++        await { exists(hasText("Rename…") and hasAnyAncestor(isDialog())) }
++        val items = compose.onAllNodes(hasClickAction() and hasAnyAncestor(isDialog())).fetchSemanticsNodes()
++            .mapNotNull { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.joinToString("") { t -> t.text } }
++        assertEquals(listOf("Rename…", "Pin", "Tags…", "Complete", "Share…", "Move…", "Delete", "Close"), items)
++        assertFalse(exists(hasText("This action isn't available", substring = true)))
++    }
++
++    private fun swipe(row: SemanticsMatcher, from: Float, to: Float, durationMillis: Long = 250) {
++        compose.onNode(row).performScrollTo().performTouchInput { swipe(Offset(width * from, centerY), Offset(width * to, centerY), durationMillis) }
++        compose.waitForIdle()
++    }
++    private fun tap(row: SemanticsMatcher) { compose.onNode(row).performTouchInput { click() }; compose.waitForIdle() }
++    private fun exists(matcher: SemanticsMatcher) = compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
++    /** The closed drawer stays composed off screen: open is its rows' position on screen (bounds are clipped, so read 0 off screen too). */
++    private fun drawerOpen() = compose.onAllNodes(hasText("Tasks")).fetchSemanticsNodes().any { it.positionInRoot.x >= 0f }
++    /** The slid row has cleared the button's slot: its edge is past the button's. */
++    private fun clearOf(row: SemanticsMatcher, title: String, leading: Boolean): Boolean {
++        val slid = compose.onNode(row).fetchSemanticsNode().boundsInRoot
++        val shown = compose.onNode(button(title)).fetchSemanticsNode().boundsInRoot
++        return if (leading) slid.left >= shown.right else slid.right <= shown.left
++    }
++    private fun toastShows(text: String) = exists(hasText(text) and hasAnyAncestor(hasTestTag("toast")))
++    private fun app() = compose.activity.application as OrbitApplication
++    private fun signIn() {
++        compose.waitUntil(60_000) { app().session.state.value is AuthState.SignedOut }
++        app().realtime.setNetwork(true, "fixture")
++        runBlocking { NavShell.signIn(app().session) }
++        compose.waitUntil(60_000) { app().session.state.value is AuthState.SignedIn && app().realtime.state.value.directoryFresh }
++    }
++    private fun await(condition: () -> Boolean) = compose.waitUntil(60_000) { compose.waitForIdle(); condition() }
++}
+diff --git a/src/android/app/src/test/kotlin/io/orbitd/android/directory/RowActionCopyParityTest.kt b/src/android/app/src/test/kotlin/io/orbitd/android/directory/RowActionCopyParityTest.kt
+new file mode 100644
+index 0000000..6574bc0
+--- /dev/null
++++ b/src/android/app/src/test/kotlin/io/orbitd/android/directory/RowActionCopyParityTest.kt
+@@ -0,0 +1,58 @@
++package io.orbitd.android.directory
++
++import java.io.File
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++/** A row's actions are named as iOS names them, and its swipe moves by iOS's numbers: each is read off the Swift it was ported from. */
++class RowActionCopyParityTest {
++    private val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
++        .first { File(it, "src/macos/OrbitKit/Sources/OrbitKit").isDirectory }
++    private fun views(name: String) = File(root, "src/macos/OrbitApp/Sources/OrbitApp/Views/$name").readText()
++    private fun kit(name: String) = File(root, "src/macos/OrbitKit/Sources/OrbitKit/App/$name").readText()
++
++    @Test fun everyTitleIsTheSwiftOne() {
++        val actions = views("SessionRowActions.swift")
++        assertTrue(actions.contains("RowSwipeAction(title: \"Move to Open\", systemImage: \"tray.and.arrow.up\", tint: .blue,"))
++        assertTrue(actions.contains("RowSwipeAction(title: isPinned ? \"Unpin\" : \"Pin\""))
++        assertTrue(actions.contains("RowSwipeAction(title: \"Share\", systemImage: \"square.and.arrow.up\", tint: .blue"))
++        assertTrue(actions.contains("RowSwipeAction(title: \"Move\", systemImage: \"folder\", tint: .indigo"))
++        assertTrue(actions.contains("RowSwipeAction(title: \"Delete Permanently\", systemImage: \"trash.slash\", tint: .red,"))
++        assertTrue(actions.contains("RowSwipeAction(title: \"Delete\", systemImage: \"trash\", tint: .red,"))
++        assertTrue(actions.contains("RowSwipeAction(title: SessionCompletionPresentation.actionTitle,"))
++        assertTrue(kit("SessionViews.swift").contains("public static let actionTitle = \"${SessionRowAction.COMPLETE.title}\""))
++        // The menu's own words: the editors, and the panels' items with their ellipsis.
++        assertTrue(actions.contains("Label(\"Rename…\""))
++        assertTrue(actions.contains("Label(\"Tags…\""))
++        assertTrue(actions.contains("Label(\"Move…\""))
++        assertTrue(actions.contains("Label(SharePanelCopy.share,"))
++        assertTrue(kit("SharePanel.swift").contains("public static let share = \"${SessionRowAction.SHARE.menuTitle}\""))
++        val held = mapOf(
++            SessionRowAction.COMPLETE to ("Complete" to "Complete"), SessionRowAction.MOVE_TO_OPEN to ("Move to Open" to "Move to Open"),
++            SessionRowAction.PIN to ("Pin" to "Pin"), SessionRowAction.UNPIN to ("Unpin" to "Unpin"),
++            SessionRowAction.SHARE to ("Share" to "Share…"), SessionRowAction.MOVE to ("Move" to "Move…"),
++            SessionRowAction.DELETE to ("Delete" to "Delete"), SessionRowAction.DELETE_PERMANENTLY to ("Delete Permanently" to "Delete Permanently"),
++            SessionRowAction.RENAME to ("Rename…" to "Rename…"), SessionRowAction.TAGS to ("Tags…" to "Tags…"),
++        )
++        assertEquals(SessionRowAction.entries.toSet(), held.keys)
++        held.forEach { (action, words) -> assertEquals(words, action.title to action.menuTitle) }
++        // A project row's Pin is the project copy's, its swipe's Move the session row's.
++        val project = views("SessionProjectPage.swift")
++        assertTrue(project.contains("[RowSwipeAction(title: \"Move\", systemImage: \"folder\", tint: .indigo,"))
++    }
++
++    @Test fun theSwipeMovesByIosNumbers() {
++        val geometry = kit("RowSwipeGeometry.swift")
++        listOf("public static let slot = 60.0", "public static let gap = 10.0", "public static let growth = 30.0",
++            "private static let resistance = 0.3", "private static let flick = 400.0", "max(leadingWidth + Self.slot, rowWidth * 0.6)",
++            "reveal <= 0 ? 0 : min(1, 0.15 + 0.85 * reveal)").forEach { assertTrue("RowSwipeGeometry.swift says $it", geometry.contains(it)) }
++        assertEquals(60.0, RowSwipeGeometry.SLOT, 0.0)
++        assertEquals(10.0, RowSwipeGeometry.GAP, 0.0)
++        assertEquals(30.0, RowSwipeGeometry.GROWTH, 0.0)
++        // The Delete Permanently confirmation is the one iOS asks.
++        val actions = views("SessionRowActions.swift")
++        assertTrue(actions.contains(".orbitConfirmation(\"Delete permanently?\", isPresented: \$confirmPurge)"))
++        assertTrue(actions.contains("Text(\"This session and its full transcript will be permanently deleted. This can't be undone.\")"))
++    }
++}
+diff --git a/src/android/app/src/test/kotlin/io/orbitd/android/directory/RowSwipeGeometryTest.kt b/src/android/app/src/test/kotlin/io/orbitd/android/directory/RowSwipeGeometryTest.kt
+new file mode 100644
+index 0000000..af6cf4f
+--- /dev/null
++++ b/src/android/app/src/test/kotlin/io/orbitd/android/directory/RowSwipeGeometryTest.kt
+@@ -0,0 +1,112 @@
++package io.orbitd.android.directory
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++/** OrbitKit's RowSwipeGeometryTests, case for case: the Android row moves by the same numbers, in dp where iOS has points. */
++class RowSwipeGeometryTest {
++    /** An Open-tab session row on a 393-wide phone: Complete and Pin on the leading side, Delete on the trailing one, and a full swipe
++     * right completes. */
++    private val open = RowSwipeGeometry(leadingWidth = 150.0, trailingWidth = 80.0, rowWidth = 393.0, leadingFullSwipe = true)
++
++    @Test fun theSlotsAreTheSystemsOwn() {
++        assertEquals(150.0, RowSwipeGeometry.openWidth(listOf(60.0, 60.0)), 0.0)
++        assertEquals(80.0, RowSwipeGeometry.openWidth(listOf(60.0)), 0.0)
++        // A third button costs a slot and a gap.
++        assertEquals(220.0, RowSwipeGeometry.openWidth(listOf(60.0, 60.0, 60.0)), 0.0)
++        // A title wider than the slot widens only its own.
++        assertEquals(174.0, RowSwipeGeometry.openWidth(listOf(84.0, 60.0)), 0.0)
++        assertEquals(0.0, RowSwipeGeometry.openWidth(emptyList()), 0.0)
++    }
++
++    @Test fun theRowFollowsTheFingerUpToEachSide() {
++        assertEquals(0.0, open.dragged(0.0), 0.0)
++        assertEquals(120.0, open.dragged(120.0), 0.0)
++        assertEquals(-80.0, open.dragged(-80.0), 0.0)
++    }
++
++    @Test fun pastTheButtonsTheRowGivesGrudgingly() {
++        // Delete has no full swipe: 20 past it moves the row 6.
++        assertEquals(-86.0, open.dragged(-100.0), 1e-9)
++        val noFull = RowSwipeGeometry(150.0, 80.0, 393.0, leadingFullSwipe = false)
++        assertEquals(165.0, noFull.dragged(200.0), 1e-9)
++        // A side with no buttons at all gives only that little.
++        val leadingOnly = RowSwipeGeometry(150.0, 0.0, 393.0, leadingFullSwipe = true)
++        assertEquals(-12.0, leadingOnly.dragged(-40.0), 1e-9)
++    }
++
++    @Test fun aFullSwipeFollowsTheFingerAndCompletes() {
++        assertEquals(300.0, open.dragged(300.0), 0.0)
++        // Over halfway across the row: 0.6 × 393.
++        assertEquals(235.8, open.fullSwipePoint, 1e-9)
++        assertFalse(open.isFullSwipe(230.0))
++        assertTrue(open.isFullSwipe(240.0))
++        assertEquals(RowSwipeGeometry.Rest.FULL_SWIPE, open.rest(240.0, 0.0))
++        assertEquals(393.0, open.offset(RowSwipeGeometry.Rest.FULL_SWIPE), 0.0)
++    }
++
++    @Test fun aNarrowRowStillNeedsASlotPastTheButtons() {
++        assertEquals(210.0, RowSwipeGeometry(150.0, 80.0, 300.0, true).fullSwipePoint, 0.0)
++    }
++
++    @Test fun withoutAFullSwipeALongSwipeJustOpens() {
++        val noFull = RowSwipeGeometry(150.0, 80.0, 393.0, leadingFullSwipe = false)
++        assertFalse(noFull.isFullSwipe(300.0))
++        assertEquals(RowSwipeGeometry.Rest.LEADING, noFull.rest(165.0, 0.0))
++    }
++
++    @Test fun aLetGoRowOpensPastHalfway() {
++        assertEquals(RowSwipeGeometry.Rest.LEADING, open.rest(80.0, 0.0))
++        assertEquals(RowSwipeGeometry.Rest.CLOSED, open.rest(70.0, 0.0))
++        assertEquals(RowSwipeGeometry.Rest.TRAILING, open.rest(-50.0, 0.0))
++        assertEquals(RowSwipeGeometry.Rest.CLOSED, open.rest(-30.0, 0.0))
++    }
++
++    @Test fun aFlickDecidesByItsDirection() {
++        assertEquals(RowSwipeGeometry.Rest.LEADING, open.rest(20.0, 800.0))
++        assertEquals(RowSwipeGeometry.Rest.CLOSED, open.rest(140.0, -800.0))
++        assertEquals(RowSwipeGeometry.Rest.TRAILING, open.rest(-20.0, -800.0))
++        assertEquals(RowSwipeGeometry.Rest.CLOSED, open.rest(-75.0, 800.0))
++    }
++
++    @Test fun aSideWithoutButtonsNeverOpens() {
++        val leadingOnly = RowSwipeGeometry(150.0, 0.0, 393.0, leadingFullSwipe = true)
++        assertEquals(RowSwipeGeometry.Rest.CLOSED, leadingOnly.rest(-12.0, -800.0))
++        assertEquals(RowSwipeGeometry.Rest.CLOSED, open.rest(0.0, 0.0))
++    }
++
++    @Test fun aLoneButtonGrowsInOverItsLastThirty() {
++        val delete = listOf(60.0)
++        assertEquals(0.0, RowSwipeGeometry.reveal(0, delete, 50.0), 0.0)
++        assertEquals(0.2, RowSwipeGeometry.reveal(0, delete, 56.0), 1e-9)
++        assertEquals(0.5, RowSwipeGeometry.reveal(0, delete, 65.0), 1e-9)
++        assertEquals(1.0, RowSwipeGeometry.reveal(0, delete, 80.0), 0.0)
++        // Pulled on past its slot, it stays whole.
++        assertEquals(1.0, RowSwipeGeometry.reveal(0, delete, 140.0), 0.0)
++    }
++
++    @Test fun buttonsGrowInFromTheEdgeInward() {
++        val leading = listOf(60.0, 60.0)
++        assertEquals(1.0, RowSwipeGeometry.reveal(0, leading, 103.0), 0.0)
++        assertEquals(0.0, RowSwipeGeometry.reveal(1, leading, 103.0), 0.0)
++        assertEquals(0.5, RowSwipeGeometry.reveal(1, leading, 135.0), 1e-9)
++        assertEquals(1.0, RowSwipeGeometry.reveal(1, leading, 150.0), 0.0)
++        // A wide slot pushes the next one's start out with it.
++        assertEquals(0.2, RowSwipeGeometry.reveal(1, listOf(84.0, 60.0), 150.0), 1e-9)
++        assertEquals("no third button", 0.0, RowSwipeGeometry.reveal(2, leading, 150.0), 0.0)
++    }
++
++    @Test fun aButtonFadesInAheadOfItsSize() {
++        assertEquals(0.0, RowSwipeGeometry.revealOpacity(0.0), 0.0)
++        assertEquals(0.32, RowSwipeGeometry.revealOpacity(0.2), 1e-9)
++        assertEquals(1.0, RowSwipeGeometry.revealOpacity(1.0), 0.0)
++    }
++
++    @Test fun eachRestHasItsOffset() {
++        assertEquals(0.0, open.offset(RowSwipeGeometry.Rest.CLOSED), 0.0)
++        assertEquals(150.0, open.offset(RowSwipeGeometry.Rest.LEADING), 0.0)
++        assertEquals(-80.0, open.offset(RowSwipeGeometry.Rest.TRAILING), 0.0)
++    }
++}
+diff --git a/src/android/app/src/test/kotlin/io/orbitd/android/directory/SessionRowActionListTest.kt b/src/android/app/src/test/kotlin/io/orbitd/android/directory/SessionRowActionListTest.kt
+new file mode 100644
+index 0000000..8c8c1f8
+--- /dev/null
++++ b/src/android/app/src/test/kotlin/io/orbitd/android/directory/SessionRowActionListTest.kt
+@@ -0,0 +1,66 @@
++package io.orbitd.android.directory
++
++import io.orbitd.android.core.protocol.SessionCapabilities
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++/** iOS `SessionRowActions`: what each side of a row's swipe holds in each scope, and the long press's menu, from one list. */
++class SessionRowActionListTest {
++    private fun session(pinned: Boolean = false, capabilities: SessionCapabilities? = SessionCapabilities(canComplete = true, canRestore = false),
++        role: String? = null) = DirectorySession(id = "34RowActionSession0001", title = "Notes", pinnedAt = if (pinned) "2026-10-01T00:00:00Z" else null,
++        capabilities = capabilities, projectMembership = role?.let { SessionProjectMembership("34RowActionProject0001", role = it) })
++    private fun titles(actions: List<SessionRowAction>) = actions.map { it.title }
++
++    @Test fun openSwipesShowCompleteAndPinThenShareMoveDelete() {
++        assertEquals(listOf("Complete", "Pin"), titles(SessionRowActionList.leading(session(), SessionView.OPEN)))
++        // From the screen edge inward: left to right the row reads Share · Move · Delete.
++        assertEquals(listOf("Delete", "Move", "Share"), titles(SessionRowActionList.trailing(session(), SessionView.OPEN)))
++        assertEquals(listOf("Complete", "Unpin"), titles(SessionRowActionList.leading(session(pinned = true), SessionView.OPEN)))
++    }
++
++    @Test fun completedMovesBackToOpenAndSwipesLeftAsOpenDoes() {
++        val done = session(capabilities = SessionCapabilities(canComplete = false, canRestore = true))
++        assertEquals(listOf("Move to Open", "Pin"), titles(SessionRowActionList.leading(done, SessionView.COMPLETED)))
++        assertEquals(listOf("Delete", "Move", "Share"), titles(SessionRowActionList.trailing(done, SessionView.COMPLETED)))
++        assertTrue(SessionRowActionList.enabled(SessionRowAction.MOVE_TO_OPEN, done))
++    }
++
++    @Test fun trashHasMoveToOpenAndDeletePermanentlyAlone() {
++        val trashed = session(capabilities = SessionCapabilities(canRestore = true))
++        assertEquals(listOf("Move to Open"), titles(SessionRowActionList.leading(trashed, SessionView.TRASH)))
++        assertEquals(listOf("Delete Permanently"), titles(SessionRowActionList.trailing(trashed, SessionView.TRASH)))
++        assertEquals(listOf("Move to Open", "Delete Permanently"), SessionRowActionList.menu(trashed, SessionView.TRASH).map { it.menuTitle })
++    }
++
++    @Test fun aProjectsMemberHasNoMoveButItsCoordinatorDoes() {
++        assertEquals(listOf("Delete", "Share"), titles(SessionRowActionList.trailing(session(role = "TASK"), SessionView.OPEN)))
++        assertEquals(listOf("Delete", "Move", "Share"), titles(SessionRowActionList.trailing(session(role = "COORDINATOR"), SessionView.OPEN)))
++        assertFalse(SessionRowActionList.menu(session(role = "TASK"), SessionView.OPEN).contains(SessionRowAction.MOVE))
++    }
++
++    /** The menu holds the swipe's actions and Rename… and Tags…, which open an editor and so are the menu's alone. */
++    @Test fun theMenuIsTheSameListInIosOrder() {
++        assertEquals(listOf("Rename…", "Pin", "Tags…", "Complete", "Share…", "Move…", "Delete"),
++            SessionRowActionList.menu(session(), SessionView.OPEN).map { it.menuTitle })
++        assertEquals(listOf("Rename…", "Unpin", "Tags…", "Move to Open", "Share…", "Move…", "Delete"),
++            SessionRowActionList.menu(session(pinned = true), SessionView.COMPLETED).map { it.menuTitle })
++        for (view in SessionView.entries) {
++            val swiped = SessionRowActionList.leading(session(), view) + SessionRowActionList.trailing(session(), view)
++            assertFalse(swiped.contains(SessionRowAction.RENAME) || swiped.contains(SessionRowAction.TAGS))
++            assertTrue("every swiped action is in the menu too", SessionRowActionList.menu(session(), view).containsAll(swiped))
++        }
++        assertEquals(listOf(SessionRowAction.DELETE), SessionRowActionList.menu(session(), SessionView.OPEN).filter { it.destructive })
++    }
++
++    /** A session that can't do it keeps the button, off; one that has not said can, as iOS's `?? true`, and the server says otherwise. */
++    @Test fun whatASessionCannotDoIsOffAndWhatItHasNotSaidIsOn() {
++        val held = session(capabilities = SessionCapabilities(canComplete = false))
++        assertFalse(SessionRowActionList.enabled(SessionRowAction.COMPLETE, held))
++        assertTrue(SessionRowActionList.leading(held, SessionView.OPEN).contains(SessionRowAction.COMPLETE))
++        assertTrue(SessionRowActionList.enabled(SessionRowAction.COMPLETE, session(capabilities = null)))
++        assertTrue(SessionRowActionList.enabled(SessionRowAction.MOVE_TO_OPEN, session(capabilities = null)))
++        assertTrue(SessionRowActionList.enabled(SessionRowAction.DELETE, held))
++    }
++}

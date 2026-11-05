@@ -1,0 +1,338 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>Android 会话行滑动 · 对齐 iOS</title>
+<style>
+/* 2026-11-06 · Android 会话行的左右滑，对照 iOS。手机都是真截图（frames/），标号和色带在 drawMarks() 里按帧自身的像素坐标画。 */
+:root { --mark: #FF7A00; --ink: #1c1c1e; --muted: #6b6b72; --hair: rgba(60,60,67,.14); --ok: #17693A; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #F3F3F6; font-family: -apple-system, "PingFang SC", sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+.board { padding: 30px 44px 36px; width: max-content; background: #F3F3F6; }
+.b-title { font-size: 25px; font-weight: 750; margin: 0 0 8px; }
+.b-lede { margin: 0 0 24px; width: 1500px; font-size: 15.5px; line-height: 1.72; color: #3a3a40; }
+.b-h2 { display: flex; align-items: center; gap: 12px; margin: 0 0 18px; font-size: 20px; font-weight: 700; }
+.b-h2 .b-no { display: inline-grid; place-items: center; width: 29px; height: 29px; border-radius: 50%; background: var(--ink); color: #fff; font-size: 15px; }
+.b-h2 .b-sub { font-size: 14.5px; font-weight: 500; color: var(--muted); }
+.b-row { display: flex; gap: 30px; align-items: flex-start; }
+figure { margin: 0; width: 340px; }
+.b-tag { display: inline-block; font-size: 13.5px; font-weight: 700; border-radius: 7px; padding: 3px 10px; margin-bottom: 12px; }
+.b-tag.today { background: #FFE3E0; color: #B42318; }
+.b-tag.after { background: #DDE7FF; color: #2447B8; }
+.b-tag.ref { background: #E7E7EC; color: #45454c; }
+.ph { position: relative; overflow: hidden; width: 340px; border-radius: 38px; background: #111; box-shadow: 0 0 0 1.5px rgba(0,0,0,.3), 0 16px 44px rgba(0,0,0,.14); }
+.ph img { display: block; width: 100%; }
+.ph.crop { height: 300px; }
+.ph.crop img { position: absolute; left: 0; }
+.wrap { position: relative; }
+figcaption { margin-top: 16px; font-size: 14.5px; line-height: 1.64; color: #2c2c31; }
+figcaption ol { margin: 0; padding: 0; list-style: none; }
+figcaption li { margin: 7px 0; position: relative; padding-left: 29px; }
+figcaption li .b-n { position: absolute; left: 0; top: 1px; }
+.b-n { display: inline-grid; place-items: center; width: 21px; height: 21px; border-radius: 50%; background: var(--mark); color: #fff; font: 700 12.5px/1 -apple-system, sans-serif; }
+.b-pin { position: absolute; z-index: 40; box-shadow: 0 0 0 2px #fff; }
+.b-ring { position: absolute; z-index: 39; border: 2px dashed var(--mark); border-radius: 12px; pointer-events: none; }
+.b-band { position: absolute; top: 0; bottom: 0; z-index: 38; pointer-events: none; display: flex; align-items: flex-end; justify-content: center; }
+.b-band span { margin-bottom: 120px; writing-mode: vertical-rl; font: 700 12px/1 -apple-system, sans-serif; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.6); letter-spacing: 1px; }
+i.en { font-style: italic; }
+code { white-space: nowrap; font: 12.5px "JetBrains Mono", monospace; background: rgba(0,0,0,.06); border-radius: 4px; padding: 0 4px; }
+table.cmp { border-collapse: separate; border-spacing: 0; width: 1500px; background: #fff; border-radius: 16px; box-shadow: 0 0 0 1px var(--hair); overflow: hidden; font-size: 14.5px; line-height: 1.55; }
+table.cmp th, table.cmp td { padding: 10px 14px; vertical-align: top; text-align: left; border-bottom: 1px solid var(--hair); }
+table.cmp tr:last-child td { border-bottom: 0; }
+table.cmp th { font-size: 13px; color: var(--muted); font-weight: 600; background: #FAFAFC; }
+table.cmp tr.group td { background: #F0F0F4; font-weight: 700; font-size: 14px; padding: 8px 14px; }
+table.cmp td.q { width: 190px; font-weight: 650; }
+table.cmp td.ios { width: 420px; }
+table.cmp td.now { width: 330px; background: #FFF7F5; }
+table.cmp td.new { background: #F1FAF4; }
+.same { color: var(--ok); font-weight: 700; }
+.diff { color: #B25E00; font-weight: 700; }
+.card { background: #fff; border-radius: 16px; box-shadow: 0 0 0 1px var(--hair); padding: 20px 24px; font-size: 14.5px; line-height: 1.68; }
+.card h3 { margin: 0 0 10px; font-size: 16.5px; }
+.card h3:not(:first-child) { margin-top: 16px; }
+.card ol, .card ul { margin: 0; padding-left: 21px; }
+.card li { margin: 6px 0; }
+.b-two { display: flex; gap: 22px; margin-top: 22px; width: 1500px; align-items: flex-start; }
+.b-two > .card { flex: 1; }
+.rec-flag { color: var(--ok); font-weight: 700; }
+.zones { width: 1500px; margin-top: 26px; }
+.zone-key { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
+</style>
+
+<section class="board" data-png="01-swipe">
+  <h1 class="b-title">Android 会话行的左滑、右滑 · 对齐 iOS</h1>
+  <p class="b-lede">iOS 的会话行除了长按还能左右滑（<code>SessionRowActions.swift</code>、<code>RowSwipeActions.swift</code>），Android 今天只有长按。这块板按 iOS 的代码逐项对过。
+  iPhone 是 iOS 26 模拟器上的真截图（10-02 的滑动探针，iPhone 宽 402 pt，样例数据；最下面探针自己的日志栏已裁掉）。Android 是模拟器（API 36，1080×2400，420 dpi）上原型的真截图，滑动是真的触摸事件，原型的代码没有进主线。两边的数据都是编的。英文是上线文案，中文是说明。</p>
+  <h2 class="b-h2"><span class="b-no">1</span>Open 里的一行：往左滑、往右滑</h2>
+  <div class="b-row">
+    <figure>
+      <span class="b-tag ref">iOS · 左滑</span>
+      <div class="wrap"><div class="ph" data-frame="ios-open-left"></div></div>
+      <figcaption>左到右 <i class="en">Share · Move · Delete</i>，<i class="en">Delete</i> 在最外。滑到底也不会删，要点按钮。</figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag after">Android 原型 · 左滑</span>
+      <div class="wrap"><div class="ph" data-frame="a-open-left"></div></div>
+      <figcaption><ol>
+        <li><span class="b-n">1</span>按钮、顺序、颜色同 iOS。再长的左滑也只是停在这里，不删（原型里滑过整行宽 80% 试过）。</li>
+        <li><span class="b-n">2</span>滑开的行变成圆角卡片，同 iOS。圆小一号，见第 3 张“按钮画成什么样”。</li>
+      </ol></figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag ref">iOS · 右滑</span>
+      <div class="wrap"><div class="ph" data-frame="ios-open-right"></div></div>
+      <figcaption><i class="en">Complete · Pin</i>（已置顶的行是 <i class="en">Unpin</i>）。滑过一大半松手就执行 <i class="en">Complete</i>。</figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag after">Android 原型 · 右滑</span>
+      <div class="wrap"><div class="ph" data-frame="a-open-right"></div></div>
+      <figcaption><ol>
+        <li><span class="b-n">3</span>同 iOS。一次只开一行：开另一行时这一行自己收回。</li>
+        <li><span class="b-n">4</span>有一行开着时，点任何一行只是把它收起，不会打开会话。</li>
+      </ol></figcaption>
+    </figure>
+  </div>
+  <div class="b-row" style="margin-top:30px">
+    <figure>
+      <span class="b-tag after">Android 原型 · 右滑到底，手还没松</span>
+      <div class="wrap"><div class="ph" data-frame="a-armed"></div></div>
+      <figcaption><ol>
+        <li><span class="b-n">5</span>过了“滑到底”的位置：手机震一下，<i class="en">Complete</i> 变大，<i class="en">Pin</i> 淡出；松手才执行，同 iOS。位置是 max(按钮区 + 60, 行宽 60%)，411 dp 宽的手机上是 247 dp。</li>
+      </ol></figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag after">Android 原型 · 这一行不能 Complete</span>
+      <div class="wrap"><div class="ph" data-frame="a-cannot"></div></div>
+      <figcaption><ol>
+        <li><span class="b-n">6</span>按钮在但变淡、点不动；滑到底只是打开，不执行。同 iOS（服务器说 <code>canComplete: false</code> 的行）。</li>
+      </ol></figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag ref">iOS · 浅色 · 右滑</span>
+      <div class="wrap"><div class="ph" data-frame="ios-open-right-light"></div></div>
+      <figcaption>浅色同一套颜色，卡片是 <code>systemGray5</code>。</figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag after">Android 原型 · 浅色 · 左滑</span>
+      <div class="wrap"><div class="ph" data-frame="a-open-left-light"></div></div>
+      <figcaption>颜色从 iOS 的截图上取：深色 <code>#30D158 #0091FF #6D7CFF #FF4245</code>，浅色 <code>#34C759 #0088FF #6155F5 #FF383C</code>；卡片 <code>#2C2C2E</code> / <code>#E5E5EA</code>。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="board" data-png="02-lists">
+  <h2 class="b-h2"><span class="b-no">2</span>Completed、Trash、项目、长按菜单<span class="b-sub">iOS 有滑动的三处会话列表都做：工作区的列表、文件夹页、项目的会话页</span></h2>
+  <div class="b-row">
+    <figure>
+      <span class="b-tag ref">iOS · Completed · 右滑</span>
+      <div class="wrap"><div class="ph" data-frame="ios-completed-right"></div></div>
+      <figcaption><i class="en">Move to Open · Pin</i>，滑到底是 <i class="en">Move to Open</i>。左滑和 Open 一样。</figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag after">Android 原型 · Completed · 右滑</span>
+      <div class="wrap"><div class="ph" data-frame="a-completed-right"></div></div>
+      <figcaption><ol><li><span class="b-n">1</span>同 iOS；左滑也是 <i class="en">Share · Move · Delete</i>。滑到底移回 Open（原型里试过）。</li></ol></figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag ref">iOS · Trash · 左滑</span>
+      <div class="wrap"><div class="ph" data-frame="ios-trash-left"></div></div>
+      <figcaption>只有 <i class="en">Delete Permanently</i>，点了先问；右滑只有 <i class="en">Move to Open</i>。</figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag after">Android 原型 · Trash · 点了先问</span>
+      <div class="wrap"><div class="ph" data-frame="a-trash-asks"></div></div>
+      <figcaption><ol><li><span class="b-n">2</span>同 iOS，问的话也同（这个对话框今天长按里就有）。滑到底不删。</li></ol></figcaption>
+    </figure>
+  </div>
+  <div class="b-row" style="margin-top:30px">
+    <figure>
+      <span class="b-tag after">Android 原型 · 项目行 · 右滑</span>
+      <div class="wrap"><div class="ph" data-frame="a-project-right"></div></div>
+      <figcaption><ol><li><span class="b-n">3</span>项目占协调会话的位置：右滑只有 <i class="en">Pin</i>（滑到底就是置顶），左滑只有 <i class="en">Move</i>，都作用在协调会话上，同 iOS 的 <code>SessionProjectRowActions</code>。没有协调会话时这一行不滑。</li></ol></figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag after">Android 原型 · 项目的会话页 · 成员左滑</span>
+      <div class="wrap"><div class="ph" data-frame="a-member-left"></div></div>
+      <figcaption><ol><li><span class="b-n">4</span>属于项目但不是协调会话的行没有 <i class="en">Move</i>，同 iOS；协调会话有。</li></ol></figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag today">Android 今天 · 长按</span>
+      <div class="wrap"><div class="ph" data-frame="today-longpress"></div></div>
+      <figcaption><i class="en">Rename</i> 没有省略号；最后一项叫 <i class="en">Move to Trash</i>，没有分隔线、不是红字。做不了的项灰掉时下面还会多一句说明（这张里没有）。</figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag after">Android 原型 · 长按</span>
+      <div class="wrap"><div class="ph" data-frame="a-menu"></div></div>
+      <figcaption><ol><li><span class="b-n">5</span>和滑动是同一份清单：顺序、字同 iOS 的长按菜单（<i class="en">Rename… · Pin · Tags… · Complete · Share… · Move…</i>，分隔线，红字 <i class="en">Delete</i>）。<i class="en">Rename…</i>、<i class="en">Tags…</i> 只在这里，不进滑动，同 iOS。样子仍是 Android 的对话框（平台差异，项目早先定的）。</li></ol></figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="board" data-png="03-gestures">
+  <h2 class="b-h2"><span class="b-no">3</span>右滑、抽屉、系统返回怎么分开；按钮画成什么样</h2>
+  <div class="b-row">
+    <figure>
+      <span class="b-tag after">手势导航（Android 默认）· 从哪里起手</span>
+      <div class="wrap"><div class="ph" data-frame="a-zones-gesture"></div></div>
+      <figcaption>色带是起手位置，宽度是这台模拟器量到的：系统的边缘区每边 30 dp（78 px）。</figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag after">原型 · 在抽屉条里右滑</span>
+      <div class="wrap"><div class="ph" data-frame="a-strip-drawer"></div></div>
+      <figcaption>从系统区外 9 dp 起手往右：抽屉出来，行不动。</figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag after">三键导航 · 从哪里起手</span>
+      <div class="wrap"><div class="ph" data-frame="a-zones-threebutton"></div></div>
+      <figcaption>三键导航没有系统的边缘区：最左 18 dp 拉抽屉，同 iOS 的 18 pt 边缘条。</figcaption>
+    </figure>
+    <div class="card" style="width:420px">
+      <h3>起手在哪儿，就归谁</h3>
+      <ul style="padding-left:0;list-style:none">
+        <li><span class="zone-key" style="background:#E5484D"></span><b>系统的边缘区</b>（手势导航每边约 30 dp）：系统返回。今天就这样，不变。列表是最底下那页时，系统返回就是退出 App，这也是今天的样子。</li>
+        <li><span class="zone-key" style="background:#3E63DD"></span><b>紧挨着的 18 dp</b>：抽屉，行不接。iOS 抽屉的边缘条也是 18 pt。</li>
+        <li><span class="zone-key" style="background:#30A46C"></span><b>行的其他地方</b>：行自己的左滑、右滑。</li>
+        <li><b>不是会话行的地方</b>（顶栏、文件夹行、分组标题、空白）：横着拖仍是抽屉，和今天一样。</li>
+        <li><b>竖着为主的拖动</b>：列表滚动，行不接；列表一动，开着的行收起，同 iOS。</li>
+        <li><b>系统返回</b>（返回键或返回手势）：有一行开着时，先把它收起，再按才返回，像先关抽屉一样。iOS 没有返回键，这是 Android 加的。</li>
+      </ul>
+      <h3>右边缘</h3>
+      <p style="margin:0">手势导航时最右 30 dp 也是系统返回，从那里起手的左滑会被系统拿走，原型里试过（从 x=1078 起手：页退回去，行没开）。iOS 右边没有这个。改不了：系统只许 App 每边让出 200 dp 高的一段，盖不住整个列表。左滑从行中间起手就行。</p>
+    </div>
+  </div>
+  <div class="b-two">
+    <div class="card">
+      <h3>按钮画成什么样</h3>
+      <ul>
+        <li><b>同 iOS 26 的圆</b>：彩色圆、白色实心图标、圆下面一行字；按钮从各自的位置由一个点长出来，最外的先出；按住时变暗变小一点；做不了的变淡。</li>
+        <li><b>槽和间距同 iOS</b>：每个按钮一个 60 dp 的槽，离边缘、彼此、和滑开的行都是 10 dp；字长的槽变宽（<i class="en">Move to Open</i>、<i class="en">Delete Permanently</i>）。所以滑开的距离也同：两个按钮 150 dp，三个 220 dp。</li>
+        <li><b>圆小一号</b>：Android 的会话行高 63 dp，iOS 是 75.3 pt。按 iOS 圆占行高的比例画：圆 40 dp（iOS 47 pt），字 12 sp（iOS 13 pt）。用 47 dp 的话字会被行切掉。</li>
+        <li><b>滑开的行</b>：圆角 24 的卡片，颜色取自 iOS 的 <code>systemGray5</code>；收回原位后淡出，同 iOS。</li>
+        <li><b>宽屏</b>：iPad 宽屏用系统自带的按钮；Android 没有三栏，平板上也画圆。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>手感的数字，全部照搬 iOS 的 <code>RowSwipeGeometry</code></h3>
+      <ul>
+        <li>跟手到按钮区的宽度为止，再往外只给 30%（朝“滑到底”的方向除外）。</li>
+        <li>松手：拉出过一半就打开，不到一半就收回；快甩（每秒 400 dp 以上）按甩的方向。</li>
+        <li>滑到底的位置：max(按钮区宽 + 60, 行宽 × 0.6)；只有右滑的第一个按钮能滑到底执行，左滑没有。</li>
+        <li>按钮在最后 30 dp 里长出来，先淡入。弹簧换算自 SwiftUI 的 <code>.snappy</code>、<code>.smooth</code>。</li>
+        <li>滑到底执行后行先滑出去，0.5 s 后如果还在列表里就滑回来（请求失败的时候），同 iOS。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="board" data-png="04-audit">
+  <h2 class="b-h2"><span class="b-no">4</span>逐项对照 iOS<span class="b-sub">iOS 这一列读自 <code>SessionRowActions.swift</code>、<code>RowSwipeActions.swift</code>、<code>RowSwipeGeometry.swift</code>、<code>SessionProjectPage.swift</code>、<code>CompactShell.swift</code></span></h2>
+  <table class="cmp">
+    <tr><th>项</th><th>iOS</th><th>Android 今天</th><th>Android 建议（原型）</th></tr>
+    <tr class="group"><td colspan="4">动作</td></tr>
+    <tr><td class="q">Open · 左滑</td><td class="ios">Share · Move · Delete（左到右），Delete 最外，滑到底不删</td><td class="now">没有滑动</td><td class="new"><span class="same">同 iOS</span></td></tr>
+    <tr><td class="q">Open · 右滑</td><td class="ios">Complete · Pin / Unpin；滑到底 = Complete，不能 Complete 时不执行</td><td class="now">没有滑动</td><td class="new"><span class="same">同 iOS</span></td></tr>
+    <tr><td class="q">Completed</td><td class="ios">右滑 Move to Open · Pin / Unpin，滑到底 = Move to Open；左滑同 Open</td><td class="now">没有滑动</td><td class="new"><span class="same">同 iOS</span></td></tr>
+    <tr><td class="q">Trash</td><td class="ios">右滑只有 Move to Open（滑到底执行）；左滑只有 Delete Permanently，先问</td><td class="now">没有滑动</td><td class="new"><span class="same">同 iOS</span>，问的对话框和字是现成的</td></tr>
+    <tr><td class="q">项目里的成员</td><td class="ios">不是协调会话的没有 Move</td><td class="now">长按菜单已是这样</td><td class="new"><span class="same">同 iOS</span>，滑动和长按都是</td></tr>
+    <tr><td class="q">项目行</td><td class="ios">右滑 Pin / Unpin（滑到底 = Pin），左滑 Move，作用在协调会话上；没有协调会话时两边都空</td><td class="now">没有滑动</td><td class="new"><span class="same">同 iOS</span>。没有协调会话时这一行不接横拖（iOS 会让它略动一下再弹回）</td></tr>
+    <tr><td class="q">做不了的动作</td><td class="ios">按钮变淡、点不动；滑到底只打开</td><td class="now">长按菜单里灰掉，下面多一句说明</td><td class="new"><span class="same">同 iOS</span>；那句说明去掉（iOS 没有）</td></tr>
+    <tr><td class="q">没说能不能的会话</td><td class="ios">当作能（<code>canComplete ?? true</code>），服务器拒了再说</td><td class="now">当作不能</td><td class="new"><span class="same">同 iOS</span></td></tr>
+    <tr><td class="q">Delete、Share、Move</td><td class="ios">Delete 移进 Trash，行当场离开，提示带 Undo；Share、Move 打开各自的面板</td><td class="now">长按里同样</td><td class="new"><span class="same">同 iOS</span>，用的是现成的写入和面板</td></tr>
+    <tr class="group"><td colspan="4">手势</td></tr>
+    <tr><td class="q">一次只开一行</td><td class="ios">开另一行时前一行收回；有一行开着时点任何一行只收起</td><td class="now">—</td><td class="new"><span class="same">同 iOS</span></td></tr>
+    <tr><td class="q">跟手、松手、滑到底</td><td class="ios"><code>RowSwipeGeometry</code>：30% 阻力、过半打开、400/s 快甩、max(按钮区 + 60, 行宽 60%)</td><td class="now">—</td><td class="new"><span class="same">同 iOS</span>，同样的数，单位 dp</td></tr>
+    <tr><td class="q">按钮出现</td><td class="ios">从点长出，最外先；过了滑到底的位置震一下，要执行的变大、其他淡出</td><td class="now">—</td><td class="new"><span class="same">同 iOS</span></td></tr>
+    <tr><td class="q">竖着拖、列表滚动</td><td class="ios">竖着为主是滚动；列表一动开着的行收起</td><td class="now">—</td><td class="new"><span class="same">同 iOS</span></td></tr>
+    <tr><td class="q">屏幕左边缘</td><td class="ios">列表页：18 pt 边缘条拉抽屉；推进来的页：系统返回</td><td class="now">手势导航：系统返回；三键：任何横拖都是抽屉</td><td class="new"><span class="diff">不同</span>：系统区仍是系统返回（平台），紧挨着 18 dp 拉抽屉</td></tr>
+    <tr><td class="q">屏幕右边缘</td><td class="ios">没有手势</td><td class="now">手势导航：系统返回</td><td class="new"><span class="diff">不同</span>：最右 30 dp 起手的左滑归系统返回（平台，改不了）</td></tr>
+    <tr><td class="q">行以外的横拖</td><td class="ios">列表页只有边缘条</td><td class="now">抽屉</td><td class="new"><span class="diff">不同</span>：仍是抽屉，不改（抽屉另有一项）</td></tr>
+    <tr><td class="q">返回键</td><td class="ios">没有</td><td class="now">返回</td><td class="new"><span class="diff">Android 加的</span>：有一行开着时先收起它</td></tr>
+    <tr class="group"><td colspan="4">长按菜单（和滑动同一份清单）</td></tr>
+    <tr><td class="q">Open / Completed</td><td class="ios">Rename… · Pin · Tags… · Complete（或 Move to Open）· Share… · Move… ┃ Delete（红）</td><td class="now">Rename · Pin · Tags… · Complete · Share… · Move… · Move to Trash</td><td class="new"><span class="same">同 iOS</span>：Rename…，分隔线，红字 Delete（见待定 1）</td></tr>
+    <tr><td class="q">Trash</td><td class="ios">Move to Open ┃ Delete Permanently（红）</td><td class="now">Move to Open · Delete Permanently…</td><td class="new"><span class="same">同 iOS</span></td></tr>
+    <tr><td class="q">会话页的 ⋯</td><td class="ios">Move to Trash</td><td class="now">Move to Trash</td><td class="new">不动，同 iOS</td></tr>
+    <tr><td class="q">菜单的样子</td><td class="ios">系统的 context menu</td><td class="now">对话框</td><td class="new"><span class="diff">不同</span>：仍是对话框（项目定的平台差异）</td></tr>
+    <tr class="group"><td colspan="4">读屏（TalkBack / VoiceOver）</td></tr>
+    <tr><td class="q">不滑也能用</td><td class="ios">VoiceOver 的操作 = 两边能用的按钮</td><td class="now">只有长按（<i class="en">Options for …</i>）</td><td class="new"><span class="same">同 iOS</span>：行的 custom actions 是同一份（Complete、Pin、Delete、Move、Share…），长按仍是菜单</td></tr>
+    <tr><td class="q">开着时的按钮</td><td class="ios">各自念标题；收起时不在树里</td><td class="now">—</td><td class="new"><span class="same">同 iOS</span></td></tr>
+  </table>
+</section>
+
+<section class="board" data-png="05-decide">
+  <h2 class="b-h2"><span class="b-no">5</span>待定 · 要你拍板</h2>
+  <div class="b-two" style="margin-top:0">
+    <div class="card">
+      <h3>待定 1：长按菜单里的 <i class="en">Move to Trash</i></h3>
+      <p style="margin:0 0 8px"><span class="rec-flag">A 改成 <i class="en">Delete</i>，对齐 iOS（推荐）。</span>iOS 的行上，滑动和长按都叫 <i class="en">Delete</i>（红字，前面一条分隔线）；只有会话页右上角 ⋯ 里叫 <i class="en">Move to Trash</i>。Android 照做：行上 <i class="en">Delete</i>，会话页 ⋯ 不动。删了之后的提示仍是 <i class="en">Moved to Trash</i> + <i class="en">Undo</i>，所以不会以为是永久删除。顺带对齐的：<i class="en">Rename</i> → <i class="en">Rename…</i>，<i class="en">Delete Permanently…</i> → <i class="en">Delete Permanently</i>。</p>
+      <p style="margin:0"><b>B 留着 <i class="en">Move to Trash</i>。</b>滑动按钮叫 <i class="en">Delete</i>（同 iOS），长按菜单叫 <i class="en">Move to Trash</i>，同一个动作两个名字。</p>
+      <h3>待定 2：抽屉的 18 dp 边缘条</h3>
+      <p style="margin:0 0 8px"><span class="rec-flag">A 留（推荐）。</span>系统区外紧挨着的 18 dp 起手是抽屉，同 iOS 的边缘条；行从这之后才接。代价：从行最左边起手的右滑拉出来的是抽屉，不是 Complete。</p>
+      <p style="margin:0"><b>B 不留。</b>系统区之外整行都是行的滑动；抽屉只能点 ☰，或从行以外（顶栏、文件夹行、空白）横拖。</p>
+      <h3>待定 3：iOS 别的有滑动的列表</h3>
+      <p style="margin:0 0 8px">这次做的是任务写的三处会话列表。iOS 另外还有滑动的：任务行（Run / Delete）、引擎页的账号行（Pause / Remove）、Codex 账号池（Sign Out）、设置里的分享链接（Turn Off）和访问令牌（Revoke）；Wiki 运行的 Reject Android 已经有。</p>
+      <p style="margin:0"><span class="rec-flag">A 另开一项（推荐）</span>，各自对照 iOS 再做；<b>B 这次一起做。</b></p>
+    </div>
+    <div class="card">
+      <h3>落地</h3>
+      <ol>
+        <li><b>一份清单</b>：<code>SessionRowActions.kt</code> 列出每种范围的左边、右边、长按菜单，滑动、长按、TalkBack 都从它画；文案和 iOS 源码逐字对的测试。</li>
+        <li><b>滑动</b>：<code>RowSwipe.kt</code>，<code>RowSwipeGeometry</code> 的移植（iOS 的测试逐条搬过来），一行一个状态、列表一个“谁开着”。</li>
+        <li><b>三处列表</b>：工作区列表和文件夹页（<code>DirectoryScreen</code>）、项目的会话页（<code>SessionProjectPage</code>）；项目行。</li>
+        <li><b>测试</b>：Robolectric（清单、几何、每种范围的滑动、点按收起、返回键、custom actions）；设备测试用真触摸走一遍（深色、浅色、手势导航、三键导航），TalkBack 打开时读行上的 actions 并执行。</li>
+      </ol>
+      <h3>还没验证</h3>
+      <ul>
+        <li>TalkBack 的“双击并按住”：模拟器控制台做不出，打开菜单只能经由节点的 long click 证明（同 11-05 的结论）。</li>
+        <li>真手机上的手感（震动、弹簧）：只在模拟器上看过。</li>
+        <li>从右往左排版的语言：代码按方向处理了，没有截图。</li>
+      </ul>
+      <h3>和 iOS 有意不同的（都在第 3、4 张）</h3>
+      <ul>
+        <li>边缘：系统返回占着两边约 30 dp（平台）。</li>
+        <li>返回键先收起开着的行。</li>
+        <li>圆 40 dp（行矮）。长按是对话框（平台）。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<script>
+// Pins, rings and bands are in the frame's own pixels; each frame's width comes from its own file.
+const WIDTH = { 'ios-open-left': 1206, 'ios-open-right': 1206, 'ios-open-right-light': 1206, 'ios-completed-right': 1206, 'ios-trash-left': 1206 };
+const BANDS_GESTURE = [[0, 78, 'rgba(229,72,77,.55)', '系统返回 30 dp'], [78, 47, 'rgba(62,99,221,.6)', '抽屉 18 dp'], [125, 877, 'rgba(48,164,108,.16)', '行的左滑、右滑'], [1002, 78, 'rgba(229,72,77,.55)', '系统返回 30 dp']];
+const BANDS_THREE = [[0, 47, 'rgba(62,99,221,.6)', '抽屉 18 dp'], [47, 1033, 'rgba(48,164,108,.16)', '行的左滑、右滑']];
+const SPEC = {
+  'a-open-left': { pins: [[1040, 1150, 1], [320, 1180, 2]] },
+  'a-open-right': { pins: [[400, 1150, 3], [640, 1520, 4]] },
+  'a-armed': { pins: [[230, 1150, 5]] },
+  'a-cannot': { pins: [[400, 1500, 6]] },
+  'a-completed-right': { pins: [[420, 590, 1]] },
+  'a-trash-asks': { pins: [[1010, 950, 2]] },
+  'a-project-right': { pins: [[230, 1010, 3]] },
+  'a-member-left': { pins: [[1040, 780, 4]] },
+  'a-menu': { pins: [[300, 1640, 5]] },
+  'a-zones-gesture': { bands: BANDS_GESTURE },
+  'a-zones-threebutton': { bands: BANDS_THREE },
+};
+function mark(ph, spec, width) {
+  const scale = ph.clientWidth / width, wrap = ph.parentElement;
+  for (const [x, w, color, label] of spec.bands || []) {
+    const b = document.createElement('div'); b.className = 'b-band';
+    b.style.left = (x * scale) + 'px'; b.style.width = (w * scale) + 'px'; b.style.background = color;
+    b.style.top = ph.offsetTop + 'px'; b.style.height = ph.clientHeight + 'px'; b.style.borderRadius = '0';
+    if (label) { const s = document.createElement('span'); s.textContent = label; b.appendChild(s); }
+    ph.appendChild(b);
+  }
+  for (const [x, y, n] of spec.pins || []) {
+    const p = document.createElement('span'); p.className = 'b-n b-pin'; p.textContent = n;
+    p.style.left = (x * scale - 10.5) + 'px'; p.style.top = (y * scale - 10.5) + 'px'; wrap.appendChild(p);
+  }
+  for (const [x, y, w, h] of spec.rings || []) {
+    const r = document.createElement('div'); r.className = 'b-ring';
+    r.style.left = x * scale + 'px'; r.style.top = y * scale + 'px'; r.style.width = w * scale + 'px'; r.style.height = h * scale + 'px'; wrap.appendChild(r);
+  }
+}
+document.querySelectorAll('[data-frame]').forEach((ph) => {
+  const img = document.createElement('img'); img.src = `frames/${ph.dataset.frame}.png`; ph.appendChild(img);
+});
+window.drawMarks = () => {
+  document.querySelectorAll('[data-frame]').forEach((ph) => mark(ph, SPEC[ph.dataset.frame] || {}, WIDTH[ph.dataset.frame] || 1080));
+};
+</script>
