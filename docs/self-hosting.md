@@ -585,7 +585,7 @@ A later build deletes the HTTPS work path. `/upgrade`'s script and Compose both 
 
 A runner takes its updates from your deployment's own `/dl`, with the release its `GET /api/runner/release` names, and
 those two stay on HTTP(S) in every build, so an upgrade of the server brings runners with it. A runner that is idle
-updates itself within RUNNER_UPDATE_DELAY_PLACEHOLDER; a busy one waits for its turns to end.
+updates itself within 10 minutes; a busy one waits for its turns to end.
 
 A runner with self-update off (`ORBIT_NO_SELFUPDATE`, or an install directory it cannot write to):
 
