@@ -216,8 +216,10 @@ jobs:
   postgres-shards:
     name: PostgreSQL specs ${{ matrix.shard }}/3
     runs-on: ubuntu-latest
-    # Above a passing run rather than at it: a budget is not a second chance.
-    timeout-minutes: 45
+    # Above a passing run rather than at it: a budget is not a second chance. On 2026-11-03 a shard's
+    # specs took up to 43 minutes and the checkout before them up to 16, which cut three runs of five
+    # at the 45 this used to say, with no spec failed.
+    timeout-minutes: 60
     strategy:
       # Every shard runs to its own end even when a sibling fails: the other two shards' reds are
       # what the next push is fixed against, and cancelling them would hide exactly that.
