@@ -880,6 +880,51 @@ test('0313 · the near-neighbour lookup at 2,606 and at 10,000 entries', { skip,
     await assertReadsTheIndex(h, fx.other, fx.otherSpace, OTHER);
   });
 
+  await t.test('the keyword leg\'s last pass reads the trigram index for rare words, and common ones cost what they cost', async () => {
+    await analyze(h);
+    const lastPass = async (q: string): Promise<{ rows: number; ms: number; nodes: PlanNode[]; text: string }> => {
+      const statements: Prisma.Sql[] = [];
+      const recorder = {
+        $queryRaw: async (statement: Prisma.Sql) => {
+          statements.push(statement);
+          return [];
+        },
+      };
+      await new WikiRetrieval(recorder as unknown as PrismaService).search({ ownerId: fx.owner.id, spaceId: fx.big, q });
+      assert.equal(statements.length, 3, 'the phrase, every word, and any word');
+      const last = statements[2];
+      const started = Date.now();
+      const answered = await h.sql.query(last.text, last.values as unknown[]);
+      const ms = Date.now() - started;
+      const json = await h.sql.query<{ 'QUERY PLAN': Array<{ Plan: PlanNode }> }>(
+        `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${last.text}`,
+        last.values as unknown[],
+      );
+      const plan = await h.sql.query<{ 'QUERY PLAN': string }>(`EXPLAIN (ANALYZE, BUFFERS) ${last.text}`, last.values as unknown[]);
+      return {
+        rows: answered.rows.length,
+        ms,
+        nodes: nodesOf(json.rows[0]['QUERY PLAN'][0].Plan),
+        text: plan.rows.map((row) => row['QUERY PLAN']).join('\n'),
+      };
+    };
+
+    // Words from the long tail: the index is what makes this the cheap answer it is.
+    const { latin } = words();
+    const rare = await lastPass(`${latin[15_000]} ${latin[16_000]} nowhereatall`);
+    assert.ok(rare.nodes.some((node) => node['Index Name'] === 'wiki_entry_search_trgm'), `rare words do not read the trigram index:\n${rare.text}`);
+    t.diagnostic(`last pass, rare words, among ${BIG} entries: ${rare.ms} ms, ${rare.rows} rows`);
+
+    // Words most entries hold: the index would narrow nothing, so which plan answers is the planner's to
+    // choose, and what the pass costs is reading those entries. It is said here rather than asserted,
+    // because a time is the host's as much as the query's; what it must do is answer.
+    for (const q of ['worktree runner nowhereatall', 'the and for with that from this nowhereatall']) {
+      const common = await lastPass(q);
+      assert.equal(common.rows, 50, `${q} answers up to the leg's cap:\n${common.text}`);
+      t.diagnostic(`last pass, "${q}", among ${BIG} entries: ${common.ms} ms\n${common.text}`);
+    }
+  });
+
   await t.test(`${OPS} adds into ${BIG.toLocaleString('en-US')} entries commit, their transaction within ${OVER_BASELINE_MS / 1_000} s of the same into an empty space`, async () => {
     const warm = await space(h, fx.owner.id, 'warm-up');
     const empty = await space(h, fx.owner.id, 'empty');

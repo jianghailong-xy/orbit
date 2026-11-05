@@ -10,14 +10,22 @@ import {
   type WikiTrust,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
-import { broaden, normalizeSearchQuery, stripEmphasis, type NormalizedSearchQuery } from '../sessions/search-query';
+import {
+  broaden,
+  CONTENT_MIN_CHARS,
+  escapeLike,
+  normalizeSearchQuery,
+  stripEmphasis,
+  type NormalizedSearchQuery,
+} from '../sessions/search-query';
 
 /**
  * Orbit Wiki's retrieval (design §6, contract `searchMatches`).
  *
  * THREE LEGS, TWO OF THEM REAL TODAY, FUSED BY RANK. The keyword leg is pg_trgm over the very
  * expression migration 0307 built `wiki_entry_search_trgm` on, normalized and broadened exactly as
- * session search is; the path leg is a prefix match against an entry's anchor paths and its
+ * session search is, with a last pass of its own when no entry holds every word (`anyWordLeg`); the
+ * path leg is a prefix match against an entry's anchor paths and its
  * pitfall trigger paths; the semantic leg (design §6.3) is phase 2 and off. The legs' ranked lists
  * are fused with reciprocal rank fusion (k=60) and the answer is entries — never a page, never a
  * slice.
@@ -127,6 +135,26 @@ export function pathQueries(q: string | undefined, paths: readonly string[] | un
   const named = (paths ?? []).map(normalizePath).filter((path) => path.length > 0);
   if (named.length > 0) return [...new Set(named)];
   return looksLikePath(q ?? '') ? [normalizePath(q!)].filter((path) => path.length > 0) : [];
+}
+
+/** Whether a word takes part in the last pass: it clears session search's floor. `to` says nothing about an entry. */
+function usableInLastPass(word: string): boolean {
+  return [...word].length >= CONTENT_MIN_CHARS;
+}
+
+/**
+ * The last pass's question (contract `searchMatches.keyword`): the groups of patterns of which any one found
+ * is enough, or null when there is no such question to ask. A group keeps the readings that take part, and goes
+ * when none does.
+ *
+ * At least two groups, because one is not a question about the query at all: it finds every entry that holds
+ * a generic word, and in the replay those answers were on topic 6 times in 21 against 26 in 39 with two or more.
+ */
+export function anyWordPatterns(norm: NormalizedSearchQuery): string[][] | null {
+  const groups = norm.terms
+    .map((term) => term.filter(usableInLastPass).map((word) => `%${escapeLike(word)}%`))
+    .filter((group) => group.length > 0);
+  return groups.length >= 2 ? groups : null;
 }
 
 // ── Fusion and ordering (pure) ──────────────────────────────────────────────────────────────────
@@ -316,7 +344,13 @@ export class WikiRetrieval {
     // `broaden` for why that is a second query rather than a second predicate. The path leg needs
     // nothing from it, so it runs either way.
     const widened = norm && keyword.length === 0 ? broaden(norm) : null;
-    const keywords = keyword.length === 0 && widened ? await this.keywordLeg(where, widened) : keyword;
+    const everyWord = keyword.length === 0 && widened ? await this.keywordLeg(where, widened) : keyword;
+    // No entry holds every word either: which holds the most of them. Measured over the multi-word
+    // searches agents really made, two thirds found nothing, because a question names more words than
+    // the entry that answers it (docs/wiki-memory-claims-design.md §6.3). Only here, and only in this
+    // file: session search's palette has no use for a row that mentions one word of three.
+    const anyWord = norm && everyWord.length === 0 ? anyWordPatterns(norm) : null;
+    const keywords = anyWord ? await this.anyWordLeg(where, norm!, anyWord) : everyWord;
     const byPath = paths.length > 0 ? await this.pathLeg(where, paths) : [];
 
     const fused = rrfFuse([
@@ -344,6 +378,35 @@ export class WikiRetrieval {
         FROM "wiki_entry" e
        WHERE ${where} AND ${matchSql(norm, col)}
        ORDER BY word_similarity(${norm.raw}, ${col}) DESC, e."id"
+       LIMIT ${LEG_CAP}::int
+    `);
+    return rows.map((row) => row.id);
+  }
+
+  /**
+   * The keyword leg's last pass: the entries holding any of the words, those holding the most first,
+   * and pg_trgm's similarity to the whole query among those holding as many.
+   *
+   * Always over the indexed expression: every word here cleared the floor, so each ILIKE is a condition the
+   * trigram index can answer. The inner query reads each entry's text once and hands it up, because the count
+   * asks of the text once per word and `wiki_entry_search_text` costs about 0.1 ms a call (0313); `OFFSET 0` is
+   * what keeps the planner from folding the call back into every one of them.
+   */
+  private async anyWordLeg(where: Prisma.Sql, norm: NormalizedSearchQuery, groups: string[][]): Promise<string[]> {
+    const holds = (col: Prisma.Sql, group: string[]): Prisma.Sql =>
+      Prisma.sql`(${Prisma.join(group.map((pattern) => Prisma.sql`${col} ILIKE ${pattern}`), ' OR ')})`;
+    const text = Prisma.sql`m."text"`;
+    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT m."id" AS "id"
+        FROM (
+          SELECT e."id" AS "id", ${SEARCH_TEXT} AS "text"
+            FROM "wiki_entry" e
+           WHERE ${where} AND (${Prisma.join(groups.map((group) => holds(SEARCH_TEXT, group)), ' OR ')})
+          OFFSET 0
+        ) m
+       ORDER BY (${Prisma.join(groups.map((group) => Prisma.sql`${holds(text, group)}::int`), ' + ')}) DESC,
+                word_similarity(${norm.raw}, ${text}) DESC,
+                m."id"
        LIMIT ${LEG_CAP}::int
     `);
     return rows.map((row) => row.id);
