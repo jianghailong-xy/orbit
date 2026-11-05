@@ -569,9 +569,11 @@ fi
 DEPLOY_SHA="$(git rev-parse HEAD)"
 export ORBIT_SOURCE_SHA="${ORBIT_SOURCE_SHA:-$DEPLOY_SHA}"
 
-# The runner link (the section above). A build that needs it demands its lines before Compose can render anything.
+# The runner link (the section above). A build that needs it demands its lines before Compose can render anything, so a
+# deployment with none gets them first; any other waits until what can stop this run before anything is built has had its say.
 link_preflight
-if [ "$LINK_ONLY" -eq 1 ]; then link_prepare; fi
+LINK_EARLY=0
+if [ "$LINK_ONLY" -eq 1 ] && [ "$LINK_STATE" = new ]; then LINK_EARLY=1; link_prepare; fi
 
 # wiki-worker runs the apiserver's image with another command, so naming it builds nothing twice: it
 # keeps this list and the recreate list below the same services.
@@ -591,8 +593,8 @@ if printf '%s\n' "$COMPOSE_SERVICES" | grep -x docker-channel >/dev/null; then
   CHANNEL=docker-channel
   managed_runners_preflight
 fi
-# Once what can stop this run before anything is built has had its say, as a build that needs the link could not wait for.
-if [ "$LINK_ONLY" -eq 0 ]; then link_prepare; fi
+# Once what can stop this run before anything is built has had its say.
+if [ "$LINK_EARLY" -eq 0 ]; then link_prepare; fi
 # The other apiservers a deployment adds in docker-compose.override.yml, apiserver-2 and on (docs/self-hosting.md,
 # "Several apiservers"). They run the apiserver's image and build nothing; they are recreated after it, below.
 # Where Compose lists none, nothing is added.

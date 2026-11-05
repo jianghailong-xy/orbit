@@ -375,6 +375,14 @@ for (const upgrade of UPGRADES) {
     assert.ok(indexOfCall(calls, LINK_SECRETS) < calls.indexOf('compose config --services'), calls.join('\n'));
     assert.ok(indexOfCall(calls, LINK_UP) < indexOfCall(calls, APISERVER_UP));
 
+    // A deployment the install set up, whose lines are there already: nothing is built before what can stop the run has
+    // had its say (the managed runners' files, scripts/managed-runner/new_deployment_test.py).
+    const managed = makeFixture(t, { linkOnly: true });
+    writeFileSync(managed.envFile, readFileSync(fixture.envFile, 'utf8'));
+    assert.equal(managed.run(upgrade, ['--no-pull']).status, 0);
+    const managedCalls = managed.calls();
+    assert.ok(managedCalls.indexOf('compose config --services') < indexOfCall(managedCalls, LINK_BUILD), managedCalls.join('\n'));
+
     const unfinished = makeFixture(t, { linkOnly: true });
     writeFileSync(unfinished.envFile, `${BEFORE_LINK}RUNNER_LINK_SIGNING_KEY="production-signing"\n`);
     const stopped = unfinished.run(upgrade, ['--no-pull']);
