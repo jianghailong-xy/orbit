@@ -52,10 +52,12 @@ import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
+import { wikiMaintainCheckClaims, wikiMaintainLines } from '../wiki-worker/wiki-maintain';
 import { wikiMaintainJobPrincipal } from '../wiki-worker/wiki-maintain-job';
 import { WikiController } from './wiki.controller';
-import { buildDossier, loadDossierRecords, storedDossierSources } from './wiki-dossier';
+import { buildDossier, loadDossierRecords, storedDossierSources, wikiClaimsHeldOut, WIKI_DOSSIER_CLAIMS } from './wiki-dossier';
 import { WikiMaintenance, type DossierPageOptions } from './wiki-maintenance';
+import { toolCallText } from './wiki-verify-evidence';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiService, type WikiPrincipal } from './wiki.service';
 
@@ -1460,6 +1462,127 @@ test('every line goes back to its record: the words at its spans, redacted, are 
   assert.notEqual(checked.ops[1]!.status, 'refused', `the result's last line, quoted from its span: ${JSON.stringify(checked.ops[1])}`);
   assert.equal(checked.ops[2]!.status, 'refused', 'the line as the dossier wrote it is not the record\'s words');
   assert.equal(checked.ops[2]!.reasons?.[0]?.code, 'WIKI_QUOTE_NOT_FOUND');
+});
+
+// ── the agent's notes, when asked for (docs/wiki-memory-claims-design.md §3.1, §3.2) ──────────────
+
+test("the agent's notes come from the real rows when asked for, and a run's page still has none", { skip }, async () => {
+  const h = await boot();
+  const owner = await account(h, 'owner');
+  const machine = await runner(h, owner.id);
+  const literal = `envval-${randomUUID()}`;
+  const ws = await workspace(h, owner.id, { DEPLOY_HOOK: literal });
+  const spaceId = await space(h, owner, ws);
+  await maintained(h, owner, spaceId, ws);
+  // A session the 10% hold-out leaves alone: its notes are what this case is about.
+  let talk = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id, status: 'SUCCEEDED', lastTurnAt: minutesAgo(20) });
+  while (wikiClaimsHeldOut(talk)) {
+    await h.sql.query(`DELETE FROM "session" WHERE "id" = $1`, [talk]);
+    talk = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id, status: 'SUCCEEDED', lastTurnAt: minutesAgo(20) });
+  }
+  const library = '/root/.claude/projects/-root-orbit/memory';
+  const turned = await turn(h, talk, 'Why did the release tag on its own?', { at: minutesAgo(59) });
+  const long = `${'a line of the log\n'.repeat(120)}tagging v0.1.2-beta.104 because parseVersion ran release.sh\n${'another line\n'.repeat(120)}the end`;
+  const result = await tool(h, talk, 'Bash', { command: 'bash scripts/release-dry.sh' }, long, { at: minutesAgo(58) });
+  // A result in blocks is read as any reader of the record reads it: its text, not its JSON.
+  const blocks = await tool(h, talk, 'Read', { file_path: 'scripts/release-lib.ts' }, [{ type: 'text', text: 'first\nexport function parseVersion(tag: string) {}\nlast' }], { at: minutesAgo(57) });
+  const written = await tool(h, talk, 'Write', {
+    file_path: `${library}/release-next.md`,
+    content: `---\nname: release-next\nmetadata:\n  type: feedback\n---\n\nparseVersion in the release script tags at once ${literal}.\n`,
+  }, 'File created', { at: minutesAgo(56) });
+  const edited = await tool(h, talk, 'Edit', {
+    file_path: `${library}/release-next.md`, old_string: 'kept', new_string: 'kept\nThe fix is to read the tag before running it.',
+  }, 'File updated', { at: minutesAgo(55) });
+  const multi = await tool(h, talk, 'MultiEdit', {
+    file_path: `${library}/other.md`, edits: [{ old_string: 'x', new_string: 'A note written through MultiEdit, of one edit.' }],
+  }, 'ok', { at: minutesAgo(54) });
+  const refused = await tool(h, talk, 'Write', { file_path: `${library}/refused.md`, content: 'A write the tool refused says nothing at all.' }, 'denied', { isError: true, at: minutesAgo(53) });
+  const code = await tool(h, talk, 'Write', { file_path: 'src/app/notes.md', content: 'A file of the repository.' }, 'ok', { at: minutesAgo(52) });
+  const big = 'y'.repeat(WIKI_DOSSIER_CLAIMS.bodyMaxChars + 500);
+  const huge = await tool(h, talk, 'Write', { file_path: `${library}/huge.md`, content: `The note starts here ${big}` }, 'ok', { at: minutesAgo(51) });
+
+  const records = (await loadDossierRecords(h.prisma, owner.id, talk))!;
+  const rowOf = (id: string) => records.events.find((row) => row.id === id)!;
+  assert.deepEqual(rowOf(edited.useEventId).memoryWrite, { content: null, oldString: 'kept', newString: 'kept\nThe fix is to read the tag before running it.', edits: null }, 'an edit\'s two strings');
+  assert.deepEqual(rowOf(multi.useEventId).memoryWrite?.edits, [{ old_string: 'x', new_string: 'A note written through MultiEdit, of one edit.' }], 'a MultiEdit\'s list');
+  assert.match(rowOf(written.useEventId).memoryWrite?.content ?? '', /^---\nname: release-next/u, 'a write\'s content');
+  assert.equal(rowOf(huge.useEventId).memoryWrite?.content?.length, WIKI_DOSSIER_CLAIMS.bodyMaxChars, 'cut in SQL to what is read');
+  assert.equal(rowOf(code.useEventId).memoryWrite, null, 'a file of the repository is no memory write');
+  assert.equal(rowOf(result.useEventId).memoryWrite, null);
+
+  const on = await buildDossier(h.prisma, records, { literals: [literal], claims: true });
+  assert.equal(on.claims?.seen, 4, 'the refused write does not count');
+  assert.deepEqual(on.claims?.lines.map((line) => line.eventId), [written.useEventId, edited.useEventId, multi.useEventId, huge.useEventId]);
+  assert.match(on.text, /C1 claim: parseVersion in the release script tags at once \[redacted\]\./u, 'the note, redacted, with no frontmatter');
+  assert.match(on.text, /C2 claim: The fix is to read the tag before running it\./u);
+  assert.ok(!on.text.includes(literal));
+  assert.ok(!on.text.includes('A write the tool refused'));
+  assert.ok(!on.sources.some((source) => source.id === written.useEventId || source.id === refused.useEventId), 'a write cites nothing');
+
+  // The result lines that name a note's word, found in the real rows, and placed in them.
+  assert.match(on.text, /→ ok: a line of the log … tagging v0\.1\.2-beta\.104 because parseVersion ran release\.sh/u, 'the line in the middle of a long result');
+  assert.match(on.text, /read scripts\/release-lib\.ts → ok: export function parseVersion\(tag: string\) \{\}/u, 'and of a result in blocks');
+  const verifiable = await h.sql.query<{ id: string; name: string; input: unknown; output: unknown }>(
+    `SELECT "id"::text AS "id", "name", "input", "output" FROM "tool_call" WHERE "id" = ANY($1::uuid[])`, [[result.toolCallId, blocks.toolCallId]]);
+  for (const call of verifiable.rows) {
+    const spans = on.sources.find((source) => source.id === call.id)?.spans ?? [];
+    const text = Array.from(redactSecrets(toolCallText(call) ?? '', { literals: [literal] }).text);
+    assert.ok(spans.some((span) => span.text.includes('parseVersion')), `the line of ${call.name} says where its words are`);
+    for (const span of spans) assert.equal(text.slice(span.start, span.end).join(''), span.text, 'word for word, at the place it names');
+  }
+
+  // The pass over that file: a fake model's answer, held to the records by the same check every proposal meets.
+  const lines = wikiMaintainLines(on);
+  const refOf = (id: string) => on.sources.find((source) => source.id === id)!.ref;
+  const asked = refOf(turned);
+  const released = refOf(result.toolCallId);
+  const answer = JSON.stringify({
+    notes: [
+      { note: 'C1', outcome: 'shown', shownBy: [released, asked] },
+      { note: 'C2', outcome: 'absent', shownBy: [] },
+      { note: 'C3', outcome: 'not_durable', shownBy: [] },
+      { note: 'C4', outcome: 'absent', shownBy: [] },
+    ],
+    entries: [{
+      note: 'C1', kind: 'pitfall', title: `parseVersion tags at once ${randomUUID().slice(0, 8)}`, summary: 'Running the release script tags at once.', topic: 'testing',
+      trigger: { paths: [], commands: ['bash scripts/release-dry.sh'], errorSignature: '' }, symptom: 'A tag appears.', cause: 'parseVersion runs release.sh.', fix: 'Read the tag first.',
+      sources: [{ ref: released, quote: 'tagging v0.1.2-beta.104 because parseVersion ran release.sh' }],
+    }],
+  });
+  const pass = await wikiMaintainCheckClaims({
+    dossier: on,
+    refs: on.claims!.lines.map((line) => line.ref),
+    context: { title: 'orbit', repo: { urlNorm: 'github.com/acme/app' }, topics: [] },
+    about: '',
+    repo: null,
+    ask: async () => answer,
+  });
+  assert.equal(lines.get(released)?.author, 'tool');
+  assert.deepEqual(pass.citedByModel, [1], 'the model cited the tool line');
+  assert.deepEqual(pass.ops.map((op) => op.note), ['C1'], 'one entry, from the note it shows');
+  const body = pass.ops[0]!.body as { sources: Array<{ kind: WikiSourceKind; ref: string; quote?: string }> };
+  assert.deepEqual(body.sources.map((source) => source.ref), [result.toolCallId, turned], 'and the owner\'s line it named beside it');
+  const principal = wikiMaintainJobPrincipal(owner.id, randomUUID());
+  const classes = await Promise.all(body.sources.map(async (source) => (await h.service.sourceText(h.prisma, principal, source))?.evidenceClass));
+  assert.deepEqual(classes, ['observed', 'owner_words'], 'both first-hand, by the class every reader of a source reads');
+  const checked = await h.service.submitChangeset(principal, spaceId, {
+    dryRun: true,
+    idempotencyKey: `claims-pass-${randomUUID()}`,
+    rationale: 'an entry of the pass that only checks notes',
+    ops: [pass.ops[0]!.body],
+  }) as { ops: Array<{ status: string; reasons?: Array<{ code: string }> }> };
+  assert.notEqual(checked.ops[0]!.status, 'refused', `what the pass wrote stands against the records: ${JSON.stringify(checked.ops[0])}`);
+
+  // Asked for or not, what a line can cite is the records it always could.
+  const off = await buildDossier(h.prisma, records, { literals: [literal] });
+  assert.doesNotMatch(off.text, /claim:|parseVersion/u, 'off: no note, and no result line in its place');
+  assert.ok(!('claims' in off));
+  // The door a maintenance run reads: nothing asks for notes yet.
+  const page = await dossiers(h, owner.id, spaceId);
+  expectStatus(page, 200, 'the run reads its page');
+  const served = (page.body.dossiers as Array<{ sessionId: string; text: string; hash: string }>).find((one) => toUuid(one.sessionId) === talk)!;
+  assert.equal(served.text, off.text, 'a run\'s page is the dossier with notes off');
+  assert.equal(served.hash, off.hash);
 });
 
 // ── a session that speaks for a project belongs where the project's work runs ─────────────────
