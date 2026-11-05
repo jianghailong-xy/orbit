@@ -219,7 +219,7 @@ test('the documents of a plan in force asked for again: by its owner, and by an 
     await sql.query(`INSERT INTO "wiki_job"("id","owner_id","space_id","kind","state","started_at","ended_at") VALUES ($1,$2,$3,'maintain','succeeded',now(),now())`, [
       runJob, owner.id, spaceId,
     ]);
-    await sql.query(`INSERT INTO "wiki_maintenance_run"("id","space_id","owner_id","job_id","started_at","outcome","ended_at") VALUES ($1,$2,$3,$4,now(),'succeeded',now())`, [
+    await sql.query(`INSERT INTO "wiki_maintenance_run"("id","space_id","owner_id","job_id","due","started_at","outcome","ended_at") VALUES ($1,$2,$3,$4,'backlog',now(),'succeeded',now())`, [
       randomUUID(), spaceId, owner.id, runJob,
     ]);
     const day = await wikiMaintenanceRunsToday(db as unknown as PrismaService, owner.id, spaceId);

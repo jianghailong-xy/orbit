@@ -1829,6 +1829,30 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'None inside. After the commit and outside the closure: one `wiki.changed` for the space when a fact made it (WikiMaintenanceTrigger.evaluate), so Activity\'s Runs card refreshes (nothing depends on it); a run\'s end that asks publishes none, as the articles job it queued publishes none.',
     answer: 'Typed 503 from the global boundary is never reached: the trigger runs off the request path, logs the failure, and the next fact of the space asks again.',
   },
+  // A history backfill (contracts/wiki.contract.json `maintenance.job.server.backfill`): a `maintain` job over named sessions,
+  // made from the operator's shell (wiki-backfill.cli.ts) under the lock a fact's run is made under, and the downgrade that closes it.
+  {
+    at: 'wiki/wiki-maintenance-run.ts#makeBackfillJob',
+    shape: 'TX_RETRIED',
+    locks: 'The space row (rank 60) by SELECT … FOR NO KEY UPDATE, the lock `wiki.maintenanceJob` takes; then the space\'s unfinished `maintain` jobs, read under it; then one wiki_maintenance_run INSERT (60, reaching wiki_space through (space_id, owner_id) FOR KEY SHARE) and one wiki_job INSERT (60). Ascending throughout. The wiki_cursor row is neither read nor written.',
+    identity: 'The space, and the one run of a space at a time: under its lock an unfinished `maintain` job, whichever made it, makes the closure write nothing, so of a fact and a command arriving together one makes its job and the other finds it. Nothing identifies the request itself: the same command run twice after the first job ended makes a second job, which reads the same sessions again.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The unfinished job is read inside the closure under the space lock, and both ids are drawn inside it, so a re-run after a conflict finds its rolled-back attempt gone and writes one pair.',
+    effects: 'None inside, and none after: the worker finds the job at its next pass, and no client is told.',
+    answer: 'The operator\'s command prints the error and exits 1, with nothing written; they run it again.',
+  },
+  {
+    at: 'wiki/wiki.service.ts#downgradeNoteEntries',
+    shape: 'TX_RETRIED',
+    locks: 'Per batch of at most `WIKI_BACKFILL.downgradeBatch` entries, in a transaction of its own and wiki rows alone: each wiki_entry (60) by one plain UPDATE (FOR NO KEY UPDATE) whose WHERE is the compare-and-set — still active, still `auto`, still at the revision judged — then, through recomputeFlags, the same row again, already held, and any document sentence an entry whose anchor moved withdraws, as every branch of applyOp does; then one INSERT of an `activity` row, which has no foreign key and no trigger. Entries are taken in the order of their ids, so two runs meet in one order. The page of candidates and each entry\'s sources are read before the transaction, unlocked.',
+    identity: 'The entry and the trust it moves from: the compare-and-set, so a run through the same entries again writes nothing, its `activity` row included, and an entry that moved since it was read is left as it is and counted `moved`.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The closure writes what was judged before it, and re-evaluates the compare-and-set per entry, so a re-run after a conflict writes the entries it still holds for, and the rolled-back attempt\'s `activity` row went with it. A source a duplicate verdict adds between the judgement and the write moves none of what the compare-and-set reads: that entry goes down all the same, which errs on the side the close exists for, and its owner can confirm it.',
+    effects: 'None inside, and none after: `wiki.changed` is not published, because the one caller is the operator\'s command, a process of its own with no hub, and a client re-reads on focus and on reconnect.',
+    answer: 'The operator\'s command prints the error and exits 1; the batches before it stand, and running it again writes the rest.',
+  },
   // The plan's jobs (contracts/wiki.contract.json `plan.jobs`, `plan.jobs.server`, migrations 0338 and 0404): a job's
   // wiki_job made with it, and no task.
   {

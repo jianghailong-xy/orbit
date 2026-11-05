@@ -75,6 +75,21 @@ export const WIKI_MAINTAIN_JOB = {
 } as const;
 
 /**
+ * A backfill (contract `maintenance.job.server.backfill`, docs/wiki-memory-claims-design.md section 5): a `maintain` job
+ * over sessions somebody named, for what their agents wrote before the notes pass existed, and the downgrade that closes it.
+ */
+export const WIKI_BACKFILL = {
+  /** The most sessions one job names. */
+  sessionsMax: 20,
+  /** Why it is run, said in words: required, and at most this long. */
+  reasonMaxChars: 500,
+  /** The entries one transaction of the downgrade writes, with its one `activity` row. */
+  downgradeBatch: 50,
+  /** The `activity` row a batch of the downgrade leaves: it writes no revision, so this is its only trail. */
+  downgradeActivity: 'wiki.note_entries.downgraded',
+} as const;
+
+/**
  * Whose failure a failed maintenance run was (contract `maintenance.job.recovery.failureKinds`), as its run
  * row and the space's health say it: `infra` — the platform under the run: its runner went offline, its
  * engine never came up, the server answered 5xx or could not be reached, the disk filled — or `content` —
@@ -184,6 +199,11 @@ export interface WikiMaintenanceReport {
   entries: { extracted: number; kept: number; dropped: number; foreign: number; principles: number };
   /** The pass that only checks the agent's notes (`maintenance.job.report`); absent from a run before it was wired in. */
   claims?: WikiMaintenanceClaimsReport;
+  /**
+   * A backfill's own part (`maintenance.job.server.backfill`): why it ran, and the sessions it named that it did not finish,
+   * which have no cursor to come back to them and are named again: those it could no longer read, and those its breaker held back.
+   */
+  backfill?: { reason: string; unread: string[]; heldBack: string[] };
   /** `heldBack` is what the review queue's quotas held back; `heldBackByBreaker` what the run's circuit breaker did. */
   ops: {
     proposed: number;

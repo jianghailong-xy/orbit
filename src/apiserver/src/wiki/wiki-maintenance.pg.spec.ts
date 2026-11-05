@@ -719,7 +719,7 @@ test('the settings door asks no provider, and dailyRunLimit is 8, within 1 to 48
     await h.prisma.wikiJob.create({ data: { id: jobId, ownerId: space.owner.id, spaceId: space.spaceId, kind: 'maintain', input: {}, state: 'queued' } });
     await h.prisma.wikiMaintenanceRun.create({
       data: {
-        spaceId: space.spaceId, ownerId: space.owner.id, jobId, createdAt, outcome,
+        spaceId: space.spaceId, ownerId: space.owner.id, jobId, due: 'backlog', createdAt, outcome,
         endedAt: outcome ? createdAt : null, failureKind: outcome === 'failed' ? 'content' : null,
       },
     });

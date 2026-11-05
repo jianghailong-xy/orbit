@@ -3,6 +3,7 @@ import { HttpException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   WIKI_ANCHOR_RULES,
+  WIKI_BACKFILL,
   WIKI_DOCS_BUILD_JOB,
   WIKI_MAINTAIN_JOB,
   WIKI_MAINTENANCE_JOB,
@@ -22,8 +23,8 @@ import { gatherDocMaterial, storedSessionCondition, type StoredSessionCondition 
 import { wikiDocsAffected } from '../wiki/wiki-docs-affected';
 import type { WikiDocs } from '../wiki/wiki-docs';
 import { ownerEnvLiterals } from '../wiki/wiki-dossier';
-import { encodeCursorToken, type WikiMaintenance } from '../wiki/wiki-maintenance';
-import { finishWikiMaintenanceJob } from '../wiki/wiki-maintenance-run';
+import { encodeCursorToken, type WikiBackfillSession, type WikiMaintenance } from '../wiki/wiki-maintenance';
+import { finishWikiBackfillJob, finishWikiMaintenanceJob } from '../wiki/wiki-maintenance-run';
 import { stripNul } from '../runner-api/strip-nul';
 import type { WikiPlans } from '../wiki/wiki-plan';
 import { WikiRefusalError, type WikiPrincipal, type WikiService } from '../wiki/wiki.service';
@@ -133,6 +134,15 @@ import { verifyWikiOps } from './wiki-verify-job';
  * WHAT IT DOES NOT DO. It asks no provider: the System model's address and key live in this process, and
  * nothing about a space's pinned provider is read. It makes no task and starts no session.
  *
+ * A BACKFILL READS THE SESSIONS IT WAS GIVEN (contract `maintenance.job.server.backfill`, docs/wiki-memory-claims-design.md
+ * §5). A job whose input names sessions reads no page of the cursor's: it checks what those sessions' agents wrote, from their
+ * writes or from the imported notes named for them, in the pass above, and nothing else is asked of the model: these sessions'
+ * extraction is the ordinary run's, which has read most of them already, and asking again is mostly new entries on an agent's
+ * word. The self-check, the breaker, the proposals, the verdicts and the anchors are the ones above. It moves no cursor, writes
+ * no document, owes no articles and records no dossier, whose hash says what the extraction has read (`WikiMaintenance.namedDossiers`).
+ * It carries no pipeline either: with no cursor behind it, a replay reads the same sessions again and meets its own requests
+ * and its own changesets, each under the identity the first attempt made it with.
+ *
  * THE REPORT IS THE WHOLE RUN'S (contract `jobs.carry`). A replay — after a stop handed the job back, or a failure of the
  * platform — runs every step again, and finds done what the attempt before it finished: the dossiers behind the cursor
  * it moved, the ops it recorded waiting no longer, the anchors it checked standing at this commit, the sections it
@@ -211,6 +221,8 @@ export interface WikiMaintainReport {
   tokens: { input: number; output: number; calls: number };
   seconds: number;
   cursorAdvanced?: boolean;
+  /** A backfill's own part (contract `maintenance.job.server.backfill`). */
+  backfill?: { reason: string; unread: string[]; heldBack: string[] };
 }
 
 /** What the documents step reports (contract `maintenance.job.docs.report`). */
@@ -331,7 +343,7 @@ class WikiMaintainStop extends Error {
 /** Run one `maintain` job: its run row, the whole pipeline, and what its end leaves. */
 export async function runWikiMaintainJob(context: WikiJobContext, deps: WikiMaintainJobDeps): Promise<Record<string, unknown>> {
   const runId = readRunId(context.job.input);
-  return new WikiMaintainRun(context, deps, runId).execute();
+  return new WikiMaintainRun(context, deps, runId, readBackfill(context.job.input)).execute();
 }
 
 /** The job's input as its row holds it: the run it executes (`maintenance.job.server`). */
@@ -341,6 +353,34 @@ function readRunId(input: Record<string, unknown>): string {
     throw new WikiJobContentError('the job names no maintenance run to execute (input.runId)');
   }
   return id;
+}
+
+/** What a backfill's job names (contract `maintenance.job.server.backfill`). */
+interface WikiMaintainBackfill {
+  reason: string;
+  sessions: WikiBackfillSession[];
+}
+
+/**
+ * The job's input as its row holds it: the sessions a backfill names, or null for a run its facts made. A job that names
+ * them wrongly is refused rather than read as the other kind: a run that went on to read the cursor's pages would move it.
+ */
+function readBackfill(input: Record<string, unknown>): WikiMaintainBackfill | null {
+  if (input?.backfill === undefined) return null;
+  const refused = (): never => {
+    throw new WikiJobContentError('the job names a backfill it does not say the sessions or the reason of (input.backfill)');
+  };
+  const { reason, sessions } = (input.backfill ?? {}) as { reason?: unknown; sessions?: unknown };
+  if (typeof reason !== 'string' || reason.trim() === '') return refused();
+  if (!Array.isArray(sessions) || sessions.length === 0 || sessions.length > WIKI_BACKFILL.sessionsMax) return refused();
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+  const read = (sessions as Array<{ sessionId?: unknown; noteIds?: unknown } | null>).map((one) => {
+    const { sessionId, noteIds } = one ?? {};
+    if (typeof sessionId !== 'string' || !uuid.test(sessionId)) return refused();
+    if (!Array.isArray(noteIds) || !noteIds.every((id) => typeof id === 'string' && uuid.test(id))) return refused();
+    return { sessionId, noteIds: noteIds as string[] };
+  });
+  return { reason, sessions: read };
 }
 
 /**
@@ -391,7 +431,11 @@ class WikiMaintainRun {
     private readonly jobContext: WikiJobContext,
     private readonly deps: WikiMaintainJobDeps,
     private readonly runId: string,
-  ) {}
+    /** The sessions this run was given, or null when it reads the cursor's pages. */
+    private readonly backfill: WikiMaintainBackfill | null = null,
+  ) {
+    if (backfill) this.report.backfill = { reason: backfill.reason, unread: [], heldBack: [] };
+  }
 
   /** The whole run: whatever ends it, the server hears how it ended — unless it is the platform's failure. */
   async execute(): Promise<Record<string, unknown>> {
@@ -450,21 +494,30 @@ class WikiMaintainRun {
     // without any U+0000 (contract `jobs.serverWrites`).
     const report = await this.wholeReport();
     const refused = [...(this.earlier.pipeline?.refused ?? []), ...this.refused];
-    const answer = await finishWikiMaintenanceJob(this.deps.prisma, this.deps.maintenance, job.ownerId, job.spaceId, job.id, {
-      to: stop === null ? this.cursor : null,
-      outcome: stop === null ? 'succeeded' : 'failed',
+    const end = {
+      outcome: stop === null ? ('succeeded' as const) : ('failed' as const),
       error: stop === null ? null : stripNul(cutRunes(stop.message, 2000)),
       failureKind: stop === null ? null : stop.kind,
       report: stripNul(report as unknown as Record<string, unknown>),
-    });
+    };
+    let position = this.position;
+    let advanced = false;
+    if (this.backfill) {
+      await finishWikiBackfillJob(this.deps.prisma, job.ownerId, job.spaceId, job.id, end);
+      if (stop === null) this.jobContext.log('every step succeeded: the backfill leaves the cursor where it was');
+    } else {
+      const answer = await finishWikiMaintenanceJob(this.deps.prisma, this.deps.maintenance, job.ownerId, job.spaceId, job.id, { ...end, to: stop === null ? this.cursor : null });
+      position = answer.state.position ?? this.position;
+      advanced = answer.advanced || this.advanced || this.earlier.pipeline?.advanced === true;
+      if (stop === null) this.jobContext.log(`every step succeeded: the cursor is at ${answer.state.position ?? '(unmoved)'}`);
+    }
     if (stop === null) {
-      this.jobContext.log(`every step succeeded: the cursor is at ${answer.state.position ?? '(unmoved)'}`);
       return {
         kind: 'maintain',
         runId: this.runId,
         outcome: 'succeeded',
-        advanced: answer.advanced || this.advanced || this.earlier.pipeline?.advanced === true,
-        cursor: answer.state.position ?? this.position,
+        advanced,
+        cursor: position,
         refused,
         report,
       };
@@ -631,8 +684,10 @@ class WikiMaintainRun {
       let ops: WikiMaintainOp[] = [];
       let noted: WikiMaintainOp[] = [];
       if (dossiers.length > 0) {
-        step = 'extract';
-        ops = await this.extractAll(dossiers);
+        if (!this.backfill) {
+          step = 'extract';
+          ops = await this.extractAll(dossiers);
+        }
         step = 'claims';
         noted = await this.checkClaimsAll(dossiers);
       }
@@ -643,14 +698,18 @@ class WikiMaintainRun {
       batches = this.breaker(batches);
       step = 'propose';
       await this.propose(batches);
-      step = 'advance';
-      await this.advance();
+      if (!this.backfill) {
+        step = 'advance';
+        await this.advance();
+      }
       step = 'verify';
       await this.verify();
       step = 'anchors';
       await this.anchors();
-      step = 'docs';
-      await this.docs();
+      if (!this.backfill) {
+        step = 'docs';
+        await this.docs();
+      }
       return null;
     } catch (error) {
       if (isWikiJobCancellation(error, this.jobContext.signal)) throw error;
@@ -778,6 +837,7 @@ class WikiMaintainRun {
    * the first read of the session, and the dossier is built from the records as they stand when it is read.
    */
   private async dossiers(): Promise<WikiDossier[]> {
+    if (this.backfill) return this.namedDossiers(this.backfill);
     /** What this run reads of each session — its newest page's copy, and the page that copy came from. */
     const read = new Map<string, { dossier: WikiDossier; page: number }>();
     let after = '';
@@ -816,6 +876,22 @@ class WikiMaintainRun {
     this.jobContext.log(`read ${sessions} session(s) after the space's cursor: ${out.length} dossier(s) to extract from, `
       + `${unchanged} already processed`);
     return out;
+  }
+
+  /**
+   * The sessions a backfill names. Each is a page of its own to the breaker, which keeps them in the order named while what
+   * their ops would change fits: there is no cursor to stop, so what it holds back is reported by name.
+   */
+  private async namedDossiers(backfill: WikiMaintainBackfill): Promise<WikiDossier[]> {
+    const { job } = this.jobContext;
+    const { dossiers, unread } = await this.deps.maintenance.namedDossiers(job.ownerId, job.spaceId, backfill.sessions);
+    backfill.sessions.forEach(({ sessionId }, page) => this.pageOf.set(sessionId, page));
+    this.report.backfill!.unread = unread;
+    this.report.sessions = backfill.sessions.length;
+    this.report.dossiers = dossiers.length;
+    this.jobContext.log(`read ${dossiers.length} of the ${backfill.sessions.length} session(s) this backfill names`
+      + (unread.length > 0 ? `: ${unread.join(', ')} could not be read` : ''));
+    return dossiers;
   }
 
   /** One page of the space's dossiers, through the server's own reader (the one the runner door served before P11). */
@@ -989,7 +1065,7 @@ class WikiMaintainRun {
     if (run.offTopic) {
       this.jobContext.log(`  ${JSON.stringify(cutRunes(dossier.title, 60))}: not about this repository — none of its notes taken`);
     }
-    const byRef = new Map(lines.map(({ ref, eventId, file: name }) => [ref, { eventId, file: name }]));
+    const byRef = new Map(lines.map(({ ref, ...by }) => [ref, by]));
     return run.ops.map((op) => ({ ...op, promptedBy: byRef.get(op.note!) }));
   }
 
@@ -1080,9 +1156,17 @@ class WikiMaintainRun {
   private breaker(batches: WikiMaintainBatch[]): WikiMaintainBatch[] {
     const { remaining, bounded } = wikiMaintainRemaining(this.breakerRead, this.context);
     if (!bounded) return batches;
-    const held = wikiMaintainBreakerHold(batches, this.pageOf, Math.max(this.pages.length, 1), remaining);
+    const named = this.backfill?.sessions ?? null;
+    const held = wikiMaintainBreakerHold(batches, this.pageOf, named ? named.length : Math.max(this.pages.length, 1), remaining);
     if (held.stop === null) return batches;
     this.report.ops.heldBackByBreaker += held.heldBack;
+    if (named) {
+      const proposing = new Set(batches.flatMap((batch) => batch.ops.map((op) => op.session)));
+      this.report.backfill!.heldBack = named.slice(held.stop).map((session) => session.sessionId).filter((id) => proposing.has(id));
+      this.jobContext.log(`the breaker held back ${held.heldBack} op(s), past the ${remaining} entr(ies) the run may still change: name `
+        + `${this.report.backfill!.heldBack.join(', ')} again in another backfill`);
+      return held.batches;
+    }
     this.cursor = this.pages[held.stop].from;
     this.jobContext.log(`the breaker held back ${held.heldBack} op(s) from page ${held.stop + 1} on, past the ${remaining} entr(ies) the run may `
       + 'still change: the cursor stops where that page starts, and the next run reads its dossiers again');
@@ -1126,8 +1210,10 @@ class WikiMaintainRun {
     const list = ops.map((op) => op.body);
     const sessions = new Set(ops.map((op) => op.session));
     const about = topic !== '' ? topic : 'no topic';
-    const rationale = cutRunes(`Wiki maintenance run: ${ops.length} entr(ies) on ${about}, extracted by `
-      + `${this.deps.model !== '' ? this.deps.model : 'the System model'} from ${sessions.size} session(s) since the space's cursor.`, 2000);
+    const who = this.deps.model !== '' ? this.deps.model : 'the System model';
+    const rationale = cutRunes(this.backfill
+      ? `Wiki maintenance backfill: ${ops.length} entr(ies) on ${about}, checked by ${who} against the notes of ${sessions.size} session(s). Why: ${this.backfill.reason}`
+      : `Wiki maintenance run: ${ops.length} entr(ies) on ${about}, extracted by ${who} from ${sessions.size} session(s) since the space's cursor.`, 2000);
     const body: Record<string, unknown> = { ops: list, rationale };
     if (dryRun) body.dryRun = true;
     else body.idempotencyKey = `wiki-maintain-${sha256Hex(`${this.runId}\u0000${JSON.stringify(list)}`).slice(0, 32)}`;

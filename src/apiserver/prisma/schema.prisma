@@ -7781,7 +7781,8 @@ model WikiMaintenanceRun {
   taskId          String?   @unique(map: "wiki_maintenance_run_task_id_key") @map("task_id") @db.Uuid
   /// The wiki_job that ran it (0401): a history reference with no foreign key, as task_id is.
   jobId           String?   @map("job_id") @db.Uuid
-  /// `backlog` | `age` for a task the trigger made; NULL for a run of a task somebody else put in the list.
+  /// `backlog` | `age` for a run the trigger made; NULL for a run of a task somebody else put in the list, or a backfill's
+  /// job, which no fact made (contracts/wiki.contract.json `maintenance.job.server.backfill`).
   due             String?
   backlog         Int       @default(0)
   pendingSessions Int       @default(0) @map("pending_sessions")

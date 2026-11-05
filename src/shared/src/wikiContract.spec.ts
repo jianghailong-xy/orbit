@@ -94,6 +94,7 @@ import {
   WIKI_MAINTENANCE_DUE,
   WIKI_MAINTENANCE_FAILURE_KINDS,
   WIKI_MAINTENANCE_HELD_REASONS,
+  WIKI_BACKFILL,
   WIKI_MAINTAIN_JOB,
   WIKI_MAINTENANCE_JOB,
   wikiMaintenanceBehind,
@@ -1143,6 +1144,17 @@ describe('wiki contract', () => {
     expect(CONTRACT.maintenance.dossier.memory).toMatch(/neither reads it nor hears of it/u);
     expect(CONTRACT.maintenance.dossier.memory).toMatch(/% 10 === 0/u);
     expect(CONTRACT.opRules.promptedBy).toMatch(/refused for its shape \(WIKI_SCHEMA\)/u);
+    // The backfill's numbers, held to its block: and what it leaves alone, which is the whole of why it is a run of its own.
+    const backfill = job.server.backfill;
+    expect(backfill.rules).toEqual(WIKI_BACKFILL);
+    expect(CONTRACT.opRules.promptedBy).toMatch(/\{ noteId, file \} for an imported note a backfill named/u);
+    expect(backfill.steps).toMatch(/No page of the cursor's is read/u);
+    expect(backfill.steps).toMatch(/It moves no cursor, writes no document/u);
+    expect(backfill.dossier).toMatch(/No wiki_dossier row is written or made/u);
+    expect(backfill.oldEntries).toMatch(/for origin maintenance alone/u);
+    expect(backfill.downgrade.rule).toMatch(/promptedEvidenceOf/u);
+    expect(backfill.downgrade.command).toMatch(/by default only reports/u);
+    expect(job.report).toMatch(/backfill \{reason, unread, heldBack\}/u);
     expect(existsSync(path.join(__dirname, '../../..', CONTRACT.storage.promptedByMigration))).toBe(true);
     const report: WikiMaintenanceReport = { sessions: 0, dossiers: 0, unchanged: 0, offTopic: 0,
       entries: { extracted: 0, kept: 0, dropped: 0, foreign: 0, principles: 0 },

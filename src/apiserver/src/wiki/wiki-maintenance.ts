@@ -20,7 +20,7 @@ import { redactSecrets } from '../common/secret-redaction';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
-import { buildDossier, loadDossierRecords, ownerEnvLiterals, storedDossierSources, type DossierReader, type DossierRecords } from './wiki-dossier';
+import { buildDossier, loadDossierRecords, ownerEnvLiterals, storedDossierSources, type DossierImportedNote, type DossierReader, type DossierRecords } from './wiki-dossier';
 import { normalizeRepoUrl, WikiRefusalError } from './wiki.service';
 import { wikiWorkspacesOfSpaces } from './wiki-workspaces';
 
@@ -290,6 +290,37 @@ export function factsSql(scope: SpaceScope, from: FactPosition | null): Prisma.S
       JOIN "project" p ON p."id" = d."project_id"
      WHERE p."owner_id" = ${owner}::uuid AND d."project_id" = ANY(${scope.projectIds}::uuid[])
        ${onOrAfter(Prisma.sql`d."updated_at"`)}`;
+}
+
+/**
+ * Every run but a backfill's, which is a job's run with no `due` (contract `maintenance.job.server.backfill`). The day's
+ * limit, the streak that pauses a catch-up and the watch on memory writes going quiet are about the runs the space's own
+ * facts made, and no backfill counts toward them.
+ */
+export const WIKI_RUNS_OF_FACTS: Prisma.WikiMaintenanceRunWhereInput = { OR: [{ due: { not: null } }, { jobId: null }] };
+
+/** One session a backfill names, and the imported notes it reads as what that session claimed (none: the session's own writes). */
+export interface WikiBackfillSession {
+  sessionId: string;
+  noteIds: string[];
+}
+
+/**
+ * Of these sessions, those a space's run may read: come to rest in one of its workspaces, and neither deleted, nor speaking
+ * for a project that works elsewhere, nor one of its old maintenance tasks' — the conditions of a `session_settled` fact, but
+ * for its position, since a backfill reads no position.
+ */
+export async function wikiSessionsOfSpace(reader: DossierReader, scope: SpaceScope, sessionIds: readonly string[]): Promise<Set<string>> {
+  const rows = await reader.$queryRaw<Array<{ id: string }>>`
+    SELECT s."id"::text AS "id"
+      FROM "session" s
+      LEFT JOIN "task" t ON t."id" = s."task_id"
+     WHERE s."owner_id" = ${scope.ownerId}::uuid AND s."id" = ANY(${[...sessionIds]}::uuid[])
+       AND s."workspace_id" = ANY(${scope.workspaceIds}::uuid[]) AND s."deleted_at" IS NULL
+       AND s."status"::text IN ('AWAITING_INPUT', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'INTERRUPTED')
+       AND s."id" <> ALL(${scope.foreignSessionIds}::uuid[])
+       AND (${scope.maintenanceListId}::uuid IS NULL OR t."list_id" IS NULL OR t."list_id" <> ${scope.maintenanceListId}::uuid)`;
+  return new Set(rows.map((row) => row.id));
 }
 
 /** `(at, kind, ref) > from`, or true from the beginning. */
@@ -647,16 +678,48 @@ export class WikiMaintenance {
   }
 
   /**
-   * What a session's memory writes come to. A session that wrote none, which is most of them, makes no second file;
-   * one held out makes the plain one again, and hands nothing on.
+   * The sessions a backfill names, each read as a page reads it and with the notes named for it as what it claimed
+   * (contract `maintenance.job.server.backfill`). Nothing is recorded: a page's record says what the extraction has read
+   * (`dossierPage`, `unchanged`), and a backfill runs no extraction, so a session's next records are still the next run's to
+   * read. `unread` the named sessions that can no longer be read, which have no cursor to come back to them.
    */
-  private async notesOf(records: DossierRecords, literals: readonly string[], maxTokens?: number): Promise<WikiDossierNotes> {
+  async namedDossiers(ownerId: string, spaceId: string, sessions: readonly WikiBackfillSession[]): Promise<{ dossiers: WikiDossier[]; unread: string[] }> {
+    const scope = await spaceScope(this.prisma, ownerId, spaceId);
+    const readable = await wikiSessionsOfSpace(this.prisma, scope, sessions.map((session) => session.sessionId));
+    const literals = await ownerEnvLiterals(this.prisma, ownerId);
+    const dossiers: WikiDossier[] = [];
+    const unread: string[] = [];
+    for (const { sessionId, noteIds } of sessions) {
+      const records = readable.has(sessionId) ? await loadDossierRecords(this.prisma, ownerId, sessionId) : null;
+      if (!records) {
+        unread.push(sessionId);
+        continue;
+      }
+      const notes = noteIds.length === 0 ? [] : await this.prisma.wikiNote.findMany({
+        where: { ownerId, spaceId, id: { in: noteIds } },
+        orderBy: { id: 'asc' },
+        select: { id: true, path: true, text: true },
+      });
+      // A note named and gone since says nothing, and the session's own writes do not stand in for it.
+      const read = noteIds.length > 0 && notes.length === 0
+        ? { claude: false, seen: 0, skipped: 0, overCap: 0, heldOut: 0, lines: [], file: null }
+        : await this.notesOf(records, literals, undefined, notes);
+      dossiers.push({ ...await buildDossier(this.prisma, records, { literals }), unchanged: false, notes: read });
+    }
+    return { dossiers, unread };
+  }
+
+  /**
+   * What a session's memory writes come to. A session that wrote none, which is most of them, makes no second file;
+   * one held out makes the plain one again, and hands nothing on. With notes named for it, those are what it claimed.
+   */
+  private async notesOf(records: DossierRecords, literals: readonly string[], maxTokens?: number, notes: readonly DossierImportedNote[] = []): Promise<WikiDossierNotes> {
     const { session } = records;
     const claude = (session.engine ?? session.provider) === 'claude';
-    if (!records.events.some((event) => event.memoryWrite)) {
+    if (notes.length === 0 && !records.events.some((event) => event.memoryWrite)) {
       return { claude, seen: 0, skipped: 0, overCap: 0, heldOut: 0, lines: [], file: null };
     }
-    const { text, sources, claims } = await buildDossier(this.prisma, records, { literals, maxTokens, claims: true });
+    const { text, sources, claims } = await buildDossier(this.prisma, records, { literals, maxTokens, claims: true, notes });
     const { seen, skipped, overCap, heldOut, lines } = claims!;
     return { claude, seen, skipped, overCap, heldOut, lines, file: lines.length > 0 ? { text, sources } : null };
   }
@@ -952,7 +1015,7 @@ export class WikiMaintenance {
     try {
       const runs = WIKI_MAINTENANCE_HEALTH.notifyNoNotesAfterRuns;
       const latest = await this.prisma.wikiMaintenanceRun.findMany({
-        where: { ownerId, spaceId, endedAt: { not: null } },
+        where: { ownerId, spaceId, endedAt: { not: null }, ...WIKI_RUNS_OF_FACTS },
         orderBy: [{ endedAt: 'desc' }, { id: 'desc' }],
         take: runs + 1,
         select: { report: true },

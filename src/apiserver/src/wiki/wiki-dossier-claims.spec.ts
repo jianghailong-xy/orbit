@@ -20,6 +20,7 @@ import {
   wikiClaimsHeldOut,
   WIKI_DOSSIER_CLAIMS,
   type DossierEventRow,
+  type DossierImportedNote,
   type DossierMemoryWrite,
   type DossierReader,
   type DossierRecords,
@@ -146,8 +147,13 @@ class Records {
 
 const LITERALS = ['workspace-env-value-1234'];
 
-function build(records: Records, options: { claims?: boolean; maxTokens?: number } = {}) {
+function build(records: Records, options: { claims?: boolean; maxTokens?: number; notes?: readonly DossierImportedNote[] } = {}) {
   return buildDossier(records.reader(), records.records(), { literals: LITERALS, ...options });
+}
+
+/** An imported note as `wiki_note` keeps it: the whole file, its frontmatter included. */
+function imported(id: string, path: string, body: string, type = 'project'): DossierImportedNote {
+  return { id, path, text: `---\noriginSessionId: abc\ntype: ${type}\n---\n\n${body}\n` };
 }
 
 /** The session the golden digests are of: a memory read and writes among the lines a dossier always made, long enough to be cut. */
@@ -306,6 +312,75 @@ test('at most 6 notes of 600 characters: the feedback first, then the newest, an
   assert.ok(long.startsWith('A long note: word word'));
   assert.match(long, /…\[\+\d+ chars\]$/u, 'a note past the cap says so');
   assert.equal(Array.from(long.replace(/…\[\+\d+ chars\]$/u, '')).length, WIKI_DOSSIER_CLAIMS.lineMaxChars);
+});
+
+// ── The notes a backfill names (design §5) ──────────────────────────────────────────────────────
+
+test('a note a backfill names is what the session claimed: its body, under the rules of a write, and the session\'s writes are not read beside it', async () => {
+  const s = new Records();
+  s.owner('Go on.', moment(1));
+  s.tool('Bash', { command: 'npm test' }, 'connect ECONNREFUSED 127.0.0.1:9000', moment(2));
+  s.write('port.md', 'An earlier version of this file, which said something else entirely.', moment(3));
+  s.write('other.md', 'A file of this session no note was imported from, and nobody names.', moment(4));
+  const body = 'STORAGE_PORT is read at import, so the fixture has to return the url it listens on.';
+
+  const dossier = await build(s, { claims: true, notes: [imported('note-1', 'sub/dir/port.md', body)] });
+  assert.ok(dossier.text.includes(`C1 claim: ${body}`), dossier.text);
+  assert.ok(!dossier.text.includes('originSessionId'), 'the frontmatter is no part of what it says');
+  assert.ok(!dossier.text.includes('earlier version') && !dossier.text.includes('nobody names'), 'its writes are not read');
+  assert.deepEqual(dossier.claims?.lines, [{ ref: 'C1', noteId: 'note-1', file: 'port.md' }], 'traced by the note, and known by its file\'s name');
+  assert.deepEqual([dossier.claims?.seen, dossier.claims?.skipped, dossier.claims?.overCap, dossier.claims?.heldOut], [1, 0, 0, 0], 'the report counts what it read: the note');
+  assert.ok(dossier.sources.every((source) => source.kind !== 'note' && !source.ref.startsWith('C')), 'nothing can cite it');
+
+  const plain = await build(s);
+  assert.deepEqual(await build(s, { notes: [imported('note-1', 'sub/dir/port.md', body)] }), plain, 'only the notes\' file reads a note: the case file is the bytes it is');
+});
+
+test('a note stands where the session last wrote its file, or after everything, so what bears on it is what came before', async () => {
+  const s = new Records();
+  s.owner('Go on.', moment(1));
+  s.tool('Bash', { command: 'npm test' }, 'first line of the first run', moment(2));
+  s.write('port.md', 'The first version of the file, long enough to count as a note.', moment(3));
+  s.tool('Bash', { command: 'npm run lint' }, 'first line of the second run', moment(4));
+  s.write('port.md', 'The second version of the file, long enough to count as a note.', moment(5));
+  s.tool('Bash', { command: 'npm run build' }, 'first line of the last run', moment(6));
+  s.write('port.md', 'A last attempt that failed and wrote nothing at all, in the end.', moment(7), { isError: true });
+
+  const notes = [imported('at-the-write', 'port.md', 'What became of the port file, in its last version.'), imported('no-write', 'never-written.md', 'A note of a file the session has no write of.')];
+  const lines = (await build(s, { claims: true, notes })).text.split('\n');
+  const at = (words: string) => lines.findIndex((line) => line.includes(words));
+  assert.ok(at('npm run lint') < at('What became of the port file'), 'after the write that stood');
+  assert.ok(at('What became of the port file') < at('npm run build'), 'and before what came after it: a failed write is no write');
+  assert.ok(at('npm run build') < at('A note of a file the session has no write of'), 'one with no write stands after everything');
+  assert.deepEqual(lines.filter((line) => /^C\d+ claim:/u.test(line)).map((line) => line.slice(0, 2)), ['C1', 'C2'], 'numbered in the order they stand');
+});
+
+test('a note says too little by the rules a write does, at most 6 are carried, the feedback first and then the newest, and a held-out session carries none', async () => {
+  const s = new Records();
+  s.owner('Go on.', moment(1));
+  const words = 'A note that says enough words to be a claim of its own, number';
+  const said = await build(s, {
+    claims: true,
+    notes: [
+      imported('user', 'user.md', 'The owner likes short answers, and says so at every turn they get.', 'user'),
+      imported('short', 'short.md', 'Too short.'),
+      imported('hub', 'hub.md', '- [One](one.md)\n- [Two](two.md)\n- [Three](three.md)'),
+    ],
+  });
+  assert.deepEqual([said.claims?.seen, said.claims?.skipped, said.claims?.lines.length], [3, 3, 0]);
+
+  const many = [...Array.from({ length: 7 }, (_, n) => imported(`note-${n}`, `note-${n}.md`, `${words} ${n}.`)), imported('feedback', 'feedback.md', `${words} feedback.`, 'feedback')];
+  const capped = await build(s, { claims: true, notes: many });
+  assert.equal(capped.claims?.seen, 8);
+  assert.equal(capped.claims?.overCap, 2);
+  assert.deepEqual(capped.claims?.lines.map((line) => ('noteId' in line ? line.noteId : '')).sort(), ['feedback', 'note-2', 'note-3', 'note-4', 'note-5', 'note-6'].sort(),
+    'the feedback, though it is last in no order of time, and of notes of one moment the later named');
+
+  const out = new Records(Array.from({ length: 64 }, (_, n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`).find((id) => wikiClaimsHeldOut(id))!);
+  out.owner('Go on.', moment(1));
+  const held = await build(out, { claims: true, notes: [imported('held', 'held.md', `${words} held.`)] });
+  assert.deepEqual([held.claims?.seen, held.claims?.heldOut, held.claims?.lines.length], [1, 1, 0]);
+  assert.ok(!held.text.includes('claim:'), 'its file says nothing of it');
 });
 
 // ── The budget (§3.2) ───────────────────────────────────────────────────────────────────────────

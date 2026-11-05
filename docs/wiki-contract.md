@@ -616,7 +616,7 @@ owner 2026-09-27 定：核实必须拿得到证据。预览 space 里出处全�
   `agent_words`（assistant、thinking、写文件类工具、wiki 读取、输入是 agent 自己写的工具，别的会话发来的 turn、父会话写给子会话的开场。这类工具的名单是 `project_send`、`task_comment`、`session_send`、`session_reply`、`session_create`、`task_create`、`task_create_batch`、`task_update`、`task_evidence_submit`、`wiki_propose`、`notify`、`SendMessage`、`Agent`、`Task`，按去掉 `mcp__<server>__`、`orbit__` 之后的名字判定，是第二次回放开跑前定的）、`no_intent_words`（其余 message 和 steer、
   旧会话的 user 事件、其余审批）、`task_text`（任务 run 的开场、task、task comment）、`orbit_or_shell`（Orbit 自己写的 turn、shell、interrupt、
   turn_end、system 事件）、`memory`（note）。影响信任的只有“全是 `memory`”和下一条来自声明的 op，其余情况类别只记录口径。
-- **来自声明的 op（`opRules.promptedBy`、`reviewModes.verification.evidence.promptedBy`）**：只核对声明那一遍的 op 记 `promptedBy`（写入事件的 id 和文件名，`wiki_changeset_op.prompted_by`，迁移 0471）。这是服务端字段：只有维护作业通过写入口不对外的参数设置，agent 在 op 里传了按形状拒绝（`WIKI_SCHEMA`）。它不算出处，也不出现在任何读接口里。这样的 op 没有第一手出处时，证据记 `second_hand`，`supported` 最多 `unreviewed`。第一手要满足：核实者读得到原文，类别属于 `WIKI_FIRST_HAND_EVIDENCE`（`observed`、`owner_words`）；`observed` 的出处还要求交给核实者的原文和这条声明没有连续 60 个字符相同（`wikiRepeatsNote`，markdown 标记不算，弯引号算直引号，连续空白算一个空格），否则那只是工具结果里又读到一遍 memory。owner 的话不受这一条影响。声明原文按 `promptedBy` 从写入事件重新读，事件读不到时不做这项比较。不带 `promptedBy` 的 op 不受影响。
+- **来自声明的 op（`opRules.promptedBy`、`reviewModes.verification.evidence.promptedBy`）**：只核对声明那一遍的 op 记 `promptedBy`（写入事件的 id 和文件名；回填点名的 note 记 note 的 id 和文件名；`wiki_changeset_op.prompted_by`，迁移 0471）。这是服务端字段：只有维护作业通过写入口不对外的参数设置，agent 在 op 里传了按形状拒绝（`WIKI_SCHEMA`）。它不算出处，也不出现在任何读接口里。这样的 op 没有第一手出处时，证据记 `second_hand`，`supported` 最多 `unreviewed`。第一手要满足：核实者读得到原文，类别属于 `WIKI_FIRST_HAND_EVIDENCE`（`observed`、`owner_words`）；`observed` 的出处还要求交给核实者的原文和这条声明没有连续 60 个字符相同（`wikiRepeatsNote`，markdown 标记不算，弯引号算直引号，连续空白算一个空格），否则那只是工具结果里又读到一遍 memory。owner 的话不受这一条影响。声明原文按 `promptedBy` 从写入事件或 note 重新读，读不到时不做这项比较。不带 `promptedBy` 的 op 不受影响。
 - **读不到原文不等于无支撑**：全部出处都读不到原文的 op，supported、partial、unsupported 一律按 `unreviewed` 生效（显示、不推送）；
   duplicate 仍转 reinforce（只追加出处）。这些结论不计入自动退回：退回窗口只数有可读原文（`readable`、`second_hand`，或 0314 之前记下）的结论。
 - **tainted 在 Automatic 下**：`wikiReviewEffect` 让 Automatic 把 tainted 的 add、对机器写的条目的 amend 送去核实（Manual、Tiered 仍待审；
@@ -962,6 +962,7 @@ JSON 里是 `space.settings.maintenance` 与 `maintenance`；实现在 `src/apis
 - **agent 写进 memory 的声明（`maintenance.dossier.memory`，设计 `docs/wiki-memory-claims-design.md` §3、§6.2）**：不进上面这份案卷，另成一份，只给只核对声明的一遍（27.3、`maintenance.job.server.claims`）读。`buildDossier(..., { claims: true })` 把每次写入
   （`/projects/<slug>/memory/<file>.md`，`Write`、`Edit`、`MultiEdit`，没报错，不含 `MEMORY.md`）记成写入时刻的一行 `C1 claim:`，是新增的字，最多 600 字符，不能当出处；旁边放 owner 的话和跟每条声明相关的记录。frontmatter 写 `type: user`、新增不足 20 字符、大部分是链接的跳过；每份最多 6 条，`feedback` 优先，其次新的。
   `parseInt(sha256(sessionId).slice(0,8),16) % 10 === 0` 的 session 留出，没有这一份（`wikiClaimsHeldOut`，设计 §6.4）。
+  回填可以点名 note 作为这个 session 的声明（`DossierOptions.notes`，27.3）：规则和上限相同，只取正文，放在 session 最后一次写这个文件的位置，session 没写过就放在最后；这时不再读它的写入。
 - **每行记原文位置（判据 2 第 2 版，`maintenance.dossier.spans`）**：`sources` 的每一项是 `{ ref, kind, id, spans }`，
   `spans` 是 `[{ start, end, text }]`——该行的字在记录原文里的位置：记录的**那一份**原文（7.5，即引文校验读的文本）先脱敏，
   按**码点**计的 `[start, end)`，`text` 是那一段逐字原文。原样抄的行一个 span；压缩过的行按它保留的片段各一个 span，
@@ -1294,7 +1295,7 @@ P11（2026-10-19）删除：这条命令（契约原来的 `maintenance.job.cli.
 op（提议 / 记下 / 被拒 / 自检丢弃 / 被配额挡住 / 被熔断扣下 / 直接生效 / 等待），核实（本次运行自己的 op；接手的单列为
 `verification.adopted {ops, verified, failed}`；没拿到结论、等下一次运行接手的 op——本次运行自己的与接手的合计——单列为
 `verification.waitingForNextRun`）、锚点、文档（`docs`，19.6）各自的结果，**token（输入、输出、调用次数，含抽取、核实、文档的节与 plan
-修改建议，按请求队列计）**与耗时，失败时 `stoppedAt`，游标在 op 记下后推进过时 `cursorAdvanced: true`。`claims` 是只核对声明那一遍（27.3）在本次运行有变化的案卷上的计数：`{ claudeSessions, seen, skipped, overCap, heldOut, shown, narrowed, contradicted, absent, notDurable, unanswered, entries, duplicates }`。`claudeSessions` 是其中 Claude 引擎的 session 数；`seen` 是写入次数，其中 `skipped`、`overCap`、`heldOut` 是跳过、超上限、留出的；`shown` 到 `unanswered` 是每条进案卷的声明的结论；`entries` 是这一遍记下的 op 数；`duplicates` 是从运行开始以来这一遍的 op 被判 duplicate 的条数，包括接手的，从 op 行上读。这一遍的 op 和抽取的 op 一起计入 `ops`，上面的“条目”只算抽取。最多 16,000 字节 JSON，存在运行那一行上，`ops.refused` 单独
+修改建议，按请求队列计）**与耗时，失败时 `stoppedAt`，游标在 op 记下后推进过时 `cursorAdvanced: true`，回填的运行多一个 `backfill { reason, unread, heldBack }`（27.3）。`claims` 是只核对声明那一遍（27.3）在本次运行有变化的案卷上的计数：`{ claudeSessions, seen, skipped, overCap, heldOut, shown, narrowed, contradicted, absent, notDurable, unanswered, entries, duplicates }`。`claudeSessions` 是其中 Claude 引擎的 session 数；`seen` 是写入次数，其中 `skipped`、`overCap`、`heldOut` 是跳过、超上限、留出的；`shown` 到 `unanswered` 是每条进案卷的声明的结论；`entries` 是这一遍记下的 op 数；`duplicates` 是从运行开始以来这一遍的 op 被判 duplicate 的条数，包括接手的，从 op 行上读。这一遍的 op 和抽取的 op 一起计入 `ops`，上面的“条目”只算抽取。最多 16,000 字节 JSON，存在运行那一行上，`ops.refused` 单独
 成列。判据 3 第 3 版之前的运行报的是 `articles`，不是 `docs`。
 
 ### 19.5 `orbit wiki check --space <id> --expect-cursor <token> [--json]`
@@ -2851,6 +2852,25 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
 10. **结束**：写报告与 token 合计，`finishWikiMaintenanceJob` 推进游标、写运行行、按 owner 2026-10-08 的决定调用
     `queueWikiArticlesAfterRun`——只有成功、记下了 op、且不在追赶期才排文章作业（§24）。报告是整个运行的（§24.10）：被交还、重放过的
     运行，之前的尝试读的、记下的、核实的、检查的、写成的都算在内，token 是运行的每一次调用、每次一回。
+
+**回填（`maintenance.job.server.backfill`，设计 `docs/wiki-memory-claims-design.md` §5）**：`maintain` 作业的另一种输入，给定 session 而不是游标页，用来核对声明这一遍接上之前 agent 写下的内容。
+
+- **入口**：容器里的一次性命令 `src/apiserver/src/wiki/wiki-backfill.cli.ts`，连 `DATABASE_URL`：`run --space <id> --reason <why> --session <id>[:<noteId>,<noteId>]`。不加路由：这件事只为一个 space 跑一次，路由要长期维护登录和租户用例，而能跑这条命令的人本来就能读数据库。必须写明原因，一次最多 `rules.sessionsMax`（20）个 session。它打印作业和运行行的 id，报告写在那一行（`wiki_maintenance_run.report`）。这些情况拒绝且什么都不写：session 重复；session 不属于这个 space 或没有停下；note 不属于这个 space；space 没开维护或不是 Automatic（duplicate 判定和证据封顶都在核对这一步）；这个 space 还有没结束的 `maintain` 作业。
+- **作业**：input 是 `{ runId, backfill: { reason, sessions: [{ sessionId, noteIds }] } }`。运行行的 `due` 是 NULL，读运行的地方靠这一点区分（`WIKI_RUNS_OF_FACTS`）。
+- **步骤**：不读游标页，也不问抽取（协调者 2026-11-05 定，理由见设计 §5）。只核对声明的一遍、自查、熔断、提交、核实和收养、锚点都走原来的步骤。不推进游标，不写文档，不提 plan 修改，报告里没有 `docs`。
+- **`wiki_dossier`**：不写也不建。这一行的 hash 表示抽取读过这份案卷，页据此判 `unchanged`。回填没跑抽取，写了会让下一次日常运行跳过这个 session 的新记录。这样的 session 由那次运行完整读一遍，声明再核对一次，重复的走 duplicate。
+- **声明**：点名了 note 的 session，声明就是这些 note（16.3 的 `maintenance.dossier.memory`）；没点名的用它自己的写入。落在留出组的 session 点名了也没有这一份。
+- **旧条目**：来自 note 的 op（`promptedBy` 带 `noteId`）把当前版本有这条 note 的 live 出处、且生效的条目排在 `similar[]` 最前面，只对 origin maintenance 生效，和字面像不像无关。核对判 duplicate 时按 `verdicts.duplicate` 把新出处追加上去，内容、信任和版本都不变。
+- **不计入日常的任何读数**：不读不写 `wiki_cursor`，不算当天次数，不进入 catch-up 的连败判断，也不进入 `maintenance.health.notifyNoNotes`。失败只写在自己的运行行上，不计连败，不通知。不排 articles，下一次记下 op 的日常运行会排。不论成败，结束时都请求这个 space 的下一轮：还到期就立刻建日常作业，下一批回填要等它结束，所以两者交替。它和普通 `maintain` 一样占着 space，一次一个；status 行照常读到它。
+- **熔断与读不到**：每个 session 对熔断算一页，按点名的顺序。没有游标可以停，挡回的 session 列在 `report.backfill.heldBack`，读不到的列在 `report.backfill.unread`，之后再点名一次。
+- **重放**：pipeline 不带 carry。重放再读同样的 session，请求和 changeset 都按第一次的身份复用。结论和锚点的 carry 和普通运行一样。
+
+**收尾降级（`maintenance.job.server.backfill.downgrade`）**：全部跑完后，`wiki-backfill.cli.ts downgrade --space <id>` 把生效、`trust = auto`、当前版本有 live 的 note 出处、且没有第一手出处的条目降为 `unreviewed`。走 `WikiService.applyOp` 的内部指令 `downgrade`，不写 revision。
+
+- **判定**：用 note 的 op 在核对时用的同一个函数 `promptedEvidenceOf`：读得到原文，类别属于第一手，`observed` 还不能重复 note 的原文。只看当前版本的 live 出处。没有 note 出处的条目不读。
+- **默认只报告**：什么都不写。加 `--apply` 才写，这时必须有 `--reason`。
+- **报告**（打印）：`{ spaceId, apply, examined, firstHand, noFirstHand, downgraded, moved, batches, byKind, entryIds }`。`noFirstHand` 是符合条件的条数，带类型和 id，不论是否写入；`downgraded` 是写入的条数；`moved` 是读取之后条目变了、没有写的条数。
+- **分批**：每 `rules.downgradeBatch`（50）条一个事务，并写一行 `activity`（`rules.downgradeActivity`，没有 actor），带原因和这一批的 id。没有 revision 也没有 op，这是唯一的记录。条目在事务外判定，写入时要求仍然生效、仍是 `auto`、版本没变。判定和写入之间 duplicate 追加了出处的条目照样会降，由 owner 确认。重复执行没有变化。
 
 ### 27.4 失败与恢复（设计 §5.5）
 
