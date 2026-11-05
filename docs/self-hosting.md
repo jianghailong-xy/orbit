@@ -538,7 +538,17 @@ runners, and the web gateway runs one worker per CPU. Past that, or to keep the 
 
 ### What it costs a small machine
 
-MEASURED_RESOURCES_PLACEHOLDER
+Measured on a fresh default install with two runners connected and idle:
+
+| Service | Memory | CPU | Image |
+| --- | --- | --- | --- |
+| `link-gateway` | 20 MiB | 0.15% of one core | 17 MB |
+| `nats` | 8.5 MiB | 0.1% of one core | 42 MB |
+
+Each connected runner adds about 158 KiB at the gateway, as measured at 15,000 connections, so 100 runners take about
+16 MiB more. The gateway's image is built on this host from `src/link-gateway`. Its first build downloads
+`golang:1.27.3-alpine` (about 380 MB, which stays in Docker's build cache) and then builds for about 15 seconds. A later
+build of the same source takes seconds and recreates nothing.
 
 ### If the link does not come up
 
