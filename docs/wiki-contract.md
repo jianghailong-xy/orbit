@@ -178,6 +178,13 @@ wiki 内部的两种互指带复合外键：
 pg spec 用执行计划钉住了这一点。它声明为 IMMUTABLE（里面的 `array_to_string` 一般只是 STABLE，对 `text[]` 其实不变），
 因此 PostgreSQL 不会内联它，索引和查询两边保持同一个调用。
 
+关键词检索最多问三轮，前一轮没有结果才问下一轮（`searchMatches.keyword`）：
+
+1. 短语：整句原样匹配。
+2. 逐词：每个词都要命中，和 session 搜索用同一个 `broaden`。
+3. 任一词：命中任一可用词就算，命中的词多的在前，同样多的按 `word_similarity` 与整句的相似度。可用词是不少于 `CONTENT_MIN_CHARS`（3）个字符的词，或正好两个字的 CJK 词；`to`、`5m` 不算。
+   可用词不足 2 个的查询不问这一轮。这一轮只有 wiki 有，session 搜索不变。
+
 ---
 
 ## 2. Space
