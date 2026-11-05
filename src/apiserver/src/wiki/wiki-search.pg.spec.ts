@@ -864,6 +864,39 @@ test('0307 · the wiki search path', { skip, concurrency: 1, timeout: 300_000 },
     assert.equal(await h.prisma.wikiExposure.count({ where: { ownerId: owner.id } }), total);
   });
 
+  await t.test('what the last pass found leaves the rows any other search leaves', async () => {
+    const holdsTwo = await ownerEntry(h, owner, here, {
+      kind: 'concept',
+      title: 'A tapir beside a dugong',
+      summary: 'Two of the words.',
+      fields: { definition: 'A tapir and a dugong share a pen.', boundaries: 'Only itself.' },
+    });
+    const holdsOne = await ownerEntry(h, owner, here, {
+      kind: 'concept',
+      title: 'A dugong',
+      summary: 'One of the words.',
+      fields: { definition: 'A dugong grazes on seagrass.', boundaries: 'Only itself.' },
+    });
+    // Each search is a session of its own, so the rows it reads are that search's and no other's.
+    const searched = async (q: string): Promise<string[]> => {
+      const reader = await session(h, owner.id, ws, machine.id, `the session that searched for ${q}`);
+      const hits = hitsOf(await sessionSearch(h, machine, reader, { q })).map((hit) => hit.id);
+      const rows = await h.prisma.wikiExposure.findMany({ where: { sessionId: reader } });
+      assert.deepEqual(rows.map((row) => row.entryId).sort(), hits.map((id) => toUuid(id)).sort(), `one row per entry returned for ${q}`);
+      for (const row of rows) {
+        assert.deepEqual([row.ownerId, row.channel, row.revision], [owner.id, 'search', 1], `the row names who, how and which revision for ${q}`);
+      }
+      assert.equal(new Set(rows.map((row) => row.at.getTime())).size, 1, `the rows of one search share their at for ${q}`);
+      return hits;
+    };
+
+    // Neither the phrase nor every word can return an entry that holds one word of three.
+    assert.deepEqual(await searched('tapir dugong bilby'), [holdsTwo, holdsOne], 'most words first');
+    // A CJK pair gets here the same way: no entry holds both pairs, and this answer has an entry for each.
+    const chinese = await searched('闭集 知识');
+    assert.ok(chinese.includes(closedSets) && chinese.includes(spaceEntry), `each pair found its entry: ${chinese.join()}`);
+  });
+
   await t.test('a record that cannot be written costs the read nothing', async () => {
     const reader = await session(h, owner.id, ws, machine.id, 'the session whose record fails');
     // A real refusal from the real table: PostgreSQL turns the door's INSERT down with 23514, whatever
