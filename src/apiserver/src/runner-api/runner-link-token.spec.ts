@@ -14,9 +14,11 @@ import {
   RUNNER_LINK_TOKEN_TTL_SECONDS,
   RunnerLinkTokenRefused,
   isRunnerLinkGateway,
+  RUNNER_LINK_SAME_ORIGIN,
   readRunnerLink,
   runnerLinkCredential,
   runnerLinkFrom,
+  sameOriginLinkUrl,
   signRunnerLinkToken,
   verifyRunnerLinkToken,
   type RunnerLinkConfig,
@@ -53,7 +55,7 @@ const RFC8037_KEY = createPrivateKey({
 
 const base64Pem = (key: KeyObject) => Buffer.from(key.export({ format: 'pem', type: 'pkcs8' }) as string).toString('base64');
 
-function settings(overrides: { signingKey?: string; linkUrl?: string; gatewayToken?: string } = {}) {
+function settings(overrides: Partial<Parameters<typeof readRunnerLink>[0]> = {}) {
   return {
     signingKey: base64Pem(generateKeyPairSync('ed25519').privateKey),
     linkUrl: LINK_URL,
@@ -368,4 +370,133 @@ test("the gateway's guard: 401 for anything but its secret, through for the secr
     assert.equal((refused.body as { code: string }).code, 'RUNNER_LINK_GATEWAY_UNAUTHORIZED');
   }
   assert.equal(guard.canActivate(asGateway(`Bearer ${GATEWAY_TOKEN}`)), true);
+});
+
+// ── RUNNER_LINK_URL=same-origin ─────────────────────────────────────────────────────────────────────────────────────────
+
+const HTTPS_ORIGIN = 'https://orbit.example.com';
+const OWN_WSS = 'wss://orbit.example.com/runner-link';
+const MANAGED_URL = 'http://172.30.0.1:2086';
+const MANAGED_HOST = '172.30.0.1:2086';
+
+const sameOrigin = (publicOrigin: string, managedRunnerServerUrl?: string) =>
+  configured({ linkUrl: RUNNER_LINK_SAME_ORIGIN, publicOrigin, managedRunnerServerUrl });
+
+// What a client can write, whatever else stands in the way: the Host, and an X-Forwarded-Proto a proxy in front passes on.
+const FORGED_HOSTS = [
+  undefined, '', ' ', 'orbit.example.com', 'ORBIT.example.com:443', 'evil.example.com', 'evil.example.com:443', '127.0.0.1:2086',
+  '10.66.82.117:2086', '[::1]:2086', 'evil.example.com/path', 'user@evil.example.com', 'evil.example.com?x=1', 'evil.example.com#x',
+  'evil.example.com\\x', 'evil.example.com x', 'wss://evil.example.com', '%65vil.example.com',
+];
+const FORGED_PROTOS = [undefined, '', 'http', 'HTTP', 'ws', 'https', 'HTTPS', 'http,https', 'https,http', 'http, http', 'javascript'];
+
+test('same-origin on an https deployment: every answer is that origin\'s wss://, whatever Host or X-Forwarded-Proto says', () => {
+  const config = sameOrigin(HTTPS_ORIGIN);
+  assert.equal(config.linkUrl, OWN_WSS);
+  for (const host of [...FORGED_HOSTS, MANAGED_HOST]) {
+    for (const forwardedProto of FORGED_PROTOS) {
+      for (const proxied of [false, true]) {
+        assert.equal(sameOriginLinkUrl(config, { host, forwardedProto, proxied }), OWN_WSS, JSON.stringify({ host, forwardedProto, proxied }));
+      }
+    }
+  }
+  // And an origin with a port of its own keeps it.
+  assert.equal(sameOriginLinkUrl(sameOrigin('https://orbit.example.com:8444/'), { host: 'evil.example.com' }), 'wss://orbit.example.com:8444/runner-link');
+});
+
+test('same-origin on an https deployment: the managed runners\' own plain address, and only for a request that shows no proxy', () => {
+  const config = sameOrigin(HTTPS_ORIGIN, MANAGED_URL);
+  assert.equal(sameOriginLinkUrl(config, { host: MANAGED_HOST }), `ws://${MANAGED_HOST}/runner-link`);
+  assert.equal(sameOriginLinkUrl(config, { host: MANAGED_HOST.toUpperCase() }), `ws://${MANAGED_HOST}/runner-link`);
+  for (const forwardedProto of FORGED_PROTOS) {
+    assert.equal(sameOriginLinkUrl(config, { host: MANAGED_HOST, forwardedProto, proxied: true }), OWN_WSS, 'a request through a proxy keeps wss');
+  }
+  for (const host of FORGED_HOSTS) {
+    for (const forwardedProto of FORGED_PROTOS) {
+      assert.equal(sameOriginLinkUrl(config, { host, forwardedProto }), OWN_WSS, 'no other host is taken');
+    }
+  }
+  assert.deepEqual(sameOrigin(HTTPS_ORIGIN, 'https://orbit.example.com').sameOrigin?.directHosts, [], 'an https server URL is no plain address');
+  assert.deepEqual(sameOrigin(HTTPS_ORIGIN, 'not a url').sameOrigin?.directHosts, []);
+});
+
+test('same-origin on a plain-http deployment: the Host the request arrived with, a host and a port and nothing else', () => {
+  for (const publicOrigin of ['http://localhost:2086', 'http://10.66.82.117:2086']) {
+    const config = sameOrigin(publicOrigin);
+    const own = `ws://${new URL(publicOrigin).host}/runner-link`;
+    assert.equal(config.linkUrl, own);
+    for (const [host, want] of [
+      ['10.66.82.117:2086', 'ws://10.66.82.117:2086/runner-link'],
+      ['172.30.0.1:2086', 'ws://172.30.0.1:2086/runner-link'],
+      ['localhost:2086', 'ws://localhost:2086/runner-link'],
+      ['orbit-box.local:2086', 'ws://orbit-box.local:2086/runner-link'],
+      ['ORBIT.lan', 'ws://orbit.lan/runner-link'],
+      ['[fd00::1]:2086', 'ws://[fd00::1]:2086/runner-link'],
+    ] as const) {
+      assert.equal(sameOriginLinkUrl(config, { host }), want);
+    }
+    // Nothing but a host and a port: no credentials, path or query can reach the address through a Host.
+    for (const host of [undefined, '', ' ', 'evil.example.com/path', 'user@evil.example.com', 'evil.example.com?x=1', 'evil.example.com#x',
+      'evil.example.com\\x', 'evil.example.com x', 'wss://evil.example.com', '%65vil.example.com', 'a:b:c', 'x:123456']) {
+      assert.equal(sameOriginLinkUrl(config, { host }), own, JSON.stringify(host));
+    }
+  }
+});
+
+test('same-origin on a plain-http deployment: X-Forwarded-Proto can only raise ws to wss, never lower it', () => {
+  const config = sameOrigin('http://localhost:2086');
+  const answer = (forwardedProto?: string) => sameOriginLinkUrl(config, { host: 'orbit.example.com', forwardedProto });
+  // A proxy with TLS in front of a deployment whose PUBLIC_ORIGIN was never set: whichever hop wrote which, one https is enough.
+  for (const proto of ['https', 'HTTPS', ' https ', 'http,https', 'https,http', 'http, https']) assert.equal(answer(proto), 'wss://orbit.example.com/runner-link');
+  for (const proto of [undefined, '', 'http', 'ws', 'wss', 'httpsx', 'javascript']) assert.equal(answer(proto), 'ws://orbit.example.com/runner-link');
+});
+
+test('same-origin says it cannot run without an origin it can read, and the link is then off', () => {
+  for (const publicOrigin of [undefined, '', 'orbit.example.com', 'ftp://orbit.example.com', 'https://orbit.example.com/orbit', 'https://user:pw@orbit.example.com', 'https://orbit.example.com/?x=1']) {
+    const { config, problems } = readRunnerLink(settings({ linkUrl: RUNNER_LINK_SAME_ORIGIN, publicOrigin }));
+    assert.equal(config, null);
+    assert.equal(problems.length, 1);
+    assert.match(problems[0], /RUNNER_LINK_URL=same-origin needs PUBLIC_ORIGIN to be an http:\/\/ or https:\/\/ origin/);
+    assert.match(problems[0], /the runner link is off$/);
+  }
+});
+
+test('a fixed RUNNER_LINK_URL is what every runner is told, whatever the request says: PUBLIC_ORIGIN and the headers are not read', () => {
+  const config = configured({ publicOrigin: 'http://evil.example.com' });
+  assert.equal(config.sameOrigin, undefined);
+  for (const host of FORGED_HOSTS) {
+    for (const forwardedProto of FORGED_PROTOS) assert.equal(sameOriginLinkUrl(config, { host, forwardedProto, proxied: false }), LINK_URL);
+  }
+});
+
+test('a link-token request is answered, and its token signed, with the address its arrival gives, from the web gateway\'s two headers alone', async () => {
+  const issue = async (config: RunnerLinkConfig, headers: Record<string, string>) => {
+    const controller = new RunnerLinkTokenController(database().prisma, on(config));
+    const answer = await controller.issue(runner, { leaseOwner: LEASE_OWNER }, { headers, socket: {} } as never);
+    assert.equal(verifyRunnerLinkToken(answer.token, config.publicKey, new Date()).linkUrl, answer.linkUrl, 'the token names what the answer says');
+    return answer.linkUrl;
+  };
+  const https = sameOrigin(HTTPS_ORIGIN, MANAGED_URL);
+  const plain = sameOrigin('http://localhost:2086');
+  // Express's own view of the request is not read: its Host, and every X-Forwarded-* a client or a proxy wrote.
+  const forged = { host: 'evil.example.com', 'x-forwarded-host': 'evil.example.com', 'x-forwarded-proto': 'http', forwarded: 'host=evil.example.com;proto=http' };
+  assert.equal(await issue(https, forged), OWN_WSS);
+  assert.equal(await issue(plain, forged), 'ws://localhost:2086/runner-link', 'no X-Orbit-Request-Host: this deployment\'s own address');
+  assert.equal(await issue(plain, { ...forged, 'x-orbit-request-host': '10.66.82.117:2086' }), 'ws://10.66.82.117:2086/runner-link');
+  assert.equal(await issue(plain, { ...forged, 'x-orbit-request-host': 'orbit.example.com', 'x-orbit-request-proto': 'https' }), 'wss://orbit.example.com/runner-link');
+  assert.equal(await issue(https, { 'x-orbit-request-host': MANAGED_HOST, 'x-forwarded-for': '172.30.0.2', 'x-orbit-request-proto': 'http' }), `ws://${MANAGED_HOST}/runner-link`);
+  // The web gateway appends the peer it saw, so a second entry means a proxy in front wrote the first, or a client did: either
+  // way the deployment's own address, and for a client that claims so itself that is no way out of wss.
+  assert.equal(await issue(https, { 'x-orbit-request-host': MANAGED_HOST, 'x-forwarded-for': '203.0.113.9, 172.30.0.2' }), OWN_WSS);
+  // No request to read at all, as the specs that call the handler without one: the configured address.
+  const controller = new RunnerLinkTokenController(database().prisma, on(https));
+  assert.equal((await controller.issue(runner, { leaseOwner: LEASE_OWNER })).linkUrl, OWN_WSS);
+});
+
+test('the answer keeps nothing: a forged Host changes the answer to that request and to no other', () => {
+  const config = sameOrigin('http://10.66.82.117:2086');
+  const before = sameOriginLinkUrl(config, { host: '10.66.82.117:2086' });
+  assert.equal(sameOriginLinkUrl(config, { host: 'evil.example.com' }), 'ws://evil.example.com/runner-link', 'the request that wrote it hears it back');
+  assert.equal(sameOriginLinkUrl(config, { host: '10.66.82.117:2086' }), before);
+  assert.equal(config.linkUrl, 'ws://10.66.82.117:2086/runner-link');
 });

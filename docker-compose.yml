@@ -223,12 +223,13 @@ services:
       FCM_CLIENT_EMAIL: "${FCM_CLIENT_EMAIL:-}"
       FCM_PRIVATE_KEY: "${FCM_PRIVATE_KEY:-}"
       FCM_ANDROID_PACKAGE: "${FCM_ANDROID_PACKAGE:-io.orbitd.android}"
-      # Optional: the runner link (docs/self-hosting.md, "Runner link"): the connection tokens a runner trades its runner
-      # token for, to reach the link gateway. All three or none: unset, the link is off, its routes answer 404 and runners
-      # work over HTTP as before. The signing key is base64 of an Ed25519 private key in PEM (generate: openssl genpkey
-      # -algorithm ed25519 | base64 -w0); the gateway is given only its public key. The URL is the gateway's ws:// or
-      # wss:// address. The gateway token is the secret the gateway presents to read revoked credentials (generate:
-      # openssl rand -base64 32).
+      # The runner link (docs/self-hosting.md, "Runner link"): the connection tokens a runner trades its runner token for,
+      # to reach the link gateway. A fresh install and /upgrade generate them. All three or none: unset, the link is off,
+      # its routes answer 404 and runners work over HTTP as before. The signing key is base64 of an Ed25519 private key in
+      # PEM; the gateway is given only its public key. The URL is the gateway's ws:// or wss:// address, or same-origin:
+      # each runner is told the address it reached this server at, through the web gateway (runner-link-token.ts,
+      # sameOriginLinkUrl), which PUBLIC_ORIGIN above decides. The gateway token is the secret the gateway presents to
+      # read revoked credentials.
       RUNNER_LINK_SIGNING_KEY: "${RUNNER_LINK_SIGNING_KEY:-}"
       RUNNER_LINK_URL: "${RUNNER_LINK_URL:-}"
       RUNNER_LINK_GATEWAY_TOKEN: "${RUNNER_LINK_GATEWAY_TOKEN:-}"
@@ -241,7 +242,7 @@ services:
       # gateway alone on a listener of their own, which opens only while the link above is configured. It binds every
       # interface of this container, so the gateway reaches it over this project's network; the port is published
       # nowhere, and every call must present RUNNER_LINK_GATEWAY_TOKEN. Then the apiserver's NATS credential: the seed of
-      # its nkey user (src/link-gateway/nats.conf; generate with: docker compose run --rm --no-deps link-gateway nkey).
+      # its nkey user (src/link-gateway/nats.conf).
       RUNNER_LINK_INTERNAL_PORT: "${RUNNER_LINK_INTERNAL_PORT:-3001}"
       RUNNER_LINK_INTERNAL_HOST: "${RUNNER_LINK_INTERNAL_HOST:-0.0.0.0}"
       RUNNER_LINK_NATS_SEED: "${RUNNER_LINK_NATS_APISERVER_SEED:-}"
@@ -450,15 +451,18 @@ services:
       retries: 3
       start_period: 10s
 
-  # The runner link's gateway (docs/runner-link-design.md §6.1; docs/self-hosting.md, "Runner link"): the WebSocket
-  # endpoint runners connect to, on a port of its own published straight from this host, never through the web gateway
-  # above or a proxying CDN. It checks each connection token with the public half of the apiserver's signing key and
+  # The runner link's gateway (docs/runner-link-design.md §6.1, §15.10; docs/self-hosting.md, "Runner link"): the WebSocket
+  # endpoint runners connect to. It checks each connection token with the public half of the apiserver's signing key and
   # reads revoked runner credentials from the apiserver with the gateway secret; it holds no signing key and no database
   # connection. Until the link is switched over (MODE_HTTP, as LINK_MODE is unset here) it keeps connections, answers
   # heartbeats and compares what runners mirror to it, and forwards nothing; once switched, it forwards their calls to
-  # the apiserver's internal listener and their live streams to NATS (src/link-gateway/README.md). It runs only under the
-  # runner-link profile, which no install switches on, so a deployment whose .env does not name that profile runs
-  # exactly what it ran.
+  # the apiserver's internal listener and their live streams to NATS (src/link-gateway/README.md).
+  #
+  # It runs under the runner-link profile. A fresh install, and /upgrade on a deployment with no link, switch that on in
+  # .env with RUNNER_LINK_URL=same-origin: runners then reach it through the web gateway's port above, and it speaks plain
+  # ws:// inside this project's network, as RUNNER_LINK_ENV_FILE and the loopback addresses in RUNNER_LINK_BIND and the
+  # two ports say. A deployment that gave it a host name of its own, as production has, publishes it straight from this
+  # host with its own certificate, and sets none of those three, so this block renders for it as it always did.
   link-gateway:
     profiles: [runner-link]
     build:
@@ -469,6 +473,8 @@ services:
     container_name: orbit-link-gateway
     restart: unless-stopped
     logging: *logging
+    # /dev/null, an empty file, leaves its environment as below. Set, deploy/runner-link/behind-web-gateway.env.
+    env_file: ["${RUNNER_LINK_ENV_FILE:-/dev/null}"]
     # Room to drain before Docker stops it: runners are told to reconnect within LINK_DRAIN_RECONNECT_MAX (30s) and given
     # LINK_DRAIN_GRACE (15s) more, and the drain gives up at LINK_DRAIN_TIMEOUT (80s).
     stop_grace_period: 90s
@@ -496,8 +502,10 @@ services:
       LINK_ACME_EMAIL: "${RUNNER_LINK_ACME_EMAIL:-}"
       LINK_ACME_CACHE_DIR: /var/lib/orbit-link-gateway/acme
     ports:
-      # The runners' port, open to the internet. Metrics and the health check stay on this host's loopback.
-      - "${RUNNER_LINK_PORT:-8443}:8443"
+      # The runners' port, open to the internet where the gateway has a host name of its own; with RUNNER_LINK_BIND=127.0.0.1
+      # and RUNNER_LINK_PORT=0, as a same-origin link has it, a port nobody uses, which cannot collide with anything. Metrics
+      # and the health check stay on this host's loopback.
+      - "${RUNNER_LINK_BIND:-}:${RUNNER_LINK_PORT:-8443}:8443"
       - "127.0.0.1:${RUNNER_LINK_METRICS_PORT:-9464}:9464"
     volumes:
       - "${RUNNER_LINK_GATEWAY_DIR:-/dev/null}:/var/lib/orbit-link-gateway"
