@@ -282,6 +282,51 @@ class NewDeploymentTest(unittest.TestCase):
         # The apiserver is recreated from the image it runs: switching managed runners on deploys nothing else.
         self.assertFalse([c for c in calls if c.startswith(("compose up -d --build", "compose build apiserver"))], calls)
 
+    def test_switching_on_adds_to_the_compose_profiles_the_deployment_already_lists(self):
+        # A deployment that runs another Compose profile (runner-link, say): its line is kept and the managed
+        # runners' profiles are added to it, never written as a second COMPOSE_PROFILES line that would drop it.
+        existing = ('JWT_SECRET="kept"\nPROVIDER_SECRET_KEY="kept too"\n'
+                    'PUBLIC_ORIGIN="https://orbit.example.com"\nCOMPOSE_PROFILES=runner-link\n'
+                    "ORBIT_MANAGED_RUNNERS_ENABLED=false\n")
+        for args, profiles in (([], "runner-link,managed-runners-docker,managed-runner-firewall"),
+                               (["--no-managed-runner-firewall"], "runner-link,managed-runners-docker")):
+            with self.subTest(args=args):
+                (self.checkout / ".env").write_text(existing)
+                shutil.rmtree(self.checkout / "data", ignore_errors=True)
+                run = self.run_script(INSTALL, "--enable-managed-runners", *args,
+                                      "--managed-runner-image", "orbit-managed-runner:fixture")
+                self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                live = self.live_lines((self.checkout / ".env").read_text())
+                self.assertEqual([line for line in live if line.startswith("COMPOSE_PROFILES=")],
+                                 [f"COMPOSE_PROFILES={profiles}"])
+                # Every other line is where it was; the switch lines follow them.
+                self.assertEqual(live[:3], ['JWT_SECRET="kept"', 'PROVIDER_SECRET_KEY="kept too"',
+                                            'PUBLIC_ORIGIN="https://orbit.example.com"'])
+                self.assertEqual(live[4:], SWITCH_LINES[:2])
+                self.assertTrue((self.checkout / "data/managed-runners/profile.json").exists())
+                self.assertIn("compose build docker-channel", self.calls())
+
+    def test_switching_on_cleans_a_quoted_or_repeated_profile_line(self):
+        existing = ('JWT_SECRET="kept"\nCOMPOSE_PROFILES="managed-runners-docker, runner-link "\n')
+        (self.checkout / ".env").write_text(existing)
+        run = self.run_script(INSTALL, "--enable-managed-runners",
+                              "--managed-runner-image", "orbit-managed-runner:fixture")
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        live = self.live_lines((self.checkout / ".env").read_text())
+        self.assertEqual([line for line in live if line.startswith("COMPOSE_PROFILES=")],
+                         ["COMPOSE_PROFILES=managed-runners-docker,runner-link,managed-runner-firewall"])
+
+    def test_switching_on_keeps_the_legacy_firewalls_lock_line_when_it_merges_profiles(self):
+        if not Path("/run/xtables.lock").is_file():
+            self.skipTest("needs /run/xtables.lock, as the legacy iptables backend does")
+        (self.checkout / ".env").write_text('JWT_SECRET="kept"\nCOMPOSE_PROFILES=runner-link\n')
+        run = self.run_script(INSTALL, "--enable-managed-runners", "--managed-runner-image", "orbit-managed-runner:fixture",
+                              FAKE_FIREWALL_BACKEND="legacy")
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        live = self.live_lines((self.checkout / ".env").read_text())
+        self.assertIn("ORBIT_MANAGED_RUNNER_FIREWALL_XTABLES_LOCK=/run/xtables.lock", live)
+        self.assertIn("COMPOSE_PROFILES=runner-link,managed-runners-docker,managed-runner-firewall", live)
+
     def test_switching_on_refuses_where_there_is_no_deployment_or_it_was_prepared_already(self):
         run = self.run_script(INSTALL, "--enable-managed-runners")
         self.assertNotEqual(run.returncode, 0)
