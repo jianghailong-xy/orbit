@@ -24,6 +24,7 @@ import {
   wikiSpaceSettings,
   wikiTieredBasis,
   wikiVerdictEffect,
+  type WikiPromptedBy,
   type WikiAnchor,
   type WikiAnchorInput,
   type WikiAnchorOutcome,
@@ -76,7 +77,7 @@ import {
   type AnchorReportEntry,
 } from './wiki-anchors';
 import { docWithdrawReason, withdrawDocSentences } from './wiki-doc-withdrawal';
-import { mergeReceiptText, ownerResolutionText } from './wiki-dossier';
+import { memoryWriteWords, mergeReceiptText, ownerResolutionText } from './wiki-dossier';
 import { wikiMaintenanceRunChanges } from './wiki-maintenance-breaker';
 import {
   ChangesetNeighbours,
@@ -103,6 +104,7 @@ import {
   eventCall,
   hasText,
   noteOriginSessionId,
+  promptedEvidenceOf,
   readBeforeRevision4,
   runEventText,
   toolCallText,
@@ -337,6 +339,8 @@ interface PreparedOp {
   payload: Record<string, unknown>;
   similar: WikiSimilar[];
   tainted: boolean;
+  /** The agent's note the op came from: the server's own word (`submitChangeset`), and null for every other op. */
+  promptedBy?: WikiPromptedBy | null;
   /** The effect policy's answer (§4.2), under the space's review mode: does this op take effect before the owner sees it? */
   applied: boolean;
   /**
@@ -1239,6 +1243,12 @@ export class WikiService {
     principal: WikiPrincipal,
     spaceId: string,
     input: WikiProposeInput,
+    /**
+     * What only the server's own maintenance run says of its ops, by their place in `input.ops` (contract
+     * `opRules.promptedBy`). Beside the input rather than in it: no door hands it on, so an op that carries the field is
+     * refused for its shape whoever sends it.
+     */
+    serverSays: { promptedBy?: ReadonlyArray<WikiPromptedBy | null> } = {},
   ): Promise<Record<string, unknown>> {
     const space = await this.requireSpace(principal.ownerId, spaceId);
     const ops = input.ops;
@@ -1271,7 +1281,7 @@ export class WikiService {
           const replay = await this.replayIdempotent(tx, principal.ownerId, input.idempotencyKey, requestSha256!);
           if (replay) return replay;
         }
-        return this.recordChangeset(tx, principal, space, ops, input, requestSha256, literals, null, neighbours);
+        return this.recordChangeset(tx, principal, space, ops, input, requestSha256, literals, null, neighbours, serverSays.promptedBy);
       },
       loggedRetry(this.logger, 'wiki.submitChangeset', { transaction: CHANGESET_TRANSACTION }),
     );
@@ -1406,6 +1416,7 @@ export class WikiService {
     literals: readonly string[],
     restorations: Restorations | null = null,
     neighbours: ChangesetNeighbours | null = null,
+    promptedBy: ReadonlyArray<WikiPromptedBy | null> = [],
   ): Promise<Record<string, unknown>> {
     const dryRun = input.dryRun === true;
     const lookups = neighbours ? await neighbours.recheck(tx, principal.ownerId) : null;
@@ -1497,6 +1508,7 @@ export class WikiService {
           );
         }
         const prepared = await this.prepareOp(tx, principal, space.id, seq, ops[seq], budget, literals, lookups);
+        prepared.promptedBy = promptedBy[seq] ?? null;
         if (prepared.byMode?.mode === 'tiered') {
           // Tiered's spot check (`reviewModes.spotChecks`): one in every block of the ops it applies at
           // once, drawn by position. Automatic applies nothing here — its verdicts draw theirs, when the
@@ -1750,6 +1762,7 @@ export class WikiService {
               // What Automatic took is not applied yet: its verdict names the mode when it applies it.
               appliedByMode: prepared.applied ? (prepared.byMode?.mode ?? null) : null,
               spotCheck: prepared.spotCheck,
+              promptedBy: prepared.promptedBy ? { ...prepared.promptedBy } : Prisma.DbNull,
             },
             select: { id: true },
           })
@@ -2219,7 +2232,7 @@ export class WikiService {
   async listVerifications(
     principal: WikiPrincipal,
     spaceId: string,
-    options: { after?: string | null; limit?: number; adopt?: boolean } = {},
+    options: { after?: string | null; limit?: number; adopt?: boolean; promptedBy?: boolean } = {},
   ): Promise<{ spaceId: string; mode: WikiReviewMode; items: WikiVerificationItem[]; next: string | null }> {
     const space = await this.requireSpace(principal.ownerId, spaceId);
     const asked = Number.isFinite(options.limit) ? Math.trunc(options.limit as number) : 20;
@@ -2244,6 +2257,7 @@ export class WikiService {
         ownerId: principal.ownerId,
         decision: 'verifying',
         ...(after ? { id: { gt: after } } : {}),
+        ...(options.promptedBy === undefined ? {} : { promptedBy: options.promptedBy ? { not: Prisma.AnyNull } : { equals: Prisma.AnyNull } }),
         changeset: { spaceId: space.id, ...scope },
       },
       // uuid(7): the id order is the order the ops were recorded in, and the partial index 0312 made.
@@ -2257,6 +2271,7 @@ export class WikiService {
         resultEntryId: true,
         payload: true,
         similar: true,
+        promptedBy: true,
         changeset: { select: { sessionId: true } },
       },
     });
@@ -2288,6 +2303,7 @@ export class WikiService {
       resultEntryId: string | null;
       payload: Prisma.JsonValue;
       similar: Prisma.JsonValue;
+      promptedBy: Prisma.JsonValue;
       changeset: { sessionId: string | null };
     },
     literals: readonly string[],
@@ -2318,7 +2334,7 @@ export class WikiService {
         aliases: (draft.aliases ?? []) as string[],
       };
     }
-    const { sources, evidence } = await this.verifierSources(reader, ownerId, row.changeset.sessionId, payload, literals);
+    const { sources, evidence } = await this.verifierSources(reader, ownerId, row.changeset.sessionId, payload, literals, row.promptedBy);
     // The neighbours as recorded, each as it reads now: a duplicate may only name one still live.
     const recorded = (Array.isArray(row.similar) ? row.similar : []) as unknown as WikiSimilar[];
     const now = recorded.length === 0
@@ -2378,6 +2394,7 @@ export class WikiService {
     sessionId: string | null,
     payload: Record<string, unknown>,
     literals: readonly string[],
+    promptedBy: Prisma.JsonValue = null,
   ): Promise<{
     sources: WikiVerificationItem['sources'];
     evidence: WikiVerificationEvidence;
@@ -2402,9 +2419,20 @@ export class WikiService {
     }
     return {
       sources,
-      evidence: evidenceOf(read),
+      evidence: promptedBy === null ? evidenceOf(read) : promptedEvidenceOf(read, await this.promptedNote(reader, ownerId, promptedBy, literals)),
       evidenceBeforeRevision4: before.some(hasText) ? 'readable' : 'unreadable',
     };
+  }
+
+  /**
+   * The words of the note an op came from, redacted as what they are held against was, read from the write it names; null
+   * when that event can no longer be read.
+   */
+  private async promptedNote(reader: Tx, ownerId: string, promptedBy: Prisma.JsonValue, literals: readonly string[]): Promise<string | null> {
+    const { eventId } = promptedBy as unknown as WikiPromptedBy;
+    const event = await reader.runEvent.findFirst({ where: { id: eventId, session: { ownerId } }, select: { payload: true } });
+    if (!event) return null;
+    return redactSecrets(memoryWriteWords((event.payload as { input?: unknown } | null)?.input), { literals }).text;
   }
 
   /**
@@ -2647,6 +2675,7 @@ export class WikiService {
         payload: true,
         similar: true,
         tainted: true,
+        promptedBy: true,
         decision: true,
         decisionReason: true,
         decidedAt: true,
@@ -2726,9 +2755,10 @@ export class WikiService {
     // What the verifier could read decides how far its verdict reaches, and the server reads it here
     // rather than taking the verifier's word (contract `reviewModes.verification.evidence`): with no
     // source readable, whatever it said leaves the op no more than unreviewed and is not counted; with
-    // only a note's words to read, its supported is no more than unreviewed and it counts; and a tainted
-    // op is never more than unreviewed, its duplicate adding nothing (`floors.taintedWaits`).
-    const { evidence } = await this.verifierSources(tx, ownerId, op.changeset.sessionId, payload, literals);
+    // only a note's words to read, or an op that came from a note with no first-hand source for it, its
+    // supported is no more than unreviewed and it counts; and a tainted op is never more than unreviewed,
+    // its duplicate adding nothing (`floors.taintedWaits`).
+    const { evidence } = await this.verifierSources(tx, ownerId, op.changeset.sessionId, payload, literals, op.promptedBy);
     let effect = wikiVerdictEffect({ verdict: verdict.verdict, tainted: op.tainted, evidence });
     // An adopted add waited while the space moved on: the entry a later op made of the very same content
     // is the one it duplicates, whatever its verdict would have applied (`verification.adoption.twin`).

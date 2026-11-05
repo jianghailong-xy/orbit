@@ -613,9 +613,10 @@ owner 2026-09-27 定：核实必须拿得到证据。预览 space 里出处全�
   或库里读不到原文的 commit）时仍算，因为结论读到的不是那条。旧条目和旧结论不改。
 - **证据类别**：`wikiEvidenceClass()`（`wiki.ts`）按 §6.1 的表给每条出处分类，`WikiService.sourceText` 给出每条记录的类别；强弱依次是 `observed`（工具调用和结果，
   写文件类工具与 wiki 读取除外；background_task、error、commit、merge receipt）、`owner_words`（`isOwnerTurn`、`isOwnerAnswer`、owner 解决的 blocker）、
-  `agent_words`（assistant、thinking、写文件类工具和 wiki 读取、别的会话发来的 turn、父会话写给子会话的开场）、`no_intent_words`（其余 message 和 steer、
+  `agent_words`（assistant、thinking、写文件类工具、wiki 读取、输入是 agent 自己写的工具，别的会话发来的 turn、父会话写给子会话的开场。这类工具的名单是 `project_send`、`task_comment`、`session_send`、`session_reply`、`session_create`、`task_create`、`task_create_batch`、`task_update`、`task_evidence_submit`、`wiki_propose`、`notify`、`SendMessage`、`Agent`、`Task`，按去掉 `mcp__<server>__`、`orbit__` 之后的名字判定，是第二次回放开跑前定的）、`no_intent_words`（其余 message 和 steer、
   旧会话的 user 事件、其余审批）、`task_text`（任务 run 的开场、task、task comment）、`orbit_or_shell`（Orbit 自己写的 turn、shell、interrupt、
-  turn_end、system 事件）、`memory`（note）。目前只有“全是 `memory`”影响信任，其余类别只记录口径。
+  turn_end、system 事件）、`memory`（note）。影响信任的只有“全是 `memory`”和下一条来自声明的 op，其余情况类别只记录口径。
+- **来自声明的 op（`opRules.promptedBy`、`reviewModes.verification.evidence.promptedBy`）**：只核对声明那一遍的 op 记 `promptedBy`（写入事件的 id 和文件名，`wiki_changeset_op.prompted_by`，迁移 0471）。这是服务端字段：只有维护作业通过写入口不对外的参数设置，agent 在 op 里传了按形状拒绝（`WIKI_SCHEMA`）。它不算出处，也不出现在任何读接口里。这样的 op 没有第一手出处时，证据记 `second_hand`，`supported` 最多 `unreviewed`。第一手要满足：核实者读得到原文，类别属于 `WIKI_FIRST_HAND_EVIDENCE`（`observed`、`owner_words`）；`observed` 的出处还要求交给核实者的原文和这条声明没有连续 60 个字符相同（`wikiRepeatsNote`，markdown 标记不算，弯引号算直引号，连续空白算一个空格），否则那只是工具结果里又读到一遍 memory。owner 的话不受这一条影响。声明原文按 `promptedBy` 从写入事件重新读，事件读不到时不做这项比较。不带 `promptedBy` 的 op 不受影响。
 - **读不到原文不等于无支撑**：全部出处都读不到原文的 op，supported、partial、unsupported 一律按 `unreviewed` 生效（显示、不推送）；
   duplicate 仍转 reinforce（只追加出处）。这些结论不计入自动退回：退回窗口只数有可读原文（`readable`、`second_hand`，或 0314 之前记下）的结论。
 - **tainted 在 Automatic 下**：`wikiReviewEffect` 让 Automatic 把 tainted 的 add、对机器写的条目的 amend 送去核实（Manual、Tiered 仍待审；
@@ -952,12 +953,15 @@ JSON 里是 `space.settings.maintenance` 与 `maintenance`；实现在 `src/apis
 - 内容照设计 §8.2 第 1 步，外加 agent 自己的轨迹：头部（会话、任务、验收标准、污染标记）；任务会话的开场 prompt（去掉任务模板尾巴）、
   owner 的消息和 steer、打断；AskUserQuestion 问答、ExitPlanMode、带理由的 DENIED；agent 的回复、thinking 里命中信号的句子、
   压缩的工具时间线（命令首行 + 结果首尾行，连续的读 / 改折成一行）；已结算任务最新 3 条 agent 评论和 owner 评论；merge receipt 的 sha；
-  owner 解决 blocker 时写的说明。读写记忆文件的工具调用连同结果剔除，指向记忆库的句子剔除。读 wiki 的调用也连同结果剔除，否则 wiki 的内容可以绕一圈
+  owner 解决 blocker 时写的说明。读写记忆文件的工具调用连同结果剔除，指向记忆库的句子剔除：案卷里没有 memory 说的话，抽取既不读它也不知道它。读 wiki 的调用也连同结果剔除，否则 wiki 的内容可以绕一圈
   回来当证据：各引擎的 `wiki_search`、`wiki_get`（`mcp__orbit__wiki_get`、`orbit__wiki_get`、不带前缀的 `wiki_get`），以及命令里跑 `orbit wiki search`、
   `orbit wiki get` 的工具调用和后台任务（`wikiCallReadsWiki()`）。
 - 打分与装箱照演示的打包器 v2；每行以 `L12` 开头，`sources` 把每个行名对到一手记录（turn / event / tool_call / task_comment /
   approval / merge_receipt / owner_decision），维护作业提议条目时引用这些记录，不引用案卷。服务端的出处解析因此补了
   `merge_receipt` 与 `owner_decision`（owner 解决的 blocker；它不算 Tiered 的 owner 原话）。
+- **agent 写进 memory 的声明（`maintenance.dossier.memory`，设计 `docs/wiki-memory-claims-design.md` §3、§6.2）**：不进上面这份案卷，另成一份，只给只核对声明的一遍（27.3、`maintenance.job.server.claims`）读。`buildDossier(..., { claims: true })` 把每次写入
+  （`/projects/<slug>/memory/<file>.md`，`Write`、`Edit`、`MultiEdit`，没报错，不含 `MEMORY.md`）记成写入时刻的一行 `C1 claim:`，是新增的字，最多 600 字符，不能当出处；旁边放 owner 的话和跟每条声明相关的记录。frontmatter 写 `type: user`、新增不足 20 字符、大部分是链接的跳过；每份最多 6 条，`feedback` 优先，其次新的。
+  `parseInt(sha256(sessionId).slice(0,8),16) % 10 === 0` 的 session 留出，没有这一份（`wikiClaimsHeldOut`，设计 §6.4）。
 - **每行记原文位置（判据 2 第 2 版，`maintenance.dossier.spans`）**：`sources` 的每一项是 `{ ref, kind, id, spans }`，
   `spans` 是 `[{ start, end, text }]`——该行的字在记录原文里的位置：记录的**那一份**原文（7.5，即引文校验读的文本）先脱敏，
   按**码点**计的 `[start, end)`，`text` 是那一段逐字原文。原样抄的行一个 span；压缩过的行按它保留的片段各一个 span，
@@ -1290,7 +1294,7 @@ P11（2026-10-19）删除：这条命令（契约原来的 `maintenance.job.cli.
 op（提议 / 记下 / 被拒 / 自检丢弃 / 被配额挡住 / 被熔断扣下 / 直接生效 / 等待），核实（本次运行自己的 op；接手的单列为
 `verification.adopted {ops, verified, failed}`；没拿到结论、等下一次运行接手的 op——本次运行自己的与接手的合计——单列为
 `verification.waitingForNextRun`）、锚点、文档（`docs`，19.6）各自的结果，**token（输入、输出、调用次数，含抽取、核实、文档的节与 plan
-修改建议，按请求队列计）**与耗时，失败时 `stoppedAt`，游标在 op 记下后推进过时 `cursorAdvanced: true`。最多 16,000 字节 JSON，存在运行那一行上，`ops.refused` 单独
+修改建议，按请求队列计）**与耗时，失败时 `stoppedAt`，游标在 op 记下后推进过时 `cursorAdvanced: true`。`claims` 是只核对声明那一遍（27.3）在本次运行有变化的案卷上的计数：`{ claudeSessions, seen, skipped, overCap, heldOut, shown, narrowed, contradicted, absent, notDurable, unanswered, entries, duplicates }`。`claudeSessions` 是其中 Claude 引擎的 session 数；`seen` 是写入次数，其中 `skipped`、`overCap`、`heldOut` 是跳过、超上限、留出的；`shown` 到 `unanswered` 是每条进案卷的声明的结论；`entries` 是这一遍记下的 op 数；`duplicates` 是从运行开始以来这一遍的 op 被判 duplicate 的条数，包括接手的，从 op 行上读。这一遍的 op 和抽取的 op 一起计入 `ops`，上面的“条目”只算抽取。最多 16,000 字节 JSON，存在运行那一行上，`ops.refused` 单独
 成列。判据 3 第 3 版之前的运行报的是 `articles`，不是 `docs`。
 
 ### 19.5 `orbit wiki check --space <id> --expect-cursor <token> [--json]`
@@ -1439,6 +1443,7 @@ JSON 里是 `maintenance.health`；服务端在 `src/apiserver/src/wiki/wiki-hea
   东西」和最后一次错误的第一行；kind `wiki-maintenance-failing`，thread `wiki-<space>`，不改角标。在语句之后、任何事务之外发，尽力而为：
   手机没响，失败照样记下。
 - 成功的运行把计数清零（§16.4），下一轮连续失败到它自己的第 3 次再推一次。
+- **memory 写入归零（`maintenance.health.notifyNoNotes`）**：Claude 的 memory 可能不再走事件流，这时运行照样成功，只是看不到写入（设计 §8）。最近连续 3 次结束的运行（不论结局）都读过至少 20 个 Claude session（`report.claims.claudeSessions`），`report.claims.seen` 都是 0，就在让连续次数恰好到 3 的那次运行结束时通知 owner 一次，走 `PushService.notifyWikiMemoryWritesQuiet`，kind 和 thread 同上，所以各端打开的是同一个 space。尽力而为，不会让运行失败。中间有一次不满足就断开，下一轮到它自己的第 3 次再推一次。没有 `claims` 的旧报告不算。
 
 ## 21. Wiki plan：先有 plan，owner 确认后才写文档（判据 11）
 
@@ -2566,7 +2571,7 @@ JSON 里是 `modelQueue` 一节；设计见 `docs/wiki-server-execution-design.m
 | `unauthorized`（401、authentication_error）| 回到 `queued`（等部署方改 key，不是这条请求的错），并把拒绝报给状态探测：状态转 `auth_failed`，队列停领（§25.6）|
 | `other`（预算用完、不是事件流、其它错误）| 结束：`state = 'failed'`、`error_kind = 'other'`；作业读到后按 content 处理 |
 
-- 等待上限（`waitLimit`，从 `enqueued_at` 起算，重试不重新计时）：`extract*` / `docs*` 180 秒、`import*` 600 秒、`plan*` 1200 秒，
+- 等待上限（`waitLimit`，从 `enqueued_at` 起算，重试不重新计时）：`extract*` / `claims*` / `docs*` 180 秒、`import*` 600 秒、`plan*` 1200 秒，
   其余 900 秒。排队超过它的请求以 `other` 失败，错误文案以「the request waited past its step's limit」开头；作业读到这个前缀就按
   infra 失败处理（稍后重试），所以模型长时间不在时是以一次失败的作业收场，而不是永远挂着。
 - 单次调用的预算（`callBudget`，设计 §6）：`docs*` 20 分钟、`plan*` 60 分钟，其余 15 分钟；另加合同里的空闲断开。
@@ -2770,6 +2775,7 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
    不在本仓库的条目丢弃（`offTopic`、`entries.foreign` 计数，`maintenance.job.offTopic`），principle 只有 owner 能写、抽到的丢弃并计数；每条按案卷的行与 spans 检查字段与引文、
    按快照检查锚点、按 `WIKI_MAINTAIN_JOB.planMaxTokens` 之外的同一条提示词重问一次（unit 加 `#retry`，拒绝原因写进提示词）。
    引文的定位照 §16.3 的规则（`wikiMaintainPlain` / `wikiMaintainPlace`，P11 之前与 runner 逐字一致）。
+   **只核对声明的一遍**（`maintenance.job.server.claims`，step `claims`，unit 是 session id，重问是 `<session id>#retry`）：抽取之后，对本次有变化、带声明的案卷各跑一遍 `wikiMaintainCheckClaims`，读 16.3 说的另一份案卷。模型逐条回答 `shown`、`narrowed`、`contradicted`、`absent`、`not_durable`，带 `shownBy`，每条答了 `shown` 或 `narrowed` 的声明写一条条目，不写别的。条目按抽取的规则检查，再加上 `shownBy` 里最多两条第一手的行，重复声明原文的工具行不加。留出的、没有声明的 session 不跑。抽取的案卷、提示和调用次数都不变。模型给不出回答时，这份案卷的声明记 `unanswered`，运行和抽取的 op 不受影响；平台的失败照常让运行在 `claims` 这一步停下。这一遍的 op 和抽取的 op 走同一个自检和熔断，但抽取的先记下、先核实完，这样这一遍的 op 的 `similar[]` 里有抽取刚写的条目，核实它时那些条目已经生效，重复就走现有的 duplicate。
 4. **自查与熔断**：按主题分组，每批最多 `limits.opsPerChangeset`（Manual 空间 `limits.opsPerTurn`）；先 dry run，
    服务端找不到的引文从来源上摘掉再查一次，仍被拒的丢掉，被审阅队列挡下的不提交；熔断按 dry run 的回答把整页整页挡回（一个会话
    出现在几页时按最后一页算），游标停在那一页的起点。熔断按整次运行计（`maintenance.job.breaker`，`wiki-maintenance-breaker.ts`）：本次运行

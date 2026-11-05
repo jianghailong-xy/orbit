@@ -421,9 +421,23 @@ export function wikiCallReadsWiki(toolName: string | null | undefined, command: 
   return WIKI_READ_TOOL.test(toolName ?? '') || WIKI_READ_COMMAND.test(command ?? '');
 }
 
-/** A tool call that shows what happened: not the agent's own writing, and not the wiki reading itself back. */
+/**
+ * The tools whose input is what the agent typed: a record of calling one shows what it said, not what happened. The list
+ * fixed before the second claims replay read anything (docs/wiki-memory-claims-design.md section 6.2), by the name a
+ * tool has without what its engine files it under ({@link WIKI_TOOL_FILED_UNDER}).
+ */
+const WIKI_AGENT_INPUT_TOOLS: ReadonlySet<string> = new Set([
+  'project_send', 'task_comment', 'session_send', 'session_reply', 'session_create', 'task_create', 'task_create_batch',
+  'task_update', 'task_evidence_submit', 'wiki_propose', 'notify', 'SendMessage', 'Agent', 'Task',
+]);
+/** What an engine files a tool under: `mcp__orbit__task_comment`, Codex's `orbit__task_comment`. */
+const WIKI_TOOL_FILED_UNDER = /^(?:mcp__.+?__|orbit__)/u;
+
+/** A tool call that shows what happened: not the agent's own writing or input, and not the wiki reading itself back. */
 function wikiCallObserves(toolName: string, command: string | null): boolean {
-  return !WIKI_FILE_WRITE_TOOLS.has(toolName) && !wikiCallReadsWiki(toolName, command);
+  return !WIKI_FILE_WRITE_TOOLS.has(toolName)
+    && !WIKI_AGENT_INPUT_TOOLS.has(toolName.replace(WIKI_TOOL_FILED_UNDER, ''))
+    && !wikiCallReadsWiki(toolName, command);
 }
 
 /** The class of one source's record (contract `reviewModes.verification.evidence.classes`). */
@@ -488,6 +502,42 @@ export function wikiStrongestEvidenceClass(classes: readonly WikiEvidenceClass[]
 export function wikiVerificationEvidence(readable: readonly WikiEvidenceClass[]): WikiVerificationEvidence {
   if (readable.length === 0) return 'unreadable';
   return wikiStrongestEvidenceClass(readable) === 'memory' ? 'second_hand' : 'readable';
+}
+
+/** How many consecutive characters a record shares with a note before it is repeating the note, not showing it. */
+export const WIKI_NOTE_REPEAT_MIN_CHARS = 60;
+
+/** Text as a repeat is compared: markdown marks aside, curly quotes straight, a run of whitespace one space. */
+function wikiRepeatPlain(text: string): string {
+  return text.replace(/[`*]/gu, '').replace(/[“”„]/gu, '"').replace(/[‘’]/gu, "'").replace(/\s+/gu, ' ');
+}
+
+/**
+ * Does `text` repeat at least {@link WIKI_NOTE_REPEAT_MIN_CHARS} consecutive characters of the note? A stored tool result
+ * can hold a memory file's words with no memory path anywhere near them, and a verifier that reads them there has read
+ * the note again (contract `reviewModes.verification.evidence.promptedBy`).
+ */
+export function wikiRepeatsNote(text: string, note: string): boolean {
+  const size = WIKI_NOTE_REPEAT_MIN_CHARS;
+  const said = wikiRepeatPlain(note);
+  const windows = new Set<string>();
+  for (let at = 0; at + size <= said.length; at += 1) windows.add(said.slice(at, at + size));
+  if (windows.size === 0) return false;
+  const read = wikiRepeatPlain(text);
+  for (let at = 0; at + size <= read.length; at += 1) {
+    if (windows.has(read.slice(at, at + size))) return true;
+  }
+  return false;
+}
+
+/**
+ * Does a source the verifier could read count as first-hand for the note an op came from? Its class says, and what
+ * happened only counts if it does not repeat the note. The owner's words do: a note that copies them copies what is
+ * first-hand. `note` is null when the write can no longer be read, and nothing can then be held against a source.
+ */
+export function wikiFirstHandForNote(evidenceClass: WikiEvidenceClass, text: string, note: string | null): boolean {
+  if (!WIKI_FIRST_HAND_EVIDENCE.includes(evidenceClass)) return false;
+  return evidenceClass !== 'observed' || note === null || !wikiRepeatsNote(text, note);
 }
 
 /**
@@ -1244,6 +1294,8 @@ export interface WikiDossier {
   hash: string;
   /** The same hash was handed out on a page the cursor has since advanced past. */
   unchanged: boolean;
+  /** What the session's memory writes came to: only on a page asked for it. */
+  notes?: WikiDossierNotes;
 }
 
 /** A batch project's sessions, which get these counts and no dossier each (contract `maintenance.dossier.batchProjects`). */
@@ -1293,6 +1345,31 @@ export interface WikiCursorState {
 }
 
 /** `GET /api/runner/wiki/spaces/:id/dossiers`. */
+/**
+ * The note an op came from: the tool_use event that wrote it, and the memory file's name (contract
+ * `opRules.promptedBy`). The server's own field: no op an agent sends can carry it.
+ */
+export interface WikiPromptedBy {
+  eventId: string;
+  file: string;
+}
+
+/**
+ * A session's writes to its memory files, on a page a maintenance run asks with `claims` (contract
+ * `maintenance.dossier.memory`): what they came to, and, when any note is carried, the file of the pass that checks them.
+ */
+export interface WikiDossierNotes {
+  /** The session ran on Claude, whose memory writes are what the run watches for (`maintenance.health.notifyNoNotes`). */
+  claude: boolean;
+  seen: number;
+  skipped: number;
+  overCap: number;
+  heldOut: number;
+  lines: Array<{ ref: string } & WikiPromptedBy>;
+  /** Null when it carries no note: none was written that counts, or the session is held out. */
+  file: Pick<WikiDossier, 'text' | 'sources'> | null;
+}
+
 export interface WikiDossierPage {
   spaceId: string;
   /** Where the page starts: advancing to this keeps none of the page, and it is read again. */

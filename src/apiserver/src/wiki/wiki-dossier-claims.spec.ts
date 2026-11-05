@@ -510,6 +510,28 @@ test('an entry from a note also cites the first-hand lines the model said show i
   assert.deepEqual(unnamed.body.sources, [{ kind: 'event', ref: 'event-3' }], 'and so is one whose note names no line');
 });
 
+test('a tool line that repeats a note is not added for it, an owner line that does is, and neither is held against another note', () => {
+  const words = 'The upload test fails with ECONNREFUSED because the port is read at import, before the fixture sets it.';
+  const line = (author: string, id: string, text: string) => ({ text, kind: 'event', id, author, spans: [] });
+  const lines = new Map([
+    ['L1', line('tool', 'stored', `read tool-results/1.txt → ok: ${words}`)],
+    ['L2', line('tool', 'short', `$ npm test → ERR: ${words.slice(0, 59)}!`)],
+    ['L3', line('owner', 'owner', words)],
+  ]);
+  const body = () => ({ body: { op: 'add', sources: [] as Array<Record<string, unknown>> }, topic: '', session: 's', title: 't' });
+  const repeated = { ...body(), note: 'C1' };
+  const other = { ...body(), note: 'C2' };
+  wikiMaintainCiteShownBy([repeated, other], new Map([
+    ['C1', { outcome: 'shown' as const, shownBy: ['L1', 'L2'] }],
+    ['C2', { outcome: 'shown' as const, shownBy: ['L1'] }],
+  ]), lines, new Map([['C1', words], ['C2', 'Another note altogether, which no line of this case repeats anywhere.']]));
+  assert.deepEqual(repeated.body.sources, [{ kind: 'event', ref: 'short' }], 'the line with 60 characters in a row is passed over, the one with 59 is not');
+  assert.deepEqual(other.body.sources, [{ kind: 'event', ref: 'stored' }]);
+  const fromOwner = { ...body(), note: 'C1' };
+  wikiMaintainCiteShownBy([fromOwner], new Map([['C1', { outcome: 'shown' as const, shownBy: ['L3'] }]]), lines, new Map([['C1', words]]));
+  assert.deepEqual((fromOwner.body.sources as Array<{ ref: string }>).map((source) => source.ref), ['owner']);
+});
+
 // ── The pass (§6.2) ──────────────────────────────────────────────────────────────
 
 /** A session with two notes, and the file made of it. */

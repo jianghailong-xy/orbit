@@ -7669,6 +7669,9 @@ model WikiChangesetOp {
   /// Near neighbours found when it was proposed, shown on its Review card.
   similar      Json       @default("[]")
   tainted      Boolean    @default(false)
+  /// The agent's note the op came from, `{ eventId, file }` (0471): the server's own field, which no door takes from
+  /// a caller and which is no source. NULL for every op but those of a maintenance run's pass over the notes.
+  promptedBy   Json?      @map("prompted_by")
 
   /// `pending` | `accepted` | `edited` | `rejected` | `auto_applied` | `conflict` | `expired` |
   /// `withdrawn` | `verifying`. Only `pending` and `verifying` — an Automatic space's op waiting for

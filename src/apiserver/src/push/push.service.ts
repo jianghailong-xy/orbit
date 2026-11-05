@@ -829,6 +829,33 @@ export class PushService {
    * made the cursor's count exactly the threshold calls here. No badge — nothing is waiting for a
    * reply. Best-effort like the others: the failure is recorded whether or not the phone rang.
    */
+  /**
+   * The owner's one alert that runs keep reading Claude sessions and find no memory write in them (contract
+   * `maintenance.health.notifyNoNotes`). The failing alert's kind and thread: it opens the same space.
+   */
+  async notifyWikiMemoryWritesQuiet(input: { ownerId: string; spaceId: string; title: string; runs: number }): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const tokens = await this.targets(input.ownerId);
+      if (tokens.length === 0) return;
+      const body = JSON.stringify({
+        aps: {
+          alert: {
+            title: `Wiki maintenance saw no memory writes in ${input.runs} runs`,
+            body: `${input.title}: Claude sessions were read, but none wrote to its memory files. Claude may have changed how it saves them.`,
+          },
+          sound: 'default',
+          'thread-id': `wiki-${input.spaceId}`,
+        },
+        wikiSpaceID: input.spaceId,
+        kind: 'wiki-maintenance-failing',
+      });
+      await this.deliver(tokens, body, 'alert', '10');
+    } catch (err) {
+      this.log.warn(`wiki memory writes notify failed: ${(err as Error).message}`);
+    }
+  }
+
   async notifyWikiMaintenanceFailing(input: {
     ownerId: string;
     spaceId: string;

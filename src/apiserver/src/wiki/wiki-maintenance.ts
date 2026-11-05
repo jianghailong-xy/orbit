@@ -11,6 +11,7 @@ import {
   type WikiCursorState,
   type WikiDossier,
   type WikiDossierBatch,
+  type WikiDossierNotes,
   type WikiDossierPage,
   type WikiErrorCluster,
   type WikiRefusalCode,
@@ -19,7 +20,7 @@ import { redactSecrets } from '../common/secret-redaction';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
-import { buildDossier, loadDossierRecords, ownerEnvLiterals, storedDossierSources, type DossierReader } from './wiki-dossier';
+import { buildDossier, loadDossierRecords, ownerEnvLiterals, storedDossierSources, type DossierReader, type DossierRecords } from './wiki-dossier';
 import { normalizeRepoUrl, WikiRefusalError } from './wiki.service';
 import { wikiWorkspacesOfSpaces } from './wiki-workspaces';
 
@@ -457,6 +458,11 @@ export interface DossierPageOptions {
   graceSeconds?: number;
   /** A budget smaller than the contract's, for a spec. */
   maxTokens?: number;
+  /**
+   * Say what each session's memory writes came to, with the file of the pass that checks them (`WikiDossier.notes`,
+   * contract `maintenance.dossier.memory`). The dossiers themselves are the same whether or not it is asked.
+   */
+  claims?: boolean;
 }
 
 /**
@@ -600,11 +606,13 @@ export class WikiMaintenance {
     const literals = await ownerEnvLiterals(this.prisma, ownerId);
     const { batchOf, batches } = await this.batches(ownerId, sessionIds);
     const dossiers: Array<Omit<WikiDossier, 'unchanged'>> = [];
+    const notesOf = new Map<string, WikiDossierNotes>();
     for (const sessionId of sessionIds) {
       if (batchOf.has(sessionId)) continue;
       const records = await loadDossierRecords(this.prisma, ownerId, sessionId);
       if (!records) continue;
       dossiers.push(await buildDossier(this.prisma, records, { literals, maxTokens: options.maxTokens }));
+      if (options.claims) notesOf.set(sessionId, await this.notesOf(records, literals, options.maxTokens));
     }
     const errorClusters = await this.errorClusters(scope, sessionIds, now, literals);
 
@@ -620,7 +628,8 @@ export class WikiMaintenance {
       const before = keptBySession.get(dossier.sessionId);
       const processed = before !== undefined && before.hash === dossier.hash
         && comparePositions(positionOf(before.pageAt, before.pageKind, before.pageRef), watermark) <= 0;
-      return { ...dossier, unchanged: processed };
+      const notes = notesOf.get(dossier.sessionId);
+      return { ...dossier, unchanged: processed, ...(notes ? { notes } : {}) };
     });
     if (end) await this.recordIssue(ownerId, spaceId, row.id, end, dossiers);
 
@@ -635,6 +644,21 @@ export class WikiMaintenance {
       errorClusters,
       state: await this.stateOf(scope, await this.cursorRow(ownerId, spaceId), now),
     };
+  }
+
+  /**
+   * What a session's memory writes come to. A session that wrote none, which is most of them, makes no second file;
+   * one held out makes the plain one again, and hands nothing on.
+   */
+  private async notesOf(records: DossierRecords, literals: readonly string[], maxTokens?: number): Promise<WikiDossierNotes> {
+    const { session } = records;
+    const claude = (session.engine ?? session.provider) === 'claude';
+    if (!records.events.some((event) => event.memoryWrite)) {
+      return { claude, seen: 0, skipped: 0, overCap: 0, heldOut: 0, lines: [], file: null };
+    }
+    const { text, sources, claims } = await buildDossier(this.prisma, records, { literals, maxTokens, claims: true });
+    const { seen, skipped, overCap, heldOut, lines } = claims!;
+    return { claude, seen, skipped, overCap, heldOut, lines, file: lines.length > 0 ? { text, sources } : null };
   }
 
   /** The furthest position handed out, and each dossier's sources and hash — never its text, nor its spans' words. */
@@ -915,6 +939,33 @@ export class WikiMaintenance {
       void this.push?.notifyWikiMaintenanceFailing({ ownerId, spaceId, title: space?.title ?? '', failures, lastError });
     } catch (error) {
       this.logger.warn(`the owner was not told of a failing maintenance run: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * The owner's one notification that Claude's memory writes have gone quiet (contract `maintenance.health.notifyNoNotes`):
+   * the run that just ended is the one that makes the streak exactly as long as it asks. After the run's row is written and
+   * best-effort, as `announceFailing` is: no run fails for it. A later run of the same streak finds an earlier one quiet
+   * too, and says nothing; a run that is not quiet ends the streak, and the next is told once more.
+   */
+  async noteNoNotes(ownerId: string, spaceId: string): Promise<void> {
+    try {
+      const runs = WIKI_MAINTENANCE_HEALTH.notifyNoNotesAfterRuns;
+      const latest = await this.prisma.wikiMaintenanceRun.findMany({
+        where: { ownerId, spaceId, endedAt: { not: null } },
+        orderBy: [{ endedAt: 'desc' }, { id: 'desc' }],
+        take: runs + 1,
+        select: { report: true },
+      });
+      const quiet = latest.map((run) => {
+        const claims = (run.report as { claims?: { claudeSessions?: unknown; seen?: unknown } } | null)?.claims;
+        return claims?.seen === 0 && Number(claims.claudeSessions) >= WIKI_MAINTENANCE_HEALTH.notifyNoNotesMinSessions;
+      });
+      if (quiet.length < runs || !quiet.slice(0, runs).every(Boolean) || quiet[runs] === true) return;
+      const space = await this.prisma.wikiSpace.findFirst({ where: { id: spaceId, ownerId }, select: { title: true } });
+      void this.push?.notifyWikiMemoryWritesQuiet({ ownerId, spaceId, title: space?.title ?? '', runs });
+    } catch (error) {
+      this.logger.warn(`the owner was not told that memory writes went quiet: ${(error as Error).message}`);
     }
   }
 

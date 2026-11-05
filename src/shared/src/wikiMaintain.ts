@@ -36,8 +36,11 @@ export const WIKI_MAINTAIN_JOB = {
    * 2026-10-10).
    */
   priority: 0,
-  /** The queue's steps: extraction, and the one plan change a run may propose; `plan_*` is the plan's wait limit. */
-  steps: { extract: 'extract', planProposal: 'plan_proposal' },
+  /**
+   * The queue's steps: extraction, the pass that only checks the agent's notes, and the one plan change a run may
+   * propose; `plan_*` is the plan's wait limit.
+   */
+  steps: { extract: 'extract', claims: 'claims', planProposal: 'plan_proposal' },
   /** One extraction's max_tokens: an 8k-token dossier's at most six entries, the import's own budget. */
   extractMaxTokens: 8192,
   /** One plan proposal's max_tokens: a document's new sections in the plan's line format (the runner's 32,000). */
@@ -143,6 +146,28 @@ export function wikiMaintenanceRunSessions(input: { mode: WikiReviewMode; active
 }
 
 /** What a run reports when it ends, kept as it was said (contract `maintenance.job.report`). */
+/** What a run's pass over the agent's notes came to, over the dossiers it extracted from (`maintenance.job.report`). */
+export type WikiMaintenanceClaimsReport = {
+  /** Of those dossiers, the sessions that ran on Claude: what `seen` being 0 says something about. */
+  claudeSessions: number;
+  /** The writes to memory files, and of those: what said too little, what passed the cap, what a held-out session kept out. */
+  seen: number;
+  skipped: number;
+  overCap: number;
+  heldOut: number;
+  /** What the model said of each note carried; `unanswered` when it did not say, or its answer could not be had. */
+  shown: number;
+  narrowed: number;
+  contradicted: number;
+  absent: number;
+  notDurable: number;
+  unanswered: number;
+  /** The pass's ops the run recorded. */
+  entries: number;
+  /** The pass's ops verified as duplicates since the run began, of its own and of what it adopted. */
+  duplicates: number;
+};
+
 export interface WikiMaintenanceReport {
   /** The step the run stopped at, when it did not succeed. */
   stoppedAt?: string;
@@ -157,6 +182,8 @@ export interface WikiMaintenanceReport {
   unchanged: number;
   offTopic: number;
   entries: { extracted: number; kept: number; dropped: number; foreign: number; principles: number };
+  /** The pass that only checks the agent's notes (`maintenance.job.report`); absent from a run before it was wired in. */
+  claims?: WikiMaintenanceClaimsReport;
   /** `heldBack` is what the review queue's quotas held back; `heldBackByBreaker` what the run's circuit breaker did. */
   ops: {
     proposed: number;
