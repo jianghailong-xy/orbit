@@ -1346,13 +1346,11 @@ export interface WikiCursorState {
 
 /** `GET /api/runner/wiki/spaces/:id/dossiers`. */
 /**
- * The note an op came from: the tool_use event that wrote it, and the memory file's name (contract
- * `opRules.promptedBy`). The server's own field: no op an agent sends can carry it.
+ * The note an op came from (contract `opRules.promptedBy`): the tool_use event that wrote it, or the imported note a
+ * backfill named (`maintenance.job.server.backfill`), and the memory file's name. The server's own field: no op an agent
+ * sends can carry it.
  */
-export interface WikiPromptedBy {
-  eventId: string;
-  file: string;
-}
+export type WikiPromptedBy = { eventId: string; file: string } | { noteId: string; file: string };
 
 /**
  * A session's writes to its memory files, on a page a maintenance run asks with `claims` (contract

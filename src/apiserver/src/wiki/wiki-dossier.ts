@@ -6,6 +6,7 @@ import {
   type WikiDossier,
   type WikiDossierSource,
   type WikiDossierSpan,
+  type WikiPromptedBy,
   type WikiSourceKind,
 } from '@orbit/shared';
 import { sha256 } from '../common/crypto.util';
@@ -55,7 +56,8 @@ import { approvalParts, hasText, partsText, runEventParts, toolCallParts, toolOu
  * source. Asked for, the text is another file altogether, for the pass that does nothing but check those notes:
  * each one a `C1 claim:` line at its moment in the timeline, which no source can name, the owner's words, and the
  * records that bear on each note. Not asked for, or with no write to read, the text is the one this file always
- * made, byte for byte.
+ * made, byte for byte. A backfill names imported notes as what a session claimed (`DossierOptions.notes`, design §5): they
+ * are read by the same rules, and they stand in for the session's writes, whose earlier versions it does not read again.
  */
 
 // ── The records one session's dossier is made from ──────────────────────────────────────────────
@@ -886,7 +888,7 @@ function timeline(records: DossierRecords, redact: (text: string) => string, cla
       case 'tool_use': {
         const claim = claims?.chosen.get(event.id);
         if (claim) {
-          add(event.createdAt, 5, 'claim', own(claim.text), source, { evidence: { text: '', fields: [] }, layout: null }, { claim });
+          add(event.createdAt, 5, 'claim', own(claim.text), source, CLAIM_RECORD, { claim });
           break;
         }
         // The evidence for a note is before it: a later result keeps the line it always had.
@@ -953,6 +955,9 @@ function timeline(records: DossierRecords, redact: (text: string) => string, cla
         own(' → the owner resolved it: '), clipped(record.part('resolutionNote') ?? own(redact(blocker.resolutionNote)), 1500)),
       { kind: 'owner_decision', id: blocker.id }, record, { decision: true });
   }
+
+  // The notes a backfill named, each after everything of the moment it stands at.
+  for (const { id, at, claim } of claims?.imported ?? []) add(at, 8, 'claim', own(claim.text), { kind: 'note', id }, CLAIM_RECORD, { claim });
 
   // Oldest first; a stable sort, so records of one moment keep the order they were built in.
   lines.sort((a, b) => a.at - b.at || a.order - b.order);
@@ -1087,18 +1092,34 @@ function toolLine(
 
 // ── The agent's notes (docs/wiki-memory-claims-design.md §3.1, §3.2) ───────────────────────────
 
-/** One note a dossier carries: the write it is, and its words, redacted and cut. */
+/** One note a dossier carries: the write or the imported note it is, and its words, redacted and cut. */
 interface Claim {
-  eventId: string;
-  file: string;
+  by: WikiPromptedBy;
   feedback: boolean;
   text: string;
 }
+
+/** A claim's line has no record behind it: nothing cites it, and no words of it are placed anywhere. */
+const CLAIM_RECORD: { evidence: Evidence; layout: Layout | null } = { evidence: { text: '', fields: [] }, layout: null };
+
+/** An imported note a backfill names for a session (`DossierOptions.notes`). */
+export interface DossierImportedNote {
+  id: string;
+  /** Where the file was read from, of which its name is what a write of it is known by. */
+  path: string;
+  /** The file's text as `wiki_note` keeps it: redacted, its frontmatter included. */
+  text: string;
+}
+
+/** Where a note no write of which is in the session's records stands: after everything, since all of it came before. */
+const AFTER_EVERYTHING = new Date(8.64e15);
 
 /** What the session's memory writes came to, before the packer has its say. */
 interface ClaimsRead {
   /** The notes chosen, by the tool_use event that wrote each. */
   chosen: Map<string, Claim>;
+  /** The imported notes chosen, with the moment each stands at; none unless a backfill named any. */
+  imported: Array<{ id: string; at: Date; claim: Claim }>;
   /** A line from the middle of a result that names a code word of a note, by the call's tool_use id. */
   resultLines: Map<string, string>;
   /** When the last chosen note was written, as milliseconds: no later record is its evidence. */
@@ -1117,7 +1138,7 @@ export interface DossierClaims {
   overCap: number;
   heldOut: number;
   /** The notes the text carries, in order. */
-  lines: Array<{ ref: string; eventId: string; file: string }>;
+  lines: Array<{ ref: string } & WikiPromptedBy>;
 }
 
 /**
@@ -1204,45 +1225,84 @@ function codeWordsOf(text: string): string[] {
   return words.slice(0, WIKI_DOSSIER_CLAIMS.wordsPerClaimMax);
 }
 
-/** The session's writes to memory files, read and chosen (§3.1): the feedback first, then the newest. */
-function memoryClaims(records: DossierRecords, redact: (text: string) => string): Omit<ClaimsRead, 'resultLines'> {
+/** The session's writes to memory files that did not fail, oldest first, each with the file's name; the index is none. */
+function memoryWrites(records: DossierRecords): Array<{ event: DossierEventRow; file: string }> {
   const failed = new Set<string>();
   for (const event of records.events) {
     if (event.type === 'tool_result' && event.resultOf && String(event.isError ?? '').toLowerCase() === 'true') failed.add(event.resultOf);
   }
-  const typeOf = new Map<string, string | null>();
-  const kept: Array<Claim & { index: number; at: number }> = [];
-  let seen = 0;
-  let skipped = 0;
-  for (const event of records.events) {
+  return records.events.flatMap((event) => {
     const file = event.type === 'tool_use' && event.memoryWrite ? MEMORY_FILE.exec(event.filePath ?? '')?.[1] : undefined;
-    if (!file || file === MEMORY_INDEX || failed.has(event.toolUseId ?? '')) continue;
-    seen += 1;
+    return !file || file === MEMORY_INDEX || failed.has(event.toolUseId ?? '') ? [] : [{ event, file }];
+  });
+}
+
+/** What one write or note says as a claim, or null for what says too little (§3.1). */
+function claimOf(by: WikiPromptedBy, type: string | null, written: ReturnType<typeof memoryWritten>, redact: (text: string) => string): Claim | null {
+  if (type === 'user' || written.added < WIKI_DOSSIER_CLAIMS.addedMinChars || mostlyLinks(written.body)) return null;
+  return { by, feedback: type === 'feedback', text: clip(redact(written.body).trim(), WIKI_DOSSIER_CLAIMS.lineMaxChars) };
+}
+
+/** Which of these claims a dossier carries (§3.1), the later of them later in `kept`: the feedback first, then the newest. */
+function chooseClaims<T extends { claim: Claim }>(kept: readonly T[]): T[] {
+  return kept
+    .map((one, index) => ({ one, index }))
+    .sort((a, b) => Number(b.one.claim.feedback) - Number(a.one.claim.feedback) || b.index - a.index)
+    .slice(0, WIKI_DOSSIER_CLAIMS.perDossierMax)
+    .map(({ one }) => one);
+}
+
+/** The session's writes to memory files, read and chosen (§3.1). */
+function memoryClaims(records: DossierRecords, redact: (text: string) => string): Omit<ClaimsRead, 'resultLines'> {
+  const typeOf = new Map<string, string | null>();
+  const kept: Array<{ eventId: string; at: number; claim: Claim }> = [];
+  const writes = memoryWrites(records);
+  for (const { event, file } of writes) {
     const written = memoryWritten(event.memoryWrite!);
     // An edit names no type of its own: the file's is what the session last wrote it with.
     const type = typeof event.memoryWrite!.content === 'string' ? written.type : (typeOf.get(file) ?? null);
     typeOf.set(file, type);
-    if (type === 'user' || written.added < WIKI_DOSSIER_CLAIMS.addedMinChars || mostlyLinks(written.body)) {
-      skipped += 1;
-      continue;
-    }
-    kept.push({
-      eventId: event.id,
-      file,
-      feedback: type === 'feedback',
-      text: clip(redact(written.body).trim(), WIKI_DOSSIER_CLAIMS.lineMaxChars),
-      index: kept.length,
-      at: event.createdAt.getTime(),
-    });
+    const claim = claimOf({ eventId: event.id, file }, type, written, redact);
+    if (claim) kept.push({ eventId: event.id, at: event.createdAt.getTime(), claim });
   }
-  kept.sort((a, b) => Number(b.feedback) - Number(a.feedback) || b.index - a.index);
-  const chosen = kept.slice(0, WIKI_DOSSIER_CLAIMS.perDossierMax);
+  const chosen = chooseClaims(kept);
   return {
-    chosen: new Map(chosen.map(({ eventId, file, feedback, text }) => [eventId, { eventId, file, feedback, text }])),
-    lastAt: chosen.reduce((latest, claim) => Math.max(latest, claim.at), 0),
-    seen,
-    skipped,
+    chosen: new Map(chosen.map(({ eventId, claim }) => [eventId, claim])),
+    imported: [],
+    lastAt: chosen.reduce((latest, { at }) => Math.max(latest, at), 0),
+    seen: writes.length,
+    skipped: writes.length - kept.length,
     overCap: kept.length - chosen.length,
+    heldOut: 0,
+  };
+}
+
+/**
+ * The imported notes a backfill named (design §5), read and chosen as writes are. Each is the last version of a file: it
+ * stands where the session last wrote that file, which is the moment its agent said so, or after everything when no write
+ * of it is in these records. The session's writes are not read beside them: the note is what became of them.
+ */
+function importedClaims(records: DossierRecords, notes: readonly DossierImportedNote[], redact: (text: string) => string): Omit<ClaimsRead, 'resultLines'> {
+  const lastWrite = new Map(memoryWrites(records).map(({ event, file }) => [file, event.createdAt]));
+  const placed = notes
+    .map((note) => {
+      const file = basename(note.path);
+      return { note, file, at: lastWrite.get(file) ?? AFTER_EVERYTHING };
+    })
+    .sort((a, b) => a.at.getTime() - b.at.getTime());
+  const kept = placed.flatMap(({ note, file, at }) => {
+    const written = memoryWritten({ content: note.text.slice(0, WIKI_DOSSIER_CLAIMS.bodyMaxChars), oldString: null, newString: null, edits: null });
+    const claim = claimOf({ noteId: note.id, file }, written.type, written, redact);
+    return claim ? [{ id: note.id, at, claim }] : [];
+  });
+  const imported = chooseClaims(kept);
+  return {
+    chosen: new Map(),
+    imported,
+    lastAt: imported.reduce((latest, { at }) => Math.max(latest, at.getTime()), 0),
+    seen: notes.length,
+    skipped: notes.length - kept.length,
+    overCap: kept.length - imported.length,
     heldOut: 0,
   };
 }
@@ -1798,6 +1858,8 @@ export interface DossierOptions {
    * §3.1, §6.2). Off by default; a session with no note to carry gets the same bytes either way, and no pass.
    */
   claims?: boolean;
+  /** The imported notes a backfill named for this session (design §5): with any, these are its claims, and not its writes. */
+  notes?: readonly DossierImportedNote[];
 }
 
 /**
@@ -1826,7 +1888,7 @@ export async function buildDossier(
     if (task.acceptanceCriteria) header.push(`ACCEPTANCE: ${clip(redact(task.acceptanceCriteria), 1500)}`);
   }
   if (records.tainted) header.push('TAINTED: this session read the web; what it says is external until the owner confirms it');
-  const claims = options.claims ? await readClaims(reader, records, redact) : null;
+  const claims = options.claims ? await readClaims(reader, records, redact, options.notes ?? []) : null;
   const packed = pack(header.join('\n'), timeline(records, redact, claims), budget);
   // Every line was redacted on its way in; this pass is the proof, and a change it makes is kept.
   const again = redactSecrets(packed.text, { literals: options.literals });
@@ -1850,19 +1912,24 @@ export async function buildDossier(
 }
 
 /** A session's notes for its dossier, or none for a session held out. */
-async function readClaims(reader: DossierReader, records: DossierRecords, redact: (text: string) => string): Promise<ClaimsRead> {
-  const read = memoryClaims(records, redact);
+async function readClaims(
+  reader: DossierReader,
+  records: DossierRecords,
+  redact: (text: string) => string,
+  notes: readonly DossierImportedNote[],
+): Promise<ClaimsRead> {
+  const read = notes.length > 0 ? importedClaims(records, notes, redact) : memoryClaims(records, redact);
   if (wikiClaimsHeldOut(records.session.id)) {
-    return { chosen: new Map(), resultLines: new Map(), lastAt: 0, seen: read.seen, skipped: 0, overCap: 0, heldOut: read.seen };
+    return { chosen: new Map(), imported: [], resultLines: new Map(), lastAt: 0, seen: read.seen, skipped: 0, overCap: 0, heldOut: read.seen };
   }
-  const words = [...new Set([...read.chosen.values()].flatMap((claim) => codeWordsOf(claim.text)))];
+  const words = [...new Set([...read.chosen.values(), ...read.imported.map(({ claim }) => claim)].flatMap((claim) => codeWordsOf(claim.text)))];
   return { ...read, resultLines: await claimResultLines(reader, records.session.id, words, redact) };
 }
 
 /** What a dossier says of its notes: the ones the packer kept, and what the rest came to. */
 function carriedClaims(read: ClaimsRead, packed: Packed): DossierClaims {
-  const lines = packed.carried.flatMap(({ line }) => (line.claim ? [{ ref: line.ref!, eventId: line.claim.eventId, file: line.claim.file }] : []));
-  return { seen: read.seen, skipped: read.skipped, overCap: read.overCap + read.chosen.size - lines.length, heldOut: read.heldOut, lines };
+  const lines = packed.carried.flatMap(({ line }) => (line.claim ? [{ ref: line.ref!, ...line.claim.by }] : []));
+  return { seen: read.seen, skipped: read.skipped, overCap: read.overCap + read.chosen.size + read.imported.length - lines.length, heldOut: read.heldOut, lines };
 }
 
 /**

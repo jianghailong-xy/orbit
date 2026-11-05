@@ -777,7 +777,7 @@ test('a plan job is no maintenance run: it does not count against the day, the d
   await h.sql.query(`INSERT INTO "wiki_job"("id","owner_id","space_id","kind","state","started_at","ended_at") VALUES ($1,$2,$3,'maintain','succeeded',now(),now())`, [
     runJob, w.owner.id, spaceId,
   ]);
-  await h.sql.query(`INSERT INTO "wiki_maintenance_run"("id","space_id","owner_id","job_id","started_at","outcome","ended_at") VALUES ($1,$2,$3,$4,now(),'succeeded',now())`, [
+  await h.sql.query(`INSERT INTO "wiki_maintenance_run"("id","space_id","owner_id","job_id","due","started_at","outcome","ended_at") VALUES ($1,$2,$3,$4,'backlog',now(),'succeeded',now())`, [
     randomUUID(), spaceId, w.owner.id, runJob,
   ]);
   today = await wikiMaintenanceRunsToday(db, w.owner.id, spaceId);

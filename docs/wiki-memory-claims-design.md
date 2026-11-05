@@ -231,12 +231,23 @@ the entry is flagged at once.
 
 **回填怎么跑**
 
-- **入口：** 维护作业加一种输入：给定 session 列表，而不是游标页。抽取、自检、断路器、提议、核对都复用。跳过移动游标、写文档和排 articles（`src/apiserver/src/wiki/wiki-articles-jobs.ts:70`），全部结束后统一排一次 articles。
+- **入口：** 维护作业加一种输入：给定 session 列表和每个 session 的 note id，而不是游标页。自检、断路器、提议、核对、锚点都复用。跳过移动游标、写文档和排 articles（`src/apiserver/src/wiki/wiki-articles-jobs.ts:70`），不单独再排：回填结束后，下一次记下 op 的日常运行会排 articles，那一次覆盖回填写的条目。
+- **只跑核对声明那一遍，不再跑原来的抽取（协调者 2026-11-05 定）：** 这些 session 大多已经被日常维护抽取过。再跑一遍只会多出一批主要靠 agent 自己的话的 `auto` 条目，这正是这个项目要减少的。第二次回放的读数（§6.2，回放数字，不是回填实测）：每个写过 memory 的 session，A 是 1.56 次抽取调用加 3.32 次核对调用（332 条 / 100），S 是 1.44 次加 1.03 次（103 条 / 100），只跑 S 少 66% 的调用。代价是从没抽取过的旧 session 这次也不抽取。
+- **不写 `wiki_dossier`（同一决定）：** 不写 hash、sources，也不写位置。hash 的含义是“抽取已经读过这份案卷”，`dossierPage` 据此判 `unchanged`。回填没跑抽取，如果更新 hash，一个有新记录、事实还在游标之后的 session，下一次日常运行就会被判 `unchanged`，新记录不抽取。没有这一行的 session 也不新建。
+- **回填过的 session 之后又有新记录：** 日常运行照常读它，抽取，再核对一次声明。重复的声明走 `duplicate`，不会多一条生效条目。
+- **声明：** 带 note id 的 session，声明就是这些 note 的正文，不含 frontmatter，规则和上限与写入相同，放在 session 最后一次写这个文件的位置，没写过就放在最后。这时不再读它事件流里的写入：更早的版本不回填，见上表。不带 note id 的 session 读它的写入。留出组不变：落在 10% 里的 session 点名了也不跑 S，它的旧 note 条目收尾时降级。
 - **不倒回游标：** 倒回会让整个 space 进入追赶，文档停更，新 session 排在后面。页位还会被没有 memory 的 session 占掉。
-- **节奏：** 每批 20 个 session，一次一个作业，和日常维护交替，从新到旧。
-- **触发：** admin 路由，要求写明原因，先例是 `POST /api/admin/wiki/spaces/:id/plan/build`（`src/apiserver/src/wiki/wiki-admin.controller.ts:30`）。没有 UI。
-- **旧条目：** 把引用这条 note 的条目加进 op 的 `similar[]`。核对判 duplicate 时，现有逻辑把新出处追加到旧条目上，内容和信任不变。
-- **收尾：** 全部跑完后，仍没有第一手证据的旧 note 条目从 `auto` 降为 Unreviewed，走 `applyOp` 的一条内部指令。
+- **节奏：** 每批 20 个 session，一次一个作业，和日常维护交替，从新到旧。交替由代码保证：回填不论成败，结束时都请求这个 space 的下一轮，还到期就立刻建日常作业，下一批回填要等它结束。
+- **触发：** 容器里的一次性 CLI `src/apiserver/src/wiki/wiki-backfill.cli.ts`，先例是附件迁移的 CLI（`src/apiserver/src/files/attachment-migration.cli.ts`）。不加 HTTP 路由，省掉登录和租户用例：这件事只为一个 space 跑一次，能跑这条命令的人本来就能读数据库。要求写明原因，一次最多 20 个 session，还有没结束的维护作业时拒绝。没有 UI。
+
+  ```text
+  node src/apiserver/dist/wiki/wiki-backfill.cli.js run --space <id> --reason <why> --session <id>[:<noteId>,<noteId>] ...
+  node src/apiserver/dist/wiki/wiki-backfill.cli.js downgrade --space <id> [--apply --reason <why>]
+  ```
+
+- **不影响日常：** 回填的运行行 `due` 为 NULL，不计入当天次数、catch-up 的连败和 memory 写入量告警。失败只写在自己的运行行上，不计入游标的连败数，也不通知。只允许 Automatic space：duplicate 判定和证据封顶都在核对这一步。
+- **旧条目：** 把当前版本引用这条 note 的生效条目加进 op 的 `similar[]`，只对 maintenance 身份生效。核对判 duplicate 时，现有逻辑把新出处追加到旧条目上，内容和信任不变。
+- **收尾：** 全部跑完后，CLI 的 `downgrade` 把仍没有第一手证据的旧 note 条目从 `auto` 降为 Unreviewed，走 `applyOp` 的一条内部指令，不产生新 revision。判定用证据规则的同一函数（`promptedEvidenceOf`）。默认只报告不执行，`--apply` 才写，这时要写明原因。每 50 条一个事务，并写一行 `activity` 记原因和 id：没有 revision，这是唯一的记录。结果打印成报告，重复执行没有变化。
 - **成本：** 1,740 个 session，按演示实测每个 26 秒，GPU 独占约 13 小时，核对另算约 2 小时。现在 articles 占近 14 天模型请求的 81%，实际会更久。
 - **止损：** 前 100 个 session 是试点，门槛 G1、G2 不过就停。
 
@@ -612,7 +623,7 @@ memory 进了抽取，就不能再拿它评召回率。所以留 10% 的 session
 | P2 声明和回放 | 声明自己的案卷和只核对声明的一遍（S），没有调用方；跑 §6.2 | `wiki-dossier.ts`、`wiki-maintain.ts`，回放脚本不进仓库 | 第二次回放 G1、G2、G3、G5 全过（§6.2），上线用这个做法 |
 | P3 上线 | 维护作业在 A 之后跑 S，A 不变；留出 10%；`promptedBy` 和封顶；`report.claims`；写入量告警 | `wiki-maintain-job.ts`、`wiki.service.ts`、`wiki.ts`，迁移 0471 | 留出组满 30 个 session 后对比（§6.4） |
 | P4 `wiki_note` | 工具、CLI、路由、`session_id` 迁移 | `wiki_tools.go`、`wiki_cli.go`、`runner-wiki.controller.ts`，runner 发版 | 非 Claude session 记的 note 进入案卷 |
-| P5 历史回填 | §5 | `wiki-maintain-job.ts`、`wiki-admin.controller.ts` | 试点过门槛后全量，收尾降级 |
+| P5 历史回填 | §5 | `wiki-maintain-job.ts`、`wiki-backfill.cli.ts` | 试点过门槛后全量，收尾降级 |
 
 - **依赖：** P0、M1、P2 可以同时开始，回放脚本自己按 R2 分类，不等 P1。P1 依赖 M1。P3 依赖 P1、P2。P4、P5 依赖 P3。
 - **P0 的搜索：** `broaden` 之后仍要求所有词命中（`src/apiserver/src/sessions/search-query.ts:113`）。wiki 这里再加第三轮（V2，§6.3）：任一词命中，按命中词数排序。不足 3 个字符的词不参与，正好两个字的 CJK 词例外，可用词不足 2 个的查询不问这一轮。session 搜索不动。

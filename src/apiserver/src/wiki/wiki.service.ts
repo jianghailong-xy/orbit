@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, HttpException, Injectable, Logg
 import { Prisma } from '@prisma/client';
 import {
   KIND_SPECS,
+  WIKI_BACKFILL,
   WIKI_CHALLENGE_ANSWERS,
   WIKI_DEFAULT_SPACE_SETTINGS,
   WIKI_KINDS,
@@ -374,10 +375,11 @@ interface PreparedOp {
  * exactly one writer. `reopen` is the one way back out of a rejection: a lineage a verdict rejected
  * without being able to read its sources, proposed again (`reviewModes.verification.reopen`).
  * `anchor_check` is not a wiki op either: it is what a maintenance run's re-verification found
- * (`recordAnchorChecks`), and it can move an entry's trust, which is why it comes here too.
+ * (`recordAnchorChecks`), and it can move an entry's trust, which is why it comes here too. `downgrade` is
+ * neither: it is the close of a history backfill (`downgradeNoteEntries`), which moves an entry's trust alone.
  */
 interface WikiApplyInstruction {
-  op: WikiOp | 'promote' | 'confirm' | 'reject' | 'reopen' | 'anchor_check';
+  op: WikiOp | 'promote' | 'confirm' | 'reject' | 'reopen' | 'anchor_check' | 'downgrade';
   entryId: string | null;
   draft: PreparedDraft | null;
   changes: WikiEntryChanges | null;
@@ -422,6 +424,25 @@ interface ChangesetBudget {
   breakerScope: WikiBreakerReading['scope'];
   /** How many ops the space's review mode had applied before this one: what the spot-check draw counts. */
   appliedByModeBefore: number;
+}
+
+/**
+ * What the close of a history backfill read and did (contract `maintenance.job.server.backfill.downgrade`): the printed
+ * report. `examined` is every live `auto` entry with a live note source on its current revision, `firstHand` those it leaves
+ * alone, `noFirstHand` those without, with their ids and kinds, whether or not this call was asked to write. `downgraded` is
+ * what it wrote, `moved` what it no longer could, because the entry had changed since it was read.
+ */
+export interface WikiNoteDowngradeReport {
+  spaceId: string;
+  apply: boolean;
+  examined: number;
+  firstHand: number;
+  noFirstHand: number;
+  downgraded: number;
+  moved: number;
+  batches: number;
+  byKind: Record<string, number>;
+  entryIds: string[];
 }
 
 /** A revert's restorations, by entry: the sources of the revision each amend puts back. */
@@ -1509,6 +1530,10 @@ export class WikiService {
         }
         const prepared = await this.prepareOp(tx, principal, space.id, seq, ops[seq], budget, literals, lookups);
         prepared.promptedBy = promptedBy[seq] ?? null;
+        // A note a backfill read again: what was drawn from it is what this op may turn out to repeat, whatever words it says it in.
+        if (principal.origin === 'maintenance' && prepared.promptedBy && 'noteId' in prepared.promptedBy) {
+          prepared.similar = await this.withEntriesOfNote(tx, principal.ownerId, space.id, prepared, prepared.promptedBy.noteId);
+        }
         if (prepared.byMode?.mode === 'tiered') {
           // Tiered's spot check (`reviewModes.spotChecks`): one in every block of the ops it applies at
           // once, drawn by position. Automatic applies nothing here — its verdicts draw theirs, when the
@@ -2429,8 +2454,12 @@ export class WikiService {
    * when that event can no longer be read.
    */
   private async promptedNote(reader: Tx, ownerId: string, promptedBy: Prisma.JsonValue, literals: readonly string[]): Promise<string | null> {
-    const { eventId } = promptedBy as unknown as WikiPromptedBy;
-    const event = await reader.runEvent.findFirst({ where: { id: eventId, session: { ownerId } }, select: { payload: true } });
+    const by = promptedBy as unknown as WikiPromptedBy;
+    if ('noteId' in by) {
+      const note = await reader.wikiNote.findFirst({ where: { id: by.noteId, ownerId }, select: { text: true } });
+      return note ? redactSecrets(memoryWriteWords({ content: note.text }), { literals }).text : null;
+    }
+    const event = await reader.runEvent.findFirst({ where: { id: by.eventId, session: { ownerId } }, select: { payload: true } });
     if (!event) return null;
     return redactSecrets(memoryWriteWords((event.payload as { input?: unknown } | null)?.input), { literals }).text;
   }
@@ -2930,6 +2959,109 @@ export class WikiService {
          AND "owner_id" = ${ownerId}::uuid
          AND "settings"->>'reviewMode' = 'automatic'`;
     return switched === 1 ? { spaceId, title: space.title, unsupported, window } : null;
+  }
+
+  // ── The close of a history backfill (contract `maintenance.job.server.backfill.downgrade`) ──────
+
+  /**
+   * What is left of the old note entries once a history backfill has read their sessions again (design §5): a live `auto`
+   * entry with a live note source on its current revision and no first-hand source there, by the rule a note's op is verified
+   * under ({@link hasFirstHandSource}), goes down to `unreviewed`. No revision: what it says has not changed.
+   *
+   * ASKED, IT ONLY REPORTS. It writes only with `apply`, and then needs why. A run through the same entries again finds nothing
+   * more to write: what it wrote is `auto` no longer, and the rest it leaves alone have a first-hand source.
+   *
+   * IN BATCHES, each in a transaction of its own with its one `activity` row: since it writes no revision, that row is the
+   * only trail of which entries it moved, and why. An entry is judged before its transaction, and written only if it is still
+   * live, `auto` and at that revision. A source a duplicate adds in between moves none of those: that entry goes down all the
+   * same, which errs on the side this exists for, and its owner can confirm it. No model is asked and no repository is read.
+   */
+  async downgradeNoteEntries(
+    ownerId: string,
+    spaceId: string,
+    options: { apply?: boolean; reason?: string; batchSize?: number } = {},
+  ): Promise<WikiNoteDowngradeReport> {
+    const apply = options.apply === true;
+    const reason = (options.reason ?? '').trim();
+    if (apply && reason === '') return refuse('WIKI_SCHEMA', 'a reason is required to write: why these entries go down to unreviewed');
+    const size = options.batchSize ?? WIKI_BACKFILL.downgradeBatch;
+    const literals = await this.envLiterals(this.prisma, ownerId);
+    const reader = this.prisma as unknown as Tx;
+    const report: WikiNoteDowngradeReport = { spaceId, apply, examined: 0, firstHand: 0, noFirstHand: 0, downgraded: 0, moved: 0, batches: 0, byKind: {}, entryIds: [] };
+    let after: string | null = null;
+    for (;;) {
+      const page: Array<{ id: string; kind: string; revision: number }> = await this.prisma.$queryRaw`
+        SELECT e."id" AS "id", e."kind" AS "kind", e."current_revision" AS "revision"
+          FROM "wiki_entry" e
+         WHERE e."owner_id" = ${ownerId}::uuid AND e."space_id" = ${spaceId}::uuid AND e."status" = 'active' AND e."trust" = 'auto'
+           AND (${after}::uuid IS NULL OR e."id" > ${after}::uuid)
+           AND EXISTS (SELECT 1 FROM "wiki_entry_revision" r JOIN "wiki_source" s ON s."revision_id" = r."id"
+                        WHERE r."entry_id" = e."id" AND r."revision" = e."current_revision" AND s."kind" = 'note' AND s."state" = 'live')
+         ORDER BY e."id"
+         LIMIT ${size}::int`;
+      if (page.length === 0) break;
+      report.batches += 1;
+      report.examined += page.length;
+      const due: typeof page = [];
+      for (const entry of page) {
+        if (await this.hasFirstHandSource(reader, ownerId, entry, literals)) report.firstHand += 1;
+        else due.push(entry);
+      }
+      report.noFirstHand += due.length;
+      for (const { id, kind } of due) {
+        report.byKind[kind] = (report.byKind[kind] ?? 0) + 1;
+        report.entryIds.push(id);
+      }
+      if (apply && due.length > 0) {
+        const written = await withTransactionRetry(
+          this.prisma,
+          async (tx) => {
+            const moved: string[] = [];
+            for (const { id, revision } of due) {
+              const done = await this.applyOp(tx, ownerId, spaceId, {
+                op: 'downgrade', entryId: id, draft: null, changes: null, payload: { revision }, sources: [], tainted: false,
+              }, { authorKind: 'system', authorUserId: null, authorSessionId: null, authorToolCallId: null, changesetOpId: null });
+              if (done.revision !== null) moved.push(id);
+            }
+            if (moved.length > 0) {
+              await tx.activity.create({
+                data: { actorId: null, type: WIKI_BACKFILL.downgradeActivity, payload: { userId: ownerId, spaceId, reason, entryIds: moved }, credentialKind: null },
+              });
+            }
+            return moved.length;
+          },
+          loggedRetry(this.logger, 'wiki.downgradeNoteEntries', { transaction: CHANGESET_TRANSACTION }),
+        );
+        report.downgraded += written;
+        report.moved += due.length - written;
+      }
+      after = page[page.length - 1]!.id;
+    }
+    return report;
+  }
+
+  /**
+   * Whether what an entry's current revision cites is first-hand, by the very function a note's op is held to at its verdict
+   * (`promptedEvidenceOf`): a source the verifier could read, of a first-hand class (`wikiEvidenceClass`), and, if it is what
+   * happened, not repeating the note. Each read as a verifier reads it, a turn cited as the calling session's own by the turn
+   * its locator names.
+   */
+  private async hasFirstHandSource(reader: Tx, ownerId: string, entry: { id: string; revision: number }, literals: readonly string[]): Promise<boolean> {
+    const cited = await reader.wikiSource.findMany({
+      where: { ownerId, state: 'live', revision: { entryId: entry.id, revision: entry.revision } },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { kind: true, ref: true, locator: true },
+    });
+    const as: WikiPrincipal = { origin: 'maintenance', ownerId, userId: null, sessionId: null, toolCallId: null };
+    const read: Array<{ text: string | null; evidenceClass: WikiEvidenceClass | null }> = [];
+    const notes: string[] = [];
+    for (const source of cited) {
+      const turnId = source.kind === 'turn' ? (source.locator as { turnId?: unknown } | null)?.turnId : undefined;
+      const found = await this.sourceText(reader, as, { kind: source.kind as WikiSourceKind, ref: typeof turnId === 'string' ? turnId : source.ref });
+      read.push({ text: verifierText(found?.text ?? null, literals).text, evidenceClass: found?.evidenceClass ?? null });
+      if (source.kind === 'note' && found?.text) notes.push(memoryWriteWords({ content: found.text }));
+    }
+    return promptedEvidenceOf(read, redactSecrets(notes.join('\n'), { literals }).text) === 'readable';
   }
 
   // ── Anchor re-verification: what a maintenance run found (contract `anchorRules.verify`) ───────
@@ -3992,6 +4124,18 @@ export class WikiService {
         await this.recomputeFlags(tx, ownerId, instruction.entryId!);
         return { entryId: instruction.entryId!, revision: found.revision };
       }
+      case 'downgrade': {
+        // The close of a history backfill (`downgradeNoteEntries`): the trust alone, and no revision, since what the entry
+        // says has not changed. Only while it is what the judgement read: live, `auto`, at that revision.
+        const { revision } = instruction.payload as { revision: number };
+        const written = await tx.wikiEntry.updateMany({
+          where: { id: instruction.entryId!, ownerId, status: 'active', trust: 'auto', currentRevision: revision },
+          data: { trust: 'unreviewed' },
+        });
+        if (written.count !== 1) return { entryId: instruction.entryId!, revision: null };
+        await this.recomputeFlags(tx, ownerId, instruction.entryId!);
+        return { entryId: instruction.entryId!, revision };
+      }
     }
   }
 
@@ -4608,6 +4752,27 @@ export class WikiService {
       select: { id: true },
     });
     return revision ? this.sourcesOfRevision(tx, ownerId, revision.id) : [];
+  }
+
+  /**
+   * An op's neighbours with the live entries whose current revision cites this note first (contract
+   * `maintenance.job.server.backfill`): by what they came from and not by their words, so a verdict may name one a trigram
+   * match would not have found. A verdict of duplicate then adds the op's first-hand sources to it, as anywhere.
+   */
+  private async withEntriesOfNote(tx: Tx, ownerId: string, spaceId: string, prepared: PreparedOp, noteId: string): Promise<WikiSimilar[]> {
+    const text = prepared.draft ? `${prepared.draft.title} ${prepared.draft.summary}`.trim() : '';
+    const rows = await tx.$queryRaw<NeighbourRow[]>`
+      SELECT e."id" AS "id", e."kind" AS "kind", e."title" AS "title", e."status" AS "status", e."trust" AS "trust",
+             similarity(wiki_entry_search_text(e."title", e."summary", e."aliases", e."fields"), ${text}::text)::float8 AS "score",
+             NULL AS "rejectedReason"
+        FROM "wiki_source" s
+        JOIN "wiki_entry_revision" r ON r."id" = s."revision_id"
+        JOIN "wiki_entry" e ON e."id" = r."entry_id" AND e."current_revision" = r."revision"
+       WHERE s."owner_id" = ${ownerId}::uuid AND s."kind" = 'note' AND s."ref" = ${noteId} AND s."state" = 'live'
+         AND e."space_id" = ${spaceId}::uuid AND e."status" = 'active'
+       ORDER BY e."recorded_at", e."id"`;
+    const cited = new Set(rows.map((row) => row.id));
+    return [...similarOf(rows, new Map()), ...prepared.similar.filter((near) => !cited.has(near.id))];
   }
 
   /** The sources of an op being applied at decide time, resolved against the session that proposed it. */

@@ -189,7 +189,7 @@ async function jobRun(
 ): Promise<void> {
   await h.prisma.wikiMaintenanceRun.create({
     data: {
-      spaceId, ownerId: h.ownerId, jobId: randomUUID(),
+      spaceId, ownerId: h.ownerId, jobId: randomUUID(), due: 'backlog',
       catchUp: shape.catchUp, localEndpoint: shape.local, outcome: shape.outcome,
       startedAt: new Date(), endedAt: new Date(),
       failureKind: shape.outcome === 'succeeded' ? null : 'content',

@@ -1512,7 +1512,7 @@ test("the agent's notes come from the real rows when asked for, and a run's page
 
   const on = await buildDossier(h.prisma, records, { literals: [literal], claims: true });
   assert.equal(on.claims?.seen, 4, 'the refused write does not count');
-  assert.deepEqual(on.claims?.lines.map((line) => line.eventId), [written.useEventId, edited.useEventId, multi.useEventId, huge.useEventId]);
+  assert.deepEqual(on.claims?.lines.map((line) => ('eventId' in line ? line.eventId : '')), [written.useEventId, edited.useEventId, multi.useEventId, huge.useEventId]);
   assert.match(on.text, /C1 claim: parseVersion in the release script tags at once \[redacted\]\./u, 'the note, redacted, with no frontmatter');
   assert.match(on.text, /C2 claim: The fix is to read the tag before running it\./u);
   assert.ok(!on.text.includes(literal));
