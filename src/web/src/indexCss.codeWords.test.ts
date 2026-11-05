@@ -2,14 +2,11 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 /**
- * A conversation has a reading width: on a 1920px window a reply ran to 90 Chinese characters a line, on 2560px to 135.
+ * What inline code in prose needs from the stylesheet (lib/codeWords), and the width a conversation has.
  *
- * It had a cap once, and the owner's complaint took it off (581bcb011, session 33aylFDIYQ1eH5X0DOjmY: "只占用了左边的一小部分"):
- * `.chat-assistant { max-width: 780px }` left the reply in the left of a wide pane, with the user's bubble far off on the
- * right. So the column is capped as a whole and stands centred: the scroller's padding narrows everything in it and leaves
- * its scrollbar on the pane's edge, and the composer takes the same width below it. `.chat-assistant` stays uncapped.
- *
- * 800px is what a 1440px window shows already, 55 characters a line, so no window at or below that moves.
+ * A conversation spans its pane. It has been capped twice and the owner took the cap off both times: `.chat-assistant
+ * { max-width: 780px }` left a reply in the left of a wide pane (581bcb011, 2026-06-19), and an 800px column in the
+ * middle of it left about 560px empty on each side of a 3008px window (682890bd2, withdrawn 2026-11-05).
  */
 const css = readFileSync(new URL('./index.css', import.meta.url), 'utf8');
 
@@ -21,30 +18,12 @@ function rule(selector: string): string {
   return match[1];
 }
 
-describe('the conversation’s width', () => {
-  it('is one token on the pane', () => {
-    expect(rule('.workspace-view')).toContain('--conversation-width: 800px');
-  });
-
-  it('centres the transcript by the scroller’s padding, which shrinks to nothing on a narrower pane', () => {
-    expect(rule('.workspace-scroll-wrap > .workspace-sessions')).toContain(
-      'padding-inline: max(0px, calc((100% - var(--conversation-width)) / 2))',
-    );
-  });
-
-  it('gives the composer the same column, its left edge on the transcript’s', () => {
-    const composer = rule('.workspace-composer');
-    expect(composer).toContain('width: 100%');
-    expect(composer).toContain('max-width: var(--conversation-width)');
-    expect(composer).toContain('margin-inline: auto');
-  });
-
-  it('does not cap a reply on its own, which is what left it in the left of the pane', () => {
+describe('a conversation', () => {
+  it('spans its pane: neither the reply, the scroller nor the composer narrows it', () => {
     expect(rule('.chat-assistant')).toContain('max-width: none');
-  });
-
-  it('leaves the session list and an exported transcript alone: they share the scroller’s class', () => {
-    expect(rule('.workspace-sessions')).not.toContain('padding-inline');
+    expect(rule('.workspace-scroll-wrap > .workspace-sessions')).not.toContain('padding-inline');
+    expect(rule('.workspace-composer')).not.toContain('max-width');
+    expect(css).not.toContain('--conversation-width');
   });
 });
 
