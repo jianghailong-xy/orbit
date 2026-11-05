@@ -484,6 +484,56 @@ final class OwnerConfirmationDoorTests: XCTestCase {
         XCTAssertEqual(OwnerConfirmations.plainText(nil), "")
     }
 
+    /// The inputs the browser's `markdownText.test.ts` is held to, so a row and a card read a field
+    /// alike and the two ends show one text.
+    func testThePlainTextDropsOnlyWhatIsAMark() {
+        for words in ["把其他的 tea_user_profile_build_*_cnch 也修复了",
+                      "file_path and snake_case_name",
+                      "看_重点_吧",
+                      "~/.orbit/bin takes ~30 minutes",
+                      "2 * 3 * 4",
+                      "foo* and bar*",
+                      "** BUILD SUCCEEDED **",
+                      "*.ts files",
+                      "*_cnch too",
+                      "--force is needed",
+                      "-1 is wrong",
+                      "#123 is broken",
+                      "_private and __dunder",
+                      "one `` tick pair stays"] {
+            XCTAssertEqual(OwnerConfirmations.plainText(words), words)
+        }
+        for (markdown, plain) in [("**bold**, *italic* and ***both***", "bold, italic and both"),
+                                  ("_em_, __strong__ and ___both___", "em, strong and both"),
+                                  ("~~gone~~ stays", "gone stays"),
+                                  ("这是**重点**内容", "这是重点内容"),
+                                  ("**a *b* c** and *d **e** f*", "a b c and d e f"),
+                                  ("**a*b**", "a*b"),
+                                  ("_foo_bar_", "foo_bar"),
+                                  ("把 tea_*_cnch 和 foo_*_bar 都修了", "把 tea_cnch 和 foo_bar 都修了"),
+                                  ("**run `npm test` now**", "run npm test now")] {
+            XCTAssertEqual(OwnerConfirmations.plainText(markdown), plain)
+        }
+    }
+
+    func testThePlainTextLeavesEveryMarkInsideCodeAlone() {
+        for (markdown, plain) in [("`a*b*c` and `_x_` and `~~y~~`", "a*b*c and _x_ and ~~y~~"),
+                                  ("(v1-beta.*), and no `android-v*` tags", "(v1-beta.*), and no android-v* tags"),
+                                  ("`- x` and `#1` start this", "- x and #1 start this"),
+                                  ("see `tea_*_cnch` and `foo_*_bar`", "see tea_*_cnch and foo_*_bar"),
+                                  ("``a_b_c`` and ``d`e`` and `f`", "a_b_c and d`e and f"),
+                                  ("``a `b` c``", "a `b` c"),
+                                  ("`[x](y)` is not a link, [z](https://example.com/z) is", "[x](y) is not a link, z is")] {
+            XCTAssertEqual(OwnerConfirmations.plainText(markdown), plain)
+        }
+        XCTAssertEqual(OwnerConfirmations.plainText("run:\n\n```sh\nls *.ts\n  - not a bullet\n# not a heading\n```\n\n- **done**"),
+                       "run:\n\nls *.ts\n  - not a bullet\n# not a heading\n\n• done",
+                       "a fenced block stays whole, its lines and their indents included")
+        XCTAssertEqual(OwnerConfirmations.plainText("~~~\na_b_c `d`\n~~~"), "a_b_c `d`")
+        XCTAssertEqual(OwnerConfirmations.plainText("```\n*a* and *b*"), "*a* and *b*",
+                       "cut off before its closing fence, as a stored excerpt can be")
+    }
+
     /// The fold drops the whitespace it lands on, so its `…` never sits alone on the next line.
     func testTheFoldDropsTheWhitespaceItLandsOn() {
         let edge = String(repeating: "x", count: OwnerConfirmations.reportClamp - 1)
