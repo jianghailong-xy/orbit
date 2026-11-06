@@ -33,6 +33,7 @@ import { configureProjectIntegration } from './project-integration-line';
 import { openItemOwed } from './project-open-item';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { readTaskIntegrationViews } from './project-task-integration';
+import '../test-support/dequeue-under-lease';
 
 /**
  * The landing generation created by a real DONE after task_reopen is an H1 hand-off, not a fresh

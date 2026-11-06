@@ -175,8 +175,9 @@ func TestARunnerKilledWhileSendingItsSpoolOverTheLinkLosesNothing(t *testing.T) 
 	t.Cleanup(m.close)
 	m.work.client.api, m.work.client.dial = r.m.work.client.api, r.m.work.client.dial
 	m.work.pingEvery, m.work.pingTimeout = 200*time.Millisecond, 2*time.Second
-	m.observe(linkpb.Mode_MODE_LINK, "the test")
-	r.g.waitWelcomed(t, len(r.g.welcomed())+1)
+	welcomed := len(r.g.welcomed())
+	m.start()
+	r.g.waitWelcomed(t, welcomed+1)
 	for _, id := range []string{"session-refused", "session-unacked"} {
 		s := m.events.open(id)
 		defer s.release()
@@ -194,39 +195,5 @@ func TestARunnerKilledWhileSendingItsSpoolOverTheLinkLosesNothing(t *testing.T) 
 	in.mu.Unlock()
 	if files := spoolFiles(home + "/link-spool"); len(files) != 0 {
 		t.Errorf("once everything is stored the spool still holds %v", files)
-	}
-}
-
-// With the link mode off the spool goes over HTTPS: a process killed with the spool's first batch out leaves the
-// segment, and the next one sends it again.
-func TestARunnerKilledWhileSendingItsSpoolOverHTTPSLosesNothing(t *testing.T) {
-	t.Setenv("ORBIT_HOME", t.TempDir())
-	logs := &linkTestLog{}
-	spoolLeftBehind(t, linkSpoolDir(), "session-h", 10, 56, "turn-0")
-	e := newLinkEvents(nil, logs.log)
-	s := e.open("session-h")
-	if batch := s.heldHead(maxEventBatchBytes); len(batch) != 56 {
-		t.Fatalf("the flush's first batch carries %d events, want the spool's 56", len(batch))
-	}
-	// Killed while that batch is out.
-	e.killed()
-	if files := spoolFiles(linkSpoolDir()); len(files) != 1 {
-		t.Fatalf("the killed process left %v, want the segment it was sending", files)
-	}
-
-	next := newLinkEvents(nil, logs.log)
-	t.Cleanup(next.close)
-	s2 := next.open("session-h")
-	defer s2.release()
-	batch := s2.heldHead(maxEventBatchBytes)
-	if len(batch) != 56 || batch[0].Seq != 10 || batch[55].Seq != 65 || batch[55].Type != evTurnEnd {
-		t.Fatalf("the next process sends %d events first, want the spool's seqs 10-65", len(batch))
-	}
-	s2.storedOverHTTPS(batch[0].Seq, batch[55].Seq)
-	if held, _ := s2.holding(); held != 0 {
-		t.Errorf("once HTTPS stored them the stream still holds %d events", held)
-	}
-	if files := spoolFiles(linkSpoolDir()); len(files) != 0 {
-		t.Errorf("once HTTPS stored them the spool still holds %v", files)
 	}
 }

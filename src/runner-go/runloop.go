@@ -970,11 +970,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// A copy of the Google sign-in lives in a session's directory only while an agy runs on it; the
 	// copies a crash or a kill left behind go before any session starts again.
 	pruneAntigravityTokenCopies()
-	// The runner link (link_mode.go): t's daemon calls move to it when the control plane asks, and until
-	// then the shadow (link_shadow.go) mirrors the heartbeats and event batches t delivers over HTTPS on a
-	// connection of its own, which the work never waits on. Started before anything sends on t, whose
-	// requests it watches.
-	stopLink := startLink(cfg, t)
+	// The runner link (link_mode.go), which carries t's daemon calls. Started before anything sends on t.
+	stopLink := startLink(t)
 	defer stopLink()
 
 	// This machine's free-space floor (Runner.minFreeDiskMb), kept in sync the same way and for
@@ -992,12 +989,6 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// (abandoned_checkout.go). Its own goroutine and its own clock — it reads every checkout,
 	// and the claim loop is not where a minute of `git status` belongs.
 	go runAbandonedCheckoutScans(loopCtx, t, pool)
-	// Once the runner stops, a runner link with no connection is not waited for: the sessions' last events go over
-	// HTTPS while the control plane still takes it (linkMode.stopping).
-	if t.link != nil {
-		stopLinkStopping := context.AfterFunc(loopCtx, t.link.stopping)
-		defer stopLinkStopping()
-	}
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	monitorCtx, stopMonitor := context.WithCancel(context.Background())

@@ -51,6 +51,7 @@ import { ProviderPlanUsageService } from './plan-usage.service';
 import { PoolNotices } from './pool-notice';
 import { encryptSecret } from './provider-crypto';
 import { ProvidersService } from './providers.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'pool-login-claim-spec';
@@ -117,7 +118,7 @@ suite("a login pool's sessions: which ChatGPT account each runs on, and when the
   const logins = new CodexLoginService(prisma, realtime);
   const notices = new PoolNotices(prisma, realtime);
   const runnerApi = new RunnerApiController(
-    db as never, queue as never, realtime as never, {} as never, {} as never,
+    db as never, queue as never, realtime as never, {} as never, { issue: async () => 'orchestration-credential' } as never,
     // Delivering a message expands its #references; this spec's messages have none.
     { expand: async (_ownerId: string, content?: string) => content } as never,
   );
@@ -163,7 +164,7 @@ suite("a login pool's sessions: which ChatGPT account each runs on, and when the
   /** The runner asking for work — which has to be `sessionId` — leaving it RUNNING or parked, as a turn would. */
   async function claim(who: Person, sessionId: string, park = true): Promise<ClaimedSession> {
     await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING, cancelRequestedAt: null } });
-    const claimed = await queue.claimSessionForRunner({ id: who.runnerId }, 0, false, false);
+    const claimed = await queue.claimSessionForRunner({ id: who.runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     assert.equal(claimed.sessionId, sessionId);
     assert.equal(claimed.agent.env?.OPENAI_BASE_URL, GATEWAY, 'a login pool session goes to the gateway, whatever its account');

@@ -27,6 +27,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * The server half of the 0227 removal, against a real PostgreSQL that replayed every migration.
@@ -124,7 +125,7 @@ const PROJECT_ACCEPTANCE_TRIGGERS = [
 
 function publishes(): RealtimeService {
   return new Proxy({}, {
-    get: (_target, name) => (name === 'waitForInbox' ? async () => undefined : () => undefined),
+    get: (_target, name) => (name === 'waitForNotice' ? async () => undefined : () => undefined),
   }) as unknown as RealtimeService;
 }
 

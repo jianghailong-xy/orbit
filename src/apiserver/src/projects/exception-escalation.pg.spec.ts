@@ -26,6 +26,7 @@ import {
 } from './coordinator-pg-test-safety';
 import { IntegrationSettings, configureProjectIntegration } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * The one clock this contract adds (docs/project-integration-line-contract.md §4.6): an exception

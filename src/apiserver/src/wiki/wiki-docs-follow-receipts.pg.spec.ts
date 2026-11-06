@@ -49,6 +49,7 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
 import { normalizeRepoUrl } from './wiki.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -326,7 +327,7 @@ test('(a) a runner\'s merge result that lands a session on main makes the space\
       // The owner presses Merge; the runner's heartbeat is handed the operation and answers it merged into main.
       await stack.sessions.mergeToMain(w.ownerId, sessionId, 'main');
       const lease = randomUUID();
-      const [operation] = await stack.realtime.drainMergeRequests(w.runnerId, lease, true);
+      const [operation] = await stack.realtime.drainMergeRequests(w.runnerId, lease);
       assert.ok(operation, 'the runner was handed the merge');
       assert.deepEqual(await follows(stack, w.spaceId), [], 'nothing is followed before main moved');
       await stack.api.mergeResult({ id: w.runnerId }, sessionId, {

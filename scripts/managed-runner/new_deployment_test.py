@@ -559,7 +559,11 @@ class NewDeploymentTest(unittest.TestCase):
                     self.assertEqual(ups[0], "compose up -d --wait postgres apiserver wiki-worker web gateway pgbackup")
 
     def test_an_upgrade_refuses_before_building_where_the_managed_runners_files_are_not_right(self):
-        installed = 'JWT_SECRET="kept"\nPROVIDER_SECRET_KEY="kept too"\n' + "\n".join(SWITCH_LINES) + "\n"
+        # With the runner link an install or an upgrade set up, as every deployment that can run this build has: one with
+        # no link gets its lines first, as Compose cannot render this build's file without them (test/upgrade-runner-link.test.mjs).
+        installed = ('JWT_SECRET="kept"\nPROVIDER_SECRET_KEY="kept too"\n' + "\n".join(SWITCH_LINES) + "\n"
+                     + "RUNNER_LINK_URL=same-origin\nRUNNER_LINK_SIGNING_KEY=\"kept\"\n"
+                     + "COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall,runner-link\n")
         twice = {"schemaVersion": 1, "image": IMAGE_ID, "runner": {"image": IMAGE_ID}}
         for upgrade in UPGRADES:
             for case in ("no directory", "a file naming two images"):

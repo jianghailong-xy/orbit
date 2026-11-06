@@ -63,7 +63,7 @@ suite('a Gemini key at claim time, on real PostgreSQL', async (t) => {
   } as unknown as RealtimeService;
   const queue = new QueueService(db as unknown as PrismaService, realtime);
   const runnerApi = new RunnerApiController(
-    db as never, queue as never, realtime as never, {} as never, {} as never, {} as never,
+    db as never, queue as never, realtime as never, {} as never, { issue: async () => 'orchestration-credential' } as never, {} as never,
   );
 
   const ownerId = randomUUID();
@@ -120,32 +120,28 @@ suite('a Gemini key at claim time, on real PostgreSQL', async (t) => {
   }
   const row = (id: string) =>
     db.session.findUniqueOrThrow({ where: { id }, select: { status: true, error: true } });
-  /** The runner's long poll, as the controller answers it, hung up as soon as it has nothing to hand
-   *  over — the claim waits up to 25s otherwise. */
-  const longPoll = (providerHeader: string) => {
-    const res = { once: (event: string, hangUp: () => void) => event === 'close' && setTimeout(hangUp, 100) };
-    return runnerApi.claim(runner, undefined, providerHeader, res as never);
-  };
+  /** The runner's claim, as the controller answers it. */
+  const claimed = (providerHeader: string) => runnerApi.claim(runner, providerHeader);
 
   const key = `AIza-${randomUUID()}`;
   const gemini = await geminiProvider(key);
   const sessionId = await queuedSession(gemini);
 
   await t.test('(1) a runner that does not advertise antigravity is not handed the session', async () => {
-    assert.equal(await queue.claimSessionForRunner({ id: runnerId, supportedProviders: LEGACY }, 0, false, false), null);
+    assert.equal(await queue.claimSessionForRunner({ id: runnerId, supportedProviders: LEGACY }), null);
     assert.equal((await row(sessionId)).status, RunStatus.PENDING);
-    // Nor on the runner's own long poll, which says on the row why it waits.
-    assert.equal(await longPoll(LEGACY.join(',')), null);
+    // Nor on the runner's own claim, which says on the row why it waits.
+    assert.equal(await claimed(LEGACY.join(',')), null);
     assert.deepEqual(await row(sessionId), { status: RunStatus.PENDING, error: ANTIGRAVITY_RUNNER_UPGRADE_ERROR });
   });
 
   await t.test('(2) its reclaim leaves the session out, so it is not rebuilt as Claude either', async () => {
-    const reclaimed = (await runnerApi.reclaim(runner, undefined, LEGACY.join(','))).sessions;
+    const reclaimed = (await runnerApi.reclaim(runner, LEGACY.join(','))).sessions;
     assert.ok(!reclaimed.some((s) => s.sessionId === sessionId), 'a legacy reclaim was handed the Gemini session');
   });
 
   await t.test('(3) a runner that advertises antigravity claims it as an antigravity job on the row’s key', async () => {
-    const claimed = await queue.claimSessionForRunner({ id: runnerId, supportedProviders: CURRENT }, 0, false, false);
+    const claimed = await queue.claimSessionForRunner({ id: runnerId, supportedProviders: CURRENT });
     assert.ok(claimed, 'the runner that names antigravity was offered nothing');
     assert.equal(claimed.sessionId, sessionId);
     assert.equal(claimed.provider, AgentProvider.ANTIGRAVITY);
@@ -159,7 +155,7 @@ suite('a Gemini key at claim time, on real PostgreSQL', async (t) => {
   });
 
   await t.test('(4) and its reclaim keeps the session, on the antigravity runtime', async () => {
-    const reclaimed = (await runnerApi.reclaim(runner, undefined, CURRENT.join(','))).sessions;
+    const reclaimed = (await runnerApi.reclaim(runner, CURRENT.join(','))).sessions;
     const mine = reclaimed.find((s) => s.sessionId === sessionId);
     assert.ok(mine, 'a capable reclaim lost the Gemini session');
     assert.equal(mine.provider, AgentProvider.ANTIGRAVITY);
@@ -168,10 +164,10 @@ suite('a Gemini key at claim time, on real PostgreSQL', async (t) => {
 
   await t.test('(5) a switched-off Gemini row is unavailable instead of dispatching as Claude', async () => {
     const disabled = await queuedSession(await geminiProvider(`AIza-${randomUUID()}`, false));
-    const claimed = await queue.claimSessionForRunner({ id: runnerId, supportedProviders: LEGACY }, 0, false, false);
+    const claimed = await queue.claimSessionForRunner({ id: runnerId, supportedProviders: LEGACY });
     assert.equal(claimed, null);
     assert.deepEqual(await row(disabled), { status: RunStatus.PENDING, error: PROVIDER_UNAVAILABLE_ERROR });
-    const reclaimed = await runnerApi.reclaim(runner, undefined, CURRENT.join(','));
+    const reclaimed = await runnerApi.reclaim(runner, CURRENT.join(','));
     assert.ok(!reclaimed.sessions.some((session) => session.sessionId === disabled));
   });
 });

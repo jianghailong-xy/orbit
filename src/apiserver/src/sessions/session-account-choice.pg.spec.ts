@@ -81,6 +81,7 @@ import { AutoRetryService } from './auto-retry.service';
 import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
 import { RunnersService } from '../runners/runners.service';
 import { SessionsService } from './sessions.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -432,7 +433,7 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
   await t.test('(8) a spent account is left before a turn reaches it, not after the turn fails there', async () => {
     const claims = new RealQueueService(prisma, quiet, new ProviderPlanUsageService(quiet));
     const claimOn = async (runnerId: string) => {
-      const claimed = await claims.claimSessionForRunner({ id: runnerId }, 0, false, false);
+      const claimed = await claims.claimSessionForRunner({ id: runnerId });
       assert.ok(claimed, 'the runner was offered no session');
       return claimed;
     };
@@ -641,7 +642,7 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
 
     // The claim that picks it up starts it on Work, and the transcript says why.
     const claims = new RealQueueService(prisma, quiet, new ProviderPlanUsageService(quiet));
-    const claimed = await claims.claimSessionForRunner({ id: m.runnerId }, 0, true, false);
+    const claimed = await claims.claimSessionForRunner({ id: m.runnerId });
     assert.equal(claimed?.agent.env?.CLAUDE_CONFIG_DIR, CLAUDE_WORK_HOME);
     assert.deepEqual(
       { account: (await row(id)).claude_account, notice: (await row(id)).pool_switch_notice },
@@ -677,7 +678,7 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     // A session woken on Work, which its runner reports signed out, starts on Default.
     const woken = await roomyMachine('claim-signed-out');
     const id = await sessionOn(woken, 'claude', RunStatus.PENDING, { numTurns: 0, claudeAccount: WORK });
-    const claimed = await claims.claimSessionForRunner({ id: woken.runnerId }, 0, false, false);
+    const claimed = await claims.claimSessionForRunner({ id: woken.runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     assert.equal(claimed.agent.env?.CLAUDE_CONFIG_DIR, undefined, 'started on Default');
     assert.deepEqual(
@@ -742,7 +743,7 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     assert.deepEqual(revived, { status: RunStatus.PENDING, retryAttempts: 1 });
     assert.deepEqual(await pending(refused), [{ kind: 'message', content: 'can it be a card instead?' }]);
     // ...and the claim that picks it up starts it on Default.
-    const resumed = await claims.claimSessionForRunner({ id: m.runnerId }, 0, true, false);
+    const resumed = await claims.claimSessionForRunner({ id: m.runnerId });
     assert.equal(resumed?.sessionId, refused);
     assert.equal(resumed?.agent.env?.CLAUDE_CONFIG_DIR, undefined, 'resumed on Default');
 
@@ -799,7 +800,7 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     });
     await sessions.resume(m.ownerId, id, { content: 'go on', clientTurnId: randomUUID() });
     const claims = new RealQueueService(prisma, quiet, new ProviderPlanUsageService(quiet));
-    const claimed = await claims.claimSessionForRunner({ id: m.runnerId }, 0, true, false);
+    const claimed = await claims.claimSessionForRunner({ id: m.runnerId });
     assert.equal(claimed?.sessionId, id);
     assert.equal(claimed?.agent.env?.CLAUDE_CONFIG_DIR, CLAUDE_WORK_HOME);
     assert.deepEqual(

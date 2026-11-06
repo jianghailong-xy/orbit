@@ -59,6 +59,7 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { controlPlaneNoteOf } from '../runner-api/control-plane-note';
 import { SessionsService } from '../sessions/sessions.service';
 import { isOwnerTurn } from './wiki.service';
+import '../test-support/daemon-routes-over-http';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);

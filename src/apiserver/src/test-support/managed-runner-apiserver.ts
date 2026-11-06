@@ -114,6 +114,8 @@ export async function bootScrubbedApiserver(
   writeFileSync(tripLog, '');
   const port = await freePort();
   let log = '';
+  // A spec that imported test-support/daemon-routes-over-http hands its apiserver the same lift.
+  const lift = (process.env.NODE_OPTIONS ?? '').match(/--require \S*daemon-routes-over-http\.js/)?.[0];
   const child = spawn(process.execPath, [MAIN], {
     cwd: API_DIR,
     env: {
@@ -126,7 +128,7 @@ export async function bootScrubbedApiserver(
       CODEX_HOME: path.join(home, '.codex'),
       CLAUDE_CONFIG_DIR: path.join(home, '.claude'),
       TMPDIR: dir,
-      NODE_OPTIONS: `--require ${preload}`,
+      NODE_OPTIONS: [`--require ${preload}`, lift].filter(Boolean).join(' '),
       MANAGED_RUNNER_TRIPWIRE_LOG: tripLog,
       ...env,
     },

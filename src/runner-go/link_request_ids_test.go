@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"strings"
 	"sync"
@@ -22,21 +21,21 @@ import (
 // next one to a new id.
 
 // linkOutageForTest is how long a test keeps the link down after an answer is lost: longer than the claim and inbox
-// calls' deadline (longPollCallTimeout), so that the call whose answer was lost has given up before the link is back.
+// calls' deadline (fetchCallTimeout), so that the call whose answer was lost has given up before the link is back.
 // 1.5 s against a deadline shortened to 1 s, which keeps the suite inside go test's 10 minutes; with
 // ORBIT_TEST_LINK_OUTAGE set, say to 2m, that long against the real 35 s one.
 func linkOutageForTest(t *testing.T) time.Duration {
 	t.Helper()
 	if v := os.Getenv("ORBIT_TEST_LINK_OUTAGE"); v != "" {
 		outage, err := time.ParseDuration(v)
-		if err != nil || outage <= longPollCallTimeout {
-			t.Fatalf("ORBIT_TEST_LINK_OUTAGE=%s: want a duration longer than the calls' deadline, %s", v, longPollCallTimeout)
+		if err != nil || outage <= fetchCallTimeout {
+			t.Fatalf("ORBIT_TEST_LINK_OUTAGE=%s: want a duration longer than the calls' deadline, %s", v, fetchCallTimeout)
 		}
 		return outage
 	}
-	old := longPollCallTimeout
-	longPollCallTimeout = time.Second
-	t.Cleanup(func() { longPollCallTimeout = old })
+	old := fetchCallTimeout
+	fetchCallTimeout = time.Second
+	t.Cleanup(func() { fetchCallTimeout = old })
 	return 1500 * time.Millisecond
 }
 
@@ -157,43 +156,6 @@ func TestAnInboxFetchKeepsItsRequestIDUntilItIsAnswered(t *testing.T) {
 			}
 		}
 	})
-	t.Run("over HTTPS", func(t *testing.T) {
-		var mu sync.Mutex
-		var headers []string
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			mu.Lock()
-			headers = append(headers, req.Header.Get("X-Orbit-Link-Request-Id"))
-			first := len(headers) == 1
-			mu.Unlock()
-			if first { // cut off before any answer
-				if conn, _, err := w.(http.Hijacker).Hijack(); err == nil {
-					_ = conn.Close()
-				}
-				return
-			}
-			time.Sleep(20 * time.Millisecond)
-			_, _ = w.Write([]byte(`{"turnId":"","seq":0,"kind":"message"}`))
-		}))
-		defer srv.Close()
-		tr := NewTransport(srv.URL, "runner-token")
-		tr.link = newLinkMode(tr, func(...any) {}) // there, and not in use
-		t.Cleanup(tr.link.close)
-		p := newInboxPoller(tr, "session-a", "gen-1")
-		defer p.close()
-		pollInBackground(t, p)
-		linkWaitFor(t, 10*time.Second, "the fetches after the one cut off", func() bool {
-			mu.Lock()
-			defer mu.Unlock()
-			return len(headers) >= 3
-		})
-		mu.Lock()
-		defer mu.Unlock()
-		for i, h := range headers {
-			if h != "" {
-				t.Errorf("HTTPS fetch %d carried X-Orbit-Link-Request-Id %q", i+1, h)
-			}
-		}
-	})
 }
 
 // The answer that handed out a control turn or a steer is lost, and the link stays down past the inbox call's deadline:
@@ -225,11 +187,11 @@ func TestALostControlTurnOrSteerAnswerComesBackAfterTheLinkWasDownLongerThanACal
 			defer p.close()
 			turns := pollInBackground(t, p)
 
-			// Back once the link is: within the reconnect's backoff (linkBackoffMax) and the poller's (inboxLinkBackoffMax).
+			// Back once the link is: within the reconnect's backoff (linkBackoffMax) and the poller's (inboxBackoffMax).
 			var got *RunInboxResponse
 			select {
 			case got = <-turns:
-			case <-time.After(outage + linkBackoffMax + inboxLinkBackoffMax + 30*time.Second):
+			case <-time.After(outage + linkBackoffMax + inboxBackoffMax + 30*time.Second):
 				t.Fatal("nothing was handed over after the link came back")
 			}
 			handedBack := time.Now()
@@ -263,8 +225,8 @@ func TestALostControlTurnOrSteerAnswerComesBackAfterTheLinkWasDownLongerThanACal
 			if got.TurnID != want {
 				t.Fatalf("handed %s (%s) first after the link came back, want %s", got.TurnID, got.Kind, want)
 			}
-			if took := handedBack.Sub(lost); took <= longPollCallTimeout {
-				t.Fatalf("%s was handed over %s after its answer was lost, within the call's own %s deadline", want, took, longPollCallTimeout)
+			if took := handedBack.Sub(lost); took <= fetchCallTimeout {
+				t.Fatalf("%s was handed over %s after its answer was lost, within the call's own %s deadline", want, took, fetchCallTimeout)
 			}
 			t.Logf("%s (%s) handed over %s after its answer was lost and the link went down for %s, %s after the link was back",
 				got.TurnID, got.Kind, handedBack.Sub(lost).Round(time.Millisecond), outage, handedBack.Sub(back).Round(time.Millisecond))
@@ -405,8 +367,8 @@ func TestALostClaimAnswerComesBackAfterTheLinkWasDownLongerThanACall(t *testing.
 	mu.Lock()
 	lost := lostAt
 	mu.Unlock()
-	if took := handedBack.Sub(lost); took <= longPollCallTimeout {
-		t.Fatalf("session-c came back %s after its answer was lost, within the call's own %s deadline", took, longPollCallTimeout)
+	if took := handedBack.Sub(lost); took <= fetchCallTimeout {
+		t.Fatalf("session-c came back %s after its answer was lost, within the call's own %s deadline", took, fetchCallTimeout)
 	}
 	t.Logf("session-c came back %s after its claim's answer was lost and the link went down for %s, %s after the link was back",
 		handedBack.Sub(lost).Round(time.Millisecond), outage, handedBack.Sub(back).Round(time.Millisecond))

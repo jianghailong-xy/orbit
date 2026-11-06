@@ -7,6 +7,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { SessionsService } from '../sessions/sessions.service';
 import { BackgroundWakeDto } from './background-job-wake';
 import { RunnerApiController } from './runner-api.controller';
+import '../test-support/dequeue-under-lease';
 
 /**
  * A background job that exits while its session is running a turn is written INTO that turn, against

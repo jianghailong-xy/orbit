@@ -53,6 +53,7 @@ import { readRunnerLink, runnerLinkCredential, signRunnerLinkToken } from '../ru
 import { RUNNER_HEARTBEAT_EVERY_MS, RUNNER_OFFLINE_AFTER_MS, RUNNER_SILENT_AFTER_MS } from '../runners/runner-presence';
 import { SINGLETON_SWEEPS_LOCK } from './control-plane-leader';
 import { MASS_SILENCE_WINDOW_MS, STARTUP_GRACE_MS } from './reaper.service';
+import '../test-support/daemon-routes-over-http';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const SECOND = 1_000;

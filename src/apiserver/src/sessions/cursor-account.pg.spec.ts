@@ -308,18 +308,5 @@ test('P4a Cursor CLI accounts on PostgreSQL', { skip, concurrency: 1, timeout: 3
       account: WORK,
       attempt: removing.codexAccountRemoveAt!.toISOString(),
     });
-
-    // Declared at its last heartbeat, and not by the process polling now: refused at the heartbeat.
-    await runners.startLogin(current.ownerId, current.runnerId, { engine: 'cursor' });
-    assert.equal(await internals.drainLoginRequest(current.runnerId, OLD), undefined);
-    const refused = await runners.getLoginState(current.ownerId, current.runnerId);
-    assert.deepEqual({ status: refused.status, message: refused.message }, { status: 'failed', message: CURSOR_LOGIN_TOO_OLD });
-    await runners.removeAccount(current.ownerId, current.runnerId, 'cursor', WORK);
-    assert.equal(await internals.drainAccountRemoveRequest(current.runnerId, OLD), undefined);
-    const removal = await db.runner.findUniqueOrThrow({ where: { id: current.runnerId } });
-    assert.deepEqual(
-      { status: removal.codexAccountRemoveStatus, message: removal.codexAccountRemoveMessage },
-      { status: 'failed', message: REMOVE },
-    );
   });
 });

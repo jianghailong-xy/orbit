@@ -5205,7 +5205,7 @@ export class SessionsService {
       }
       // The runner's answer wakes this at once; the second is the fallback for a wake that is lost, or
       // that came between the read above and the wait.
-      await this.realtime.waitForInbox(worktreeFileAnswerKey(turn.id), 1_000);
+      await this.realtime.waitForNotice(worktreeFileAnswerKey(turn.id), 1_000);
     }
   }
 
@@ -8312,7 +8312,7 @@ export class SessionsService {
     );
   }
 
-  /** Record a human allow/deny on a pending approval; the runner's long-poll picks
+  /** Record a human allow/deny on a pending approval; the runner's next read picks
    *  it up and returns it to claude's --permission-prompt-tool. */
   async decideApproval(
     ownerId: string,
@@ -8381,7 +8381,7 @@ export class SessionsService {
         message: dto.message ?? null,
         answers: dto.answers ? (dto.answers as Prisma.InputJsonValue) : Prisma.DbNull,
         // Only an allow can carry "remember same kind" rules; the runner reads them off
-        // the long-poll and adds them to claude's session permissions. Stored as a JSON
+        // that read and adds them to claude's session permissions. Stored as a JSON
         // array (the schemaless `remember_rule` column holds either shape).
         rememberRule:
           dto.behavior === 'allow' && dto.rememberRules?.length
@@ -8413,7 +8413,7 @@ export class SessionsService {
    *  later sessions start with them (see WorkspacePermissionRule). Duplicates are skipped by
    *  the unique index, so re-approving something already granted is a no-op rather than a
    *  second row. A session with no workspace stores nothing — the decision still applies to
-   *  the running session through the runner's long-poll, as it always did. */
+   *  the running session through the runner's read of it, as it always did. */
   private async rememberForWorkspace(
     workspaceId: string,
     ownerId: string,

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException } from '@nestjs/common';
-import { RunnerStatus, SESSION_MERGE_RECOVERY_V1 } from '@orbit/shared';
-import { RunnerApiController, SESSION_WORKTREE_OPS_V1 } from './runner-api.controller';
+import { RunnerStatus } from '@orbit/shared';
+import { RunnerApiController } from './runner-api.controller';
 
 const RUNNER_ID = '11111111-1111-4111-8111-111111111111';
 const OWNER = '22222222-2222-4222-8222-222222222222';
@@ -187,13 +187,12 @@ test('heartbeat drains manual worktree operations only with capability and proce
         idleCapacity: 1,
         leaseOwner: OWNER,
       },
-      SESSION_WORKTREE_OPS_V1,
     );
 
     // The abandoned-operation sweep shares the drains' fencing: it may only run for
-    // a capable runner that advertised its process owner.
+    // a runner that advertised its process owner.
     assert.deepEqual(h.abandonedSweeps, [[RUNNER_ID, OWNER]]);
-    assert.deepEqual(h.mergeDrainCalls, [[RUNNER_ID, OWNER, false]]);
+    assert.deepEqual(h.mergeDrainCalls, [[RUNNER_ID, OWNER]]);
     // The third argument is whether this runner declared abandoned-checkout-v1; a runner's own
     // header decides whether a queued discard is handed over.
     assert.deepEqual(h.commitDrainCalls, [[RUNNER_ID, OWNER, false]]);
@@ -201,34 +200,10 @@ test('heartbeat drains manual worktree operations only with capability and proce
     assert.deepEqual(response.commitRequests, [commit]);
   });
 
-  await t.test('recovery commands require the additional runner capability', async () => {
-    const h = harness();
-    await h.controller.heartbeat(
-      { id: RUNNER_ID, version: null },
-      { status: RunnerStatus.ONLINE, idleCapacity: 1, leaseOwner: OWNER },
-      `${SESSION_WORKTREE_OPS_V1},${SESSION_MERGE_RECOVERY_V1}`,
-    );
-    assert.deepEqual(h.mergeDrainCalls, [[RUNNER_ID, OWNER, true]]);
-    // The third argument is whether this runner declared abandoned-checkout-v1; a runner's own
-    // header decides whether a queued discard is handed over.
-    assert.deepEqual(h.commitDrainCalls, [[RUNNER_ID, OWNER, false]]);
-  });
-
   for (const tc of [
     {
-      name: 'legacy runner with a process owner',
-      leaseOwner: OWNER,
-      capabilities: undefined,
-    },
-    {
-      name: 'capable runner without a process owner',
+      name: 'a runner without a process owner',
       leaseOwner: undefined,
-      capabilities: SESSION_WORKTREE_OPS_V1,
-    },
-    {
-      name: 'partial capability name',
-      leaseOwner: OWNER,
-      capabilities: `${SESSION_WORKTREE_OPS_V1}-extra`,
     },
   ]) {
     await t.test(tc.name, async () => {
@@ -244,7 +219,6 @@ test('heartbeat drains manual worktree operations only with capability and proce
           idleCapacity: 1,
           ...(tc.leaseOwner ? { leaseOwner: tc.leaseOwner } : {}),
         },
-        tc.capabilities,
       );
 
       assert.deepEqual(h.abandonedSweeps, []);
@@ -270,7 +244,6 @@ test('a draining runner is claimed no git work but still gets the abandoned swee
       leaseOwner: OWNER,
       draining: true,
     },
-    SESSION_WORKTREE_OPS_V1,
   );
 
   // Claiming for a process that is about to be replaced pins the session to a dead

@@ -94,21 +94,21 @@ func (b *coordinatorContextFlushBarrier) beforeTurnComplete(
 // sessionEventBuffer is what a session's emitters have emitted and its flush has not taken yet. An event takes its seq
 // and its place in the buffer in one step, under one lock: with the seq taken under a lock of its own and the append
 // under another, two emitters (the stdout reader, background output, a suggestion, a steer) could buffer their events
-// swapped. HTTPS stores such a batch as it comes, but the runner link's ingest and gateway refuse a batch whose seqs
-// do not count up by one (EVENT_BATCH_MALFORMED), and sending it again does not change it.
+// swapped, and the runner link's ingest and gateway refuse a batch whose seqs do not count up by one
+// (EVENT_BATCH_MALFORMED), and sending it again does not change it.
 type sessionEventBuffer struct {
 	mu sync.Mutex
 	// next is the seq the next buffered event takes.
 	next   int
 	events []RunEvent
-	// position counts every event emitted, whatever became of it: in link mode a live event or a noise ping takes no
-	// seq, and what follows a turn's end is still news to that turn's suggestion (requestOrbitSuggestion).
+	// position counts every event emitted, whatever became of it: a live event or a noise ping takes no seq, and what
+	// follows a turn's end is still news to that turn's suggestion (requestOrbitSuggestion).
 	position int
 	// clock times reasoning (thinking_clock.go). It sees events in the order they are buffered.
 	clock *thinkingClock
-	// link is the session's event stream on the runner link (link_events.go), nil without a link mode; provider names
-	// the engine the session runs on; soon, when set, is told of a boundary event numbered over the link, for the flush
-	// to hand it over at once.
+	// link is the session's event stream on the runner link (link_events.go), nil on a transport with no link; provider
+	// names the engine the session runs on; soon, when set, is told of a boundary event, for the flush to hand it over
+	// at once.
 	link     *linkEventStream
 	provider func() string
 	soon     chan struct{}
@@ -134,7 +134,7 @@ func (b *sessionEventBuffer) add(turnID, eventType string, payload map[string]in
 	ev := RunEvent{Seq: b.next, Type: eventType, TS: nowISO(), TurnID: turnID, Payload: payload}
 	b.next++
 	b.events = append(b.events, ev)
-	if b.link != nil && b.link.onLink() {
+	if b.link != nil {
 		// What it ends of the live stream goes ahead of it, and what follows it waits for it; a boundary goes without
 		// waiting for the flush's next tick (link_events_live.go, link_events_kind.go).
 		b.link.durableNumbered(ev.Seq, eventType, payload)
@@ -776,31 +776,21 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// Session-scoped, monotonic event seq that survives respawn. Continues from the
 	// server's high-water mark so post-respawn events don't collide (skipDuplicates).
 	seq := job.MaxSeq + 1
-	// The session's event stream on the runner link (link_events.go). While the link is in use,
-	// its durable events go there and its live events to the live stream; what an earlier
-	// supervisor, or the process before this one, left unacknowledged in it goes first, and
-	// numbering continues after that. For a session older than link mode the claim's MaxSeq and a
-	// Welcome's durable_seq stop at different places, and numbering takes the later of every one.
-	// With the link mode off the stream holds only what a process in link mode left in the spool:
-	// it goes over HTTPS first all the same, and is never numbered over.
+	// The session's event stream on the runner link (link_events.go). Its durable events go there
+	// and its live events to the live stream; what an earlier supervisor, or the process before
+	// this one, left unacknowledged in it goes first, and numbering continues after that. For a
+	// session older than link mode the claim's MaxSeq and a Welcome's durable_seq stop at
+	// different places, and numbering takes the later of every one. Nil on a transport with no
+	// link: only the session loops' unit tests run on one.
 	var linkStream *linkEventStream
 	if streams := t.eventStreams(); streams != nil {
 		linkStream = streams.open(sessionID)
 		defer linkStream.release()
-		seq = linkStream.firstSeq(seq)
-		if linkStream.onLink() {
-			seq = linkStoredSeqAfterTakeover(sessionCtx, t, sessionID, seq)
-		}
+		seq = linkStoredSeqAfterTakeover(sessionCtx, t, sessionID, linkStream.firstSeq(seq))
 	}
 	// The turn completions this supervisor sends, kept on disk until the control plane answers them;
 	// those an earlier process kept go before this supervisor's first inbox fetch (turn_complete_journal.go).
 	completions := newTurnCompletions(t, sessionID)
-	// What the buffer numbers its events with: the stream while a link mode can carry them, and
-	// nothing with the link mode off, where every event takes a seq of its own, as it always has.
-	bufferLink := linkStream
-	if t.link == nil {
-		bufferLink = nil
-	}
 	// The engine the session runs on, for the one event the link carries it with (linkEventFateOf).
 	// Kept apart from job, which the outer loop swaps on a cold resume while the emitters run.
 	var engineProvider atomic.Value
@@ -825,7 +815,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// The session's emitted events, numbered and buffered for the flush in one step. How long each
 	// stretch of reasoning took is written onto the block that closes it by a clock that sees them in
 	// the order they are buffered (thinking_clock.go).
-	eventBuf := &sessionEventBuffer{next: seq, clock: &thinkingClock{}, link: bufferLink,
+	eventBuf := &sessionEventBuffer{next: seq, clock: &thinkingClock{}, link: linkStream,
 		provider: func() string { return engineProvider.Load().(string) }, soon: make(chan struct{}, 1)}
 	// A coordinator context can be acknowledged only after its compaction boundary is durable on
 	// the control plane. The provider emits and completes on different goroutines, so count under
@@ -842,8 +832,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	flushGate := newEventFlushGate()
 	criticalFlushFence := &criticalEventFlushFence{}
 	if linkStream != nil {
-		// A CURRENT_WORK acknowledgement the link's ingest refuses fails this session's flushes, as one
-		// HTTPS gave up on does.
+		// A CURRENT_WORK acknowledgement the link's ingest refuses fails this session's flushes.
 		linkStream.setFence(criticalFlushFence)
 	}
 	// A reply that links a file by the path it wrote it to (an agent's own mock, most of the time)
@@ -868,83 +857,48 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		cancelUploads()
 		return taken
 	}
-	// sendOverHTTPS posts events as requests of at most maxEventBatchBytes, one at a time and in seq
-	// order, so the control plane only ever holds a prefix of what was taken: the seq a reclaim
-	// resumes after (MaxSeq) still marks where the unsent rest begins. done is told each request's
-	// events once the control plane has them, or once they are given up. It returns what it did not
-	// send, with why.
-	sendOverHTTPS := func(flushCtx context.Context, events []RunEvent, done func([]RunEvent)) ([]RunEvent, error) {
-		for len(events) > 0 {
-			batch := events[:eventBatchLen(events, maxEventBatchBytes)]
-			serverRejections := 0
-			retry := eventFlushRetryPolicy(&serverRejections)
-			err := retryIdempotentWhile(flushCtx, func(attemptCtx context.Context) error {
-				return t.postEventsHTTPS(attemptCtx, sessionID, RunEventBatch{Events: batch})
-			}, func(err error) bool {
-				// Refused over HTTPS for the link: the flush sends it there instead.
-				return !errors.Is(err, errLinkEventsMoved) && retry(err)
-			})
-			if err != nil {
-				if serverRejections >= maxEventFlushServerRejections {
-					logln("dropping", len(batch), "events for", sessionID,
-						fmt.Sprintf("(seq %d-%d)", batch[0].Seq, batch[len(batch)-1].Seq),
-						"after", serverRejections, "server rejections:", err)
-					done(batch)
-					err = criticalFlushFence.recordDropped(batch, err)
-					events = events[len(batch):]
-				}
-				return events, err
-			}
-			done(batch)
-			events = events[len(batch):]
-		}
-		return nil, nil
-	}
-	flushOverHTTPS := func(flushCtx context.Context) error {
+	// flushWithoutLink posts what is buffered on a transport with no link, which no daemon has: the session
+	// loops' unit tests run on one, against a control plane of their own. It goes as requests of at most
+	// maxEventBatchBytes, one at a time and in seq order, so the control plane only ever holds a prefix of
+	// what was taken: the seq a reclaim resumes after (MaxSeq) still marks where the unsent rest begins.
+	flushWithoutLink := func(flushCtx context.Context) error {
 		if err := criticalFlushFence.check(); err != nil {
 			return err
 		}
-		// What the link's event stream still holds is older than anything buffered, and goes first:
-		// the link went out of use before the control plane acknowledged it.
-		for linkStream != nil {
-			held := linkStream.heldHead(maxEventBatchBytes)
-			if len(held) == 0 {
-				break
+		events := takeBuffered(flushCtx)
+		for len(events) > 0 {
+			batch := events[:eventBatchLen(events, maxEventBatchBytes)]
+			serverRejections := 0
+			err := retryIdempotentWhile(flushCtx, func(attemptCtx context.Context) error {
+				return t.postEvents(attemptCtx, sessionID, RunEventBatch{Events: batch})
+			}, eventFlushRetryPolicy(&serverRejections))
+			if err != nil && serverRejections >= maxEventFlushServerRejections {
+				logln("dropping", len(batch), "events for", sessionID,
+					fmt.Sprintf("(seq %d-%d)", batch[0].Seq, batch[len(batch)-1].Seq),
+					"after", serverRejections, "server rejections:", err)
+				backlog.settled(len(batch))
+				err = criticalFlushFence.recordDropped(batch, err)
+				events = events[len(batch):]
+			} else if err == nil {
+				backlog.settled(len(batch))
+				events = events[len(batch):]
+				continue
 			}
-			_, err := sendOverHTTPS(flushCtx, held, func(sent []RunEvent) {
-				linkStream.storedOverHTTPS(sent[0].Seq, sent[len(sent)-1].Seq)
-			})
 			if isLeaseOwnershipError(err) {
 				// Another process owns the session now: none of this will ever be sent from here.
-				linkStream.fail(err)
+				backlog.settled(len(events))
 				markOwnershipLost(err)
-			}
-			if err != nil {
 				return err
 			}
-		}
-		if linkStream != nil && linkStream.onLink() {
-			// The link came back in use while this flush waited its turn: its stream sends what it holds, and
-			// the buffer goes to it, behind that.
-			return errLinkEventsMoved
-		}
-		rest, err := sendOverHTTPS(flushCtx, takeBuffered(flushCtx), func(sent []RunEvent) { backlog.settled(len(sent)) })
-		if isLeaseOwnershipError(err) {
-			// Another process owns the session now: none of this will ever be sent from here.
-			backlog.settled(len(rest))
-			markOwnershipLost(err)
+			// Keep what is still unsent available to the final flush. Requests are seq-idempotent, so
+			// restoring after a lost committed response is safe and avoids dropping the tail.
+			eventBuf.restore(events)
 			return err
 		}
-		if err != nil {
-			// Keep what is still unsent available to the final flush. Requests are
-			// seq-idempotent, so restoring after a lost committed response is safe and avoids
-			// dropping the tail.
-			eventBuf.restore(rest)
-		}
-		return err
+		return nil
 	}
-	// submitToLink hands what is buffered to the session's event stream on the link, which holds it
-	// until the control plane has stored it (link_events.go).
+	// submitToLink hands what is buffered to the session's event stream, which holds it until the
+	// control plane has stored it (link_events.go).
 	submitToLink := func(flushCtx context.Context) error {
 		if err := criticalFlushFence.check(); err != nil {
 			return err
@@ -963,36 +917,26 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		}
 		return err
 	}
-	// flushEvents sends what is buffered: over HTTPS, or to the session's event stream while the link
-	// is in use. wait has it return only once all of it is stored, which every flush but the
-	// periodic one asks for. Over the link the periodic flush only hands events over, and the stream
-	// sends them at its own pace, so the buffer never grows while the link waits for anything.
+	// flushEvents hands what is buffered to the session's event stream. wait has it return only once all of it
+	// is stored, which every flush but the periodic one asks for. The periodic flush only hands events over, and
+	// the stream sends them at its own pace, so the buffer never grows while the link waits for anything.
 	flushEvents := func(ctx context.Context, wait bool) error {
-		for {
-			if linkStream != nil && linkStream.onLink() {
-				if err := flushGate.run(ctx, submitToLink); err != nil || !wait {
-					return err
-				}
-				err := linkStream.waitStored(ctx)
-				if errors.Is(err, errLinkEventsOffLink) {
-					continue // what the stream holds goes over HTTPS
-				}
-				if isLeaseOwnershipError(err) {
-					markOwnershipLost(err)
-				} else if errors.Is(err, errLinkEventsAbandoned) {
-					markEventsGivenUp(err)
-				}
-				if err == nil {
-					err = criticalFlushFence.check()
-				}
-				return err
-			}
-			err := flushGate.run(ctx, flushOverHTTPS)
-			if errors.Is(err, errLinkEventsMoved) {
-				continue // the control plane takes the session's events over the link now
-			}
+		if linkStream == nil {
+			return flushGate.run(ctx, flushWithoutLink)
+		}
+		if err := flushGate.run(ctx, submitToLink); err != nil || !wait {
 			return err
 		}
+		err := linkStream.waitStored(ctx)
+		if isLeaseOwnershipError(err) {
+			markOwnershipLost(err)
+		} else if errors.Is(err, errLinkEventsAbandoned) {
+			markEventsGivenUp(err)
+		}
+		if err == nil {
+			err = criticalFlushFence.check()
+		}
+		return err
 	}
 	flushWithContext := func(ctx context.Context) error { return flushEvents(ctx, true) }
 	periodicEventCtx, cancelPeriodicEvents := context.WithCancel(eventCtx)
@@ -1103,9 +1047,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	emit := emitOn(emissionGate)
 
 	// What the stream still holds, left in the spool by an earlier process or not yet seen stored for an
-	// earlier supervisor of the session, is stored before this supervisor emits anything, whichever way the
-	// session's events go now: it was written first, so it is stored first, and nothing numbered after it
-	// lands ahead of it. The wait ends with the session, its lease or the runner's stop; what is still held
+	// earlier supervisor of the session, is stored before this supervisor emits anything: it was written
+	// first, so it is stored first, and nothing numbered after it lands ahead of it. The wait ends with the session, its lease or the runner's stop; what is still held
 	// then goes ahead of everything else in every flush after it, and back to the spool if the runner stops.
 	if linkStream != nil {
 		if held, through := linkStream.holding(); held > 0 {

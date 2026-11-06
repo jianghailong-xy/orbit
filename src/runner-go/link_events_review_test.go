@@ -117,12 +117,11 @@ func TestLateEventsAreNotHandedToANewerSupervisorsStream(t *testing.T) {
 }
 
 // A refusal that is neither retryable nor the session's own (a 413, a 500 the data decided) is sent again after a wait,
-// as HTTPS sends such a batch again, but no more than maxEventFlushServerRejections times in a row
+// but no more than maxEventFlushServerRejections times in a row
 // (eventFlushRetryPolicy). Then the stream is given up: nothing more is sent, a wait for its events ends, and what it
 // held is in the spool, not dropped. An ack that stores, or a retryable failure, starts the count over.
 func TestAStreamRefusedThirtyTimesInARowIsGivenUpWithItsEventsInTheSpool(t *testing.T) {
 	e := linkEventsWithoutSender(t)
-	e.onLink.Store(true)
 	c := &linkWorkConn{}
 	e.welcomed(c, &linkpb.Welcome{Credit: &linkpb.Credit{MaxUnackedEvents: 1000, MaxUnackedBytes: 1 << 20}})
 	s := e.open("session-r")

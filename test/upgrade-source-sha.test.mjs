@@ -167,13 +167,27 @@ test('the docker build carries the checkout commit into the runner-binary stage'
   }
 });
 
+// A link of the deployment's own, complete and running, as production's is: the runner link's steps
+// (test/upgrade-runner-link.test.mjs) look at it and leave it, and the .env, alone, in a build that needs the link too.
+const LINK_OF_ITS_OWN = {
+  ...Object.fromEntries(['SIGNING_KEY', 'GATEWAY_TOKEN', 'PUBLIC_KEY', 'NATS_APISERVER_SEED', 'NATS_APISERVER_KEY', 'NATS_GATEWAY_SEED',
+    'NATS_GATEWAY_KEY'].map((name) => [`RUNNER_LINK_${name}`, 'fixture'])),
+  RUNNER_LINK_URL: 'wss://link.fixture.invalid',
+  COMPOSE_PROFILES: 'runner-link',
+};
+const LINK_GATEWAY_ANSWERS = `case "$*" in
+  'compose ps -q link-gateway') echo link-gateway-0 ;;
+  'inspect -f {{with index .State "Health"}}{{.Status}}{{end}} link-gateway-0') echo healthy ;;
+esac
+`;
+
 test('legacy upgrade passes the checked-out commit to the web image build', () => {
   const fixture = mkdtempSync(path.join(tmpdir(), 'orbit-upgrade-source-sha-'));
   const dockerLog = path.join(fixture, 'docker.log');
   const fakeDocker = path.join(fixture, 'docker');
   writeFileSync(fakeDocker, `#!/bin/sh
 printf '%s\\t%s\\n' "\${ORBIT_SOURCE_SHA-}" "$*" >>"$ORBIT_FAKE_DOCKER_LOG"
-`);
+${LINK_GATEWAY_ANSWERS}`);
   chmodSync(fakeDocker, 0o755);
 
   try {
@@ -181,8 +195,7 @@ printf '%s\\t%s\\n' "\${ORBIT_SOURCE_SHA-}" "$*" >>"$ORBIT_FAKE_DOCKER_LOG"
       ...process.env,
       PATH: `${fixture}:${process.env.PATH}`,
       ORBIT_FAKE_DOCKER_LOG: dockerLog,
-      // A link of its own, so that the runner link's steps (test/upgrade-runner-link.test.mjs) leave this case and its .env alone.
-      RUNNER_LINK_URL: 'wss://link.fixture.invalid',
+      ...LINK_OF_ITS_OWN,
     };
     delete env.ORBIT_SOURCE_SHA;
     // --no-pull: this runs in the repository itself, which a pull would move.
@@ -224,14 +237,13 @@ test('upgrade on main pulls origin first, so the build names the commit that lan
     const fakeDocker = path.join(fixture, 'docker');
     writeFileSync(fakeDocker, `#!/bin/sh
 printf '%s\\t%s\\n' "\${ORBIT_SOURCE_SHA-}" "$*" >>"$ORBIT_FAKE_DOCKER_LOG"
-`);
+${LINK_GATEWAY_ANSWERS}`);
     chmodSync(fakeDocker, 0o755);
     const env = {
       ...process.env,
       PATH: `${fixture}:${process.env.PATH}`,
       ORBIT_FAKE_DOCKER_LOG: dockerLog,
-      // A link of its own, so that the runner link's steps (test/upgrade-runner-link.test.mjs) leave this case and its .env alone.
-      RUNNER_LINK_URL: 'wss://link.fixture.invalid',
+      ...LINK_OF_ITS_OWN,
       GIT_AUTHOR_NAME: 'fixture',
       GIT_AUTHOR_EMAIL: 'fixture@example.invalid',
       GIT_COMMITTER_NAME: 'fixture',
@@ -332,7 +344,7 @@ case "$*" in
   'inspect --format '*' orbit-qa-postgres') echo "$PWD/data/pg-archive" ;;
   "exec $ORBIT_FAKE_PGBACKUP cat /usr/local/bin/pg-backup.sh") cat "$ORBIT_FAKE_RUNNING_SCRIPT" ;;
 esac
-`;
+${LINK_GATEWAY_ANSWERS}`;
 
 for (const relative of ['.claude/skills/upgrade/upgrade.sh', '.agents/skills/upgrade/scripts/upgrade.sh']) {
   test(`${relative} stops anywhere but the checkout the deployment runs from, and brings pgbackup up to date there`, () => {
@@ -347,8 +359,7 @@ for (const relative of ['.claude/skills/upgrade/upgrade.sh', '.agents/skills/upg
       ...process.env,
       PATH: `${fixture}:${process.env.PATH}`,
       ORBIT_FAKE_DOCKER_LOG: dockerLog,
-      // A link of its own, so that the runner link's steps (test/upgrade-runner-link.test.mjs) leave this case and its .env alone.
-      RUNNER_LINK_URL: 'wss://link.fixture.invalid',
+      ...LINK_OF_ITS_OWN,
       ORBIT_FAKE_RUNNING_SCRIPT: running,
       GIT_AUTHOR_NAME: 'fixture',
       GIT_AUTHOR_EMAIL: 'fixture@example.invalid',
