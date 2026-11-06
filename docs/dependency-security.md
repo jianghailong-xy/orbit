@@ -320,6 +320,39 @@ is the official image.
 
 Decision: accepted, with no override or audit exception.
 
+## Cloned checkouts on macOS (2026-11-06)
+
+On APFS the runner clones a session checkout from the workspace's own checkout, file by file, with clonefile(2)
+(`src/runner-go/clone_checkout_darwin.go`, `docs/session-checkout-storage-design.md` §7). The release builds have no
+cgo, and without it a Go binary reaches libSystem only through generated trampolines. `golang.org/x/sys` has those.
+The other way, `/bin/cp -c`, would start a process for every file or directory of a checkout.
+
+| Module | Version | Purpose | License |
+| --- | --- | --- | --- |
+| `golang.org/x/sys` | v0.30.0 | `unix.Clonefile`, imported by the darwin builds only. New in `src/runner-go/go.mod`. | BSD-3-Clause |
+
+- **Source and integrity.** The Go project's own module. Its `go.mod` requires nothing, so `go.sum` gains its two
+  hashes and nothing else, and `go mod verify` passes.
+- **Version.** v0.30.0 is the newest release whose `go.mod` asks for go 1.18. Later releases ask for more: v0.31.0
+  asks for go 1.23.0, v0.36.0 for 1.24.0, v0.43.0 for 1.25.0 and v0.49.0 for 1.26.0. Requiring one of them raises the
+  `go` line of `src/runner-go/go.mod`, and the runner's GODEBUG defaults move with that line. The link gateway's
+  v0.49.0 (indirect, above) belongs to its own module.
+- **Known vulnerabilities.** OSV lists GO-2026-5024 (CVE-2026-39824) for every release before v0.44.0. It is
+  `NewNTUnicodeString` in `golang.org/x/sys/windows`. The runner imports only `golang.org/x/sys/unix`, only in darwin
+  builds, and there is no Windows build. govulncheck v1.9.0 scanned the darwin/arm64 build with go1.27.1:
+  - Its symbol scan reports GO-2026-5024 among the modules required, not called, and nothing else in
+    `golang.org/x/sys`.
+  - What it finds reachable are ten standard-library advisories of that toolchain, all fixed in go1.27.2 or go1.27.3.
+    These are the toolchain findings recorded above.
+- **Reach.** The runner calls `Clonefile(src, dst, CLONE_NOFOLLOW|CLONE_NOOWNERCOPY)` with paths it builds itself:
+  - `src` is a regular file of the workspace's checkout that the commit tracks;
+  - `dst` is a new path in the session's checkout.
+  The only names that come from the repository are the paths in its own index.
+- **Updates.** Dependabot's existing `gomod` entry for `/src/runner-go` covers it. A release after v0.30.0 means
+  raising the module's `go` line, so take one only with that decision.
+
+Decision: accepted, with no override or audit exception. GO-2026-5024 needs none, since its package is not imported.
+
 ## Verification
 
 Run from a clean checkout:
