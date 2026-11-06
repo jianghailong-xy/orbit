@@ -1411,6 +1411,12 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
  * any other — and the reading, with file:line, of what it reads.
  */
 export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly string[]; reading: string }>> = {
+  'POST /runner/link-token request': {
+    reads: [],
+    reading: 'the whole request, for how it arrived: X-Orbit-Request-Host, X-Orbit-Request-Proto, X-Forwarded-For and '
+      + 'X-Real-IP, none of them an id. They choose only the link address the answer names, for this runner\'s own token '
+      + '(runner-api/runner-link-token.controller.ts:61, sameOriginLinkUrl in runner-link-token.ts)',
+  },
   'POST /runner/wiki/repo-ops/:id/result body result.*': {
     reads: [],
     reading: 'the runner\'s own answer — a snapshot\'s index, a read\'s text, a diff\'s paths, an anchor\'s states — '
