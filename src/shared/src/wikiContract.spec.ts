@@ -2212,6 +2212,17 @@ describe('wiki contract', () => {
     expect(CONTRACT.jobs.serverWrites).toMatch(/src\/apiserver\/src\/runner-api\/strip-nul\.ts/u);
     expect(existsSync(path.join(ROOT, 'src/apiserver/src/runner-api/strip-nul.ts'))).toBe(true);
     expect(sql).toContain('CONSTRAINT "wiki_model_request_unit_key" UNIQUE ("job_id", "step", "unit", "attempt")');
+    // What a call was made from, kept beside it for a replay to ask the same again (2026-11-06): a column of its own, an
+    // object or nothing, written by the maintain job's first question about a session, and read out by no read.
+    const material = readFileSync(path.join(ROOT, queue.material.migration), 'utf8').replace(/\s+/gu, ' ');
+    expect(material).toContain('ALTER TABLE "wiki_model_request" ADD COLUMN IF NOT EXISTS "material" JSONB');
+    expect(material).toContain('CHECK ("material" IS NULL OR jsonb_typeof("material") = \'object\')');
+    expect(queue.material.rule).toMatch(/maintenance\.job\.server\.replay/u);
+    expect(CONTRACT.jobs.read.never).toMatch(/the material it was made from \(modelQueue\.material\)/u);
+    const replay = CONTRACT.maintenance.job.server.replay;
+    expect(replay).toMatch(/under step extract and under step claims/u);
+    expect(replay).toMatch(/meets its own idempotency key, so nothing is written twice/u);
+    expect(replay).toMatch(/WikiMaintenance\.recordAsked/u);
     // The claim's order and its lock are the statement's, in the worker; the queue's sets and numbers are here.
     expect(queue.states).toEqual([...WIKI_MODEL_REQUEST_STATES]);
     expect(queue.concurrency.env).toBe(WIKI_SYSTEM_MODEL_ENV.concurrency);
