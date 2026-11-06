@@ -1,0 +1,28 @@
+-- 0480 — a managed runner's data volume as its backend last measured it, so the runner's heartbeat can
+-- relay it as the runner's storage budget (docs/session-checkout-storage-design.md §5, decision D1).
+--
+-- WHY
+-- ===
+-- On the Docker backend a managed runner's checkouts live on one local volume, `mr-data-<runner>`, and
+-- the restricted Docker channel stops the container once Docker measures that volume over its limit
+-- (VOLUME_OVER_LIMIT). statfs inside the container reports the host's disk, so the runner cannot see
+-- the limit and reclaims nothing before the stop. The manager already reads the channel's view of the
+-- volume on every pass (`limitBytes`, `usageBytes`). The heartbeat that answers the runner may run in
+-- any apiserver process, and the pass in any replica that holds the mapping's lease, so the reading
+-- has to be in the database. No existing column can hold it: `reservation` is written only together
+-- with the capacity pool, in one transaction, and `last_error` is the owner's reason.
+--
+-- WHAT IT ADDS
+-- ============
+-- One nullable jsonb column on `managed_runner`, `volume_measurement`: `{limitBytes, usageBytes,
+-- measuredAt}`. The manager writes it under its lease when the figures change. It is a predicate
+-- write of its own column, and `revision` does not move. Nothing is backfilled: NULL reads as no
+-- measurement, which is what every mapping has until its next pass, and what every Kubernetes mapping
+-- keeps.
+--
+-- 0480: the first number free on every ref and every local worktree on 2026-11-06 (0476, 0477 and
+-- 0479 are taken by unlanded branches). ADD COLUMN without a default is a catalog change only: no table
+-- rewrite and no row written. Only `managed_runner` is named; no index, constraint, function, trigger
+-- or type is created, replaced or dropped. IF NOT EXISTS keeps a retried apply harmless.
+
+ALTER TABLE "managed_runner" ADD COLUMN IF NOT EXISTS "volume_measurement" JSONB;

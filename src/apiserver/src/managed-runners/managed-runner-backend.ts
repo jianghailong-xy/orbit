@@ -2,6 +2,7 @@ import type { ManagedRunner } from '@prisma/client';
 
 import type { CapacityBudget, ComputeAmounts, StorageAmounts } from './managed-runner-capacity';
 import type { FencingReceiptVerdict, ManagedRunnerPredecessor, ObservedStopProof } from './managed-runner-fencing';
+import type { VolumeFigures } from './managed-runner-storage';
 
 /**
  * Where a managed runner's data volume lives and its instance runs: the one surface between the
@@ -270,6 +271,13 @@ export interface ManagedRunnerBackend {
   backingProblem(backing: ManagedVolumeBacking, mapping: ManagedRunner): string | null;
   /** What still holds a verified volume on a machine (Kubernetes: its VolumeAttachments). Empty: released. */
   volumeHolders(volume: VerifiedVolume): Promise<string[]>;
+  /**
+   * What the backend last measured of a volume it read: the most it may hold and what it held, which the manager
+   * keeps for the runner's heartbeat to relay as its storage budget (managed-runner-storage.ts); null while it has
+   * measured nothing. Absent where statfs inside the instance already reports the volume (Kubernetes: the PVC is
+   * the filesystem), so nothing is kept.
+   */
+  volumeMeasurement?(volume: ManagedVolume): VolumeFigures | null;
 
   // ── an operator's switch to a restored volume: Kubernetes only ──
   /**

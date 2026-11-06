@@ -35,7 +35,10 @@
  *       refuses the previous apiserver's creates, and the runner it was starting fails;
  *  (13) model supply is the same rule on Docker: with no runtime signed in, the owner's own enabled
  *       model key makes the runner READY on it; another account's key, a disabled one and a shared
- *       one do not.
+ *       one do not;
+ *  (14) the channel's measurement of the volume, read by every pass already, is kept on the mapping
+ *       when its figures change, with the time they were first read and the revision left alone, and
+ *       is the storage budget the runner's heartbeat relays (managed-runner-storage.ts).
  *
  * Not destructive: every row belongs to a user this run creates, and each world has a pool of its own.
  */
@@ -63,6 +66,7 @@ import { ManagedRunnerManager, type ReconcileOutcome } from './managed-runner-ma
 import type { DockerRunnerProfile } from './managed-runner-profile';
 import type { ManagedRunnerRuntime } from './managed-runner-runtime';
 import { managedRunnerHeartbeat, storedWorkloadFor } from './managed-runner-sleep';
+import { readManagedRunnerStorage } from './managed-runner-storage';
 import { recordManagedDemand } from './managed-runner-work';
 import { ManagedRunnerWorker } from './managed-runner-worker';
 import { ManagedRunnerService } from './managed-runner.service';
@@ -552,5 +556,37 @@ test('the manager drives a mapping on DockerBackend, through the restricted chan
     assert.equal(ready.podUid, waiting.podUid, 'the same container, waited on');
     const status = await w.service.status(ownerId);
     assert.deepEqual({ state: status.managementState, initialProvider: status.initialProvider }, { state: 'READY', initialProvider: own.slug });
+  });
+
+  await t.test('(14) a pass keeps the channel\'s measurement of the volume on the mapping, and that is the budget the heartbeat relays', async () => {
+    const w = world();
+    const { ownerId, mapping } = await w.readyRunner('volume-budget');
+    assert.equal(mapping.volumeMeasurement, null, 'the channel has measured nothing yet, so nothing is kept');
+    const instance = { mappingId: mapping.id, generation: mapping.generation, podUid: mapping.podUid! };
+    assert.deepEqual(await readManagedRunnerStorage(prisma, instance, null), { minFreeDiskMb: null }, 'and no budget is sent');
+
+    const view = w.channel.volumes.get(mapping.pvcName)!;
+    view.usageBytes = 3 * GiB;
+    const firstRead = w.now().toISOString();
+    assert.equal(await w.manager.reconcile(mapping.id), 'READY');
+    const kept = await w.mappingOf(ownerId);
+    assert.deepEqual(kept.volumeMeasurement, { limitBytes: 10 * GiB, usageBytes: 3 * GiB, measuredAt: firstRead });
+    assert.equal(kept.revision, mapping.revision, 'a write of its own column: the revision does not move');
+
+    // The same figures on a later pass keep the time they were first read; new figures are kept with that pass's.
+    w.advance(30_000);
+    assert.equal(await w.manager.reconcile(mapping.id), 'READY');
+    assert.deepEqual((await w.mappingOf(ownerId)).volumeMeasurement, kept.volumeMeasurement);
+    view.usageBytes = 4 * GiB;
+    assert.equal(await w.manager.reconcile(mapping.id), 'READY');
+    const later = w.now().toISOString();
+    assert.deepEqual((await w.mappingOf(ownerId)).volumeMeasurement, { limitBytes: 10 * GiB, usageBytes: 4 * GiB, measuredAt: later });
+
+    // What the runner's heartbeat is told: the floor a quarter of the 10 GiB limit, or the owner's.
+    assert.deepEqual(await readManagedRunnerStorage(prisma, instance, null), {
+      minFreeDiskMb: null,
+      storageBudget: { limitBytes: 10 * GiB, usageBytes: 4 * GiB, measuredAt: later, floorBytes: 2.5 * GiB },
+    });
+    assert.equal((await readManagedRunnerStorage(prisma, instance, 1024))?.storageBudget?.floorBytes, GiB);
   });
 });
