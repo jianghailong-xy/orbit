@@ -1,0 +1,53 @@
+# Paths Orbit leaves out of this repository's session checkouts
+# (docs/session-checkout-storage-design.md section 6, decision D6).
+# One pattern a line in gitignore syntax; a line starting with ! brings a path back in.
+#
+# docs/mocks/ and docs/evidence/ are left out, except what a test, script, build or
+# CI job reads and what the public guides link to (npm run docs:check opens those).
+# A path a test starts reading goes back in here, with its reader named above it.
+# In a session checkout, `git sparse-checkout add <path>` brings a path in for that
+# checkout alone.
+
+docs/mocks/
+# src/shared/src/claude-region-check.spec.ts
+!docs/mocks/claude-region-check/01-board.html
+# src/android: CursorCopyParityTest.kt
+!docs/mocks/cursor-engine/ios-2-infrastructure.html
+!docs/mocks/cursor-engine/kit.js
+# src/macos/OrbitKit: MachineSetupCopyParityTests.swift
+!docs/mocks/first-workspace-in-conversation/03-iphone.html
+# README.md and docs/90-second-demo.md show it
+!docs/mocks/project-progress/04-merge-to-main.png
+# src/macos/OrbitKit: WikiStartParityTests.swift
+!docs/mocks/wiki/41-home-setup.html
+# src/shared/src/wikiChatContract.spec.ts (the PNG is contracts/wiki.contract.json's chat.board)
+!docs/mocks/wiki/42-wiki-chat.html
+!docs/mocks/wiki/42-wiki-chat.png
+
+docs/evidence/
+# src/runner-go: antigravity_google*_test.go
+!docs/evidence/antigravity-cli-1.2.16/
+# src/web RunnerEngines.antigravityGoogle.test.tsx, src/android AntigravityAccountsTest.kt,
+# src/macos/OrbitKit AntigravityGoogleClientTests.swift
+!docs/evidence/antigravity-google-login/
+# src/web/ui-migration (the P0 screenshot registries cite documents across it),
+# src/web/scripts/audit-antd.mjs and verify-antd-inventory.mjs
+!docs/evidence/base-ui-migration/
+# README.md and the public guides link to it
+!docs/evidence/clean-install-2026-09-29.md
+# src/runner-go codex_rate_limit_reset_test.go, src/shared codexRateLimitReset.spec.ts
+!docs/evidence/codex-rate-limit-reset-0.154.0/
+# docs/README.md links to its transcript
+!docs/evidence/codex-turn-steer-0.149.0/
+# src/runner-go cursor_usage_test.go, scripts/cursor-p0
+!docs/evidence/cursor-cli/
+# src/runner-go dsh_events_test.go, scripts/test-dsh-*.mjs, scripts/deepseek-harness-session-log
+!docs/evidence/deepseek-harness/
+# .github/workflows/client.yml runs its probe harness
+!docs/evidence/ios-http-ip/
+# scripts/long-running-loops/verdicts.py reads it as its dump
+!docs/evidence/long-running-loops/
+# scripts/managed-runner/lab/durability-lab.py runs its timing kit
+!docs/evidence/managed-runner-power-cut-durability/
+# .github/workflows/client.yml and probe-dispatch.yml use its probe harness
+!docs/evidence/source-refused-native/
