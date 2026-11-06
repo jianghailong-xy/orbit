@@ -260,7 +260,7 @@ export function buildReportOf(summary: WikiDocsBuildSummary, model: string): Wik
  * plan's order, each section's sources as stored — so its fingerprint is the runner's — and its session condition as
  * the material route read it.
  */
-async function readConfirmedPlan(
+export async function readConfirmedPlan(
   prisma: PrismaService,
   ownerId: string,
   spaceId: string,
@@ -325,7 +325,7 @@ async function readConfirmedPlan(
 // ── The write ───────────────────────────────────────────────────────────────────────────────────
 
 /** One write through the shared writer (`WikiDocs.write`); a refusal is the section's, said as the runner said it. */
-async function write(
+export async function write(
   deps: WikiDocsBuildJobDeps,
   ownerId: string,
   spaceId: string,
@@ -494,7 +494,7 @@ async function snapshotRepo(context: WikiJobContext, deps: WikiDocsBuildJobDeps,
 
 /** Files read whole at the commit (`read`), from the cache where held: asked again when the read failed, and
  *  given up as the platform's after `readAttempts`. The worker stopping is no failed read: it is thrown as it is. */
-async function readFiles(
+export async function readFiles(
   context: WikiJobContext,
   deps: WikiDocsBuildJobDeps,
   sha: string,
@@ -540,10 +540,10 @@ export function wikiDocsShownOf(file: WikiRepoFileRead, size: number): WikiDocSh
 }
 
 /** One repository operation of the job, waited for holding its lease; a wait that runs out is the platform's failure. */
-async function operation(
+export async function operation(
   context: WikiJobContext,
   deps: WikiDocsBuildJobDeps,
-  kind: 'snapshot' | 'read',
+  kind: 'snapshot' | 'read' | 'diff',
   input: Record<string, unknown>,
   what: string,
 ): Promise<WikiRepoOpWait> {

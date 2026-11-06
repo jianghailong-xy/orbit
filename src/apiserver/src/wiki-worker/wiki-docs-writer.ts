@@ -229,11 +229,13 @@ export function wikiDocFilter(pieces: WikiDocPiece[]): void {
 
 /**
  * Keep what fits the section's cap (`docs.build.rules`), in the order its kind takes material: a mechanism's
- * documents and code first, the others' records first. The first piece is kept whatever its size.
+ * documents and code first, the others' records first. The first piece is kept whatever its size. `first` — what a
+ * follow job's press hands a section besides its own material (`docs.follow.material`) — is taken before all of it,
+ * in its own order.
  */
-export function wikiDocSelect(kind: string, pieces: WikiDocPiece[]): void {
+export function wikiDocSelect(kind: string, pieces: WikiDocPiece[], first?: ReadonlySet<WikiDocPiece>): void {
   const order: Record<string, number> = MECHANISM_KINDS.has(kind) ? { D: 0, C: 1, K: 2, S: 3 } : { S: 0, D: 1, C: 2, K: 3 };
-  const rank = (piece: WikiDocPiece): number => order[piece.id.slice(0, 1)] ?? 0;
+  const rank = (piece: WikiDocPiece): number => (first?.has(piece) ? -1 : order[piece.id.slice(0, 1)] ?? 0);
   const ranked = pieces.filter((piece) => piece.action === '');
   // Array.prototype.sort is stable, as sort.SliceStable is.
   ranked.sort((a, b) => rank(a) - rank(b));

@@ -70,4 +70,6 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   // The owner's restore of a version a section kept (contract `docs.versions.restore`): the user door's one write to a
   // document, which refuses an acting session WIKI_OWNER_CHANNEL_ONLY as the plan's routes do.
   'POST /wiki/doc-versions/:id/restore',
+  // Making a wiki chat (contract `chat.door`): the owner's interactive credential's, as the binding writes are.
+  'POST /wiki/spaces/:id/chats',
 ];

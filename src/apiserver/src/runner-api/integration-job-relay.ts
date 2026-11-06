@@ -1881,6 +1881,8 @@ export interface IntegrationResultAftermath {
   ownerItemIds?: string[];
   /** Set for an observation's own result, which has just looked at the line (O-T3 skips it). */
   observed?: boolean;
+  /** The receipts this result wrote: a landing into main among them is a fact the wiki follows (`docs.follow`). */
+  receiptIds?: string[];
   /**
    * The project whose next promotion candidate is now worth looking for (§3.4 M-F1, M-F4), or null.
    *
@@ -2078,6 +2080,7 @@ export async function applyIntegrationJobResult(
           // M-F1: a receipt on a project branch moved the line, as a landing does.
           considerPromotionProjectId: observed.receiptIds.length > 0 ? job.projectId : null,
           observed: true,
+          receiptIds: observed.receiptIds,
         },
       };
     }
@@ -2867,6 +2870,7 @@ export async function applyIntegrationJobResult(
         // M-F1 for a landing, M-F4 for a promotion that ended: both are the queue getting shorter.
         considerPromotionProjectId:
           job.kind === 'LAND_TASK' || job.kind === 'LAND_PROMOTION' ? job.projectId : null,
+        receiptIds: [...receiptIds, ...promotionReceiptIds, ...recoveredReceiptIds],
       },
     };
   }, onRetry);

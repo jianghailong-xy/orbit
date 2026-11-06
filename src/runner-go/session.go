@@ -1812,6 +1812,12 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// server judgement every pass and acts on it only under disk pressure or its retention cap. That
 	// also means a checkout THIS function could not remove — every `return` above, lease loss in
 	// particular — is reclaimed by a later sweep instead of leaking until the process restarts.
+	//
+	// One exception, below, once the end is reported: a wiki chat whose branch is still at its pinned
+	// commit and whose checkout is clean (dropEmptyChatBranch; wiki contract chat.branch, design §5.2).
+	// It has nothing to lose — no commit of its own, nothing uncommitted — and it would otherwise leave
+	// an unmerged branch behind every chat that only read code, which reads as abandoned work. A chat
+	// that comes back loses nothing either: its pin is frozen, so its next claim forks the same commit.
 	finalizeRequest := RunFinalizeRequest{Status: status, IsolationStatus: job.IsolationStatus, RuntimeSessionID: currentRuntimeSessionID(job)}
 	// Carry the failure reason onto the session record. Only on failure: the
 	// apiserver writes `error` straight through, so attaching a recovered-from
@@ -1843,6 +1849,12 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		logln("run finalization failed for", job.SessionID+":", err)
 	} else {
 		logln(fmt.Sprintf("■ interactive run %s → %s", job.SessionID, status))
+		// After the end is on the record and still inside the finalization fence, so no claim of this
+		// session can be setting its checkout up meanwhile. A finalize that failed keeps everything: the
+		// branch is then the only record of what the chat was on.
+		if !ownershipLost.Load() {
+			dropEmptyChatBranch(job)
+		}
 	}
 }
 

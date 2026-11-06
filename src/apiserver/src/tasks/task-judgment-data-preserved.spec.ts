@@ -2692,11 +2692,31 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // the six preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so
       // it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: the table starts empty.
       '0475_wiki_doc_section_version',
+      // 0476 is the wiki chat's session: a nullable `session.wiki_chat_space_id` and a guard
+      // (`session_wiki_chat_space_guard`, BEFORE UPDATE OF that one column, which raises and writes nothing),
+      // `CHAT_UPSTREAM` admitted by three CHECKs on `session`'s SOURCE columns (added back NOT VALID; 0479 validates
+      // them), and a nullable `conversation_turn.wiki_context`, all in one DO statement that takes both tables' locks
+      // in short tries and writes no row. Neither table is a preserved relation, nothing here names `task`, `project`
+      // or `project_acceptance_*`, and the one function it creates writes no row, so it is not another writer of the
+      // DONE fence. No INSERT, UPDATE or DELETE: every stored row reads NULL in both new columns.
+      '0476_wiki_chat_session',
+      // 0477 widens `wiki_job_kind_chk` by `docs_follow` and replaces `wiki_job_space_running_key` with two partial unique
+      // indexes over the same table (contract `jobs.onePerSpace`'s exception for the follow job), all in one DO statement
+      // that takes wiki_job's lock in short tries and writes no row. `wiki_job` is not a preserved relation, no `task`,
+      // `session`, `project` or `project_acceptance_*` object nor any of the six preserved triggers/functions is named,
+      // and no function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence.
+      // No INSERT, UPDATE or DELETE: every stored job satisfies both as it stands.
+      '0477_wiki_docs_follow',
       // 0478 adds one nullable jsonb column to `session` (`engine_usage_totals`, the engine's running totals as last
       // booked) and nothing else. `session` is not a preserved relation, no column any preserved trigger reads is
       // touched, and no function, trigger, type or constraint is created, replaced or dropped, so it is not another
       // writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored session reads NULL in it.
       '0478_session_engine_usage_totals',
+      // 0479 finishes 0476: it validates the three SOURCE CHECKs 0476 added back NOT VALID and builds the partial
+      // `session_wiki_chat_space_idx` CONCURRENTLY (dropping a leftover one first). `session` is not a preserved
+      // relation, no column any preserved trigger reads is touched, and no function, trigger, type or constraint is
+      // created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '0479_wiki_chat_session_checks_index',
       // 0480 adds one nullable jsonb column to `managed_runner` (`volume_measurement`, the data volume as its backend
       // last measured it) and nothing else. `managed_runner` is not a preserved relation, no `task`, `session`, `project`
       // or `project_acceptance_*` object nor any preserved trigger/function is named, and no function, trigger, type or
