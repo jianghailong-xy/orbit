@@ -19,6 +19,9 @@ struct MainView: View {
     #endif
     /// `.doubleColumn` hides only the sidebar — `.detailOnly` would take the session list with it.
     @State private var columnVisibility: NavigationSplitViewVisibility = .doubleColumn
+    /// The first column folded while the wiki chat is a column beside the page (wiki-chat design §9: the directory,
+    /// the page and the chat), so the page keeps its width; it comes back as it was once the chat closes.
+    @State private var foldedForChat = false
 
     var body: some View {
         @Bindable var model = model
@@ -49,11 +52,29 @@ struct MainView: View {
         }
         .task { model.startPolling() }
         .onAppear { columnVisibility = sidebarVisible ? .all : .doubleColumn }
-        .onChange(of: columnVisibility) { _, now in sidebarVisible = (now == .all) }
+        .onChange(of: columnVisibility) { _, now in
+            // Brought back by hand while the chat is open: the reader's again, nothing to restore.
+            if now == .all { foldedForChat = false }
+            if !foldedForChat { sidebarVisible = (now == .all) }
+        }
+        .onChange(of: wikiChatColumn) { _, open in
+            if open, columnVisibility == .all {
+                foldedForChat = true
+                columnVisibility = .doubleColumn
+            } else if !open, foldedForChat {
+                columnVisibility = .all
+            }
+        }
         // Stream lifecycle: start exactly the focused session's SSE and stop any other, from the
         // always-present shell so it never depends on a console view unmounting (see syncConsoleFocus).
         .onChange(of: model.focusedConsoleSessionID, initial: true) { _, _ in model.syncConsoleFocus() }
         .toastHost()
+    }
+
+    /// The wiki chat open as a column beside the Wiki's page — the inspector, not a phone's sheet.
+    private var wikiChatColumn: Bool {
+        guard model.selectedSection == .wiki, let chat = model.wikiChat else { return false }
+        return chat.presented && !chat.asSheet
     }
 
     /// The first column. The iPad seats the phone's drawer here — the same rows, counts, state marks

@@ -661,7 +661,8 @@ struct WikiChatComposer: View {
     let space: WikiSpace
     let console: ConsoleModel?
 
-    /// A phone's chip says how many sentences alone (board 42 ⑤); a wider one adds the sources, as the web's does.
+    /// A compact column's chip — a phone's sheet, an iPad's third column, each about 380 points wide — says how many
+    /// sentences alone (board 42 ⑤); a Mac's adds the sources, as the web's docked panel does.
     private var narrow: Bool {
         #if os(iOS)
         return hSize == .compact
