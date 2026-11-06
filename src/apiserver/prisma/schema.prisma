@@ -1341,8 +1341,9 @@ model ManagedRunner {
   /// receipt may advance it, which this version never does.
   generation         Int                          @default(1)
   /// Compare-and-set counter: every manager and owner write of this row is `WHERE revision = <read>`
-  /// and bumps it. Two writes of their own columns are predicate writes instead and leave it: demand
-  /// (`demandRevision`, `lastDemandAt`, RUNNING desired) and a drained instance's `stopAcknowledgedAt`.
+  /// and bumps it. Three writes of their own columns are predicate writes instead and leave it: demand
+  /// (`demandRevision`, `lastDemandAt`, RUNNING desired), a drained instance's `stopAcknowledgedAt`,
+  /// and the manager's `volumeMeasurement`.
   revision           Int                          @default(1)
   /// The run backend that made this mapping's volume and instances, and alone drives them
   /// (managed-runner-backend.ts): `kubernetes` — every mapping before migration 0430 — or `docker`.
@@ -1368,6 +1369,12 @@ model ManagedRunner {
   /// migration 0413): storage while its volume exists, compute from admission until its instance is
   /// proven stopped. Written only together with `managed_runner_capacity`, in one transaction.
   reservation        Json?
+  /// The data volume as its backend last measured it (Docker: the channel's `limitBytes` and
+  /// `usageBytes`), `{limitBytes, usageBytes, measuredAt}`, which the runner's heartbeat relays as its
+  /// storage budget (managed-runner-storage.ts, migration 0480). Written by the manager under its
+  /// lease when the figures change; `measuredAt` is when it first read them, never before the
+  /// backend took them. Null until a measurement is read, and always on Kubernetes.
+  volumeMeasurement  Json?                        @map("volume_measurement")
   /// Demand: bumped by every piece of work addressed to this runner while the switch is on
   /// (managed-runner-demand.ts), whatever the state. Sleep compares it before it stops anything.
   demandRevision     Int                          @default(0) @map("demand_revision")

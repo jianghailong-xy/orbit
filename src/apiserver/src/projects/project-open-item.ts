@@ -864,10 +864,14 @@ export const INTEGRATION_ITEM_KINDS: readonly OpenItemKind[] = [
  *    edges for a handled item; until one commits, M-T11 and the readers that use this predicate
  *    still count the OPEN item, including an owner-held item under H4;
  *  - a task's failure, while the task still stands where the failure left it: not DONE, not
- *    cancelled, not replaced, and no attempt at it in flight. That is the exact complement of the
- *    four facts `resolveByFact`'s first statement answers a failure with — `TASK_DONE`,
- *    `SUCCESSOR_FILED`, `TASK_CLOSED`, `RETRIED` — read off the same rows, so a failure whose task
- *    moved on is owed by nobody and an edge that missed it leaves nothing in front of anybody;
+ *    cancelled, not replaced, and no attempt at it in flight. An attempt is in flight when a live
+ *    work session holds the task other than the one the failure came from, or when that same
+ *    session was resumed after the item opened — a new message turn on it is a new run at the
+ *    task, which is what an auto-retry, a coordinator continuing the conversation and the failed
+ *    session card's Retry all are. That is the exact complement of the four facts `resolveByFact`'s first
+ *    statement answers a failure with — `TASK_DONE`, `SUCCESSOR_FILED`, `TASK_CLOSED`, `RETRIED` —
+ *    read off the same rows, so a failure whose task moved on is owed by nobody and an edge that
+ *    missed it leaves nothing in front of anybody;
  *  - a `LANDING_UNOBSERVED` (§10.7), while its task is still DONE, not replaced, not declared
  *    codeless and still NOT_KNOWN (§1.4, `taskLandingSql`): the complement of the endings
  *    `resolveByFact` and the landing edge write — `SUCCESSOR_FILED`, `TASK_CLOSED`, `RETRIED`,
@@ -933,7 +937,12 @@ export function openItemOwed(alias: string): Prisma.Sql {
               WHERE owed_session."task_id" = owed_task."id"
                 AND owed_session."starts_task_work"
                 AND owed_session."status" IN (${liveSessions})
-                AND owed_session."id" IS DISTINCT FROM ${item}."session_id"))
+                AND (owed_session."id" IS DISTINCT FROM ${item}."session_id"
+                     OR EXISTS (
+                       SELECT 1 FROM "conversation_turn" resumed_turn
+                        WHERE resumed_turn."session_id" = owed_session."id"
+                          AND resumed_turn."kind" = 'message'
+                          AND resumed_turn."created_at" > (${item}."waiting_since" AT TIME ZONE 'UTC')))))
       ELSE true
     END)`;
 }

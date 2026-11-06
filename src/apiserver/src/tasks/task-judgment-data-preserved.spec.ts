@@ -2715,7 +2715,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `session_wiki_chat_space_idx` CONCURRENTLY (dropping a leftover one first). `session` is not a preserved
       // relation, no column any preserved trigger reads is touched, and no function, trigger, type or constraint is
       // created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
-      '0479_wiki_chat_session_checks_index'],
+      '0479_wiki_chat_session_checks_index',
+      // 0480 adds one nullable jsonb column to `managed_runner` (`volume_measurement`, the data volume as its backend
+      // last measured it) and nothing else. `managed_runner` is not a preserved relation, no `task`, `session`, `project`
+      // or `project_acceptance_*` object nor any preserved trigger/function is named, and no function, trigger, type or
+      // constraint is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE: every stored mapping reads NULL in it.
+      '0480_managed_runner_volume_measurement'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

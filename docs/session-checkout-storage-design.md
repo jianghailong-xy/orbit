@@ -110,8 +110,22 @@ The runner judges pressure against the storage it may use:
 - **Docker backend.** The apiserver already receives each volume's `usageBytes` and `limitBytes` from the channel
   (`ChannelVolume` in `src/apiserver/src/managed-runners/docker-channel-client.ts`). It relays them to the managed
   runner in the heartbeat response, next to `minFreeDiskMb` (D1).
-- **Kubernetes backend.** `statfs` is already right. Provisioning sets `Runner.minFreeDiskMb` from the PVC size when the
-  owner has not set it.
+- **Field names as implemented** (`StorageBudget` in `src/runner-go/types.go`): the heartbeat response's
+  `storageBudget` is `{limitBytes, usageBytes, measuredAt, floorBytes}`, the byte counts as integers and `measuredAt`
+  as RFC 3339, never earlier than when the channel's measurement finished. Like `minFreeDiskMb`, an answer without
+  `storageBudget` means no budget, so every answer a managed runner gets carries it. A managed runner's beat always
+  reconciles in full, over the link too; the link's quiet answer goes only to other runners, which have no budget.
+- **The relay as implemented** (`src/apiserver/src/managed-runners/managed-runner-storage.ts`). Each manager pass
+  already reads the channel's view of the volume (`verifyStorage`). When the figures differ from the ones kept, the
+  manager keeps them on the mapping (`managed_runner.volume_measurement`, migration 0480) with the time it read them.
+  The channel does not say when it measured, and its view is at most `diskCheckSeconds` old, so that time is never
+  earlier than the measurement. The same figures read again keep their first time, so the runner's lag compensation
+  holds across passes. The heartbeat relays the kept measurement while the managed runner switch is on; with the
+  switch off, management is frozen and the runner gets no budget, as before.
+- **Kubernetes backend.** `statfs` is already right. When the owner has not set a floor, the heartbeat answers
+  `minFreeDiskMb` as 25% of the PVC's size (the size admission reserved for it). The default is worked out when the
+  answer is made and is not stored, so `Runner.minFreeDiskMb` and the auto-run disk gate still read the owner's
+  setting.
 - **Default floor for managed runners:** 25% of the budget (D5). On a 20 GiB volume that is 5 GiB, which covers the
   120 s measurement lag at the rate checkouts are created.
 - **Lag compensation.** Between two channel measurements, the runner subtracts the bytes of checkouts it has removed

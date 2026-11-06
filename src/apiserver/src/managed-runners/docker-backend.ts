@@ -28,6 +28,7 @@ import { quantityUnits, type CapacityBudget, type ComputeAmounts, type StorageAm
 import { readDockerFencingReceipt, type ManagedRunnerPredecessor, type ObservedStopProof } from './managed-runner-fencing';
 import type { DockerRunnerProfile } from './managed-runner-profile';
 import { managedPodName, managedPvcName, managedSecretName } from './managed-runner-resources';
+import { isByteCount, type VolumeFigures } from './managed-runner-storage';
 
 /**
  * The Docker backend (docs/managed-runner-design.md, "Implementation record: Docker backend"): one
@@ -240,6 +241,16 @@ export class DockerBackend implements ManagedRunnerBackend {
     if (mapping.pvUid && backing.uid !== mapping.pvUid) return 'the volume has a different UID from the one recorded';
     if (mapping.volumeHandle && backing.handle !== mapping.volumeHandle) return 'the volume has a different handle from the one recorded';
     return null;
+  }
+
+  /**
+   * The channel's latest measurement of the volume: its limit, and what Docker last measured it holding, which the
+   * channel takes every `diskCheckSeconds` to enforce the limit and keeps. Reading the view walks nothing. None
+   * until the channel has measured the volume, or for one with no limit.
+   */
+  volumeMeasurement(volume: DockerVolume): VolumeFigures | null {
+    const { limitBytes, usageBytes } = volume.view;
+    return isByteCount(limitBytes) && limitBytes > 0 && isByteCount(usageBytes) ? { limitBytes, usageBytes } : null;
   }
 
   /** Every container that refers to the volume, labelled or not, in any state. */

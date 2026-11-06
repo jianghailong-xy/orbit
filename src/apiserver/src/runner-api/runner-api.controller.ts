@@ -497,6 +497,7 @@ import {
   storedWorkloadFor,
   type ManagedHeartbeatAnswer,
 } from '../managed-runners/managed-runner-sleep';
+import { readManagedRunnerStorage, type ManagedRunnerStorage } from '../managed-runners/managed-runner-storage';
 import {
   RUNNER_OFFLINE_AFTER_MS,
   RunnerPresenceService,
@@ -2108,6 +2109,19 @@ export class RunnerApiController {
         this.logger.warn(`runner ${runner.id}: managed sleep state not read this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
       }
     }
+    // What a managed instance is told of its storage (managed-runners/managed-runner-storage.ts): on Docker the
+    // volume's budget as the channel last measured it, and the floor, which defaults to a quarter of the volume when
+    // the owner set none. Like idle sleep, only while the switch is on: off, management is frozen, and a measurement
+    // nothing renews would hide everything written since. A read that fails answers as for any other runner, and
+    // the next beat says it again.
+    let managedStorage: ManagedRunnerStorage | null = null;
+    if (managedSleepOn) {
+      try {
+        managedStorage = await readManagedRunnerStorage(this.prisma, managedInstance!, updated.minFreeDiskMb);
+      } catch (error) {
+        this.logger.warn(`runner ${runner.id}: managed storage not read this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+      }
+    }
     // A process draining by itself, or a managed instance its manager is draining to sleep, is handed
     // no new heartbeat work: it stays queued for the next instance, or for this one once the drain is
     // called off.
@@ -2479,12 +2493,13 @@ export class RunnerApiController {
     // Hand back the authoritative max-concurrent (the editable DB value) so the runner
     // syncs its self-gate to a UI/API change without needing a restart. The free-space floor
     // rides along for the same reason: the runner reclaims its own session checkouts under disk
-    // pressure, and that has to be the floor the owner set here, not a second number.
+    // pressure, and that has to be the floor the owner set here, not a second number. A managed
+    // runner's floor is the owner's too when set; otherwise its storage answer's default.
     const answer: RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints } = {
       cancelSessionIds,
       leaseLostSessionIds: ownershipLostSessionIds,
       maxConcurrent: updated.maxConcurrent,
-      minFreeDiskMb: updated.minFreeDiskMb,
+      minFreeDiskMb: managedStorage ? managedStorage.minFreeDiskMb : updated.minFreeDiskMb,
       mergeRequests,
       commitRequests,
       artifactRequests,
@@ -2509,6 +2524,8 @@ export class RunnerApiController {
       ...(wikiRepoOps ? { wikiRepoOps } : {}),
       // Only to the instance being drained to sleep: every other runner's response keeps its shape.
       ...(managedBeat.sleep ? { managedSleep: managedBeat.sleep } : {}),
+      // Only to a managed instance whose volume the channel has measured: every other runner's response keeps its shape.
+      ...(managedStorage?.storageBudget ? { storageBudget: managedStorage.storageBudget } : {}),
       // Present only when this beat hands a key over, for the same reason.
       ...(cursorKeyChecks.length > 0 ? { cursorKeyChecks } : {}),
       // Only while the owner's Check again waits, and only to a process that declared claude-region/v1.

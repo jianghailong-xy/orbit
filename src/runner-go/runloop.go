@@ -981,6 +981,10 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// Zero is "no floor", which is what both a machine with none configured and a control plane
 	// too old to send one mean, and what the sweep reads as "no disk-pressure gate".
 	var diskFloorMb atomic.Int64
+	// The storage budget a managed runner's checkouts are held to (StorageBudget), kept in sync the
+	// same way and stored beside the floor, with the checkouts the sweep has removed since it was
+	// measured (checkoutStorage). No budget is the floor's rule as it was.
+	var storage checkoutStorage
 
 	loopCtx, stopLoop := context.WithCancelCause(context.Background())
 	loopCancel := func() { stopLoop(nil) }
@@ -1445,6 +1449,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				floorMb = int64(*resp.MinFreeDiskMb)
 			}
 			diskFloorMb.Store(floorMb)
+			// The storage budget is replaced the same way: an answer without one means there is none.
+			storage.budget.Store(resp.StorageBudget)
 			// Process ownership loss first. A terminal row can appear in both lists;
 			// marking its exact advertised epoch detaching before a durable cancel
 			// makes that overlap take the no-finalize path.
@@ -2080,7 +2086,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	}
 	if worktreeGC.due(time.Now()) {
 		liveSet := pool.ids()
-		pressure := measureWorktreePressure(diskFloorMb.Load())
+		pressure := measureWorktreePressure(diskFloorMb.Load(), &storage)
 		gcWorktrees(t, liveSet, pressure)
 		worktreeGC.sweepResumable(t, pool, pressure)
 		gcUploads(liveSet)
@@ -2160,7 +2166,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// out is exactly when its disk gets tight. It costs one round trip plus a directory
 		// listing when nothing is due, and the claim long-poll guarantees a lap every 35 seconds.
 		if worktreeGC.due(time.Now()) {
-			pressure := measureWorktreePressure(diskFloorMb.Load())
+			pressure := measureWorktreePressure(diskFloorMb.Load(), &storage)
 			gcWorktrees(t, pool.ids(), pressure)
 			worktreeGC.sweepResumable(t, pool, pressure)
 		}

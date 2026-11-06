@@ -3066,10 +3066,10 @@ func TestTheRunLoopCallsEverySideOfTheResumableSweep(t *testing.T) {
 	}
 	body := string(source)
 	// The first half first and on nothing but the sweeper's schedule, and the second behind it, both times.
-	if !strings.Contains(body, "if worktreeGC.due(time.Now()) {\n\t\tliveSet := pool.ids()\n\t\tpressure := measureWorktreePressure(diskFloorMb.Load())\n\t\tgcWorktrees(t, liveSet, pressure)\n\t\tworktreeGC.sweepResumable(t, pool, pressure)\n") {
+	if !strings.Contains(body, "if worktreeGC.due(time.Now()) {\n\t\tliveSet := pool.ids()\n\t\tpressure := measureWorktreePressure(diskFloorMb.Load(), &storage)\n\t\tgcWorktrees(t, liveSet, pressure)\n\t\tworktreeGC.sweepResumable(t, pool, pressure)\n") {
 		t.Error("the startup sweep must run the first half, then the second, whenever a sweep is due")
 	}
-	if !strings.Contains(body, "if worktreeGC.due(time.Now()) {\n\t\t\tpressure := measureWorktreePressure(diskFloorMb.Load())\n\t\t\tgcWorktrees(t, pool.ids(), pressure)\n\t\t\tworktreeGC.sweepResumable(t, pool, pressure)\n") {
+	if !strings.Contains(body, "if worktreeGC.due(time.Now()) {\n\t\t\tpressure := measureWorktreePressure(diskFloorMb.Load(), &storage)\n\t\t\tgcWorktrees(t, pool.ids(), pressure)\n\t\t\tworktreeGC.sweepResumable(t, pool, pressure)\n") {
 		t.Error("the claim loop's sweep must run the first half, then the second, whenever a sweep is due")
 	}
 	if got := strings.Count(body, "gcResumableCheckouts(t, pool, pressure)"); got != 1 {
