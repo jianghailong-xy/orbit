@@ -2726,7 +2726,15 @@
       "wiki_search": {
         "readOnly": true,
         "params": { "query": "required", "kinds": "optional", "topic": "optional", "paths": "optional", "limit": "optional, 1 to limits.searchLimitMax" },
-        "returns": "entries only: id, kind, title, summary, trust, anchorState, match (searchMatches) and score"
+        "returns": "entries only: id, kind, title, summary, trust, anchorState, match (searchMatches), score, and how old each one is (age)",
+        "hit": ["id", "kind", "title", "summary", "trust", "anchorState", "match", "score", "recordedAt", "changedAt", "anchorCheckedRef", "anchorCheckedAt"],
+        "age": {
+          "why": "So that a caller can judge for itself how old what an entry says is (the wiki_search review, 2026-11-06): anchorState verified says that the last check found the anchors as recorded (anchorStates), never that what the entry says still holds. Every hit carries all four, on the runner door and on the owner's GET /api/wiki/search alike; a time is ISO 8601 in UTC.",
+          "recordedAt": "When the entry was recorded: the birth of its lineage (wiki_entry.recorded_at), when it was first proposed or written. No amend moves it; a supersede is a lineage of its own.",
+          "changedAt": "When its current revision was written (the created_at of the wiki_entry_revision at its current_revision): the last change to what it says. An anchor check writes no revision and leaves it as it was. Null only for an entry deleted while the search read it.",
+          "anchorCheckedRef": "The ref its anchors were last checked at (wiki_entry.anchor_checked_ref): a commit of the space's main, as the maintenance run reports it. Null until the first check, and again after an amend that gives the anchors anew (anchorRules.verify.aggregate); an amend that leaves them alone keeps it, so a check can be older than changedAt.",
+          "anchorCheckedAt": "When that check was made (wiki_entry.anchor_checked_at); null exactly when anchorCheckedRef is."
+        }
       },
       "wiki_get": {
         "readOnly": true,

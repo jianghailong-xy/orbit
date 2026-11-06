@@ -23,6 +23,8 @@
  */
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { after, test } from 'node:test';
 
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
@@ -46,6 +48,11 @@ import { WikiService } from './wiki.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
+
+/** A hit's fields, as the contract lists them (`agentSurface.toolSpecs.wiki_search.hit`). */
+const HIT_FIELDS: string[] = JSON.parse(
+  readFileSync(path.join(path.resolve(__dirname, '../../../..'), 'contracts/wiki.contract.json'), 'utf8'),
+).agentSurface.toolSpecs.wiki_search.hit;
 
 interface Harness {
   base: string;
@@ -178,10 +185,14 @@ interface Hit {
   anchorState: string;
   match: string[];
   score: number;
-  /** Present only when the caller asked (`?include=space,topics,anchor`). */
+  /** How old the entry is (contract `age`), on every hit. */
+  recordedAt: string;
+  changedAt: string | null;
+  anchorCheckedRef: string | null;
+  anchorCheckedAt: string | null;
+  /** Present only when the caller asked (`?include=space,topics`). */
   spaceSlug?: string;
   topics?: string[];
-  anchorCheckedRef?: string | null;
 }
 
 const hitsOf = (answer: Answer): Hit[] => answer.body.hits as Hit[];
@@ -640,12 +651,17 @@ test('0307 · the wiki search path', { skip, concurrency: 1, timeout: 300_000 },
     const answer = await ownerSearch(h, owner, { q: '闭集', space: here });
     assert.equal(answer.body.semantic, false, 'the semantic leg did not run');
     assert.equal(answer.body.q, '闭集', 'the query as it was understood comes back');
+    assert.deepEqual(
+      HIT_FIELDS,
+      ['id', 'kind', 'title', 'summary', 'trust', 'anchorState', 'match', 'score', 'recordedAt', 'changedAt', 'anchorCheckedRef', 'anchorCheckedAt'],
+      "the contract's hit, read where every end reads it",
+    );
     for (const hit of hitsOf(answer)) {
       assert.deepEqual(
-        Object.keys(hit).sort(),
+        Object.keys(hit),
         // `publicId` is the interceptor's twin of `id`, the API's convention for every address.
-        ['anchorState', 'id', 'kind', 'match', 'publicId', 'score', 'summary', 'title', 'trust'],
-        "a hit carries the contract's fields and no others: no fields, no sources, no history",
+        [...HIT_FIELDS, 'publicId'],
+        "a hit carries the contract's fields, in its order, and no others: no fields, no sources, no history",
       );
       assert.ok(hit.score > 0 && hit.score <= 2 / 61, `a fused score is a sum of two RRF terms: ${hit.score}`);
     }
@@ -658,20 +674,17 @@ test('0307 · the wiki search path', { skip, concurrency: 1, timeout: 300_000 },
     assert.deepEqual(declined.body, answer.body, 'declining it answers identically too');
   });
 
-  await t.test('a hit asked for its space, topics and anchor carries them — and nothing more', async () => {
+  await t.test('a hit asked for its space and topics carries them — and nothing more', async () => {
     // The owner's ⌘K OPENS what it finds: an entry's page is `/wiki/<space>/e/<id>`, and the row
-    // under the title names the topic and the last anchor check. None of it is part of a hit's
-    // answer, which is why it arrives only when named (`include`).
+    // under the title names the topic. Neither is part of a hit's answer, which is why they arrive
+    // only when named (`include`). The last anchor check was a third until every hit carried it.
     const asked = await ownerSearch(h, owner, { q: '闭集', space: here, include: 'space,topics,anchor' });
     assert.equal(asked.status, 200, asked.body);
     const hit = hitFor(asked, closedSets, 'the convention, asked about in full');
     assert.deepEqual(
-      Object.keys(hit).sort(),
-      [
-        'anchorCheckedRef', 'anchorState', 'id', 'kind', 'match', 'publicId', 'score', 'spaceSlug',
-        'summary', 'title', 'topics', 'trust',
-      ],
-      'asking adds exactly the three named fields',
+      Object.keys(hit),
+      [...HIT_FIELDS, 'spaceSlug', 'topics', 'publicId'],
+      'asking adds exactly the two named fields, and anchor is no name any more',
     );
     // The slug is the space's own spelling — the one `/wiki/<space>/e/<id>` takes — read back off
     // the space document rather than restated here.
@@ -688,16 +701,15 @@ test('0307 · the wiki search path', { skip, concurrency: 1, timeout: 300_000 },
     // One name at a time, and a name that is not a field: neither adds anything.
     const one = await ownerSearch(h, owner, { q: '闭集', space: here, include: 'space' });
     assert.deepEqual(
-      Object.keys(hitFor(one, closedSets, 'the convention, asked about its space')).sort(),
-      ['anchorState', 'id', 'kind', 'match', 'publicId', 'score', 'spaceSlug', 'summary', 'title', 'trust'],
+      Object.keys(hitFor(one, closedSets, 'the convention, asked about its space')),
+      [...HIT_FIELDS, 'spaceSlug', 'publicId'],
       'only what was asked for',
     );
-    const none = await ownerSearch(h, owner, { q: '闭集', space: here, include: 'nonsense' });
-    assert.deepEqual(
-      none.body.hits,
-      (await ownerSearch(h, owner, { q: '闭集', space: here })).body.hits,
-      'a name that is not a field is not an answer',
-    );
+    const plain = (await ownerSearch(h, owner, { q: '闭集', space: here })).body.hits;
+    for (const name of ['nonsense', 'anchor']) {
+      const none = await ownerSearch(h, owner, { q: '闭集', space: here, include: name });
+      assert.deepEqual(none.body.hits, plain, `${name} is not a field to ask for, so it is not an answer`);
+    }
   });
 
   await t.test("the filters narrow within the reader's own boundary and cannot widen it", async () => {
@@ -926,6 +938,88 @@ test('0307 · the wiki search path', { skip, concurrency: 1, timeout: 300_000 },
     // And the next read is recorded: the failure held nothing shut.
     await sessionSearch(h, machine, reader, { q: 'run-pg-spec.sh' });
     assert.ok((await h.prisma.wikiExposure.count({ where: { sessionId: reader, channel: 'search' } })) > 0);
+  });
+
+  await t.test('a hit says how old it is: when it was recorded and revised, and where its anchors were checked', async () => {
+    // An entry of this case's own, and the last case in the file: what it does to the entry moves no other.
+    const dated = await ownerEntry(h, owner, here, {
+      kind: 'recipe',
+      title: 'Regenerate the Prisma client after a schema edit',
+      summary: 'npx prisma generate rewrites the client the apiserver imports.',
+      fields: { steps: ['npx prisma generate'], verify: { command: 'npx prisma validate', expectedExit: 0 } },
+      anchors: [{ type: 'path', path: 'src/apiserver/prisma/schema.prisma' }],
+    });
+    const id = toUuid(dated);
+    // What a hit for it has to say, read off the rows the doors wrote (contract `age`).
+    const stored = async () => {
+      const entry = await h.prisma.wikiEntry.findUniqueOrThrow({
+        where: { id },
+        select: { recordedAt: true, currentRevision: true, anchorCheckedRef: true, anchorCheckedAt: true },
+      });
+      const revision = await h.prisma.wikiEntryRevision.findFirstOrThrow({
+        where: { entryId: id, revision: entry.currentRevision },
+        select: { createdAt: true },
+      });
+      return {
+        recordedAt: entry.recordedAt.toISOString(),
+        changedAt: revision.createdAt.toISOString(),
+        anchorCheckedRef: entry.anchorCheckedRef,
+        anchorCheckedAt: entry.anchorCheckedAt?.toISOString() ?? null,
+      };
+    };
+    const ageOf = ({ recordedAt, changedAt, anchorCheckedRef, anchorCheckedAt }: Hit) =>
+      ({ recordedAt, changedAt, anchorCheckedRef, anchorCheckedAt });
+    // Both doors answer with the same hit: the agent's wiki_search, and the owner's ⌘K.
+    const hits = async (): Promise<Hit[]> => [
+      hitFor(await sessionSearch(h, machine, mine, { q: 'prisma generate' }), dated, 'the runner door'),
+      hitFor(await ownerSearch(h, owner, { q: 'prisma generate', space: here }), dated, 'the owner door'),
+    ];
+
+    // Written, and never checked.
+    const born = await stored();
+    assert.equal(born.anchorCheckedRef, null, 'the fixture: nothing has checked the anchor yet');
+    for (const hit of await hits()) {
+      assert.deepEqual(ageOf(hit), born, 'recorded, its first revision, and no check');
+      assert.equal(hit.anchorState, 'unchecked');
+    }
+
+    // The maintenance run checks the anchor on a commit, through the one writer a check has.
+    const job = randomUUID();
+    await h.sql.query(`INSERT INTO "wiki_job"("id","owner_id","space_id","kind","state") VALUES ($1,$2,$3,'maintain','queued')`, [
+      job,
+      owner.id,
+      toUuid(here),
+    ]);
+    const commit = '7de4f86bcf1c01d2fcff6d154a039e5c54961df8';
+    const report = await new WikiService(h.prisma as unknown as PrismaService).recordAnchorChecks(
+      { ownerId: owner.id, jobId: job },
+      toUuid(here),
+      { ref: commit, entries: [{ entryId: id, revision: 1, checks: [{ index: 0, type: 'path', state: 'verified' }] }] },
+    );
+    assert.equal(report.outcomes[0]?.status, 'recorded', `the check is recorded: ${JSON.stringify(report)}`);
+    const checked = await stored();
+    assert.equal(checked.anchorCheckedRef, commit, 'the fixture: the check is on the entry');
+    assert.equal(checked.changedAt, born.changedAt, 'a check writes no revision');
+    for (const hit of await hits()) {
+      assert.deepEqual(ageOf(hit), checked, 'the commit the anchors were checked at, and when; nothing else moved');
+      assert.equal(hit.anchorState, 'verified');
+    }
+
+    // The owner amends what it says and leaves the anchor alone: a new revision of the same lineage, and a
+    // check older than what the entry now says — which a reader of `verified` has to be able to see.
+    const amended = await call(h, { bearer: owner.bearer }, 'POST', `/wiki/spaces/${here}/changesets`, {
+      rationale: 'the owner corrects it',
+      ops: [{ op: 'amend', entryId: dated, baseRevision: 1, changes: { summary: 'npx prisma generate rewrites the client every build imports.' } }],
+    });
+    expectStatus(amended, 200, 'the owner amends the recipe');
+    const revised = await stored();
+    assert.notEqual(revised.changedAt, born.changedAt, 'the fixture: a second revision');
+    for (const hit of await hits()) {
+      assert.deepEqual(ageOf(hit), revised, 'the second revision, under the same lineage and the same check');
+      assert.equal(hit.recordedAt, born.recordedAt, 'no amend moves when the entry was recorded');
+      assert.equal(hit.anchorCheckedRef, commit, 'an amend that leaves the anchors alone keeps their check');
+      assert.ok(hit.anchorCheckedAt! < hit.changedAt!, `the check is older than the revision: ${JSON.stringify(hit)}`);
+    }
   });
 
   // The fixture, read back through the database once at the end: an assertion that a search found

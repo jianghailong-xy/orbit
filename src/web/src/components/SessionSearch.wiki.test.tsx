@@ -142,8 +142,9 @@ describe('⌘K with the wiki above the sessions', () => {
     const asked = fetchMock.mock.calls.map(([url]) => String(url));
     expect(asked.some((url) => url.startsWith('/api/wiki/search'))).toBe(true);
     expect(asked.some((url) => url.startsWith('/api/sessions/search'))).toBe(true);
-    // The wiki's read asks for where an entry lives, because this caller opens what it finds.
-    expect(asked.find((url) => url.startsWith('/api/wiki/search'))).toContain('include=space,topics,anchor');
+    // The wiki's read asks for where an entry lives, because this caller opens what it finds. The anchor
+    // check its row marks comes on every hit, so it is not asked for.
+    expect(asked.find((url) => url.startsWith('/api/wiki/search'))).toMatch(/[?&]include=space,topics$/u);
 
     expect(texts('.wk-pal-group')).toEqual([`${SEARCH_WIKI_GROUP} 1`, SEARCH_GROUP_SESSIONS]);
     // The wiki rows come first in the DOM, which is also the order the cursor walks.

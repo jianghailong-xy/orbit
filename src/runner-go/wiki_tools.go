@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -145,8 +146,11 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 			"name": "wiki_search",
 			"description": "What the Orbit wiki already knows about this codebase, as entries: a keyword and path " +
 				"search over titles, summaries, aliases and anchor paths. It returns entries and nothing else — id, " +
-				"kind, title, summary, trust, anchorState, the legs that matched and a score — so read one in full " +
-				"with wiki_get when the summary is not enough. Search BEFORE proposing: a near neighbour is better " +
+				"kind, title, summary, trust, anchorState, the legs that matched, a score, and how old each one is: " +
+				"when it was recorded, when its current revision was written, and the commit and time its anchors were " +
+				"last checked at — so read one in full with wiki_get when the summary is not enough. A verified anchor " +
+				"was found as recorded, which does not say the entry still holds: weigh an old one against the code. " +
+				"Search BEFORE proposing: a near neighbour is better " +
 				"reinforced than duplicated, and the answer to a proposal names what it resembles. A session reads " +
 				"only the space its workspace is bound to, plus the proposals it made itself and the owner has not " +
 				"decided yet; another session's pending proposal is not visible here.",
@@ -176,6 +180,14 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 							"description": "Which legs found it: keyword, path, or (phase 2) semantic.",
 						},
 						"score": map[string]interface{}{"type": "number", "description": "The fused rank. Compare within one answer only."},
+						// How old the entry is (contract `agentSurface.toolSpecs.wiki_search.age`). Each is left
+						// out where the server sent none: a check not made yet, or a server that predates them.
+						"recordedAt": map[string]interface{}{"type": "string", "description": "When the entry was first recorded, ISO 8601 in UTC. No amend moves it."},
+						"changedAt":  map[string]interface{}{"type": "string", "description": "When its current revision was written, ISO 8601 in UTC: the last change to what it says."},
+						"anchorCheckedRef": map[string]interface{}{"type": "string",
+							"description": "The commit its anchors were last checked at. Absent until a check; it can be older than changedAt."},
+						"anchorCheckedAt": map[string]interface{}{"type": "string",
+							"description": "When that check was made, ISO 8601 in UTC. A check finds the anchors as recorded or not; it does not re-read what the entry says."},
 					}, "id", "kind", "title"),
 				},
 			}, "hits"),
@@ -555,7 +567,9 @@ type wikiSearchAnswer struct {
 }
 
 // wikiSearchHit is one entry as the search ranked it, and no more than that: the legs that found it
-// are the answer's own account of why it is here.
+// are the answer's own account of why it is here. Its fields are the contract's `hit`, in that order,
+// and they are all that reaches the engine: the MCP door's structuredContent and `orbit wiki search
+// --json` are this struct serialized, so a field the server sends and this does not name is dropped.
 type wikiSearchHit struct {
 	ID          string   `json:"id"`
 	Kind        string   `json:"kind"`
@@ -565,6 +579,12 @@ type wikiSearchHit struct {
 	AnchorState string   `json:"anchorState"`
 	Match       []string `json:"match"`
 	Score       float64  `json:"score"`
+	// How old the entry is (contract `age`), for the agent to judge for itself. A null from the server
+	// (no check yet) and a field a server that predates them never sent are both left out, never "".
+	RecordedAt       string `json:"recordedAt,omitempty"`
+	ChangedAt        string `json:"changedAt,omitempty"`
+	AnchorCheckedRef string `json:"anchorCheckedRef,omitempty"`
+	AnchorCheckedAt  string `json:"anchorCheckedAt,omitempty"`
 }
 
 // wikiGetAnswer is what wiki_get returns: the entries that were read, and the ids that were not.
@@ -732,9 +752,52 @@ func describeWikiSearch(answer wikiSearchAnswer, query wikiSearchQuery) string {
 	for _, hit := range answer.Hits {
 		fmt.Fprintf(&out, "  %s  %s  [%s · anchor %s · %s]  matched: %s\n",
 			hit.ID, hit.Title, hit.Trust, hit.AnchorState, hit.Kind, strings.Join(hit.Match, ", "))
+		if age := describeWikiHitAge(hit); age != "" {
+			fmt.Fprintf(&out, "    %s\n", age)
+		}
 	}
 	out.WriteString("Read one in full with wiki_get, and refer to it in a reply as [title](orbit-wiki:<id>).")
 	return out.String()
+}
+
+// describeWikiHitAge is the line under a hit that says how old it is (contract `age`): when the entry
+// was recorded, when its current revision was written, and the commit its anchors were last checked
+// at. Empty from a server that predates them; a check not made yet is the hit's own "anchor unchecked".
+func describeWikiHitAge(hit wikiSearchHit) string {
+	var parts []string
+	if hit.RecordedAt != "" {
+		parts = append(parts, "recorded "+wikiTimeOf(hit.RecordedAt))
+	}
+	if hit.ChangedAt != "" {
+		parts = append(parts, "current revision "+wikiTimeOf(hit.ChangedAt))
+	}
+	if hit.AnchorCheckedRef != "" {
+		check := "anchors last checked at " + wikiRefOf(hit.AnchorCheckedRef)
+		if hit.AnchorCheckedAt != "" {
+			check += " on " + wikiTimeOf(hit.AnchorCheckedAt)
+		}
+		parts = append(parts, check)
+	}
+	return strings.Join(parts, " · ")
+}
+
+// wikiTimeOf is a server time to the minute, in UTC (2026-10-03 11:39Z); one that does not parse is
+// shown as it came.
+func wikiTimeOf(value string) string {
+	at, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return value
+	}
+	return at.UTC().Format("2006-01-02 15:04Z")
+}
+
+// wikiRefOf is a check's ref as it is typed: a commit by its first 12 characters, as the server's own
+// challenge names the commit it checked at, and any other ref whole.
+func wikiRefOf(ref string) string {
+	if wikiCommitSha.MatchString(ref) {
+		return ref[:12]
+	}
+	return ref
 }
 
 func describeWikiGet(answer wikiGetAnswer) string {

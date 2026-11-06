@@ -798,12 +798,22 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
 
   | 工具 | 注解 | 参数 | 返回 |
   | --- | --- | --- | --- |
-  | `wiki_search` | readOnly | query, kinds?, topic?, paths?, limit ≤10 | 只返回条目：id, kind, title, summary, trust, anchorState, match（keyword / semantic / path）, score |
+  | `wiki_search` | readOnly | query, kinds?, topic?, paths?, limit ≤10 | 只返回条目：id, kind, title, summary, trust, anchorState, match（keyword / semantic / path）, score，以及新旧：recordedAt, changedAt, anchorCheckedRef, anchorCheckedAt（见下） |
   | `wiki_get` | readOnly | ids ≤10, include?（sources, anchors, history） | 完整条目；锚点带最近复验（ref 与时间）；出处带 `orbit-*` 链接 |
   | `wiki_propose` | 不带 destructive | ops, rationale, idempotencyKey, dryRun? | 逐 op：pending（Automatic 等核实的带 `waitsFor: "verification"`）/ applied / conflict（当前版与 diff）/ refused（理由），add 与 supersede 旁附 `similar[]` |
   | `wiki_note` | 不带 destructive | text ≤2000, paths? ≤10（每条 ≤200）, corrects? | `{ noted, noteId, created, readBy, challenged? }`，见下面的 `wiki_note` |
 
   CLI 同名同参：`orbit wiki search | get | propose | note`。**没有**接受、确认、决定、硬删、整页覆盖的工具；确认只存在于 owner 通道。
+- **`wiki_search` 的每条结果都说明条目新旧**（JSON 的 `toolSpecs.wiki_search.hit` 与 `age`，2026-11-06 的 wiki_search 评审）：
+  `anchorState: verified` 只说明上次核对时锚点照原样还在，不说明条目内容仍然成立，所以把时间交给读的人自己判断。
+  runner 门和 owner 的 `GET /api/wiki/search` 给的是同一形状；时间是 UTC 的 ISO 8601。
+  - `recordedAt`：条目写入的时间，即这条 lineage 诞生的时间（`wiki_entry.recorded_at`），amend 不改它；supersede 是新的 lineage。
+  - `changedAt`：当前修订写入的时间（当前 revision 的 `created_at`），即内容最后一次改动。锚点核对不写修订，也不改它。
+  - `anchorCheckedRef` / `anchorCheckedAt`：锚点最后一次核对的提交和时间（`wiki_entry.anchor_checked_ref` / `anchor_checked_at`）。
+    从没核对过时两者都是 null；amend 重给锚点时清空，只改别的字段时保留，所以核对可能早于 `changedAt`。
+  - 字段的顺序和集合由 `hit` 列出，各端各自钉住：服务端的回答（`wiki-search.pg.spec.ts`）、runner 的 `wikiSearchHit` 结构体与 outputSchema
+    （`TestWikiAgentSurfaceIsTheContracts`；MCP 的 structuredContent 和 `orbit wiki search --json` 都是这个结构体序列化出来的，不在结构体里的字段到不了 agent），
+    OrbitKit 与 Android 的 `WikiSearchHit` 模型（`WikiContractTests`）。给结果加字段就走这条路。
 - **`orbit wiki verify --space ID [--json]`**（JSON 的 `agentSurface.verify`）：和 `orbit wiki import`（§5.1）一样没有 MCP 工具对应——它把会话
   的活交给服务端、等它做完，是命令的等待，不是一次工具调用。它请服务端核实本会话提议到这个 Automatic space、还在等核实的 op
   （`reviewModes.verification.routes.request`），再读列表的 `waiting`（`routes.list`）直到归零，打印服务端核实了几个。列表不说
