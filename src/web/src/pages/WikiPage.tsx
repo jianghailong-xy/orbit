@@ -9,6 +9,7 @@ import { WikiArticleRoute } from '../components/WikiArticlePage';
 import { WikiBrowsePage } from '../components/WikiBrowsePage';
 import { WikiDocRoute } from '../components/WikiDocPage';
 import { WikiCard, WikiEmpty } from '../components/WikiCards';
+import { WikiChatHost } from '../components/WikiChat';
 import { WikiContentsButton, WikiContentsProvider, WikiDirectory, type WikiDirectoryAt } from '../components/WikiDirectory';
 import { WikiEntryDrawer } from '../components/WikiEntryDrawer';
 import { WikiHome, WikiHomeState } from '../components/WikiHome';
@@ -129,8 +130,20 @@ export function WikiPage({ route }: { route: WikiRoute }) {
 
   const space: SpaceRow = resolved;
   // The space's own settings are a page of their own, the app's Settings page for one space (mock 19):
-  // no search line or status row over them.
+  // no search line or status row over them, and no chat (design §3).
   if (route === 'settings') return <WikiSettingsPage space={resolved} />;
+  // Every other page of the space wears the chat's round button and docks its panel (design §3–§4): one host
+  // over all of them, so turning a page keeps the panel and what its composer holds.
+  return (
+    <WikiChatHost space={space} route={route}>
+      <WikiSpaceRoute route={route} space={space} spaces={spaces.data ?? [space]} />
+    </WikiChatHost>
+  );
+}
+
+/** A page of one space, under the chat's host: the routes' bodies, each in the frame its view wears. */
+function WikiSpaceRoute({ route, space, spaces }: { route: WikiRoute; space: SpaceRow; spaces: SpaceRow[] }) {
+  const params = useParams();
   if (route === 'run') return <RunRoute space={space} runParam={params.run ?? ''} />;
   if (route === 'review') {
     return (
@@ -143,7 +156,7 @@ export function WikiPage({ route }: { route: WikiRoute }) {
   if (route === 'activity') {
     return (
       <WikiFrame space={space} at={{ view: 'activity' }}>
-        <WikiActivityPage key={space.slug} space={space} spaces={spaces.data ?? [space]} status={<WikiStatusRow space={space} />} />
+        <WikiActivityPage key={space.slug} space={space} spaces={spaces} status={<WikiStatusRow space={space} />} />
       </WikiFrame>
     );
   }

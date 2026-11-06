@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -15,6 +15,7 @@ import {
   UpOutlined,
 } from '@ant-design/icons';
 import { WikiEmpty } from './WikiCards';
+import { WikiChatLitCtx, useWikiChatAsk } from './WikiChat';
 import { WikiDiagram } from './WikiDiagram';
 import { WIKI_DOC_SECTION_EVENT, WikiContentsButton } from './WikiDirectory';
 import { WikiAnchorMark, WikiKindMark, WikiStatusBadge, WikiTrustBadge } from './WikiMarks';
@@ -167,6 +168,9 @@ export function WikiDocPage({
   const tags = wikiDocTags(doc);
   const updated = wikiDocUpdatedParts(doc);
   const warn = wikiDocUpdatedWarn(doc);
+  // A selection in the text snaps to whole sentences and offers Ask, beside a wiki chat (WikiChat.tsx).
+  const articleRef = useRef<HTMLElement>(null);
+  const chat = useWikiChatAsk(doc, articleRef);
 
   // The section on screen, for the directory to light (`WIKI_DOC_SECTION_EVENT`): the topmost one whose
   // heading has come into the top half of the window. jsdom has no IntersectionObserver; nothing is lit there.
@@ -212,7 +216,7 @@ export function WikiDocPage({
   };
 
   return (
-    <article className="wk-art-page wk-dc-page">
+    <article className="wk-art-page wk-dc-page" ref={articleRef}>
       <div className="wk-art-crumbrow">
         <div className="wk-crumb">
           <Link to={wikiSpacePath(spaceSlug)}>{WIKI_TITLE}</Link>
@@ -247,22 +251,25 @@ export function WikiDocPage({
       {doc.status === 'needs_review' && <WikiDocReviewBanner doc={doc} />}
       <WikiDocScope doc={doc} spaceSlug={spaceSlug} phone={phone} />
 
-      <div className="wk-art wk-dc-body">
-        {doc.sections.map((section) => (
-          <WikiDocSectionText
-            key={section.key}
-            doc={doc}
-            section={section}
-            notes={notes}
-            open={open}
-            setOpen={setOpen}
-            phone={phone}
-            github={github}
-            spaceSlug={spaceSlug}
-            via={via}
-          />
-        ))}
-      </div>
+      <WikiChatLitCtx.Provider value={chat.lit}>
+        <div className="wk-art wk-dc-body">
+          {doc.sections.map((section) => (
+            <WikiDocSectionText
+              key={section.key}
+              doc={doc}
+              section={section}
+              notes={notes}
+              open={open}
+              setOpen={setOpen}
+              phone={phone}
+              github={github}
+              spaceSlug={spaceSlug}
+              via={via}
+            />
+          ))}
+        </div>
+      </WikiChatLitCtx.Provider>
+      {chat.ask}
       {phone && (
         <Drawer
           placement="bottom"
@@ -505,6 +512,9 @@ function WikiDocSentence({
   const navigate = useNavigate();
   const mark = wikiSentenceMark(sentence);
   const lit = open?.at === at;
+  // Lit for a wiki chat: snapped from a selection, or quoted in its composer.
+  const chatLit = useContext(WikiChatLitCtx);
+  const snapped = sentence.id !== undefined && chatLit.has(sentence.id);
   const words = <WikiWords text={sentence.text} />;
   const note = mark ? wikiMarkNote(sentence, section, doc) : null;
   const explained: ReactNode = note ? (
@@ -529,12 +539,14 @@ function WikiDocSentence({
   ) : null;
   const text = mark ? (
     <Tooltip content={explained} toggleOnClick side="bottom" align="start" popupClassName="wk-dc-tip-pop">
-      <span className={MARK_CLASS[mark]} data-mark={mark} tabIndex={0}>
+      <span className={`${MARK_CLASS[mark]}${snapped ? ' wk-snap' : ''}`} data-mark={mark} data-wk-sid={sentence.id} tabIndex={0}>
         {words}
       </span>
     </Tooltip>
   ) : (
-    <span className={lit ? 'hl' : undefined}>{words}</span>
+    <span className={[lit ? 'hl' : '', snapped ? 'wk-snap' : ''].filter(Boolean).join(' ') || undefined} data-wk-sid={sentence.id}>
+      {words}
+    </span>
   );
   return (
     <>

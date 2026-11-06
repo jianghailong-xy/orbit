@@ -2,7 +2,7 @@ import { HttpException, NotFoundException } from '@nestjs/common';
 import { WIKI_DOCS_BUILD_JOB, type WikiPlanBuildProgress, type WikiPlanBuildReport, type WikiRepoFileRead } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
 import { stripNul } from '../runner-api/strip-nul';
-import { wikiDocsBuildJobPrincipal, type WikiDocs } from '../wiki/wiki-docs';
+import { wikiDocsBuildJobPrincipal, type WikiDocs, type WikiDocWriteCause } from '../wiki/wiki-docs';
 import { gatherDocMaterial, storedSessionCondition, type StoredSessionCondition } from '../wiki/wiki-docs-material';
 import { ownerEnvLiterals } from '../wiki/wiki-dossier';
 import { wikiPlanProjectIds } from '../wiki/wiki-plan';
@@ -171,7 +171,8 @@ export async function runWikiDocsBuildJob(context: WikiJobContext, deps: WikiDoc
         throw error;
       }
     },
-    write: (slug, request) => write(deps, job.ownerId, job.spaceId, slug, request),
+    // Every section it writes over is kept as it stood, as replaced by the build of this version (docs.versions).
+    write: (slug, request) => write(deps, job.ownerId, job.spaceId, slug, request, { reason: 'build', jobId: job.id, planVersion: plan.version }),
     ask: async (call) => {
       try {
         const row = await context.ask(call.step, call.unit, { system: call.system, prompt: call.prompt, maxTokens: WIKI_DOCS_BUILD_JOB.maxTokens });
@@ -324,11 +325,18 @@ async function readConfirmedPlan(
 // ── The write ───────────────────────────────────────────────────────────────────────────────────
 
 /** One write through the shared writer (`WikiDocs.write`); a refusal is the section's, said as the runner said it. */
-async function write(deps: WikiDocsBuildJobDeps, ownerId: string, spaceId: string, slug: string, request: WikiDocsWriteRequest): Promise<WikiDocsWriteAnswer> {
+async function write(
+  deps: WikiDocsBuildJobDeps,
+  ownerId: string,
+  spaceId: string,
+  slug: string,
+  request: WikiDocsWriteRequest,
+  cause: WikiDocWriteCause,
+): Promise<WikiDocsWriteAnswer> {
   try {
     // What the model wrote goes to the shared writer without any U+0000 (contract `jobs.serverWrites`): Postgres keeps
     // none, and a model may copy one out of a code piece it was shown — the runner gate drops it from a report the same way.
-    const answer = await deps.docs.write(wikiDocsBuildJobPrincipal(ownerId), spaceId, slug, stripNul(request));
+    const answer = await deps.docs.write(wikiDocsBuildJobPrincipal(ownerId), spaceId, slug, stripNul(request), cause);
     return { status: answer.status, sections: answer.sections, counts: answer.counts };
   } catch (error) {
     if (error instanceof WikiRefusalError) throw new WikiDocsWriteRefused(refusalText(spaceId, error));

@@ -2685,7 +2685,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // and no column any preserved trigger reads is touched), and no function, trigger or type is created, replaced or
       // dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored session reads
       // NULL in the new column, and the new table starts empty.
-      '0474_abandoned_checkout'],
+      '0474_abandoned_checkout',
+      // 0475 is one new table, `wiki_doc_section_version` (the versions a rewritten section keeps, contract
+      // `docs.versions`), with its own primary key, CHECKs, a foreign key to `wiki_space` and two indexes, all created IF NOT
+      // EXISTS. It is not a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of
+      // the six preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so
+      // it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: the table starts empty.
+      '0475_wiki_doc_section_version'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

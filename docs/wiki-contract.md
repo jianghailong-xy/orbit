@@ -3331,3 +3331,20 @@ See changes 逐句对照（`wikiDocSentenceDiff`）：一版的句子和替换�
   句子存为 withdrawn、那一节 stale），先问 `requireConfirmedPlan`；已确认 plan 里没有这一节、或版本不是这一节的，回 409。
 - 只认 JWT：带会话头 `WIKI_OWNER_CHANNEL_ONLY`，个人访问令牌 `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，别的 owner 的版本一律 404。聊天的 Undo 经同一个写入方恢复（§28.6）。
 - 没有工具读写版本（`docs.tool` 不变）；恢复在事务提交后发一次 `wiki.changed`。
+
+### 30.6 落地（C3）
+
+- **写入方说原因**：`WikiDocs.write(principal, spaceId, slug, body, cause)`，`cause` 由写的作业给出：维护 `{ reason: 'maintenance', jobId }`、生成
+  `{ reason: 'build', jobId, planVersion }`、跟进 `{ reason: 'merge' | 'landing', jobId, title, sha }` 或 `{ reason: 'chat', jobId, title }`；`restore` 只属于恢复，
+  调用方写不出来。写的回答每节多两项：`versionId`（这次替换留下的版本）和 `changed`（逐句对照改了几句），第一次写、没重写的节都是 null；跟进作业的报告
+  （§29.7 的 `versionId`、`changed`）从这里取。
+- **读的形状**（类型在 `src/shared/src/wikiDocs.ts`）：`reason` 是 `wikiDocVersionReason` 收的对象 `{ kind, title?, sha?, planVersion? }`，只带这个原因有的项；
+  `replacedBy` 是 `{ kind: 'job', jobId }` 或 `{ kind: 'restore', versionId }`；Docs 行的 `title` 是节的标题。恢复回
+  `{ spaceId, slug, key, versionId, outcome, keptVersionId, changed, status, counts }`：`outcome` 是 `restored`，或这一节已经是那一版的样子时的 `unchanged`
+  ——块、每句的块、正文和脚注、`materialSha256` 与 `repoSha` 都和那一版一样——什么都不写、不留版、句子 id 不变，所以重复按不会挤掉旧版。状态、新事实记号和
+  撤句不比：它们由写入按当时的文档和条目推出，照那一版再写一次也是按当时的推；stale 也不比，标记照旧留着。`keptVersionId` 是被替换的文字留成的版本，
+  恢复它就撤回这次恢复。恢复不改文档行的 plan 版本和提交。
+- **聊天的 Undo**（C6）走同一个写入方：`WikiDocs.restore(ownerId, versionId, null, { slug, key })`，给了节就核对，版本不是这一节的回 409。它自己开事务；
+  要和撤回变更集放进同一个事务时，从同一个 `store` 接进去，锁序照旧先条目、后文档。
+- **Activity 的 `left` 行随 C4**：跟进作业成为作业种类之前没有这种行，`doc-changes` 现在只列 `section` 行。
+- 迁移 `0475_wiki_doc_section_version`，一节的版本按 `seq` 排先后；pg spec 是 `src/apiserver/src/wiki/wiki-doc-versions.pg.spec.ts`。
