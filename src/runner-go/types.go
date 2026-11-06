@@ -421,6 +421,14 @@ type HeartbeatResponse struct {
 	// "no gate" — so nil replaces the last value rather than preserving it. Contrast
 	// MaxConcurrent, where 0 is not a legal setting and therefore does mean "no news".
 	MinFreeDiskMb *int `json:"minFreeDiskMb,omitempty"`
+	// The storage budget this machine's checkouts are held to when that is not its disk: a Docker
+	// managed runner's volume, as the channel that enforces the volume's limit last measured it
+	// (docs/session-checkout-storage-design.md §5). With one, the worktree sweep judges free space
+	// against it and its floor instead of MinFreeDiskMb (checkoutStorage.judge). Absence replaces,
+	// as MinFreeDiskMb's does: nil is no budget and the sweep's rule as it was, so every answer that
+	// states the floor states the budget too, the link's quiet answer included. Nil from older
+	// control planes and for every runner the control plane has no measurement for.
+	StorageBudget *StorageBudget `json:"storageBudget,omitempty"`
 	// The one Codex rate-limit reset step claimed for this process
 	// (docs/codex-rate-limit-reset-contract.md §6). Nil from older control planes and whenever no
 	// operation is claimed for it; nothing acts on it until this binary declares
@@ -453,6 +461,25 @@ type HeartbeatResponse struct {
 	// response until the control plane records a check made at or after it. Nil on older control
 	// planes and whenever nobody is asking.
 	RegionCheckRequest *ClaudeRegionCheckRequest `json:"regionCheckRequest,omitempty"`
+}
+
+// StorageBudget is the storage a runner's checkouts may take where statfs cannot say: a Docker local
+// volume is a directory on the host's disk, so statfs inside the container reports the host's free
+// space, while the channel stops the container once the volume holds more than its limit
+// (VOLUME_OVER_LIMIT). The sweep reads free space as LimitBytes − UsageBytes, plus the bytes of the
+// checkouts it began removing after MeasuredAt, and never more than statfs reports.
+type StorageBudget struct {
+	// LimitBytes is the most the volume may hold.
+	LimitBytes int64 `json:"limitBytes"`
+	// UsageBytes is what it held when measured, as Docker's GET /system/df sizes a volume: apparent
+	// sizes, each inode once.
+	UsageBytes int64 `json:"usageBytes"`
+	// MeasuredAt is when that measurement finished, RFC 3339, by the clock of the host the volume is
+	// on, which the container shares. A checkout this runner began removing after it is still in
+	// UsageBytes; one it began removing before it is not, or not all of it.
+	MeasuredAt string `json:"measuredAt"`
+	// FloorBytes is the free space below which the sweep reclaims checkouts. Zero is no floor.
+	FloorBytes int64 `json:"floorBytes"`
 }
 
 // ClaudeRegionCheckRequest mirrors @orbit/shared: when the owner asked for a region check, ISO 8601.

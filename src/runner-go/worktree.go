@@ -1367,8 +1367,9 @@ func buildFilePatches(files []ChangedFile, byPath map[string]string) []FilePatch
 
 // removeWorktree tears down the session's checkout (the branch is kept) and drops the base
 // ref. Called only from gcWorktrees, which has asked the control plane whether this one may go.
-// Finalization leaves every checkout standing.
-func removeWorktree(wt *Worktree) {
+// Finalization leaves every checkout standing. Under a storage budget, storage counts the
+// checkout's bytes once it is gone (checkoutStorage.removing); nil counts nothing.
+func removeWorktree(wt *Worktree, storage *checkoutStorage) {
 	// The checkout is dropped on the belief that finalizeWorktree already put its contents on the
 	// branch. Confirm that belief instead of acting on it: staging or committing can fail, and
 	// `worktree remove --force` is then the step that destroys the session's only copy of its
@@ -1379,10 +1380,14 @@ func removeWorktree(wt *Worktree) {
 		return
 	}
 	teardownWorktreeProcesses(wt.Path)
+	removal := storage.removing(wt.Path)
 	if _, err := git(wt.RepoDir, "worktree", "remove", "--force", wt.Path); err != nil {
 		logln("worktree remove failed for", wt.Session+":", err)
 		_ = os.RemoveAll(wt.Path)
 		_, _ = git(wt.RepoDir, "worktree", "prune")
+	}
+	if checkoutAbsent(wt.Path) {
+		removal.done()
 	}
 	_, _ = git(wt.RepoDir, "update-ref", "-d", baseRefName(wt.Session))
 }
@@ -2778,6 +2783,13 @@ type worktreeGCPressure struct {
 	// floorMb is Runner.minFreeDiskMb as this machine's control plane last reported it; 0 is
 	// "no floor configured", which is also what an older control plane's silence stores.
 	floorMb int64
+	// budget is the storage budget the reading was judged against (checkoutStorage.judge), nil
+	// without one. With one, freeBytes is already what the budget leaves, the floor is its
+	// FloorBytes, and floorMb is not read.
+	budget *StorageBudget
+	// storage is where the sweep counts the checkouts it removes against that budget, so that the
+	// reading taken again counts them too. Nil without a budget, which counts and measures nothing.
+	storage *checkoutStorage
 	// reread takes the reading again, for a sweep that has just freed space. Nil for a reading that
 	// stands as it is.
 	reread func() worktreeGCPressure
@@ -2796,8 +2808,12 @@ func (p worktreeGCPressure) again() worktreeGCPressure {
 // no reading and no floor both mean NO GATE, because a gate that fires on absent information
 // would reclaim checkouts precisely on the machines it knows nothing about, and the failure it
 // guards against — a volume filling up — is one its own silence cannot evidence. Documented as
-// fail-open on the server side too (workspaces.service.ts).
+// fail-open on the server side too (workspaces.service.ts). A storage budget's floor follows the
+// same rule: zero is no gate.
 func (p worktreeGCPressure) belowFloor() bool {
+	if p.budget != nil {
+		return p.measured && p.budget.FloorBytes > 0 && p.freeBytes < uint64(p.budget.FloorBytes)
+	}
 	if !p.measured || p.floorMb <= 0 {
 		return false
 	}
@@ -2806,11 +2822,13 @@ func (p worktreeGCPressure) belowFloor() bool {
 
 // measureWorktreePressure reads the filesystem holding the worktrees root. That root, rather than
 // the machine as a whole, because it is the only filesystem this sweep can free space on — the
-// same reason the control plane measures per working directory instead of per machine.
-func measureWorktreePressure(floorMb int64) worktreeGCPressure {
+// same reason the control plane measures per working directory instead of per machine. Where the
+// control plane sent a storage budget, the reading is judged against that (checkoutStorage.judge).
+func measureWorktreePressure(floorMb int64, storage *checkoutStorage) worktreeGCPressure {
 	free, _, ok := diskUsage(worktreesDir())
-	return worktreeGCPressure{freeBytes: free, measured: ok, floorMb: floorMb,
-		reread: func() worktreeGCPressure { return measureWorktreePressure(floorMb) }}
+	pressure := storage.judge(worktreeGCPressure{freeBytes: free, measured: ok, floorMb: floorMb})
+	pressure.reread = func() worktreeGCPressure { return measureWorktreePressure(floorMb, storage) }
+	return pressure
 }
 
 // maxRetainedEligibleCheckouts caps how many removable checkouts a roomy disk is allowed to keep.
@@ -2933,7 +2951,7 @@ func gcWorktrees(t *Transport, live map[string]bool, pressure worktreeGCPressure
 			if !filepath.IsAbs(common) {
 				common = filepath.Join(path, common)
 			}
-			removeWorktree(&Worktree{Path: path, RepoDir: filepath.Dir(common), Session: c.name})
+			removeWorktree(&Worktree{Path: path, RepoDir: filepath.Dir(common), Session: c.name}, pressure.storage)
 			// removeWorktree refuses a checkout still holding work no branch has, and logs its
 			// own reason for doing so. Only claim the reclamation that actually happened —
 			// "reclaimed" beside a directory still on disk is what makes a leak hard to read.
@@ -2945,7 +2963,10 @@ func gcWorktrees(t *Transport, live map[string]bool, pressure worktreeGCPressure
 		// Not a worktree of anything we can find: there is no repo to unregister it from and no
 		// base ref we could name, so the directory itself is all there is to remove.
 		teardownWorktreeProcesses(path)
-		_ = os.RemoveAll(path)
+		removal := pressure.storage.removing(path)
+		if os.RemoveAll(path) == nil {
+			removal.done()
+		}
 		logln("gc: removed orphan worktree dir", c.name, "—", reason)
 	}
 }
@@ -3339,7 +3360,7 @@ func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPr
 				now.Sub(spending).Round(time.Second), resumableSweepBudget, len(candidates)-i))
 			return false
 		}
-		taken, err := reclaimResumableCheckout(t, pool, root, c.name)
+		taken, err := reclaimResumableCheckout(t, pool, root, c.name, pressure.storage)
 		if (taken || err != nil) && spending.IsZero() {
 			spending = now
 		}
@@ -3363,7 +3384,10 @@ func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPr
 //
 // False with no error is the rule keeping it. An error says this checkout could not be judged or taken at all,
 // which is no answer about it and starts no wait: on a disk too full to write the mark, the next sweep may be able to.
-func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string) (bool, error) {
+//
+// Under a storage budget, storage counts the checkout's bytes once it is gone (checkoutStorage.removing); nil counts
+// nothing.
+func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string, storage *checkoutStorage) (bool, error) {
 	if pool.checkoutDriven(name) {
 		return false, nil
 	}
@@ -3399,6 +3423,7 @@ func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string
 	}
 	repo := gitCommonDir(path)
 	aside := filepath.Join(root, reclaimingCheckoutPrefix+name)
+	removal := storage.removing(path)
 	if err := os.Rename(path, aside); err != nil {
 		_, _ = git(path, "update-ref", "-d", absentRefName(name))
 		logln("gc: keeping checkout", name+": moving it aside failed:", err)
@@ -3406,6 +3431,8 @@ func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string
 	}
 	if err := os.RemoveAll(aside); err != nil {
 		logln("gc: removing checkout", name, "failed, the next sweep tries again:", err)
+	} else {
+		removal.done()
 	}
 	if repo != "" {
 		_, _ = git(repo, "worktree", "prune")
