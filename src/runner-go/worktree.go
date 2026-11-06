@@ -678,7 +678,7 @@ func setupSourceWorktree(job *ClaimedSession, baseDir string, atRest bool) strin
 	}
 
 	base := pin
-	add := []string{"worktree", "add", "-b", job.Branch, wtPath, pin}
+	add := []string{"-b", job.Branch, wtPath, pin}
 	revived := branchExists(repoRoot, job.Branch)
 	hadBaseRef := false
 	if revived {
@@ -697,10 +697,10 @@ func setupSourceWorktree(job *ClaimedSession, baseDir string, atRest bool) strin
 		}
 		// Whatever took the checkout may have left git believing it is still there.
 		_, _ = git(repoRoot, "worktree", "prune")
-		add = []string{"worktree", "add", wtPath, job.Branch}
+		add = []string{wtPath, job.Branch}
 	}
 	_, _ = git(repoRoot, "update-ref", baseRefName(job.SessionID), base)
-	if _, err := git(repoRoot, add...); err != nil {
+	if err := addSessionCheckout(job.SessionID, repoRoot, wtPath, base, add...); err != nil {
 		if !hadBaseRef {
 			_, _ = git(repoRoot, "update-ref", "-d", baseRefName(job.SessionID))
 		}
@@ -859,7 +859,7 @@ func setupCheckout(job *ClaimedSession, baseDir string, atRest bool) string {
 		}
 		// Whatever took the checkout may have left git believing it is still there.
 		_, _ = git(repoRoot, "worktree", "prune")
-		_, err = git(repoRoot, "worktree", "add", wtPath, job.Branch)
+		err = addSessionCheckout(job.SessionID, repoRoot, wtPath, base, wtPath, job.Branch)
 		if err != nil && kept != "" {
 			// This session has had a checkout, its base ref says so, and that is where it goes on. A disk
 			// too full to hold it, or the branch checked out somewhere else, is why it did not come back,
@@ -871,7 +871,7 @@ func setupCheckout(job *ClaimedSession, baseDir string, atRest bool) string {
 		_, _ = git(repoRoot, "update-ref", "-d", absentRefName(job.SessionID))
 	} else {
 		_, _ = git(repoRoot, "update-ref", baseRefName(job.SessionID), base)
-		_, err = git(repoRoot, "worktree", "add", "-b", job.Branch, wtPath, base)
+		err = addSessionCheckout(job.SessionID, repoRoot, wtPath, base, "-b", job.Branch, wtPath, base)
 	}
 	if err != nil {
 		_, _ = git(repoRoot, "update-ref", "-d", baseRefName(job.SessionID))
@@ -1135,13 +1135,20 @@ func (ops worktreeGitOps) stagedLiveDiff(wt *Worktree, withPatch bool) ([]Change
 	// every tracked file: 1.5–14 s per call on Orbit's own 18k-file checkout under load
 	// (2026-10-09), and a turn's completion — the session leaving Running after a Stop — waited
 	// on it.
-	if !ops.seedIndexFromCheckout(wt.Path, idx, env) {
+	add := []string{"add", "-A"}
+	if ops.seedIndexFromCheckout(wt.Path, idx, env) {
+		// --sparse in a sparse checkout (addAllArgs), over this index only: it keeps the skip-worktree mark of
+		// every path the checkout leaves out, and one read fresh from HEAD has none, so there --sparse would
+		// stage the deletion of each of them. Without it git leaves those paths alone, and a new file under one
+		// makes the live diff fail rather than lie.
+		add = ops.addAllArgs(wt.Path)
+	} else {
 		_ = os.Remove(idx)
 		if _, err := ops.runEnv(wt.Path, env, "read-tree", "HEAD"); err != nil {
 			return nil, nil
 		}
 	}
-	if _, err := ops.runEnv(wt.Path, env, "add", "-A"); err != nil {
+	if _, err := ops.runEnv(wt.Path, env, add...); err != nil {
 		return nil, nil
 	}
 	numOut, err := ops.runEnv(wt.Path, env, "diff", "--cached", "--numstat", baseSha)
@@ -2317,7 +2324,7 @@ func commitWorktree(req CommitCommand) commitOutcome {
 		}
 		return out
 	}
-	if err := gitIndex("add", "-A"); err != nil {
+	if err := gitIndex(addAllArgs(wtPath)...); err != nil {
 		return fail(err)
 	}
 	// `diff --cached --quiet` exits 0 when nothing is staged → the tree is already clean.
@@ -2352,7 +2359,7 @@ func indexLockHeld(err error) bool {
 // oldest four days old.
 const staleIndexLockAge = time.Minute
 
-// stageForFinalize is `git add -A` for finalizeWorktree, plus the one recovery the finalize
+// stageForFinalize is `git add -A` (addAllArgs) for finalizeWorktree, plus the one recovery the finalize
 // moment can justify: breaking an index.lock nobody is using.
 //
 // A lock left behind by a git that crashed or was killed — a runner restart or self-update is the
@@ -2363,7 +2370,8 @@ const staleIndexLockAge = time.Minute
 // can be mid-index-write here. breakStaleIndexLock adds the evidence the runner cannot get from
 // that alone, and staging is retried once when the lock is gone.
 func stageForFinalize(dir string) error {
-	_, err := git(dir, "add", "-A")
+	add := addAllArgs(dir)
+	_, err := git(dir, add...)
 	if err == nil || !indexLockHeld(err) {
 		return err
 	}
@@ -2373,7 +2381,7 @@ func stageForFinalize(dir string) error {
 		return err
 	}
 	logln("broke", why, "— retrying the staging it was refusing")
-	_, retried := git(dir, "add", "-A")
+	_, retried := git(dir, add...)
 	return retried
 }
 
@@ -3169,15 +3177,21 @@ func checkoutHasNothingToLose(path, branch string, inDependencies bool) bool {
 		}
 	}
 	// `git status` says nothing about a file marked assume-unchanged or skip-worktree, whatever has been
-	// done to it. Anything but H in this listing is one.
-	tracked, err := gitCtx(ctx, path, "ls-files", "-v")
+	// done to it. Anything but H in this listing is one, except a skip-worktree path with nothing on disk,
+	// which is how a sparse checkout leaves a path out: what it holds is in the index, and status reads that.
+	// -z, so that a name git would quote is looked for on disk as it is.
+	tracked, err := gitCtx(ctx, path, "ls-files", "-v", "-z")
 	if err != nil {
 		return false
 	}
-	for _, line := range strings.Split(tracked, "\n") {
-		if line != "" && line[0] != 'H' {
-			return false
+	for _, line := range strings.Split(tracked, "\x00") {
+		if line == "" || line[0] == 'H' {
+			continue
 		}
+		if name, ok := strings.CutPrefix(line, "S "); ok && checkoutAbsent(filepath.Join(path, name)) {
+			continue
+		}
+		return false
 	}
 	// With no remote this counts all of history, so a repository with nowhere to push to keeps them.
 	unpushed, err := gitCtx(ctx, path, "rev-list", "--count", "HEAD", "--not", "--remotes")
@@ -3517,7 +3531,7 @@ func restoreAbsentCheckout(pool *sessionPool, job *ClaimedSession) {
 	}
 	// Whatever took the checkout may have left git believing it is still there.
 	_, _ = git(wt.RepoDir, "worktree", "prune")
-	if _, err := git(wt.RepoDir, "worktree", "add", wt.Path, branch); err != nil {
+	if err := addSessionCheckout(job.SessionID, wt.RepoDir, wt.Path, wt.baseSha(), wt.Path, branch); err != nil {
 		refuseSourceWorktree(job, sourceRefusalWorktreeRequired, fmt.Sprintf("the session's checkout could not be restored from %s: %v", branch, err))
 		pool.refuseSupervisorCheckout(job.SessionID, job.SourceRefusal)
 		return
