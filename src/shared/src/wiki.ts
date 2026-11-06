@@ -1095,9 +1095,10 @@ export interface WikiProposeResult {
 }
 
 /** `wiki_search` returns entries, and nothing else (contract `agentSurface.toolSpecs.wiki_search`
- *  `returns`: id, kind, title, summary, trust, anchorState, match, score). A session is bound to one
- *  space, so a hit there needs nothing about where it lives — and a search that quietly grew the
- *  whole entry back onto every hit is the RAG collapse `wiki-retrieval.ts` refuses on purpose. */
+ *  `hit`: id, kind, title, summary, trust, anchorState, match, score, and how old the entry is). A
+ *  session is bound to one space, so a hit there needs nothing about where it lives — and a search
+ *  that quietly grew the whole entry back onto every hit is the RAG collapse `wiki-retrieval.ts`
+ *  refuses on purpose. */
 export interface WikiSearchHit {
   id: string;
   kind: WikiEntryKind;
@@ -1107,6 +1108,15 @@ export interface WikiSearchHit {
   anchorState: WikiAnchorState;
   match: WikiSearchMatch[];
   score: number;
+  // How old what the entry says is, so the reader can judge it (contract `age`): a verified anchor
+  // was found as recorded, which says nothing about whether the entry still holds.
+  /** When the lineage was recorded, which no amend moves (`WikiEntry.recordedAt`). */
+  recordedAt: string;
+  /** When its current revision was written. Null only for an entry deleted while the search read it. */
+  changedAt: string | null;
+  /** The commit its anchors were last checked at, and when; both null until a check. */
+  anchorCheckedRef: string | null;
+  anchorCheckedAt: string | null;
 }
 
 /**
@@ -1115,16 +1125,15 @@ export interface WikiSearchHit {
  *
  * For the one caller that OPENS what it finds: the owner's ⌘K. An entry's page is
  * `/wiki/<space>/e/<id>` — a space AND an id, while the id alone names no page — and the row under
- * the title says which topic it is filed under and what the last anchor check found. None of them
- * is part of a hit's answer, which is why they arrive only when named.
+ * the title says which topic it is filed under. Neither is part of a hit's answer, which is why they
+ * arrive only when named. (The last anchor check, `anchorCheckedRef`, was a third until every hit
+ * carried it.)
  */
 export interface WikiSearchRowAdditions {
   /** The space the entry is filed in, whose slug its page is reached under. */
   spaceSlug?: string;
   /** The entry's topic slugs, as the Wiki's own pages spell them. */
   topics?: string[];
-  /** The ref the entry's anchors were last checked at, for the `✓ <ref>` mark. */
-  anchorCheckedRef?: string | null;
 }
 
 export type WikiSearchRow = WikiSearchHit & WikiSearchRowAdditions;

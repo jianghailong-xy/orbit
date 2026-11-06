@@ -210,9 +210,13 @@ data class WikiTimelineItem(
 @Serializable
 data class WikiTimeline(val items: List<WikiTimelineItem>? = null)
 
+/** One entry a search found. The last four say how old it is (contract `agentSurface.toolSpecs.wiki_search.age`), as
+ * the server spells each time; null from a server that predates them, and for a check not made yet. */
 @Serializable
 data class WikiSearchHit(val id: String, val kind: String? = null, val title: String? = null, val summary: String? = null,
-    val trust: String? = null, val anchorState: String? = null, val match: List<String>? = null, val topics: List<String>? = null)
+    val trust: String? = null, val anchorState: String? = null, val match: List<String>? = null, val topics: List<String>? = null,
+    val recordedAt: String? = null, val changedAt: String? = null, val anchorCheckedRef: String? = null,
+    val anchorCheckedAt: String? = null)
 
 @Serializable
 data class WikiSearchResponse(val q: String? = null, val hits: List<WikiSearchHit>? = null)
