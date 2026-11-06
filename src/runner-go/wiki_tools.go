@@ -16,17 +16,20 @@ import (
 //
 // An agent reads the wiki and proposes to it; it never decides. There is no accept, no confirm, no
 // hard delete and no page overwrite here, and no tool that would be one: what an agent learned goes
-// through the space's review mode, which decides whether it waits or is live. Four tools, split by
+// through the space's review mode, which decides whether it waits or is live. Five tools, split by
 // risk rather than by entity — the two that only read say so, the one that proposes changes what
 // anyone can see, and wiki_note only leaves a claim for maintenance to check, unless it corrects an
-// entry, which flags it at once.
+// entry, which flags it at once. The fifth, wiki_draft, is a wiki chat's alone (contract
+// `agentSurface.chat.draft`): it makes a card the chat's owner may press, and the server refuses it to
+// every other session. In a wiki chat wiki_propose and a wiki_note's corrects make cards too, and
+// nothing of the wiki changes until the owner presses one.
 //
 // WHAT A SESSION MAY READ IS WHAT ITS WORKSPACE IS BOUND TO. The space comes from the calling
 // session's own header on the server side (never from an argument here), so nothing a model writes
 // can widen the reach of a call; a session reads the entries its bound workspace shares, plus the
 // proposals it made itself and the owner has not decided.
 //
-// The same four verbs are `orbit wiki search|get|propose|note` (wiki_cli.go), which run the runWikiTool
+// The same five verbs are `orbit wiki search|get|propose|note|draft` (wiki_cli.go), which run the runWikiTool
 // below: one implementation, two doors.
 
 // The contract's limits, repeated so a schema states the bounds a request would be refused against.
@@ -38,7 +41,13 @@ const (
 	wikiNoteTextMaxChars = 2000
 	wikiNotePathsMax     = 10
 	wikiNotePathMaxChars = 200
+	// contracts/wiki.contract.json chat.rules.rewritesMax: the most sections one card rewrites.
+	wikiDraftSectionsMax = 5
 )
+
+// wikiDraftKinds is what wiki_draft drafts (contract `agentSurface.chat.draft.params.kind`): a rewrite of sections from
+// main, or a plan change. The plan kind arrives with the plan card, and the server refuses it until then.
+var wikiDraftKinds = []string{"rewrite", "plan"}
 
 // wikiEntryKinds is contracts/wiki.contract.json kinds, in the order the contract lists them. The
 // reserved phase-3 kind (`assumption`) is not here: an agent may not propose one.
@@ -96,6 +105,19 @@ const wikiNoteDescription = "Tell the wiki something this session learned that s
 	"wiki yet and may never be. Not for progress or status: use task_progress_report. If your engine keeps its own " +
 	"memory, what you write there is read the same way: do not write both. To say an entry is wrong, pass corrects " +
 	"with its id: the entry is flagged at once."
+
+// wikiDraftDescription is contracts/wiki.contract.json `agentSurface.chat.draft.description`, word for word, and
+// wiki_tools_test.go holds the two equal. It says first that nothing is written until the owner presses the card, and
+// last that it works only in a wiki chat, which the server enforces for every other session (WIKI_SESSION_EXCLUDED).
+const wikiDraftDescription = "Draft, for the owner of this wiki chat to apply, a change that is not an entry: a rewrite of " +
+	"wiki sections from main, when the code changed and a section did not follow it, or a change to how the wiki's " +
+	"documents are planned. Nothing is written until the owner presses Apply on the card, so never call a draft applied. " +
+	"A change to what the wiki knows is an entry: use wiki_propose. Works only in a wiki chat."
+
+// wikiReplacesDescription is what the `replaces` parameter of the three drafting tools says (contract
+// `agentSurface.chat.replaces`).
+const wikiReplacesDescription = "In a wiki chat only: the id of an open card of this chat that this one replaces, " +
+	"when you revise a draft. The card it names reads Replaced from then on. Any other session leaves it unread."
 
 // wikiSourceRefs is what each source kind takes as its ref (contracts/wiki.contract.json
 // `sourceInput.refs`), said where a source is filled in: a tool_use_id where a row's id goes is the
@@ -281,6 +303,7 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 					"type":        "boolean",
 					"description": "Check every op and answer as the request would, recording nothing and publishing nothing.",
 				},
+				"replaces": map[string]interface{}{"type": "string", "description": wikiReplacesDescription},
 			}, "ops", "rationale", "idempotencyKey"),
 			"outputSchema": obj(map[string]interface{}{
 				"changesetId": map[string]interface{}{
@@ -288,12 +311,25 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 					"description": "The changeset this batch was recorded as; null when nothing was recorded (a dry run, or every op refused).",
 				},
 				"replayed": map[string]interface{}{"type": "boolean", "description": "True when this is the recorded answer to an earlier request under the same idempotencyKey."},
+				// A wiki chat's answer (contract `agentSurface.chat.propose`): one card the owner may press, nothing written.
+				"status":  map[string]interface{}{"type": "string", "enum": []string{"draft"}, "description": "In a wiki chat: draft — the ops that passed are one card for the owner to apply, and nothing of the wiki changed."},
+				"draftId": map[string]interface{}{"type": "string", "description": "In a wiki chat: the card the ops that passed became. Pass it as replaces when you revise it."},
+				"similar": map[string]interface{}{
+					"type":        "array",
+					"description": "In a wiki chat: the entries the card's adds and supersedes resemble, shown on the card before the press.",
+					"items":       map[string]interface{}{"type": "object"},
+				},
+				"rewrites": map[string]interface{}{
+					"type":        "array",
+					"description": "In a wiki chat: the sections the card's press would rewrite, each with where it is and its title.",
+					"items":       map[string]interface{}{"type": "object"},
+				},
 				"ops": map[string]interface{}{
 					"type":        "array",
 					"description": "One answer per op, by its 0-based position in the request.",
 					"items": obj(map[string]interface{}{
 						"seq":    map[string]interface{}{"type": "integer"},
-						"status": map[string]interface{}{"type": "string", "enum": []string{"pending", "applied", "conflict", "refused"}},
+						"status": map[string]interface{}{"type": "string", "enum": []string{"pending", "applied", "conflict", "refused", "draft"}},
 						"opId":   map[string]interface{}{"type": []string{"string", "null"}},
 						"entryId": map[string]interface{}{
 							"type":        []string{"string", "null"},
@@ -344,8 +380,9 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 				},
 				"corrects": map[string]interface{}{
 					"type":        "string",
-					"description": "The id of an entry this says is wrong, as wiki_search returned it. The entry is flagged at once, and the owner answers the flag in Review.",
+					"description": "The id of an entry this says is wrong, as wiki_search returned it. The entry is flagged at once, and the owner answers the flag in Review. In a wiki chat the flag is a card the owner may apply instead.",
 				},
+				"replaces": map[string]interface{}{"type": "string", "description": wikiReplacesDescription},
 			}, "text"),
 			"outputSchema": obj(map[string]interface{}{
 				"noted":   map[string]interface{}{"type": "boolean", "description": "True: the claim is kept. It is not in the wiki."},
@@ -353,7 +390,8 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 				"created": map[string]interface{}{"type": "boolean", "description": "False when the space already held this text, so nothing new was written."},
 				"readBy":  map[string]interface{}{"type": "string", "description": "What reads the note against the session's records, in the server's words."},
 				"challenged": obj(map[string]interface{}{
-					"status":      map[string]interface{}{"type": "string", "enum": []string{"applied", "pending", "refused"}, "description": "refused: the entry is not flagged, and reasons say why. Anything else: it is. The note is kept either way."},
+					"status":      map[string]interface{}{"type": "string", "enum": []string{"applied", "pending", "refused", "draft"}, "description": "refused: the entry is not flagged, and reasons say why. draft, in a wiki chat: the flag is a card for the owner to apply, and the entry is not flagged yet. Anything else: it is flagged. The note is kept either way."},
+					"draftId":     map[string]interface{}{"type": "string", "description": "draft: the card the flag became."},
 					"changesetId": map[string]interface{}{"type": []string{"string", "null"}},
 					"opId":        map[string]interface{}{"type": []string{"string", "null"}},
 					"entryId":     map[string]interface{}{"type": []string{"string", "null"}},
@@ -361,6 +399,52 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 				}, "status"),
 			}, "noted", "noteId", "created", "readBy"),
 			// It keeps a claim, and at most flags an entry for the owner to answer: nothing is taken away.
+			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
+		},
+		{
+			"name":        "wiki_draft",
+			"description": wikiDraftDescription,
+			"inputSchema": obj(map[string]interface{}{
+				"kind": map[string]interface{}{
+					"type":        "string",
+					"enum":        wikiDraftKinds,
+					"description": "rewrite: these sections lag behind main and are written again from it. plan: a change to how the documents are planned (not open yet: the server refuses it).",
+				},
+				"sections": map[string]interface{}{
+					"type":     "array",
+					"minItems": 1,
+					"maxItems": wikiDraftSectionsMax,
+					"items": obj(map[string]interface{}{
+						"doc":     map[string]interface{}{"type": "string", "description": "The document's slug, as the page and its attachments name it."},
+						"section": map[string]interface{}{"type": "string", "description": "The section's key."},
+					}, "doc", "section"),
+					"description": "rewrite: 1 to " + strconv.Itoa(wikiDraftSectionsMax) + " written sections of the confirmed plan, each { doc, section }.",
+				},
+				"change": map[string]interface{}{"type": "object", "description": "plan: the change, shaped as a plan proposal's."},
+				"reason": map[string]interface{}{
+					"type":        "string",
+					"description": "Why, in a sentence or two: what lags behind main, or what the plan should do. The card shows it.",
+				},
+				"replaces": map[string]interface{}{"type": "string", "description": wikiReplacesDescription},
+				"idempotencyKey": map[string]interface{}{
+					"type":        "string",
+					"minLength":   1,
+					"maxLength":   200,
+					"description": "Required, and yours to choose: the same key with the same request answers with the card it made.",
+				},
+			}, "kind", "reason", "idempotencyKey"),
+			"outputSchema": obj(map[string]interface{}{
+				"status":   map[string]interface{}{"type": "string", "enum": []string{"draft"}, "description": "draft: a card for the owner to press; nothing was written."},
+				"draftId":  map[string]interface{}{"type": "string", "description": "The card. Pass it as replaces when you revise it."},
+				"kind":     map[string]interface{}{"type": "string", "enum": wikiDraftKinds},
+				"replayed": map[string]interface{}{"type": "boolean", "description": "True when this is the card an earlier call under the same idempotencyKey made."},
+				"rewrites": map[string]interface{}{
+					"type":        "array",
+					"description": "The sections the press would rewrite, each with where it is and its title.",
+					"items":       map[string]interface{}{"type": "object"},
+				},
+			}, "status", "draftId", "kind"),
+			// It makes a card and nothing else: no accept, no confirm, no page overwritten (contract `notTools`).
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
 	}
@@ -372,6 +456,7 @@ var wikiToolNames = map[string]bool{
 	"wiki_get":     true,
 	"wiki_propose": true,
 	"wiki_note":    true,
+	"wiki_draft":   true,
 }
 
 // callWikiTool runs one wiki tool for the session this server runs in, and reports whether it
@@ -513,6 +598,9 @@ func runWikiTool(t *Transport, caller cliOrchestrationContext, name string, args
 			body["dryRun"] = true
 			dryRun = true
 		}
+		if replaces := strings.TrimSpace(getString(args, "replaces")); replaces != "" {
+			body["replaces"] = replaces
+		}
 		raw, err := t.proposeWikiChangeset(caller.sessionID, body)
 		if err != nil {
 			// A refused batch is an ANSWER, not a failed call: the door answers with the first
@@ -544,6 +632,21 @@ func runWikiTool(t *Transport, caller cliOrchestrationContext, name string, args
 			return wikiAnswer{}, fmt.Errorf("wiki_note: the server's answer is not the shape this build reads: %w", err)
 		}
 		return wikiAnswer{Text: describeWikiNote(answer), Data: answer}, nil
+
+	case "wiki_draft":
+		body, err := wikiDraftBody(args)
+		if err != nil {
+			return wikiAnswer{}, err
+		}
+		raw, err := t.draftWiki(caller.sessionID, body)
+		if err != nil {
+			return wikiAnswer{}, wikiDraftCallError(err)
+		}
+		var answer wikiDraftAnswer
+		if err := json.Unmarshal(raw, &answer); err != nil {
+			return wikiAnswer{}, fmt.Errorf("wiki_draft: the server's answer is not the shape this build reads: %w", err)
+		}
+		return wikiAnswer{Text: describeWikiDraft(answer), Data: answer}, nil
 	}
 	return wikiAnswer{}, fmt.Errorf("unknown wiki tool %q", name)
 }
@@ -612,6 +715,21 @@ type wikiProposeAnswer struct {
 	// nothing of it asks a model of this session's provider. Absent under the default runner mode, and the
 	// wording this side answers with is unchanged wherever it is absent.
 	ServedBy string `json:"servedBy"`
+	// In a wiki chat (contract `agentSurface.chat.propose`): status draft, the card the ops that passed became, the
+	// entries it resembles and the sections its press would rewrite. Nothing of the wiki was written.
+	Status   string                   `json:"status,omitempty"`
+	DraftID  string                   `json:"draftId,omitempty"`
+	Similar  []map[string]interface{} `json:"similar,omitempty"`
+	Rewrites []map[string]interface{} `json:"rewrites,omitempty"`
+}
+
+// wikiDraftAnswer is `POST /api/runner/wiki/drafts` (contract `agentSurface.chat.draft.returns`).
+type wikiDraftAnswer struct {
+	Status   string                   `json:"status"`
+	DraftID  string                   `json:"draftId"`
+	Kind     string                   `json:"kind"`
+	Replayed bool                     `json:"replayed"`
+	Rewrites []map[string]interface{} `json:"rewrites"`
 }
 
 // wikiSessionNoteAnswer is `POST /api/runner/wiki/notes` (contract `agentSurface.note.answer`). challenged is passed
@@ -645,7 +763,75 @@ func wikiNoteBody(args map[string]interface{}) (map[string]interface{}, error) {
 	if corrects := strings.TrimSpace(getString(args, "corrects")); corrects != "" {
 		body["corrects"] = corrects
 	}
+	if replaces := strings.TrimSpace(getString(args, "replaces")); replaces != "" {
+		body["replaces"] = replaces
+	}
 	return body, nil
+}
+
+// wikiDraftBody reads wiki_draft's arguments into the door's body. What the contract bounds is said here before it is
+// sent — the kind, one to five sections each with its document and its key, a reason and a key; the server holds the
+// rest (each section a written one of the confirmed plan, the plan kind not open yet) and names each field it refuses.
+func wikiDraftBody(args map[string]interface{}) (map[string]interface{}, error) {
+	kind := strings.ToLower(strings.TrimSpace(getString(args, "kind")))
+	if !contains(wikiDraftKinds, kind) {
+		return nil, fmt.Errorf("kind is required: rewrite (sections that lag behind main, written again from it) or plan")
+	}
+	reason := strings.TrimSpace(getString(args, "reason"))
+	if reason == "" {
+		return nil, fmt.Errorf("reason is required: why, in a sentence or two; the card shows it")
+	}
+	key := strings.TrimSpace(getString(args, "idempotencyKey"))
+	if key == "" {
+		return nil, fmt.Errorf("idempotencyKey is required: the same key with the same request answers with the card it " +
+			"made, so a retry after an answer you never saw drafts nothing twice")
+	}
+	body := map[string]interface{}{"kind": kind, "reason": reason, "idempotencyKey": key}
+	if kind == "rewrite" {
+		sections, err := wikiDraftSectionsArg(args["sections"])
+		if err != nil {
+			return nil, err
+		}
+		body["sections"] = sections
+	}
+	if change, ok := args["change"].(map[string]interface{}); ok {
+		body["change"] = change
+	}
+	if replaces := strings.TrimSpace(getString(args, "replaces")); replaces != "" {
+		body["replaces"] = replaces
+	}
+	return body, nil
+}
+
+// wikiDraftSectionsArg reads sections: an array of { doc, section }, or that array sent as a JSON string, which models do.
+func wikiDraftSectionsArg(raw interface{}) ([]interface{}, error) {
+	var sections []interface{}
+	switch value := raw.(type) {
+	case nil:
+		return nil, fmt.Errorf("sections is required for a rewrite: 1 to %d of { doc, section }", wikiDraftSectionsMax)
+	case []interface{}:
+		sections = value
+	case string:
+		if err := json.Unmarshal([]byte(strings.TrimSpace(value)), &sections); err != nil {
+			return nil, fmt.Errorf("sections must be a JSON array of { doc, section }: %v", err)
+		}
+	default:
+		return nil, fmt.Errorf("sections must be an array of { doc, section }")
+	}
+	if len(sections) < 1 || len(sections) > wikiDraftSectionsMax {
+		return nil, fmt.Errorf("sections takes 1 to %d sections, got %d: a card rewrites at most %d", wikiDraftSectionsMax, len(sections), wikiDraftSectionsMax)
+	}
+	out := make([]interface{}, 0, len(sections))
+	for i, one := range sections {
+		section, ok := one.(map[string]interface{})
+		doc := strings.TrimSpace(getString(section, "doc"))
+		key := strings.TrimSpace(getString(section, "section"))
+		if !ok || doc == "" || key == "" {
+			return nil, fmt.Errorf("sections[%d] must name the document's slug as doc and the section's key as section", i)
+		}
+		out = append(out, map[string]interface{}{"doc": doc, "section": key})
+	}
+	return out, nil
 }
 
 // wikiOpsArg reads ops: an array of objects, or that array sent as a JSON string, which models do.
@@ -824,6 +1010,9 @@ func describeWikiGet(answer wikiGetAnswer) string {
 // describeWikiPropose says what happened to the batch in the terms that decide what the agent is
 // allowed to say about it: what is pending is not knowledge, and what was applied is live.
 func describeWikiPropose(answer wikiProposeAnswer, names []string, dryRun bool) string {
+	if answer.Status == "draft" {
+		return describeWikiChatPropose(answer, names, dryRun)
+	}
 	var out strings.Builder
 	switch {
 	case dryRun:
@@ -870,6 +1059,82 @@ func describeWikiPropose(answer wikiProposeAnswer, names []string, dryRun bool) 
 	return out.String()
 }
 
+// describeWikiChatPropose is a wiki chat's answer (contract `agentSurface.chat.propose`): the ops that passed are one card
+// the owner may press, and nothing of the wiki changed — which is the one thing the agent must not say otherwise.
+func describeWikiChatPropose(answer wikiProposeAnswer, names []string, dryRun bool) string {
+	var out strings.Builder
+	switch {
+	case dryRun:
+		out.WriteString("Dry run in a wiki chat: every op was checked, and NO card was made — the owner sees nothing of this.\n")
+	case answer.Replayed:
+		fmt.Fprintf(&out, "This request already made card %s under this idempotencyKey, and this is that answer; nothing was drafted twice.\n", answer.DraftID)
+	default:
+		fmt.Fprintf(&out, "Drafted card %s for the owner of this wiki chat. Nothing in the wiki changed: the owner presses Apply, "+
+			"Edit or Discard on the card, and until then no session reads any of it. Say what the card would change, and never "+
+			"call it applied; pass replaces: %s when you revise it.\n", answer.DraftID, answer.DraftID)
+	}
+	for _, op := range answer.Ops {
+		if status, _ := op["status"].(string); status == "draft" {
+			line := "op " + strconv.Itoa(int(wikiFloat(op["seq"])))
+			if seq := int(wikiFloat(op["seq"])); seq >= 0 && seq < len(names) && names[seq] != "" {
+				line += " " + names[seq]
+			}
+			line += ": on the card"
+			if similar := wikiMapSlice(op["similar"]); len(similar) > 0 {
+				parts := make([]string, 0, len(similar))
+				for _, neighbour := range similar {
+					id, _ := neighbour["id"].(string)
+					title, _ := neighbour["title"].(string)
+					parts = append(parts, strings.TrimSpace(id+" "+title))
+				}
+				line += "; similar: " + strings.Join(parts, " | ")
+			}
+			out.WriteString("  " + line + "\n")
+			continue
+		}
+		out.WriteString("  " + describeWikiOp(op, names, answer.ServedBy == "server") + "\n")
+	}
+	if len(answer.Rewrites) > 0 {
+		wheres := make([]string, 0, len(answer.Rewrites))
+		for _, section := range answer.Rewrites {
+			where, _ := section["where"].(string)
+			title, _ := section["title"].(string)
+			wheres = append(wheres, strings.TrimSpace(where+" "+title))
+		}
+		out.WriteString("Once applied, the card's press rewrites: " + strings.Join(wheres, "; ") + ".\n")
+	}
+	return out.String()
+}
+
+// describeWikiDraft says what wiki_draft made: a card, and nothing written.
+func describeWikiDraft(answer wikiDraftAnswer) string {
+	var out strings.Builder
+	if answer.Replayed {
+		fmt.Fprintf(&out, "This request already made card %s under this idempotencyKey, and this is that answer; nothing was drafted twice.", answer.DraftID)
+	} else {
+		fmt.Fprintf(&out, "Drafted card %s (%s) for the owner of this wiki chat. Nothing was written: the owner presses the card, and "+
+			"only then are the sections rewritten. Never call it applied; pass replaces: %s when you revise it.", answer.DraftID, answer.Kind, answer.DraftID)
+	}
+	if len(answer.Rewrites) > 0 {
+		wheres := make([]string, 0, len(answer.Rewrites))
+		for _, section := range answer.Rewrites {
+			where, _ := section["where"].(string)
+			title, _ := section["title"].(string)
+			wheres = append(wheres, strings.TrimSpace(where+" "+title))
+		}
+		out.WriteString("\nIts press would rewrite: " + strings.Join(wheres, "; ") + ".")
+	}
+	return out.String()
+}
+
+// wikiFloat is a JSON number, or -1.
+func wikiFloat(raw interface{}) float64 {
+	if value, ok := raw.(float64); ok {
+		return value
+	}
+	return -1
+}
+
 // describeWikiNote says what a note is in the terms that decide what the agent may say of it: it is kept, and it
 // is not knowledge. What it corrects is told apart, since that takes effect now, or does not.
 func describeWikiNote(answer wikiSessionNoteAnswer) string {
@@ -882,6 +1147,11 @@ func describeWikiNote(answer wikiSessionNoteAnswer) string {
 	fmt.Fprintf(&out, " It is not in the wiki yet and may never be: maintenance reads a note against the records of the "+
 		"session that wrote it, and writes an entry only if they bear it out. Read by: %s.", answer.ReadBy)
 	if answer.Challenged == nil {
+		return out.String()
+	}
+	if status, _ := answer.Challenged["status"].(string); status == "draft" {
+		draft, _ := answer.Challenged["draftId"].(string)
+		fmt.Fprintf(&out, "\nIn this wiki chat the flag is card %s, for the owner to apply: the entry is NOT flagged until they do.", draft)
 		return out.String()
 	}
 	if status, _ := answer.Challenged["status"].(string); status != "refused" {
@@ -1146,6 +1416,17 @@ func wikiNoteCallError(err error) error {
 	return wikiCallError("wiki_note", err)
 }
 
+// wikiDraftCallError is wikiCallError for wiki_draft, whose door is newer still: a server that has the wiki and not this
+// route answers a plain 404, and what is true then is that this binary is newer than its server, so no card was made.
+func wikiDraftCallError(err error) error {
+	if wikiDoorMissing(err) {
+		return fmt.Errorf("wiki_draft: this Orbit server is too old for wiki_draft (it answered 404 for POST " +
+			"/api/runner/wiki/drafts), so no card was made. Tell the owner what should be rewritten, or draft an entry " +
+			"with wiki_propose")
+	}
+	return wikiCallError("wiki_draft", err)
+}
+
 // refusalCodeOf and refusalMessageOf pull a wiki refusal's code and sentence out of a response the
 // transport wrapped, so one id's failure can be shown beside the ids that were read.
 func refusalCodeOf(err error) string {
@@ -1172,5 +1453,5 @@ func refusalMessageOf(err error) string {
 
 // ── Transport ───────────────────────────────────────────────────────────────────────────────────
 
-// searchWiki, getWikiEntry, proposeWikiChangeset and writeWikiNote live in transport.go with the other ops; the
-// header these calls carry is the calling session's, which is what the door resolves the space from.
+// searchWiki, getWikiEntry, proposeWikiChangeset, writeWikiNote and draftWiki live in transport.go with the other ops;
+// the header these calls carry is the calling session's, which is what the door resolves the space from.

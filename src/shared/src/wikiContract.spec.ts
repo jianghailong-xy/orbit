@@ -1646,9 +1646,10 @@ describe('wiki contract', () => {
     expect(status('WIKI_OWNER_CHANNEL_ONLY')).toBe(403);
   });
 
-  it('gives agents four tools and two doors, and no way to decide', () => {
+  it('gives agents five tools and two doors, and no way to decide', () => {
     const surface = CONTRACT.agentSurface;
-    expect(surface.tools).toEqual(['wiki_search', 'wiki_get', 'wiki_propose', 'wiki_note']);
+    // The fifth, wiki_draft, is a wiki chat's alone (agentSurface.chat.draft): every other session is refused it.
+    expect(surface.tools).toEqual(['wiki_search', 'wiki_get', 'wiki_propose', 'wiki_note', 'wiki_draft']);
     expect(keysOf(surface.toolSpecs)).toEqual(surface.tools);
     expect(keysOf(surface.cli)).toEqual(surface.tools);
     expect(surface.toolSpecs.wiki_search.readOnly).toBe(true);
@@ -1657,6 +1658,8 @@ describe('wiki contract', () => {
     expect(surface.toolSpecs.wiki_propose.destructive).toBe(false);
     expect(surface.toolSpecs.wiki_note.readOnly).toBe(false);
     expect(surface.toolSpecs.wiki_note.destructive).toBe(false);
+    expect(surface.toolSpecs.wiki_draft.readOnly).toBe(false);
+    expect(surface.toolSpecs.wiki_draft.destructive).toBe(false);
     for (const tool of surface.tools) expect(tool).not.toMatch(/accept|confirm|decide|delete/u);
 
     expect(keysOf(surface.doors)).toEqual(['user', 'runner']);
@@ -1708,7 +1711,8 @@ describe('wiki contract', () => {
     expect(surface.note.rules).toEqual({ ...WIKI_NOTE_RULES });
     expect(surface.note.route).toBe('POST /api/runner/wiki/notes');
     expect(surface.doors.runner.routes).toContain(surface.note.route);
-    expect(keysOf(surface.toolSpecs.wiki_note.params)).toEqual(['text', 'paths', 'corrects']);
+    expect(keysOf(surface.toolSpecs.wiki_note.params)).toEqual(['text', 'paths', 'corrects', 'replaces']);
+    expect(surface.toolSpecs.wiki_note.params.replaces).toMatch(/in a wiki chat alone/u);
     expect(surface.noteDescription).toMatch(/so it is not in the wiki yet and may never be/u);
     expect(surface.noteDescription).toMatch(/pass corrects with its id: the entry is flagged at once/u);
     expect(surface.note.review).toMatch(/no op/u);

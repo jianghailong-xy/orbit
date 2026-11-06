@@ -204,6 +204,86 @@ func TestANewerMeasurementResetsTheCount(t *testing.T) {
 	}
 }
 
+// madeCounted makes a checkout of this apparent size and counts it on storage, as a new session checkout is counted,
+// and returns when it was counted finished.
+func madeCounted(t *testing.T, storage *checkoutStorage, size int64) time.Time {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "sess")
+	writeSparse(t, filepath.Join(path, "payload"), size)
+	before := len(storage.added)
+	storage.made(path)
+	if len(storage.added) != before+1 || storage.added[before].bytes != uint64(size) {
+		t.Fatalf("a %d-byte checkout must be counted once at its size, got %+v", size, storage.added)
+	}
+	return storage.added[before].finished
+}
+
+// The inverse of the removals': a session checkout this runner made counts as used from when it was finished until a
+// measurement taken after then, which counts it itself, and from then on it is not taken off again. A measurement
+// that finished while the checkout was still being made counts some of it at most, so it stays counted. A checkout
+// removed between the same two measurements as one made cancels it out.
+func TestCheckoutsMadeSinceTheMeasurementCountAsUsedUntilANewerOne(t *testing.T) {
+	storage := budgetStorage(budgetMeasured(12*oneGiB, time.Now().Add(-time.Minute)))
+	first := madeCounted(t, storage, 2*oneGiB)
+	if got := storage.judge(roomyStatfs()); got.freeBytes != 6*oneGiB || got.belowFloor() {
+		t.Fatalf("8 GiB left, then a 2 GiB checkout made: %d bytes free, below %v; want 6 GiB, over the 5 GiB floor", got.freeBytes, got.belowFloor())
+	}
+	time.Sleep(time.Millisecond)
+	second := madeCounted(t, storage, 2*oneGiB)
+	if got := storage.judge(roomyStatfs()); got.freeBytes != 4*oneGiB || !got.belowFloor() {
+		t.Fatalf("another 2 GiB made: %d bytes free, below %v; want 4 GiB, under the floor", got.freeBytes, got.belowFloor())
+	}
+	removeCounted(t, storage, oneGiB)
+	if got := storage.judge(roomyStatfs()); got.freeBytes != 5*oneGiB {
+		t.Fatalf("1 GiB removed after them: %d bytes free, want 5 GiB", got.freeBytes)
+	}
+	if !second.After(first) {
+		t.Fatalf("the two checkouts were counted finished at %v and %v; this test needs them apart", first, second)
+	}
+
+	// The channel measured after the first was made and before the second was finished: the first is in its usage,
+	// 14 GiB, and the second is not, or not all of it.
+	storage.budget.Store(budgetMeasured(14*oneGiB, second.Add(-time.Nanosecond)))
+	if got := storage.judge(roomyStatfs()); got.freeBytes != 5*oneGiB {
+		t.Fatalf("6 GiB left by the newer measurement, less the second checkout, plus the removal: %d bytes free, want 5 GiB", got.freeBytes)
+	}
+	if len(storage.added) != 1 || !storage.added[0].finished.Equal(second) {
+		t.Fatalf("the checkout the measurement counts is still kept, or the other one was dropped: %+v", storage.added)
+	}
+
+	// A measurement after all of it counts all of it: 12 + 2 + 2 - 1 GiB.
+	storage.budget.Store(budgetMeasured(15*oneGiB, time.Now()))
+	if got := storage.judge(roomyStatfs()); got.freeBytes != 5*oneGiB {
+		t.Fatalf("the newest measurement counts every change already: %d bytes free, want 5 GiB", got.freeBytes)
+	}
+	if len(storage.added) != 0 || len(storage.removed) != 0 {
+		t.Fatalf("changes the latest measurement counts are still kept: added %+v, removed %+v", storage.added, storage.removed)
+	}
+
+	madeCounted(t, storage, oneGiB)
+	if got := storage.judge(roomyStatfs()); got.freeBytes != 4*oneGiB {
+		t.Fatalf("1 GiB made after the newest measurement: %d bytes free, want 4 GiB", got.freeBytes)
+	}
+}
+
+// Without a budget, or with one that cannot be one, a checkout made is measured and counted nowhere: the walk would
+// serve nothing.
+func TestWithoutAStorageBudgetACheckoutMadeIsNotMeasured(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sess")
+	writeSparse(t, filepath.Join(path, "payload"), oneGiB)
+	var none *checkoutStorage
+	none.made(path)
+	for name, storage := range map[string]*checkoutStorage{
+		"no budget sent":         {},
+		"a budget with no limit": budgetStorage(&StorageBudget{UsageBytes: oneGiB, MeasuredAt: time.Now().UTC().Format(time.RFC3339Nano), FloorBytes: oneGiB}),
+	} {
+		storage.made(path)
+		if len(storage.added) != 0 {
+			t.Errorf("%s: a checkout was counted: %+v", name, storage.added)
+		}
+	}
+}
+
 // The bytes a removal takes off a volume as Docker sizes one: apparent sizes, each inode once, nothing for a
 // directory, and nothing for a file a hard link outside the checkout keeps.
 func TestCheckoutBytesSizesACheckoutAsDockerSizesAVolume(t *testing.T) {
@@ -335,7 +415,17 @@ func TestTheRunLoopKeepsTheStorageBudgetBesideTheFloor(t *testing.T) {
 	if got := strings.Count(body, "var storage checkoutStorage\n"); got != 1 {
 		t.Errorf("one checkoutStorage per run loop, or a sweep forgets what the last one removed: found %d", got)
 	}
-	if got := strings.Count(body, "measureWorktreePressure(diskFloorMb.Load(), &storage)"); got != 2 {
-		t.Errorf("both sweeps must read the budget: found %d", got)
+	if got := strings.Count(body, "measureWorktreePressure(diskFloorMb.Load(), &storage)"); got != 3 {
+		t.Errorf("both sweeps, and the room a new checkout makes, must read the budget: found %d", got)
+	}
+	// The room a new checkout makes is that same storage and the one sweeper, set once the sweeper exists, so that
+	// it runs only when the sweeper is armed (worktreeSweeper.makeRoom).
+	sweeper := strings.Index(body, "worktreeGC := worktreeSweeper{")
+	room := strings.Index(body, "sessionCheckoutRoom.Store(&checkoutRoom{storage: &storage,\n")
+	if sweeper < 0 || room < sweeper || strings.Count(body, "sessionCheckoutRoom.Store(&checkoutRoom{") != 1 {
+		t.Error("the run loop must set the room once, on its own storage, after its sweeper exists")
+	}
+	if !strings.Contains(body, "sweep:   func(pressure worktreeGCPressure) { worktreeGC.makeRoom(t, pool, pressure) }})\n\tdefer sessionCheckoutRoom.Store(nil)\n") {
+		t.Error("the room must sweep with the run loop's sweeper, and go with the run loop")
 	}
 }

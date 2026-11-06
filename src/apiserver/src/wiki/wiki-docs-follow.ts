@@ -329,10 +329,8 @@ async function receiptFact(prisma: PrismaService, receipt: ReceiptRow): Promise<
 
 /** Whether a session is a wiki chat (`session.wiki_chat_space_id`, contract `chat.binding`): its merge is the owner's work. */
 async function sessionIsChat(prisma: PrismaService, sessionId: string): Promise<boolean> {
-  // Read off the row as a whole so that a build without the chat's column answers no rather than failing.
-  const [row] = await prisma.$queryRaw<Array<{ chat: boolean }>>(Prisma.sql`
-    SELECT (to_jsonb(s) ->> 'wiki_chat_space_id') IS NOT NULL AS "chat" FROM "session" s WHERE s."id" = ${sessionId}::uuid`);
-  return row?.chat === true;
+  const session = await prisma.session.findUnique({ where: { id: sessionId }, select: { wikiChatSpaceId: true } });
+  return session?.wikiChatSpaceId != null;
 }
 
 /**
