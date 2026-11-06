@@ -48,6 +48,7 @@ import type {
   WikiArticleIndex,
   WikiArticleView,
   WikiChangesetView,
+  WikiDocChanges,
   WikiDocView,
   WikiDocsDirectory,
   WikiDocsIndex,
@@ -71,7 +72,7 @@ import type {
   WikiTopicView,
 } from './wiki';
 import { isWikiDisabled } from './wiki';
-import { getWikiChats } from './wikiChat';
+import { getWikiChatDraft, getWikiChatDrafts, getWikiChats, getWikiDocVersions } from './wikiChat';
 import {
   activeTasksPath,
   labelSummaryPath,
@@ -1413,6 +1414,59 @@ export const wikiChatsQuery = (spaceId: string | null) =>
     enabled: spaceId !== null,
     staleTime: 15_000,
     refetchInterval: (query) => (query.state.data?.fab.working ? 10_000 : false),
+  });
+
+/**
+ * One card of a wiki chat (contract `chat.drafts.read`), drawn from the draftId its drafting call answered: its state is
+ * the server's, never read off the conversation. A wiki write re-reads it (`wiki.changed` names the space when a card is
+ * made, pressed, or its rewrite moves); while its rewrite is under way it is read again besides.
+ */
+export const wikiChatDraftQuery = (draftId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'chat-draft', draftId] as const,
+    queryFn: () => getWikiChatDraft(draftId!),
+    enabled: draftId !== null,
+    staleTime: 5_000,
+    refetchInterval: (query) => {
+      const result = query.state.data?.state === 'applied' ? query.state.data.rewrite?.result : undefined;
+      return result === 'rewriting' || result === 'waiting' ? 15_000 : false;
+    },
+  });
+
+/** Every card of one chat, oldest first: what the page beside the panel marks (Draft would rewrite this section). */
+export const wikiChatDraftsQuery = (chatId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'chat-drafts', chatId] as const,
+    queryFn: () => getWikiChatDrafts(chatId!),
+    enabled: chatId !== null,
+    staleTime: 15_000,
+  });
+
+/** A section's kept versions, newest first, each compared with what replaced it (contract `docs.versions.reads.versions`). */
+export const wikiDocVersionsQuery = (spaceId: string | null, slug: string | null, key: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'doc-versions', slug, key] as const,
+    queryFn: () => getWikiDocVersions(spaceId!, slug!, key!),
+    enabled: spaceId !== null && slug !== null && key !== null,
+    staleTime: 30_000,
+  });
+
+/**
+ * Activity's Docs rows (contract `docs.versions.reads.changes`): the space's sections written again, and the follow jobs
+ * that left sections for maintenance, newest first. `null` from a server older than the versions, which has none to say.
+ */
+export const wikiDocChangesQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'doc-changes'] as const,
+    queryFn: async (): Promise<WikiDocChanges | null> => {
+      try {
+        return await api<WikiDocChanges>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/doc-changes`);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404 && !isWikiDisabled(error)) return null;
+        throw error;
+      }
+    },
+    enabled: spaceId !== null,
   });
 
 /** Every document of the plan and every section title no other document shares, A to Z (contract `docs.reads.index`). */

@@ -1562,6 +1562,11 @@ export interface WikiSpace {
   // server older than them.
   /** The things of its plan that wait on the owner, counted as the plan's own amber count beside Plan counts them. */
   planWaiting?: number;
+  /**
+   * Its applied chat cards whose rewrite waits on the owner, one each (contract `space.list.chatWaiting`,
+   * `wikiChatWaiting`): with pendingOps and planWaiting it is the Wiki's waiting count on web and iOS.
+   */
+  chatWaiting?: number;
   /** The workspaces bound to it, in the order they were bound. */
   workspaceIds?: string[];
   /** Its confirmed plan's documents, written of how many: null while it has no confirmed plan. */
