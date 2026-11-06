@@ -96,6 +96,8 @@ struct WikiDocPage: View {
                 }
             }
             .listStyle(.plain)
+            // Where the page stands, for the reading line the section in view is read against.
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in headingTops.page = frame }
             // Back on the page from one pushed over it: the chat's page chip is this document's section again.
             .onAppear { if let shown = sectionShown { actions.sectionInView(shown) } }
             .task(id: section) {
@@ -163,11 +165,11 @@ struct WikiDocPage: View {
     }
 
     /// The section the reader is in (design §4.2: the nearest section heading by scroll position): the lowest heading
-    /// above the reading line near the top; with none above it, the one already counted — or, at the document's top,
-    /// its first section.
+    /// above the reading line, a little under the middle of what the page shows — the half a phone's chat sheet leaves
+    /// is above it; with none above it, the one already counted — or, at the document's top, its first section.
     private func headingMoved(_ key: String, top: CGFloat?) {
         headingTops.tops[key] = top
-        let line: CGFloat = 220
+        let line = headingTops.page.map { $0.minY + $0.height * 0.45 } ?? 300
         let above = headingTops.tops.filter { $0.value <= line }.max { $0.value < $1.value }?.key
         let first = (doc.sections ?? []).first?.key
         let below = headingTops.tops.min { $0.value < $1.value }?.key
@@ -684,6 +686,8 @@ struct WikiDocPage: View {
 /// the section it counts the reader in is state.
 private final class WikiDocHeadingTops {
     var tops: [String: CGFloat] = [:]
+    /// The page's own frame, on screen.
+    var page: CGRect?
 }
 
 /// Ask on a paragraph (wiki chat design §9, board 42 ⑤): a long press — a right click on a Mac — offers Ask, which

@@ -621,9 +621,21 @@ private struct WikiChatConversation: View {
 /// chat's are made into the chat itself.
 struct WikiChatComposer: View {
     @Environment(AppModel.self) private var model
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var hSize
+    #endif
     let chat: WikiChatModel
     let space: WikiSpace
     let console: ConsoleModel?
+
+    /// A phone's chip says how many sentences alone (board 42 ⑤); a wider one adds the sources, as the web's does.
+    private var narrow: Bool {
+        #if os(iOS)
+        return hSize == .compact
+        #else
+        return false
+        #endif
+    }
 
     @FocusState private var focused: Bool
 
@@ -737,7 +749,7 @@ struct WikiChatComposer: View {
                 Text(quote.first)
                     .lineLimit(1)
                     .frame(maxWidth: 120, alignment: .leading)
-                Text(WikiChatLogic.quoteCounts(sentences: quote.sentenceIds.count, sources: quote.sources))
+                Text(WikiChatLogic.quoteCounts(sentences: quote.sentenceIds.count, sources: narrow ? 0 : quote.sources))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .fixedSize()
