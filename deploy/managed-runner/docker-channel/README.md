@@ -38,7 +38,7 @@ Docker backend" and "Implementation record: new deployments"; operating it is in
 | `GET /v1/volumes/mr-data-<runner>/holders` | Every container that refers to the volume, in any state, labelled or not (others only counted). |
 | `PUT/GET/DELETE /v1/credentials/<runner>` | The runner credential of one generation, kept in the state directory (0700/0600) until its container starts; removed by UID. |
 | `POST /v1/containers` | Create the runner's container from the template and start it (create once), unless this instance already has `maxContainers` containers (`429 CONTAINER_LIMIT`). `dryRun: true` checks the request only. |
-| `GET /v1/containers/mr-<runner>` | Docker's state of it: status, exit code, `FinishedAt`, OOM, and why the channel stopped it, if it did. |
+| `GET /v1/containers/mr-<runner>` | Docker's state of it: status, exit code, `FinishedAt`, OOM, and why the channel stopped it, if it did; and the image ID it was made from (`image`), which after an upgrade is the previous one until its next container. |
 | `POST /v1/containers/mr-<runner>/stop?uid=` | Stop it (SIGTERM, `stopGraceSeconds`, then SIGKILL), by its instance UID. |
 | `DELETE /v1/containers/mr-<runner>?uid=` | Remove it, by its instance UID, only once it has stopped; its bootstrap volume goes with it. |
 | `GET /v1/fencing-receipts/<runner>` | An operator's receipt for a container that vanished unobserved (below). |
