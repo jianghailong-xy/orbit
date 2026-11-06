@@ -794,11 +794,24 @@ export const WIKI_CHAT_REDO_MESSAGE = WIKI_CHAT_COPY.card.redoMessage;
 export const wikiChatActionLabel = (action: WikiChatAction): string => WIKI_CHAT_COPY.actions[action];
 /** Said when a press is refused, with the server's reason after it. */
 export const WIKI_CHAT_PRESS_FAILED = 'The card couldn’t be pressed';
+
+/** A press refused or lost, said truthfully: the server's reason, a failure of the server, or no connection. */
+export function wikiChatPressError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status >= 500) return `The server couldn’t take the press (${error.status}). Try again in a moment.`;
+    return `${WIKI_CHAT_PRESS_FAILED}: ${error.message.trim()}`;
+  }
+  return 'The press didn’t reach the server. Check the connection, then try again.';
+}
 /** The card's read failing: the call stands, its card cannot be read now. */
 export const WIKI_CHAT_CARD_UNREAD = 'This card couldn’t be read. It is still there: open the chat again to retry.';
 /** Edit's dialog (design §7.2: as Review's Edit, the owner's own version of the ops). */
 export const WIKI_CHAT_EDIT_TITLE = 'Edit, then apply';
 export const WIKI_CHAT_EDIT_NOTE = 'What you change here is applied as your own version of the draft.';
+/** Its fields, as the drawer's and Review's Edit name theirs, and its way out. */
+export const WIKI_CHAT_EDIT_TITLE_FIELD = 'Title';
+export const WIKI_CHAT_EDIT_LINE = 'One line';
+export const WIKI_CHAT_CANCEL = 'Cancel';
 
 // ── See changes (design §8.4, board 42 ③, comment design §12.2) ─────────────────────────────────
 

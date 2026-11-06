@@ -10,7 +10,6 @@ import {
   SyncOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
-import { ApiError } from '../api';
 import { WikiSeeChanges } from './WikiSeeChanges';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
@@ -24,9 +23,11 @@ import { wikiSettingsPath } from '../lib/wikiReviewMode';
 import {
   WIKI_CHAT_ACTION_PRESS,
   WIKI_CHAT_CARD_UNREAD,
+  WIKI_CHAT_CANCEL,
+  WIKI_CHAT_EDIT_LINE,
   WIKI_CHAT_EDIT_NOTE,
   WIKI_CHAT_EDIT_TITLE,
-  WIKI_CHAT_PRESS_FAILED,
+  WIKI_CHAT_EDIT_TITLE_FIELD,
   WIKI_CHAT_REDO_MESSAGE,
   WIKI_CHAT_REWRITES,
   WIKI_CHAT_SIMILAR,
@@ -41,6 +42,7 @@ import {
   wikiChatCardLook,
   wikiChatInReviewOp,
   wikiChatNeedsSeen,
+  wikiChatPressError,
   wikiChatResultLook,
   wikiReviewItemAnchor,
   type WikiChatAction,
@@ -111,15 +113,6 @@ export function useWikiChatSessionCards(sessionId: string | null, spaceId: strin
       focus: null,
     };
   }, [navigate, sessionId, spaceId, slug]);
-}
-
-/** A press refused or lost, said truthfully: the server's reason, a failure of the server, or no connection. */
-export function wikiChatPressError(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (error.status >= 500) return `The server couldn’t take the press (${error.status}). Try again in a moment.`;
-    return `${WIKI_CHAT_PRESS_FAILED}: ${error.message.trim()}`;
-  }
-  return 'The press didn’t reach the server. Check the connection, then try again.';
 }
 
 /**
@@ -464,7 +457,7 @@ function WikiDraftEditor({
       className="wk-proposal-dialog wk-draft-edit"
       footer={
         <>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button onClick={onClose}>{WIKI_CHAT_CANCEL}</Button>
           <Button variant="primary" disabled={edits.length === 0 || blank} loading={saving} onClick={() => void submit()}>
             {wikiChatActionLabel('apply')}
           </Button>
@@ -478,13 +471,18 @@ function WikiDraftEditor({
           setWords((all) => new Map(all).set(op.seq, { ...all.get(op.seq)!, ...next }));
         return (
           <div key={op.seq} className="wk-draft-edit-op" data-seq={op.seq}>
-            <Input aria-label="Title" value={now.title} onChange={(event) => set({ title: event.target.value })} placeholder="Title" />
+            <Input
+              aria-label={WIKI_CHAT_EDIT_TITLE_FIELD}
+              value={now.title}
+              onChange={(event) => set({ title: event.target.value })}
+              placeholder={WIKI_CHAT_EDIT_TITLE_FIELD}
+            />
             <Textarea
-              aria-label="One line"
+              aria-label={WIKI_CHAT_EDIT_LINE}
               rows={3}
               value={now.summary}
               onChange={(event) => set({ summary: event.target.value })}
-              placeholder="One line"
+              placeholder={WIKI_CHAT_EDIT_LINE}
               style={{ marginTop: 8 }}
             />
           </div>
