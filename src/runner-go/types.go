@@ -1355,6 +1355,11 @@ type ClaimedSession struct {
 	// is the live worktree (nil when running shared), IsolationStatus what was done.
 	WT              *Worktree `json:"-"`
 	IsolationStatus string    `json:"-"`
+	// CheckoutCreation is how the runner made the session's checkout, when this process made it: cloned from the
+	// workspace's own checkout (checkoutCloned) or written out by git (checkoutPlain). It is "" for a checkout found
+	// on disk. The log says why a checkout was not cloned. IsolationStatus reads "worktree" for both, the one value
+	// the control plane takes for a session with a checkout of its own. Runner-internal.
+	CheckoutCreation string `json:"-"`
 	// SourceRefusal is why a pinned run may not start: setupWorktree could not stand a checkout on the
 	// pinned commit (docs/project-integration-line-contract.md §1.5 L10). On a managed runner it is
 	// also why a run may not start in a damaged repository (managed_repo_recovery.go). Non-nil means
