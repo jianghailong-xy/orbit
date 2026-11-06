@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
@@ -30,6 +30,11 @@ export class WikiChatController {
     @Body(PublicIdPipe.forFields('workspaceId')) body: unknown,
     @Req() request: { headers: Record<string, string | string[] | undefined> },
   ) {
+    // The pipe hands a blank id through as it came; refused here, it never reaches a uuid column as "".
+    const workspaceId = (body as { workspaceId?: unknown } | null)?.workspaceId;
+    if (typeof workspaceId === 'string' && workspaceId.trim() === '') {
+      throw new BadRequestException('workspaceId names one of the workspaces the space\'s chats may run in, or is left out');
+    }
     return this.chats.create(user.userId, id, body, actingSession(request.headers), user.credential);
   }
 

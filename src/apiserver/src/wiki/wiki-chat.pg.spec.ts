@@ -207,8 +207,9 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
   const TURN_RECORD = randomUUID();
   const RECORD_SESSION = randomUUID();
   const VIA = randomUUID();
+  // A verified footnote carries its quote (wiki_doc_footnote_quote_chk); the notes name where, never what it quotes.
   const footnote = (ref: string, lines: [number, number]) => ({
-    kind: 'code', ref, sha: SHA, lineStart: lines[0], lineEnd: lines[1], locator: {}, verdict: 'verified', checkedBy: 'runner',
+    kind: 'code', ref, sha: SHA, lineStart: lines[0], lineEnd: lines[1], locator: {}, quote: 'lease', verdict: 'verified', checkedBy: 'runner',
   });
   const section = async (key: string, sentences: Array<{ text: string; footnotes: Array<Record<string, unknown>> }>) => {
     const row = await prisma.wikiDocSection.create({
@@ -236,7 +237,7 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
         footnote('src/runner-go/inbox.go', [10, 40]),
         {
           kind: 'turn', ref: TURN_RECORD, sha: null, charStart: 0, charEnd: 10, locator: { sessionId: RECORD_SESSION },
-          verdict: 'verified', checkedBy: 'server', viaEntryId: VIA,
+          quote: 'one turn', verdict: 'verified', checkedBy: 'server', viaEntryId: VIA,
         },
       ],
     },
@@ -352,6 +353,9 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
     const theirs = await create({ workspaceId: pub(wsStranger) });
     assert.equal(theirs.status, 404, theirs.text);
     assert.equal(await sessionsIn(wsStranger), 0);
+    const blank = await create({ workspaceId: '   ' });
+    assert.equal(blank.status, 400, `a blank workspaceId is refused, never read as an id: ${blank.text}`);
+    assert.equal(toUuid(await remembered() as string), wsOther, 'and nothing is remembered');
 
     // The settings PATCH sets it — to a machine that is offline, which is no reason to move anywhere else.
     const set = await api('PATCH', `/api/wiki/spaces/${pub(spaceId)}`, ownerToken, { chat: { workspaceId: pub(wsOffline) } });

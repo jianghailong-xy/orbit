@@ -5596,8 +5596,8 @@ export class SessionsService {
    * chat's prompt as the seeded `initial-` turn is any other session's, so it is listed and withdrawn no
    * more than that one is.
    */
-  private static isChatOpeningTurn(session: { wikiChatSpaceId: string | null }, turn: { seq: number }): boolean {
-    return session.wikiChatSpaceId !== null && turn.seq === 1;
+  private static isChatOpeningTurn(session: { wikiChatSpaceId?: string | null }, turn: { seq: number }): boolean {
+    return Boolean(session.wikiChatSpaceId) && turn.seq === 1;
   }
 
   /** The fixed clientTurnId of the seeded first turn (the prompt) — see ensurePromptSeeded

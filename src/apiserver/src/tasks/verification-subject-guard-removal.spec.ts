@@ -311,6 +311,9 @@ const CORE_TRIGGERS_AFTER: Readonly<Record<string, readonly string[]>> = {
     'session_source_freeze_guard',
     'session_superseded_task_guard',
     'session_superseded_task_revive_guard',
+    // 0476's: a session is a wiki chat for its whole life or never; the column is written by the
+    // chat's create alone. Another SIBLING change.
+    'session_wiki_chat_space_guard',
     // 0370's: a session that ends records, on the confirmation reviews still waiting on it, that their
     // reviewer ended (docs/owner-confirmation-review-contract.md §3.1). Another SIBLING change.
     'task_owner_confirmation_review_reviewer_ended',
@@ -328,7 +331,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
   // `task` carries 24; naming all of them here would restate the inventory rather than check it.
   // What matters for it is the same two properties, stated directly.
   const core = TRIGGER_WRITE_SOURCES.filter((entry) => CENSUS_TABLES.includes(entry.table));
-  assert.equal(core.length, 53,
+  assert.equal(core.length, 54,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -350,7 +353,9 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '`session_engine_immutable` with the recorded session engine, and 51 once 0426 added '
     + '`session_cursor_runner_acquisition_guard` for Cursor CLI, and 53 once 0441 added '
     + '`project_rollup_candidate_task_insert` and `project_rollup_candidate_task_update` to `task`, '
-    + 'appending the tasks GET /projects has to classify itself');
+    + 'appending the tasks GET /projects has to classify itself, and 54 once 0476 added '
+    + '`session_wiki_chat_space_guard` to `session`, which refuses a write that would change the '
+    + 'wiki space a session is a chat of');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
   // Every one of them installed BEFORE 0207 is still here. Derived from the inventory's own

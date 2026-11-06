@@ -1285,8 +1285,10 @@ test("a wiki chat's drafting calls are left out with their results, the owner's 
   const spaceId = await space(h, owner, ws);
   await maintained(h, owner, spaceId, ws);
 
-  /** One conversation: the owner's question, a draft made three ways, each failing once and then working — which is
-   *  what carries a tool line into a dossier this short — and a call of the wiki tools that does not draft. */
+  /** One conversation: the owner's question, a draft made three ways, each failing once and then working, and a call of
+   *  the wiki tools that does not draft. A command that fails and then works is a signal the dossier packs a window
+   *  around; a tool of any other kind weighs too little to open one, so each such draft is followed by a check that
+   *  carries it in — in the session that is no chat, which is the control. */
   const conversation = async (chat: boolean) => {
     const talk = await session(h, owner.id, {
       workspaceId: ws, runnerId: machine.id, status: 'SUCCEEDED', lastTurnAt: minutesAgo(20),
@@ -1297,14 +1299,15 @@ test("a wiki chat's drafting calls are left out with their results, the owner's 
       await tool(h, talk, name, input, 'Exit code 1\nnot yet', { isError: true, at: minutesAgo(at + 0.5) });
       return tool(h, talk, name, input, `${words} recorded`, { at: minutesAgo(at) });
     };
-    const drafts = [
-      await failedThenWorked('mcp__orbit__wiki_propose', { rationale: 'the lease changed' }, 'DRAFT-PROPOSED', 44),
-      await failedThenWorked('orbit__wiki_draft', { kind: 'rewrite', sections: ['1.1 §3'] }, 'DRAFT-REWRITE', 43),
-      await failedThenWorked('Bash', { command: 'orbit wiki propose --file ops.json' }, 'DRAFT-CLI', 42),
-    ];
-    const help = await failedThenWorked('Bash', { command: 'orbit wiki --help' }, 'WIKI-HELP', 41);
+    const check = (at: number) => failedThenWorked('Bash', { command: `npm test -- lease-${at}` }, `CHECK-${at}`, at);
+    const proposed = await failedThenWorked('mcp__orbit__wiki_propose', { rationale: 'the lease changed' }, 'DRAFT-PROPOSED', 47);
+    await check(46);
+    const rewrite = await failedThenWorked('orbit__wiki_draft', { kind: 'rewrite', sections: ['1.1 §3'] }, 'DRAFT-REWRITE', 45);
+    await check(44);
+    const cli = await failedThenWorked('Bash', { command: 'orbit wiki propose --file ops.json' }, 'DRAFT-CLI', 43);
+    const help = await failedThenWorked('Bash', { command: 'orbit wiki --help' }, 'WIKI-HELP', 42);
     await event(h, talk, 'assistant', { text: 'Drafted: the lease section, from main.' }, minutesAgo(40));
-    return { talk, drafts, help };
+    return { talk, drafts: [proposed, rewrite, cli], help };
   };
 
   const chat = await conversation(true);
