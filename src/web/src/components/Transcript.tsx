@@ -91,6 +91,8 @@ import { BackgroundWakeCard } from './BackgroundWakeCard';
 import { BackgroundJobsNote } from './BackgroundJobsNote';
 import { ReferencedTaskNote } from './ReferencedTaskNote';
 import { WikiContextNote } from './WikiContextNote';
+import { WikiDraftCard, WikiDraftCardCtx } from './WikiDraftCard';
+import { wikiChatDraftIdOf, wikiChatDraftingCall } from '../lib/wikiChat';
 import { EMPTY_LIVE_TOOL_OUTPUTS, type LiveToolOutputs } from '../lib/liveToolOutputs';
 import { EMPTY_LIVE_TASK_PROGRESS, endedTaskProgress, type LiveTaskProgress } from '../lib/liveTaskProgress';
 import { TaskProgressBlock } from './TaskProgressBlock';
@@ -1699,7 +1701,9 @@ function NodeList({
   /** Only the conversation's own lists carry inserts; a sub-workspace's nested list has none. */
   placed?: ReadonlyMap<number, TranscriptInsert[]>;
 }) {
-  const items = useMemo(() => groupToolRuns(nodes), [nodes]);
+  // In a wiki chat a drafting call is its card, which no run summary may fold away (`isGroupableTool`).
+  const chat = useContext(WikiDraftCardCtx) !== null;
+  const items = useMemo(() => groupToolRuns(nodes, chat), [nodes, chat]);
   return (
     <>
       {items.flatMap((item) => {
@@ -1725,7 +1729,7 @@ function NodeList({
   );
 }
 
-function groupToolRuns(nodes: Node[]): NodeListItem[] {
+function groupToolRuns(nodes: Node[], chat = false): NodeListItem[] {
   const out: NodeListItem[] = [];
   let run: ToolNode[] = [];
   const flush = () => {
@@ -1738,7 +1742,7 @@ function groupToolRuns(nodes: Node[]): NodeListItem[] {
   };
 
   for (const node of nodes) {
-    if (isGroupableTool(node)) {
+    if (isGroupableTool(node, chat)) {
       run.push(node);
       continue;
     }
@@ -1761,9 +1765,11 @@ function groupToolRuns(nodes: Node[]): NodeListItem[] {
 // reaches the reader as nothing at all. The hop this costs happens once and never reverses: an
 // image block that has arrived stays arrived, unlike the running/failed states the folded row
 // deliberately reports instead of opening on.
-function isGroupableTool(node: Node): node is ToolNode {
+function isGroupableTool(node: Node, chat = false): node is ToolNode {
   return (
     node.kind === 'tool' &&
+    // A wiki chat's drafting call is its card (`WikiDraftCard`), told by its name, as the others here are.
+    !(chat && wikiChatDraftingCall(node.name, node.input)) &&
     node.children.length === 0 &&
     !hasResultImage(node.result?.content) &&
     !node.id.startsWith('shell-') &&
@@ -3769,6 +3775,9 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // distinct "Shell" card, not Claude's Bash tool — see describeTool's isShell branch.
   const isShell = node.id.startsWith('shell-');
   const exp = useContext(ExportCtx);
+  // A wiki chat's drafting call (contract `chat.drafts.toolResult`) is drawn as the card its answer names, wherever the
+  // chat is shown — the panel and the full session page provide the card's host; a share link and an export do not.
+  const draftCall = useContext(WikiDraftCardCtx) !== null && wikiChatDraftingCall(node.name, node.input);
   // A plan is the point of the turn — open it by default; a result carrying an image (a
   // screenshot the workspace produced for the user) opens so the picture shows without a click.
   // A static export opens every card (nothing can be un-folded after the fact).
@@ -3801,7 +3810,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // The session-created card parses its result as JSON even while folded, so a clipped copy would
   // fail to parse and render nothing — it needs the whole result regardless of the fold. So does a
   // question's record.
-  const needsWholeResult = node.name === 'mcp__orbit__session_create' || isQuestion;
+  const needsWholeResult = node.name === 'mcp__orbit__session_create' || isQuestion || draftCall;
   const hideResult = resultRepeatsBody(node);
   const fullResult = useFullPayload(
     node.result?.seq ?? 0,
@@ -3856,6 +3865,13 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     // Nothing to render until the untrimmed result lands (see needsWholeResult).
     if (node.result.truncated && !fullResult) return null;
     return <SessionCreateCard result={resultContent} />;
+  }
+  // A drafting call that made a card is the card; one that made none (a dry run, a refusal) stays a call. A clipped
+  // answer that does not name its card yet waits for the whole one (see needsWholeResult), as a session's does.
+  if (draftCall && node.result && !node.result.isError) {
+    const draftId = wikiChatDraftIdOf(resultContent);
+    if (draftId) return <WikiDraftCard draftId={draftId} />;
+    if (node.result.truncated && !fullResult) return null;
   }
   return (
     <div

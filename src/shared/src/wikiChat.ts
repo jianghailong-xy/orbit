@@ -168,6 +168,8 @@ export const WIKI_CHAT_COPY = {
     web: 'Based on web content',
     webNote: 'Read before you apply.',
     applied: 'Applied · Confirmed by you',
+    appliedInReview: 'Applied · In Review',
+    appliedInReviewNote: 'Re-confirm, amend or retire the entry in Review.',
     discarded: 'Discarded',
     notApplied: 'Not applied',
     undone: 'Undone',
@@ -299,8 +301,26 @@ export function wikiChatDraftLabel(kind: WikiChatDraftKind, ops: readonly WikiCh
   return WIKI_CHAT_COPY.card[only!.op];
 }
 
-/** The card's status line (design §7.3's first column): `Draft · <label>` while it is open, its state after. */
-export function wikiChatCardTitle(state: WikiChatDraftState, label: string): string {
+/** One op of a card as its title reads it: what it does, and — once pressed — its decision in the changeset the press recorded. */
+export interface WikiChatPressedOp {
+  op: string;
+  decision?: string | null;
+}
+
+/**
+ * Whether an applied card still waits in Review (contract `chat.drafts.states.applied`): it holds a challenge whose
+ * decision is pending. Its press raised the flag on the entry, and the owner answers that flag in Review — re-confirms,
+ * amends or retires the entry — so the card is not confirmed and says `Applied · In Review` instead.
+ */
+export function wikiChatAppliedInReview(state: WikiChatDraftState, ops: readonly WikiChatPressedOp[]): boolean {
+  return state === 'applied' && ops.some((op) => op.op === 'challenge' && op.decision === 'pending');
+}
+
+/**
+ * The card's status line (design §7.3's first column): `Draft · <label>` while it is open, its state after — an applied
+ * card still waiting in Review (`wikiChatAppliedInReview`) says so rather than that it is confirmed.
+ */
+export function wikiChatCardTitle(state: WikiChatDraftState, label: string, inReview = false): string {
   const { card } = WIKI_CHAT_COPY;
   switch (state) {
     case 'draft':
@@ -310,7 +330,7 @@ export function wikiChatCardTitle(state: WikiChatDraftState, label: string): str
     case 'changed':
       return card.changed;
     case 'applied':
-      return card.applied;
+      return inReview ? card.appliedInReview : card.applied;
     case 'discarded':
       return card.discarded;
     case 'not_applied':
