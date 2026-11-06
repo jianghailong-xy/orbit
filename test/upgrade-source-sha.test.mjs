@@ -181,6 +181,8 @@ printf '%s\\t%s\\n' "\${ORBIT_SOURCE_SHA-}" "$*" >>"$ORBIT_FAKE_DOCKER_LOG"
       ...process.env,
       PATH: `${fixture}:${process.env.PATH}`,
       ORBIT_FAKE_DOCKER_LOG: dockerLog,
+      // A link of its own, so that the runner link's steps (test/upgrade-runner-link.test.mjs) leave this case and its .env alone.
+      RUNNER_LINK_URL: 'wss://link.fixture.invalid',
     };
     delete env.ORBIT_SOURCE_SHA;
     // --no-pull: this runs in the repository itself, which a pull would move.
@@ -228,6 +230,8 @@ printf '%s\\t%s\\n' "\${ORBIT_SOURCE_SHA-}" "$*" >>"$ORBIT_FAKE_DOCKER_LOG"
       ...process.env,
       PATH: `${fixture}:${process.env.PATH}`,
       ORBIT_FAKE_DOCKER_LOG: dockerLog,
+      // A link of its own, so that the runner link's steps (test/upgrade-runner-link.test.mjs) leave this case and its .env alone.
+      RUNNER_LINK_URL: 'wss://link.fixture.invalid',
       GIT_AUTHOR_NAME: 'fixture',
       GIT_AUTHOR_EMAIL: 'fixture@example.invalid',
       GIT_COMMITTER_NAME: 'fixture',
@@ -343,6 +347,8 @@ for (const relative of ['.claude/skills/upgrade/upgrade.sh', '.agents/skills/upg
       ...process.env,
       PATH: `${fixture}:${process.env.PATH}`,
       ORBIT_FAKE_DOCKER_LOG: dockerLog,
+      // A link of its own, so that the runner link's steps (test/upgrade-runner-link.test.mjs) leave this case and its .env alone.
+      RUNNER_LINK_URL: 'wss://link.fixture.invalid',
       ORBIT_FAKE_RUNNING_SCRIPT: running,
       GIT_AUTHOR_NAME: 'fixture',
       GIT_AUTHOR_EMAIL: 'fixture@example.invalid',

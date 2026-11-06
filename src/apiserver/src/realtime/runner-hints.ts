@@ -4,7 +4,7 @@ import type { ConfigService } from '@nestjs/config';
 import { connect, headers as natsHeaders, nkeyAuthenticator, type NatsConnection, type Subscription } from '@nats-io/transport-node';
 import { RunEventType, type NormalizedRunEvent } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
-import { readRunnerLink } from '../runner-api/runner-link-token';
+import { readRunnerLink, runnerLinkSettings } from '../runner-api/runner-link-token';
 import { normalizeToolOutputEvent } from '../runner-api/tool-output';
 import { relayPeers, type RelayPeers } from '../runners/relay-peers';
 
@@ -234,11 +234,7 @@ export class RunnerHints implements OnModuleInit, OnModuleDestroy {
   static fromConfig(prisma: PrismaService, config: Pick<ConfigService, 'get'>): RunnerHints {
     const url = config.get<string>('RUNNER_LINK_NATS_URL')?.trim() || null;
     const seed = config.get<string>('RUNNER_LINK_NATS_SEED')?.trim() || null;
-    const link = readRunnerLink({
-      signingKey: config.get<string>('RUNNER_LINK_SIGNING_KEY'),
-      linkUrl: config.get<string>('RUNNER_LINK_URL'),
-      gatewayToken: config.get<string>('RUNNER_LINK_GATEWAY_TOKEN'),
-    });
+    const link = readRunnerLink(runnerLinkSettings(config));
     if (link.config && !url) {
       new Logger('RunnerHints').warn('RUNNER_LINK_NATS_URL is not set: no runner link hints are published, and runners on the link learn of work at their heartbeat');
     }

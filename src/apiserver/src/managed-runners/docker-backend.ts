@@ -48,9 +48,11 @@ import { managedPodName, managedPvcName, managedSecretName } from './managed-run
  *                 reports (CPU, memory, the disk Docker's volumes live on) less a reserve, unless stated
  *
  * One host's Docker vouches for every stop it makes, so this backend can also stop an instance
- * (`stopInstance`) when the manager asks: an accepted sleep that overran its drain time, or a disabled
- * owner's runner that has not stopped by itself. Asking is never the proof: the gate still waits for
- * Docker's report of the exit and the container's removal.
+ * (`stopInstance`) when the manager asks: an accepted sleep that overran its drain time, a disabled
+ * owner's runner that has not stopped by itself, or a container of a previous image (`previousImage`,
+ * the image ID the channel reports against the profile's) that a link-only server has long stopped
+ * hearing. Asking is never the proof: the gate still waits for Docker's report of the exit and the
+ * container's removal.
  */
 
 const TERMS: ManagedRunnerBackendTerms = {
@@ -144,10 +146,13 @@ function phaseOf(view: ChannelContainer): string {
   return `${view.status} (exit ${view.exitCode ?? '?'}${why ? `; ${why}` : ''})`;
 }
 
-function instanceOf(view: ChannelContainer): DockerInstance {
+/** `image`: the one the profile names now, which every new container is made from. */
+function instanceOf(view: ChannelContainer, image: string): DockerInstance {
   const neverRan = view.status === 'created' && view.neverStarted;
   const ended = view.status === 'exited' || view.status === 'dead';
   return {
+    // A channel too old to say which image a container was made from says nothing here either.
+    ...(typeof view.image === 'string' && view.image !== image ? { previousImage: view.image } : {}),
     name: view.name,
     uid: view.uid,
     node: view.node,
@@ -271,7 +276,7 @@ export class DockerBackend implements ManagedRunnerBackend {
 
   async readInstance(mapping: ManagedRunner): Promise<DockerInstance | null> {
     const view = await this.channel.readContainer(managedPodName(mapping.runnerId));
-    return view ? instanceOf(view) : null;
+    return view ? instanceOf(view, this.profile.runner.image) : null;
   }
 
   /**
@@ -297,7 +302,7 @@ export class DockerBackend implements ManagedRunnerBackend {
     const name = managedPodName(mapping.runnerId);
     try {
       const view = await this.orReadBack(() => this.channel.createContainer(this.containerRequest(mapping)), () => this.channel.readContainer(name));
-      return instanceOf(view);
+      return instanceOf(view, this.profile.runner.image);
     } catch (error) {
       if (error instanceof DockerChannelError && error.code === 'VOLUME_IN_USE') throw new ManagedVolumeHeld(error.message);
       if (error instanceof DockerChannelError && error.code === 'CONTAINER_LIMIT') throw new ManagedInstanceLimit(error.message);

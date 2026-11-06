@@ -9,11 +9,14 @@ import {
   Inject,
   Injectable,
   Post,
+  Req,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import type { Runner } from '@prisma/client';
+import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { cameThroughTrustedProxy } from '../shared/public-surface.guard';
 import { CurrentRunner } from './current-runner.decorator';
 import { parseLeaseGeneration } from './runner-api.controller';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -24,7 +27,9 @@ import {
   isRunnerLinkGateway,
   runnerLinkCredential,
   runnerLinkNotConfigured,
+  sameOriginLinkUrl,
   signRunnerLinkToken,
+  type LinkTokenArrival,
   type RunnerLinkState,
 } from './runner-link-token';
 
@@ -45,6 +50,25 @@ export interface RunnerLinkRevocationsResponse {
   /** Revocations at or after this instant are listed; an earlier one can refuse no live token. */
   since: string;
   revocations: Array<{ credential: string; revokedAt: string }>;
+}
+
+/**
+ * How a link-token request arrived, from what gateway/nginx.conf hands over. The two X-Orbit-* headers are overwritten
+ * there, so a client cannot write them. X-Forwarded-For's entries are the client's words until a proxy appends one, but
+ * here they only say whether anything stood in front, and a client that claims so itself is answered with this
+ * deployment's own address: the web gateway always adds its own peer, so more than one entry means it received some.
+ */
+function linkTokenArrival(request: Request): LinkTokenArrival {
+  const single = (name: string) => {
+    const value = request.headers[name];
+    return Array.isArray(value) ? value.join(',') : value;
+  };
+  const hops = (single('x-forwarded-for') ?? '').split(',').filter((hop) => hop.trim() !== '').length;
+  return {
+    host: single('x-orbit-request-host'),
+    forwardedProto: single('x-orbit-request-proto'),
+    proxied: hops > 1 || cameThroughTrustedProxy(request),
+  };
 }
 
 /**
@@ -84,12 +108,17 @@ export class RunnerLinkTokenController {
    * POST /api/runner/link-token: a connection token for this runner, valid for an hour, naming the
    * runner, its tenant, the tenant's cell and that cell's address, and the asking process. It is
    * bound to the runner credential that asked: deleting the runner or replacing its credential
-   * revokes it (migration 0443's trigger), and the gateway refuses it from then on.
+   * revokes it (migration 0443's trigger), and the gateway refuses it from then on. With
+   * RUNNER_LINK_URL=same-origin, the address is the one this runner reached this server at (sameOriginLinkUrl).
    */
   @UseGuards(RunnerAuthGuard)
   @Post()
   @HttpCode(200)
-  async issue(@CurrentRunner() runner: Runner, @Body() body: RunnerLinkTokenRequest): Promise<RunnerLinkTokenResponse> {
+  async issue(
+    @CurrentRunner() runner: Runner,
+    @Body() body: RunnerLinkTokenRequest,
+    @Req() request?: Request,
+  ): Promise<RunnerLinkTokenResponse> {
     const config = this.link.config;
     if (!config) throw runnerLinkNotConfigured();
     const leaseOwner = parseLeaseGeneration(body?.leaseOwner, 'leaseOwner');
@@ -106,6 +135,7 @@ export class RunnerLinkTokenController {
         credential: runnerLinkCredential(runner.tokenHash),
       },
       new Date(),
+      request ? sameOriginLinkUrl(config, linkTokenArrival(request)) : undefined,
     );
     return { token, expiresAt: new Date(claims.exp * 1000).toISOString(), cellId, linkUrl: claims.linkUrl };
   }
