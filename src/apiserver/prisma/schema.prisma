@@ -8396,6 +8396,9 @@ model WikiModelRequest {
   /// `{ system, prompt, maxTokens }` and its sha256, so a replay proves it is the same call.
   request       Json   @map("request")
   requestSha256 String @map("request_sha256") @db.Char(64)
+  /// What the call was made from, for a replay to read its answer against (0482, contract `modelQueue.material`): the
+  /// maintain job's case file of a session's first question; null on every other call.
+  material Json? @map("material")
   /// `queued` | `running` | `succeeded` | `failed` | `cancelled`.
   state String @default("queued")
   /// The lease: the three together exactly while running, cleared by every settle (a CHECK holds both ways).

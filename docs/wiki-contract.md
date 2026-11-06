@@ -2680,7 +2680,8 @@ JSON 里是 `modelQueue` 一节；设计见 `docs/wiki-server-execution-design.m
 
 - `wiki_model_request`：`id`、`job_id`（外键到 `wiki_job`，随作业删除而删）、`owner_id`、`space_id`、`step`、`unit`、`attempt`、
   `attempts`、`priority`、`request`（`{ system, prompt, maxTokens }`）与 `request_sha256`、`state`、租约三列、`enqueued_at`、
-  `not_before`、`started_at`、`ended_at`、`answer`、`partial`、`input_tokens`、`output_tokens`、`http_status`、`error`、`error_kind`。
+  `not_before`、`started_at`、`ended_at`、`answer`、`partial`、`input_tokens`、`output_tokens`、`http_status`、`error`、`error_kind`，
+  以及 `material`（迁移 `0482_wiki_model_request_material`，§25.3）。
 - `request` 里的 system 或 prompt 含 U+0000 时——prompt 带着仓库的原文，源文件里可能有 NUL（§26.4）——两段都按 UTF-8 字节的 base64 存，
   旁边写 `encoding: "base64"`；领取时解码，发给模型的就是流水线拼出的那次调用，逐字节相同。`request_sha256` 按调用
   本身算，不按列里存的形式（`modelQueue.requestEncoding`）。
@@ -2706,6 +2707,11 @@ JSON 里是 `modelQueue` 一节；设计见 `docs/wiki-server-execution-design.m
   再等它（`WikiModelRequestQueue.whenSettled`）——已成功的直接用它的答案，还在排队或执行中的继续等。作业被回收后重跑，已经答过的
   调用不会再发一次。
 - 同一单元带着不同的调用再次出现（`request_sha256` 不同）是错误：答案不是这次问的问题，作业按 content 失败。
+- 一行可以带着这次调用是从什么拼出来的（`material`，可空的 jsonb 对象，`modelQueue.material`）：调用方建行时写，之后不改，撞上已有行
+  时用已有行的。`wikiModelRequestsAsked` 按下一次提问会撞上的那一行把调用和 `material` 一起读回。维护作业给每个 session 的第一个问题
+  存案卷（`extract` 存交出的案卷，不含 notes；`claims` 存 notes 和它的文件），重放时问上一次问过的问题，并按当时的案卷读答案
+  （§27.4）。其他调用都是 null；jsonb 存不下的不存。作业读取不读出它（`jobs.read.never`）。2026-11-06 生产主机 CPU 打满，orbit space
+  的两次维护丢了 lease 被重放，重放按新多出的记录重建案卷，同一单元问了另一个问题，被拒，两轮都失败；这一列就是为此加的。
 
 ### 25.4 执行与租约（`modelQueue.lease`）
 
@@ -3034,6 +3040,15 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
   游标按规则不动，`consecutive_failures` 加一，连续三次通知 owner；作业以 `failure_kind = content` 结束。
 - **worker 停机**：模型请求与仓库等待被中止（`WikiModelWaitCancelled` / `WikiRepoOpWaitCancelled`），运行不结算，
   作业交还（§24.3）：立即回 `queued`，不计次、不退避（owner 2026-10-09 定），下一个进程重放；已经答过的请求直接复用。
+- **重放问上一次问过的问题**（`maintenance.job.server.replay`，2026-11-06）：不管是租约过期、停机交还还是 infra 失败后的重放，
+  都会重新读页，还在进行的 session 可能多了上一次没读到的记录，重建的案卷就是另一份。上一次问过的 session，在 `extract` 和
+  `claims` 两步都照问原来的问题：自己单元和 `#retry` 单元的调用取请求行里存的，答案按第一个问题存的案卷读（§25.3 `material`），
+  报告的 notes 计数也按那一份算。所以重放不再向模型提新问题，op 和上一次建的相同，上一次已记下的批次撞上自己的幂等键，不会重复写入。
+  该 session 的 `wiki_dossier` 行写回那份案卷的 hash、sources 和大小（`WikiMaintenance.recordAsked`），`unchanged` 拿下一次读到的
+  和抽取实际读过的比；重放多读到的记录留给下一轮，和单次运行读完之后才到的记录一样。迁移 0482 之前建的请求行没有 `material`，
+  照旧处理。此前 2026-11-06 生产 CPU 打满时，orbit space 09:24 和 10:27 两轮丢了 lease 被重放，都以
+  `extract: the model request 'extract/<session>' already exists with a different call` 失败；`claims` 一步把被拒的问题当作没有答案，
+  notes 同样记成 unanswered。
 
 ---
 

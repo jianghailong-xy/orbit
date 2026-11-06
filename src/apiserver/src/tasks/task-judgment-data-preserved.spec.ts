@@ -2722,7 +2722,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // or `project_acceptance_*` object nor any preserved trigger/function is named, and no function, trigger, type or
       // constraint is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
       // DELETE: every stored mapping reads NULL in it.
-      '0480_managed_runner_volume_measurement'],
+      '0480_managed_runner_volume_measurement',
+      // A nullable column for what a wiki model call was made from, and a CHECK of its shape: nothing to preserve, no row
+      // written.
+      '0482_wiki_model_request_material'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

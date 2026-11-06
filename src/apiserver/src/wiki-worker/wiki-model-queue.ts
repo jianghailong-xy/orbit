@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { WIKI_MODEL_QUEUE, type WikiSystemModelErrorKind } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
 import { stripNul } from '../runner-api/strip-nul';
-import { wikiStoredModelText, wikiTextBase64, wikiTextFromStored, wikiTextIsStorable } from './wiki-stored-text';
+import { wikiJsonIsStorable, wikiStoredModelText, wikiTextBase64, wikiTextFromStored, wikiTextIsStorable } from './wiki-stored-text';
 
 /**
  * The `wiki_model_request` table: the queue every wiki model call goes through (migration 0401, contract
@@ -15,6 +15,11 @@ import { wikiStoredModelText, wikiTextBase64, wikiTextFromStored, wikiTextIsStor
  * succeeded row holds or waits for the one still in flight — so a pipeline that replays, after its worker
  * died or its job was retried, reuses what answered. Nothing is issued twice for one unit, which is what
  * makes the restart specs' "each write happens once" true.
+ *
+ * WHAT A QUESTION WAS MADE FROM (2026-11-06). A row can keep the material its call was made from (`material`, contract
+ * `modelQueue.material`). A replay that builds its question again from records that moved on since would ask the same unit
+ * another question, which the executor refuses; a pipeline that keeps its material asks again what was asked, and reads the
+ * answer against what it was asked from (`wikiModelRequestsAsked`).
  *
  * THE CLAIM
  * One scheduler claims in a transaction that starts with an advisory lock (so every scheduler in the
@@ -456,7 +461,29 @@ export async function wikiJobModelCalls(
   return { calls: row?.calls ?? 0, inputTokens: row?.inputTokens ?? 0, outputTokens: row?.outputTokens ?? 0 };
 }
 
-/** Enqueue one call (`job_id`, `step`, `unit`, `attempt` is its identity). A row already there is that row. */
+/**
+ * What a job's next ask of each of `units` under `step` meets, as `wikiModelRequestAttempt` picks it: the unit's newest row,
+ * unless that row failed on its wait limit, which the next ask moves past. Each with the call it was asked with and the
+ * material it was made from (contract `modelQueue.material`), null when it was made without one. A unit with no such row
+ * is not in the map.
+ */
+export async function wikiModelRequestsAsked(
+  prisma: PrismaService,
+  input: { jobId: string; step: string; units: readonly string[] },
+): Promise<Map<string, { call: WikiModelRequestCall; material: Record<string, unknown> | null }>> {
+  const rows = await prisma.$queryRaw<Array<{ unit: string; state: string; error: string | null; request: unknown; material: Record<string, unknown> | null }>>`
+    SELECT DISTINCT ON ("unit") "unit", "state", "error", "request", "material" FROM "wiki_model_request"
+    WHERE "job_id" = ${input.jobId}::uuid AND "step" = ${input.step} AND "unit" = ANY(${[...input.units]}::text[])
+    ORDER BY "unit", "attempt" DESC`;
+  return new Map(rows
+    .filter((row) => !(row.state === 'failed' && wikiModelRequestFailedOnWaitLimit(row.error)))
+    .map((row) => [row.unit, { call: wikiModelRequestCallOf(row.request), material: row.material }]));
+}
+
+/**
+ * Enqueue one call (`job_id`, `step`, `unit`, `attempt` is its identity). A row already there is that row. `material` is what
+ * the call was made from, kept with a row this makes (contract `modelQueue.material`); a row already there keeps its own.
+ */
 export async function enqueueWikiModelRequest(
   prisma: PrismaService,
   input: {
@@ -469,15 +496,18 @@ export async function enqueueWikiModelRequest(
     attempt?: number;
     priority?: number;
     request: WikiModelRequestCall;
+    material?: Record<string, unknown>;
   },
 ): Promise<{ id: string; inserted: boolean }> {
   const sha = wikiModelRequestSha256(input.request);
+  // A material jsonb cannot keep is not kept (repoOps.storedText): a replay of that unit then asks as one made without it.
+  const material = input.material !== undefined && wikiJsonIsStorable(input.material) ? JSON.stringify(input.material) : null;
   const inserted = await prisma.$queryRaw<Array<{ id: string }>>`
     INSERT INTO "wiki_model_request" ("id", "job_id", "owner_id", "space_id", "step", "unit", "attempt", "priority",
-                                      "request", "request_sha256", "state")
+                                      "request", "request_sha256", "material", "state")
     VALUES (${input.id}::uuid, ${input.jobId}::uuid, ${input.ownerId}::uuid, ${input.spaceId}::uuid,
             ${input.step}, ${input.unit}, ${input.attempt ?? 1}, ${input.priority ?? 0},
-            ${JSON.stringify(wikiModelRequestStored(input.request))}::jsonb, ${sha}, 'queued')
+            ${JSON.stringify(wikiModelRequestStored(input.request))}::jsonb, ${sha}, ${material}::jsonb, 'queued')
     ON CONFLICT ("job_id", "step", "unit", "attempt") DO NOTHING
     RETURNING "id"`;
   if (inserted.length > 0) return { id: inserted[0].id, inserted: true };
