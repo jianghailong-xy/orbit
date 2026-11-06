@@ -1,0 +1,24 @@
+-- 0478 — what a Claude session's engine last reported as running totals, so a turn books its own
+-- cost and tokens and not the process's whole count again.
+--
+-- WHY
+-- ===
+-- Claude Code's `total_cost_usd` and `modelUsage` count everything its process has spent, and a
+-- process started with `--resume` restores the totals its transcript last saved and goes on
+-- counting. turn-complete added that total to `session.cost_usd` on every turn and wrote it as a
+-- new `usage` row: one long coordinator showed $258k that way (task 34sjn2yQvNJg1JhQIARvd).
+-- A turn's own share is the difference from the totals booked before, and this column holds
+-- them: `{process, costUsd, modelUsage}`, the engine process they belong to beside its totals.
+--
+-- WHAT IT ADDS
+-- ============
+-- One nullable column, written by turn-complete in the same update that books the turn. Nothing is
+-- backfilled and no existing row is rewritten (the owner's decision of 2026-11-05: new data only).
+-- Null reads as "nothing booked yet", which is what every existing session is.
+--
+-- BACKWARD COMPATIBLE
+-- ===================
+-- A nullable column with no default is a catalog change only: no table rewrite, no lock beyond
+-- the ALTER's own. Rolling the code back leaves it in place, unread.
+
+ALTER TABLE "session" ADD COLUMN "engine_usage_totals" JSONB;

@@ -1761,6 +1761,11 @@ model Session {
   // billing, accrued per turn
   numTurns             Int       @default(0) @map("num_turns")
   costUsd              Float     @default(0) @map("cost_usd")
+  // The running totals of cost and tokens (Claude Code's `total_cost_usd` and `modelUsage`) the
+  // session's engine last reported, as booked, with the engine process they belong to: what the
+  // next completion of that process is measured from (runner-api/running-totals.ts). Null until a
+  // completion reporting running totals is booked (migration 0478).
+  engineUsageTotals    Json?     @map("engine_usage_totals")
   // How full the context window is RIGHT NOW: the tokens the latest top-level assistant message
   // actually cost (fresh input + cache reads + cache writes + output), denormalized from the
   // turn_end event that already carries it for the clients' context gauge. A long-lived session
