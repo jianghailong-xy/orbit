@@ -144,16 +144,35 @@ The runner judges pressure against the storage it may use:
   eligible checkout of an ended session, then resting sessions' checkouts by the rule below until the new one fits. The
   checkout is never refused for want of room: when nothing more can go, it is made all the same, and the log says how
   far short of the floor that leaves the budget. Every door that makes a session checkout (a new session, a pinned run,
-  `restoreAbsentCheckout`) runs on the claim loop, as the sweep does. The room is made only once the sweeper is armed,
-  and its look at resting checkouts keeps the sweeper's hour of waiting after a look that found nothing
-  (`resumableSweepWait`). Without a budget, a checkout is made as before.
-- **Resting checkouts under a budget** (owner decision, 2026-11-06). Below a budget's floor, `gcResumableCheckouts`
-  may take a resting session's checkout however recently it was written (`resumableIdle`), oldest last write first.
-  The rest of its rule stands. The control plane must answer that the session is resumable, nothing of the session may
-  be at work on the runner, and no process or mount may be in the checkout. The checkout must have nothing to lose
-  (`checkoutHasNothingToLose`), and all of this is asked again just before it goes. Its branch and base ref stay, and
-  the sweep's 60-second budget holds. The checkout comes back on the session's next claim (`restoreAbsentCheckout`).
-  Without a budget, two weeks unwritten (`resumableCheckoutIdle`) stands.
+  `restoreAbsentCheckout`) runs on the claim loop, as the sweep does. The room is made only once the sweeper is armed.
+  Its look at resting checkouts does not wait out the hour that follows a look that found nothing
+  (`resumableSweepWait`): a new checkout under the budget's floor is the change that wait assumes has not happened. It
+  still goes through the one door to that half (`sweepResumable`) and within its 60-second budget, and a look of its own
+  that finds nothing starts the wait for the schedule. Without a budget, a checkout is made as before.
+- **Resting checkouts under a budget** (owner decision, 2026-11-06). Below a budget's floor (`underBudgetFloor`),
+  `gcResumableCheckouts` may take a resting session's checkout however recently it was written, oldest last write
+  first. A commit on the session's own branch counts as kept there, pushed or not: the branch and its commits stay in
+  the repository when the checkout goes, and the checkout comes back from the branch, a park checkpoint undone as on any
+  resume. That is the case of every resting session that did work, since the runner pushes no session branch. The rest
+  of the rule stands. The control plane must answer that the session is resumable, nothing of the session may be at
+  work on the runner, and no process or mount may be in the checkout. In `checkoutHasNothingToLose`, no operation may
+  be half done, HEAD must be on the session's branch, the base ref must be there, the status must be clean apart from
+  dependency and build output, no file may carry an assume-unchanged or skip-worktree mark but a sparse checkout's
+  absent paths, and no repository may be nested in a dependency directory. All of this is asked again just before it
+  goes. Its branch and base ref stay, and the sweep's 60-second budget holds. The checkout comes back on the session's
+  next claim (`restoreAbsentCheckout`). Without a budget, two weeks unwritten (`resumableCheckoutIdle`) and a remote
+  for every commit stand.
+- **A session's branch while its checkout is away.** Nothing in the runner deletes or prunes a local branch. No call
+  deletes a ref under `refs/heads/`. Its `git branch -f` calls move a merge target forward, to a commit that holds its
+  old tip, or move an integration line. `git worktree prune` removes only the records of checkouts that are gone, and
+  `git gc`, which git may start on its own, deletes no ref and prunes only objects nothing reaches. An agent or a person
+  working in the same repository can delete a branch, though. git refuses `git branch -D` of a branch checked out in
+  some worktree, and once the checkout is away it no longer does. The commits stay reachable from the absent ref
+  (`refs/orbit-absent/<session>`), which points where the branch did when the checkout went. Every door that brings the
+  checkout back puts a missing branch back there first (`restoreBranchOfAbsentCheckout`): a claim waking a supervisor,
+  a claim, and a pinned claim. A restart does so too, and then leaves the checkout away as for any resting session.
+  Without that, the session would be refused, or would start over on a new branch from HEAD, and a later sweep could
+  move the absent ref off the old commits.
 - **Self-registered runners:** unchanged. The owner's Keep free setting is the floor.
 
 The channel's stop at the limit stays as the backstop. The runner should rarely reach it, because reclamation starts at
