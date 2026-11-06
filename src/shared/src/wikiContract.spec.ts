@@ -1682,7 +1682,7 @@ describe('wiki contract', () => {
     const search = CONTRACT.agentSurface.toolSpecs.wiki_search;
     // A hit's fields, in the order the server writes them. Each end holds its own reading to this list: the
     // server's answer (wiki-search.pg.spec.ts), runner-go's wikiSearchHit and its outputSchema
-    // (TestWikiAgentSurfaceIsTheContracts), OrbitKit's and Android's models (WikiContractTests).
+    // (TestWikiAgentSurfaceIsTheContracts), OrbitKit's and Android's models (WikiContractTests, WikiContractTest).
     expect(search.hit).toEqual([
       'id', 'kind', 'title', 'summary', 'trust', 'anchorState', 'match', 'score',
       'recordedAt', 'changedAt', 'anchorCheckedRef', 'anchorCheckedAt',

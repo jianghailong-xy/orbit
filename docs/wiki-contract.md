@@ -812,8 +812,9 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   - `anchorCheckedRef` / `anchorCheckedAt`：锚点最后一次核对的提交和时间（`wiki_entry.anchor_checked_ref` / `anchor_checked_at`）。
     从没核对过时两者都是 null；amend 重给锚点时清空，只改别的字段时保留，所以核对可能早于 `changedAt`。
   - 字段的顺序和集合由 `hit` 列出，各端各自钉住：服务端的回答（`wiki-search.pg.spec.ts`）、runner 的 `wikiSearchHit` 结构体与 outputSchema
-    （`TestWikiAgentSurfaceIsTheContracts`；MCP 的 structuredContent 和 `orbit wiki search --json` 都是这个结构体序列化出来的，不在结构体里的字段到不了 agent），
-    OrbitKit 与 Android 的 `WikiSearchHit` 模型（`WikiContractTests`）。给结果加字段就走这条路。
+    （`TestWikiAgentSurfaceIsTheContracts`；MCP 的 structuredContent 和 `orbit wiki search --json` 都是这个结构体序列化出来的，不在结构体里的字段到不了 agent，
+    服务端给的 null 在这里省掉，不写成空串），OrbitKit 与 Android 的 `WikiSearchHit` 模型（OrbitKit `WikiContractTests`、Android `WikiContractTest`）。
+    给结果加字段就走这条路。
 - **`orbit wiki verify --space ID [--json]`**（JSON 的 `agentSurface.verify`）：和 `orbit wiki import`（§5.1）一样没有 MCP 工具对应——它把会话
   的活交给服务端、等它做完，是命令的等待，不是一次工具调用。它请服务端核实本会话提议到这个 Automatic space、还在等核实的 op
   （`reviewModes.verification.routes.request`），再读列表的 `waiting`（`routes.list`）直到归零，打印服务端核实了几个。列表不说
