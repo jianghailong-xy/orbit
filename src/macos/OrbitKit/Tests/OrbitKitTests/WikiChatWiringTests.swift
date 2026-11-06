@@ -215,9 +215,12 @@ final class WikiChatWiringTests: XCTestCase {
                            "resultLine(result, actions: look.rewriteActions)"], "the card's parts, board 42 ⑤")
         assertOrder(card, ["Text(look.title.uppercased())", "ForEach(Array(face.diff.enumerated()), id: \\.offset)",
                            "let similar = card.state == .draft ? Array(card.similar.prefix(3)) : []",
-                           "ForEach(Array(face.rows.enumerated()), id: \\.offset)", "Text(WikiChatCopy.cardSources)",
-                           "Text(WikiChatCopy.cardRewrites)", "WikiDraftCardTarget.section(doc: $0.doc, key: $0.key)",
-                           "Text(WikiChatCopy.similar)", "WikiDraftCardTarget.entry($0.id)",
+                           "ForEach(Array(face.rows.enumerated()), id: \\.offset)", "label(row.label)",
+                           "Text(row.value)\n                            .fixedSize(horizontal: false, vertical: true)\n                            .frame(maxWidth: .infinity, alignment: .leading)",
+                           "label(WikiChatCopy.cardSources)",
+                           "label(WikiChatCopy.cardRewrites)", "WikiDraftCardTarget.section(doc: $0.doc, key: $0.key)",
+                           "label(WikiChatCopy.similar)", "WikiDraftCardTarget.entry($0.id)",
+                           "private func label(_ text: String) -> some View {\n        Text(text)\n            .foregroundStyle(.secondary)\n            .fixedSize()",
                            "let primary: WikiChatAction? = card.state == .draft ? look.actions.first : nil",
                            ".buttonStyle(.borderedProminent)", "HStack(spacing: 8) {", ".buttonStyle(.bordered)\n",
                            "Text(result.line)", "if action == .seeChanges {"], "the card's words and buttons, board 42 ⑤")

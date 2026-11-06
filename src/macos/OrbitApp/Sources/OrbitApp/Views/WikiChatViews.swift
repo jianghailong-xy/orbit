@@ -1125,14 +1125,15 @@ struct WikiDraftCardView: View {
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 6) {
                 ForEach(Array(face.rows.enumerated()), id: \.offset) { _, row in
                     GridRow {
-                        Text(row.label).foregroundStyle(.secondary)
+                        label(row.label)
                         Text(row.value)
                             .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 if !face.sources.isEmpty {
                     GridRow {
-                        Text(WikiChatCopy.cardSources).foregroundStyle(.secondary)
+                        label(WikiChatCopy.cardSources)
                         VStack(alignment: .leading, spacing: 2) {
                             ForEach(face.sources, id: \.self) { line in
                                 HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -1144,23 +1145,34 @@ struct WikiDraftCardView: View {
                                 }
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 if !card.rewrites.isEmpty {
                     GridRow {
-                        Text(WikiChatCopy.cardRewrites).foregroundStyle(.secondary)
+                        label(WikiChatCopy.cardRewrites)
                         links(card.rewrites.map { ($0.place, WikiDraftCardTarget.section(doc: $0.doc, key: $0.key)) })
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 if !similar.isEmpty {
                     GridRow {
-                        Text(WikiChatCopy.similar).foregroundStyle(.secondary)
+                        label(WikiChatCopy.similar)
                         links(similar.map { ($0.title ?? $0.id, WikiDraftCardTarget.entry($0.id)) })
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
             .font(.orbitLabel)
         }
+    }
+
+    /// A row's label at its own width: the value beside it takes the rest of the row (board 42's `64px 1fr` grid), so
+    /// it does not wrap at half the card.
+    private func label(_ text: String) -> some View {
+        Text(text)
+            .foregroundStyle(.secondary)
+            .fixedSize()
     }
 
     /// Sections or entries, each opening where it is: on one line when they fit, else one under another.
