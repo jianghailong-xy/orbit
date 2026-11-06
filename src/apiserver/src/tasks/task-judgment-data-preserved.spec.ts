@@ -2692,12 +2692,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // the six preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so
       // it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: the table starts empty.
       '0475_wiki_doc_section_version',
-      // 0476 is the wiki chat's session: a nullable `session.wiki_chat_space_id` with a partial index and a guard
+      // 0476 is the wiki chat's session: a nullable `session.wiki_chat_space_id` and a guard
       // (`session_wiki_chat_space_guard`, BEFORE UPDATE OF that one column, which raises and writes nothing),
-      // `CHAT_UPSTREAM` admitted by three CHECKs on `session`'s SOURCE columns (added back NOT VALID, then validated),
-      // and a nullable `conversation_turn.wiki_context`. Neither table is a preserved relation, nothing here names
-      // `task`, `project` or `project_acceptance_*`, and the one function it creates writes no row, so it is not another
-      // writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored row reads NULL in both new columns.
+      // `CHAT_UPSTREAM` admitted by three CHECKs on `session`'s SOURCE columns (added back NOT VALID; 0479 validates
+      // them), and a nullable `conversation_turn.wiki_context`, all in one DO statement that takes both tables' locks
+      // in short tries and writes no row. Neither table is a preserved relation, nothing here names `task`, `project`
+      // or `project_acceptance_*`, and the one function it creates writes no row, so it is not another writer of the
+      // DONE fence. No INSERT, UPDATE or DELETE: every stored row reads NULL in both new columns.
       '0476_wiki_chat_session',
       // 0477 widens `wiki_job_kind_chk` by `docs_follow` and replaces `wiki_job_space_running_key` with two partial unique
       // indexes over the same table (contract `jobs.onePerSpace`'s exception for the follow job). `wiki_job` is not a
@@ -2709,7 +2710,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // booked) and nothing else. `session` is not a preserved relation, no column any preserved trigger reads is
       // touched, and no function, trigger, type or constraint is created, replaced or dropped, so it is not another
       // writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored session reads NULL in it.
-      '0478_session_engine_usage_totals'],
+      '0478_session_engine_usage_totals',
+      // 0479 finishes 0476: it validates the three SOURCE CHECKs 0476 added back NOT VALID and builds the partial
+      // `session_wiki_chat_space_idx` CONCURRENTLY (dropping a leftover one first). `session` is not a preserved
+      // relation, no column any preserved trigger reads is touched, and no function, trigger, type or constraint is
+      // created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '0479_wiki_chat_session_checks_index'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -2043,7 +2043,7 @@
     "tables": [
       "wiki_chat_draft"
     ],
-    "migrations": "Made by the tasks that need them — session.wiki_chat_space_id with the chat (C5, migration 0476, beside conversation_turn.wiki_context: the ids a message's page and selection notes are read from at delivery), wiki_chat_draft with the presses (C6) — each numbered after a scan of main, every origin/project/* and the pushed orbit/* branches, and entered in the censuses: db-write-inventory, public-id-coverage's CONTROLLERS, PUBLIC_ID_FIELDS, the migration ledger and the personal-access-token decorators.",
+    "migrations": "Made by the tasks that need them — session.wiki_chat_space_id with the chat (C5, migration 0476, beside conversation_turn.wiki_context: the ids a message's page and selection notes are read from at delivery; 0479 validates 0476's SOURCE CHECKs and builds session_wiki_chat_space_idx CONCURRENTLY), wiki_chat_draft with the presses (C6) — each numbered after a scan of main, every origin/project/* and the pushed orbit/* branches, and entered in the censuses: db-write-inventory, public-id-coverage's CONTROLLERS, PUBLIC_ID_FIELDS, the migration ledger and the personal-access-token decorators.",
     "rules": {
       "selectionSentencesMax": 20,
       "rewritesMax": 5,

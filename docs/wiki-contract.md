@@ -3203,7 +3203,7 @@ C6（草稿与按压）、C8 与 C9（web）、C11（iOS）、C12（plan 卡）�
 
 ### 28.10 落地次序
 
-- 迁移：`session.wiki_chat_space_id` 随 C5（0476，同一次迁移还加了 `conversation_turn.wiki_context`：消息的页面与选区附注在投递时按它记下的 id 读），`wiki_chat_draft` 随 C6，`wiki_doc_section_version` 随 C3，`docs_follow` 进 `wiki_job_kind_chk` 与 §24.2 的两条部分唯一索引随 C4；
+- 迁移：`session.wiki_chat_space_id` 随 C5（0476，同一次迁移还加了 `conversation_turn.wiki_context`：消息的页面与选区附注在投递时按它记下的 id 读；0479 校验 0476 的三条 SOURCE CHECK，并 CONCURRENTLY 建 `session_wiki_chat_space_idx`），`wiki_chat_draft` 随 C6，`wiki_doc_section_version` 随 C3，`docs_follow` 进 `wiki_job_kind_chk` 与 §24.2 的两条部分唯一索引随 C4；
   取号前扫 main、所有 `origin/project/*` 与已推的 `orbit/*` 分支，登记 db-write-inventory、public-id-coverage 的 CONTROLLERS、`PUBLIC_ID_FIELDS`、迁移账本与 PAT 装饰器。
 - 闭集随做它的任务扩：`wiki_draft` 进 `agentSurface.tools`、`toolSpecs`、`cli`（C6，runner 发版）；`docs_follow` 进 `jobs.kinds`、`kindRuns`、`carry.kinds`（C4）与 OrbitKit 的
   `WikiJobKind`；SOURCE 的 `CHAT_UPSTREAM` 进共享的 `SourceKind` 与三条 CHECK（C5）。
