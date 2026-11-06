@@ -235,7 +235,7 @@ func TestAStoppingRunnerKeepsWhatMemoryHoldsWhenTheSpoolFails(t *testing.T) {
 // it acknowledges and stores as nothing. At the cut-over a reply delta numbered over HTTPS goes as such a ping
 // (linkLiveEventSeqPlaceholder); a completion that waited for it would wait for ever.
 func TestATurnCompletionDoesNotWaitForAPingThatIsNeverStored(t *testing.T) {
-	shortenLinkWaits(t, linkLongPoll, linkApprovalRecheck, 300*time.Millisecond)
+	shortenLinkWaits(t, linkHintWait, linkApprovalRecheck, 300*time.Millisecond)
 	r, in := newLinkEventsRig(t)
 	var calls atomic.Int32
 	r.g.backend = linkAfterSeqBackend(in, &calls, false)
@@ -244,7 +244,7 @@ func TestATurnCompletionDoesNotWaitForAPingThatIsNeverStored(t *testing.T) {
 	defer cancel()
 	events := linkTestRunEvents(1, 3, 10)
 	events = append(events, RunEvent{Seq: 4, Type: evTextDelta, TS: nowISO(), TurnID: "turn-1", Payload: map[string]interface{}{"text": "hel"}})
-	if err := r.t.postEvents(ctx, "session-p", RunEventBatch{Events: events}); err != nil {
+	if err := r.deliver(t, ctx, "session-p", RunEventBatch{Events: events}); err != nil {
 		t.Fatal(err)
 	}
 	began := time.Now()
@@ -260,14 +260,14 @@ func TestATurnCompletionDoesNotWaitForAPingThatIsNeverStored(t *testing.T) {
 // a loop that does not sleep: past linkAfterSeqWait it depends only on what is known stored, and past another wait on
 // nothing at all.
 func TestATurnCompletionKeptPendingBacksOffAndStopsWaiting(t *testing.T) {
-	shortenLinkWaits(t, linkLongPoll, linkApprovalRecheck, 300*time.Millisecond)
+	shortenLinkWaits(t, linkHintWait, linkApprovalRecheck, 300*time.Millisecond)
 	r, in := newLinkEventsRig(t)
 	var calls atomic.Int32
 	r.g.backend = linkAfterSeqBackend(in, &calls, true)
 	r.useLink(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := r.t.postEvents(ctx, "session-q", linkTestEvents(1, 3, 10)); err != nil {
+	if err := r.deliver(t, ctx, "session-q", linkTestEvents(1, 3, 10)); err != nil {
 		t.Fatal(err)
 	}
 	began := time.Now()
@@ -386,7 +386,6 @@ func TestLinkEventsGoAgainAfterARefusalThatIsNotTheSessions(t *testing.T) {
 // gateway's reduced credit stalls every session.
 func TestAWelcomeLeavesOneBatchInFlightAndTheCreditWhole(t *testing.T) {
 	e := linkEventsWithoutSender(t)
-	e.onLink.Store(true)
 	credit := &linkpb.Credit{MaxUnackedEvents: 10, MaxUnackedBytes: 1 << 20}
 	c1, c2 := &linkWorkConn{}, &linkWorkConn{}
 	e.welcomed(c1, &linkpb.Welcome{Credit: credit})
@@ -444,36 +443,8 @@ func TestAWelcomeLeavesOneBatchInFlightAndTheCreditWhole(t *testing.T) {
 	}
 }
 
-// An HTTPS flush that was waiting its turn when the link came back in use leaves the batch the link has in flight
-// alone: still one batch in flight, whose ack gives its credit back.
-func TestAnHTTPSFlushLeavesTheLinksBatchInFlightAlone(t *testing.T) {
-	e := linkEventsWithoutSender(t)
-	e.onLink.Store(true)
-	c := &linkWorkConn{}
-	e.welcomed(c, &linkpb.Welcome{Credit: &linkpb.Credit{MaxUnackedEvents: 10, MaxUnackedBytes: 1 << 20}})
-	s := e.open("session-h")
-	defer s.release()
-	if err := s.submit([]RunEvent{{Seq: 1, Type: evTurnEnd, TS: nowISO(), Payload: map[string]interface{}{}}}); err != nil {
-		t.Fatal(err)
-	}
-	if f, _, _ := s.nextBatch(c, time.Now()); f == nil {
-		t.Fatal("the batch did not go")
-	}
-	_ = s.heldHead(maxEventBatchBytes) // the HTTPS flush, behind the flush gate since before the link came back
-	if f, _, _ := s.nextBatch(c, time.Now()); f != nil {
-		t.Fatal("a second batch went while the first was in flight")
-	}
-	s.acked(c, &linkpb.EventAck{SessionId: "session-h", DurableSeq: 1})
-	e.mu.Lock()
-	inflight := e.inflight
-	e.mu.Unlock()
-	if inflight != (linkCredit{}) {
-		t.Errorf("with the batch acknowledged %+v is still counted in flight", inflight)
-	}
-}
-
-// Every delta is folded into the turn prefix, in HTTP mode as over the link, so that a TurnPrefixRequest just after the
-// cut-over finds the turn whole. Folding one costs the same however long the prefix has grown: the emitter holds the
+// Every delta is folded into the turn prefix, so that a TurnPrefixRequest finds the turn whole. Folding one costs the
+// same however long the prefix has grown: the emitter holds the
 // session's buffer lock no longer for the last words of a long reply than for its first. Counted, not timed (a loaded
 // host made the timing flaky): a reply of 60,000 characters folded in two at a time is copied to a new array, all told,
 // no more than a few times its own length (the array grows geometrically, by a quarter once it is large, so its moves add

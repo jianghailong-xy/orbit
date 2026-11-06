@@ -171,7 +171,7 @@ func TestLinkClientConnectsOverTLSWithATokenForItsProcess(t *testing.T) {
 	if conn.id == "" || conn.welcome.GetMode() != linkpb.Mode_MODE_HTTP || conn.token == nil {
 		t.Fatalf("welcomed as %q in %s", conn.id, conn.welcome.GetMode())
 	}
-	conns, _, _, _ := g.snapshot()
+	conns, _ := g.snapshot()
 	if len(conns) != 1 || conns[0].hello.GetProcessId() != "11111111-2222-4333-8444-555555555555" {
 		t.Fatalf("the gateway saw %d connections", len(conns))
 	}

@@ -8,9 +8,9 @@ import (
 	"orbit/linkpb"
 )
 
-// What the daemon's long polls wait on in link mode (docs/runner-link-design.md §5.5, §5.6). Over the link, the claim,
-// the inbox, the wake and an approval's decision answer at once rather than hang, and the runner asks only once
-// something says there is an answer to have:
+// What the daemon's fetches wait on (docs/runner-link-design.md §5.5, §5.6). The claim, the inbox, the wake and an
+// approval's decision answer at once rather than hang, and the runner asks only once something says there is an answer
+// to have:
 //
 //   - a Hint frame: ClaimHint, InboxHint for the session, CommandsHint (the wake: the next heartbeat carries what
 //     waits), ApprovalHint for the approval;
@@ -20,18 +20,17 @@ import (
 //     and the wake sends the connection's first heartbeat at once. Its HeartbeatAck's HintState names every session
 //     with a turn waiting in its inbox, so the inboxes are not each asked again (§10).
 //
-// Each of those makes its gate due, and a long poll that finds its gate due asks once and clears it. The first ask
-// for an approval is due too: nothing has been heard about it yet. So a hint, or a HintState entry, marks only a gate
-// a long poll has made: one for an approval nobody asks about would never be deleted, and a gate made later is due
-// anyway. A long poll that waits its whole window (linkLongPoll) answers that nothing came, without asking, as an
-// HTTP long poll that timed out does. An approval's gate waits linkApprovalRecheck at most: the fallback for a
-// decision no hint and no HintState names.
+// Each of those makes its gate due, and a fetch that finds its gate due asks once and clears it. The first ask for an
+// approval is due too: nothing has been heard about it yet. So a hint, or a HintState entry, marks only a gate a fetch
+// has made: one for an approval nobody asks about would never be deleted, and a gate made later is due anyway. A fetch
+// that waits its whole window (linkHintWait) answers that nothing came, without asking. An approval's gate waits
+// linkApprovalRecheck at most: the fallback for a decision no hint and no HintState names.
 //
 // A session's inbox gate is its inbox poller's (inbox_poller.go), which decides when to fetch: openInbox makes it,
 // due, for the poller's first fetch, and closeInbox forgets it when the engine generation ends. Hints mark it while it
 // is open.
 
-// linkGates are the gates of one link mode.
+// linkGates are the gates of one link.
 type linkGates struct {
 	mu       sync.Mutex
 	claim    *linkGate
@@ -40,10 +39,10 @@ type linkGates struct {
 	approval map[string]*linkGate // by approval, as decodeSessionID spells it
 }
 
-// linkGate is whether something waits to be asked for, and the channel a long poll waiting for that sleeps on.
+// linkGate is whether something waits to be asked for, and the channel a fetch waiting for that sleeps on.
 type linkGate struct {
 	due bool
-	ch  chan struct{} // closed when due is set while a long poll waits; nil while none does
+	ch  chan struct{} // closed when due is set while a fetch waits; nil while none does
 }
 
 func newLinkGates() *linkGates {
@@ -151,8 +150,8 @@ func (gs *linkGates) markWake() {
 	gs.mu.Unlock()
 }
 
-// markInbox marks the gate of the session's open inbox poller, and markApproval the gate a long poll has made. One that
-// does not exist is due when it is made.
+// markInbox marks the gate of the session's open inbox poller, and markApproval the gate a fetch has made. One that does
+// not exist is due when it is made.
 func (gs *linkGates) markInbox(sessionID string) {
 	gs.mu.Lock()
 	if g := gs.inbox[decodeSessionID(sessionID)]; g != nil {

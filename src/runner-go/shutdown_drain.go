@@ -45,9 +45,8 @@ import (
 // that kills at bgDrainWaitCap (30 s) has reported by 35 s. The releases, the last flush and a racing
 // finalization keep the limits they have everywhere, which add up to more than a Mac has left when the
 // control plane does not answer: there, the envelope is what ends them. When it answers they take a moment.
-// Past the envelope come the last beat (5 s at most), the shadow's stop (linkShadowStopWait, 2 s at most) and
-// the link's close (linkCloseWait, 5 s at most), so the runner is gone 57 s after the stop at the very latest,
-// 3 s inside launchd's limit. macOS 15 would
+// Past the envelope come the last beat (5 s at most) and the link's close (linkCloseWait, 5 s at most), so the
+// runner is gone 55 s after the stop at the very latest, 5 s inside launchd's limit. macOS 15 would
 // allow more, but one budget for every Mac is one thing to reason about, and the runner cannot tell who
 // sent its SIGTERM anyway.
 //

@@ -1,13 +1,10 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,8 +19,8 @@ import (
 // heard the turn was over (turn_complete_journal.go, task 34mwBTpOPo3S9LM2SXs10, from the C1a rollback drill of
 // 2026-10-27). The supervisor keeps each completion on disk until the control plane answers it; a runner that stops
 // first leaves it, and the session's next supervisor sends it after the session's spool is stored and before its first
-// inbox fetch. With nothing kept, a turn is handed out again as before, and the completion of a turn goes as it always
-// has: the same body, after the turn's events.
+// inbox fetch. With nothing kept, a turn is handed out again, and the completion of a turn goes once, after the turn's
+// events.
 
 // oneTurnScript is an engine answering one message.
 func oneTurnScript(text string) []fakeStep {
@@ -118,186 +115,133 @@ func (tr *completionTrace) fetches() int {
 	return tr.inboxFetches
 }
 
-// superviseOverHTTPSWithTrace is superviseClaudeSessionVia on a daemon transport whose link mode is off (Transport.spooled),
-// behind a stub that records the session's event batches and completions in trace, answers a completion with answer
-// (nil: an empty body, which parks), and runs prepare, when set, before the supervisor starts.
-func superviseOverHTTPSWithTrace(t *testing.T, pool *sessionPool, shutdown context.Context, logs *linkTestLog, trace *completionTrace,
-	prepare func(s *supervisedSession, tr *Transport), answer func(req TurnCompleteRequest, w http.ResponseWriter) bool,
-	script ...fakeStep) (*supervisedSession, *Transport) {
+// superviseOverLinkWithAnswers is superviseClaudeSessionOverLinkVia behind a backend that records the session's inbox
+// fetches and completions in trace, answers a completion with answer (nil: as the session does, which parks), and runs
+// prepare, when set, before the supervisor starts.
+func superviseOverLinkWithAnswers(t *testing.T, r *linkWorkRig, pool *sessionPool, shutdown context.Context, trace *completionTrace,
+	prepare func(s *supervisedSession), answer func(req TurnCompleteRequest, rpc *linkpb.Rpc) *linkpb.RpcResult,
+	script ...fakeStep) *supervisedSession {
 	t.Helper()
-	var transport *Transport
-	s := superviseClaudeSessionVia(t, pool, t.TempDir(), shutdown, func(s *supervisedSession, apiURL string) *Transport {
-		front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			switch {
-			case strings.HasSuffix(r.URL.Path, "/inbox"):
-				trace.mu.Lock()
-				trace.inboxFetches++
-				trace.mu.Unlock()
-			case strings.HasSuffix(r.URL.Path, "/events") && r.Method == http.MethodPost:
-				body, _ := io.ReadAll(r.Body)
-				r.Body = io.NopCloser(bytes.NewReader(body))
-				var batch RunEventBatch
-				_ = json.Unmarshal(body, &batch)
-				trace.events(batch.Events)
-			case strings.HasSuffix(r.URL.Path, "/turn-complete"):
-				body, _ := io.ReadAll(r.Body)
-				r.Body = io.NopCloser(bytes.NewReader(body))
-				req := trace.completion(t, body, func(turnID string) string { return newTurnCompletions(transport, s.job.SessionID).path(turnID) })
-				if answer != nil && answer(req, w) {
-					return
-				}
-			}
-			s.serve(w, r)
-		}))
-		t.Cleanup(front.Close)
-		transport = NewTransport(front.URL, "runner-token")
-		transport.spooled = newLinkEvents(nil, logs.log)
-		t.Cleanup(transport.spooled.close)
-		if prepare != nil {
-			prepare(s, transport)
-		}
-		return transport
-	}, script...)
-	return s, transport
-}
-
-// The completion of an ordinary turn, with nothing kept from an earlier process, goes as it always has, over HTTPS and
-// over the link: once, with the body the engine's loop gave it, after the turn's events are stored. It is on disk while
-// the control plane has it, and gone once the control plane answered it. A completion the disk will not take is said
-// and goes all the same, the same body in the same place: what the runner sent before completions were kept.
-func TestWithNothingKeptATurnCompletionGoesAsItAlwaysHas(t *testing.T) {
-	type run struct {
-		order []string // the entries of the trace, the events reduced to the turn's end
-		body  string
-		kept  bool
-		left  []string
-		logs  *linkTestLog
-	}
-	reduce := func(entries []string) []string {
-		var out []string
-		for _, e := range entries {
-			if strings.HasPrefix(e, "events ") {
-				for _, part := range strings.Fields(strings.TrimPrefix(e, "events ")) {
-					if strings.Contains(part, ":"+evTurnEnd+":") {
-						out = append(out, "turn_end "+part[strings.LastIndex(part, ":")+1:])
-					}
-				}
-				continue
-			}
-			out = append(out, e)
-		}
-		return out
-	}
-	overHTTPS := func(t *testing.T, writable bool) run {
-		logs := &linkTestLog{}
-		trace := newCompletionTrace()
-		var keptDir string
-		s, tr := superviseOverHTTPSWithTrace(t, newSessionPool(4), context.Background(), logs, trace,
-			func(s *supervisedSession, tr *Transport) {
-				keptDir = newTurnCompletions(tr, s.job.SessionID).dir
-				if !writable {
-					// The spool's directory is a file: no completion can be kept.
-					if err := os.WriteFile(tr.spooled.spool.dir, []byte("not a directory"), 0o600); err != nil {
-						t.Fatal(err)
-					}
-				}
-			}, nil, oneTurnScript("answered")...)
-		s.awaitParked("turn-1")
-		bodies := trace.completionsOf("turn-1")
-		if len(bodies) != 1 {
-			t.Fatalf("turn-1's completion went %d times, want once", len(bodies))
-		}
-		left, _ := filepath.Glob(filepath.Join(keptDir, turnCompletionPrefix+"*"))
-		_ = tr
-		trace.mu.Lock()
-		kept := trace.keptAtArrival["turn-1"]
-		trace.mu.Unlock()
-		return run{order: reduce(trace.snapshot()), body: bodies[0], kept: kept, left: left, logs: logs}
-	}
-	var kept, unkept run
-	t.Run("kept", func(t *testing.T) { kept = overHTTPS(t, true) })
-	t.Run("not kept", func(t *testing.T) { unkept = overHTTPS(t, false) })
-	if t.Failed() {
-		return
-	}
-	want := []string{"turn_end turn-1", "turn-complete turn-1"}
-	for name, r := range map[string]run{"kept": kept, "not kept": unkept} {
-		if fmt.Sprint(r.order) != fmt.Sprint(want) {
-			t.Errorf("over HTTPS, %s: the control plane saw %v, want the turn's end stored and then its completion, once", name, r.order)
-		}
-	}
-	if kept.body != unkept.body {
-		t.Errorf("over HTTPS the completion's body differs with the completion kept:\n  kept:     %s\n  not kept: %s", kept.body, unkept.body)
-	}
-	if !kept.kept || len(kept.left) != 0 {
-		t.Errorf("over HTTPS the completion was on disk when it arrived: %v; left once answered: %v", kept.kept, kept.left)
-	}
-	if unkept.kept || !logged(unkept.logs, "could not be kept for the runner's next process") {
-		t.Errorf("a completion the disk would not take was on disk (%v) or not said: %v", unkept.kept, unkept.logs.all())
-	}
-
-	// Over the link: the same body, after the turn's end is stored, once, and nothing left on disk.
-	r, in := newLinkEventsRig(t)
-	var linkBody string
-	var linkEndStored, linkKept bool
-	var linkCompletions int
-	var mu sync.Mutex
-	s := superviseClaudeSessionOverLinkVia(t, r, newSessionPool(4), context.Background(), func(s *supervisedSession) {
+	return superviseClaudeSessionOverLinkVia(t, r, pool, shutdown, func(s *supervisedSession) {
 		serve := r.g.backend
 		r.g.mu.Lock()
 		r.g.backend = func(c *fakeWorkConn, rpc *linkpb.Rpc) *linkpb.RpcResult {
-			if strings.HasSuffix(rpc.GetTunnel().GetPath(), "/turn-complete") {
-				body := rpc.GetTunnel().GetJsonBody()
-				var req TurnCompleteRequest
-				_ = json.Unmarshal(body, &req)
-				ended := false
-				seqs, _, _ := in.storedSeqs(s.job.SessionID)
-				for _, seq := range seqs {
-					if e := in.event(s.job.SessionID, seq); e != nil && e.GetType() == evTurnEnd && e.GetTurnId() == req.TurnID {
-						ended = true
+			path := rpc.GetTunnel().GetPath()
+			switch {
+			case strings.Contains(path, "/inbox"):
+				trace.mu.Lock()
+				trace.inboxFetches++
+				trace.mu.Unlock()
+			case strings.HasSuffix(path, "/turn-complete"):
+				req := trace.completion(t, rpc.GetTunnel().GetJsonBody(), func(turnID string) string { return newTurnCompletions(r.t, s.job.SessionID).path(turnID) })
+				if answer != nil {
+					if result := answer(req, rpc); result != nil {
+						return result
 					}
 				}
-				_, err := os.Stat(newTurnCompletions(r.t, s.job.SessionID).path(req.TurnID))
-				mu.Lock()
-				linkCompletions++
-				linkBody, linkEndStored, linkKept = completionWireBody(t, body), ended, err == nil
-				mu.Unlock()
 			}
 			return serve(c, rpc)
 		}
 		r.g.mu.Unlock()
-	}, oneTurnScript("answered")...)
-	s.awaitParked("turn-1")
-	mu.Lock()
-	defer mu.Unlock()
-	if linkCompletions != 1 || !linkEndStored || !linkKept {
-		t.Errorf("over the link the completion went %d time(s), with the turn's end stored %v and the completion on disk %v; want once, true, true",
-			linkCompletions, linkEndStored, linkKept)
+		if prepare != nil {
+			prepare(s)
+		}
+	}, script...)
+}
+
+// The completion of an ordinary turn, with nothing kept from an earlier process, goes once, with the body the engine's
+// loop gave it, after the turn's events are stored. It is on disk while the control plane has it, and gone once the
+// control plane answered it. A completion the disk will not take is said and goes all the same, the same body.
+func TestWithNothingKeptATurnCompletionGoesOnceAfterItsEvents(t *testing.T) {
+	type run struct {
+		endStored, kept bool
+		body            string
+		completions     int
+		left            []string
+		logs            *linkTestLog
 	}
-	if linkBody != kept.body {
-		t.Errorf("over the link the completion's body differs from HTTPS's:\n  link:  %s\n  HTTPS: %s", linkBody, kept.body)
+	overLink := func(t *testing.T, writable bool) run {
+		r, in := newLinkEventsRig(t)
+		var mu sync.Mutex
+		var got run
+		s := superviseClaudeSessionOverLinkVia(t, r, newSessionPool(4), context.Background(), func(s *supervisedSession) {
+			if !writable {
+				// The session's spool directory is a file: no completion can be kept.
+				dir := newTurnCompletions(r.t, s.job.SessionID).dir
+				if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(dir, []byte("not a directory"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			serve := r.g.backend
+			r.g.mu.Lock()
+			r.g.backend = func(c *fakeWorkConn, rpc *linkpb.Rpc) *linkpb.RpcResult {
+				if strings.HasSuffix(rpc.GetTunnel().GetPath(), "/turn-complete") {
+					body := rpc.GetTunnel().GetJsonBody()
+					var req TurnCompleteRequest
+					_ = json.Unmarshal(body, &req)
+					ended := false
+					seqs, _, _ := in.storedSeqs(s.job.SessionID)
+					for _, seq := range seqs {
+						if e := in.event(s.job.SessionID, seq); e != nil && e.GetType() == evTurnEnd && e.GetTurnId() == req.TurnID {
+							ended = true
+						}
+					}
+					_, err := os.Stat(newTurnCompletions(r.t, s.job.SessionID).path(req.TurnID))
+					mu.Lock()
+					got.completions++
+					got.body, got.endStored, got.kept = completionWireBody(t, body), ended, err == nil
+					mu.Unlock()
+				}
+				return serve(c, rpc)
+			}
+			r.g.mu.Unlock()
+		}, oneTurnScript("answered")...)
+		s.awaitParked("turn-1")
+		got.left, _ = filepath.Glob(filepath.Join(newTurnCompletions(r.t, s.job.SessionID).dir, turnCompletionPrefix+"*"))
+		got.logs = r.logs
+		mu.Lock()
+		defer mu.Unlock()
+		return got
 	}
-	if left, _ := filepath.Glob(filepath.Join(newTurnCompletions(r.t, s.job.SessionID).dir, turnCompletionPrefix+"*")); len(left) != 0 {
-		t.Errorf("over the link a completion answered is still on disk: %v", left)
+	var kept, unkept run
+	t.Run("kept", func(t *testing.T) { kept = overLink(t, true) })
+	t.Run("not kept", func(t *testing.T) { unkept = overLink(t, false) })
+	if t.Failed() {
+		return
+	}
+	for name, r := range map[string]run{"kept": kept, "not kept": unkept} {
+		if r.completions != 1 || !r.endStored {
+			t.Errorf("%s: the completion went %d time(s), with the turn's end stored %v; want once, true", name, r.completions, r.endStored)
+		}
+	}
+	if kept.body != unkept.body {
+		t.Errorf("the completion's body differs with the completion kept:\n  kept:     %s\n  not kept: %s", kept.body, unkept.body)
+	}
+	if !kept.kept || len(kept.left) != 0 {
+		t.Errorf("the completion was on disk when it arrived: %v; left once answered: %v", kept.kept, kept.left)
+	}
+	if unkept.kept || !logged(unkept.logs, "could not be kept for the runner's next process") {
+		t.Errorf("a completion the disk would not take was on disk (%v) or not said: %v", unkept.kept, unkept.logs.all())
 	}
 }
 
 // A runner that stops before the control plane answers a turn's completion keeps it, whole, for its next process: here
-// the control plane refuses HTTPS once the stop has begun, as one whose link is required does.
+// no answer comes until the stop has begun, and then a refusal that says nothing of the session.
 func TestARunnerStoppingBeforeItsCompletionIsAnsweredKeepsIt(t *testing.T) {
-	logs := &linkTestLog{}
+	r, _ := newLinkEventsRig(t)
 	trace := newCompletionTrace()
 	shutdown, stop := context.WithCancel(context.Background())
 	defer stop()
 	arrived := make(chan struct{})
 	var once sync.Once
-	s, tr := superviseOverHTTPSWithTrace(t, newSessionPool(4), shutdown, logs, trace, nil,
-		func(req TurnCompleteRequest, w http.ResponseWriter) bool {
+	s := superviseOverLinkWithAnswers(t, r, newSessionPool(4), shutdown, trace, nil,
+		func(req TurnCompleteRequest, rpc *linkpb.Rpc) *linkpb.RpcResult {
 			once.Do(func() { close(arrived) })
 			<-shutdown.Done()
-			w.WriteHeader(http.StatusUpgradeRequired)
-			_, _ = w.Write([]byte(`{"code":"UPGRADE_REQUIRED","message":"daemon calls go over the runner link"}`))
-			return true
+			return fakeWorkAnswer(rpc, http.StatusBadRequest, `{"code":"REFUSED_FOR_THE_TEST"}`)
 		}, oneTurnScript("answered before the stop")...)
 	select {
 	case <-arrived:
@@ -306,10 +250,10 @@ func TestARunnerStoppingBeforeItsCompletionIsAnsweredKeepsIt(t *testing.T) {
 	}
 	stop()
 	waitUntil(t, func() bool {
-		return logged(logs, "the completion of turn turn-1 of session sess-1 is kept for the runner's next process")
+		return logged(r.logs, "the completion of turn turn-1 of session sess-1 is kept for the runner's next process")
 	},
 		"the runner never said it kept the completion")
-	path := newTurnCompletions(tr, s.job.SessionID).path("turn-1")
+	path := newTurnCompletions(r.t, s.job.SessionID).path("turn-1")
 	body, ok := keptCompletionBody(t, path)
 	if !ok {
 		t.Fatalf("no completion of turn-1 is kept at %s", path)
@@ -326,72 +270,6 @@ func TestARunnerStoppingBeforeItsCompletionIsAnsweredKeepsIt(t *testing.T) {
 // The supervisor stores the spool, then sends the completion, before it fetches anything: the control plane answers
 // it, and turn-0 is never handed to an engine again. The next message is run as ever.
 func TestTheNextProcessSettlesAKeptCompletionBeforeItsFirstFetch(t *testing.T) {
-	logs := &linkTestLog{}
-	trace := newCompletionTrace()
-	pool := newSessionPool(4)
-	var kept TurnCompleteRequest
-	s, tr := superviseOverHTTPSWithTrace(t, pool, context.Background(), logs, trace,
-		func(s *supervisedSession, tr *Transport) {
-			s.job.MaxSeq = 9
-			spoolLeftBehind(t, tr.spooled.spool.dir, s.job.SessionID, 10, 11, "turn-0")
-			kept = TurnCompleteRequest{TurnID: "turn-0", Status: stSucceeded, Result: "the answer before the stop", Subtype: "success",
-				NumTurns: 2, CostUsd: 0.25, Usage: &TokenUsage{InputTokens: 120, OutputTokens: 40}}
-			newTurnCompletions(tr, s.job.SessionID).keep(kept)
-			// Nothing queued: the next message comes later. A fetch before turn-0's completion would be the one the
-			// control plane answers with turn-0 again, and its resume continuation.
-			s.mu.Lock()
-			s.inbox = []RunInboxResponse{}
-			s.mu.Unlock()
-		},
-		func(req TurnCompleteRequest, w http.ResponseWriter) bool {
-			if req.TurnID != "turn-0" {
-				return false
-			}
-			_, _ = w.Write([]byte(`{"ok":true,"status":"AWAITING_INPUT"}`))
-			return true
-		}, oneTurnScript("answered the next message")...)
-
-	waitUntil(t, func() bool { return len(trace.completionsOf("turn-0")) == 1 }, "turn-0's kept completion was never sent")
-	waitUntil(t, func() bool { return !pool.isActive(s.live) }, "the session was never parked after turn-0 was settled")
-	time.Sleep(300 * time.Millisecond)
-	entries := trace.snapshot()
-	if len(entries) < 2 || !strings.HasPrefix(entries[0], "events 10:") || !strings.Contains(entries[0], "20:"+evTurnEnd+":turn-0") ||
-		entries[1] != "turn-complete turn-0" {
-		t.Fatalf("the control plane saw %v, want the spool's seqs 10-20 and then turn-0's completion", entries)
-	}
-	wire, _ := json.Marshal(kept)
-	if got := trace.completionsOf("turn-0")[0]; got != completionWireBody(t, wire) {
-		t.Errorf("the kept completion went as %s, want %s", got, completionWireBody(t, wire))
-	}
-	if n := trace.fetches(); n != 0 || len(s.fake.Spawns()) != 0 {
-		t.Errorf("with turn-0 settled and the session parked the supervisor fetched %d time(s) and started %d engine(s)", n, len(s.fake.Spawns()))
-	}
-	if _, err := os.Stat(newTurnCompletions(tr, s.job.SessionID).path("turn-0")); !os.IsNotExist(err) {
-		t.Errorf("the kept completion is still on disk once answered: %v", err)
-	}
-	if !logged(logs, "turn turn-0 of session sess-1, which an earlier process finished, is settled from the completion it kept: AWAITING_INPUT") {
-		t.Errorf("the runner never said it settled turn-0: %v", logs.all())
-	}
-
-	// The next message claims the session: it is what the engine is handed, and nothing of turn-0.
-	s.queue(RunInboxResponse{TurnID: "turn-1", Kind: "message", Content: "start the build"})
-	if _, ok := pool.activate(s.job); !ok {
-		t.Fatal("the next message's claim did not activate the session")
-	}
-	s.awaitParked("turn-1")
-	var handed []string
-	for _, frame := range s.fake.Stdin() {
-		if frame["type"] == frameUser {
-			handed = append(handed, userFrameText(t, frame))
-		}
-	}
-	if len(handed) != 1 || handed[0] != "start the build" {
-		t.Errorf("the engine was handed %q, want only the next message", handed)
-	}
-}
-
-// Over the link the same: the spool is stored on the link, then the kept completion goes over it, before any fetch.
-func TestTheNextProcessSettlesAKeptCompletionOverTheLink(t *testing.T) {
 	r, in := newLinkEventsRig(t)
 	pool := newSessionPool(4)
 	var mu sync.Mutex
@@ -411,7 +289,9 @@ func TestTheNextProcessSettlesAKeptCompletionOverTheLink(t *testing.T) {
 		r.g.mu.Lock()
 		r.g.backend = func(c *fakeWorkConn, rpc *linkpb.Rpc) *linkpb.RpcResult {
 			path := rpc.GetTunnel().GetPath()
-			if strings.HasSuffix(path, "/turn-complete") {
+			var completed TurnCompleteRequest
+			_ = json.Unmarshal(rpc.GetTunnel().GetJsonBody(), &completed)
+			if strings.HasSuffix(path, "/turn-complete") && completed.TurnID == "turn-0" {
 				seqs, _, _ := in.storedSeqs(s.job.SessionID)
 				mu.Lock()
 				bodies = append(bodies, completionWireBody(t, rpc.GetTunnel().GetJsonBody()))
@@ -432,7 +312,6 @@ func TestTheNextProcessSettlesAKeptCompletionOverTheLink(t *testing.T) {
 	waitUntil(t, func() bool { return !pool.isActive(s.live) }, "the session was never parked after turn-0 was settled")
 	time.Sleep(300 * time.Millisecond)
 	mu.Lock()
-	defer mu.Unlock()
 	wire, _ := json.Marshal(kept)
 	if bodies[0] != completionWireBody(t, wire) {
 		t.Errorf("the kept completion went as %s, want %s", bodies[0], completionWireBody(t, wire))
@@ -440,6 +319,7 @@ func TestTheNextProcessSettlesAKeptCompletionOverTheLink(t *testing.T) {
 	if !spoolStoredFirst || fetchesBefore != 0 {
 		t.Errorf("when the kept completion went the spool was stored: %v, and the supervisor had fetched %d time(s)", spoolStoredFirst, fetchesBefore)
 	}
+	mu.Unlock()
 	if n := len(r.g.rpcsTo("/runner/sessions/" + s.job.SessionID + "/inbox")); n != 0 || len(s.fake.Spawns()) != 0 {
 		t.Errorf("with turn-0 settled the supervisor fetched %d time(s) and started %d engine(s)", n, len(s.fake.Spawns()))
 	}
@@ -447,39 +327,32 @@ func TestTheNextProcessSettlesAKeptCompletionOverTheLink(t *testing.T) {
 	if _, err := os.Stat(newTurnCompletions(r.t, s.job.SessionID).path("turn-0")); !os.IsNotExist(err) {
 		t.Errorf("the kept completion is still on disk once answered: %v", err)
 	}
-}
+	if !logged(r.logs, "turn turn-0 of session sess-1, which an earlier process finished, is settled from the completion it kept: AWAITING_INPUT") {
+		t.Errorf("the runner never said it settled turn-0: %v", r.logs.all())
+	}
 
-// With nothing kept (the runner killed before its engine finished the turn, or before the completion was written), the
-// turn is handed out again with its resume continuation and run, as before.
-func TestWithNoCompletionKeptTheTurnIsHandedOutAgain(t *testing.T) {
-	logs := &linkTestLog{}
-	trace := newCompletionTrace()
-	const continuation = "Your previous run of this message was interrupted because its runner restarted."
-	s, _ := superviseOverHTTPSWithTrace(t, newSessionPool(4), context.Background(), logs, trace,
-		func(s *supervisedSession, tr *Transport) {
-			s.job.MaxSeq = 9
-			s.mu.Lock()
-			s.inbox = []RunInboxResponse{{TurnID: "turn-0", Kind: "message", Content: continuation}}
-			s.mu.Unlock()
-		}, nil, oneTurnScript("answered again")...)
-	s.awaitParked("turn-0")
+	// The next message claims the session: it is what the engine is handed, and nothing of turn-0.
+	s.queue(RunInboxResponse{TurnID: "turn-1", Kind: "message", Content: "start the build"})
+	if _, ok := pool.activate(s.job); !ok {
+		t.Fatal("the next message's claim did not activate the session")
+	}
+	r.m.gates.markInbox(s.job.SessionID)
+	s.awaitParked("turn-1")
 	var handed []string
 	for _, frame := range s.fake.Stdin() {
 		if frame["type"] == frameUser {
 			handed = append(handed, userFrameText(t, frame))
 		}
 	}
-	if len(handed) != 1 || !strings.Contains(handed[0], continuation) {
-		t.Errorf("the engine was handed %q, want turn-0's continuation", handed)
-	}
-	if sent := trace.completionsOf("turn-0"); len(sent) != 1 {
-		t.Errorf("turn-0's completion went %d time(s), want once, from the engine that ran it again", len(sent))
+	if len(handed) != 1 || handed[0] != "start the build" {
+		t.Errorf("the engine was handed %q, want only the next message", handed)
 	}
 }
 
-// Over the link the same: with nothing kept, the first fetch hands turn-0 back with its resume continuation, the engine
-// runs it, and its completion goes once, from that run.
-func TestWithNoCompletionKeptTheTurnIsHandedOutAgainOverTheLink(t *testing.T) {
+// With nothing kept (the runner killed before its engine finished the turn, or before the completion was written), the
+// first fetch hands turn-0 back with its resume continuation, the engine runs it, and its completion goes once, from
+// that run.
+func TestWithNoCompletionKeptTheTurnIsHandedOutAgain(t *testing.T) {
 	r, in := newLinkEventsRig(t)
 	const continuation = "Your previous run of this message was interrupted because its runner restarted."
 	var mu sync.Mutex
@@ -528,47 +401,44 @@ func TestWithNoCompletionKeptTheTurnIsHandedOutAgainOverTheLink(t *testing.T) {
 // A kept completion of a failed turn is the run's end, as the failed turn's own acknowledgement is: the control plane
 // answers it with a terminal status, and the supervisor returns without an engine.
 func TestAKeptCompletionOfAFailedTurnEndsTheRun(t *testing.T) {
-	logs := &linkTestLog{}
+	r, _ := newLinkEventsRig(t)
 	trace := newCompletionTrace()
 	pool := newSessionPool(4)
-	s, _ := superviseOverHTTPSWithTrace(t, pool, context.Background(), logs, trace,
-		func(s *supervisedSession, tr *Transport) {
-			newTurnCompletions(tr, s.job.SessionID).keep(TurnCompleteRequest{TurnID: "turn-0", Status: stFailed, Result: "API Error: 529 overloaded"})
+	s := superviseOverLinkWithAnswers(t, r, pool, context.Background(), trace,
+		func(s *supervisedSession) {
+			newTurnCompletions(r.t, s.job.SessionID).keep(TurnCompleteRequest{TurnID: "turn-0", Status: stFailed, Result: "API Error: 529 overloaded"})
 		},
-		func(req TurnCompleteRequest, w http.ResponseWriter) bool {
-			_, _ = w.Write([]byte(`{"ok":true,"status":"FAILED"}`))
-			return true
+		func(req TurnCompleteRequest, rpc *linkpb.Rpc) *linkpb.RpcResult {
+			return fakeWorkAnswer(rpc, http.StatusOK, `{"ok":true,"status":"FAILED"}`)
 		}, oneTurnScript("never asked")...)
 	waitUntil(t, func() bool { return !pool.ids()[s.job.SessionID] }, "the supervisor did not end the run")
 	if n := trace.fetches(); n != 0 || len(s.fake.Spawns()) != 0 {
 		t.Errorf("the run ended by its kept failed turn fetched %d time(s) and started %d engine(s)", n, len(s.fake.Spawns()))
 	}
-	if !logged(logs, "is settled from the completion it kept: FAILED") {
-		t.Errorf("the runner never said it settled the failed turn: %v", logs.all())
+	if !logged(r.logs, "is settled from the completion it kept: FAILED") {
+		t.Errorf("the runner never said it settled the failed turn: %v", r.logs.all())
 	}
 }
 
 // A kept completion the control plane refuses for the session (409: another process owns it now) is dropped and said;
 // the supervisor lets the session go, as for any such refusal.
 func TestAKeptCompletionRefusedForTheSessionIsDroppedAndSaid(t *testing.T) {
-	logs := &linkTestLog{}
+	r, _ := newLinkEventsRig(t)
 	trace := newCompletionTrace()
 	pool := newSessionPool(4)
-	s, tr := superviseOverHTTPSWithTrace(t, pool, context.Background(), logs, trace,
-		func(s *supervisedSession, tr *Transport) {
-			newTurnCompletions(tr, s.job.SessionID).keep(TurnCompleteRequest{TurnID: "turn-0", Status: stSucceeded})
+	s := superviseOverLinkWithAnswers(t, r, pool, context.Background(), trace,
+		func(s *supervisedSession) {
+			newTurnCompletions(r.t, s.job.SessionID).keep(TurnCompleteRequest{TurnID: "turn-0", Status: stSucceeded})
 		},
-		func(req TurnCompleteRequest, w http.ResponseWriter) bool {
-			w.WriteHeader(http.StatusConflict)
-			_, _ = w.Write([]byte(`{"code":"CONFLICT","message":"runner process no longer owns this session"}`))
-			return true
+		func(req TurnCompleteRequest, rpc *linkpb.Rpc) *linkpb.RpcResult {
+			return fakeWorkAnswer(rpc, http.StatusConflict, `{"code":"CONFLICT","message":"runner process no longer owns this session"}`)
 		}, oneTurnScript("never asked")...)
 	waitUntil(t, func() bool { return !pool.ids()[s.job.SessionID] }, "the supervisor did not let the session go")
-	if _, err := os.Stat(newTurnCompletions(tr, s.job.SessionID).path("turn-0")); !os.IsNotExist(err) {
+	if _, err := os.Stat(newTurnCompletions(r.t, s.job.SessionID).path("turn-0")); !os.IsNotExist(err) {
 		t.Errorf("a completion refused for the session is still kept: %v", err)
 	}
-	if !logged(logs, "the completion an earlier process kept of turn turn-0 of session sess-1 is dropped: the control plane refused it for the session") {
-		t.Errorf("the runner never said it dropped the completion: %v", logs.all())
+	if !logged(r.logs, "the completion an earlier process kept of turn turn-0 of session sess-1 is dropped: the control plane refused it for the session") {
+		t.Errorf("the runner never said it dropped the completion: %v", r.logs.all())
 	}
 	if len(s.fake.Spawns()) != 0 {
 		t.Errorf("a session another process owns started %d engine(s)", len(s.fake.Spawns()))
@@ -581,8 +451,8 @@ func TestAKeptCompletionReadsBackAsItWasSent(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	logs := &linkTestLog{}
 	tr := NewTransport("http://127.0.0.1:1", "runner-token")
-	tr.spooled = newLinkEvents(nil, logs.log)
-	t.Cleanup(tr.spooled.close)
+	tr.link = newLinkMode(tr, logs.log)
+	t.Cleanup(tr.link.close)
 	j := newTurnCompletions(tr, "sess-k")
 	first := TurnCompleteRequest{TurnID: "turn-a", Status: stSucceeded, UsageUnknown: true, NumTurns: 1, BaseSha: "abc", LeaseOwner: "someone"}
 	j.keep(first)
@@ -628,10 +498,10 @@ func TestTheSpoolCleanupSaysWhichKeptCompletionsItRemoves(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	logs := &linkTestLog{}
 	tr := NewTransport("http://127.0.0.1:1", "runner-token")
-	tr.spooled = newLinkEvents(nil, func(...any) {})
+	tr.link = newLinkMode(tr, func(...any) {})
 	newTurnCompletions(tr, "session-old").keep(TurnCompleteRequest{TurnID: "turn-9", Status: stSucceeded})
 	spoolLeftBehind(t, linkSpoolDir(), "session-old", 5, 3, "turn-9")
-	tr.spooled.close()
+	tr.link.close()
 	dir := filepath.Join(linkSpoolDir(), "session-old")
 	old := time.Now().Add(-linkSpoolStaleAfter - time.Hour)
 	entries, _ := os.ReadDir(dir)
