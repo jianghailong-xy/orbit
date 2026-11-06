@@ -597,6 +597,11 @@ A runner takes its updates from your deployment's own `/dl`, with the release it
 those two stay on HTTP(S) in every build, so an upgrade of the server brings runners with it. A runner that is idle
 updates itself within 10 minutes; a busy one waits for its turns to end.
 
+In a build that serves runners only over the link, one from before 0.1.237 does not wait: its first call is refused with
+426, and it stops. The service `orbit register` installs starts it again within seconds (systemd's `Restart=always`,
+launchd's `KeepAlive`), and it then updates itself at once and comes back on the link, carrying on a turn it was
+running. A runner started another way, such as `orbit run` in a terminal, stays stopped until you start it again.
+
 A [managed runner](#managed-runners) never updates itself either: it takes the new image with its next container, made
 when it wakes after it next sleeps, or, for one from before 0.1.237 on a build that serves runners only over the link, when
 the manager replaces it ([What an upgrade does](#what-an-upgrade-does)). Until then it runs the binary its container
@@ -606,9 +611,8 @@ A runner with self-update off (`ORBIT_NO_SELFUPDATE`, or an install directory it
 
 - at 0.1.237 or later, speaks the link and needs nothing;
 - older, cannot. In a build that keeps its HTTPS path it goes on working. In a build that serves runners only over the
-  link, every call it makes is refused with 426, and its log says
-  `Run \`orbit upgrade\` to update this runner, and check that its link mode is not turned off`. Do what it says on
-  that machine.
+  link, its first call is refused with 426 and it stops, and its log says `Run \`orbit upgrade\` to update this runner`
+  each time its service starts it. Do what it says on that machine.
 
 ### Moving runners onto the link now
 
