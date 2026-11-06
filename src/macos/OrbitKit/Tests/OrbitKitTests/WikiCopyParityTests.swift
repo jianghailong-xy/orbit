@@ -445,6 +445,7 @@ final class WikiCopyParityTests: XCTestCase {
     /// head, the line and the search, `WikiHome.tsx` the rest, and index.css's phone rules keep them one
     /// column in that order — and iOS draws `WikiLogic.HomeBand` in the same one. No block says how the wiki
     /// is kept: the status row, Review, the plan, the decisions, the changes and the agents' use are Activity's.
+    /// The setup card alone does, in the documents' place, until there is something to read (mock 41).
     func testTheHomeBandsAreTheWebPhonesInItsOrder() throws {
         let page = try source(Self.page)
         let frame = try slice(page, from: "function WikiFrame(", to: "function WikiHeadSpace(")
@@ -455,8 +456,8 @@ final class WikiCopyParityTests: XCTestCase {
                             "<div className={`wk-layout${home ? ' home' : ''}`}>"], "the web's head, line and search")
         let home = try source(Self.home)
         let body = try slice(home, from: "export function WikiHome(", to: "export function WikiHomeState(")
-        assertOrder(body, ["{principles.length > 0 && <HomePrinciples", "<HomeSkeleton />", "<HomeCategory key={category.key}",
-                           "<HomeTopics key={group.key}", "<HomeNewSpace", "<div className=\"wk-home-more\">",
+        assertOrder(body, ["{principles.length > 0 && <HomePrinciples", "{start && <WikiStartCard space={space} />}", "<HomeSkeleton />",
+                           "<HomeCategory key={category.key}", "<HomeTopics key={group.key}", "<div className=\"wk-home-more\">",
                            "{WIKI_BROWSE}", "{WIKI_AZ_INDEX}"], "the web's home")
         for gone in ["wk-cols", "<ReviewCard", "WIKI_RECENT_DECISIONS", "WIKI_RECENTLY_CHANGED", "<UsageCard", "wk-banner"] {
             XCTAssertFalse(body.contains(gone), "the home draws \(gone) again: that is Activity's")
@@ -480,17 +481,15 @@ final class WikiCopyParityTests: XCTestCase {
 
     /// What each band draws of what the home read — the web's branches, the native `homeDocuments` and
     /// `homeLine`: grey bars while the first read is out; the confirmed plan's documents; before a plan, the
-    /// topic articles; else a new space's card, or nothing once maintenance is set up. Browse · A–Z ends the
-    /// home only once something is listed.
+    /// topic articles; with nothing to read the setup card, above the categories of a plan none of whose documents
+    /// is written. Browse · A–Z ends the home only once something is listed.
     func testTheHomeDrawsWhatItReadAsTheWebDoes() throws {
         let home = try source(Self.home)
         assertSays(home, "loading: docs.isPending || (!byDocs && articles.isPending),", in: Self.home)
         assertSays(home, "const listed = home.directory !== null || home.topics > 0;", in: Self.home)
-        assertSays(home, "!space.settings?.maintenance?.enabled && <HomeNewSpace spaceSlug={space.slug} />", in: Self.home)
+        assertSays(home, "const start = !home.loading && wikiStartShown(home.directory?.docs.written ?? 0, home.topics);", in: Self.home)
         assertSays(home, "{!home.loading && listed && (", in: Self.home)
         assertSays(home, "{home.loading ? <span className=\"wk-sk\" aria-hidden=\"true\" /> : wikiHomeLine(home.directory, home.topics)}",
-                   in: Self.home)
-        assertSays(home, "<p>{WIKI_NO_DOCUMENTS_NOTE}</p> <Link to={wikiSettingsPath(spaceSlug)}>{WIKI_PLAN_SET_UP} ›</Link>",
                    in: Self.home)
 
         let plan = try JSONDecoder().decode(WikiDocsDirectory.self, from: Data(#"""
@@ -509,29 +508,39 @@ final class WikiCopyParityTests: XCTestCase {
         let none = try JSONDecoder().decode(WikiArticleDirectory.self, from: Data(#"{"categories":[],"uncategorized":[]}"#.utf8))
         let unplanned = try JSONDecoder().decode(WikiDocsDirectory.self, from: Data(#"{"plan":null,"docs":null,"categories":[]}"#.utf8))
 
-        XCTAssertEqual(WikiLogic.homeDocuments(docs: plan, articles: articles, loading: true, maintenance: false, seen: 0), .loading)
+        XCTAssertEqual(WikiLogic.homeDocuments(docs: plan, articles: articles, loading: true, seen: 0), .loading)
         XCTAssertNil(WikiLogic.homeLine(docs: plan, articles: articles, loading: true))
-        guard case .categories(let categories) = WikiLogic.homeDocuments(docs: plan, articles: articles, loading: false,
-                                                                          maintenance: false, seen: 0) else {
+        guard case .categories(let categories, let start) = WikiLogic.homeDocuments(docs: plan, articles: articles, loading: false,
+                                                                                    seen: 0) else {
             return XCTFail("a confirmed plan's home lists its documents")
         }
+        XCTAssertFalse(start, "a document is written: the setup card has gone")
         XCTAssertEqual(categories.map(\.number), [1, 4], "a category with no document is left out")
         XCTAssertEqual(categories.map(WikiDocLogic.notWrittenRow), ["+1 not written yet", "1 document · Not written yet"])
         XCTAssertEqual(WikiLogic.homeLine(docs: plan, articles: articles, loading: false), "3 documents · 1 written")
 
-        let topics = WikiLogic.homeDocuments(docs: unplanned, articles: articles, loading: false, maintenance: false, seen: 0)
+        let topics = WikiLogic.homeDocuments(docs: unplanned, articles: articles, loading: false, seen: 0)
         XCTAssertEqual(topics, .topics(WikiArticleLogic.directoryGroups(articles)), "before a plan: the topic articles")
         XCTAssertTrue(topics.listed)
         XCTAssertEqual(WikiLogic.homeLine(docs: unplanned, articles: articles, loading: false), "2 articles")
 
-        XCTAssertEqual(WikiLogic.homeDocuments(docs: unplanned, articles: none, loading: false, maintenance: false, seen: 0), .newSpace)
-        XCTAssertEqual(WikiLogic.homeDocuments(docs: nil, articles: nil, loading: false, maintenance: true, seen: 0), .nothing,
-                       "maintenance set up: the line says No documents yet, and nothing more")
-        XCTAssertFalse(WikiLogic.HomeDocuments.newSpace.listed)
+        XCTAssertEqual(WikiLogic.homeDocuments(docs: unplanned, articles: none, loading: false, seen: 0), .start,
+                       "nothing to read: the setup card, maintenance on or off")
+        XCTAssertEqual(WikiLogic.homeDocuments(docs: nil, articles: nil, loading: false, seen: 0), .start)
+        XCTAssertFalse(WikiLogic.HomeDocuments.start.listed)
         XCTAssertEqual(WikiLogic.homeLine(docs: unplanned, articles: none, loading: false), WikiCopy.noDocuments)
-        XCTAssertEqual(WikiDocCopy.noDocumentsNote,
-                       "This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space.")
         XCTAssertEqual(WikiPlanCopy.setUp, "Set up maintenance")
+
+        // A plan confirmed and nothing written: the card over its categories, then Browse · A–Z, as the web lists them.
+        let nothingWritten = try JSONDecoder().decode(WikiDocsDirectory.self, from: Data(#"""
+            {"spaceId":"s","plan":{"version":1,"confirmedAt":"2026-10-01T00:00:00.000Z"},"docs":{"total":1,"written":0},
+             "categories":[{"key":"overview","number":1,"title":"Product overview","docs":[
+               {"slug":"product","number":"1.1","title":"Overview","written":false}]}]}
+            """#.utf8))
+        let writing = WikiLogic.homeDocuments(docs: nothingWritten, articles: none, loading: false, seen: 0)
+        XCTAssertEqual(writing, .categories(WikiDocLogic.homeCategories(nothingWritten, seen: 0), start: true))
+        XCTAssertTrue(writing.listed)
+        XCTAssertEqual(WikiLogic.homeLine(docs: nothingWritten, articles: none, loading: false), "1 document · 0 written")
     }
 
     /// The home page's rows are the web's: principles oldest recorded first, the four newest

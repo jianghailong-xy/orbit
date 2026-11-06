@@ -34,7 +34,7 @@ import io.orbitd.android.toast.OrbitToasts
  * what is new since the reader last looked, the space by its repository's name, and the space a workspace opens. A12-3
  * (iOS 712c92e10): the home is the documents — the line that says what the space holds, the principles, the confirmed
  * plan's documents by category with their leads and the dots of what is new, the folded rows of what is not written yet,
- * Browse · A–Z at the foot; before a plan the topic articles; a new space's card; grey bars until the first read is in.
+ * Browse · A–Z at the foot; before a plan the topic articles; the setup card; grey bars until the first read is in.
  * Every check goes through the production Activity by links, tags and the words on screen. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = WikiShellApplication::class, qualifiers = "w411dp-h891dp")
@@ -216,9 +216,8 @@ class WikiIncrementShellTest {
         shell.workspaces = """[{"id":"$workspace","name":"wikova-develop"}]"""
         shell.spaces = spaces(orbit = mapOf("pendingOps" to 3), wikova = mapOf("workspaceIds" to listOf(workspace)))
         signIn()
-        // The workspace's session list, from the workspaces page.
-        awaitTag("workspace:$workspace")
-        compose.onNodeWithTag("workspace:$workspace").performClick()
+        // The workspace's session list, where the launch lands.
+        awaitTag("directory-list")
         compose.onNodeWithContentDescription("Open navigation").performClick()
         awaitThat("the Wiki row") { compose.onAllNodes(hasText("Wiki") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("Wiki") and hasClickAction()).performClick()
@@ -282,20 +281,42 @@ class WikiIncrementShellTest {
         awaitTag("wiki-browse")
     }
 
-    /** A new space — no confirmed plan, no topic article, maintenance not set up — says how a space comes to have documents,
-     * over Set up maintenance, which opens its Wiki settings; the line says "No documents yet" and nothing is to browse. */
-    @Test fun aNewSpaceShowsOneCardAndSetUpMaintenance() {
+    /** A new space — no confirmed plan, no topic article, maintenance not set up — draws the setup card (mock 41): its first step
+     * asks for the repository, and Set up… opens Set up maintenance where the reader is, never by way of Wiki settings; the line
+     * says "No documents yet" and nothing is to browse. */
+    @Test fun aNewSpaceShowsTheSetupCardAndSetsUpWhereTheReaderIs() {
         shell.docs = """{"spaceId":"${WikiShell.SPACE}","plan":null,"docs":null,"categories":[]}"""
         shell.articles = """{"spaceId":"${WikiShell.SPACE}","categories":[],"uncategorized":[]}"""
+        shell.plans = mapOf(WikiShell.SPACE to """{"spaceId":"${WikiShell.SPACE}","confirmed":null,"draft":null,"proposals":[],"job":null}""")
         signIn()
         open("orbit://wiki/${WikiShell.SPACE}")
         awaitTag("wiki-home-line")
         compose.onNodeWithTag("wiki-home-line").assertTextEquals("No documents yet")
-        scrollToTag("wiki-home-list", "wiki-home-new-space")
-        compose.onNodeWithText("This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space.").assertExists()
+        scrollToTag("wiki-home-list", "wiki-home-start")
+        compose.onNodeWithText(WikiStartCopy.title).assertExists()
+        compose.onNodeWithText(WikiStartCopy.connectText).assertExists()
         assertTrue("nothing to browse", compose.onAllNodesWithTag("wiki-home-browse").fetchSemanticsNodes().isEmpty())
-        press("wiki-home-set-up")
-        awaitTag("wiki-settings-page")
+        scrollToTag("wiki-home-list", "wiki-home-start-set-up")
+        press("wiki-home-start-set-up")
+        awaitTag("wiki-settings-form")
+        assertTrue("in place", compose.onAllNodesWithTag("wiki-settings-page").fetchSemanticsNodes().isEmpty())
+    }
+
+    /** An account with no wiki (mock 41): the Wiki is the same card, whose first step makes one — never the sentence about spaces,
+     * which Activity keeps. */
+    @Test fun anAccountWithNoWikiIsOfferedTheFirstOne() {
+        shell.spaces = "[]"
+        shell.workspaces = """[{"id":"01a0cca7-8609-70ed-a0e2-d4b55b832b99","name":"shop-cli","repoUrl":"https://github.com/acme/shop-cli.git"}]"""
+        signIn()
+        compose.onNodeWithContentDescription("Open navigation").performClick()
+        awaitThat("the Wiki row") { compose.onAllNodes(hasText("Wiki") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText("Wiki") and hasClickAction()).performClick()
+        awaitTag("wiki-home-first")
+        compose.onNodeWithText(WikiStartCopy.firstTitle).assertExists()
+        assertTrue(compose.onAllNodesWithText(WikiCopy.noSpaces).fetchSemanticsNodes().isEmpty())
+        press("wiki-home-start-create")
+        awaitTag("wiki-settings-form")
+        compose.onNodeWithTag("wiki-settings-form-submit").assertTextEquals(WikiStartCopy.createSubmit)
     }
 
     /** Before a plan is confirmed the home lists the topic articles, as the directory groups them, a title a row. */

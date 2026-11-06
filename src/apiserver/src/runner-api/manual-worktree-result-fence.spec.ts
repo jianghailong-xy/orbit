@@ -22,6 +22,9 @@ function harness(row: Record<string, unknown>) {
         return row;
       },
     },
+    // A clean commit result also drops the session's abandoned-checkout entry, if it has one
+    // (abandoned_checkout). Nothing here has one: what this spec is about is the fence.
+    abandonedCheckout: { deleteMany: async () => ({ count: 0 }) },
   };
   const prisma = {
     $transaction: async (fn: (client: typeof tx) => unknown) => {

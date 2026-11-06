@@ -3443,8 +3443,6 @@ button.toast--pill:focus-visible {
 
 /* ---- Agent detail view (conversation pane) ---- */
 .workspace-view {
-  /* The conversation's reading width (indexCss.conversationWidth.test.ts): the width a 1440px window shows already. */
-  --conversation-width: 800px;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -4547,10 +4545,8 @@ button.toast--pill:focus-visible {
 /* The conversation ends in a fade, not a rule: the composer card has its own edge, and a message
    cut off at the bottom dissolves into the card instead of being sliced through above it. The
    padding is the fade's room, so at the live tail nothing sits in it. Only the conversation's
-   scroller: the session list and an exported transcript share the class. Its inline padding stands the whole
-   column in the middle of a wide pane, its scrollbar left on the pane's edge, and is nothing on a narrower one. */
+   scroller: the session list and an exported transcript share the class. */
 .workspace-scroll-wrap > .workspace-sessions {
-  padding-inline: max(0px, calc((100% - var(--conversation-width)) / 2));
   padding-bottom: 20px;
   mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
 }
@@ -6506,9 +6502,6 @@ button.toast--pill:focus-visible {
 }
 .workspace-composer {
   flex: none;
-  width: 100%;
-  max-width: var(--conversation-width);
-  margin-inline: auto;
 }
 /* Where this task's current run is — the composer's answer to "you are not the run that has
    this task any more", and the transcript card's. One rule set for both, because a reader meeting
@@ -9175,7 +9168,7 @@ button.chat-jump-start:hover {
   word-break: break-word;
 }
 /* Assistant turns are long-form Markdown — render them as a document (no bubble,
-   spanning the conversation's column) rather than a chat pill; only short
+   spanning the full session width) rather than a chat pill; only short
    user/streaming-raw turns keep a bubble. max-width:none overrides .chat-msg's
    80% cap (equal specificity, but later, so this wins). */
 .chat-assistant {
@@ -25035,10 +25028,10 @@ button.project-open-item-action:disabled {
   .wk-home .wk-pl-doc.phone > .chev { align-self: center; }
   .wk-home .wk-pl-doc.phone.more { padding: 8px 0 9px; }
   .wk-home .wk-pl-doc.phone.pr { padding: 9px 0; }
-  .wk-home > .wk-home-new { margin: 0; }
+  .wk-home > .wk-start { margin: 0; }
   @container wk-home (min-width: 1100px) {
     .wk-home { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .wk-home > .wk-home-pr, .wk-home > .wk-home-new { grid-column: 1 / -1; }
+    .wk-home > .wk-home-pr, .wk-home > .wk-start { grid-column: 1 / -1; }
   }
   .wk-page--activity > .wk-layout > .wk-main { container: wk-act / inline-size; }
   @container wk-act (min-width: 760px) {
@@ -25532,9 +25525,36 @@ button.project-open-item-action:disabled {
 .wk-home-n { padding: 1px 7px; border-radius: 999px; background: var(--fill-muted); font-size: 11.5px; font-weight: 600; line-height: 17px; color: var(--text-2); }
 .wk-home-pr .tdp-badge { font-size: 11px; line-height: 16px; padding: 0 6px; }
 .wk-home-all { margin-left: auto; padding: 0; border: 0; background: transparent; font: inherit; font-size: 12.5px; color: var(--brand); cursor: pointer; white-space: nowrap; }
-.wk-home-new { margin-top: 16px; padding: 12px 14px; border-radius: 10px; background: var(--bg-subtle); font-size: 13px; line-height: 1.6; color: var(--text-2); }
-.wk-home-new p { margin: 0; }
-.wk-home-new a { display: inline-block; margin-top: 6px; font-weight: 600; color: var(--brand); text-decoration: none; }
+/* The setup card, while the wiki has nothing to read (mock 41): three steps across once it has the room. */
+.wk-start { container: wk-start / inline-size; box-sizing: border-box; margin-top: 16px; padding: 14px 18px 18px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--bg-raised); }
+.wk-start-h b { display: block; font-size: 15px; line-height: 22px; font-weight: 650; color: var(--text-1); }
+.wk-start-h span { display: block; margin-top: 1px; font-size: 13px; line-height: 20px; color: var(--text-2); }
+.wk-start-steps { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin: 14px 0 0; padding: 0; list-style: none; }
+.wk-start-head { display: flex; align-items: center; gap: 8px; min-height: 22px; }
+.wk-start-no { flex: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: 22px; height: 22px; border: 1px solid var(--border); border-radius: 50%;
+               background: var(--bg-raised); color: var(--text-3); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.wk-start-no .ic { font-size: 11px; }
+.wk-start-t { font-size: 13.5px; line-height: 20px; font-weight: 600; color: var(--text-1); }
+.wk-start-body { margin: 3px 0 0 30px; }
+.wk-start-d { font-size: 13px; line-height: 20px; color: var(--text-2); }
+.wk-start-note { margin-top: 2px; font-size: 12px; line-height: 18px; color: var(--text-3); }
+.wk-start-act { margin-top: 10px; }
+.wk-start-step.is-todo .wk-start-t { font-weight: 500; color: var(--text-3); }
+.wk-start-step.is-todo .wk-start-d { color: var(--text-3); }
+.wk-start-step.is-wait .wk-start-no { border-color: var(--warning-solid); background: var(--warning-solid); color: #fff; }
+.wk-start-step.is-run .wk-start-no { border-color: var(--brand); background: var(--brand); color: #fff; }
+.wk-start-step.is-done .wk-start-no { border-color: var(--success-border); background: var(--success-bg); color: var(--success); }
+.wk-start-step.is-done .wk-start-t { font-weight: 500; color: var(--text-2); }
+.wk-start-step.is-done .wk-start-d { color: var(--text-3); }
+.wk-start .wk-pl-prog { padding: 8px 0 0; }
+@container wk-start (min-width: 720px) {
+  .wk-start-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 28px; }
+  .wk-start-t { flex: none; }
+  .wk-start-step:not(:last-child) .wk-start-head::after { content: ""; flex: 1; height: 1px; background: var(--border-subtle); }
+}
+.wk-setup-option { display: flex; align-items: center; gap: 12px; }
+.wk-setup-option > :first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.wk-setup-option .off { flex: none; font-size: 12px; color: var(--text-3); }
 .wk-home-more { display: none; gap: 18px; margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border-subtle); font-size: 13px; }
 .wk-home-more a { display: inline-flex; align-items: center; gap: 6px; color: var(--brand); text-decoration: none; }
 .wk-sk { display: block; height: 10px; border-radius: 5px; background: var(--fill-muted); }
@@ -26529,5 +26549,107 @@ button.agent-progress-agent:hover {
 
   .privacy-doc h1 {
     font-size: 26px;
+  }
+}
+
+/* ── Uncommitted checkouts (components/AbandonedCheckouts.tsx) ────────────────────────────────
+   One row per finished session whose checkout still holds work no branch has. The row itself
+   opens the diff; the two buttons beside it are the exits. */
+.ac-box {
+  padding: 0;
+  overflow: hidden;
+}
+.ac-entry + .ac-entry {
+  border-top: 1px solid var(--border-subtle);
+}
+.ac-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+}
+.ac-toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.ac-toggle:hover {
+  background: var(--bg-hover);
+}
+.ac-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ac-branch {
+  flex: none;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--text-2);
+}
+.ac-stat {
+  flex: none;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--text-3);
+}
+.ac-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+.ac-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px 8px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.ac-error {
+  color: var(--danger-solid, var(--danger));
+}
+.ac-diff {
+  max-height: 420px;
+  overflow: auto;
+  padding: 0 14px 10px;
+  background: var(--bg-subtle);
+}
+.ac-file-path {
+  margin: 10px 0 4px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--text-2);
+}
+.ac-file-patch {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .ac-row {
+    flex-wrap: wrap;
+  }
+  .ac-actions {
+    width: 100%;
+    justify-content: flex-end;
   }
 }

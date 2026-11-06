@@ -539,6 +539,8 @@ var linkDaemonRoutes = []string{
 	"POST /runner/sessions/:id/finalize",
 	"POST /runner/sessions/:id/import-result",
 	"POST /runner/sessions/worktrees-removable",
+	// The checkout inventory a machine reports for its own finished sessions (abandoned_checkout.go).
+	"POST /runner/abandoned-checkouts",
 	"POST /runner/sessions/:id/merge-result",
 	"POST /runner/sessions/:id/commit-result",
 	"POST /runner/sessions/:id/diff",

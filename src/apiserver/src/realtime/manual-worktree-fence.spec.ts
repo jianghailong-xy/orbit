@@ -272,7 +272,7 @@ test('commit claim repeats every idle and process-owner guard in its CAS', async
     },
   };
 
-  const commands = await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER);
+  const commands = await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER, true);
 
   assert.deepEqual(commands, [
     {
@@ -313,7 +313,9 @@ test('commit claim repeats every idle and process-owner guard in its CAS', async
           },
         ],
       },
-      select: { id: true, branch: true, commitOperationId: true, status: true },
+      // commitAction too: a queued discard is not handed to a runner that would read it as a
+      // plain commit (drainCommitRequests' third argument).
+      select: { id: true, branch: true, commitOperationId: true, commitAction: true, status: true },
     },
   ]);
   const restampedAt = (writes[0] as { data: { commitRequestedAt: Date } }).data.commitRequestedAt;
@@ -347,7 +349,7 @@ test('commit is not dispatched when the idle-state CAS loses', async () => {
     },
   };
 
-  assert.deepEqual(await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER), []);
+  assert.deepEqual(await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER, true), []);
 });
 
 /**
@@ -378,7 +380,7 @@ test('terminal commit reaches its owner, and a fresh owner only for a dirty chec
       },
     };
 
-    assert.deepEqual(await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER), [
+    assert.deepEqual(await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER, true), [
       {
         sessionId: SESSION_ID,
         operationId: OPERATION_ID,
@@ -427,7 +429,7 @@ test('terminal commit reaches its owner, and a fresh owner only for a dirty chec
       },
     };
 
-    assert.deepEqual(await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER), []);
+    assert.deepEqual(await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER, true), []);
     assert.deepEqual((writes[0] as { where: Record<string, unknown> }).where.OR, [
       { commitOperationOwner: NEW_OWNER },
       { commitOperationOwner: null, worktreeDirty: true },

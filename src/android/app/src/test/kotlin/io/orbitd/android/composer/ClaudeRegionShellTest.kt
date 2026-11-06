@@ -156,8 +156,6 @@ class ClaudeRegionShellTest : ComposerShellTest() {
 
     @Test fun theSessionListSaysAnthropicIsUnavailableOnTheMachine() {
         held(); signIn()
-        await { has(hasText("Alpha") and hasClickAction()) }
-        compose.onAllNodes(hasText("Alpha") and hasClickAction())[0].performClick()
         await { has(hasTestTag("session-state:${ComposerShell.SESSION}"), unmerged = true) }
         assertEquals("Anthropic unavailable on HPC", textOf("session-state:${ComposerShell.SESSION}"))
     }
@@ -184,8 +182,6 @@ class ClaudeRegionShellTest : ComposerShellTest() {
         hpc(blocked())
         ComposerShell.session = ComposerShell.fields("""{"status":"PENDING","runStatus":"PENDING","runState":"QUEUED"}""")
         signIn()
-        await { has(hasText("Alpha") and hasClickAction()) }
-        compose.onAllNodes(hasText("Alpha") and hasClickAction())[0].performClick()
         await { has(hasTestTag("session-state:${ComposerShell.SESSION}"), unmerged = true) }
         assertEquals("Queued", textOf("session-state:${ComposerShell.SESSION}"))
     }

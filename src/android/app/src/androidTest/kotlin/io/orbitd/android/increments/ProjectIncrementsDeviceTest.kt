@@ -130,8 +130,6 @@ class ProjectIncrementsDeviceTest : IncrementDeviceTest() {
 
     private fun openSessionsPage() {
         signIn()
-        awaitTag("workspace:$workspace")
-        compose.onNodeWithTag("workspace:$workspace").performClick()
         awaitTag("project-row:$launch")
         compose.onNodeWithTag("project-row:$launch").performClick()
         await("the project's sessions page") { exists(hasTestTag("project-sessions-list")) }

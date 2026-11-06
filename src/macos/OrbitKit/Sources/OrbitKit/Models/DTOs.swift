@@ -149,9 +149,11 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let workDirTotalBytes: Int64?
     public let repoHealth: RunnerRepoHealth?
     public let repoCleanup: RunnerRepoCleanup?
+    /// The repository its directory is a checkout of, as the runner reported it; nil for a workspace on none.
+    public let repoUrl: String?
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, lastProvider, lastEngine, provider, model, permissionMode, effort, workDir
+        case id, name, lastProvider, lastEngine, provider, model, permissionMode, effort, workDir, repoUrl
         case description, appendSystemPrompt, systemPrompt, allowedTools, disallowedTools
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
         case antigravityKeyAvailableByRunner
@@ -200,6 +202,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         workDirTotalBytes = c.flexibleInt64(forKey: .workDirTotalBytes)
         repoHealth = try c.decodeIfPresent(RunnerRepoHealth.self, forKey: .repoHealth)
         repoCleanup = try c.decodeIfPresent(RunnerRepoCleanup.self, forKey: .repoCleanup)
+        repoUrl = try c.decodeIfPresent(String.self, forKey: .repoUrl)
     }
 }
 

@@ -27,6 +27,24 @@ extension AppModel {
         guard let runner = wikiMaintenanceAgent(of: space)?.runnerId, let online = agents?.runnerOnline else { return nil }
         return online.first { PublicID.storageKey($0.key) == PublicID.storageKey(runner) }?.value
     }
+
+    /// Every workspace as Set up maintenance and Create wiki offer it, as the web's `useWikiWorkspaceChoices` reads them.
+    var wikiWorkspaceChoices: [WikiStartLogic.WorkspaceChoice] {
+        guard let agents else { return [] }
+        return WikiStartLogic.choices(agents.items, runnerNames: agents.runnerNames, runnerOnline: agents.runnerOnline)
+    }
+
+    /// A workspace's name and runner, when this client holds it.
+    func wikiWorkspaceLabel(_ id: String?) -> String? {
+        guard let agents else { return nil }
+        return WikiStartLogic.workspaceLabel(id, agents: agents.items, runnerNames: agents.runnerNames)
+    }
+
+    /// Whether the workspaces are still on their first read: until they are in, nothing is said of what they are on.
+    var wikiWorkspacesLoading: Bool {
+        guard let agents else { return true }
+        return agents.items.isEmpty && !agents.loadState.hasLoaded
+    }
 }
 
 // MARK: - a document

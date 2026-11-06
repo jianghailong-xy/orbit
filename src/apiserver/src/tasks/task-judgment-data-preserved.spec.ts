@@ -2674,7 +2674,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // A nullable column for what an op's note was, and a CHECK of its shape: nothing to preserve, no row written.
       '0471_wiki_op_prompted_by',
       // A nullable column saying which session wrote a note, and its index: nothing to preserve, no row written.
-      '0472_wiki_note_session'],
+      '0472_wiki_note_session',
+      // 0473 widens four int4 counts of `usage` to bigint. `usage` is not a preserved relation, every value keeps its
+      // value, and no `task`, `session`, ledger table or preserved trigger/function is named, so it is not another writer
+      // of the DONE fence.
+      '0473_usage_token_counts_bigint',
+      // 0474 is the abandoned-checkout table and one nullable column on `session` (`commit_action`, with a CHECK on its
+      // two values). `abandoned_checkout` is a new relation with its own primary key, a unique `session_id` and no
+      // trigger; `session` is not a preserved relation (nothing here names `task`, `project` or `project_acceptance_*`,
+      // and no column any preserved trigger reads is touched), and no function, trigger or type is created, replaced or
+      // dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored session reads
+      // NULL in the new column, and the new table starts empty.
+      '0474_abandoned_checkout'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

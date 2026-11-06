@@ -1955,7 +1955,7 @@ export interface SessionDetail {
   // so the bar falls back to the session lifecycle). commitStatus is 'pending' while the
   // runner commits, then 'committed' | 'nochange' | 'error' (commitError carries why).
   worktreeDirty?: boolean | null;
-  commitStatus?: 'pending' | 'committed' | 'nochange' | 'error' | null;
+  commitStatus?: 'pending' | 'committed' | 'nochange' | 'discarded' | 'error' | null;
   commitError?: string | null;
   /** What the runner said alongside a terminal commit status. For a commit that went through:
    *  which background jobs were live in the checkout while it committed, and what it did about them
@@ -2012,6 +2012,39 @@ export interface SessionFilePatch {
   width?: number;
   height?: number;
 }
+
+/** Throw away a finished session's uncommitted checkout work, so its checkout can be reclaimed.
+ *  Rides the commit relay: the outcome lands on the session's commitStatus/worktreeDirty. */
+export const discardSessionCheckout = (sessionId: string) =>
+  api<{ ok: true }>(`/sessions/${sessionId}/checkout/discard`, { method: 'POST' });
+
+/** One checkout a finished session left behind holding work no branch has (the runner page's
+ *  abandoned-checkout list, GET /runners/:id/abandoned-checkouts). */
+export interface AbandonedCheckout {
+  sessionId: string;
+  /** The base62 spelling, which the session routes take. */
+  sessionPublicId?: string;
+  title: string;
+  branch: string | null;
+  status: string;
+  files: SessionChangedFile[];
+  /** Whether the runner's report carried the diff text (its patch budget can drop it). */
+  hasPatches: boolean;
+  observedAt: string;
+  commitStatus?: 'pending' | 'committed' | 'nochange' | 'discarded' | 'error' | null;
+  commitError?: string | null;
+  commitResultMessage?: string | null;
+}
+
+/** The finished sessions' checkouts this runner reported as still holding uncommitted work. */
+export const getAbandonedCheckouts = (runnerId: string) =>
+  api<{ checkouts: AbandonedCheckout[] }>(`/runners/${runnerId}/abandoned-checkouts`);
+
+/** One abandoned checkout's per-file diffs, fetched when it is opened. */
+export const getAbandonedCheckoutDiff = (runnerId: string, sessionId: string) =>
+  api<{ sessionId: string; files: SessionChangedFile[]; patches: SessionFilePatch[] }>(
+    `/runners/${runnerId}/abandoned-checkouts/${sessionId}`,
+  );
 
 /** The session's per-file diffs, kept off the session payload and fetched on demand when a
  *  file in the worktree status bar is opened (GET /sessions/:id/diff). */

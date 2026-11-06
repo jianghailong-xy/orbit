@@ -55,17 +55,18 @@ import kotlinx.serialization.json.JsonObject
  * `Destination.SESSION`'s two renderers, chosen by the DETAIL's `sessionKind` (LS6): a landing opens its project's Landings window
  * (the project the detail's `landing.projectId` names), focused on that landing — scrolled to, opened and outlined — and never the
  * reader: no composer, no session menu and no `sessions/:id/events` subscription. A conversation gets the reader as it always did. A
- * session the directory does not list is asked for once (a landing link reaches its subject before the session row exists, and a
- * flat list never carries a landing), so the answer is the server's, never a guess from an id. When that one read fails, an id an
+ * session the directory does not list, nor the Completed or Trash list the reader came from ([listedElsewhere]), is asked for once
+ * (a landing link reaches its subject before the session row exists, and a flat list never carries a landing), so the answer is the
+ * server's, never a guess from an id. When that one read fails, an id an
  * integration read named as a landing job's ([LandingJobSnapshots]) still opens that job's project's window, whose card draws the job
  * frozen; any other id gets the reader. Every way into a landing — Open landing ›, the coordinator's cards, the task page's Landing
  * section, the source session's chip, an orbit-session link — comes through here.
  */
 @Composable
 fun SessionDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, api: DirectoryApi, data: DirectoryData,
-    open: (OrbitRoute) -> Unit, leave: () -> Unit = {}) {
+    open: (OrbitRoute) -> Unit, listedElsewhere: (String) -> Boolean = { false }, leave: () -> Unit = {}) {
     val id = route.id ?: return
-    val listed = remember(data.sessions, id) { data.sessions.values.any { rows -> rows.any { ObjectId.same(it.id, id) } } }
+    val listed = remember(data.sessions, id) { data.sessions.values.any { rows -> rows.any { ObjectId.same(it.id, id) } } || listedElsewhere(id) }
     var kind by remember(id) { mutableStateOf<SessionKind?>(if (listed) SessionKind.Conversation else null) }
     LaunchedEffect(id, listed) {
         if (listed) { kind = SessionKind.Conversation; return@LaunchedEffect }

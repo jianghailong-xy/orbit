@@ -1,5 +1,6 @@
 package io.orbitd.android.cards
 
+import io.orbitd.android.hasRowMenu
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -289,10 +290,8 @@ class CoordinatorQueueCardTest {
     /** Counted nowhere: today's card beside it is the one the conversation's bar and the session row count. */
     @Test fun theWaitingRevisionIsCountedNowhereTodaysCardIs() {
         signIn()
-        await { exists(hasTestTag("workspace:${CoordinatorQueueServer.WORKSPACE}")) }
-        compose.onNodeWithTag("workspace:${CoordinatorQueueServer.WORKSPACE}").performClick()
-        await { exists(hasContentDescription("Options for Coordinate the release")) }
-        assertFalse(exists(hasText("Needs you", substring = true), unmerged = true))
+        await { exists(hasRowMenu("Options for Coordinate the release")) }
+        assertFalse(exists(hasTestTag("session-mark-needs-you"), unmerged = true))
         open("orbit-session:${CoordinatorQueueServer.COORD}")
         await { exists(hasTestTag(key)) }
         compose.onAllNodesWithTag("needs-you-bar").assertCountEquals(0)
@@ -303,7 +302,7 @@ class CoordinatorQueueCardTest {
         assertTrue("still drawn beside it", exists(hasTestTag("$key:DECIDE_MYSELF")))
         assertEquals(1, NeedsYouLogic.belowRows(app().realtime.state.value.session!!.id, app().realtime.state.value.session!!.snapshot!!).size)
         compose.onNodeWithContentDescription("Back").performClick()
-        await { exists(hasText("Needs you · 1"), unmerged = true) }
+        await { exists(hasTestTag("session-mark-needs-you"), unmerged = true) }
     }
 
     private fun exists(matcher: SemanticsMatcher, unmerged: Boolean = false) =

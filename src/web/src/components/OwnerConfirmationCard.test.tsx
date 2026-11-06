@@ -303,6 +303,15 @@ describe('the confirmation card', () => {
     expect(scope.querySelector('.owner-confirmation-value')?.textContent).toBe('Done when\n\n• all filed\n• totals match');
   });
 
+  it('leaves the marks inside code alone in both boxes', async () => {
+    const v = view({ acceptanceCriteria: 'Both `tea_*_cnch` and `foo_*_bar` pass' });
+    const w = waiting({ report: { text: 'Ran `a*b*c` on `_x_` and **all** passed', reportedAt: '2026-09-13T10:39:00.000Z' } });
+    expect(card({ view: v, waiting: w })).toContain('>Ran a*b*c on _x_ and all passed<');
+    const scope = await mount(<OwnerConfirmationCard view={v} waiting={w} onDecide={() => {}} onSendBack={() => {}} />);
+    await press(scope.querySelector<HTMLElement>('.owner-confirmation-fold')!);
+    expect(scope.querySelector('.owner-confirmation-value')?.textContent).toBe('Both tea_*_cnch and foo_*_bar pass');
+  });
+
   it('folds what counts as done into one row that says how much is behind it, and opens it in place', async () => {
     const v = view({ acceptanceCriteria: '1. One\n2. Two\n3. Three\n4. Four\n5. Five\n6. Six' });
     const scope = await mount(<OwnerConfirmationCard view={v} waiting={waiting()} onDecide={() => {}} onSendBack={() => {}} />);

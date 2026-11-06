@@ -24,7 +24,7 @@ import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 // onto the session is RECORDED on the task by the door's caller, in the same transaction, through
 // `recordDispatchRefusal` — and that module reads `hasResolvedSource` from this one.
 import type { RefusedRunSource } from '../tasks/task-dispatch-refusal';
-import { branchName, LANDED_RESULTS } from './project-criterion-landing';
+import { branchName, LANDED_RESULTS, receiptTargetBranches } from './project-criterion-landing';
 import { resolveSource, SourceReason, SourceResolution } from './source-selector';
 
 /**
@@ -216,7 +216,7 @@ async function integrationLineHasLandingReceipt(
     where: {
       projectId,
       result: { in: [...LANDED_RESULTS] },
-      targetBranch: branchName(integrationRef),
+      targetBranch: { in: receiptTargetBranches(integrationRef) },
     },
     select: { id: true },
     take: 1,

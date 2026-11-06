@@ -1699,8 +1699,18 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    * that the user asked to commit (commitStatus='pending'). At-least-once — redelivered each
    * heartbeat until the runner reports an outcome that flips commitStatus off 'pending'. The
    * runner locates the per-session checkout from the session id; branch is for logging.
+   *
+   * `supportsDiscard` is whether this runner declared abandoned-checkout-v1, and it decides one
+   * thing: a queued 'discard' is handed over only to a runner that knows the flag. An older
+   * runner would read the command as an ordinary commit and put the work on the branch — the
+   * opposite of what the owner pressed. Its session stays queued until a runner that can do it
+   * takes over, or the owner's next press replaces it.
    */
-  async drainCommitRequests(runnerId: string, leaseOwner: string): Promise<CommitCommand[]> {
+  async drainCommitRequests(
+    runnerId: string,
+    leaseOwner: string,
+    supportsDiscard: boolean,
+  ): Promise<CommitCommand[]> {
     const sessions = await this.prisma.session.findMany({
       where: {
         assignedRunnerId: runnerId,
@@ -1738,11 +1748,20 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
           },
         ],
       },
-      select: { id: true, branch: true, commitOperationId: true, status: true },
+      select: {
+        id: true,
+        branch: true,
+        commitOperationId: true,
+        commitAction: true,
+        status: true,
+      },
     });
     const claimed = await Promise.all(
       sessions
         .filter((s) => s.branch && s.commitOperationId)
+        // A discard nobody here can perform is left queued rather than handed to a runner that
+        // would commit the work instead (see `supportsDiscard`).
+        .filter((s) => supportsDiscard || s.commitAction !== 'discard')
         .map(async (s): Promise<CommitCommand | null> => {
           const claim = await this.prisma.session.updateMany({
             where: {
@@ -1778,6 +1797,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             operationId: s.commitOperationId!,
             leaseOwner,
             branch: s.branch!,
+            ...(s.commitAction === 'discard' ? { discard: true } : {}),
           };
         }),
     );

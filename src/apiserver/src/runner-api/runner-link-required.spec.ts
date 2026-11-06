@@ -25,8 +25,9 @@ import {
  * STAYS_ON_HTTPS are the 49 the design counted (docs/runner-link-design.md §11.3), and 47 since 2026-10-28, when the
  * daemon's three calls that went beside the agent tool API moved here: a Cursor key check's answer, a session's own key
  * check and a background job's alert (§15.9). 48 since 2026-10-31: the directory probe's answer
- * (docs/first-workspace-contract.md §2.4). 47 again since the cleanup after the cut-over (§13), which took
- * `POST /runner/sessions/:id/complete` away. src/runner-go/link_mode.go holds them in linkDaemonRoutes, but for
+ * (docs/first-workspace-contract.md §2.4). 49 since 2026-11-05: the abandoned-checkout inventory. 48 since the cleanup
+ * after the cut-over (§13), which took `POST /runner/sessions/:id/complete` away. src/runner-go/link_mode.go holds them
+ * in linkDaemonRoutes, but for
  * `GET /runner/wake`, which nothing serves any more (RETIRED).
  */
 const REFUSED_OVER_HTTPS = [
@@ -72,6 +73,7 @@ const REFUSED_OVER_HTTPS = [
   'POST /runner/sessions/:id/finalize',
   'POST /runner/sessions/:id/import-result',
   'POST /runner/sessions/worktrees-removable',
+  'POST /runner/abandoned-checkouts',
   'POST /runner/sessions/:id/merge-result',
   'POST /runner/sessions/:id/commit-result',
   'POST /runner/sessions/:id/diff',
@@ -160,9 +162,9 @@ async function through(interceptor: RunnerLinkRequiredInterceptor, context: Exec
 
 const door = () => new RunnerLinkRequiredInterceptor();
 
-test('RunnerApiController has 54 routes: 47 refused over HTTPS, 7 kept on HTTPS (D14); a new one fails here', () => {
+test('RunnerApiController has 55 routes: 48 refused over HTTPS, 7 kept on HTTPS (D14); a new one fails here', () => {
   const routes = routesOf(RunnerApiController);
-  assert.equal(REFUSED_OVER_HTTPS.length, 47);
+  assert.equal(REFUSED_OVER_HTTPS.length, 48);
   assert.deepEqual(
     sorted(routes.map((r) => r.route)),
     sorted([...REFUSED_OVER_HTTPS, ...STAYS_ON_HTTPS]),
@@ -170,7 +172,7 @@ test('RunnerApiController has 54 routes: 47 refused over HTTPS, 7 kept on HTTPS 
       + 'over HTTPS (REFUSED_OVER_HTTPS; and src/runner-go/link_mode.go linkDaemonRoutes), or not part of it and marked '
       + '@StaysOnHttps() (STAYS_ON_HTTPS, docs/runner-link-design.md D14)',
   );
-  assert.equal(routes.length, 54, 'the 49 counted on 2026-10-25, the three that moved here on 2026-10-28, the directory probe\'s answer, the Claude region check and the file upload of 2026-11-02, less /complete');
+  assert.equal(routes.length, 55, 'the 49 counted on 2026-10-25, the three that moved here on 2026-10-28, the directory probe\'s answer, the Claude region check, the file upload of 2026-11-02 and the abandoned-checkout inventory of 2026-11-05, less /complete');
   assert.deepEqual(sorted(routes.filter((r) => staysOnHttps(r.handler)).map((r) => r.route)), sorted(STAYS_ON_HTTPS));
   for (const route of [...RETIRED, ...CALLED_BY_NAMED_CALLERS]) {
     assert.ok(REFUSED_OVER_HTTPS.includes(route), `${route} is not one of the daemon's routes`);

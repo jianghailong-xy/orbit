@@ -320,6 +320,10 @@ function isAnthropicEndpoint(baseUrl: string): boolean {
 /** The variable a Cursor key reaches the runner in. */
 export const CURSOR_KEY_VAR = 'ORBIT_CURSOR_API_KEY';
 
+/** The fraction of a custom endpoint's window withheld from CLAUDE_CODE_MAX_CONTEXT_TOKENS, so the
+ *  CLI's own compaction request still fits the endpoint. See the injection site for the measurement. */
+const COMPACTION_RESERVE_FRACTION = 8;
+
 // Env injected so the engine's CLI talks to the key's endpoint, in the variables THAT engine reads
 // (docs/provider-engine-contract.md §4.2) — the engine is the session's, and the key only says where
 // to send it: Claude Code → the Anthropic-compatible vars (Phase 1); Codex → OpenAI-compatible (Phase
@@ -419,7 +423,21 @@ function injectedEnv(
     (preset ? catalogModels(preset).find((m) => m.value === model)?.contextWindow : undefined) ??
     ownModel(row, model)?.contextWindow;
   if (typeof window === 'number' && window > 0) {
-    claudeEnv.CLAUDE_CODE_MAX_CONTEXT_TOKENS = String(window);
+    // Declared short of the endpoint's true maximum, because the CLI's auto-compact path needs room
+    // the window alone does not leave it. The CLI compacts when the conversation reaches
+    // `window - 32,000` (its output budget), and the compaction request sends the conversation WITH
+    // that 32,000 — so at the trigger line the request exactly fills the declared window, and the
+    // first token the request carries over the CLI's own measurement puts it past the endpoint's
+    // hard cap. That 400 is deliberately non-retryable, and a failed compaction leaves the
+    // transcript as large as it was, so the session can never compact again: every later turn
+    // repeats the 400 (measured: session 01a005f5 on 2026-11-04 sent 1,081,492 message tokens
+    // against a 1,048,576-token cap while its last ordinary request measured 1,015,430; session
+    // 01a104c1 on 2026-10-29 sent 1,016,869 + 32,000 against the same cap, 293 over). An eighth of
+    // the window in reserve moves the trigger line far enough below the cap to carry both the
+    // output budget and that excess, and a session nowhere near the limit never reaches the
+    // (earlier) line, so it behaves exactly as before.
+    const declared = window - Math.floor(window / COMPACTION_RESERVE_FRACTION);
+    claudeEnv.CLAUDE_CODE_MAX_CONTEXT_TOKENS = String(declared);
   }
   // A model declared to take no effort at all. The CLI sends one regardless, and the only thing that
   // stops it is this variable: `unset` is the CLI's own spelling for "send no effort parameter", and it

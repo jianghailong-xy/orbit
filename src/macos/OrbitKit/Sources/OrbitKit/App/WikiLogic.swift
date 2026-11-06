@@ -384,36 +384,37 @@ public enum WikiLogic {
     public enum HomeDocuments: Equatable, Sendable {
         /// The first read is out: grey bars in the rows' shape (mock 31 ⑦).
         case loading
-        /// The confirmed plan's documents, a category a group (mock 30 ③).
-        case categories([WikiDocLogic.HomeCategory])
+        /// The confirmed plan's documents, a category a group (mock 30 ③). `start`: none is written yet, so the
+        /// setup card stands above them (mock 41 ⑦).
+        case categories([WikiDocLogic.HomeCategory], start: Bool)
         /// Before a plan is confirmed: the topic articles, as the directory groups them, a title a row.
         case topics([WikiArticleLogic.DirectoryGroup])
-        /// Neither, and maintenance not set up: the one card that says how a space comes to have documents
-        /// (mock 31 ⑥).
-        case newSpace
-        /// Neither, with maintenance set up: nothing, the line under the head saying `No documents yet`.
-        case nothing
+        /// Neither: the setup card alone (mock 41), which says how the wiki comes to have something to read.
+        case start
 
         /// Whether the home ends on Browse by category · A–Z index: once its first read is in, with
         /// something listed.
         public var listed: Bool {
             switch self {
             case .categories, .topics: return true
-            case .loading, .newSpace, .nothing: return false
+            case .loading, .start: return false
             }
         }
     }
 
-    /// The home's documents: the confirmed plan's, by category; before one, the topic articles; else a new
-    /// space's card, or nothing once maintenance is set up. `loading` is the first read alone — a read the
-    /// page already has stays drawn while it is read again.
+    /// The home's documents: the confirmed plan's, by category; before one, the topic articles; else the setup
+    /// card, which also stands above a plan's categories while none of them is written (`wikiStartShown`).
+    /// `loading` is the first read alone — a read the page already has stays drawn while it is read again.
     public static func homeDocuments(docs: WikiDocsDirectory?, articles: WikiArticleDirectory?, loading: Bool,
-                                     maintenance: Bool, seen: Double?) -> HomeDocuments {
+                                     seen: Double?) -> HomeDocuments {
         if loading { return .loading }
-        if let docs, WikiDocLogic.readsByDocs(docs) { return .categories(WikiDocLogic.homeCategories(docs, seen: seen)) }
+        if let docs, WikiDocLogic.readsByDocs(docs) {
+            return .categories(WikiDocLogic.homeCategories(docs, seen: seen),
+                               start: WikiStartLogic.shown(written: docs.docs?.written ?? 0, topics: 0))
+        }
         let groups = articles.map(WikiArticleLogic.directoryGroups) ?? []
         if groups.contains(where: { !$0.topics.isEmpty }) { return .topics(groups) }
-        return maintenance ? .nothing : .newSpace
+        return .start
     }
 
     /// The line under the home's head (`WikiHomeState`): what `WikiDocLogic.homeLine` says of the reads the

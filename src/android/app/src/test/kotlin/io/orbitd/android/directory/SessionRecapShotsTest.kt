@@ -98,7 +98,8 @@ class SessionRecapShotsTest {
         val now = Instant.now().truncatedTo(ChronoUnit.SECONDS)
         val writtenAt = now.minusSeconds(300)
         val longAgo = now.minus(3, ChronoUnit.DAYS)
-        val api = DirectoryApi(stub(), signedIn())
+        val handle = signedIn()
+        val api = DirectoryApi(stub(), handle)
         // A parked session the server has recapped, one recapped days ago, one with only a reply, and one working
         // with a recap of the turn before it — the three states the row has to get right, in the web's order.
         val rows = listOf(
@@ -115,7 +116,7 @@ class SessionRecapShotsTest {
         compose.activityRule.scenario.onActivity { activity -> activity.setContent { OrbitTheme {
             CompositionLocalProvider(LocalSessionRecaps provides recaps) {
                 DirectoryScreen(OrbitRoute(Destination.WORKSPACE, workspace),
-                    DirectoryData(sessions = mapOf("open" to rows), ready = true, fresh = true), api, {}, {})
+                    DirectoryData(sessions = mapOf("open" to rows), ready = true, fresh = true), api, handle, {}, {})
             }
         } } }
 
@@ -135,13 +136,10 @@ class SessionRecapShotsTest {
         compose.onNodeWithTag("directory-list").performScrollToNode(hasText("Rebasing the fixtures"))
         compose.onNodeWithText("Rebased the fixtures; the suite is green.", substring = true).assertIsDisplayed()
 
-        // Working: this row keeps its own state line above the preview (it always has — the preview is
-        // the second line, not the only one), so a live session reads "Running" here. The web rule that
-        // live state outranks the recap is `SessionLine`'s, which is what a project row draws and what
-        // the whole macOS/iOS list draws; on this row the recap takes the preview slot either way.
-        // Asked of the ROW, not the screen: the recapped rows above keep their recaps either way.
+        // Working: the row's one line says what it is doing, and not its recap: live state outranks the recap (`SessionLine`, the web's
+        // rule). Asked of the ROW, not the screen: the recapped rows above keep their recaps either way.
         compose.onNodeWithTag("directory-list").performScrollToNode(hasText("Rebuilding the transcript page"))
-        compose.onNode(hasText("Rebuilding the transcript page") and hasText("Running")).assertExists()
+        compose.onNode(hasText("Rebuilding the transcript page") and hasText("Running Bash…")).assertExists()
         compose.onAllNodes(hasText("Rebuilding the transcript page") and hasText(recap, substring = true))
             .assertCountEquals(0)
 

@@ -330,8 +330,7 @@ class TranscriptDeviceTest {
 
     @Test fun readingPagingSelectionLinksAndRestoration() = journey("reading") {
         login()
-        compose.onNodeWithTag("workspace:$workspace").performClick()
-        compose.onNodeWithText("Long conversation").performClick()
+        openSession()
         awaitText("Latest answer 9999", substring = true)
         capture("latest")
         compose.runOnIdle { (app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).clearPrimaryClip() }
@@ -575,7 +574,7 @@ class TranscriptDeviceTest {
         compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
     }
     private fun openSession() {
-        compose.onNodeWithTag("workspace:$workspace").performClick()
+        awaitText("Long conversation")
         compose.onNodeWithText("Long conversation").performClick()
     }
     private fun openRecord(target: String = record) {

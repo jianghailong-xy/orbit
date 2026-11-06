@@ -1,5 +1,6 @@
 package io.orbitd.android.increments
 
+import io.orbitd.android.pickFromSessionOptions
 import android.app.Instrumentation
 import android.content.Intent
 import android.content.IntentFilter
@@ -77,7 +78,7 @@ class LinkIncrementsDeviceTest : IncrementDeviceTest() {
         }
     }
 
-    private fun onWorkspacesHome() = exists(hasTestTag("workspace:$workspace")) && !exists(hasTestTag("directory-list"))
+    private fun onTheList() = exists(hasTestTag("directory-list"))
     /** A link another app sends, as Android hands it to the running app: the manifest resolves it ([resolves]) and the singleTop
      * MainActivity receives it in onNewIntent ([open]). Delivered to the test's own Activity, so the run keeps one Activity. */
     private fun deliver(link: String) = open(link)
@@ -85,38 +86,41 @@ class LinkIncrementsDeviceTest : IncrementDeviceTest() {
         Intent(Intent.ACTION_VIEW, Uri.parse(link)).addCategory(Intent.CATEGORY_BROWSABLE).setPackage(app.packageName), 0)
         .any { it.activityInfo.name == MainActivity::class.java.name }
 
-    /** DL-1: `orbit://active`, from another app, opens the workspaces home — before sign-in it waits for it, and over a workspace it
-     * is pushed with Back to return. */
-    @Test fun orbitActiveOpensTheWorkspacesHome() = journey {
+    /** DL-1: `orbit://active`, from another app, opens the app (iOS `route(to: .active)`). Before sign-in it waits, and signing in lands
+     * on the workspace's list as a launch does; in a workspace nothing moves; from anywhere else it goes back to that list. */
+    @Test fun orbitActiveOpensTheApp() = journey {
         verify("the manifest resolves orbit://active to the app", resolves("orbit://active"))
         deliver("orbit://active")
         signIn()
-        await("signed in, the link lands on the workspaces home") { onWorkspacesHome() }
-        capture("01-home-after-sign-in")
-        compose.onNodeWithTag("workspace:$workspace").performClick()
-        awaitTag("directory-list")
-        capture("02-in-a-workspace")
+        await("signed in, the link lands on the workspace's list") { onTheList() }
+        capture("01-list-after-sign-in")
         deliver("orbit://active")
-        await("the workspaces home is opened over the workspace") { onWorkspacesHome() }
-        capture("03-home-over-the-workspace")
-        back()
-        await("Back returns to the workspace") { exists(hasTestTag("directory-list")) }
-        capture("04-back-to-the-workspace")
+        settle()
+        verify("in the workspace, nothing moves and nothing is pushed", onTheList() && !exists(hasContentDescription("Back")))
+        capture("02-stays-in-the-workspace")
+        compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
+        compose.onNode(hasText("Tasks") and hasClickAction()).performClick()
+        await("on Tasks") { !onTheList() }
+        deliver("orbit://active")
+        await("from Tasks it goes back to the list") { onTheList() }
+        verify("with nothing to go back to", !exists(hasContentDescription("Back")))
+        capture("03-back-from-tasks")
     }
 
-    /** DL-1, its other half: a bare `orbit://` from another app opens the workspaces home, as iOS's DeepLink does
-     * (`case "active", ""`). The `orbit` filter takes its empty host (A05h) and still names the others, so `orbit://auth/google` is
-     * not offered to MainActivity as well (the D1 merge's choice). */
-    @Test fun aBareOrbitLinkOpensTheWorkspacesHome() = journey {
+    /** DL-1, its other half: a bare `orbit://` from another app opens the app too, as iOS's DeepLink does (`case "active", ""`). The
+     * `orbit` filter takes its empty host (A05h) and still names the others, so `orbit://auth/google` is not offered to MainActivity
+     * as well (the D1 merge's choice). */
+    @Test fun aBareOrbitLinkOpensTheApp() = journey {
         signIn()
-        awaitTag("workspace:$workspace")
-        compose.onNodeWithTag("workspace:$workspace").performClick()
-        awaitTag("directory-list")
+        await("the list") { onTheList() }
         verify("the manifest resolves orbit:// to the app", resolves("orbit://"))
+        compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
+        compose.onNode(hasText("Tasks") and hasClickAction()).performClick()
+        await("on Tasks") { !onTheList() }
         deliver("orbit://")
-        val home = runCatching { compose.waitUntil(10_000) { onWorkspacesHome() }; true }.getOrDefault(false)
+        val home = runCatching { compose.waitUntil(10_000) { onTheList() }; true }.getOrDefault(false)
         capture("01-after-a-bare-link")
-        verify("a bare orbit:// delivered to the app opens the workspaces home", home)
+        verify("a bare orbit:// delivered to the app opens the workspace's list", home)
     }
 
     /** DL-6: the pre-1.0 web links to a session — /workspaces/<w>/sessions/<s> and /agents/<a>/sessions/<s> — tapped in a transcript,
@@ -163,7 +167,8 @@ class LinkIncrementsDeviceTest : IncrementDeviceTest() {
         } finally { instrumentation.removeMonitor(browser) }
     }
 
-    /** A05-10: a list reply that left before a newer read was asked for never overwrites it; switching views sends nothing. */
+    /** A05-10: a list reply that left before a newer read was asked for never overwrites it. The directory is Open alone: a view is read
+     * when it is chosen, and going back to Open sends nothing. */
     @Test fun aLateListReplyNeverOverwritesANewerOne() = journey {
         val seen = CopyOnWriteArrayList<String>()
         val watcher = CoroutineScope(Dispatchers.Default)
@@ -173,7 +178,6 @@ class LinkIncrementsDeviceTest : IncrementDeviceTest() {
         } }
         try {
             signIn()
-            compose.onNodeWithTag("workspace:$workspace").performClick()
             await("the list") { exists(hasText("Release notes")) }
             val latch = CountDownLatch(1)
             listedTitle = "Stale title"
@@ -181,12 +185,12 @@ class LinkIncrementsDeviceTest : IncrementDeviceTest() {
             val mark = calls.size
             app.realtime.refreshDirectory()
             await("the first read is out and held") { hold == null }
-            await("its other views are read") { calls.drop(mark).any { it == "GET sessions?view=completed" } && calls.drop(mark).any { it == "GET sessions?view=trash" } }
-            val before = calls.drop(mark).count { it.startsWith("GET sessions") }
-            // A view switch reads nothing: one directory read holds all three views.
-            compose.onAllNodes(hasText("Completed") and hasClickAction()).onFirst().performClick(); settle()
-            compose.onAllNodes(hasText("Open") and hasClickAction()).onFirst().performClick(); settle()
-            verify("switching views read nothing", calls.drop(mark).count { it.startsWith("GET sessions") } == before)
+            fun completedReads() = calls.drop(mark).count { it == "GET sessions?view=completed" }
+            verify("the directory's read asks for no other view", completedReads() == 0 && calls.drop(mark).none { it == "GET sessions?view=trash" })
+            compose.pickFromSessionOptions("Completed"); settle()
+            await("Completed is read when it is chosen") { completedReads() == 1 }
+            compose.pickFromSessionOptions("Open"); settle()
+            verify("going back to Open reads nothing", completedReads() == 1 && calls.drop(mark).none { it == "GET sessions?view=trash" })
             capture("01-read-held")
             listedTitle = "Fresh title"
             app.realtime.refreshDirectory()
@@ -207,7 +211,6 @@ class LinkIncrementsDeviceTest : IncrementDeviceTest() {
         recap = "Moved the recap onto the session list row; the three states are covered by tests."
         preferences = """{"recaps":true}"""
         signIn()
-        compose.onNodeWithTag("workspace:$workspace").performClick()
         await("the row's line is the recap") { exists(hasText(recap!!)) }
         verify("not the last reply", !exists(hasText("Committed the row change.")))
         verify("and no recap label", !exists(hasText("Recap ·", substring = true)))
@@ -228,8 +231,7 @@ class LinkIncrementsDeviceTest : IncrementDeviceTest() {
         back()
         await("back on Settings") { exists(hasText("Appearance")) }
         back()
-        await("back on the list") { exists(hasTestTag("directory-list")) || exists(hasTestTag("workspace:$workspace")) }
-        if (!exists(hasTestTag("directory-list"))) compose.onNodeWithTag("workspace:$workspace").performClick()
+        await("back on the list") { onTheList() }
         await("the row's line is the last reply again") { exists(hasText("Committed the row change.")) }
         verify("the recap is gone from the row", !exists(hasText(recap!!)))
         capture("03-last-reply-line")

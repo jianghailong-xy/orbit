@@ -193,7 +193,9 @@ test('heartbeat drains manual worktree operations only with capability and proce
     // a runner that advertised its process owner.
     assert.deepEqual(h.abandonedSweeps, [[RUNNER_ID, OWNER]]);
     assert.deepEqual(h.mergeDrainCalls, [[RUNNER_ID, OWNER]]);
-    assert.deepEqual(h.commitDrainCalls, [[RUNNER_ID, OWNER]]);
+    // The third argument is whether this runner declared abandoned-checkout-v1; a runner's own
+    // header decides whether a queued discard is handed over.
+    assert.deepEqual(h.commitDrainCalls, [[RUNNER_ID, OWNER, false]]);
     assert.deepEqual(response.mergeRequests, [merge]);
     assert.deepEqual(response.commitRequests, [commit]);
   });

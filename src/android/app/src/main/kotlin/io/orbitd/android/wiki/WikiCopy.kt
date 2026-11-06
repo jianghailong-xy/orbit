@@ -451,12 +451,10 @@ internal object WikiDocCopy {
     fun monthDayTime(iso: String?, zone: ZoneId = ZoneId.systemDefault()): String? =
         iso?.let { WikiModeLogic.runWhen(it, zone).ifEmpty { null } }
 
-    // The home, by the confirmed plan (design §12.3.1, mocks 30 ③, 31 ① ⑥).
+    // The home, by the confirmed plan (design §12.3.1, mocks 30 ③, 31 ①).
 
     /** The line under the home's head once a plan is confirmed: `35 documents · 5 written` (`wikiDocsWritten`). */
     fun docsWritten(total: Int, written: Int) = "${plural(total, "document", "documents")} · ${WikiArticleCopy.count(written)} written"
-    /** A new space's one card (mock 31 ⑥): why it has nothing, over Set up maintenance (`WIKI_NO_DOCUMENTS_NOTE`). */
-    const val noDocumentsNote = "This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space."
     /** A category's documents not written yet, folded into one row under its written ones (`wikiNotWrittenYet`). */
     fun notWrittenYet(n: Int) = "+${WikiArticleCopy.count(n)} not written yet"
     /** A category none of whose documents is written yet, as its one row (`wikiDocsNotWrittenYet`). */

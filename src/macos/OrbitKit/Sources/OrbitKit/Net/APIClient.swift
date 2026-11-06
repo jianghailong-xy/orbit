@@ -1276,6 +1276,11 @@ public final class APIClient: @unchecked Sendable {
     public func submitWikiChangeset(spaceID: String, _ req: WikiChangesetRequest) async throws -> WikiChangeResult {
         try await post("wiki/spaces/\(spaceID)/changesets", body: req)
     }
+    /// `POST /wiki/spaces`: a wiki made by its owner — the space, with maintenance on and its plan's first draft asked
+    /// for, in one request; answers with the space. Maintenance is refused to every session.
+    public func createWikiSpace(_ req: WikiSpaceCreate) async throws -> WikiSpace {
+        try await post("wiki/spaces", body: req)
+    }
     /// `PATCH /wiki/spaces/:id`: the owner's settings — the review mode, Automatic's spot checks and
     /// maintenance; answers with the space as the server kept it. Refused to every session.
     public func updateWikiSpace(_ id: String, _ req: WikiSpaceUpdate) async throws -> WikiSpace {

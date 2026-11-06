@@ -919,6 +919,16 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     as: RUNNER,
     request: (of) => ({ params: {}, body: { ids: [of.runner.orphanSessionId] } }),
   },
+  // The inventory a machine reports about its own checkouts. Another account's session named in it is
+  // dropped before anything is stored: the machine is told about that session as it is about one that
+  // names nothing, and no row of A's is written.
+  'POST /runner/abandoned-checkouts body checkouts[].sessionId': {
+    as: RUNNER,
+    request: (of) => ({
+      params: {},
+      body: { checkouts: [{ sessionId: of.runner.machineSessionId, files: [], patches: [] }] },
+    }),
+  },
 
   // ── sessions ────────────────────────────────────────────────────────────────────────────────────
   'POST /runner/sessions body workspaceId': {

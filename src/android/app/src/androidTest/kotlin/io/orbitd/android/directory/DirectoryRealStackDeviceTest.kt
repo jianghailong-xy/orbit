@@ -1,5 +1,8 @@
 package io.orbitd.android.directory
 
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.Role
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.os.Process
@@ -68,6 +71,7 @@ class DirectoryRealStackDeviceTest {
     }
     private fun assertReadable() {
         compose.onAllNodesWithText("Couldn't load workspaces").assertCountEquals(0)
+        compose.onAllNodesWithText("Workspaces couldn't be loaded").assertCountEquals(0)
         compose.onAllNodesWithText("unreadable directory", substring = true).assertCountEquals(0)
     }
 
@@ -90,17 +94,16 @@ class DirectoryRealStackDeviceTest {
             compose.pressSignIn()
             compose.waitUntil(30_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
 
-            // The Workspaces page: one row per workspace, top to bottom in iOS's order.
-            ios.forEach { (id, _) -> compose.waitUntil(30_000) { compose.onAllNodesWithTag("workspace:$id").fetchSemanticsNodes().isNotEmpty() } }
+            // A launch with nothing remembered lands on the first in iOS's order.
+            compose.waitUntil(30_000) { compose.onAllNodesWithTag("directory-list").fetchSemanticsNodes().isNotEmpty() }
             assertReadable()
-            val home = ios.map { (id, _) -> top(hasTestTag("workspace:$id")) }
-            reads += "Workspaces page tops: $home"
-            assertEquals("Workspaces page order", home.sorted(), home)
-            capture("a05b-workspaces")
+            compose.onNode(hasText(ios.first().second) and hasAnyAncestor(hasTestTag("app-bar"))).assertExists()
+            reads += "landed on: ${ios.first().second}"
+            capture("a05b-landed")
 
-            // The drawer, over that page: its rows are the nodes with the name and without the page row's tag.
+            // The drawer: its rows are the workspaces, top to bottom in iOS's order.
             compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
-            val rows = ios.map { (id, name) -> hasText(name) and !hasTestTag("workspace:$id") }
+            val rows = ios.map { (_, name) -> hasText(name) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab) }
             rows.forEach { row -> compose.waitUntil(30_000) { compose.onAllNodes(row).fetchSemanticsNodes().isNotEmpty() } }
             assertReadable()
             val drawer = rows.map { top(it) }

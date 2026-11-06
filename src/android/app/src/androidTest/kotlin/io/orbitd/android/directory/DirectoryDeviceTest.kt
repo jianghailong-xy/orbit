@@ -1,5 +1,8 @@
 package io.orbitd.android.directory
 
+import io.orbitd.android.pickFromSessionOptions
+import io.orbitd.android.hasRowMenu
+import io.orbitd.android.openRowMenu
 import android.graphics.Bitmap
 import android.os.SystemClock
 import android.view.KeyEvent
@@ -57,27 +60,43 @@ class DirectoryDeviceTest {
                 capture("login-ime")
                 tap(signIn, requireAboveIme = true)
                 compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
-                compose.onNodeWithTag("workspace:$workspaceId").performClick()
+                // The launch lands on the workspace by itself.
+                compose.waitUntil(15_000) { compose.onAllNodesWithTag("directory-list").fetchSemanticsNodes().isNotEmpty() }
+                // ≡ New Folder…: the dialog it always was. Not in the shell tests: one holding a text field never settles in Robolectric.
+                compose.pickFromSessionOptions("New Folder…")
+                compose.waitUntil(5_000) { compose.onAllNodes(hasText("New folder") and hasAnyAncestor(isDialog())).fetchSemanticsNodes().isNotEmpty() }
+                compose.onNode(hasText("Close") and hasAnyAncestor(isDialog())).performClick()
+                compose.waitForIdle()
                 directoryScrollTo("Research")
                 compose.onNodeWithText("Review navigation").assertDoesNotExist() // filed only once, inside its folder
                 compose.onNodeWithText("Research").performClick()
                 directoryScrollTo("Review navigation")
                 capture("folder")
+                // The bar's ⋯ (iOS `folderMenu`): the folder's own dialog. Not in the shell tests: a dialog holding a text field never settles in Robolectric.
+                compose.onNodeWithContentDescription("Folder actions").performClick()
+                compose.waitUntil(5_000) { compose.onAllNodes(hasText("Folder options") and hasAnyAncestor(isDialog())).fetchSemanticsNodes().isNotEmpty() }
+                compose.onNode(hasText("Close") and hasAnyAncestor(isDialog())).performClick()
+                compose.waitForIdle()
                 compose.activityRule.scenario.recreate()
                 compose.waitUntil(5_000) { compose.activity.window.decorView.hasWindowFocus() }
                 instrumentation.waitForIdleSync()
                 instrumentation.uiAutomation.waitForIdle(500, 5_000)
                 compose.onNodeWithText("Review navigation").assertIsDisplayed()
+                // A folder's page has no search of its own (iOS): that is the list's, at its foot.
+                compose.onAllNodes(hasSetTextAction()).assertCountEquals(0)
+                key(KeyEvent.KEYCODE_BACK)
+                compose.waitUntil(5_000) { compose.onAllNodesWithTag("session-search").fetchSemanticsNodes().isNotEmpty() }
+                instrumentation.uiAutomation.waitForIdle(500, 5_000)
                 tap(compose.onNode(hasSetTextAction()), false)
                 awaitIme(true)
-                compose.onNodeWithText("Search sessions").performTextInput("Review")
+                compose.onNodeWithTag("session-search").performTextInput("Review")
                 compose.waitUntil(10_000) { compose.onAllNodesWithText("Same dataset across light and dark").fetchSemanticsNodes().isNotEmpty() }
                 val hit = compose.onNodeWithText("Review navigation")
                 hit.performScrollTo()
                 capture("directory-ime")
                 key(KeyEvent.KEYCODE_BACK)
                 awaitIme(false)
-                compose.onNodeWithText("Review").assertIsDisplayed() // IME Back must keep the folder/search route.
+                compose.onNodeWithText("Review").assertIsDisplayed() // IME Back must keep the search.
                 instrumentation.uiAutomation.waitForIdle(500, 5_000)
                 tap(compose.onNode(hasSetTextAction()), false)
                 awaitIme(true)
@@ -87,22 +106,27 @@ class DirectoryDeviceTest {
                 awaitIme(false)
                 key(KeyEvent.KEYCODE_BACK)
                 compose.waitUntil(5_000) { compose.onAllNodesWithText("Review").fetchSemanticsNodes().isNotEmpty() }
-                compose.onNodeWithText("Review").assertIsDisplayed() // search and folder source survived
-                compose.onNodeWithText("Clear").performClick()
-                compose.onNodeWithContentDescription("Options for Review navigation").performScrollTo().performClick()
+                compose.onNodeWithText("Review").assertIsDisplayed() // the search survived
+                compose.onNodeWithContentDescription("Clear").performClick()
+                compose.onNodeWithText("Research").performClick()
+                compose.onNode(hasRowMenu("Options for Review navigation")).performScrollTo().openRowMenu()
                 compose.onNodeWithText("Complete", useUnmergedTree = true).performScrollTo().performClick()
                 compose.waitUntil(10_000) {
                     val live = app.realtime.state.value
                     completed && live.directoryFresh && !live.directoryRefreshing &&
-                        live.directory?.sessions?.get("completed")?.any { it["id"]?.jsonPrimitive?.content == sessionId } == true
+                        live.directory?.sessions?.get("open")?.none { it["id"]?.jsonPrimitive?.content == sessionId } == true
                 }
                 // The outcome is the app's toast (A05-4): "Session completed" with Undo, a card under the bar for six seconds.
                 compose.waitUntil(10_000) { compose.onAllNodes(hasText("Session completed") and hasAnyAncestor(hasTestTag("toast"))).fetchSemanticsNodes().isNotEmpty() }
                 capture("completed-toast")
                 compose.mainClock.advanceTimeBy(6_500)
                 compose.waitUntil(10_000) { compose.onAllNodes(hasAnyAncestor(hasTestTag("toast"))).fetchSemanticsNodes().isEmpty() }
-                directoryScrollTo("Completed")
-                compose.onNodeWithText("Completed").performClick()
+                // Completed is the list's ≡, read when it is chosen. A folder's page shows the scope it was opened from.
+                key(KeyEvent.KEYCODE_BACK)
+                compose.pickFromSessionOptions("Completed")
+                compose.waitUntil(10_000) { compose.onAllNodesWithText("Research").fetchSemanticsNodes().isNotEmpty() }
+                compose.onNodeWithText("Research").performClick()
+                compose.waitUntil(10_000) { compose.onAllNodesWithText("Review navigation").fetchSemanticsNodes().isNotEmpty() }
                 directoryScrollTo("Review navigation")
                 capture("completed")
                 key(KeyEvent.KEYCODE_BACK)
@@ -163,16 +187,21 @@ class DirectoryDeviceTest {
                 assertTrue(apiCalls.contains("POST /api/sessions/$sessionId/complete"))
                 assertTrue(apiCalls.any { it.contains("/api/sessions/search?") && it.contains("q=Review") })
                 capture("directory")
+                // A read that fails: the rows stay and the list says nothing; the drawer heads its workspaces with why (iOS).
+                compose.pickFromSessionOptions("Open")
                 forbiddenDirectory = true
-                compose.onNodeWithContentDescription("Refresh directory").performClick()
+                app.realtime.refreshDirectory()
                 compose.waitUntil(10_000) { app.realtime.state.value.directoryError?.httpStatus == 403 }
-                directoryScrollTo("You don't have permission to load this directory.")
+                compose.onNodeWithText("Research").assertIsDisplayed()
+                compose.onAllNodesWithText("Can't reach Orbit").fetchSemanticsNodes().single() // Composed in the closed drawer.
+                compose.onNodeWithContentDescription("Open navigation").performClick()
+                compose.onNodeWithText("Can't reach Orbit").assertIsDisplayed()
                 capture("permission")
-                directoryScrollTo("New folder")
-                compose.onNode(hasText("New folder") and hasAnyAncestor(hasTestTag("directory-list"))).assertIsNotEnabled()
                 forbiddenDirectory = false
-                compose.onNodeWithContentDescription("Refresh directory").performClick()
+                compose.onNodeWithText("Retry").performClick()
                 compose.waitUntil(10_000) { app.realtime.state.value.directoryFresh }
+                compose.onAllNodesWithText("Can't reach Orbit").assertCountEquals(0)
+                key(KeyEvent.KEYCODE_BACK)
                 compose.activityRule.scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
                 compose.waitUntil(5_000) { compose.activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE }
                 instrumentation.uiAutomation.waitForIdle(500, 5_000)
@@ -185,7 +214,7 @@ class DirectoryDeviceTest {
                 instrumentation.uiAutomation.waitForIdle(500, 5_000)
                 tap(compose.onNode(hasSetTextAction()), false)
                 awaitIme(true)
-                compose.onNodeWithText("Search sessions").performTextInput("Review")
+                compose.onNodeWithTag("session-search").performTextInput("Review")
                 capture("root-ime")
                 key(KeyEvent.KEYCODE_BACK)
                 awaitIme(false)

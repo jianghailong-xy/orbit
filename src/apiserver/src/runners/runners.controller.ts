@@ -93,6 +93,25 @@ export class RunnersController {
     return this.runners.updateRunner(user.userId, id, dto);
   }
 
+  /** The checkouts of this machine's finished sessions that still hold uncommitted work — the
+   *  runner page's list, with Commit and Discard beside each one. */
+  @PatScope('runners:read', { workspaceConfinable: false })
+  @Get(':id/abandoned-checkouts')
+  abandonedCheckouts(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.runners.abandonedCheckouts(user.userId, id);
+  }
+
+  /** One entry's per-file diffs, fetched when somebody opens it. */
+  @PatScope('runners:read', { workspaceConfinable: false })
+  @Get(':id/abandoned-checkouts/:sessionId')
+  abandonedCheckoutDiff(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('sessionId', PublicIdPipe) sessionId: string,
+  ) {
+    return this.runners.abandonedCheckoutDiff(user.userId, id, sessionId);
+  }
+
   // Browser-less sign-in relay for one runner. Owner-scoped in the service (a non-owner gets a
   // 404, same as every other :id route here), because these drive credential writes on that
   // machine. The pasted code is single-use and never read back.
