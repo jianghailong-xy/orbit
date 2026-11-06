@@ -340,7 +340,10 @@ interface Wrote {
   section: { key: string; outcome: string; versionId: string | null; changed: number | null };
 }
 
-/** One section written as the server's jobs write it, with the cause they say: its material's fingerprint is `material`. */
+/**
+ * One section written as the server's jobs write it, with the cause they say: its material's fingerprint is `material`,
+ * and its body `markdown` when given, its sentences one a list item otherwise.
+ */
 async function write(
   h: Harness,
   s: Scene,
@@ -348,13 +351,13 @@ async function write(
   at: { slug: string; key: string },
   sentences: readonly string[],
   cause: WikiDocWriteCause,
-  { material = sha256(sentences.join('\n')), repoSha = commit(sentences.join('\n')), footnotes = [] as unknown[] } = {},
+  { material = sha256(sentences.join('\n')), repoSha = commit(sentences.join('\n')), footnotes = [] as unknown[], markdown = markdownOf(sentences) } = {},
 ): Promise<Wrote> {
   const answer = await served(() => h.docs.write(s.writer, s.spaceId, at.slug, {
     planVersion,
     repoSha,
     model: 'qwen3.8-27b-fp8',
-    sections: [{ key: at.key, materialSha256: material, markdown: markdownOf(sentences), footnotes }],
+    sections: [{ key: at.key, materialSha256: material, markdown, footnotes }],
   }, cause));
   expectStatus(answer, 200, `the write of ${at.slug}#${at.key}`);
   return { answer, section: answer.body.sections[0] };
@@ -788,6 +791,58 @@ test('a restored sentence through an entry retired since is stored withdrawn and
   ]);
   assert.ok(restored.staleAt, 'the section is to be written again, as any write through a withdrawn entry leaves it');
   assert.equal(restored.sentences[0].footnotes[0].viaEntryId, entry, 'the footnote comes back as it was');
+
+  // The same restore pressed again finds the section standing as the version kept it — its sentence withdrawn and the
+  // section stale, as writing the version again would leave them: nothing written, nothing kept, the same rows.
+  const versions = (await versionRows(h, s.spaceId, HEARTBEAT)).length;
+  const published = h.published.length;
+  const again = await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/doc-versions/${v}/restore`);
+  expectStatus(again, 200, 'the same restore pressed again');
+  assert.deepEqual([again.body.outcome, again.body.keptVersionId, again.body.changed], ['unchanged', null, null]);
+  assert.equal((await versionRows(h, s.spaceId, HEARTBEAT)).length, versions, 'no version kept');
+  const still = await sectionNow(h, s.spaceId, HEARTBEAT);
+  assert.deepEqual([still.id, still.sentences.map((one) => one.id)], [restored.id, restored.sentences.map((one) => one.id)], 'the same rows');
+  assert.deepEqual([still.staleAt?.toISOString(), still.sentences[0].status, still.sentences[0].withdrawnReason],
+    [restored.staleAt?.toISOString(), 'withdrawn', 'retired'], 'still withdrawn, and still to be written again');
+  assert.equal(h.published.length, published, 'nothing announced');
+});
+
+test('a second restore of the same version is unchanged once the document around it reads its sentence differently: what a write derives is not compared', { skip }, async () => {
+  const h = await boot();
+  const s = await scene(h);
+  const version = await confirmPlan(h, s);
+  const overview = { slug: HEARTBEAT.slug, key: 's1' };
+  // The overview's heading names 30: not the section's first line, so it stays a heading block, which the document's
+  // classification reads.
+  await write(h, s, version, overview, ['总览的一句话。', '另一句话。'], { reason: 'build', jobId: randomUUID(), planVersion: version },
+    { markdown: '- 总览的一句话。\n\n### 每 30 秒一次\n\n- 另一句话。', material: sha256('the overview with its heading') });
+  await write(h, s, version, HEARTBEAT, ['Runner 每 30 秒发送一次心跳。'], { reason: 'build', jobId: randomUUID(), planVersion: version });
+  const first = await sectionNow(h, s.spaceId, HEARTBEAT);
+  assert.deepEqual(first.sentences.map((one) => [one.status, one.newTokens]), [['transition', []]], 'the heading makes 30 known: a transition');
+  const v0 = (await write(h, s, version, HEARTBEAT, ['Runner 每 45 秒发送一次心跳。'], { reason: 'maintenance', jobId: randomUUID() })).section.versionId!;
+  // The overview is written again without its heading: 30 is known no more.
+  await write(h, s, version, overview, ['总览的一句话。', '另一句话。'], { reason: 'maintenance', jobId: randomUUID() },
+    { markdown: '- 总览的一句话。\n\n- 另一句话。', material: sha256('the overview without its heading') });
+
+  const restored = await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/doc-versions/${v0}/restore`);
+  expectStatus(restored, 200, 'the restore');
+  assert.deepEqual([restored.body.outcome, restored.body.changed], ['restored', 1]);
+  const now = await sectionNow(h, s.spaceId, HEARTBEAT);
+  assert.deepEqual(now.sentences.map((one) => [one.text, one.status, one.newTokens]), [['Runner 每 30 秒发送一次心跳。', 'unsourced', ['30']]],
+    'the sentence the version kept as a transition reads unsourced in the document as it is now');
+  const versions = (await versionRows(h, s.spaceId, HEARTBEAT)).length;
+  assert.equal(versions, 2, 'the version the rewrite kept, and the one the restore kept');
+  const published = h.published.length;
+
+  // Pressed again: the section stands as the version kept it, whatever its sentence's status reads now.
+  const again = await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/doc-versions/${v0}/restore`);
+  expectStatus(again, 200, 'the same restore pressed again');
+  assert.deepEqual([again.body.outcome, again.body.keptVersionId, again.body.changed], ['unchanged', null, null]);
+  assert.equal((await versionRows(h, s.spaceId, HEARTBEAT)).length, versions, 'no version kept: none of the five is pushed out');
+  const after = await sectionNow(h, s.spaceId, HEARTBEAT);
+  assert.deepEqual([after.id, after.sentences.map((one) => one.id)], [now.id, now.sentences.map((one) => one.id)],
+    'the same rows: a selection naming the sentence still finds it');
+  assert.equal(h.published.length, published, 'nothing announced');
 });
 
 // ── 6. the owner's door, and nobody else's ──────────────────────────────────────────────────────

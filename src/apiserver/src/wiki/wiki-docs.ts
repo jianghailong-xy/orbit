@@ -1076,6 +1076,25 @@ async function standingSections(db: Pick<Tx, 'wikiDocSection'>, ownerId: string,
   }));
 }
 
+/**
+ * What a restore compares a section with a version by (contract `docs.versions.restore`): its blocks, each sentence's
+ * block, text and footnotes, its fingerprint and its commit — what a version holds. Not what a write derives from the
+ * document and the entries around the section (statuses, new tokens, withdrawals, staleness): writing the version
+ * again would derive those from them as they are now, so they say nothing about whether it already stands.
+ */
+function restoreIdentity(kept: KeptSection, materialSha256: string, repoSha: string): string {
+  return canonical({
+    blocks: kept.blocks,
+    sentences: kept.sentences.map((sentence) => ({
+      block: sentence.block,
+      text: sentence.text,
+      footnotes: sentence.notes.map((n) => kept.footnotes[n] ?? null),
+    })),
+    materialSha256,
+    repoSha,
+  });
+}
+
 /** A value as JSON with every object's keys sorted: two that say the same thing read the same, however they were stored. */
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -1513,7 +1532,8 @@ export class WikiDocs {
    * version's blocks, sentences, footnotes, repoSha, materialSha256 and generatedAt, so the next maintenance run
    * finds the fingerprint it was written from and does not write it again for nothing; and the text it replaces is
    * kept as a version too (reason restore), so a restore is taken back the same way. A section already standing as
-   * the version kept it is unchanged: nothing is written, and nothing kept.
+   * the version kept it — its blocks, each sentence's block, text and footnotes, its fingerprint and its commit — is
+   * unchanged: nothing is written and nothing kept, however its statuses read now.
    */
   async restore(
     ownerId: string,
@@ -1761,7 +1781,7 @@ export class WikiDocs {
     const storedByKey = new Map(stored.map((section) => [section.key, section]));
     // Unchanged: the fingerprint it was written from, and nothing withdrawn from it since. A restore is written
     // whatever the fingerprint says — the text it puts back is what changes — unless the section already stands as
-    // the version kept it.
+    // the version kept it (`restoreIdentity`): then it is left as it is, its stale mark too.
     let toWrite = restoring
       ? prepared
       : prepared.filter((section) => {
@@ -1773,8 +1793,9 @@ export class WikiDocs {
     const asTheyStand = await standingSections(tx, ownerId, overwritten.map((section) => section.id));
     if (restoring) {
       const current = overwritten[0];
-      const same = current !== undefined && current.materialSha256 === restoring.materialSha256 && current.repoSha === restoring.repoSha
-        && current.staleAt === null && canonical(asTheyStand.get(current.id)) === canonical(restoring.kept);
+      const same = current !== undefined
+        && restoreIdentity(asTheyStand.get(current.id)!, current.materialSha256, current.repoSha)
+          === restoreIdentity(restoring.kept, restoring.materialSha256, restoring.repoSha);
       if (same) toWrite = [];
     }
     const planKeys = new Set(planDoc.sections.map((section) => section.key));
