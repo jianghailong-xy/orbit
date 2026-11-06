@@ -1441,6 +1441,11 @@ button.toast--pill:focus-visible {
   .app-shell .app-nav:not(.collapsed) .tp-item.menu-open .tp-workspace-label ~ .tp-count.needs-you {
     display: none;
   }
+  /* A wiki's row, the same way. */
+  .app-shell .app-nav:not(.collapsed) .tp-group-wiki .tp-item:hover .tp-count.needs-you,
+  .app-shell .app-nav:not(.collapsed) .tp-group-wiki .tp-item.menu-open .tp-count.needs-you {
+    display: none;
+  }
   .app-shell .app-nav:not(.collapsed) .tp-nav-shortcut {
     display: inline;
   }
@@ -24715,6 +24720,9 @@ button.project-open-item-action:disabled {
 .wk-spot-t { font-size: 13.5px; color: var(--text-1); }
 .wk-spot-d { margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--text-3); }
 .wk-floors { margin-top: 12px; }
+.wk-delete { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.wk-delete .wk-maint-d { margin-top: 0; }
+.wk-delete-lines > * + * { margin-top: 12px; }
 .wk-maint-off { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; }
 .wk-maint-t { font-size: 14px; color: var(--text-1); }
 .wk-maint-d { margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--text-3); }

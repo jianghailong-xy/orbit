@@ -850,6 +850,27 @@ final class WikiModel {
         }
     }
 
+    /// How many entries a space's delete would take, for the question it asks; nil when the read fails.
+    func entryCount(_ space: WikiSpace) async -> Int? {
+        try? await api.wikiHealth(spaceID: space.id).entries
+    }
+
+    /// Delete a wiki for good (contract `space.delete`). `leave` runs the moment it is gone, before the wikis are read
+    /// again, so the page that asked never draws the next wiki's settings. Nil on success, else the sentence to show.
+    func deleteSpace(_ space: WikiSpace, leave: () -> Void) async -> String? {
+        busy = true
+        defer { busy = false }
+        do {
+            try await api.deleteWikiSpace(space.id)
+        } catch {
+            return Self.refusal(error)
+        }
+        leave()
+        spaceWorkspaces[space.id] = nil
+        await reloadAfterWrite()
+        return nil
+    }
+
     // MARK: an entry a review mode applied
 
     /// Confirm: the entry becomes Confirmed and is pushed from then on.

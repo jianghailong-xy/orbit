@@ -28,6 +28,21 @@ class WikiSettingsFixtureTest {
         assertEquals(workspaces.fstr("empty"), WikiModeCopy.workspacesEmpty)
         assertEquals(workspaces.fstr("add"), WikiModeCopy.addWorkspace)
         assertEquals(workspaces.fstr("addGroup"), WikiModeCopy.addWorkspaceGroup)
+        val delete = settings.fobj("delete")
+        assertEquals(delete.fstr("note"), WikiModeCopy.deleteNote)
+        assertEquals(delete.fstr("open"), WikiModeCopy.deleteOpen)
+        assertEquals(delete.fstr("confirm"), WikiModeCopy.deleteConfirm)
+        assertEquals(delete.fstr("kept"), WikiModeCopy.deleteKept)
+        assertEquals(delete.fstr("failedNative"), WikiModeCopy.deleteFailed)
+        assertEquals(delete.fobj("question").fstr("text"), WikiModeCopy.deleteQuestion(delete.fobj("question").fstr("name")))
+        assertEquals(delete.fobj("deleted").fstr("text"), WikiModeCopy.deleted(delete.fobj("deleted").fstr("name")))
+        assertEquals(delete.fobj("comesBack").fstr("text"), WikiModeCopy.deleteComesBack(delete.fobj("comesBack").fstr("repository")))
+        val bodies = delete.farr("bodies").map { it.jsonObject }
+        assertTrue(bodies.isNotEmpty())
+        bodies.forEach { assertEquals(it.fstr("text"), WikiModeCopy.deleteBody(it["entries"]?.jsonPrimitive?.intOrNull, it.fint("documents"))) }
+        assertEquals(listOf(WikiModeCopy.deleteBody(null, 0), delete.fobj("comesBack").fstr("text"), delete.fstr("kept")).joinToString("\n\n"),
+            WikiModeCopy.deleteMessage(null, 0, delete.fobj("comesBack").fstr("repository")))
+        assertEquals(listOf(WikiModeCopy.deleteBody(2606, 0), delete.fstr("kept")).joinToString("\n\n"), WikiModeCopy.deleteMessage(2606, 0, null))
         assertEquals(settings.fstr("reviewModeHint"), WikiModeCopy.reviewModeHint)
         assertEquals(settings.fstr("lead"), WikiModeCopy.reviewModeLead)
         assertEquals(settings.fstr("defaultTag"), WikiModeCopy.modeDefault)

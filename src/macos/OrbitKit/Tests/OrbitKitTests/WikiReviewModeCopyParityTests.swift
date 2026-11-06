@@ -176,6 +176,21 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                 let addGroup: String
             }
             let workspaces: Workspaces
+            struct Delete: Decodable {
+                struct Named: Decodable { let name: String; let text: String }
+                struct ComesBack: Decodable { let repository: String; let text: String }
+                struct Body: Decodable { let entries: Int?; let documents: Int; let text: String }
+                let note: String
+                let open: String
+                let confirm: String
+                let kept: String
+                let failedNative: String
+                let question: Named
+                let deleted: Named
+                let comesBack: ComesBack
+                let bodies: [Body]
+            }
+            let delete: Delete
             let reviewModeHint: String
             let lead: String
             let defaultTag: String
@@ -310,6 +325,22 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         XCTAssertEqual(WikiModeCopy.workspacesEmpty, settings.workspaces.empty)
         XCTAssertEqual(WikiModeCopy.addWorkspace, settings.workspaces.add)
         XCTAssertEqual(WikiModeCopy.addWorkspaceGroup, settings.workspaces.addGroup)
+        XCTAssertEqual(WikiModeCopy.deleteNote, settings.delete.note)
+        XCTAssertEqual(WikiModeCopy.deleteOpen, settings.delete.open)
+        XCTAssertEqual(WikiModeCopy.deleteConfirm, settings.delete.confirm)
+        XCTAssertEqual(WikiModeCopy.deleteKept, settings.delete.kept)
+        XCTAssertEqual(WikiModeCopy.deleteFailed, settings.delete.failedNative)
+        XCTAssertEqual(WikiModeCopy.deleteQuestion(settings.delete.question.name), settings.delete.question.text)
+        XCTAssertEqual(WikiModeCopy.deleted(settings.delete.deleted.name), settings.delete.deleted.text)
+        XCTAssertEqual(WikiModeCopy.deleteComesBack(settings.delete.comesBack.repository), settings.delete.comesBack.text)
+        XCTAssertFalse(settings.delete.bodies.isEmpty)
+        for body in settings.delete.bodies {
+            XCTAssertEqual(WikiModeCopy.deleteBody(entries: body.entries, documents: body.documents), body.text)
+        }
+        XCTAssertEqual(WikiModeCopy.deleteMessage(entries: nil, documents: 0, repository: "github.com/acme/shop"),
+                       [WikiModeCopy.deleteBody(entries: nil, documents: 0), settings.delete.comesBack.text, settings.delete.kept].joined(separator: "\n\n"))
+        XCTAssertEqual(WikiModeCopy.deleteMessage(entries: 2606, documents: 0, repository: nil),
+                       [WikiModeCopy.deleteBody(entries: 2606, documents: 0), settings.delete.kept].joined(separator: "\n\n"))
         XCTAssertEqual(WikiModeCopy.reviewModeHint, settings.reviewModeHint)
         XCTAssertEqual(WikiModeCopy.reviewModeLead, settings.lead)
         XCTAssertEqual(WikiModeCopy.modeDefault, settings.defaultTag)
@@ -512,6 +543,11 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
             ("WIKI_MAINTENANCE_EDIT", WikiModeCopy.maintenanceEdit),
             ("WIKI_SAVE", WikiModeCopy.save),
             ("WIKI_NO_WORKSPACE", WikiModeCopy.noWorkspace),
+            ("WIKI_DELETE_TITLE", WikiModeCopy.deleteTitle),
+            ("WIKI_DELETE_NOTE", WikiModeCopy.deleteNote),
+            ("WIKI_DELETE_OPEN", WikiModeCopy.deleteOpen),
+            ("WIKI_DELETE_CONFIRM", WikiModeCopy.deleteConfirm),
+            ("WIKI_DELETE_KEPT", WikiModeCopy.deleteKept),
             ("WIKI_CONFIRM", WikiModeCopy.confirm),
             ("WIKI_CONFIRMED", WikiModeCopy.confirmed),
             ("WIKI_REJECTED", WikiModeCopy.rejected),
@@ -567,7 +603,7 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
             assertSays(origins, "\(origin.rawValue): '\(WikiModeCopy.originWord(origin))'", in: Self.lib)
         }
         assertSays(origins, "maintenance: WIKI_HISTORY_MAINTENANCE", in: Self.lib)
-        assertSays(lib, "export const WIKI_SETTINGS_SECTIONS = [WIKI_REVIEW_MODE, WIKI_WORKSPACES, WIKI_MAINTENANCE] as const;", in: Self.lib)
+        assertSays(lib, "export const WIKI_SETTINGS_SECTIONS = [WIKI_REVIEW_MODE, WIKI_WORKSPACES, WIKI_MAINTENANCE, WIKI_DELETE_TITLE] as const;", in: Self.lib)
         // The sentences built around a value.
         assertSays(lib, "(runs === 1 ? '1 run a day' : `${runs} ${WIKI_RUNS_A_DAY}`)", in: Self.lib)
         assertSays(lib, "days === null ? WIKI_LOOKBACK_ALL : days === 0 ? WIKI_LOOKBACK_NOW : days === 1 ? 'Last 1 day' : `Last ${days} ${WIKI_LOOKBACK_UNIT}`",
@@ -648,7 +684,17 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                            "WikiModeCopy.maintenanceName", "WikiModeCopy.setUp",
                            "Text(WikiModeCopy.maintenanceNoteServer)", "Text(WikiModeCopy.privacyNote)",
                            "} else if !maintenance.enabled {",
-                           "WikiModeCopy.maintenanceEdit + \"…\"", "WikiModeCopy.turnOff"], "the native page's sections")
+                           "WikiModeCopy.maintenanceEdit + \"…\"", "WikiModeCopy.turnOff",
+                           "case .delete:", "Button(WikiModeCopy.deleteOpen, role: .destructive, action: actions.delete)",
+                           "Text(WikiModeCopy.deleteNote)"], "the native page's sections")
+        // The question comes first, and the page goes as soon as the wiki does.
+        let deleting = try slice(native, from: "struct WikiSettingsView: View {", to: "private func workspaceLabel(_ id: String)")
+        assertOrder(deleting, ["wiki.entryCount(space)", ".orbitConfirmation(WikiModeCopy.deleteQuestion(",
+                             "Button(WikiModeCopy.deleteConfirm, role: .destructive) { delete(space, from: wiki) }",
+                             "Button(WikiModeCopy.cancel, role: .cancel)", "WikiModeCopy.deleteMessage(",
+                             ".alert(WikiModeCopy.deleteFailed", "delete: { confirmingDelete = true }",
+                             "WikiModeCopy.deleted(name(of: space, in: wiki))", "wiki.deleteSpace(space)", "model.nav.pop()", "model.showToast(said)"],
+                    "the native page asks before it deletes")
         XCTAssertFalse(arms.contains("provider"), "the native page still shows a provider")
         let row = try slice(nativePage, from: "private func modeRow(", to: "private func fallbackBanner(")
         assertOrder(row, ["WikiModeCopy.modeLabel(value)", "WikiModeCopy.modeDefault", "WikiModeCopy.modeNote(value)",

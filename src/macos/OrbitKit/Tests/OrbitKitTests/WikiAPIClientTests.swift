@@ -98,6 +98,7 @@ final class WikiAPIClientTests: XCTestCase {
         let workspaces = try await api.wikiSpaceWorkspaces("S1")
         try await api.addWikiWorkspace(spaceID: "S1", workspaceID: "W2")
         try await api.leaveWikiWorkspaceOut(spaceID: "S1", workspaceID: "W1")
+        try await api.deleteWikiSpace("S1")
 
         XCTAssertEqual(workspaces.workspaces, [WikiSpaceWorkspaceRow(id: "W1", name: "shop-cli @ EU", runner: "build-01", inWiki: false)])
         XCTAssertEqual(workspaces.addable, [WikiSpaceWorkspaceRow(id: "W2", name: "notes", runner: nil, inWiki: false)])
@@ -121,6 +122,7 @@ final class WikiAPIClientTests: XCTestCase {
             "GET /api/wiki/spaces/S1/workspaces",
             "POST /api/wiki/spaces/S1/workspaces",
             "DELETE /api/wiki/spaces/S1/workspaces/W1",
+            "DELETE /api/wiki/spaces/S1",
         ])
     }
 

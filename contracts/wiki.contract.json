@@ -81,6 +81,16 @@
       "addable": "The live workspaces Wiki settings' Add workspace offers: no repository, and in no wiki. One the owner left out of another space counts as in none. inWiki is false in every row.",
       "clients": "Web, macOS/iOS and Android draw it as the Workspaces section between Review mode and Maintenance (docs/mocks/wiki/38-workspaces)."
     },
+    "delete": {
+      "route": "DELETE /api/wiki/spaces/:id",
+      "answer": "{ spaceId }. Another account's space, or one already gone, is the plain 404.",
+      "who": "The owner's alone: a request with a session header is refused WIKI_OWNER_CHANNEL_ONLY and a personal access token OWNER_INTERACTIVE_CREDENTIAL_REQUIRED. No agent tool and no CLI command reaches it.",
+      "takes": "The space and everything hanging off it, by foreign key in one transaction, its public link included. It cannot be undone, and a failure leaves all of it.",
+      "keeps": "Workspaces, sessions, tasks and projects. Text that names an entry keeps its words, and an orbit-wiki: link in it names nothing.",
+      "runningJobs": "Not waited for and not refused: a job's row goes with its space, so every write of its claim matches nothing, and its next write that needs the space fails, which ends the attempt with nothing left to requeue. A repository operation's result is answered 404, which a runner takes as the operation being gone.",
+      "repository": "A space with a repository is made again, empty, by the next session on that repository to use a wiki tool (`binding.automatic`), and asks for its plan's first draft like any new space. Its workspaces' rows went with the old space, a left-out mark among them. A space with no repository stays gone, and a session bound to it is refused WIKI_SPACE_UNBOUND.",
+      "clients": "Web has it on a wiki's sidebar row and at the foot of Wiki settings; macOS/iOS and Android at the foot of Wiki settings. Each asks first, naming the wiki and how many entries and documents go (docs/mocks/wiki-delete)."
+    },
     "list": {
       "route": "GET /api/wiki/spaces",
       "row": "Every space of the owner, by slug: the space as GET /api/wiki/spaces/:id answers it, with pendingOps, planWaiting, workspaceIds and docs, which the one-space read does not carry. A client reading a server older than the last three takes them as absent.",
@@ -2438,6 +2448,7 @@
       "a changeset recorded something, after its transaction commits",
       "the owner decided ops, after the transaction commits",
       "a space was created, its settings changed, or a workspace was added to it, turned back on or left out",
+      "a space was deleted, after its transaction commits",
       "the owner reverted a changeset or rejected an entry, after the transaction commits",
       "a verdict was recorded, after its transaction commits",
       "pending ops expired or were withdrawn",

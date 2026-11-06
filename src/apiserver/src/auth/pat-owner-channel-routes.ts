@@ -57,6 +57,7 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /wiki/spaces/:id/verifications/reopen',
   'POST /wiki/spaces/:id/workspaces',
   'DELETE /wiki/spaces/:id/workspaces/:workspaceId',
+  'DELETE /wiki/spaces/:id',
   'GET /wiki/changesets/:id',
   'GET /wiki/spaces/:id/plan',
   'GET /wiki/spaces/:id/plan/versions',
