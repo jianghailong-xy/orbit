@@ -2211,7 +2211,7 @@ describe('wiki contract', () => {
     // What a call was made from, kept beside it for a replay to ask the same again (2026-11-06): a column of its own, an
     // object or nothing, written by the maintain job's first question about a session, and read out by no read.
     const material = readFileSync(path.join(ROOT, queue.material.migration), 'utf8').replace(/\s+/gu, ' ');
-    expect(material).toContain('ALTER TABLE "wiki_model_request" ADD COLUMN "material" JSONB');
+    expect(material).toContain('ALTER TABLE "wiki_model_request" ADD COLUMN IF NOT EXISTS "material" JSONB');
     expect(material).toContain('CHECK ("material" IS NULL OR jsonb_typeof("material") = \'object\')');
     expect(queue.material.rule).toMatch(/maintenance\.job\.server\.replay/u);
     expect(CONTRACT.jobs.read.never).toMatch(/the material it was made from \(modelQueue\.material\)/u);
