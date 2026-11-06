@@ -5,8 +5,8 @@
 # runner's connection instead of relaying it. What must hold: the runner reconnects and gets the same session, or the
 # same message, within ORBIT_LOST_ANSWER_BOUND seconds of the cut, not once a 300 s lease runs out, and runs it once.
 #
-#   lost-answer-drill.sh prepare  The stack in MODE_LINK, built from this checkout, its link gateway as a deployment runs
-#                                 it; the runner and the suite's scripted claude built from this checkout too; the runner
+#   lost-answer-drill.sh prepare  The stack, built from this checkout, its link gateway as a deployment runs it; the
+#                                 runner and the suite's scripted claude built from this checkout too; the runner
 #                                 registered, working over the link, and a baseline session answered.
 #   lost-answer-drill.sh claim    The gateway set to lose ORBIT_LOST_ANSWER_ROUNDS claim answers. Each round opens a
 #                                 session; the answer that claims it is lost; the runner sends the claim again and is
@@ -23,7 +23,7 @@
 #   ORBIT_LOST_ANSWER_ROUNDS  answers lost per call                                  5
 #   ORBIT_LOST_ANSWER_BOUND   seconds within which the same work must come back      5
 #
-# Run it as root (the runner runs in a mount namespace of its own, as rollback-drill.sh's does) on a stack no other
+# Run it as root (the runner runs in a mount namespace of its own, as the other drills' runners do) on a stack no other
 # runner works on. It needs docker, node, go and curl. The records go to <state>/client/lost-answer/: timeline.txt is
 # the drill's account and rounds.tsv has a line per answer lost, beside the link gateway's log and metrics of each phase.
 # The runner, its log and the scripted claude's records (spawns.jsonl, stdin.jsonl) are in <state>/lost-answer-runner/;
@@ -33,7 +33,7 @@ set -euo pipefail
 # shellcheck source=../staging-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../staging-lib.sh"
 
-helper="$here/drills/rollback-drill.mjs"
+helper="$here/drills/drill-api.mjs"
 overlay="$here/drills/lost-answer.compose.yml"
 out="$state/client/lost-answer"
 drill="$state/lost-answer-runner"
@@ -235,13 +235,13 @@ save_records() {
 prepare() {
   local name created f0 f1 calls since until
   rm -f "$timeline" "$table"
-  say "prepare: the stack $project in MODE_LINK, built from $(git -C "$repo" rev-parse --short HEAD)"
+  say "prepare: the stack $project, built from $(git -C "$repo" rev-parse --short HEAD)"
   stop_runner
-  ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_BACKENDS=1 "$here/staging-up.sh" > "$out/prepare-staging-up.log" 2>&1 ||
+  ORBIT_LINK_STAGING_BACKENDS=1 "$here/staging-up.sh" > "$out/prepare-staging-up.log" 2>&1 ||
     fail "staging-up.sh (see $out/prepare-staging-up.log)"
   stack_settings
   [ -z "$(gateway_env)" ] || fail "the stack's own link gateway says $(gateway_env)"
-  say "stack $project up at $origin: the link gateway in MODE_LINK, without LINK_DRILL_LOSE_ANSWERS"
+  say "stack $project up at $origin: the link gateway without LINK_DRILL_LOSE_ANSWERS"
 
   # The runner and its engine: this checkout's runner, and the test suite's scripted claude.
   rm -rf "$drill"
@@ -278,11 +278,8 @@ EOF
   ( trap '' HUP; exec setsid "${runner[@]}" run ) < /dev/null >> "$drill/runner.log" 2>&1 &
   echo $! > "$drill/runner.pid"
   say "drill runner $name ($(runner_id)) started (pid $(runner_pid)), built from $(git -C "$repo" rev-parse --short HEAD)"
-  wait_log 'runner link mode: on' 0 120
+  wait_log 'carries the work of process' 0 120
   wait_presence LINK 120
-  # The long polls the runner opened over HTTPS as it started (25 s at most) end there, and a claim among them could
-  # take the baseline session: the session waits for them.
-  sleep 30
   api workspace "$(runner_id)" "$drill/work" "$name" > "$drill/workspace.json" || fail "creating the drill workspace"
   say "workspace: $(cat "$drill/workspace.json")"
 
