@@ -792,7 +792,7 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
 
 ---
 
-## 11. agentSurface：四个工具、两道门
+## 11. agentSurface：五个工具、两道门
 
 - **工具**（按风险拆，不按实体拆）：
 
@@ -860,9 +860,19 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
     `reason`、`replaces?`、`idempotencyKey`；回 `{ status: "draft", draftId, kind, rewrites }`。CLI `orbit wiki draft`，runner 门 `POST /api/runner/wiki/drafts`。
     `plan` 种类随 plan 卡（设计 §14 第二步）开放，在那之前拒 `WIKI_SCHEMA`（kind，写明还没开放）。它不接受、不确认、不决定、不覆写页面，
     `notTools` 一字不改。工具说明一字不差写在 `agentSurface.chat.draft.description`。
-  - **`agentSurface.tools` 仍是四个**：runner-go 的 `TestWikiAgentSurfaceIsTheContracts` 要求它与 binary 实际提供的工具相等，`wiki_draft` 在 runner
-    提供它的那次发版（C6）才进 `tools`、`toolSpecs`、`cli`，同时登记 cli/mcp 对照、help 覆盖与 agent_instructions 三张 family 表；
-    `replaces` 同理随之进 `toolSpecs.wiki_propose.params`。在那之前 `agentSurface.chat` 就是它们的契约。
+  - **`agentSurface.tools` 是五个**（C6）：runner-go 的 `TestWikiAgentSurfaceIsTheContracts` 要求它与 binary 实际提供的工具相等，`wiki_draft` 随 runner
+    提供它的那次发版（C6，要 owner 发 runner 版）进了 `tools`、`toolSpecs`、`cli`，同时登记了 cli/mcp 对照（`sections` 在命令行是可重复的
+    `--section doc/key`）、help 覆盖与 agent_instructions 三张 family 表；`replaces` 随之进了 `toolSpecs.wiki_propose.params` 与
+    `toolSpecs.wiki_note.params`，别的会话带它不读。比这次发版旧的 runner 不提供 `wiki_draft`，聊天里照样只能用 `wiki_propose` 起草条目卡。
+    `agentSurface.chat` 仍是它们的契约，一字不差。
+  - **实现的取舍**（C6，协调会话 2026-11-06 确认）：
+    - 起草照 `submitChangeset` 的次序逐条校验（含探针拒绝），只是不查 owner 专属种类、名额、待审队列和熔断，审阅模式也不碰它；理由（rationale）至多
+      `fieldTextMaxChars`（4000）字，超出拒 `WIKI_SCHEMA`。起草的幂等键与请求摘要记在卡上，同键同请求回原卡（`replayed`），同键异请求拒
+      `WIKI_IDEMPOTENCY_KEY_REUSED`。
+    - 卡上 challenge 的 Apply：challenged 立刻写上，op 留在 Review 里 pending 等 owner 的 Re-confirm、Amend 或 Retire——当场 accepted 会把这次按压
+      要立的标记撤掉（`recomputeFlags` 只把 pending 的 challenge 算作开着）。reinforce 追加出处、trust 不变（§8 的 op 表）。add、supersede、amend
+      记 confirmed（amend 照 decide：改的是机器写的条目才升到 confirmed），原则类记 owner。
+    - Apply 一张 `changed` 的卡拒 `WIKI_REVISION_CONFLICT`，什么都不写；它的动作只有 Redo 和 Discard。
   - 不是聊天的会话：`wiki_propose`、`wiki_note`、它们的说明和回答一点不变。
 - **用户门** `/api/wiki`（JwtAuthGuard，owner 本人）：spaces 列表（待审数、plan 等你数、绑定的 workspace、文档数，§2）、建 space、改设置（含审阅模式）、读 / 加入 / 留在外面 workspace、首页、条目列表、主题、
   时间线、owner 的变更集（立即生效，带 CAS）、条目详情、pin / unpin、逐条 Reject 与 Confirm、`GET /api/wiki/search`（⌘K 的独立端点）、Review、
@@ -946,10 +956,11 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   读取形状，以及会话记录脚注拼出 `SessionRecordLink` 深链。Go 的 `TestWikiDoc*`（钉住 runner 门写入请求的字段与路由）随 runner 的文档代码在 P11 删除。
 - **wiki 聊天、跟进与留版**（§28–§30）：`wikiChatContract.spec.ts` 钉住 `chat`、`docs.follow`、`docs.versions` 的闭集、限额（20 句、5 节、
   每天 40 节、每节 5 版，并从设计原文里读出这几个数）、全部英文文案（与 `WIKI_CHAT_COPY` 相等，设计表格与效果图 42 里的句子逐字在场，没有一个中文字）、
-  `<orbit_wiki_chat>` 的原文、路由都在用户门（`wiki_draft` 的在 runner 门）、`tools` 仍是四个而 `wiki_draft` 的规格齐全、`notTools` 一字不改、
+  `<orbit_wiki_chat>` 的原文、路由都在用户门（`wiki_draft` 的在 runner 门）、`tools` 是五个而 `wiki_draft` 的规格与 `chat.draft` 一致、`notTools` 一字不改、
   `jobs.onePerSpace` 的两条部分唯一索引与任意两种作业能否并行，并把 `wiki-chat.fixture.json` 的每条向量跑过 `wikiChat.ts` 的函数：
   卡的状态与按钮、卡下那一行、圆按钮的三个数与四种样子、「等你」、跟进作业等待的原因、Rewrites、逐句对照、附注标签、`wikiContext` 的校验、
-  Activity 的 Docs 行。OrbitKit 的镜像（C11）读同一份向量；服务端的行为（建聊天、按压、跟进、留版）由 C3–C6 的 pg spec 逐条断言。
+  Activity 的 Docs 行。OrbitKit 的镜像（C11）读同一份向量；服务端的行为（建聊天、按压、跟进、留版）由 C3–C6 的 pg spec 逐条断言——草稿与按压在
+  `src/apiserver/src/wiki/wiki-chat-drafts.pg.spec.ts`，`wiki_draft` 的形状、只对聊天会话开放与 cli/mcp 对照在 runner-go 的 `wiki_draft_test.go`。
   `wikiContract.spec.ts` 原有的文档一条随 §30.5 改为：用户门对文档唯一的写是恢复旧版。
 
 ---
@@ -3205,7 +3216,12 @@ C6（草稿与按压）、C8 与 C9（web）、C11（iOS）、C12（plan 卡）�
 
 - 迁移：`session.wiki_chat_space_id` 随 C5（0476，同一次迁移还加了 `conversation_turn.wiki_context`：消息的页面与选区附注在投递时按它记下的 id 读；0479 校验 0476 的三条 SOURCE CHECK，并 CONCURRENTLY 建 `session_wiki_chat_space_idx`），`wiki_chat_draft` 随 C6，`wiki_doc_section_version` 随 C3，`docs_follow` 进 `wiki_job_kind_chk` 与 §24.2 的两条部分唯一索引随 C4；
   取号前扫 main、所有 `origin/project/*` 与已推的 `orbit/*` 分支，登记 db-write-inventory、public-id-coverage 的 CONTROLLERS、`PUBLIC_ID_FIELDS`、迁移账本与 PAT 装饰器。
-- 闭集随做它的任务扩：`wiki_draft` 进 `agentSurface.tools`、`toolSpecs`、`cli`（C6，runner 发版）；`docs_follow` 进 `jobs.kinds`、`kindRuns`、`carry.kinds`（C4）与 OrbitKit 的
+- `wiki_chat_draft` 是迁移 0483（C6；0481、0482 当时已被别的分支取走）：一张卡一行，`(space_id, owner_id)` 外键随 space 级联删除，会话、被替换的卡与
+  Apply 记下的变更集是没有外键的历史引用。除契约 28.5 列的各项外多三列：`trust_before`（Apply 时卡上每个 amend 的条目原来的 trust，Undo 照它放回）、
+  `told_at`（按压随下一条消息告诉 agent 的时间，投递的事务里写）和起草调用的幂等键与请求摘要。`replaces_id` 上的部分唯一索引让一张卡至多被替换一次。
+- Undo 的三种情形（C6）：重写已写的节，按这张卡的跟进作业留下的第一版恢复（之后被别的写过的不动、在回答里点名）；排队中的作业拿掉这张卡的按压，
+  空了就取消；正在跑的作业写一节前先 FOR SHARE 读请它写这节的卡（`WikiDocs.store`，在条目和文档之前），卡都撤了就不写。
+- 闭集随做它的任务扩：`wiki_draft` 进 `agentSurface.tools`、`toolSpecs`、`cli`（C6，已进，runner 发版）；`docs_follow` 进 `jobs.kinds`、`kindRuns`、`carry.kinds`（C4）与 OrbitKit 的
   `WikiJobKind`；SOURCE 的 `CHAT_UPSTREAM` 进共享的 `SourceKind` 与三条 CHECK（C5）。
 - 新句子 web 先在 `src/web/src/lib/wikiChat.ts` 定义（取自 `WIKI_CHAT_COPY`），Swift 的 `WikiCopy` 镜像，parity 测试缺项必须红、不许 skip；OrbitKit 的状态逻辑读
   `wiki-chat.fixture.json` 的向量。

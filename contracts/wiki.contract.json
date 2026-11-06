@@ -2722,8 +2722,8 @@
   },
 
   "agentSurface": {
-    "why": "An agent reads the wiki and proposes to it; it never decides. Four tools, split by risk rather than by entity.",
-    "tools": ["wiki_search", "wiki_get", "wiki_propose", "wiki_note"],
+    "why": "An agent reads the wiki and proposes to it; it never decides. Five tools, split by risk rather than by entity: the fifth, wiki_draft, a wiki chat's alone (chat.draft).",
+    "tools": ["wiki_search", "wiki_get", "wiki_propose", "wiki_note", "wiki_draft"],
     "toolSpecs": {
       "wiki_search": {
         "readOnly": true,
@@ -2746,21 +2746,35 @@
       "wiki_propose": {
         "readOnly": false,
         "destructive": false,
-        "params": { "ops": "required: ops", "rationale": "required", "idempotencyKey": "required", "dryRun": "optional" },
-        "returns": "per op: pending (with waitsFor verification when an automatic space's verification, not the owner, decides it), applied, conflict (current revision and diff) or refused (reasons); similar[] beside an add or supersede"
+        "params": { "ops": "required: ops", "rationale": "required", "idempotencyKey": "required", "dryRun": "optional", "replaces": "optional, in a wiki chat alone: the id of an open card of the chat that the new one replaces (chat.drafts.replace)" },
+        "returns": "per op: pending (with waitsFor verification when an automatic space's verification, not the owner, decides it), applied, conflict (current revision and diff) or refused (reasons); similar[] beside an add or supersede. In a wiki chat: { status: draft, draftId, ops, similar[], rewrites } (chat.propose)"
       },
       "wiki_note": {
         "readOnly": false,
         "destructive": false,
-        "params": { "text": "required, at most note.rules.textMaxChars", "paths": "optional, at most note.rules.pathsMax", "corrects": "optional: the id of the entry this says is wrong" },
+        "params": { "text": "required, at most note.rules.textMaxChars", "paths": "optional, at most note.rules.pathsMax", "corrects": "optional: the id of the entry this says is wrong", "replaces": "optional, in a wiki chat alone: the id of an open card of the chat that the challenge's card replaces (chat.drafts.replace)" },
         "returns": "note.answer"
+      },
+      "wiki_draft": {
+        "readOnly": false,
+        "destructive": false,
+        "params": {
+          "kind": "required: rewrite or plan (chat.drafts.kinds; entry ops are wiki_propose's)",
+          "sections": "rewrite: required, 1 to chat.rules.rewritesMax of { doc, section }: a document's slug and a section's key, each a written section of the confirmed plan (WIKI_SCHEMA naming it otherwise)",
+          "change": "plan: required, shaped as a plan proposal's change (plan.proposals)",
+          "reason": "required: why, in a sentence or two; the card shows it",
+          "replaces": "optional: the id of an open card of this chat that this one replaces",
+          "idempotencyKey": "required"
+        },
+        "returns": "{ status: draft, draftId, kind, rewrites }, or refused with its reasons (chat.draft)"
       }
     },
     "cli": {
       "wiki_search": "orbit wiki search",
       "wiki_get": "orbit wiki get",
       "wiki_propose": "orbit wiki propose",
-      "wiki_note": "orbit wiki note"
+      "wiki_note": "orbit wiki note",
+      "wiki_draft": "orbit wiki draft"
     },
     "notTools": "No tool accepts, confirms, decides, hard-deletes or overwrites a page. Confirmation exists only on the owner channel.",
     "chat": {
@@ -2769,7 +2783,7 @@
       "who": "A chat session (chat.binding: session.wiki_chat_space_id set). Its space is that one, the space its workspace is in — create chose an eligible workspace of it (chat.workspace).",
       "propose": "In a chat, wiki_propose drafts. Every op — add, amend, supersede and retire, and the reinforce and challenge that apply at once elsewhere — is checked as ever (refusalRules.order: schema, sources, quotes, redaction, compare-and-set, the taint mark; not quota, review queue or breaker, which a draft takes no place in) and the ops that pass become one card (chat.drafts), written nowhere else: no changeset, no entry, no Review, no verification. It answers { status: draft, draftId, ops: [each draft, or refused with its reasons], similar[] }; a request none of whose ops passed makes no card and answers as it would have. dryRun checks and makes nothing. A principle op is not refused WIKI_KIND_OWNER_ONLY in a chat: it waits for the owner's press, which is the owner's own write (reviewModes.chat). In every space and every review mode alike: the mode never touches a card.",
       "note": "In a chat, wiki_note's corrects drafts its challenge: the note is kept as anywhere (note.stored), and the challenge becomes a card, not an op; challenged answers { status: draft, draftId }. A note without corrects is unchanged: it was only ever a lead for maintenance.",
-      "replaces": "In a chat both tools take one parameter more, replaces: the id of an open card of the same chat that the new one replaces (chat.drafts.replace). It joins toolSpecs.wiki_propose.params when the runner serves it (C6), as wiki_draft joins tools.",
+      "replaces": "In a chat both tools take one parameter more, replaces: the id of an open card of the same chat that the new one replaces (chat.drafts.replace). It joined toolSpecs.wiki_propose.params and toolSpecs.wiki_note.params with the runner that serves it (C6), as wiki_draft joined tools; any other session's call leaves it unread.",
       "draft": {
         "tool": "wiki_draft",
         "readOnly": false,
@@ -2788,7 +2802,7 @@
         "cli": "orbit wiki draft",
         "route": "POST /api/runner/wiki/drafts",
         "description": "Draft, for the owner of this wiki chat to apply, a change that is not an entry: a rewrite of wiki sections from main, when the code changed and a section did not follow it, or a change to how the wiki's documents are planned. Nothing is written until the owner presses Apply on the card, so never call a draft applied. A change to what the wiki knows is an entry: use wiki_propose. Works only in a wiki chat.",
-        "arrival": "It joins tools, toolSpecs and cli when the runner serves it (C6, a runner release): TestWikiAgentSurfaceIsTheContracts (src/runner-go/wiki_tools_test.go) holds tools to the tools a binary serves, so a fifth name there before the binary serves it would fail every runner build. Until then this is its contract, word for word; the cli/mcp parity, the help coverage and agent_instructions' three family tables take it with the tool.",
+        "arrival": "It joined tools, toolSpecs and cli with the runner that serves it (C6, which needs a runner release): TestWikiAgentSurfaceIsTheContracts (src/runner-go/wiki_tools_test.go) holds tools to the tools a binary serves, so the fifth name arrived with the binary that serves it. This block stays its contract, word for word; the cli/mcp parity, the help coverage and agent_instructions' three family tables took it with the tool. A runner older than that release offers no wiki_draft, and a chat on one drafts its entries through wiki_propose alone.",
         "notTools": "It accepts nothing, confirms nothing, decides nothing and overwrites no page: it makes a card the owner may press. notTools holds as written."
       },
       "unchanged": "Outside a chat nothing here applies: wiki_propose, wiki_note, their descriptions and every answer are what they were."

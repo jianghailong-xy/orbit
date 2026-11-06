@@ -72,4 +72,11 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /wiki/doc-versions/:id/restore',
   // Making a wiki chat (contract `chat.door`): the owner's interactive credential's, as the binding writes are.
   'POST /wiki/spaces/:id/chats',
+  // The six presses of a chat's card (contract `chat.presses`): the owner's alone, as decide is.
+  'POST /wiki/chat-drafts/:id/apply',
+  'POST /wiki/chat-drafts/:id/edit',
+  'POST /wiki/chat-drafts/:id/discard',
+  'POST /wiki/chat-drafts/:id/undo',
+  'POST /wiki/chat-drafts/:id/retry',
+  'POST /wiki/chat-drafts/:id/seen',
 ];

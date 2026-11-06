@@ -169,6 +169,11 @@ export class WikiSessionNoteDto {
   @IsOptional()
   @IsPublicId()
   corrects?: string;
+
+  /** In a wiki chat, the open card of the chat that the challenge's card replaces (contract `agentSurface.chat.replaces`). */
+  @IsOptional()
+  @Allow()
+  replaces?: unknown;
 }
 
 /** What became of a note's `corrects`, read from the op's own answer. */
@@ -177,6 +182,8 @@ export interface WikiNoteChallenge {
   changesetId?: string | null;
   opId?: string | null;
   entryId?: string | null;
+  /** In a wiki chat, the card the challenge became (`status: draft`, contract `agentSurface.chat.note`). */
+  draftId?: string | null;
   /** Why it was not flagged. The note was kept all the same: asking again with the right id writes no second one. */
   reasons?: Array<{ code?: string; message: string }>;
 }
@@ -225,6 +232,11 @@ export async function writeSessionNote(
   principal: WikiPrincipal & { sessionId: string },
   spaceId: string,
   input: WikiSessionNoteDto,
+  /**
+   * The note's session is a wiki chat (contract `agentSurface.chat.note`): its `corrects` drafts the challenge as a card,
+   * through this, instead of filing it. The note itself is kept as anywhere.
+   */
+  chat?: { correct: (input: { entryId: string; reason: string; noteId: string; replaces?: unknown }) => Promise<Record<string, unknown>> },
 ): Promise<WikiSessionNoteAnswer> {
   const { ownerId, sessionId } = principal;
   const { text, paths } = sessionNoteOf(input);
@@ -248,7 +260,13 @@ export async function writeSessionNote(
     noteId: note.id,
     created: note.created,
     readBy,
-    ...(input.corrects ? { challenged: await challengeForNote(wiki, principal, spaceId, input.corrects, note.id, text) } : {}),
+    ...(input.corrects
+      ? {
+          challenged: chat
+            ? (await chat.correct({ entryId: input.corrects, reason: text, noteId: note.id, replaces: input.replaces })) as unknown as WikiNoteChallenge
+            : await challengeForNote(wiki, principal, spaceId, input.corrects, note.id, text),
+        }
+      : {}),
   };
 }
 

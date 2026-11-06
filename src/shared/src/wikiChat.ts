@@ -6,6 +6,7 @@
 // the same words, and wikiChatContract.spec.ts holds all of it to the contract JSON and to the vectors of
 // src/shared/src/wiki-chat.fixture.json, which OrbitKit reads too.
 
+import type { WikiRefusal, WikiSimilar } from './wiki';
 import type { WikiJobKind } from './wikiJobs';
 import type { WikiRepoLook } from './wikiRepoOps';
 import type { WikiSystemModelReadState } from './wikiSystemModel';
@@ -393,6 +394,117 @@ export function wikiChatCardNeedsYou(card: WikiChatCard): boolean {
 /** A space's cards that add to W, one each (contract `space.list.chatWaiting`). */
 export function wikiChatWaiting(cards: readonly WikiChatCard[]): number {
   return cards.filter(wikiChatRewriteWaits).length;
+}
+
+/**
+ * Whether Undo can take a card back (contract `chat.presses.undo`): an applied entry card every op of which is an add or
+ * an amend — the two a revert takes back; a supersede and a retire end a lineage, and a reinforce or a challenge is
+ * answered as any other, the challenge in Review — and an applied rewrite card. A plan card's is C12's.
+ */
+export function wikiChatDraftUndoable(kind: WikiChatDraftKind, state: WikiChatDraftState, ops: readonly WikiChatDraftOp[]): boolean {
+  if (state !== 'applied') return false;
+  if (kind === 'rewrite') return true;
+  if (kind !== 'entry') return false;
+  return ops.length > 0 && ops.every((op) => op.op === 'add' || op.op === 'amend');
+}
+
+// ── A card as the user door and the drafting tools serve it ─────────────────────────────────────
+
+/** One op of an entry card (contract `chat.drafts.read`, ops): as checked, with its entry as it stands now. */
+export interface WikiChatDraftOpView {
+  seq: number;
+  op: WikiChatDraftOp['op'];
+  /** The entry the op is about; for an applied add or supersede, the entry it wrote. */
+  entryId: string | null;
+  baseRevision: number | null;
+  /** The op as checked and redacted: what Apply records. */
+  payload: Record<string, unknown>;
+  similar: WikiSimilar[];
+  tainted: boolean;
+  /** That entry as it stands now (entryView), or null when there is none. */
+  entry: Record<string, unknown> | null;
+  /** Once pressed, the op's decision in the changeset the press recorded: accepted, edited, or pending for a challenge Review answers. */
+  decision: string | null;
+}
+
+/** A section a card names (contract `chat.drafts.read`, rewrites and sections): its document's number, its own and its title. */
+export interface WikiChatDraftSectionView {
+  doc: string;
+  key: string;
+  /** "3.1 §3" (wikiChatWhere), or `slug §key` for a section the confirmed plan no longer numbers. */
+  where: string;
+  title: string | null;
+}
+
+/** An applied card's rewrite (contract `chat.drafts.read`, rewrite). */
+export interface WikiChatDraftRewriteView {
+  jobId: string;
+  result: WikiChatRewriteResult;
+  reason: WikiDocsFollowWaiting | null;
+  sha: string | null;
+  sections: Array<{ doc: string; key: string; where: string; result: WikiChatSectionResult['result']; changed: number | null; versionId: string | null }>;
+  seen: boolean;
+  settledAt: string | null;
+}
+
+/** `GET /api/wiki/chat-drafts/:id`, and each card of `GET /api/wiki/chats/:id/drafts` (contract `chat.drafts.read`). */
+export interface WikiChatDraftView {
+  id: string;
+  sessionId: string;
+  kind: WikiChatDraftKind;
+  state: WikiChatDraftState;
+  label: string;
+  rationale: string;
+  ops: WikiChatDraftOpView[];
+  sections: WikiChatDraftSectionView[];
+  rewrites: WikiChatDraftSectionView[];
+  /** The entries the card's adds and supersedes resemble, each once, best first: shown before the press (design §10). */
+  similar: WikiSimilar[];
+  tainted: boolean;
+  replaces: string | null;
+  replacedBy: string | null;
+  decision: 'applied' | 'edited' | 'discarded' | null;
+  decidedAt: string | null;
+  undoneAt: string | null;
+  undoable: boolean;
+  changesetId: string | null;
+  rewrite: WikiChatDraftRewriteView | null;
+  createdAt: string;
+}
+
+/** One op of a drafting call's answer in a chat (contract `agentSurface.chat.propose`): drafted, or why not. */
+export type WikiChatDraftOpOutcome =
+  | { seq: number; status: 'draft'; entryId: string | null; similar?: WikiSimilar[] }
+  | {
+      seq: number;
+      status: 'conflict';
+      entryId: string;
+      baseRevision: number;
+      currentRevision: number;
+      current: Record<string, unknown>;
+      diff: string;
+    }
+  | { seq: number; status: 'refused'; reasons: WikiRefusal[] };
+
+/** What wiki_propose answers in a chat (contract `agentSurface.chat.propose`); a request none of whose ops passed answers as ever. */
+export interface WikiChatProposeAnswer {
+  status: 'draft';
+  /** Null for a dry run, which makes nothing. */
+  draftId: string | null;
+  replayed: boolean;
+  dryRun?: true;
+  ops: WikiChatDraftOpOutcome[];
+  similar: WikiSimilar[];
+  rewrites: WikiChatDraftSectionView[];
+}
+
+/** What wiki_draft answers (contract `agentSurface.chat.draft.returns`). */
+export interface WikiChatDraftToolAnswer {
+  status: 'draft';
+  draftId: string;
+  kind: WikiChatDraftKind;
+  replayed: boolean;
+  rewrites: WikiChatDraftSectionView[];
 }
 
 // ── The round button ─────────────────────────────────────────────────────────────────────────────

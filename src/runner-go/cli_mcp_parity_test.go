@@ -93,6 +93,8 @@ var cliParityParamAlias = map[string]string{
 	// as a separator.
 	"kinds": "--kind",
 	"paths": "--path",
+	// One section per flag at a terminal, repeatable, as doc/key: wiki_draft's sections are { doc, section } objects.
+	"sections": "--section",
 }
 
 // Tools whose command takes the whole MCP input as ONE JSON document (`--input JSON | --input-file -`),

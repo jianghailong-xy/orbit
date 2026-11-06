@@ -156,12 +156,19 @@ describe('wiki chat contract', () => {
     expect(notes.how).toMatch(/the Android client and every older one draw them and count nothing from them/u);
   });
 
-  it('drafts every op of a chat, opens wiki_draft to a chat alone, and keeps four tools until the runner serves a fifth', () => {
+  it('drafts every op of a chat, opens wiki_draft to a chat alone, and serves it as the fifth tool (C6)', () => {
     const surface = CONTRACT.agentSurface;
-    // The runner's Go test holds tools to what a binary serves; wiki_draft joins with the binary that serves it (C6).
-    expect(surface.tools).toEqual(['wiki_search', 'wiki_get', 'wiki_propose', 'wiki_note']);
+    // The runner's Go test holds tools to what a binary serves; wiki_draft joined with the binary that serves it (C6).
+    expect(surface.tools).toEqual(['wiki_search', 'wiki_get', 'wiki_propose', 'wiki_note', 'wiki_draft']);
     expect(surface.chat.draft.arrival).toMatch(/TestWikiAgentSurfaceIsTheContracts/u);
     const draft = surface.chat.draft;
+    // The live tool spec is the chat's block, field for field, and its command is the block's.
+    expect(surface.toolSpecs.wiki_draft.params).toEqual(draft.params);
+    expect([surface.toolSpecs.wiki_draft.readOnly, surface.toolSpecs.wiki_draft.destructive]).toEqual([draft.readOnly, draft.destructive]);
+    expect(surface.cli.wiki_draft).toBe(draft.cli);
+    // replaces joined both drafting tools' params, a chat's alone.
+    expect(surface.toolSpecs.wiki_propose.params.replaces).toMatch(/in a wiki chat alone/u);
+    expect(surface.toolSpecs.wiki_note.params.replaces).toMatch(/in a wiki chat alone/u);
     expect(draft.tool).toBe('wiki_draft');
     expect([draft.readOnly, draft.destructive]).toEqual([false, false]);
     expect(keysOf(draft.params)).toEqual(['kind', 'sections', 'change', 'reason', 'replaces', 'idempotencyKey']);

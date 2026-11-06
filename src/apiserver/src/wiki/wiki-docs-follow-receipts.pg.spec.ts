@@ -343,6 +343,40 @@ test('(a) a runner\'s merge result that lands a session on main makes the space\
       assert.deepEqual(jobs[0]!.facts.map(factOf),
         [{ kind: 'merge', from: MAIN_CHECKED, sha: MERGE_COMMIT, title: 'Shorten the offline window', chat: false }]);
       assert.equal(jobs[0]!.facts[0]!.receiptId, receipts[0]!.id);
+      assert.equal(jobs[0]!.priority, 0, 'an ordinary session\'s merge is followed at priority 0');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(a) a wiki chat\'s merge into main is the owner\'s work: its follow job is queued at priority 1, the fact marked chat',
+  { skip, timeout: 120_000 }, async () => {
+    const stack = await connect('real');
+    try {
+      const w = await world(stack, 'chat-merge');
+      const sessionId = randomUUID();
+      // A chat is a session whose wiki_chat_space_id is set in its own INSERT (contract `chat.binding`), read as the column.
+      await stack.db.session.create({
+        data: {
+          id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
+          title: 'Chat: the lease is two minutes', prompt: 'p', status: RunStatus.SUCCEEDED, branch: 'orbit/chat-lease',
+          isolationStatus: 'worktree', wikiChatSpaceId: w.spaceId,
+        },
+      });
+      await stack.sessions.mergeToMain(w.ownerId, sessionId, 'main');
+      const lease = randomUUID();
+      const [operation] = await stack.realtime.drainMergeRequests(w.runnerId, lease);
+      assert.ok(operation, 'the runner was handed the merge');
+      await stack.api.mergeResult({ id: w.runnerId }, sessionId, {
+        status: 'merged', operationId: operation.operationId, leaseOwner: lease,
+        sourceSha: TASK_BRANCH_TIP, targetBranch: 'main', targetShaBefore: MAIN_CHECKED, mergedSha: MERGE_COMMIT,
+      });
+      const jobs = await follows(stack, w.spaceId);
+      assert.equal(jobs.length, 1, 'one receipt, one follow job');
+      assert.deepEqual([jobs[0]!.state, jobs[0]!.priority], ['queued', WIKI_DOCS_FOLLOW.priorities.chatMerge]);
+      assert.equal(WIKI_DOCS_FOLLOW.priorities.chatMerge, 1);
+      assert.deepEqual(jobs[0]!.facts.map(factOf),
+        [{ kind: 'merge', from: MAIN_CHECKED, sha: MERGE_COMMIT, title: 'Chat: the lease is two minutes', chat: true }]);
     } finally {
       await stack.db.$disconnect();
     }
