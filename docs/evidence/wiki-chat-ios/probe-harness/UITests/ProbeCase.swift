@@ -149,14 +149,18 @@ class ProbeCase: XCTestCase {
             }
             let below = element.exists ? element.frame.maxY > bottom : !missingIsAbove
             #if os(iOS)
-            let start = window.coordinate(withNormalizedOffset: CGVector(dx: 0.03, dy: below ? 0.62 : 0.3))
+            // From the page's left margin, clear of its text: a held press on a paragraph is that paragraph's Ask menu
+            // (round 4 picked Ask off an iPad's paragraph this way, where 3% of the width is on the text).
+            let start = window.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: below ? 0.62 : 0.3))
+                .withOffset(CGVector(dx: 12, dy: 0))
             start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: below ? -140 : 140)),
                         withVelocity: .slow, thenHoldForDuration: 0.6)
             #else
-            // The detail column, where the document is: a window's own scroll lands on its middle column.
+            // The detail column, where the document is: a window's own scroll lands on its middle column. A scroll's
+            // units are lines of several points each, so small steps — 120 overshot the band both ways in round 4.
             let pane = window.coordinate(withNormalizedOffset: CGVector(dx: 0.82, dy: 0.5))
             pane.hover()
-            pane.scroll(byDeltaX: 0, deltaY: below ? -120 : 120)
+            pane.scroll(byDeltaX: 0, deltaY: below ? -12 : 12)
             #endif
             settle(1)
         }

@@ -83,9 +83,14 @@ final class WikiChatShotTests: ProbeCase {
         press(done)
         settle(2)
 
-        // The half sheet: the empty chat, the page chip and the quote chip.
-        // A phone's chip says the sentences alone (board 42 ⑤); a wider one adds the sources.
-        XCTAssertTrue(appears(app, phone ? "1 sentence" : "1 sentence · 2 sources", timeout: 15), "\(tag): the quote chip never showed")
+        // The half sheet: the empty chat, the page chip and the quote chip. A compact column's chip — a phone's sheet,
+        // an iPad's third column — says the sentences alone (board 42 ⑤); a Mac's adds the sources.
+        #if os(iOS)
+        let chipWords = "1 sentence"
+        #else
+        let chipWords = "1 sentence · 2 sources"
+        #endif
+        XCTAssertTrue(appears(app, chipWords, timeout: 15), "\(tag): the quote chip never showed")
         XCTAssertTrue(appears(app, "3.1 §3", timeout: 5), "\(tag): the page chip never showed")
         let head = words(app, "New chat")
         note("\(tag): the panel's head: \(describe(head))")
@@ -178,7 +183,16 @@ final class WikiChatShotTests: ProbeCase {
         // The page beside an iPad's or a Mac's panel marks the section the open card would rewrite (board 42 ②).
         let would = app.descendants(matching: .any).matching(identifier: "wiki-section-would-rewrite").firstMatch
         note("\(tag): the would-rewrite mark: \(describe(would))")
-        if !phone { XCTAssertTrue(would.exists, "\(tag): the page beside the panel does not mark §3 as the card would rewrite it") }
+        if !phone {
+            XCTAssertTrue(would.exists && would.frame.width > 0,
+                          "\(tag): the page beside the panel does not mark §3 as the card would rewrite it")
+        }
+        #if os(macOS)
+        // The source list folds while the chat is a column: the directory, the page and the chat share the window.
+        let sidebar = app.outlines.matching(NSPredicate(format: "label == %@", "Sidebar")).firstMatch
+        note("\(tag): the source list beside the chat: \(describe(sidebar))")
+        XCTAssertFalse(sidebar.exists && sidebar.frame.width > 1, "\(tag): the source list did not fold beside the chat's column")
+        #endif
         shot("\(platform)-2b-full-sheet-card")
     }
 
@@ -245,24 +259,24 @@ final class WikiChatShotTests: ProbeCase {
             app.typeKey("n", modifierFlags: .command)
         }
         #endif
-        // The document's own head: its reader-and-scope block, at the page's top.
-        if !appears(app, "Question", timeout: 45) {
+        // The document's own head: its reader-and-scope block, at the page's top. A simulator's first launch of the
+        // app can take two minutes before its first request (round 4's iPad).
+        if !appears(app, "Question", timeout: 150) {
             tree(app, "\(tag)-no-page")
             XCTFail("\(tag): the document never showed — the app did not render the stub's document")
         }
         settle(2.5)
-        #if os(macOS)
-        // The source list folded (⌃⌘S) when it shows: the page and the chat's column share the window.
-        if app.staticTexts.matching(NSPredicate(format: "value == %@ OR label == %@", "Workspaces", "Workspaces")).firstMatch.exists {
-            app.typeKey("s", modifierFlags: [.control, .command])
-            settle(1.5)
-        }
-        #endif
+        // The Mac's source list stays as the app keeps it: the app folds it itself while the chat is a column.
         // Section 3 of the board, its heading near the top of the page — not the Mac directory column's row, whose
-        // title is the fixture's longer one.
+        // title is the fixture's longer one. The page opens there; a Mac's heading sits right under the toolbar.
         let heading = sectionThree(app)
         let window = app.windows.firstMatch.frame
-        bring(app, heading, between: window.minY + 60, and: window.minY + window.height * 0.4, missingIsAbove: false, "\(tag)-section-3")
+        #if os(macOS)
+        let bandTop = window.minY + 30
+        #else
+        let bandTop = window.minY + 60
+        #endif
+        bring(app, heading, between: bandTop, and: window.minY + window.height * 0.4, missingIsAbove: false, "\(tag)-section-3")
         settle(1)
         return app
     }
