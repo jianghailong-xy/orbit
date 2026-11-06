@@ -503,10 +503,11 @@ const REPO_WAKE: WikiRepoOpWake = {
 const runLog: string[] = [];
 
 /**
- * The worker under test, its kind map the one the worker module builds — with this spec's services. `renewMs` is how often its
- * jobs' leases are renewed: the deployment's, unless a case wants a worker whose job lease runs out (the replay cases).
+ * The worker under test, its kind map the one the worker module builds — with this spec's services. `leaseMs` and `renewMs` are
+ * its jobs' lease and how often it is renewed: the deployment's, unless a case wants a worker whose job lease runs out only when
+ * the case says so (the replay cases).
  */
-function worker(h: Harness, over: { repoWaitMs?: number; wake?: boolean; renewMs?: number } = {}): { queue: WikiModelRequestQueue; executor: WikiJobExecutor } {
+function worker(h: Harness, over: { repoWaitMs?: number; wake?: boolean; leaseMs?: number; renewMs?: number } = {}): { queue: WikiModelRequestQueue; executor: WikiJobExecutor } {
   const options = { leaseMs: HARNESS_LEASE_MS, renewMs: HARNESS_RENEW_MS, partialMs: 40, pollMs: 30 };
   const config_ = config(h);
   const queue = new WikiModelRequestQueue(
@@ -536,7 +537,9 @@ function worker(h: Harness, over: { repoWaitMs?: number; wake?: boolean; renewMs
       },
     }),
   };
-  const executor = new WikiJobExecutor(h.prisma as unknown as PrismaService, queue, { ...options, renewMs: over.renewMs ?? HARNESS_RENEW_MS }, runners);
+  const executor = new WikiJobExecutor(
+    h.prisma as unknown as PrismaService, queue, { ...options, leaseMs: over.leaseMs ?? HARNESS_LEASE_MS, renewMs: over.renewMs ?? HARNESS_RENEW_MS }, runners,
+  );
   live.push({ queue, executor });
   return { queue, executor };
 }
@@ -4415,9 +4418,8 @@ test('a record that arrives between two page reads is extracted with its session
 
 /**
  * The first advance of a run held, as a worker on a stalled host holds its job: every question asked and answered, the ops
- * recorded, the cursor not moved — and, the worker made without renewals, its lease running out. `release` lets the held
- * attempt go as the platform's failure; by then another worker holds the job, and what the attempt settles is nothing. The
- * advances after the first are the server's own.
+ * recorded, the cursor not moved. `release` lets the held attempt go as the platform's failure; by then another worker holds the
+ * job, and what the attempt settles is nothing. The advances after the first are the server's own.
  */
 function holdFirstAdvance(h: Harness): { held: () => boolean; release: () => void; restore: () => void } {
   let holding = false;
@@ -4486,12 +4488,14 @@ async function promptAsked(h: Harness, jobId: string, step: string, sessionId: s
 /**
  * The first attempt of the fixture's run, held at its advance with its ops recorded; then `between` — what the sessions do
  * while it stalls — and the lease running out; then the replay, by the next worker, to its end. Answers what the first
- * attempt left, for the case to hold the replay to.
+ * attempt left, for the case to hold the replay to. The first worker's lease is an hour long and never renewed: it runs out
+ * when the case says so and not before, however slowly a loaded host gets the attempt to its advance — where a 60-second
+ * lease could run out first, and that worker's own next pass take the job over while the attempt still runs.
  */
 async function replayedAfterLostLease(h: Harness, fx: Fixture, between: () => Promise<void>): Promise<{ questions: string[]; written: { changesets: number; ops: string[] }; hits: number }> {
   const hold = holdFirstAdvance(h);
   try {
-    await pass(h, worker(h, { renewMs: 3_600_000 }), async () => hold.held());
+    await pass(h, worker(h, { leaseMs: 3_600_000, renewMs: 3_600_000 }), async () => hold.held());
     const questions = await questionsOf(h, fx.jobId);
     const written = await writtenOps(h, fx);
     const hits = h.model.hits.length;
