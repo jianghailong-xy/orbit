@@ -11,7 +11,7 @@ import (
 	"orbit/link-gateway/linkpb"
 )
 
-// What a connection in MODE_LINK forwards with (docs/runner-link-design.md §5.6–§5.9, §6.4): requests (forward.go),
+// What a connection forwards with (docs/runner-link-design.md §5.6–§5.9, §6.4): requests (forward.go),
 // heartbeats (heartbeat.go), durable events (events.go), and the live stream and turn prefixes (live.go). The state
 // is the connection's and lives as long as it; nothing here decides what the control plane would decide. Every rule a
 // route applies stays in the route the call is forwarded to.

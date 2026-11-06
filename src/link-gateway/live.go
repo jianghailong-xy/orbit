@@ -24,8 +24,8 @@ import (
 //
 // A client that opens a session mid-turn is handed what the turn has streamed so far (TurnPrefixRequest): the apiserver
 // asks over NATS, on the runner's subject with a reply subject, and the gateway relays the question to the runner's
-// connection and its answer back. With no connection in MODE_LINK to ask, it answers at once with nothing, and the
-// apiserver keeps today's behaviour.
+// connection and its answer back. With no connection to ask, it answers at once with nothing, and the apiserver keeps
+// today's behaviour.
 
 const (
 	liveSubjectPrefix = "ses."
@@ -270,7 +270,8 @@ func (g *gateway) watchersFromSnapshot(runner, instance string, counts map[strin
 	g.tellWatchers(runner, g.watchers.snapshot(runner, instance, canonical))
 }
 
-// tellWatchers sends the runner's MODE_LINK connections each new sum, and says what became of the last one.
+// tellWatchers sends the runner's connections each new sum, and says what became of the last one. A gateway without
+// backends, as some tests build it, keeps no watchers for its connections.
 func (g *gateway) tellWatchers(runner string, changes []watcherChange) string {
 	if len(changes) == 0 {
 		return "unchanged"
@@ -279,9 +280,6 @@ func (g *gateway) tellWatchers(runner string, changes []watcherChange) string {
 	for _, ch := range changes {
 		for _, c := range g.reg.connsOf(runner) {
 			if c.link == nil {
-				if result == "no_connection" {
-					result = "mode_http"
-				}
 				continue
 			}
 			if c.offer(watchersFrame(ch.session, ch.sum)) {
@@ -388,7 +386,7 @@ func (p *pendingPrefix) answer(g *gateway, resp *linkpb.TurnPrefixResponse, resu
 func (p *pendingPrefix) answerEmpty(g *gateway, result string) { p.answer(g, nil, result) }
 
 // relayPrefixRequest hands a turn prefix request from NATS to the runner: to the connection whose process supervises
-// the session, else the newest in MODE_LINK. With none, it is answered at once with nothing.
+// the session, else the newest. With none, it is answered at once with nothing.
 func (g *gateway) relayPrefixRequest(runner string, req *linkpb.TurnPrefixRequest, reply string) {
 	session, ok := sessionUUID(req.GetSessionId())
 	p := &pendingPrefix{requestID: req.GetRequestId(), sessionID: session, reply: reply}
@@ -399,10 +397,8 @@ func (g *gateway) relayPrefixRequest(runner string, req *linkpb.TurnPrefixReques
 	var best *conn
 	var bestAt time.Time
 	supervising := false
-	inHTTP := false
 	for _, c := range g.reg.connsOf(runner) {
 		if c.link == nil {
-			inHTTP = true
 			continue
 		}
 		owns := c.link.supervises(p.sessionID)
@@ -413,11 +409,7 @@ func (g *gateway) relayPrefixRequest(runner string, req *linkpb.TurnPrefixReques
 		}
 	}
 	if best == nil {
-		result := "no_connection"
-		if inHTTP {
-			result = "mode_http"
-		}
-		p.answerEmpty(g, result)
+		p.answerEmpty(g, "no_connection")
 		return
 	}
 	best.link.askPrefix(p)
