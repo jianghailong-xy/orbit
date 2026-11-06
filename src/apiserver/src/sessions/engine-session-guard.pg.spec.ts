@@ -290,6 +290,7 @@ const USER_DRIVERS: Readonly<Record<string, Drive>> = {
   'POST /sessions/:id/merge-receipts': (s, w, id) =>
     s.receipts.record(w.ownerId, id, { result: 'ERROR', sourceSha: 'a'.repeat(40), targetBranch: 'main' }, 'USER'),
   'POST /sessions/:id/commit': (s, w, id) => s.sessions.commitWorktree(w.ownerId, id),
+  'POST /sessions/:id/checkout/discard': (s, w, id) => s.sessions.discardCheckout(w.ownerId, id),
   'POST /sessions/:id/adopt-branch': (s, w, id) => s.sessions.adoptWorktreeBranch(w.ownerId, id),
   'POST /sessions/:id/retry-message': (s, w, id) => s.autoRetry.resendRetryMessage(w.ownerId, id),
   'POST /sessions/:id/auto-retry': (s, w, id) => s.sessions.armAutoRetry(w.ownerId, id, future()),
