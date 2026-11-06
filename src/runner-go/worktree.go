@@ -1373,8 +1373,9 @@ func buildFilePatches(files []ChangedFile, byPath map[string]string) []FilePatch
 }
 
 // removeWorktree tears down the session's checkout (the branch is kept) and drops the base
-// ref. Called only from gcWorktrees, which has asked the control plane whether this one may go.
-// Finalization leaves every checkout standing. Under a storage budget, storage counts the
+// ref. Called from gcWorktrees, which has asked the control plane whether this one may go, and
+// from dropEmptyChatBranch for a wiki chat that ended with nothing of its own; finalization
+// otherwise leaves every checkout standing. Under a storage budget, storage counts the
 // checkout's bytes once it is gone (checkoutStorage.removing); nil counts nothing.
 func removeWorktree(wt *Worktree, storage *checkoutStorage) {
 	// The checkout is dropped on the belief that finalizeWorktree already put its contents on the
@@ -1448,7 +1449,9 @@ func dropEmptyChatBranch(job *ClaimedSession) bool {
 			return false
 		}
 		// removeWorktree checks again that the work is captured, and drops the base ref with the checkout.
-		removeWorktree(wt)
+		// Not the sweep's removal, so nothing counts its bytes (nil): under a storage budget the volume's
+		// next measurement reads them, and until then the sweep only judges the volume a little fuller.
+		removeWorktree(wt, nil)
 		if !checkoutAbsent(wt.Path) {
 			logln(fmt.Sprintf("session %s — chat checkout %s could not be removed; keeping its branch %s", wt.Session, wt.Path, wt.Branch))
 			return false
