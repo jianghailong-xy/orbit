@@ -2077,7 +2077,7 @@ P11（2026-10-19）起这条 runner 门路由没有了：写入是 `WikiDocs.wri
     的头两句，照原样连起来（英文句号后空一格，全角句号后不空），超过 200 字（code point）就截断、末尾加「…」；句子是文档页上的
     原文，行内标记照留。没写的篇为 null；写了但第一节没写、或第一节的句子都撤下了，也为 null。
   - `GET /api/wiki/spaces/:id/docs/:slug`：文档页。编号、标题、读者的问题、写给谁、含与不含（不含的篇给出编号和标题）、大类、篇幅、
-    状态、依据的 plan 版本与当前版本、`repoSha`、更新时间；各节按 plan 的顺序，带 `repoSha`、块和句子（状态、脚注号、新事实记号、
+    状态、依据的 plan 版本与当前版本、`repoSha`、更新时间；各节按 plan 的顺序，带 `repoSha`、块和句子（句子的 public id——聊天的选区按它点名，§28.4——、状态、脚注号、新事实记号、
     撤下的原因与条目）；脚注按首次出现编号（同一原文、同一位置、同一引文只编一个号），每个带种类、结论、谁核对的、引文、位置字符串
     和链接数据；以及 via entry 现在的样子（种类、标题、状态、trust、锚点状态）和它带进来的脚注号。plan 里有、还没写的篇：`written: false`，
     各节空着；plan 里没有的：404。
@@ -3035,7 +3035,7 @@ C6（草稿与按压）、C8 与 C9（web）、C11（iOS）、C12（plan 卡）�
 
 ### 28.2 跑在哪个 workspace、用什么代码
 
-- **合格的 workspace**：在这个 space 里（§2 绑定：同仓库或有行，没被留在外面）、没删、`enableWorktree` 开着。只列这些、只存这些：聊天从不在共享目录里跑。
+- **合格的 workspace**：在这个 space 里（§2 绑定：同仓库或有行，没被留在外面）、没删、没停用（停用的 workspace 开不了会话）、`enableWorktree` 开着。只列这些、只存这些：聊天从不在共享目录里跑。
 - **选一次，记住**：每个 space 第一次聊天时从 `choices` 里选，存进 `space.settings.chat.workspaceId`；`Runs in` 里可以换（建聊天时带另一个 `workspaceId`，或 PATCH 设置）。
   代码里不算任何默认：图 36 的「最近开过会话的」可能把聊天带到生产机上（设计 §5.1）。orbit 这个 space 用 `orbit-develop`（HPC）是 owner 11-06 的选择：
   是 owner 第一次选的值，不是写在代码里的名字。
@@ -3183,7 +3183,7 @@ C6（草稿与按压）、C8 与 C9（web）、C11（iOS）、C12（plan 卡）�
 
 ### 28.10 落地次序
 
-- 迁移：`session.wiki_chat_space_id` 随 C5，`wiki_chat_draft` 随 C6，`wiki_doc_section_version` 随 C3，`docs_follow` 进 `wiki_job_kind_chk` 与 §24.2 的两条部分唯一索引随 C4；
+- 迁移：`session.wiki_chat_space_id` 随 C5（0476，同一次迁移还加了 `conversation_turn.wiki_context`：消息的页面与选区附注在投递时按它记下的 id 读），`wiki_chat_draft` 随 C6，`wiki_doc_section_version` 随 C3，`docs_follow` 进 `wiki_job_kind_chk` 与 §24.2 的两条部分唯一索引随 C4；
   取号前扫 main、所有 `origin/project/*` 与已推的 `orbit/*` 分支，登记 db-write-inventory、public-id-coverage 的 CONTROLLERS、`PUBLIC_ID_FIELDS`、迁移账本与 PAT 装饰器。
 - 闭集随做它的任务扩：`wiki_draft` 进 `agentSurface.tools`、`toolSpecs`、`cli`（C6，runner 发版）；`docs_follow` 进 `jobs.kinds`、`kindRuns`、`carry.kinds`（C4）与 OrbitKit 的
   `WikiJobKind`；SOURCE 的 `CHAT_UPSTREAM` 进共享的 `SourceKind` 与三条 CHECK（C5）。

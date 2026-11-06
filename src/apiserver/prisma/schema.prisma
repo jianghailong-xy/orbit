@@ -1944,6 +1944,12 @@ model Session {
   /// that cannot be written down becomes a run that started from somewhere nobody chose.
   sourceRefusalCode        String?   @map("source_refusal_code")
   sourceRefusalDetail      Json?     @map("source_refusal_detail")
+  /// The wiki space this session is a chat of (migration 0476, wiki contract `chat.binding`): a session
+  /// is a chat exactly when it is set. Written by the chat's create in this row's own INSERT and never
+  /// afterwards (a trigger refuses the UPDATE), so a session is a chat for its whole life or never. No
+  /// foreign key: a deleted space leaves its chats as sessions. Its partial index over
+  /// (wiki_chat_space_id, created_at) is the migration's alone, as schema.prisma cannot spell one.
+  wikiChatSpaceId          String?   @map("wiki_chat_space_id") @db.Uuid
   // ── Per-session git worktree isolation ──────────────────────────────────────
   // When the agent's workDir is a git repo, the runner runs this session in its own
   // git worktree on `branch`, forked from `baseSha` (the workDir HEAD at claim time).
@@ -2628,6 +2634,10 @@ model ConversationTurn {
   /// Coordinator-context digest attached to this delivery. It is acknowledged onto Session only
   /// when this exact top-level turn succeeds under the same engine generation and compaction epoch.
   coordinatorContextKey String? @map("coordinator_context_key") @db.Char(64)
+  /// A wiki chat's message: the page and selection it carried (`{ page?, selection? }`, wiki contract
+  /// `chat.notes.wikiContext`, migration 0476), as ids. Delivery reads what they name and appends it as
+  /// the control plane's note, so `content` stays the owner's words. Null for every other turn.
+  wikiContext     Json?     @map("wiki_context")
   answeredAt      DateTime? @map("answered_at")
   createdAt       DateTime  @default(now()) @map("created_at")
 

@@ -50,6 +50,7 @@ import { WikiHealthController } from '../wiki/wiki-health.controller';
 import { WikiJobsController } from '../wiki/wiki-jobs.controller';
 import { WikiPlanController } from '../wiki/wiki-plan.controller';
 import { WikiDocsController } from '../wiki/wiki-docs.controller';
+import { WikiChatController } from '../wiki/wiki-chat.controller';
 
 // Every id crossing the HTTP boundary arrives from a URL, a human, or a model — pasted out of a
 // client link, echoed from a previous tool result, or invented. The columns behind them are all
@@ -139,6 +140,9 @@ const CONTROLLERS = [
   // The documents (migration 0326, contract `docs`): the owner's directory, document and index. `slug`
   // is the plan document's.
   WikiDocsController,
+  // A space's wiki chats (migration 0476, contract `chat`): making one and reading them. The create's
+  // `workspaceId` is decoded by the body pipe.
+  WikiChatController,
 ];
 
 // Nest records one entry per decorated argument under `__routeArguments__`, keyed

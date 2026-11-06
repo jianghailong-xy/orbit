@@ -230,6 +230,7 @@ import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
+import { appendWikiChatNotes } from '../wiki/wiki-chat-notes';
 import {
   type TaskFailure,
   recordTaskFailure,
@@ -906,6 +907,8 @@ interface HandedTurn {
   targetTurnId: string | null;
   coordinatorContextKey: string | null;
   senderSessionId: string | null;
+  /** A wiki chat's page and selection, as ids (migration 0476): what `appendWikiChatNotes` reads. */
+  wikiContext: unknown;
 }
 // How many times one message may be handed to an engine with nothing under it answering before the
 // control plane stops putting it back on the queue at once. A message that deserves another delivery
@@ -5004,7 +5007,8 @@ export class RunnerApiController {
                    "send_intent" AS "sendIntent",
                    "target_turn_id" AS "targetTurnId",
                    "coordinator_context_key" AS "coordinatorContextKey",
-                   "sender_session_id" AS "senderSessionId"
+                   "sender_session_id" AS "senderSessionId",
+                   "wiki_context" AS "wikiContext"
             FROM "conversation_turn" turn
             WHERE turn.id = ${owned[0].inboxRequestTurnId}::uuid
               AND turn."session_id" = ${sessionId}::uuid
@@ -5261,7 +5265,8 @@ export class RunnerApiController {
                   "send_intent" AS "sendIntent",
                   "target_turn_id" AS "targetTurnId",
                   "coordinator_context_key" AS "coordinatorContextKey",
-                  "sender_session_id" AS "senderSessionId"
+                  "sender_session_id" AS "senderSessionId",
+                  "wiki_context" AS "wikiContext"
       `;
       if (rows.length === 0) return null;
       const t = rows[0];
@@ -5287,6 +5292,8 @@ export class RunnerApiController {
             coordinatorForProject: {
               select: { id: true, coordinatorEnabled: true, owner: { select: { preferences: true } } },
             },
+            // A wiki chat's messages carry its notes (appendWikiChatNotes, below).
+            wikiChatSpaceId: true,
           },
         });
         // A message turn that already produced runtime output is a lease re-delivery.
@@ -5336,6 +5343,20 @@ export class RunnerApiController {
           // nothing rather than leaking another tenant's list into a prompt.
           if (sessionContext) {
             content = (await this.references.expand(sessionContext.ownerId, content)) ?? content;
+          }
+          // A wiki chat's message (wiki contract `chat.notes`): its first carries the chat's standing
+          // rules, and any carries the page and the selection it was sent with, read now from the ids
+          // its door kept — the sentences and footnotes as the document holds them at this delivery.
+          // After the words, so the echo is recorded with them as the control plane's note. Not
+          // best-effort: the page and the selection are part of what the owner said, and a failed read
+          // rolls the claim back, leaving the turn queued for the next poll.
+          if (sessionContext?.wikiChatSpaceId) {
+            content = await appendWikiChatNotes(tx, {
+              ownerId: sessionContext.ownerId,
+              spaceId: sessionContext.wikiChatSpaceId,
+              sessionId,
+              turn: { seq: t.seq, kind: t.kind, wikiContext: t.wikiContext },
+            }, content);
           }
           // Another Orbit session's message says so, in a block after its words (session-message.ts,
           // contract §2.2): without it the recipient reads another agent as the account owner. After

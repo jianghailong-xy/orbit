@@ -928,7 +928,11 @@ export class QueueService {
     // empty message, and — before the seq below stopped being a constant — a claim that died on
     // @@unique([sessionId, seq]) for the seq the message had already taken, after committing the
     // session to RUNNING.
-    if (!session.importedAt && session.prompt !== '') {
+    //
+    // And a wiki chat lays no turn down here: its opening turn was filed with the session, under the
+    // owner's own UUID (SessionsService.writeChat), so its words are first-hand. A seed under
+    // `initial-` would hand the engine the same message twice.
+    if (!session.importedAt && session.prompt !== '' && !session.wikiChatSpaceId) {
       await withTransactionRetry(this.prisma, async (tx) => {
         await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${session.id}::uuid FOR UPDATE`;
         const seedClientTurnId = `initial-${session.id}`;

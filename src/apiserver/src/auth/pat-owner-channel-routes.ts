@@ -66,4 +66,6 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /wiki/spaces/:id/plan/redraft',
   'POST /wiki/spaces/:id/plan/versions/:version/build',
   'POST /wiki/plan-proposals/:id/decide',
+  // Making a wiki chat (contract `chat.door`): the owner's interactive credential's, as the binding writes are.
+  'POST /wiki/spaces/:id/chats',
 ];

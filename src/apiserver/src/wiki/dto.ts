@@ -71,6 +71,13 @@ export class WikiMaintenanceSettingsDto {
   lookbackDays?: number | null;
 }
 
+/** Where the space's chats run (contract `space.settings.chat`): an eligible workspace, or null to forget it. */
+export class WikiChatSettingsDto {
+  @ValidateIf((_object, value) => value !== null)
+  @IsPublicId()
+  workspaceId!: string | null;
+}
+
 /** POST /api/wiki/spaces — the owner's own space, for a codebase or for nothing in particular. */
 export class CreateWikiSpaceDto {
   @IsString()
@@ -126,6 +133,12 @@ export class UpdateWikiSpaceDto {
   @ValidateNested()
   @Type(() => WikiMaintenanceSettingsDto)
   maintenance?: WikiMaintenanceSettingsDto;
+
+  /** Where the space's chats run (Runs in). The owner channel's alone, like the mode: WIKI_OWNER_CHANNEL_ONLY otherwise. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => WikiChatSettingsDto)
+  chat?: WikiChatSettingsDto;
 
   @IsOptional()
   @IsString()

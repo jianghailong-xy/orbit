@@ -113,7 +113,7 @@ import {
 } from './wiki-verify-evidence';
 import { enqueueWikiVerifyJob, wikiVerifyJobNeeded } from './wiki-verify-jobs';
 import { entryAppliedBy } from './wiki-run-reads';
-import { wikiSpaceWorkspaces, wikiWorkspacesOfSpaces } from './wiki-workspaces';
+import { wikiChatChoices, wikiSpaceWorkspaces, wikiWorkspacesOfSpaces } from './wiki-workspaces';
 
 /** `Prisma.TransactionClient`, named once: every write below takes one, never the unmanaged client. */
 type Tx = Prisma.TransactionClient;
@@ -1129,6 +1129,10 @@ export class WikiService {
    *
    * The three owner-channel fields are refused to a personal access token as well, by `credential`,
    * and the whole request with them (docs/personal-access-token-design.md §5); the rest are a token's.
+   *
+   * Where the space's chats run (`chat.workspaceId`, contract `space.settings.chat`) is the owner channel's in
+   * the same way, as the chat's create that also writes it is: refused to a session header and to a token. Only
+   * a workspace the space's chats may run in is stored (`wikiChatChoices`); null forgets the one remembered.
    */
   async updateSpace(
     ownerId: string,
@@ -1139,6 +1143,7 @@ export class WikiService {
       reviewMode?: WikiReviewMode;
       automaticSpotChecks?: boolean;
       maintenance?: WikiMaintenanceInput;
+      chat?: { workspaceId: string | null };
       title?: string;
     },
     actingSessionId: string | null = null,
@@ -1165,12 +1170,29 @@ export class WikiService {
           + 'channel with no acting session: report what should change, and let a person change it.',
       );
     }
+    if (input.chat !== undefined && actingSessionId) {
+      return refuse(
+        'WIKI_OWNER_CHANNEL_ONLY',
+        "where a space's wiki chats run is the account owner's to choose, through an owner channel with no acting "
+          + 'session: report which workspace they should run in, and let a person choose it.',
+      );
+    }
     refuseOwnerFieldsToToken(credential, {
       reviewMode: input.reviewMode,
       maintenance: input.maintenance,
       automaticSpotChecks: input.automaticSpotChecks,
+      chat: input.chat,
     });
     const current = await this.requireSpace(ownerId, spaceId);
+    const chatWorkspaceId = input.chat === undefined ? undefined : (input.chat.workspaceId ?? null);
+    if (chatWorkspaceId) {
+      const choices = await wikiChatChoices(this.prisma, ownerId, current);
+      if (!choices.some((choice) => choice.id === chatWorkspaceId)) {
+        throw new BadRequestException(
+          "this space's chats can run only in a workspace of the space that runs its sessions in worktrees of their own",
+        );
+      }
+    }
     // Maintenance is written by its own unit, under the space row's lock and with the cursor start it
     // may need (`setWikiMaintenance`); every other key below is merged over the row as it stands, so
     // neither write can put back what the other just changed.
@@ -1179,10 +1201,13 @@ export class WikiService {
       // The settings a held plan job waited for may be here now (contract `plan.jobs.held`).
       await this.planJobFact(() => resumeWikiPlanJobs(this.prisma, ownerId, { spaceId }));
     }
-    const { maintenance: _maintenance, ...settings }: Record<string, unknown> = { ...current.settings };
+    // `chat` is left out the same way unless the request names it: a chat's create remembers a workspace with a
+    // statement of its own (WikiChat.create), which this merge must not put back.
+    const { maintenance: _maintenance, chat: _chat, ...settings }: Record<string, unknown> = { ...current.settings };
     if (input.push !== undefined) settings.push = input.push;
     if (input.autoAcceptReinforce !== undefined) settings.autoAcceptReinforce = input.autoAcceptReinforce;
     if (input.automaticSpotChecks !== undefined) settings.automaticSpotChecks = input.automaticSpotChecks;
+    if (chatWorkspaceId !== undefined) settings.chat = { workspaceId: chatWorkspaceId };
     if (input.reviewMode !== undefined && input.reviewMode !== current.settings.reviewMode) {
       settings.reviewMode = input.reviewMode;
       settings.reviewModeChangedAt = new Date().toISOString();

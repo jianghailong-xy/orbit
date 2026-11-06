@@ -916,7 +916,7 @@ interface PreparedSection {
   stats: WikiDocSectionStats;
 }
 
-const PLAN_SELECT = {
+export const PLAN_SELECT = {
   id: true,
   version: true,
   confirmedAt: true,
@@ -940,7 +940,7 @@ const PLAN_SELECT = {
   },
 } satisfies Prisma.WikiPlanSelect;
 
-type PlanRow = Prisma.WikiPlanGetPayload<{ select: typeof PLAN_SELECT }>;
+export type PlanRow = Prisma.WikiPlanGetPayload<{ select: typeof PLAN_SELECT }>;
 type PlanDocRow = PlanRow['docs'][number];
 
 interface PlanCategory {
@@ -951,7 +951,7 @@ interface PlanCategory {
 }
 
 /** Each document's number (`<category>.<n>`) and its category, in the plan's order. */
-function numbering(plan: PlanRow): Map<string, { number: string; category: { key: string; number: number; title: string } }> {
+export function numbering(plan: PlanRow): Map<string, { number: string; category: { key: string; number: number; title: string } }> {
   const categories = (plan.categories as unknown as PlanCategory[]) ?? [];
   const place = new Map(categories.map((category, i) => [category.key, { number: i + 1, title: category.title }]));
   const counted = new Map<string, number>();
@@ -1627,6 +1627,7 @@ export class WikiDocs {
             sentences: {
               orderBy: { position: 'asc' },
               select: {
+                id: true,
                 block: true,
                 text: true,
                 status: true,
@@ -1690,6 +1691,8 @@ export class WikiDocs {
         const status = sentence.status as WikiDocSentenceStatus;
         statuses.push(status);
         blocks[sentence.block]?.sentences.push({
+          // What a chat's selection names (contract `chat.notes.wikiContext`); rendered as a public id.
+          id: sentence.id,
           text: sentence.text,
           status,
           notes: [...new Set(sentence.footnotes.map(noteOf))],

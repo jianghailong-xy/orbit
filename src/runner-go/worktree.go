@@ -1400,6 +1400,58 @@ func checkoutWorkIsCaptured(wt *Worktree) bool {
 	return err == nil && out == ""
 }
 
+// dropEmptyChatBranch removes a wiki chat's checkout and deletes its branch when the run ends with
+// nothing of the chat's own on either (wiki contract chat.branch, design §5.2): most chats only read
+// code and answer, and each would otherwise leave an unmerged branch at the pinned commit, which reads
+// as work somebody abandoned. It reports whether the branch was deleted.
+//
+// Only when there is provably nothing to lose, and anything short of that keeps everything:
+//   - the session is a chat (isWikiChat) and its SOURCE is pinned to a full commit;
+//   - its branch is exactly at that pin, so no commit of the chat's own is on it — a dirty checkout
+//     was committed by finalizeWorktree a moment ago, so its tip is past the pin and it stays;
+//   - its checkout is absent, or present with HEAD on that branch and nothing uncommitted: an agent
+//     that switched the checkout to a branch of its own, or detached it, keeps its checkout.
+//
+// The branch is deleted by compare-and-set against the pin, so a branch something moved meanwhile
+// is never deleted. Nothing is lost for a chat that comes back either: its pin is frozen (SR29), so
+// setupSourceWorktree re-creates the same branch on the same commit at its next claim.
+func dropEmptyChatBranch(job *ClaimedSession) bool {
+	if !isWikiChat(job) || job.WT == nil {
+		return false
+	}
+	wt, pin := job.WT, job.Source.BaseSha
+	if job.Source.State != sourceStatePinned || !fullSha.MatchString(pin) || wt.Branch == "" || wt.RepoDir == "" {
+		return false
+	}
+	branchRef := "refs/heads/" + wt.Branch
+	if tip, err := git(wt.RepoDir, "rev-parse", "--verify", "--quiet", branchRef); err != nil || tip != pin {
+		return false
+	}
+	if checkoutAbsent(wt.Path) {
+		// Away already (leaveCheckoutAbsent): git may still list it, and its base ref is all that is left.
+		_, _ = git(wt.RepoDir, "worktree", "prune")
+		_, _ = git(wt.RepoDir, "update-ref", "-d", baseRefName(wt.Session))
+	} else {
+		if currentBranch(wt) != wt.Branch || !checkoutWorkIsCaptured(wt) {
+			return false
+		}
+		// removeWorktree checks again that the work is captured, and drops the base ref with the checkout.
+		removeWorktree(wt)
+		if !checkoutAbsent(wt.Path) {
+			logln(fmt.Sprintf("session %s — chat checkout %s could not be removed; keeping its branch %s", wt.Session, wt.Path, wt.Branch))
+			return false
+		}
+	}
+	if _, err := git(wt.RepoDir, "update-ref", "-d", branchRef, pin); err != nil {
+		logln(fmt.Sprintf("session %s — chat branch %s was not deleted: %v", wt.Session, wt.Branch, err))
+		return false
+	}
+	_, _ = git(wt.RepoDir, "update-ref", "-d", absentRefName(wt.Session))
+	logln(fmt.Sprintf("session %s — chat ended with nothing past its pinned %s: removed its checkout and branch %s",
+		wt.Session, shortSha(pin), wt.Branch))
+	return true
+}
+
 // rebaseScratchPrefix names the staging worktree rebaseFastForward puts beside the session
 // checkouts. It is not a session checkout, and gcWorktrees skips it by this prefix: the sweep runs
 // while merges do, and reclaiming one mid-rebase would delete the working tree a merge is
