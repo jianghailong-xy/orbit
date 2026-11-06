@@ -180,6 +180,31 @@ the worktrees root, or the clone fails with `EXDEV`.
 4. On any error, remove the partial checkout and fall back to `git worktree add` with a normal checkout. Report which
    path was taken in the runner log and in the session's isolation status.
 
+**As implemented** (`src/runner-go/clone_checkout.go`; `addSessionCheckout` in `sparse_checkout.go`, which every door
+above goes through). Two of the steps changed. Both changes were measured with git 2.47.3.
+
+- **Step 1 builds the index instead of copying it.** A copy of the template's index carries the template's marks into
+  the checkout: a file marked assume-unchanged keeps the mark, so the session's edits to it never show in status or
+  reach the branch, and a file marked skip-worktree stays out of a full checkout while status reads clean. The runner
+  writes the checkout's own index with `git read-tree HEAD`. In a sparse checkout it then marks the left-out entries
+  with `git sparse-checkout reapply`, which writes no file.
+- **Step 2 clones regular files only.** Symlinks have no data to share, and the reset writes them with git's guard
+  against a path that leads through a symlink. A symlink the runner made before the clones could lead one out of the
+  checkout: on a case-insensitive filesystem (APFS by default) a symlink `A` and a file `a/x` can be in one commit.
+- **Step 3 refreshes before it resets.** `git reset --hard` rewrites every entry whose stat data does not match its
+  file. That is every clone, so on its own the reset undoes the cloning. `git update-index -q --refresh` runs first.
+  After it, the reset rewrites only the files that differ from the commit.
+- **The reset is to the checkout's own `HEAD`.** That is the commit `git worktree add` put the checkout on. For a
+  checkout recreated on an existing branch it is the branch's tip, not the session's fork point.
+- **A failure after `git worktree add`** removes the checkout, which is then made again plainly. A branch the failed
+  attempt made with `-b` is used as it stands. A failure of `git worktree add` itself is returned unchanged, since a
+  plain checkout would fail the same way.
+- **The probe** runs at start and before each checkout, once per device. A template on another device is not tried.
+- **The log** names the path taken and why. The isolation status the runner reports stays `worktree`, the one value the
+  control plane takes for a session with a checkout of its own. How the checkout was made is kept beside it, in the
+  runner (`ClaimedSession.CheckoutCreation`).
+- **On darwin** the clone is `unix.Clonefile` from `golang.org/x/sys` v0.30.0 (`docs/dependency-security.md`).
+
 **Cost.** Step 3 rehashes the checked-out bytes: 15–17 s for the full Orbit tree in the experiments, and about 1 s with
 the Orbit exclusion list in place. A later optimization can write the index stat data directly for files cloned from
 clean template entries (§10).
