@@ -468,7 +468,7 @@ func TestTheIngestQueueBoundAndTheDrillIngestRateAreReadFromTheEnvironment(t *te
 	env := func(extra map[string]string) func(string) string {
 		base := map[string]string{
 			"LINK_TLS_MODE": "off", "LINK_API_URL": "http://api", "LINK_GATEWAY_TOKEN": strings.Repeat("g", 32),
-			"LINK_PUBLIC_KEYS": publicPEM(t, newTestKeys(t).pub),
+			"LINK_PUBLIC_KEYS": publicPEM(t, newTestKeys(t).pub), "LINK_INTERNAL_API_URLS": "http://api:3001",
 		}
 		for k, v := range extra {
 			base[k] = v

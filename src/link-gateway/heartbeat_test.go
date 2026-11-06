@@ -44,7 +44,7 @@ func heartbeatAnswer(w http.ResponseWriter, r *http.Request, body []byte) {
 	})
 }
 
-func TestAHeartbeatIsForwardedAsTheBodyItsMirrorWouldCarry(t *testing.T) {
+func TestAHeartbeatIsForwardedAsTheBodyTheHeartbeatRouteTakes(t *testing.T) {
 	backend := newFakeBackend(t, heartbeatAnswer)
 	h := newLinkHarness(t, []*fakeBackend{backend}, nil)
 	tc, _ := h.connectLink(runnerA, processA)
@@ -66,15 +66,16 @@ func TestAHeartbeatIsForwardedAsTheBodyItsMirrorWouldCarry(t *testing.T) {
 	if len(calls) != 1 || calls[0].Method != "POST" {
 		t.Fatalf("calls %+v", calls)
 	}
-	// The body is exactly what the shadow comparison holds the HTTP heartbeat to: the two mappings are inverses.
-	hello := linkHello(processA).GetHello()
-	if diffs := compareHeartbeat(hb, &linkpb.TunnelRequest{Method: "POST", Path: "/runner/heartbeat", JsonBody: calls[0].Body}, hello); len(diffs) != 0 {
-		t.Fatalf("the forwarded body differs from the mirror's mapping: %s\nbody %s", fields(diffs), calls[0].Body)
-	}
-	var body map[string]any
-	_ = json.Unmarshal(calls[0].Body, &body)
-	if body["status"] != "ONLINE" || body["version"] != "0.1.240" || body["leaseOwner"] != strings.ToLower(processA) || body["draining"] != true {
-		t.Fatalf("body %s", calls[0].Body)
+	// The body the heartbeat route takes: the typed fields as their members, status ONLINE, Hello's version, the
+	// connection's process, and each Fact's JSON as the member it is named after.
+	want := `{"status": "ONLINE", "version": "0.1.240", "leaseOwner": "` + strings.ToLower(processA) + `",
+		"idleCapacity": 3, "draining": true,
+		"supervisedSessionIds": ["0190a0b0-0000-7000-8000-0000000000c2", "0190a0b0-0000-7000-8000-0000000000c1"],
+		"modelCatalog": {"claude": [{"id": "claude-opus-5-5", "label": "Opus 5.5 — 長文"}]},
+		"engines": [{"engine": "claude", "installed": true, "auth": "yes"}],
+		"reposRoot": "/srv/repos/naïve", "runsAsRoot": false}`
+	if !jsonEqual(calls[0].Body, []byte(want)) {
+		t.Fatalf("the forwarded body is not the heartbeat route's:\n got %s\nwant %s", calls[0].Body, want)
 	}
 	// The providers the beat names replace Hello's on its call and every later one.
 	if got := calls[0].Header.Get("X-Orbit-Supported-Providers"); got != "claude,codex,cursor" {

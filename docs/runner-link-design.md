@@ -396,6 +396,8 @@ apiserver 进程数和数据库规格按 C2b 在单元规模上的实测补齐�
 
 ### 11.2 影子期（1–2 周，D7）
 
+> **历史：影子期已在 2026-11-05 的切换后结束，它的代码已删除（§13）。** runner 的影子连接由切换后清理删除（§15.11）；网关的镜像比对、读切换开关的轮询、`LINK_MODE` 和 `MODE_HTTP` 的连接由 34sSqSNx9BHCECKDNblLr 删除（§15.12）。下面是当时的计划和通过标准。
+
 - **过渡版 runner。** 工作仍走 HTTP。另起一个隔离的协程，只做握手和心跳，并把心跳和事件镜像到链路上；网关只解码比对，不落库、不派发。
 - **影子协程必须和工作路径隔离。** 用独立的客户端、有资源上限、任何错误都只记日志，不能影响工作路径。
 - **通过标准（先定好，再测）：**
@@ -420,7 +422,7 @@ apiserver 进程数和数据库规格按 C2b 在单元规模上的实测补齐�
 5. runner 建立链路、接管会话；然后关闭"暂停派发"，排队的消息开始投递。
 6. 观察 1 小时：连接数、确认延迟、错误率、会话恢复情况。
 
-`Welcome` 和 `HeartbeatAck` 都带当前模式。开关关上时，runner 自动退回 HTTP 模式。
+`Welcome` 和 `HeartbeatAck` 都带当前模式。开关关上时，runner 自动退回 HTTP 模式。（历史：开关和退回都已删除，网关只说 `MODE_LINK`，见 §15.11、§15.12。）
 
 ### 11.4 回滚
 
@@ -497,7 +499,7 @@ runner 本地的两种暂存，回滚和降级时这样处理：
 
 ### 15.1 `RUNNER_LINK_REQUIRED` 是运行时开关
 
-> 历史：开关已在切换后清理中删除，见 §15.11。
+> 历史：开关已在切换后清理中删除，见 §15.11；网关读开关的轮询和 `LINK_MODE` 的删除见 §15.12。
 
 出处：D0（34lqlVVjIXZRmKyCWzATR）。涉及 D15、§11.3、§11.4。
 
@@ -716,6 +718,22 @@ runner 本地的两种暂存，回滚和降级时这样处理：
 - **能力判断和旧式轮询。** 删了 2026-10-25 统计的 14 处 `runnerSupportsCapability` 和它们守着的旧分支：这些能力最晚由 0.1.232 的 runner 开始声明，而能和这个服务端工作的 runner 都有链路（0.1.237 起），都声明了它们。2026-11-01 加上的第 15 处留着：Claude 地区检查的"再查一次"只交给声明 `claude-region/v1` 的进程，而这个能力从 0.1.242 才有，0.1.237–0.1.241 的 runner 走链路照常工作、却不会检查。11-05 随废弃检出清单加入的 `abandoned-checkout-v1` 判断也留着：到 0.1.246 为止没有 runner 声明它。`RunnersService` 里读已持久化能力的登录门槛不是这种判断，留着。取消息必须带租约代次，不带回 400；`release-leases` 必须带代次和所有者。
 - **写入契约摘要。** 服务端不再读、也不再发摘要 header 和应答里的 `X-Orbit-Server-*`，修订号照旧校验。runner 照旧发摘要和能力声明：清理之前的服务端缺了摘要会拒绝修订（`RUNNER_PROTOCOL_CONTRACT_MISMATCH`），能力声明它也照读。等再也没有清理之前的服务端，下一次清理才能删 runner 这一侧。
 - **runner。** 删了 HTTP 工作路径（`ORBIT_LINK_MODE`、config.json 的 `linkMode`、链路 5 分钟不可达就退回 HTTPS、HTTPS 上的事件补发、`/complete` 回退）、影子连接（`ORBIT_LINK_SHADOW`）和守护进程的 wake 长轮询。守护进程的调用只走链路；`Welcome` 或 `HeartbeatAck` 说 `MODE_HTTP` 时 runner 不退回，留在链路上等。`orbit doctor` 对这种情况和没配链路的服务端都写 ✗。没有链路的传输只留给不是守护进程的进程（`orbit mcp`、CLI、钩子）；单元测试也用它驱动会话循环。
-- **没动。** 网关（`mode.go` 读模式、`LINK_MODE`、`shadow.go`、`MODE_HTTP` 的连接、`client_switch.go` 的演练）和“暂停派发”开关。网关的清理是单独的任务：网关一发布，runner 要断开 4–56 秒。
+- **没动。** 网关（`mode.go` 读模式、`LINK_MODE`、`shadow.go`、`MODE_HTTP` 的连接、`client_switch.go` 的演练）和“暂停派发”开关。网关的清理是单独的任务：网关一发布，runner 要断开 4–56 秒。网关这一部分后来由 34sSqSNx9BHCECKDNblLr 清理，见 §15.12。
 - **发布顺序。** 服务端和 runner 谁先发布都可以：0.1.246 的 runner 在 `MODE_LINK` 下只走链路，对着清理之后的服务端照常工作；清理之后的 runner 对着清理之前、开关打开的服务端也照常工作。清理之后的服务端回滚到清理之前的版本时，开关那一行还是打开的，所以清理之后的 runner 照常工作；有人再把开关关上，这些 runner 就停工，因为它们没有 HTTP 路径。没有链路的部署（开关关着、或没配链路）用不了清理之后的服务端和 runner，所以默认安装和升级要先带上链路（34sREuYT2DCEXiW6qZuOh）。
 - **没有链路的旧 runner（0.1.237 之前）。** 它们的守护进程调用一律得到 426，第一次心跳被拒就以退出码 0 退出（日志 `⏸ interactive run … detached for shutdown (resumable)`），这时不会自更新。由 `orbit register` 装的服务（systemd 的 `Restart=always`、launchd 的 `KeepAlive`）几秒后把它拉起来，启动时的自更新经 `GET /runner/release`（仍走 HTTPS）换成 `/dl` 上的版本，随即走链路、接管会话，手上正在跑的 turn 也接着跑完（case 4c：turn 完成，事件 1..42 连续）；在终端里手动 `orbit run`、或没有重启策略的容器里跑的，会一直停着，直到有人再启动它，手上的 turn 以 runner 离线结束（case 4b，停了 13 分钟）。关了自更新的，每次启动都打印 426 的提示（`Run \`orbit upgrade\``）后退出。生产从 D1 打开开关起就是这样；自托管部署在第一次升级到清理之后的版本时遇到（34sREuYT2DCEXiW6qZuOh 的 case 4b 和 4c，0.1.233 的 runner）。
+
+### 15.12 网关的影子期代码清理
+
+出处：34sSqSNx9BHCECKDNblLr。涉及 §6.1、§11.2、§11.3、§13、§15.1、§15.11、D7、D15。D2 留下的网关部分（§15.11 “没动”）在这里清理；`upgrade.sh` 不重建生产的网关，所以合入本身不改变生产。
+
+- **删了什么。** 网关里：镜像比对（`shadow.go` 和 `link_shadow_*` 指标）；读切换开关的轮询（`mode.go`：每秒读一次 `GET /api/runner/link/mode`，以及 `link_mode_link`、`link_mode_fetches_total`）；`LINK_MODE` 和它的 `link` 覆盖；`MODE_HTTP` 的连接（心跳立即回一个什么也不带的 `HeartbeatAck`、请求回 `LINK_MODE_HTTP`、事件批不存也不确认、提示记作 `mode_http`）；测试客户端的镜像（`-mirror`、`-http`、`-events`、`-corrupt-every`）和 `switch` 演练（`client_switch.go`）。`linkstub` 不再提供 mode 路由。脚本里：删了 `staging-check-switch.sh` 和 `drills/rollback-drill.sh`；四个演练共用的 `rollback-drill.mjs` 改名 `drills/drill-api.mjs`，去掉 `switch` 命令；durable-events 演练删了驱动开关和 HTTPS 路径的 `rollback`、`partition-off` 两个阶段；release-outage 演练的 `https` 阶段改成链路上的 `apiserver` 阶段；`staging-check.sh` 改成检查链路下的网关本身；`ORBIT_LINK_STAGING_MODE` 删除。各演练等的日志改成 D2 的 runner 写的那一行（`carries the work of process`）。
+- **`LINK_MODE` 不再读取，`LINK_INTERNAL_API_URLS` 必填。** 还设着 `LINK_MODE` 的部署照常启动，runner 收到的也是 `MODE_LINK`，和读 D2 服务端的旧网关一样。
+- **留下的：每个 `Welcome` 和 `HeartbeatAck` 都说 `MODE_LINK`。** 0.1.246 的 runner（763df9fab 的 `link_mode.go`、`link_shadow.go`）收到 `MODE_LINK` 把工作放到链路上，`Welcome` 不带模式时当作没说，收到 `MODE_HTTP` 退回 HTTPS；它的影子连接在说了 `MODE_LINK` 的连接上不发镜像，工作连接占住这个进程的连接后就让出来。所以这个网关对 0.1.246 的 runner 和以前的网关一样：D2 的服务端对它的 HTTPS 守护进程调用回 426（进程启动时一到三次），链路接手后不再有。
+- **留下的：协议里的 `MODE_HTTP`。** contracts/runner-link/v1 保留这个值（buf breaking，编号不复用），这个网关不再发它。D2 的 runner 遇到旧网关说 `MODE_HTTP` 时留在链路上继续问（§15.11）。
+- **留下的：服务端的 `GET /api/runner/link/mode`**，D2 让它对网关一直答 `{"required": true}`。清理之前的网关（生产的 f8b9964f3）每秒读它；启动后读不到，就对所有 runner 说 `MODE_HTTP`，什么也不转。自己配了链路域名的部署（`upgrade.sh` 的 `operator`），升级从不重建网关，所以这个路由要留到运维把网关重建成这个版本以后，才能由以后的清理删掉。
+- **三种组合。**
+  - 旧网关对 D2 的服务端：每秒读到 `required: true`，对 runner 说 `MODE_LINK`，照常转发。D2 的复验就是这样跑的；本任务的复验（staging，项目分支 32844320c 的服务端和网关，网关代码与 f8b9964f3 相同）o 阶段又测了一次：3 秒内读了 3 次、零失败，`link_mode_link` 为 1，`Welcome` 和 `HeartbeatAck` 全是 `MODE_LINK`；0.1.246 和 D2 的 runner 各开新会话、发消息，事件连续；HTTPS 上只有 0.1.246 进程启动时的三次调用（`GET /runner/wake`、`GET /runner/sessions/reclaim`、`GET /runner/me`），都回 426。
+  - 0.1.246 的 runner 对这个网关：复验 n 阶段，新会话、消息、中断的 turn、网关重启、apiserver 重启都照常，期间没有 HTTPS 守护进程调用；0.1.246 重启时只有一次 `GET /runner/me` 被拒 426，它的影子连接收到 `MODE_LINK` 的 `Welcome` 后让出（`the shadow stands down`），工作连接接手。D2 的 runner 重启时没有 HTTPS 守护进程调用。
+  - 这个网关对清理之前、开关打开的服务端（生产现在的 b4619320b）：和旧网关读到开关打开时一样。有人在那个服务端上把开关关上，这个网关仍说 `MODE_LINK`，runner 留在链路上（清理之前的服务端从不拒绝经网关转发的调用，`runner-link-required.ts`），关开关不再能把 runner 带回 HTTPS。
+- **生产网关重建会怎样。** 合入之后，生产只有在有人重建网关时才带上它：`docker build` 网关镜像，再只重建 `link-gateway` 这一个容器。旧进程收到 SIGTERM 后 drain：每条连接在 1–30 秒的随机延迟后被要求重连；单节点时这次重连在新进程起来之前被 `503 DRAINING` 拒绝，连接留在旧进程上，到延迟之后再过 15 秒（`LINK_DRAIN_GRACE`）被关掉；连接都关了（最迟到 80 秒的 drain 超时）旧进程才退出，Compose 随后启动新进程，runner 按退避重连上来。正在跑的 turn 不中断，事件不丢。新网关不再读 mode 路由，`/metrics` 少了 `link_shadow_*` 和 `link_mode_*`。复验 g 阶段这样做了一次（只重建 `link-gateway` 一个容器，沿用旧的 compose 文件和环境，环境里还有 `LINK_MODE=http`）：镜像构建 8 秒，从重建容器开始到新网关提供服务约 55 秒；两台 runner 分别有 37 秒（0.1.246）和 60 秒（D2）没有工作连接，各自跨过重建的长 turn 照常完成，事件 1..33 连续，每个 turn 只交给引擎一次，期间没有 HTTPS 守护进程调用。断开多久取决于重连延迟的随机值和 runner 的退避：单节点时旧进程要等到最后一条连接被关掉（延迟最多 30 秒，再加 15 秒宽限）才退出。同一个容器 `docker restart` 时，两台 runner 断开 4 秒和 14 秒。它不改变 runner 能做的任何事，所以可以等到证书或安全修复本来就要重建网关时一起带上；什么时候重建由账号所有者决定，要走审过的步骤。
+- **默认安装（same-origin，`upgrade.sh` 的 `managed`）。** 网关镜像以最后一次改 `src/link-gateway` 的提交命名，所以合入之后默认安装的下一次 `/upgrade` 会重建并重启网关，断开情况同上。

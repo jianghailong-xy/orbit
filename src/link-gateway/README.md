@@ -8,20 +8,16 @@ and it speaks plain `ws://` inside the project's network. Frames are the protobu
 [contracts/runner-link/v1](../../contracts/runner-link/v1/runner_link.proto); `linkpb/` is their generated Go.
 
 It authenticates connections, greets runners, keeps connections alive and drains them, and relays the
-[hints](#hints) the apiserver publishes on NATS for the runners it holds. What else it does depends on its mode, which
-every Welcome and HeartbeatAck states (D15):
+[hints](#hints) the apiserver publishes on NATS for the runners it holds. Runners do their work over the link, and every
+Welcome and HeartbeatAck says so: `MODE_LINK` (D15). The gateway forwards their requests, heartbeats and durable events
+to the apiserver's internal listener, publishes their live streams on NATS while someone watches, and relays the
+apiserver's turn prefix requests to them ([Forwarding](#forwarding)). It makes no decision of the control plane's: every
+rule stays in the route a call is forwarded to.
 
-- **`MODE_HTTP`, the shadow period** (§11.2), the default. Runners do their work over HTTPS. The gateway compares the
-  heartbeats and event batches they mirror to it and **forwards nothing** to the control plane
-  ([Shadow comparison](#shadow-comparison)).
-- **`MODE_LINK`** (version 1). Runners do their work over the link. The gateway forwards their requests, heartbeats and
-  durable events to the apiserver's internal listener, publishes their live streams on NATS while someone watches, and
-  relays the apiserver's turn prefix requests to them ([Forwarding](#forwarding-mode_link)). It makes no decision of the
-  control plane's: every rule stays in the route a call is forwarded to.
-
-Which mode runners are told is the server's cut-over switch, `RUNNER_LINK_REQUIRED` (§11.3, §11.4, task D0):
-`MODE_HTTP` while it is off, `MODE_LINK` while it is on ([The switch](#the-switch)). `LINK_MODE=link` pins `MODE_LINK`
-whatever the switch says, which the staging drills use. A deployment leaves `LINK_MODE` unset.
+Until the cut-over on 2026-11-05 it also served the shadow period (§11.2): told `MODE_HTTP` while the server's switch,
+`RUNNER_LINK_REQUIRED`, was off, runners worked over HTTPS and the gateway only compared what they mirrored to it. That
+code is gone; [After the shadow period](#after-the-shadow-period) says what went, what stayed, and what an older gateway
+or runner does beside this one.
 
 It is one static binary with these subcommands:
 
@@ -55,8 +51,7 @@ It is one static binary with these subcommands:
 | `LINK_REVOCATION_INTERVAL` | `30s` | How often the revocation list is read. |
 | `LINK_NATS_URL` | — | The NATS server the apiserver publishes [hints](#hints) to, as a `nats://` address without credentials. Unset, the gateway relays no hints, publishes no live stream and says so when it starts. |
 | `LINK_NATS_SEED` | — | The gateway's NATS nkey seed (`SU…`), its credential on the [NATS](#nats) server. Never logged. Unset, it connects without credentials, which the deployment's NATS refuses. |
-| `LINK_MODE` | `http` | `http`: runners are told what the server's `RUNNER_LINK_REQUIRED` switch says, `MODE_HTTP` (the shadow period: compare, forward nothing) while it is off and `MODE_LINK` (forward) while it is on. `link`: `MODE_LINK`, whatever the switch says. See [The switch](#the-switch). |
-| `LINK_INTERNAL_API_URLS` | required with `LINK_MODE=link` | The apiserver's internal listener for runner link calls (`RUNNER_LINK_INTERNAL_PORT`), one `http://` address per apiserver instance, comma-separated, for example `http://apiserver:3001`. Without it there is nowhere to forward to: the gateway does not read the switch, and runners are told `MODE_HTTP`. |
+| `LINK_INTERNAL_API_URLS` | required | The apiserver's internal listener for runner link calls (`RUNNER_LINK_INTERNAL_PORT`), one `http://` address per apiserver instance, comma-separated, for example `http://apiserver:3001`: where every call is forwarded. |
 | `LINK_RPC_TIMEOUT` | `60s` | How long one forwarded call may take, retries on other backends included. |
 | `LINK_EVENT_MERGE_WINDOW` | `100ms` | How long an event batch waits for others, from any connection, to go with it in one [merged call](#merged-calls), up to `500ms`. `0` forwards every batch alone. |
 | `LINK_EVENT_MERGE_MAX_BATCHES`, `LINK_EVENT_MERGE_MAX_BYTES` | `64`, `2097152` | What one merged call may carry: the sessions its transaction holds at once (at most the apiserver's 256), and the bytes of its events. A full call goes at once. |
@@ -125,22 +120,19 @@ upgrade, the first frame must be Hello, within `LINK_HELLO_TIMEOUT`, and these H
 
 Welcome carries:
 
-- protocol version 1 and the gateway's mode;
+- protocol version 1 and `MODE_LINK`;
 - `heartbeat_interval_ms` 30000, `max_frame_bytes` 262144, and the [credit](#durable-events-and-credit) a connection
   gets now;
-- in `MODE_LINK`, where each session Hello names stands and the runner's release, as the apiserver answers them
-  ([Welcome](#welcome)); nothing of either in `MODE_HTTP`;
+- where each session Hello names stands and the runner's release, as the apiserver answers them ([Welcome](#welcome));
 - an empty `HintState` and a `connection_id` (`c-` followed by 16 hex digits).
 
-Welcome lists no `HintState` yet: a runner sends its first Heartbeat as soon as it has read Welcome, and in `MODE_LINK`
-that beat's HeartbeatAck carries the `HintState`. A runner in `MODE_HTTP` ignores it.
+Welcome lists no `HintState` yet: a runner sends its first Heartbeat as soon as it has read Welcome, and that beat's
+HeartbeatAck carries the `HintState`.
 
 ## Connections
 
-- **Heartbeats** are counted and logged. In `MODE_HTTP` each is answered at once with a `HeartbeatAck` saying
-  `MODE_HTTP` that reconciles nothing: `reconcile_json` is empty and `want_facts` names nothing. In `MODE_LINK` each is
-  [forwarded](#heartbeats) and answered with what the heartbeat route says. A `HeartbeatAck` states the mode runners
-  are told now, which may not be the one the connection opened in ([The switch](#the-switch)).
+- **Heartbeats** are counted, logged and [forwarded](#heartbeats), and each is answered with what the heartbeat route
+  says, in a `HeartbeatAck` saying `MODE_LINK`.
 - **Pings.** The gateway pings every 20s and measures the round trip (`link_rtt_seconds`). A ping unanswered for 60s
   closes the connection. Whether the runner process is alive is judged by its heartbeats (§6.1), which version 0
   only records.
@@ -194,10 +186,9 @@ test instead of dropping hints.
 
 The gateway subscribes to `rnr.<runnerId>` from the Welcome of a runner's first connection to the end of its last one,
 and to no other runner's subject; one subscription per runner, which is also what lets it answer a turn prefix request
-(NATS lets a connection answer a request once). It writes each hint as a `Hint` frame to every connection of that runner
-in `MODE_LINK`, behind control frames and never ahead of Welcome. In `MODE_HTTP` a hint is counted and not sent: a
-runner working over HTTPS is woken by its long polls. With `LINK_FRAME_LOG=all`, each hint that is not sent is logged
-with its runner, kind and result.
+(NATS lets a connection answer a request once). It writes each hint as a `Hint` frame to every connection of that
+runner, behind control frames and never ahead of Welcome. With `LINK_FRAME_LOG=all`, each hint that is not sent is
+logged with its runner, kind and result.
 
 Two more kinds of message arrive on a runner's subject: an apiserver instance's count of a session's
 [watchers](#live-stream-and-watchers), a `watchers` hint with the instance named in an `Orbit-Instance` header, which
@@ -212,68 +203,50 @@ asks.
 
 ### Frames a runner may send
 
-| Body | In `MODE_HTTP` | In `MODE_LINK` |
-| --- | --- | --- |
-| `Hello` | The first frame only. A second Hello is a protocol error. | The same. |
-| `Heartbeat` | Answered at once with `HeartbeatAck` (`MODE_HTTP`), and the typed half of a [mirror](#shadow-comparison). | [Forwarded](#heartbeats) to the heartbeat route. |
-| `EventBatch` | The typed half of a mirror. Never stored and never acknowledged: an `EventAck` would say the events are stored (§5.8). | [Stored](#durable-events-and-credit) through the ingest route and acknowledged. |
-| `Rpc` | Answered with exactly one `RpcResult`, `Failure{code: LINK_MODE_HTTP, retryable: false}`. A `shadow:` request is the raw half of a mirror. | [Forwarded](#requests); a `shadow:` request is still never forwarded. |
-| `LiveBatch` | Counted and dropped: the shadow period publishes no live stream. | [Published](#live-stream-and-watchers) while someone watches. |
-| `TurnPrefixResponse` | Dropped. | The answer to a [turn prefix request](#turn-prefixes). |
-| `Chunk` | Joined, then handled as the frame it makes up. | The same. |
-| Anything else | Ignored, as the protocol asks of a body the receiver does not take. | The same. |
+| Body | What the gateway does |
+| --- | --- |
+| `Hello` | The first frame only. A second Hello is a protocol error. |
+| `Heartbeat` | [Forwarded](#heartbeats) to the heartbeat route, and answered with a `HeartbeatAck`. |
+| `EventBatch` | [Stored](#durable-events-and-credit) through the ingest route and acknowledged. |
+| `Rpc` | [Forwarded](#requests), and answered with exactly one `RpcResult`. |
+| `LiveBatch` | [Published](#live-stream-and-watchers) while someone watches. |
+| `TurnPrefixResponse` | The answer to a [turn prefix request](#turn-prefixes). |
+| `Chunk` | Joined, then handled as the frame it makes up. |
+| Anything else | Ignored, as the protocol asks of a body the receiver does not take. |
 
-The columns are the mode a connection opened in, which its Welcome stated. What changes once the switch has changed
-since then is in [The switch](#the-switch).
+## After the shadow period
 
-### Forwarding invariants
+The shadow period (§11.2) and the cut-over switch (§11.3, §11.4, §15.1) ended with the cut-over on 2026-11-05. D2
+removed the switch, the HTTPS work path and the runner's shadow connection from the apiserver and the runner
+(docs/runner-link-design.md §15.11); task 34sSqSNx9BHCECKDNblLr removed the gateway's part (§15.12):
 
-`mayForward` (`conn.go`) is the only check an Rpc passes before it may reach a backend. Two things hold, and
-`TestRpcForwardingInvariants` pins both:
+- **Gone:** the shadow comparison (`shadow.go`: the mirrors' pairing and its `link_shadow_*` series), the reading of the
+  switch (`mode.go`: `GET /api/runner/link/mode` every second, `link_mode_link`, `link_mode_fetches_total`), `LINK_MODE`
+  and its `link` override, the connection in `MODE_HTTP` (its HeartbeatAck answered at once, its `LINK_MODE_HTTP`
+  refusal, its event batches neither stored nor acknowledged, its hints counted as `mode_http`), the test client's
+  mirrors and the `switch` drill.
+- **`LINK_MODE` is no longer read.** A deployment that still sets it starts, and its runners are told `MODE_LINK`, as a
+  gateway reading D2's server tells them. `LINK_INTERNAL_API_URLS` is required.
+- **Kept: `MODE_LINK` in every Welcome and HeartbeatAck.** A runner from before D2, such as 0.1.246 (src/runner-go
+  link_mode.go and link_shadow.go at 763df9fab), moves its work onto the link when it is told `MODE_LINK`, takes a
+  Welcome that states no mode as saying nothing, and goes back to HTTPS when it is told `MODE_HTTP`. Its shadow
+  connection sends no mirror on a connection told `MODE_LINK`, and stands down once the work connection holds the
+  process's one. So against this gateway a 0.1.246 runner works over the link as it did against the gateway before it:
+  D2's server refuses its HTTPS daemon calls 426 (one to three as its process starts), and none follows once the link
+  carries the work.
+- **Kept: `MODE_HTTP` in the protocol.** contracts/runner-link/v1 keeps the value, which no field number may reuse; this
+  gateway never sends it. A D2 runner told `MODE_HTTP` by an older gateway stays on the link and keeps asking.
+- **Kept on the server: `GET /api/runner/link/mode`**, answered `{"required": true}` (runner-link-required.controller.ts).
+  A gateway from before this cleanup, such as production's at f8b9964f3, reads it every second; one that starts and
+  cannot read it tells every runner `MODE_HTTP` and forwards nothing. It stays as long as such a gateway may run: on a
+  deployment whose link has a host of its own, /upgrade never rebuilds the gateway (`operator`), so that is until an
+  operator rebuilds it.
 
-1. On a connection in `MODE_HTTP`, no Rpc is forwarded. A connection opened in `MODE_LINK` is in `MODE_HTTP` once the
-   switch is off ([The switch](#the-switch)).
-2. An Rpc whose `request_id` starts with `shadow:` is never forwarded, in any mode.
-
-## The switch
-
-The cut-over to the link and its first rollback are one switch on the server, `RUNNER_LINK_REQUIRED` (§11.3, §11.4). An
-administrator reads and flips it at runtime, and nothing is rebuilt or restarted:
-
-```sh
-curl -H "Authorization: Bearer $TOKEN" https://<host>/api/admin/runner-link-required
-curl -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"required":true}' https://<host>/api/admin/runner-link-required
-```
-
-While it is on, the apiserver answers an HTTPS call to a runner daemon route `426` with `code: "UPGRADE_REQUIRED"`
-(`src/apiserver/src/runner-api/runner-link-required.ts`), and this gateway tells runners `MODE_LINK`. A runner that speaks
-the link moves its work here on either signal, and goes back to HTTPS once it is told `MODE_HTTP`.
-
-- **Reading it.** `GET {LINK_API_URL}/api/runner/link/mode`, with the gateway token, is read once before serving and then
-  every second. What it answers, `{"required": true}` or `false`, is what runners are told from then on.
-- **A read that fails changes nothing.** An error status, a refusal, an answer that does not say, or an apiserver that
-  cannot be reached leaves runners told the mode last read, so a blip does not move every runner between the link and
-  HTTPS. A failure is logged when it starts or changes, and the recovery once. Until a read succeeds, runners are told
-  `MODE_HTTP`, what `LINK_MODE` says.
-- **Not read at all** with `LINK_MODE=link`, which pins `MODE_LINK`, or without `LINK_INTERNAL_API_URLS`, when runners are
-  told `MODE_HTTP`. The gateway says which when it starts.
-- **Welcome** states the mode as the connection opens, and that stays the connection's: one opened in `MODE_LINK` has what
-  forwarding needs, one opened in `MODE_HTTP` never forwards. A runner refused over HTTPS less than 2 s before it began to
-  open the connection does not take this Welcome's `MODE_HTTP` for the switch, since this gateway may not have read it
-  yet: it closes the connection and opens the next one 2 s after the refusal (docs/runner-link-design.md §15.1).
-- **HeartbeatAck** states the mode now. A runner told `MODE_LINK` on a connection opened in `MODE_HTTP` (its shadow's)
-  opens a new connection for its work. Once the switch is off, on a connection opened in `MODE_LINK`, a heartbeat is
-  answered at once with `MODE_HTTP` and nothing to apply, and a request is refused `LINK_MODE_HTTP`, both without reaching
-  a backend: the runner sends them again over HTTPS. Its `EventBatch`es are still stored and acknowledged until the runner
-  leaves the connection; the ingest stores each seq once, so nothing is lost or stored twice whichever way it comes.
-- `link_mode_link` is 1 while runners are told `MODE_LINK`, and `link_mode_fetches_total` counts the reads by outcome.
-
-## Forwarding (MODE_LINK)
+## Forwarding
 
 Every call the gateway forwards goes to one of the apiserver's internal listeners in `LINK_INTERNAL_API_URLS`
-(`src/apiserver/src/runner-api/runner-link-call.ts`), as the HTTPS request a runner makes today, under `/api`. It
-carries, besides the request itself:
+(`src/apiserver/src/runner-api/runner-link-call.ts`), as the HTTPS request a runner made before the link, under `/api`.
+It carries, besides the request itself:
 
 | Header | What it is |
 | --- | --- |
@@ -377,9 +350,8 @@ Unset, which is the default and every deployment's setting, no answer is lost.
 
 ### Heartbeats
 
-A `Heartbeat` is forwarded to `POST /runner/heartbeat` as the body a runner posts over HTTPS today: the exact inverse of
-the [shadow comparison's](#shadow-comparison) mapping, which `TestAHeartbeatIsForwardedAsTheBodyItsMirrorWouldCarry`
-holds it to. `status` is `ONLINE`, `version` is Hello's, `leaseOwner` is the connection's process, `idleCapacity`,
+A `Heartbeat` is forwarded to `POST /runner/heartbeat` as the body a runner posted over HTTPS before the link, which
+`TestAHeartbeatIsForwardedAsTheBodyTheHeartbeatRouteTakes` holds it to. `status` is `ONLINE`, `version` is Hello's, `leaseOwner` is the connection's process, `idleCapacity`,
 `draining` and `supervisedSessionIds` are the typed fields, and each `Fact`'s JSON is the member it is named after.
 
 A Fact may come by digest alone. The connection keeps the last full value of each kind (64 kinds, 4 MiB), and fills in a
@@ -405,7 +377,7 @@ A beat that gets no 2xx answer is acknowledged with nothing to apply: no reconci
 ### Durable events and credit
 
 An `EventBatch` is stored through `POST /runner/sessions/<id>/events`, the existing ingest route, as the batch a runner
-posts over HTTPS today (task B5 gives the link an entry of its own). A session is named by its UUID or its public id,
+posted over HTTPS before the link (task B5 gives the link an entry of its own). A session is named by its UUID or its public id,
 and acknowledged under the id the runner sent. One session's batches are forwarded one after another, in order.
 
 | What happens | EventAck |
@@ -491,9 +463,9 @@ When a client opens a session, its apiserver instance asks the session's runner 
 far: a NATS request on `rnr.<runnerId>`, a `Frame` with only `turn_prefix_request` set, with a reply subject. The
 gateway sends the runner a `TurnPrefixRequest`, in the live tier, on the connection whose last heartbeat names the
 session (else the newest), and publishes the runner's `TurnPrefixResponse` on the reply subject. The client is handed the
-prefix, then only the live events after its `through_live_seq`. With no connection of the runner in `MODE_LINK`, a full
-live queue, the connection's end or no answer within 10s, the request is answered at once with an empty response, and
-the client gets today's behaviour.
+prefix, then only the live events after its `through_live_seq`. With no connection of the runner, a full live queue,
+the connection's end or no answer within 10s, the request is answered at once with an empty response, and the client
+gets today's behaviour.
 
 ### Writing
 
@@ -524,126 +496,6 @@ A client without a seed cannot connect. The gateway connects with `LINK_NATS_SEE
 `scripts/runner-link/nats-auth-check.sh` holds a real nats-server running `nats.conf` to that table
 (`TestNATSAuthorizationOnARealServer`).
 
-## Shadow comparison
-
-During the shadow period, runners work over HTTPS. Each one also mirrors to the gateway the heartbeats and event
-batches that the HTTP side accepted. The gateway compares each mirror with what the HTTP side received, counts the
-outcome, and writes it nowhere: no database row, no acknowledgement, no forwarding. The pass criterion is zero
-differences (§11.2).
-
-This section is the contract for the runner's mirror (task A5). A runner that follows it produces no difference that
-is not real, and the comparison is built so that the freedom an encoder has cannot show up as one.
-
-### What the runner sends
-
-For each `POST /runner/heartbeat` and each `POST /runner/sessions/<id>/events` that the server answers with 2xx, the
-runner sends two frames on its link connection:
-
-1. **The typed half**: the frame the link carries after the cutover, built from the same values.
-   - For a heartbeat, a `Heartbeat`:
-     - `process_id` is the body's `leaseOwner`.
-     - `idle_capacity` is `idleCapacity`, `draining` is `draining`, and `session_ids` is `supervisedSessionIds`.
-     - Every other member of the body becomes one `Fact`. Its `kind` is the member's name, its `json` is the member's
-       JSON value, and its `sha256` is the lowercase hex SHA-256 of exactly those `json` bytes.
-     - `status` and `version` are not carried. The link has no status, and the version travels in Hello.
-     - A mirror sends every Fact whole, `json` included, every time. A Fact without `json` counts as a difference
-       (`fact_json_missing`).
-   - For an event batch, an `EventBatch`:
-     - `session_id` is the session in the path.
-     - Its events are the body's events, in order, one for one.
-     - Each event's `seq`, `type` and `turn_id` are the event's `seq`, `type` and `turnId`, and `ts_unix_ms` is `ts` in
-       Unix milliseconds.
-     - `payload_json` is the event's `payload`.
-2. **The raw half**: an `Rpc` with `request_id` `shadow:<connection_id>:<id>`. Here `connection_id` is the one Welcome
-   gave and `id` is the typed frame's `Frame.id`. Its body is a `TunnelRequest` holding the HTTP request itself: the
-   method, the path as the runner requested it under `/api` (for example `/runner/heartbeat`), and the request body,
-   byte for byte as it was sent.
-
-A half larger than 256 KiB goes in `Chunk`s like any other frame. The two halves may arrive in either order.
-
-In `MODE_HTTP`, every `Heartbeat` and `EventBatch` a runner sends is the typed half of a mirror. A runner sends no other
-`Heartbeat` or `EventBatch`, so the gateway can count a typed half whose raw half never comes. A runner's first
-Heartbeat on a connection is therefore the mirror of its next HTTP heartbeat, within one heartbeat interval.
-
-### What the runner must never do
-
-- **Never mirror before the 2xx.** The mirror is sent after the HTTP side has answered 2xx, from a goroutine of its
-  own. A request that failed is not mirrored: the HTTP side did not receive it.
-- **Never let the mirror slow the work.** Mirrors go through a bounded queue. When the queue is full, the mirror is
-  dropped and counted. The work path never waits on the link, its queue or its errors.
-- **Never alter what was sent.** The raw half is the body that was sent, not a re-encoding of it.
-- **Report coverage.** The runner reports how many mirrors it sent and how many it dropped (A5, item 4). The gateway
-  cannot see a mirror that never reached it.
-
-### How the gateway compares
-
-The gateway pairs the halves by `request_id`. It compares the raw half's body as JSON with the typed half, and counts
-the outcome in `link_shadow_pairs_total{kind, result}`. It also adds one to `link_shadow_mismatches_total{kind, field}`
-for each field that differed. A difference is logged with the frame id, the path and the fields. The log names a
-fact's or a payload's size and digest, never its content.
-
-Values are compared as JSON values, never as bytes:
-
-- Whitespace and member order do not count.
-- Escapes do not count: Go's `encoding/json` writes `<`, `>` and `&` as Unicode escapes, and a string may hold `é`
-  either raw or escaped.
-- How a number is spelled does not count: `1`, `1.0` and `1e0` are equal. Whole numbers are compared exactly;
-  others as float64.
-- A `Fact.sha256` is checked against its own `json` bytes, the only bytes the digest can be of. It is never checked
-  against a re-encoding.
-
-Heartbeat, against the `POST /runner/heartbeat` body:
-
-| Field (metric label) | Rule |
-| --- | --- |
-| `route` | The method is `POST` and the path is `/runner/heartbeat`. |
-| `body` | The body is a JSON object. |
-| `leaseOwner` | `process_id` equals the body's `leaseOwner`, case-insensitively, as the server lowercases it. |
-| `idleCapacity`, `draining` | Equal to the body's. An absent member reads as zero or false. |
-| `supervisedSessionIds` | The same ids as `session_ids`, compared as sets: the server reads them as a set. |
-| `version` | When present, equal to Hello's `runner_version`. |
-| `status` | When present, `ONLINE`. |
-| `fact_missing`, `fact_extra`, `fact_duplicate` | Exactly one Fact for every other member, and none besides. |
-| `fact_json_missing`, `fact_digest`, `fact_value` | Each Fact carries `json`, `sha256` is the digest of that `json`, and `json` equals the member as a JSON value. |
-
-`supported_providers` comes from a request header rather than the body, so it is not compared.
-
-Event batch, against the `POST /runner/sessions/<id>/events` body:
-
-| Field (metric label) | Rule |
-| --- | --- |
-| `route` | The method is `POST` and the path is `/runner/sessions/<session_id>/events`. |
-| `body`, `batch_member` | The body is an object holding only `leaseOwner` and `events`. |
-| `leaseOwner` | When present and not empty, equal to Hello's `process_id`. |
-| `events_length` | As many events as the body has. |
-| `seq`, `type`, `turnId` | Equal, event by event. |
-| `ts` | `ts`, read as RFC 3339, is `ts_unix_ms` to the millisecond. |
-| `payload` | `payload_json` equals `payload` as a JSON value. |
-| `event_member` | No event member other than `seq`, `type`, `ts`, `turnId` and `payload`: the link would drop it. |
-
-A half that never meets its other half is counted in `link_shadow_unpaired_total{side, reason}`:
-
-| Reason | Meaning |
-| --- | --- |
-| `expired` | It waited 60s. |
-| `evicted` | A bound pushed it out: 64 halves of a side, or 4 MiB, per connection, or 256 MiB across the process. |
-| `closed` | It was still waiting when its connection closed. |
-| `wrong_connection` | Its `request_id` names another connection. |
-| `malformed` | Its `request_id` does not read as `shadow:<connection_id>:<id>`, or it carries no TunnelRequest. |
-
-The two halves of a mirror are sent back to back, so a half waits milliseconds, and these bounds only stop a runner
-that never sends the other half from holding memory. `link_shadow_pending_bytes` shows what is held.
-
-**Zero differences** for a period means three things: `link_shadow_pairs_total{result="mismatch"}` did not increase,
-`link_shadow_unpaired_total` did not increase, and the runners' own drop counts were zero or accounted for.
-
-### What it does not establish
-
-- That a runner mirrored everything it sent: only the runner's own counts can say that.
-- That the HTTP side stored what it received. The comparison is with the request the server accepted, not with the
-  database, so server-side handling is outside it.
-- `supported_providers`, which travels in a request header.
-
 ## Metrics
 
 Every metric is served at `/metrics` on `LINK_METRICS_ADDR`, in Prometheus text format.
@@ -661,9 +513,8 @@ Every metric is served at `/metrics` on `LINK_METRICS_ADDR`, in Prometheus text 
 | `link_heartbeats_total` | counter | — |
 | `link_draining`, `link_drains_sent_total` | gauge, counter | — |
 | `link_revocations`, `link_revocation_fetches_total`, `link_revocation_last_success_timestamp_seconds` | gauge, counter, gauge | `result`: ok, error, unauthorized, not_configured |
-| `link_mode_link`, `link_mode_fetches_total` | gauge, counter | `result`: ok, error, unauthorized, not_configured (see [The switch](#the-switch)) |
 | `link_tls_certificate_not_after_timestamp_seconds`, `link_tls_reloads_total`, `link_tls_handshake_errors_total` | gauge, counter, counter | `result`: ok, error |
-| `link_rpcs_total` | counter | `result`: shadow, not_forwarded, forwarded |
+| `link_rpcs_total` | counter | `result`: forwarded; not_forwarded on a gateway built without backends, as tests build one |
 | `link_rpc_results_total` | counter | `result`: the route's status class (2xx, 4xx, 5xx), or the Failure code when there was no answer (`BACKEND_*`, `RPC_*`, `CANCELLED`) |
 | `link_rpc_duration_seconds` | histogram | — (from a forwarded request's start to its route's answer) |
 | `link_backend_calls_total` | counter | `kind`: rpc, heartbeat, events, welcome; `result`: answered, timeout, cancelled, cut_off, unavailable, too_large |
@@ -687,10 +538,9 @@ Every metric is served at `/metrics` on `LINK_METRICS_ADDR`, in Prometheus text 
 | `link_credit_reduced`, `link_credit_changes_total` | gauge, counter | `to`: reduced, restored |
 | `link_live_events_total` | counter | `result`: published, no_watchers, nats_down, publish_failed, bad_session |
 | `link_watched_sessions` | gauge | — |
-| `link_turn_prefix_requests_total` | counter | `result`: answered, timeout, dropped, mode_http, no_connection, closed, superseded, unknown_answer, malformed |
+| `link_turn_prefix_requests_total` | counter | `result`: answered, timeout, dropped, no_connection, closed, superseded, unknown_answer, malformed |
 | `link_queue_full_total` | counter | `queue`: control, normal, live; `result`: closed (slow_consumer), dropped |
-| `link_shadow_pairs_total`, `link_shadow_mismatches_total`, `link_shadow_unpaired_total`, `link_shadow_events_compared_total`, `link_shadow_pending_bytes` | | see [Shadow comparison](#shadow-comparison) |
-| `link_hints_total` | counter | `kind`: inbox, claim, commands, approval, watchers, unknown; `result`: sent, mode_http, no_connection, dropped, malformed, unchanged (a watchers count that did not move the sum) |
+| `link_hints_total` | counter | `kind`: inbox, claim, commands, approval, watchers, unknown; `result`: sent, no_connection, dropped, malformed, unchanged (a watchers count that did not move the sum) |
 | `link_hints_slow_total` | counter | — (hints NATS dropped because the relay was not keeping up) |
 | `link_hint_subscriptions` | gauge | — (runners whose hint subject is subscribed to) |
 | `link_nats_connected`, `link_nats_reconnects_total` | gauge, counter | — |
@@ -722,31 +572,23 @@ docker compose logs link-gateway | link-gateway dump
 
 `link-gateway client` behaves like a runner:
 
-1. It trades a runner token for a link token (`POST /api/runner/link-token`), connects, says Hello and heartbeats.
-2. With `-http`, it sends each heartbeat to the server over HTTPS first and mirrors only the beats the server
-   accepted.
-3. With `-events N`, it also mirrors a synthetic event batch of N events. The payloads hold `<`, `>`, `&`, non-ASCII
-   text and whitespace, and the typed half is written by a different encoder from the raw half.
-4. It follows Drain make-before-break, and reconnects with exponential backoff and full jitter, from 1s to 60s,
+1. It trades a runner token for a link token (`POST /api/runner/link-token`), connects, says Hello and heartbeats; each
+   beat is forwarded to the heartbeat route, as a runner's is.
+2. It follows Drain make-before-break, and reconnects with exponential backoff and full jitter, from 1s to 60s,
    never sooner than a refusal's Retry-After or a Close's `retry_after_ms`.
-5. When it stops, it prints a JSON summary of connects, heartbeats, mirrors, drains and reconnects.
+3. When it stops, it prints a JSON summary of connects, heartbeats, the modes its HeartbeatAcks said, drains and
+   reconnects.
 
 ```bash
-link-gateway client -api http://127.0.0.1:18086 -runner-token "$TOKEN" -ca ca.pem -http -events 3 \
-  -until-drains 1 -summary summary.json
+link-gateway client -api http://127.0.0.1:18086 -runner-token "$TOKEN" -ca ca.pem -until-drains 1 -summary summary.json
 ```
 
-`-corrupt-every N` alters the typed half of every Nth mirror, to check that the gateway counts the difference.
-
-With `-drill <name>`, against a gateway in `MODE_LINK`, it acts as a runner on each path the gateway forwards and writes
-a report of every step (`-report`): `link` (requests, heartbeats and facts, hints, an approval its owner decides, durable
+With `-drill <name>`, it acts as a runner on each path the gateway forwards and writes a report of every step
+(`-report`): `link` (requests, heartbeats and facts, hints, an approval its owner decides, durable
 events and credit, the live stream and the turn prefix, an answer in pieces), `cancel` (a claim dropped while it waits),
 `retry` (calls answered while a backend goes away) and `slow` (a runner that stops reading). It signs in as the runner's
 owner (`-owner-email`, `-owner-password-file`) to create, watch and decide for sessions, and reads the live subject as
 the apiserver's NATS user (`-nats-url`, `-nats-seed-file`). `scripts/runner-link/staging-check-link.sh` runs them all.
-Against a gateway that follows the server's switch, `switch` has the owner, as the administrator, flip
-`RUNNER_LINK_REQUIRED` on and then off in the middle of a session's event stream ([The switch](#the-switch));
-`scripts/runner-link/staging-check-switch.sh` runs it.
 
 The staging stack's scripts ([scripts/runner-link](../../scripts/runner-link/README.md)) build and run all of this.
 
