@@ -32,6 +32,7 @@ import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
 import { isOrbitAuthoredTurn } from './orbit-authored-turn';
+import { importForkSessionId } from './import-fork';
 import { assertMayMoveRuns, assertSessionMayReach, type SessionAct } from './session-reach';
 import {
   readSteerWithdrawRequest,
@@ -1764,7 +1765,8 @@ export class SessionsService {
    * The row is written PENDING with `runtimeSessionId` = the Claude session id and a non-null
    * `importSourceCwd` (the transcript's original cwd, or the workspace workDir for the web path,
    * where the runner locates the file itself). The runner then, inside one claim: copies the
-   * transcript into the session's `~/.claude/projects/<slug>/` directory, replays it as run
+   * transcript into the session's `~/.claude/projects/<slug>/` directory (forking it under
+   * `importForkSessionId` when that copy would be the transcript itself), replays it as run
    * events so Orbit can read and search the conversation, and clears the marker (or Trashes the
    * session) via POST /runner/sessions/:id/import-result — and spawns no engine, because an
    * import has no user turn behind it to run. The session parks at AWAITING_INPUT, and the
@@ -1801,6 +1803,12 @@ export class SessionsService {
       enableWorktree: boolean;
       enabled: boolean;
     } | null;
+    // The machine the transcript is on, when a runner asks (the CLI door): the import runs there,
+    // so only a workspace on that machine can hold it. The same path on another machine is another
+    // directory — on 2026-11-06 a transcript recorded in /root/orbit on one host went to a
+    // workspace at that path on a different host, the first of four that matched it.
+    const machine = opts?.assignedRunnerId;
+    const onThisMachine = machine ? ' on this machine' : '';
     if (dto.workspaceId) {
       workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
@@ -1808,25 +1816,43 @@ export class SessionsService {
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
       if (workspace.enabled === false) throw new ForbiddenException('workspace is disabled');
+      if (machine && workspace.runnerId && workspace.runnerId !== machine) {
+        throw new BadRequestException(
+          `workspace ${workspace.name} is on another machine, and the transcript is on this one; pick a workspace on this machine`,
+        );
+      }
     } else {
       // No explicit pick: the transcript's cwd names its workspace. Longest workDir prefix wins,
-      // so a project nested inside another binds the transcript to the tighter one.
+      // so a project nested inside another binds the transcript to the tighter one; two that hold
+      // it equally are the caller's to choose between, never the order the rows come back in. A
+      // workspace bound to no runner at all may be this machine's.
       const cwd = dto.sourceCwd;
       if (!cwd) throw new BadRequestException('pick a workspace or pass the transcript cwd');
       const candidates = await this.prisma.workspace.findMany({
         where: { ownerId, deletedAt: null },
         select: { id: true, name: true, workDir: true, runnerId: true, enableWorktree: true, enabled: true },
       });
-      workspace = candidates
+      const matches = candidates
+        .filter((c) => !machine || c.runnerId === null || c.runnerId === machine)
         .map((c) => ({ c, matched: c.workDir === null ? -1 : workDirPrefixLength(c.workDir, cwd) }))
-        .filter((s) => s.matched >= 0)
-        .sort((a, b) => b.matched - a.matched)[0]?.c;
-      if (!workspace) {
+        .filter((s) => s.matched >= 0);
+      const longest = Math.max(-1, ...matches.map((s) => s.matched));
+      const tightest = matches.filter((s) => s.matched === longest).map((s) => s.c);
+      if (tightest.length === 0) {
         throw new BadRequestException(
-          `no workspace of yours contains the transcript's cwd ${cwd}; pass --workspace to pick one`,
+          `no workspace of yours${onThisMachine} contains the transcript's cwd ${cwd}; pass --workspace to pick one`,
         );
       }
-      if (workspace.enabled === false) throw new ForbiddenException('workspace is disabled');
+      const open = tightest.filter((c) => c.enabled !== false);
+      if (open.length === 0) throw new ForbiddenException('workspace is disabled');
+      if (open.length > 1) {
+        throw new BadRequestException(
+          `${open.length} workspaces${onThisMachine} contain the transcript's cwd ${cwd}: `
+            + open.map((c) => `${c.name} (${uuidToBase62(c.id)})`).join(', ')
+            + '; pass --workspace to pick one',
+        );
+      }
+      workspace = open[0];
     }
     if (!workspace.workDir) throw new BadRequestException('the workspace has no work directory');
     if (dto.sourceCwd) {
@@ -1863,11 +1889,16 @@ export class SessionsService {
       async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${SessionsService.IMPORT_LOCK_NAMESPACE}, ${lockKey})`;
         // Rejection ③: a Claude transcript can be imported once — the imported session IS the
-        // continuation of it. A Trashed one does not count: deleting the import frees the id.
+        // continuation of it, whether it resumes the transcript itself or the fork a runner placed
+        // beside it (import-fork.ts). A Trashed one does not count: deleting the import frees the id.
         // Once per account: a session of another account with this engine id is not this
         // account's to be told about — not that it exists, nor its id or title — nor in its way.
         const claimed = await tx.session.findFirst({
-          where: { ownerId, runtimeSessionId: dto.claudeSessionId, deletedAt: null },
+          where: {
+            ownerId,
+            runtimeSessionId: { in: [dto.claudeSessionId, importForkSessionId(dto.claudeSessionId)] },
+            deletedAt: null,
+          },
           select: { id: true, title: true },
         });
         if (claimed) {
@@ -1917,7 +1948,8 @@ export class SessionsService {
     this.queue.notifySessionQueued(session.assignedRunnerId);
     await this.wakeManagedRunner(session.assignedRunnerId, 'session');
     this.realtime.publishSessionCreated(session.id);
-    return withSessionState(session);
+    // The workspace by name too, so whoever asked sees at once where the import landed.
+    return { ...withSessionState(session), workspace: { id: workspace.id, name: workspace.name } };
   }
 
   /**

@@ -11,12 +11,15 @@ package main
 //
 // The transcript file itself is copied into the session's own ~/.claude/projects/<slug>/
 // directory (cwd rewritten to the session checkout) so the `--resume` spawn reads the
-// original conversation, thinking blocks and all, not a reconstruction.
+// original conversation, thinking blocks and all, not a reconstruction. The original is never
+// written: where that copy would be the original file itself, the session forks under a Claude
+// session id of its own instead (importForkSessionID).
 
 import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha1"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -362,35 +365,54 @@ func insideDir(dir, p string) bool {
 	return c == d || strings.HasPrefix(c, d+string(filepath.Separator))
 }
 
-// copyTranscriptRewritingCwd copies the transcript into the session's own project directory,
-// rewriting each record's recorded cwd to the session checkout, so `--resume` (which reads
-// only the directory for the engine's own cwd) finds the conversation. Lines that fail to
-// parse are copied verbatim — the import's events skip them, and a record we don't
-// understand is not ours to edit.
-func copyTranscriptRewritingCwd(src, dst, newCwd string) error {
+// importForkNamespace is the UUID namespace (RFC 9562 §5.5) a forked import's Claude session id
+// is derived in. The control plane derives the same id (apiserver sessions/import-fork.ts), which
+// is how it still knows which transcript a forked session came from: the fork is the one id an
+// import-result may move a session to, and the one a second import of the original is refused by.
+var importForkNamespace = [16]byte{0x4f, 0xe3, 0x09, 0xcd, 0xd9, 0x94, 0x45, 0xb0, 0xa2, 0x81, 0xff, 0x98, 0x1e, 0x57, 0xf5, 0xfd}
+
+// importForkSessionID is the Claude session id an import forks the transcript of claudeSessionID
+// under: a version-5 UUID of the lowercase id, so every derivation of it agrees.
+func importForkSessionID(claudeSessionID string) string {
+	h := sha1.New()
+	h.Write(importForkNamespace[:])
+	h.Write([]byte(strings.ToLower(claudeSessionID)))
+	u := h.Sum(nil)[:16]
+	u[6] = (u[6] & 0x0f) | 0x50 // version 5
+	u[8] = (u[8] & 0x3f) | 0x80 // the RFC variant
+	return fmt.Sprintf("%x-%x-%x-%x-%x", u[0:4], u[4:6], u[6:8], u[8:10], u[10:16])
+}
+
+// copyTranscriptForSession places a copy of the transcript at dst for the session that resumes it
+// there. A record's top-level cwd becomes newCwd, the session checkout, so `--resume` (which reads
+// only the directory for the engine's own cwd) finds the conversation; for a fork (forkID set), a
+// top-level sessionId naming the conversation it came from (fromID) names the fork instead.
+//
+// A line that needs neither, or does not parse, is copied byte for byte — the import's events skip
+// one that does not parse, and a record we don't understand is not ours to edit — and a rewritten
+// line keeps every other value exactly as it was written: no number goes through a float, and no
+// `<`, `>` or `&` comes back as a Unicode escape. The copy keeps the source's permissions; Claude
+// Code writes its transcripts owner-only.
+func copyTranscriptForSession(src, dst, newCwd, fromID, forkID string) error {
 	in, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer in.Close()
+	info, err := in.Stat()
+	if err != nil {
+		return err
+	}
 	r := bufio.NewReaderSize(in, transcriptReadBuffer)
 	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
 	for {
 		line, readErr := r.ReadString('\n')
 		if strings.TrimSpace(line) != "" {
-			rewritten := false
-			var rec map[string]interface{}
-			if json.Unmarshal([]byte(line), &rec) == nil {
-				if _, has := rec["cwd"]; has {
-					rec["cwd"] = newCwd
-					if out, merr := json.Marshal(rec); merr == nil {
-						b.Write(out)
-						b.WriteByte('\n')
-						rewritten = true
-					}
-				}
-			}
-			if !rewritten {
+			// Encode writes nothing when it fails, so the line then goes in as it was.
+			rec, changed := rewriteTranscriptRecord(line, newCwd, fromID, forkID)
+			if !changed || enc.Encode(rec) != nil {
 				b.WriteString(line)
 			}
 		}
@@ -401,7 +423,41 @@ func copyTranscriptRewritingCwd(src, dst, newCwd string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	return writeFileAtomically(dst, b.Bytes(), 0o644)
+	return writeFileAtomically(dst, b.Bytes(), info.Mode().Perm())
+}
+
+// rewriteTranscriptRecord is one transcript line as copyTranscriptForSession writes it, and whether
+// that differs from the line at all. Values stay raw, so only the two it rewrites are re-encoded.
+func rewriteTranscriptRecord(line, newCwd, fromID, forkID string) (map[string]json.RawMessage, bool) {
+	var rec map[string]json.RawMessage
+	if json.Unmarshal([]byte(line), &rec) != nil {
+		return nil, false
+	}
+	changed := false
+	if raw, has := rec["cwd"]; has {
+		var cwd string
+		if json.Unmarshal(raw, &cwd) != nil || cwd != newCwd {
+			rec["cwd"] = jsonStringValue(newCwd)
+			changed = true
+		}
+	}
+	if forkID != "" {
+		var id string
+		if raw, has := rec["sessionId"]; has && json.Unmarshal(raw, &id) == nil && id == fromID {
+			rec["sessionId"] = jsonStringValue(forkID)
+			changed = true
+		}
+	}
+	return rec, changed
+}
+
+// jsonStringValue is s as a JSON string, with no HTML escaping.
+func jsonStringValue(s string) json.RawMessage {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(s)
+	return bytes.TrimRight(b.Bytes(), "\n")
 }
 
 // runTranscriptImport is the import step a claim runs once, after the inbox generation is
@@ -469,7 +525,26 @@ func runTranscriptImport(ctx context.Context, t *Transport, job *ClaimedSession,
 		if derr != nil {
 			return fail(fmt.Errorf("cannot place the transcript for the session: %v", derr))
 		}
-		if err := copyTranscriptRewritingCwd(cand, dst, execDir); err != nil {
+		// Where --resume reads this session can be the transcript itself: a workspace with no
+		// worktree runs the session in the directory the conversation was recorded in, and on the
+		// same Claude config the terminal used. Resuming it there would have Orbit and whoever still
+		// holds the original write one file, so the session forks instead: a copy under its own
+		// Claude session id, which the control plane can derive from the original.
+		forkID := ""
+		if sameFile(cand, dst) {
+			forkID = importForkSessionID(job.SessionUUID)
+			if dst, derr = claudeTranscriptPathIn(dstBase, execDir, forkID); derr != nil {
+				return fail(fmt.Errorf("cannot place the transcript for the session: %v", derr))
+			}
+		}
+		// A fork the session will not resume is a stray conversation in the terminal's own history.
+		discardFork := func() {
+			if forkID != "" {
+				_ = os.Remove(dst)
+			}
+		}
+		if err := copyTranscriptForSession(cand, dst, execDir, job.SessionUUID, forkID); err != nil {
+			discardFork()
 			return fail(fmt.Errorf("cannot place the transcript for the session: %v", err))
 		}
 		// The emit closure's seq continues from job.MaxSeq, so skipping the already-stored
@@ -478,14 +553,27 @@ func runTranscriptImport(ctx context.Context, t *Transport, job *ClaimedSession,
 			emit(events[i].Type, events[i].Payload)
 		}
 		if err := flush(ctx); err != nil {
+			discardFork()
 			return fail(fmt.Errorf("cannot store the replayed transcript: %v", err))
 		}
-		resp, err := t.importResult(job.SessionID, ImportResultRequest{Ok: true, Title: title})
+		resp, err := t.importResult(job.SessionID, ImportResultRequest{Ok: true, Title: title, Forked: forkID != ""})
 		if err != nil {
+			discardFork()
 			return fail(fmt.Errorf("cannot settle the import: %v", err))
 		}
 		if !resp.Ok {
+			discardFork()
 			return fail(fmt.Errorf("the control plane refused the import result"))
+		}
+		if forkID != "" {
+			if resp.RuntimeSessionID == forkID {
+				job.SessionUUID = forkID
+			} else {
+				// A control plane that predates forks kept the original id, so the session resumes
+				// the transcript where it lies, as imports always did.
+				discardFork()
+				logln("import of", job.SessionID+": the control plane kept Claude session", job.SessionUUID, "so the session resumes", cand, "itself")
+			}
 		}
 		// The marker is settled: a respawn iteration of this same supervision loop must not
 		// re-import (the events are already stored and the seq cursor has moved past them).

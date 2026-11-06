@@ -745,6 +745,10 @@ const taskFilterCases = (route: string, filters: ReadonlyArray<'projectId' | 'li
 /** The routes RunnerSessionsController serves in-session, as a field case of the calling session's header. */
 const ownSessionRequests: Readonly<Record<string, (mine: RunnerTenant) => TenantRequest>> = {
   'POST /runner/sessions': (mine) => ({ params: {}, body: { prompt: 'opened by the census', workspaceId: mine.workspaceId } }),
+  'POST /runner/sessions/import': (mine) => ({
+    params: {},
+    body: { claudeSessionId: '00000000-0000-4000-8000-0000000c1a0f', workspaceId: mine.workspaceId },
+  }),
   'GET /runner/sessions': () => ({ params: {} }),
   'GET /runner/sessions/search': () => ({ params: {}, query: { q: 'census' } }),
   'GET /runner/sessions/:id': (mine) => ({ params: { id: mine.sessionId } }),
@@ -940,13 +944,13 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     request: (of) => ({ params: {}, body: { prompt: 'opened by the census', agentId: of.workspaceId } }),
   },
   'POST /runner/sessions/import body workspaceId': {
-    as: ['runner', 'service'],
+    as: ['runner', 'service', 'session'],
     request: (of) => ({ params: {}, body: { claudeSessionId: '00000000-0000-4000-8000-0000000c1a0f', workspaceId: of.workspaceId } }),
   },
   // A transcript another account already imported — its engine session id, which a stranger may know.
   // Titled, so that what the two imports are answered with is not told apart by a title spelled from the id.
   'POST /runner/sessions/import body claudeSessionId': {
-    as: ['runner', 'service'],
+    as: ['runner', 'service', 'session'],
     request: (of, mine) => ({
       params: {},
       body: { claudeSessionId: of.runner.runtimeSessionId, workspaceId: mine.workspaceId, title: 'imported by the census' },
@@ -1393,11 +1397,6 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'the engine\'s id for the tool call a sub-agent\'s event belongs to, read only to tell its text from the main '
     + 'conversation\'s (runner-api.controller.ts:5549)',
 
-  // ── sessions ────────────────────────────────────────────────────────────────────────────────────
-  'POST /runner/sessions/import header x-orbit-session-id':
-    'any calling session at all refuses the import before anything is read: it is a shell\'s door '
-    + '(runner-sessions.controller.ts:222)',
-    
   // ── tasks ───────────────────────────────────────────────────────────────────────────────────────
   'DELETE /runner/tasks/:id header x-orbit-session-id':
     'looked up only by the id and the caller\'s owner, so another account\'s session is not found and the request reads '

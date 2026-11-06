@@ -137,7 +137,7 @@ func carryMovedClaudeConversation(base string, job *ClaimedSession, execDir, dst
 			return false
 		}
 	}
-	if err := copyTranscriptRewritingCwd(src, dst, execDir); err != nil {
+	if err := copyTranscriptForSession(src, dst, execDir, "", ""); err != nil {
 		logln("claude conversation for", job.SessionUUID, "not carried from", last+":", err)
 		return false
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -181,10 +182,10 @@ func TestParseImportTranscriptRefuses(t *testing.T) {
 	})
 }
 
-// copyTranscriptRewritingCwd rewrites the recorded cwd on every row that has one, leaves rows
+// copyTranscriptForSession rewrites the recorded cwd on every row whose cwd differs, leaves rows
 // without a cwd byte-for-byte alone, and keeps an unparseable line verbatim rather than editing
 // a record it does not understand.
-func TestCopyTranscriptRewritingCwd(t *testing.T) {
+func TestCopyTranscriptForSession(t *testing.T) {
 	var tr importTestTranscript
 	tr.add(importMsgRow("user", "/old/proj", "2026-09-15T10:00:00Z", map[string]interface{}{"type": "text", "text": "hi"}))
 	tr.add(map[string]interface{}{"type": "summary", "summary": "no cwd here"})
@@ -194,8 +195,8 @@ func TestCopyTranscriptRewritingCwd(t *testing.T) {
 	src := filepath.Join(t.TempDir(), "src.jsonl")
 	tr.write(t, src)
 	dst := filepath.Join(t.TempDir(), "proj", "dst.jsonl")
-	if err := copyTranscriptRewritingCwd(src, dst, "/new/proj"); err != nil {
-		t.Fatalf("copyTranscriptRewritingCwd: %v", err)
+	if err := copyTranscriptForSession(src, dst, "/new/proj", "", ""); err != nil {
+		t.Fatalf("copyTranscriptForSession: %v", err)
 	}
 	raw, err := os.ReadFile(dst)
 	if err != nil {
@@ -225,6 +226,213 @@ func TestCopyTranscriptRewritingCwd(t *testing.T) {
 	if lines[3] != tr.lines[3] {
 		t.Errorf("unparseable line changed: %q", lines[3])
 	}
+}
+
+// What the copy rewrites, it rewrites and nothing else. A row already recorded in the session's
+// own directory is copied byte for byte. A row whose cwd changes keeps every other value as Claude
+// wrote it: an integer past float64's precision, `<`, `>` and `&` in text, key order inside the
+// values. On 2026-11-06 a re-encode of each row sorted every key and turned 84 rows' `<>&` into
+// Unicode escapes, in the original file itself. The copy also keeps the source's owner-only mode,
+// where it used to come out world-readable.
+func TestCopyTranscriptForSessionRewritesOnlyWhatChanges(t *testing.T) {
+	const here = "/ws/proj"
+	unchanged := `{"type":"user","cwd":"/ws/proj","message":{"content":"<b>a</b> & b","role":"user"},"sessionId":"s-1"}`
+	moved := `{"type":"assistant","cwd":"/old/proj","costUSD":12345678901234567890,"message":{"role":"assistant","content":"x<y && y>z"},"sessionId":"s-1"}`
+	src := filepath.Join(t.TempDir(), "src.jsonl")
+	if err := os.WriteFile(src, []byte(unchanged+"\n"+moved+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(t.TempDir(), "proj", "dst.jsonl")
+	if err := copyTranscriptForSession(src, dst, here, "", ""); err != nil {
+		t.Fatalf("copyTranscriptForSession: %v", err)
+	}
+	raw, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("copied %d lines, want 2", len(lines))
+	}
+	if lines[0] != unchanged {
+		t.Errorf("a row already in this directory was re-encoded:\n got %s\nwant %s", lines[0], unchanged)
+	}
+	for _, kept := range []string{`12345678901234567890`, `"x<y && y>z"`, `{"role":"assistant","content":"x<y && y>z"}`} {
+		if !strings.Contains(lines[1], kept) {
+			t.Errorf("the rewritten row lost %s: %s", kept, lines[1])
+		}
+	}
+	if !strings.Contains(lines[1], `"cwd":"/ws/proj"`) {
+		t.Errorf("the rewritten row's cwd is not the session's: %s", lines[1])
+	}
+	info, err := os.Stat(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Errorf("copy mode = %o, want the source's 600", got)
+	}
+}
+
+// A fork renames the conversation in each record that names it, and only there: a record naming
+// another conversation, or none, keeps what it had.
+func TestCopyTranscriptForSessionForksTheSessionID(t *testing.T) {
+	const original = "4e453ab7-f37c-494d-8017-bb4e9beffeef"
+	fork := importForkSessionID(original)
+	rows := []string{
+		`{"type":"user","cwd":"/ws/proj","sessionId":"` + original + `","message":{"content":"hi"}}`,
+		`{"type":"session-owner","sessionId":"` + original + `"}`,
+		`{"type":"user","cwd":"/ws/proj","sessionId":"another-conversation","message":{"content":"hi"}}`,
+		`{"type":"summary","summary":"names nobody"}`,
+	}
+	src := filepath.Join(t.TempDir(), "src.jsonl")
+	if err := os.WriteFile(src, []byte(strings.Join(rows, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(t.TempDir(), "proj", fork+".jsonl")
+	if err := copyTranscriptForSession(src, dst, "/ws/proj", original, fork); err != nil {
+		t.Fatalf("copyTranscriptForSession: %v", err)
+	}
+	raw, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	for i, want := range []string{fork, fork, "another-conversation", ""} {
+		var rec struct {
+			SessionID string `json:"sessionId"`
+		}
+		if err := json.Unmarshal([]byte(lines[i]), &rec); err != nil {
+			t.Fatalf("line %d not JSON: %v", i, err)
+		}
+		if rec.SessionID != want {
+			t.Errorf("line %d sessionId = %q, want %q", i, rec.SessionID, want)
+		}
+	}
+	if lines[2] != rows[2] || lines[3] != rows[3] {
+		t.Errorf("rows the fork does not name were rewritten:\n%s\n%s", lines[2], lines[3])
+	}
+}
+
+// The fork id is a version-5 UUID of the original under importForkNamespace, which the control
+// plane derives too (apiserver sessions/import-fork.ts pins the same vectors). These were computed
+// with Python's uuid.uuid5, the reference both are checked against.
+func TestImportForkSessionIDIsTheSharedUUIDv5(t *testing.T) {
+	for original, want := range map[string]string{
+		"0d8c31b9-db03-4aa7-8e3d-11fb96358552": "65e78295-ae77-576c-86dc-427eaeceb83e",
+		"4e453ab7-f37c-494d-8017-bb4e9beffeef": "59373f01-c835-536d-9fba-7095cf012000",
+		"4E453AB7-F37C-494D-8017-BB4E9BEFFEEF": "59373f01-c835-536d-9fba-7095cf012000",
+	} {
+		if got := importForkSessionID(original); got != want {
+			t.Errorf("importForkSessionID(%s) = %s, want %s", original, got, want)
+		}
+	}
+}
+
+// When the place --resume reads for the imported session is the transcript itself, which is what a
+// workspace with no worktree, in the directory the conversation was recorded in, on the terminal's
+// own Claude config, comes to, the import forks: the original is left exactly as it was, and the
+// session resumes a copy under its own Claude session id once the control plane has taken it. On
+// 2026-11-06 an import there rewrote the original in place, and the person's terminal then kept
+// writing the file the Orbit session would resume.
+func TestRunTranscriptImportForksATranscriptItWouldShare(t *testing.T) {
+	const uuid = "4e453ab7-f37c-494d-8017-bb4e9beffeef"
+	fork := importForkSessionID(uuid)
+	run := func(t *testing.T, answer string) (job *ClaimedSession, posted ImportResultRequest, original, placed string, before []byte) {
+		t.Helper()
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
+		workDir := filepath.Join(home, "proj")
+		if err := os.MkdirAll(workDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		var tr importTestTranscript
+		tr.add(importMsgRow("user", workDir, "2026-09-15T10:00:01Z", map[string]interface{}{"type": "text", "text": "<hi> & bye"}))
+		tr.add(importMsgRow("assistant", workDir, "2026-09-15T10:00:02Z", map[string]interface{}{"type": "text", "text": "hello"}))
+		projects := filepath.Join(home, ".claude", "projects", claudeProjectSlug(workDir))
+		if err := os.MkdirAll(projects, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		original = filepath.Join(projects, uuid+".jsonl")
+		tr.write(t, original)
+		if err := os.Chmod(original, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		var err error
+		if before, err = os.ReadFile(original); err != nil {
+			t.Fatal(err)
+		}
+		placed = filepath.Join(projects, fork+".jsonl")
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
+				t.Errorf("decoding the import result: %v", err)
+			}
+			w.Header().Set("content-type", "application/json")
+			_, _ = w.Write([]byte(answer))
+		}))
+		defer srv.Close()
+
+		marker := workDir
+		job = &ClaimedSession{SessionID: "s1", SessionUUID: uuid, WorkDir: workDir, ImportSourceCwd: &marker}
+		emit := func(string, map[string]interface{}) {}
+		transport := &Transport{baseURL: srv.URL, client: srv.Client()}
+		// No worktree: the session runs in the workspace directory itself.
+		if err := runTranscriptImport(context.Background(), transport, job, workDir, emit, func(context.Context) error { return nil }); err != nil {
+			t.Fatalf("runTranscriptImport: %v", err)
+		}
+		return job, posted, original, placed, before
+	}
+	assertOriginalUntouched := func(t *testing.T, original string, before []byte) {
+		t.Helper()
+		after, err := os.ReadFile(original)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(after, before) {
+			t.Errorf("the original transcript was written:\nbefore %s\nafter  %s", before, after)
+		}
+		if info, err := os.Stat(original); err != nil || info.Mode().Perm() != 0o600 {
+			t.Errorf("the original's mode changed: %v %v", info.Mode(), err)
+		}
+	}
+
+	t.Run("the control plane takes the fork", func(t *testing.T) {
+		job, posted, original, placed, before := run(t, `{"ok":true,"applied":true,"runtimeSessionId":"`+fork+`"}`)
+		if !posted.Ok || !posted.Forked {
+			t.Errorf("import result = %+v, want an ok that says it forked", posted)
+		}
+		assertOriginalUntouched(t, original, before)
+		copied, err := os.ReadFile(placed)
+		if err != nil {
+			t.Fatalf("no fork where --resume %s reads: %v", fork, err)
+		}
+		if strings.Contains(string(copied), uuid) || !strings.Contains(string(copied), fork) {
+			t.Errorf("the fork still names the original conversation: %s", copied)
+		}
+		if info, err := os.Stat(placed); err != nil || info.Mode().Perm() != 0o600 {
+			t.Errorf("the fork's mode is not the original's: %v %v", info.Mode(), err)
+		}
+		if job.SessionUUID != fork {
+			t.Errorf("the session resumes %s, want the fork %s", job.SessionUUID, fork)
+		}
+	})
+
+	t.Run("a control plane that predates forks keeps the transcript where it is", func(t *testing.T) {
+		job, posted, original, placed, before := run(t, `{"ok":true,"applied":true}`)
+		if !posted.Forked {
+			t.Errorf("import result = %+v, want the fork asked for", posted)
+		}
+		assertOriginalUntouched(t, original, before)
+		if _, err := os.Stat(placed); !os.IsNotExist(err) {
+			t.Errorf("the fork nothing resumes was left in the terminal's history: %v", err)
+		}
+		if job.SessionUUID != uuid {
+			t.Errorf("the session resumes %s, want the original %s", job.SessionUUID, uuid)
+		}
+	})
 }
 
 // findClaudeTranscripts globs every project directory, not just the first match — a previous
@@ -454,6 +662,9 @@ func TestRunTranscriptImportTildeWorkDir(t *testing.T) {
 		}
 		if !posted.Ok || posted.Title != "Imported talk" {
 			t.Errorf("import result = %+v, want ok with the transcript's title", posted)
+		}
+		if posted.Forked {
+			t.Errorf("import result = %+v: a copy in the session's own checkout is no fork", posted)
 		}
 		if len(events) != 2 || events[0].Type != evUser || events[1].Type != evAssistant {
 			t.Errorf("replayed %s, want the transcript's two messages", dumpEvents(events))

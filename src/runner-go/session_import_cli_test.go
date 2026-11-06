@@ -186,27 +186,74 @@ func TestSessionCLIImportRefusesLocallyWithoutACall(t *testing.T) {
 	}
 }
 
-// An agent inside a session never imports: the door is headless by design, and the CLI says so
-// without a round-trip.
-func TestSessionCLIImportRefusesInsideASession(t *testing.T) {
-	configureCLITestRunner(t, "http://127.0.0.1:1")
+// An agent asked to bring a conversation into Orbit imports it as its session: the create goes
+// through the orchestration gate with the session's id and credential, as session create does,
+// and the replay is watched the way a shell watches it. The answer names the workspace it landed in.
+func TestSessionCLIImportRunsAsTheCallingSession(t *testing.T) {
+	shortenSessionWait(t)
+	config := t.TempDir()
+	writeImportCLITranscript(t, config, "/ws/proj", true)
+	t.Setenv("CLAUDE_CONFIG_DIR", config)
+
+	var importHeaders http.Header
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		switch r.Method + " " + r.URL.Path {
+		case "POST /api/runner/sessions/import":
+			importHeaders = r.Header.Clone()
+			_, _ = w.Write([]byte(`{"id":"imported-1","status":"PENDING","workspace":{"id":"ws-1","name":"orbit-prod"}}`))
+		case "GET /api/runner/sessions/imported-1/events":
+			_, _ = w.Write([]byte(`{"events":[{"seq":1,"type":"user","payload":{"text":"hello"},"ts":"2026-09-15T10:00:00Z"}],"hasMore":false}`))
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
 	t.Setenv(envMCPOrchestration, "true")
+	t.Setenv("ORBIT_SESSION_ID", "caller-session")
+	t.Setenv(envOrchestrationToken, "session-token")
+	t.Setenv("ORBIT_AGENT_ID", "")
+
+	var out bytes.Buffer
+	if err := cmdSessionCLI([]string{"import", importCLIUUID, "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if importHeaders == nil {
+		t.Fatal("the import was never posted")
+	}
+	if got := importHeaders.Get("X-Orbit-Session-Id"); got != "caller-session" {
+		t.Errorf("X-Orbit-Session-Id = %q, want the calling session", got)
+	}
+	if got := importHeaders.Get("X-Orbit-Session-Token"); got != "session-token" {
+		t.Errorf("X-Orbit-Session-Token = %q, want the session's credential", got)
+	}
+	if got := out.String(); !strings.Contains(got, `"orbit-prod"`) {
+		t.Errorf("output %q does not name the workspace the import landed in", got)
+	}
+}
+
+// A session whose account has orchestration off has no session verbs at all, import among them:
+// refused locally, before anything is posted.
+func TestSessionCLIImportInsideASessionNeedsOrchestration(t *testing.T) {
+	configureCLITestRunner(t, "http://127.0.0.1:1")
+	t.Setenv(envMCPOrchestration, "")
 	t.Setenv("ORBIT_SESSION_ID", "caller-session")
 	t.Setenv(envOrchestrationToken, "session-token")
 	t.Setenv("ORBIT_AGENT_ID", "")
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 
 	err := cmdSessionCLI([]string{"import", importCLIUUID, "--json"}, strings.NewReader(""), &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "headless") {
-		t.Fatalf("error = %v, want the headless-only refusal", err)
+	if err == nil || err.Error() != orchestrationOffMsg {
+		t.Fatalf("error = %v, want the orchestration-off refusal", err)
 	}
 }
 
-// The refusal above is only half the contract; the other half is that `capabilities --json` must not
-// send an agent at the door in the first place. Asserted in BOTH directions, because either one
-// alone is satisfiable by a document that has lost the command entirely: the headless operator, for
-// whom `orbit session import` is the whole door, reaches it only through this advertisement.
-func TestSessionImportIsAdvertisedOnlyHeadless(t *testing.T) {
+// `capabilities --json` offers `orbit session import` wherever it runs: to a session with the
+// orchestration grant, beside create, and headless, with the description the machine's credential
+// answers for. A session without the grant is offered no session verb, import included.
+func TestSessionImportIsAdvertisedWhereItRuns(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	t.Setenv(envServiceToken, "")
 	t.Setenv("ORBIT_AGENT_ID", "")
@@ -219,19 +266,23 @@ func TestSessionImportIsAdvertisedOnlyHeadless(t *testing.T) {
 		return strings.Join(ids, ", ")
 	}
 
-	// In a session, with the orchestration grant and a session credential — the reader this
-	// document is composed for. `import` is withheld, while the verbs beside it are not: the
-	// absence has to be specific to this command, not the whole family dropping out.
 	t.Setenv(envMCPOrchestration, "true")
 	t.Setenv(envOrchestrationToken, "session-token")
 	t.Setenv("ORBIT_SESSION_ID", "caller-session")
 	inSession := buildCLICapabilities("/opt/orbit")
-	if capability := sessionCLICapabilityByID(inSession.Capabilities, "session_import"); capability != nil {
-		t.Errorf("a running agent is advertised `orbit session import`, which refuses inside every session: %#v", capability)
-	}
-	if capability := sessionCLICapabilityByID(inSession.Capabilities, "session_create"); capability == nil {
-		t.Fatalf("the session family is missing from the in-session document, so the check above proves nothing. Advertised: %s",
+	capability := sessionCLICapabilityByID(inSession.Capabilities, "session_import")
+	if capability == nil {
+		t.Fatalf("a session with the orchestration grant is not offered `orbit session import`. Advertised: %s",
 			advertisedIDs(inSession))
+	}
+	if !strings.Contains(capability.Description, "this machine") {
+		t.Errorf("in-session session_import description = %q, want the one that says where the transcript is read", capability.Description)
+	}
+
+	t.Setenv(envMCPOrchestration, "")
+	withoutGrant := buildCLICapabilities("/opt/orbit")
+	if capability := sessionCLICapabilityByID(withoutGrant.Capabilities, "session_import"); capability != nil {
+		t.Errorf("a session without the orchestration grant is offered `orbit session import`: %#v", capability)
 	}
 
 	// Headless (launchd/cron): the runner credential reaches `import` (runnerCredentialActions), so
@@ -245,7 +296,7 @@ func TestSessionImportIsAdvertisedOnlyHeadless(t *testing.T) {
 		headless := buildCLICapabilities("/opt/orbit")
 		capability := sessionCLICapabilityByID(headless.Capabilities, "session_import")
 		if capability == nil {
-			t.Fatalf("`orbit session import` is missing headless (allow=%q), which is the only door it has. Advertised: %s",
+			t.Fatalf("`orbit session import` is missing headless (allow=%q). Advertised: %s",
 				allow, advertisedIDs(headless))
 		}
 		if got, want := capability.Description, headlessActionDescription["import"]; got != want {
