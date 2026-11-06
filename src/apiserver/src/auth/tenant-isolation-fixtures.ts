@@ -543,6 +543,30 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
        VALUES ($1,$2,$3,1,'the census','{}','[]','{}',$4)`,
       [wikiPlanProposalId, wikiSpaceId, ownerId, sessionId],
     );
+    // A wiki chat of the space (`session.wiki_chat_space_id`, written with the row) and one card its agent drafted: a
+    // rewrite of the written census section, which the owner's presses below can apply, undo and leave seen.
+    const wikiChatId = randomUUID();
+    await db.session.create({
+      data: {
+        id: wikiChatId,
+        title: `${name} wiki chat`,
+        prompt: `${name} wiki chat`,
+        ownerId,
+        creatorId: ownerId,
+        workspaceId,
+        assignedRunnerId: runnerId,
+        status: 'AWAITING_INPUT',
+        startedAt: new Date(),
+        runtimeSessionId: `runtime-${wikiChatId}`,
+        wikiChatSpaceId: wikiSpaceId,
+      },
+    });
+    const wikiChatDraftId = randomUUID();
+    await wiki(
+      `INSERT INTO "wiki_chat_draft"("id","owner_id","space_id","session_id","kind","rationale","sections","rewrites")
+       VALUES ($1,$2,$3,$4,'rewrite','The census section lags behind main.','[{"doc":"census","key":"census"}]','[{"doc":"census","key":"census"}]')`,
+      [wikiChatDraftId, ownerId, wikiSpaceId, wikiChatId],
+    );
 
     const deviceUserCode = `${name.toUpperCase()}${RUN.slice(0, 4)}-CNSS`.slice(0, 9);
     await db.deviceEnrollment.create({
@@ -689,6 +713,8 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       wikiDocSlug: 'census',
       wikiDocSectionKey: 'census',
       wikiDocVersionId,
+      wikiChatId,
+      wikiChatDraftId,
       wikiTopicSlug: 'census',
       adminSubjectId: adminSubject.userId,
       adminSubjectTokenId,

@@ -2630,6 +2630,14 @@ func (t *Transport) writeWikiNote(sessionID string, body interface{}) (json.RawM
 	return out, err
 }
 
+// draftWiki makes a card in the calling wiki chat (`wiki_draft`, contract `agentSurface.chat.draft`). It is made under the
+// call's idempotency key, so a request that lands twice answers with the card the first made: it is sent again like a read.
+func (t *Transport) draftWiki(sessionID string, body interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	_, err := t.doWiki(http.MethodPost, "/runner/wiki/drafts", body, &out, taskOpTimeout, sessionHeader(sessionID), wikiRecordsOnce(body))
+	return out, err
+}
+
 // listWikiVerifications reads one page of the ops the calling session proposed that wait for their
 // verification in a space (`orbit wiki verify`, contract `reviewModes.verification.list`). route is the
 // path after the space.

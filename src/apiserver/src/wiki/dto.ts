@@ -181,6 +181,14 @@ export class WikiProposeDto {
   @IsOptional()
   @IsPublicId()
   spaceId?: string;
+
+  /**
+   * In a wiki chat (contract `agentSurface.chat.replaces`): the open card of the same chat the new one replaces. Read by
+   * the chat's draft alone, which refuses one that names no such card WIKI_SCHEMA; any other call leaves it unread.
+   */
+  @IsOptional()
+  @Allow()
+  replaces?: unknown;
 }
 
 /** One op's answer in `POST /api/wiki/changesets/:id/decide` (contract `effectPolicy.decide`). */
