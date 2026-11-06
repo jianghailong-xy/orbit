@@ -21,6 +21,13 @@ struct WikiDocActions {
     var openContents: () -> Void = {}
     /// A footnote's one button: the session at that record, the task, the project, or the repository's host.
     var openSource: (WikiDocLogic.OpenTarget) -> Void = { _ in }
+    /// Ask on a paragraph (wiki chat design §9): its sentences, for the chat's Ask sheet. Nil where there is no chat.
+    var ask: ((WikiChatAskRequest) -> Void)? = nil
+    /// The section nearest the top as the reader scrolls: the chat's page chip follows it (design §4.2).
+    var sectionInView: (String) -> Void = { _ in }
+    /// Fold the wiki chat's sheet away before another sheet opens over the page — a phone shows one sheet at a
+    /// time; true when there was one to fold, so the page waits for it to go.
+    var foldChat: () -> Bool = { false }
 }
 
 /// A footnote the reader opened, from a sentence or from the list.
@@ -51,6 +58,14 @@ struct WikiDocPage: View {
     /// A section to open at, from the directory or the index.
     var section: String?
     var actions = WikiDocActions()
+    /// When the reader last looked at this document (seconds since 1970): a section written since wears Updated.
+    var seen: Double = 0
+    /// Each section's sentences its latest rewrite added, by section key: the green line under them (board 42 ⑤).
+    var added: [String: Set<String>] = [:]
+    /// The room the wiki chat's round button keeps clear at the page's foot (design §3: 88).
+    var footClearance: CGFloat = 0
+    /// The sentences the chat's composer quotes, by id: lit on the page while the quote is there (board 42 ⑤).
+    var quoted: Set<String> = []
 
     @State private var openNote: WikiDocOpenNote?
     @State private var openMark: WikiDocOpenMark?
@@ -58,6 +73,9 @@ struct WikiDocPage: View {
     @State private var allFootnotes = false
     @State private var expanded: Set<String> = []
     @State private var nextMark = 0
+    /// The section headings on screen, and the one the page counts the reader in.
+    @State private var headingsInView: Set<String> = []
+    @State private var sectionShown: String?
 
     private var notes: [Int: WikiDocFootnote] {
         Dictionary((doc.footnotes ?? []).map { ($0.n, $0) }, uniquingKeysWith: { first, _ in first })
@@ -77,6 +95,12 @@ struct WikiDocPage: View {
             List {
                 ForEach(WikiDocLogic.Section.allCases, id: \.self) { section in
                     self.section(section, proxy: proxy)
+                }
+                if footClearance > 0 {
+                    Color.clear
+                        .frame(height: footClearance)
+                        .listRowSeparator(.hidden)
+                        .accessibilityHidden(true)
                 }
             }
             .listStyle(.plain)
@@ -99,11 +123,11 @@ struct WikiDocPage: View {
         // A footnote number and a mark's label are links inside the text; a press opens its card or its bubble.
         .environment(\.openURL, OpenURLAction { url in
             if let n = Self.note(from: url) {
-                openNote = WikiDocOpenNote(n: n)
+                present { openNote = WikiDocOpenNote(n: n) }
                 return .handled
             }
             if let mark = Self.mark(from: url) {
-                openMark = mark
+                present { openMark = mark }
                 return .handled
             }
             return .leaving(url)
@@ -133,6 +157,24 @@ struct WikiDocPage: View {
                 .presentationDetents([.height(220), .medium])
             }
         }
+    }
+
+    /// A sheet over the page, once the wiki chat's sheet — the one a phone shows at a time — has folded away.
+    private func present(_ open: @escaping () -> Void) {
+        if actions.foldChat() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: open)
+        } else {
+            open()
+        }
+    }
+
+    /// The section the reader is in: the first heading on screen, in the text's order — else the last one seen.
+    private func headingMoved(_ key: String, inView: Bool) {
+        if inView { headingsInView.insert(key) } else { headingsInView.remove(key) }
+        guard let first = (doc.sections ?? []).first(where: { headingsInView.contains($0.key) })?.key,
+              first != sectionShown else { return }
+        sectionShown = first
+        actions.sectionInView(first)
     }
 
     @ViewBuilder
@@ -172,6 +214,8 @@ struct WikiDocPage: View {
             ForEach(doc.sections ?? [], id: \.key) { section in
                 sectionHeading(section)
                     .id("sec-\(section.key)")
+                    .onAppear { headingMoved(section.key, inView: true) }
+                    .onDisappear { headingMoved(section.key, inView: false) }
                 if section.written == false {
                     Text(WikiDocCopy.sectionNotWritten)
                         .font(.orbitSubtext)
@@ -338,6 +382,16 @@ struct WikiDocPage: View {
             Text("\(section.number ?? 0)")
                 .foregroundStyle(.secondary)
             Text(section.title)
+            if WikiChatLogic.sectionUpdated(section.change, seen: seen) {
+                // Written since the reader last looked (contract `docs.versions.reads.doc`, board 42 ⑤).
+                Text(WikiChatCopy.sectionUpdated)
+                    .font(.orbitMeta.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Color.accentColor.opacity(0.12), in: Capsule())
+                    .accessibilityIdentifier("wiki-section-updated")
+            }
             if section.stale == true {
                 Label(WikiDocCopy.rewritePending, systemImage: "arrow.triangle.2.circlepath")
                     .font(.orbitMeta.weight(.medium))
@@ -372,12 +426,27 @@ struct WikiDocPage: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .font(.orbitProse)
+            .modifier(WikiDocAsk(request: askRequest(block, section: section), ask: actions.ask))
         default:
             Text(paragraph(block, section: section, index: index))
                 .font(.orbitProse)
                 .lineSpacing(6)
                 .fixedSize(horizontal: false, vertical: true)
+                .modifier(WikiDocAsk(request: askRequest(block, section: section), ask: actions.ask))
         }
+    }
+
+    /// A paragraph's sentences as the Ask sheet lists them (design §9): the ones with an id — what a selection
+    /// names — under its section's place, `3.1 §3`. Nil for a block with none, which offers no Ask.
+    private func askRequest(_ block: WikiDocBlock, section: WikiDocSection) -> WikiChatAskRequest? {
+        let sentences = (block.sentences ?? []).compactMap { sentence -> WikiChatLogic.AskSentence? in
+            guard let id = sentence.id, !id.isEmpty else { return nil }
+            return WikiChatLogic.AskSentence(id: id, section: section.key, text: sentence.text, notes: sentence.notes ?? [])
+        }
+        guard !sentences.isEmpty else { return nil }
+        return WikiChatAskRequest(docSlug: doc.slug,
+                                  place: WikiChatLogic.place(doc: doc.number ?? doc.slug, section: "\(section.number ?? 0)"),
+                                  sentences: sentences)
     }
 
     /// One block's sentences as one paragraph: each sentence's words, its mark after it when it wears one
@@ -411,6 +480,14 @@ struct WikiDocPage: View {
             if openNote.map({ sentence.notes?.contains($0.n) ?? false }) ?? false {
                 words[AttributeScopes.SwiftUIAttributes.BackgroundColorAttribute.self] = Color.accentColor.opacity(0.14)
             }
+            // A sentence the chat's composer quotes: lit as the selection it was (board 42 ⑤, first phone).
+            if let id = sentence.id, quoted.contains(id) {
+                words[AttributeScopes.SwiftUIAttributes.BackgroundColorAttribute.self] = Color.yellow.opacity(0.35)
+            }
+            // A sentence the section's latest rewrite added: the green line under it (board 42 ⑤).
+            if added[section.key]?.contains(WikiDocPage.sentenceKey(sentence.text)) == true {
+                words[AttributeScopes.SwiftUIAttributes.UnderlineStyleAttribute.self] = Text.LineStyle(pattern: .solid, color: Color.green)
+            }
             out += words
             for n in sentence.notes ?? [] {
                 var number = AttributedString(WikiDocCopy.noteLabel(n))
@@ -434,6 +511,11 @@ struct WikiDocPage: View {
             out += AttributedString(" ")
         }
         return out
+    }
+
+    /// A sentence's words as the versions' comparison compares them: trimmed, inner runs of space as one.
+    static func sentenceKey(_ text: String) -> String {
+        text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
     private func markNote(_ mark: WikiDocOpenMark) -> WikiDocLogic.MarkNote? {
@@ -593,6 +675,27 @@ struct WikiDocPage: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// Ask on a paragraph (wiki chat design §9, board 42 ⑤): a long press — a right click on a Mac — offers Ask, which
+/// opens the chat's Ask sheet over the paragraph's sentences. A paragraph with none, or a page with no chat, has none.
+private struct WikiDocAsk: ViewModifier {
+    let request: WikiChatAskRequest?
+    let ask: ((WikiChatAskRequest) -> Void)?
+
+    func body(content: Content) -> some View {
+        if let request, let ask {
+            content.contextMenu {
+                Button {
+                    ask(request)
+                } label: {
+                    Label(WikiChatCopy.ask, systemImage: "ellipsis.bubble")
+                }
+            }
+        } else {
+            content
+        }
     }
 }
 

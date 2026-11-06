@@ -1017,13 +1017,17 @@ public struct SessionTurnRequest: Codable, Sendable {
     /// `NEXT_TURN` to queue a message behind a running turn instead of sending it into that turn;
     /// nil (left out of the body) keeps the server's own placement, as every send before it had.
     public let intent: String?
+    /// A wiki chat's page and selection, beside the owner's words rather than in them (wiki contract
+    /// `chat.turns`). Nil leaves the field out: any other session refuses one.
+    public let wikiContext: WikiChatContext?
     public init(clientTurnId: String, content: String, kind: String = "message", attachmentIds: [String]? = nil,
-                intent: String? = nil) {
+                intent: String? = nil, wikiContext: WikiChatContext? = nil) {
         self.clientTurnId = clientTurnId
         self.content = content
         self.kind = kind
         self.attachmentIds = attachmentIds
         self.intent = intent
+        self.wikiContext = wikiContext
     }
 }
 
@@ -1754,11 +1758,14 @@ public struct ResumeRequest: Codable, Sendable {
     /// changed hands between question and answer is asked about again instead of being stopped on
     /// a confirmation about a different run. Never sent unasked — see contract §3.2.
     public let stopSessionId: String?
+    /// A wiki chat's page and selection: a chat's next message may revive it, and carries them here as on
+    /// a live one (wiki contract `chat.turns`). Nil leaves the field out.
+    public let wikiContext: WikiChatContext?
     public init(clientTurnId: String, content: String, kind: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
                 attachmentIds: [String]? = nil, provider: String? = nil, account: String? = nil,
-                stopSessionId: String? = nil) {
+                stopSessionId: String? = nil, wikiContext: WikiChatContext? = nil) {
         self.clientTurnId = clientTurnId
         self.content = content
         self.kind = kind
@@ -1770,6 +1777,7 @@ public struct ResumeRequest: Codable, Sendable {
         self.provider = provider
         self.account = account
         self.stopSessionId = stopSessionId
+        self.wikiContext = wikiContext
     }
 }
 

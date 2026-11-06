@@ -345,7 +345,7 @@ struct SectionDetail: View {
         case .tasks:
             TaskDetailView()
         case .wiki:
-            WikiDetailPane()
+            WikiDetailPane().wikiChatHost()   // the chat's third column beside the page (wiki-chat design §9)
         case .following:
             WatchDetailView()
         case .agents:

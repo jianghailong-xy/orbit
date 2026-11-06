@@ -485,6 +485,9 @@ final class AppModel {
     private(set) var projects: ProjectsModel?
     /// The account's wiki: the Wiki section, the drawer's Wiki row and every entry page.
     private(set) var wiki: WikiModel?
+    /// The wiki chat beside every wiki page: its round button, its panel and the cards it draws
+    /// (docs/wiki-chat-design.md §9).
+    private(set) var wikiChat: WikiChatModel?
     /// Warm cache of open consoles + their on-disk transcript store, scoped to this instance.
     private(set) var consoleRegistry: ConsoleRegistry?
     /// What the next cold launch draws first (`persistLaunchSnapshot` / `restoreLaunchSnapshot`),
@@ -563,6 +566,7 @@ final class AppModel {
         watches = watchesModel
         projects = ProjectsModel(baseURL: url, tokenStore: tokenStore)
         wiki = WikiModel(baseURL: url, tokenStore: tokenStore)
+        wikiChat = WikiChatModel(baseURL: url, tokenStore: tokenStore)
         consoleRegistry = ConsoleRegistry(baseURL: url, tokenStore: tokenStore,
                                           store: ConsoleRegistry.defaultStore(for: url))
         launchSnapshots = LaunchSnapshotStore.defaultStore(for: url)
@@ -1073,6 +1077,7 @@ final class AppModel {
                         // `wiki.changed` has no replay either, and nothing depends on it arriving:
                         // re-read what the Wiki has loaded, the drawer's number with it.
                         if let wiki { Task { await wiki.reloadLoaded() } }
+                        if let wikiChat { Task { await wikiChat.reloadLoaded() } }
                         #if os(iOS)
                         // Nor has `folder.changed`: re-read the folders the Move panel offers.
                         Task { await loadSessionFolders() }
@@ -1196,6 +1201,8 @@ final class AppModel {
         // `groupsFor` default of `['sessions']`, a list refetch for an event about something else.
         case .wikiChanged:
             wiki?.nudge()
+            // A card made, replaced or pressed, or its rewrite moving (contract `chat.realtime`).
+            wikiChat?.nudge()
         #if os(iOS)
         // A folder was created, renamed or deleted, here or on another device: re-read the library
         // the Move panel lists (docs/session-folders-move-design.md §5.6). The event names the folder
@@ -1455,7 +1462,9 @@ final class AppModel {
     /// CompactShell `.onChange(of: focusedConsoleSessionID)`), so a stream never outlives its console
     /// by depending on a view unmounting.
     func syncConsoleFocus() {
-        let id = focusedConsoleSessionID
+        // The console on top of the stack, else the wiki chat a panel beside a wiki page shows: it streams
+        // while the panel is open, as a console on top would (`WikiChatHost` re-syncs as the panel moves).
+        let id = focusedConsoleSessionID ?? wikiChat?.focusedSessionID
         // Every focused console needs an exact-detail fallback, not only cold deep links. If an
         // Open row is filed or purged on another client, the next list refresh removes it; retaining
         // this last loaded snapshot makes `needsExactRefresh` detect that absence and GET the new

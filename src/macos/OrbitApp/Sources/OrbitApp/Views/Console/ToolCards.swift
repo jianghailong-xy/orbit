@@ -319,7 +319,15 @@ struct ToolCardView: View {
               !p.id.isEmpty else { return nil }
         return p
     }
-    private var needsWholeResult: Bool { card.name == "mcp__orbit__session_create" }
+    /// A wiki chat's drafting call — `wiki_propose` or `wiki_draft` — whose answer names its card (wiki
+    /// contract `chat.drafts.toolResult`): drawn as that card, read off the answer and never off the
+    /// conversation's words, here as on the web and in the wiki chat's panel. An answer naming none (a
+    /// dry run, a refusal) draws as any call.
+    private var wikiDraftID: String? {
+        guard card.status == .ok else { return nil }
+        return WikiChatLogic.draftID(toolName: card.name, result: result)
+    }
+    private var needsWholeResult: Bool { card.name == "mcp__orbit__session_create" || WikiChatLogic.isDraftTool(card.name) }
     private var resolutionKey: ToolPayloadResolutionKey {
         ToolPayloadResolutionKey(card: card, expanded: expanded, needsWholeInput: readsWholeQuestion,
                                  needsWholeResult: needsWholeResult || readsWholeQuestion)
@@ -329,6 +337,8 @@ struct ToolCardView: View {
         Group {
             if let payload = sessionCreate {
                 SessionCreateCardView(payload: payload)
+            } else if let draft = wikiDraftID {
+                WikiDraftCardSlot(draftID: draft)
             } else if card.resultTruncated, needsWholeResult, fullResult == nil {
                 EmptyView()   // nothing to show until the untrimmed JSON lands
             } else if showsHeader {
