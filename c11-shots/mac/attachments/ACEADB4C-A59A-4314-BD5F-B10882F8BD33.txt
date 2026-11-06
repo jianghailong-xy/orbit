@@ -1,0 +1,441 @@
+Attributes: Application, 0xa12b5e300, pid: 30790, title: 'C11MacProbe', Disabled
+Element subtree:
+ →Application, 0xa12b5e300, pid: 30790, title: 'C11MacProbe', Disabled
+    Window (Main), 0xa12b5d400, {{0.0, 31.0}, {1010.0, 677.0}}, identifier: 'SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1', Disabled
+      Group, 0xa12b5d680, {{0.0, 31.0}, {1010.0, 677.0}}, Disabled
+        SplitGroup, 0xa12b5d540, {{0.0, 31.0}, {1010.0, 677.0}}, identifier: 'SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1, SidebarNavigationSplitView', Disabled
+          Group, 0xa12b5e080, {{8.0, 39.0}, {320.0, 661.0}}, Disabled
+            ScrollView, 0xa12b5db80, {{8.0, 83.0}, {320.0, 568.0}}, Disabled
+              Outline, 0xa12b5dcc0, {{7.0, 82.0}, {322.0, 570.0}}, label: 'Sidebar', Keyboard Focused
+                OutlineRow, 0xa12b5de00, {{8.0, 83.0}, {320.0, 32.0}}, Disabled
+                  Cell, 0xa12b5e1c0, {{18.0, 83.0}, {300.0, 32.0}}, Keyboard Focused
+                    StaticText, 0xa12b5e440, {{37.0, 91.0}, {101.0, 16.0}}, label: 'Workspaces'
+                    DisclosureTriangle, 0xa12b5e580, {{19.0, 82.0}, {15.0, 34.0}}, identifier: 'NSOutlineViewDisclosureButtonKey', value: 1
+                OutlineRow, 0xa12b5e6c0, {{8.0, 115.0}, {320.0, 32.0}}, Disabled
+                  Cell, 0xa12b5e800, {{18.0, 115.0}, {300.0, 32.0}}, Keyboard Focused
+                    StaticText, 0xa12b5e940, {{45.0, 123.5}, {26.0, 15.0}}, value: HPC
+                OutlineRow, 0xa12b5ea80, {{8.0, 147.0}, {320.0, 44.0}}, Disabled
+                  Cell, 0xa12b5ebc0, {{18.0, 147.0}, {300.0, 44.0}}, Keyboard Focused
+                    StaticText, 0xa12b5ed00, {{45.0, 153.0}, {82.0, 16.0}}, value: orbit-develop
+                    StaticText, 0xa12b5ee40, {{296.0, 162.5}, {16.0, 13.0}}, value: ⌘1
+                    StaticText, 0xa12b5ef80, {{45.0, 172.0}, {120.0, 13.0}}, value: Claude Code · /roo...
+                OutlineRow, 0xa12b5f0c0, {{8.0, 191.0}, {320.0, 32.0}}, Disabled
+                  Cell, 0xa12b5f200, {{18.0, 191.0}, {300.0, 32.0}}, Keyboard Focused
+                    StaticText, 0xa12b5f340, {{40.0, 199.0}, {73.0, 16.0}}, value: Projects
+                OutlineRow, 0xa12b5f480, {{8.0, 223.0}, {320.0, 32.0}}, Disabled
+                  Cell, 0xa12b5f5c0, {{18.0, 223.0}, {300.0, 32.0}}, Keyboard Focused
+                    StaticText, 0xa12b5f700, {{39.0, 231.0}, {59.0, 16.0}}, value: Tasks
+                OutlineRow, 0xa12b5f840, {{8.0, 255.0}, {320.0, 32.0}}, Selected, Disabled
+                  Cell, 0xa12b5f980, {{18.0, 255.0}, {300.0, 32.0}}, Keyboard Focused, Selected
+                    StaticText, 0xa12b5fac0, {{41.0, 263.0}, {48.0, 16.0}}, value: Wiki
+                OutlineRow, 0xa12b5fc00, {{8.0, 287.0}, {320.0, 32.0}}, Disabled
+                  Cell, 0xa12b5fd40, {{18.0, 287.0}, {300.0, 32.0}}, Keyboard Focused
+                    StaticText, 0xa12b5fe80, {{37.0, 295.0}, {84.0, 16.0}}, value: Following
+                OutlineRow, 0xa12adb200, {{8.0, 319.0}, {320.0, 32.0}}, Disabled
+                  Cell, 0xa12b60000, {{18.0, 319.0}, {300.0, 32.0}}, Keyboard Focused
+                    StaticText, 0xa12b60140, {{39.0, 327.0}, {75.0, 16.0}}, value: Settings
+                TableColumn, 0xa12b60280, {{18.0, 83.0}, {300.0, 568.0}}, identifier: 'ListColumn', Disabled
+            MenuButton, 0xa12b603c0, {{32.0, 666.5}, {8.0, 19.0}}, label: '?'
+            MenuButton, 0xa12b60500, {{62.0, 668.0}, {53.0, 16.0}}, label: 'Account'
+          Splitter, 0xa12b60640, {{328.0, 83.0}, {0.0, 625.0}}, value: 328, Disabled
+          Group, 0xa12b60780, {{0.0, 31.0}, {628.0, 677.0}}, Disabled
+            ScrollView, 0xa12b608c0, {{328.0, 83.0}, {300.0, 625.0}}, Disabled
+              Outline, 0xa12b60a00, {{327.0, 82.0}, {302.0, 627.0}}
+                OutlineRow, 0xa12b60b40, {{328.0, 83.0}, {300.0, 43.0}}, Disabled
+                  Cell, 0xa12b60c80, {{328.0, 83.0}, {300.0, 43.0}}, Keyboard Focused
+                    StaticText, 0xa12b60dc0, {{336.0, 96.5}, {29.0, 16.0}}, label: 'Wiki'
+                    StaticText, 0xa12b60f00, {{375.0, 91.0}, {51.0, 27.0}}, label: 'The codebase this wiki describes', value: orbit
+                OutlineRow, 0xa12b61040, {{328.0, 126.0}, {300.0, 0.0}}, Disabled
+                  Cell, 0xa12b61180, {{328.0, 126.0}, {300.0, 0.0}}, Keyboard Focused
+                    Group, 0xa12b612c0, {{336.0, 126.0}, {283.0, 0.0}}, Disabled
+                OutlineRow, 0xa12b61400, {{328.0, 126.0}, {300.0, 25.0}}, Disabled
+                  Cell, 0xa12b61540, {{328.0, 126.0}, {300.0, 25.0}}, Keyboard Focused
+                    Button, 0xa12b61680, {{336.0, 130.0}, {283.0, 17.0}}, label: 'Home'
+                OutlineRow, 0xa12b617c0, {{328.0, 151.0}, {300.0, 25.0}}, Disabled
+                  Cell, 0xa12b61900, {{328.0, 151.0}, {300.0, 25.0}}, Keyboard Focused
+                    Button, 0xa12b61a40, {{336.0, 155.0}, {283.0, 17.0}}, label: 'Browse by category'
+                OutlineRow, 0xa12b61b80, {{328.0, 176.0}, {300.0, 25.0}}, Disabled
+                  Cell, 0xa12b61cc0, {{328.0, 176.0}, {300.0, 25.0}}, Keyboard Focused
+                    Button, 0xa12b61e00, {{336.0, 180.0}, {283.0, 17.0}}, label: 'A–Z index'
+                OutlineRow, 0xa12b61f40, {{328.0, 201.0}, {300.0, 25.0}}, Disabled
+                  Cell, 0xa12b62080, {{328.0, 201.0}, {300.0, 25.0}}, Keyboard Focused
+                    Button, 0xa12b621c0, {{336.0, 205.0}, {283.0, 17.0}}, label: 'Plan'
+                OutlineRow, 0xa12b62300, {{328.0, 226.0}, {300.0, 0.0}}, Disabled
+                  Cell, 0xa12b62440, {{328.0, 226.0}, {300.0, 0.0}}, Keyboard Focused
+                    Group, 0xa12b62580, {{336.0, 226.0}, {283.0, 0.0}}, Disabled
+                OutlineRow, 0xa12b626c0, {{328.0, 226.0}, {300.0, 24.0}}, Disabled
+                  Cell, 0xa12b62800, {{328.0, 226.0}, {300.0, 24.0}}, Keyboard Focused
+                    StaticText, 0xa12b62940, {{336.0, 230.0}, {52.0, 16.0}}, value: 产品概览
+                OutlineRow, 0xa12b62a80, {{328.0, 250.0}, {300.0, 25.0}}, Disabled
+                  Cell, 0xa12b62bc0, {{328.0, 250.0}, {300.0, 25.0}}, Keyboard Focused
+                    Button, 0xa12b62d00, {{336.0, 254.0}, {283.0, 17.0}}, label: '1.1, 产品定位与使用场景'
+                OutlineRow, 0xa12b62e40, {{328.0, 275.0}, {300.0, 0.0}}, Disabled
+                  Cell, 0xa12b62f80, {{328.0, 275.0}, {300.0, 0.0}}, Keyboard Focused
+                    Group, 0xa12b630c0, {{336.0, 275.0}, {283.0, 0.0}}, Disabled
+                OutlineRow, 0xa12b63200, {{328.0, 275.0}, {300.0, 24.0}}, Disabled
+                  Cell, 0xa12b63340, {{328.0, 275.0}, {300.0, 24.0}}, Keyboard Focused
+                    StaticText, 0xa12b63480, {{336.0, 279.0}, {26.0, 16.0}}, value: 会话
+                OutlineRow, 0xa12b635c0, {{328.0, 299.0}, {300.0, 25.0}}, Disabled
+                  Cell, 0xa12b63700, {{328.0, 299.0}, {300.0, 25.0}}, Keyboard Focused
+                    Button, 0xa12b63840, {{336.0, 303.0}, {283.0, 17.0}}, label: '3.1, 会话运行模型与长连接, Needs review'
+                OutlineRow, 0xa12b63980, {{328.0, 324.0}, {300.0, 24.0}}, Disabled
+                  Cell, 0xa12b63ac0, {{328.0, 324.0}, {300.0, 24.0}}, Keyboard Focused
+                    Button, 0xa12b63c00, {{336.0, 328.0}, {283.0, 16.0}}, label: '1, 会话运行模型与长连接：总览'
+                OutlineRow, 0xa12b63d40, {{328.0, 348.0}, {300.0, 24.0}}, Disabled
+                  Cell, 0xa12b63e80, {{328.0, 348.0}, {300.0, 24.0}}, Keyboard Focused
+                    Button, 0xa12b64000, {{336.0, 352.0}, {283.0, 16.0}}, label: '2, turn 投递与 inbox 领取：long-poll 与心跳'
+                OutlineRow, 0xa12b64140, {{328.0, 372.0}, {300.0, 24.0}}, Disabled
+                  Cell, 0xa12b64280, {{328.0, 372.0}, {300.0, 24.0}}, Keyboard Focused
+                    Button, 0xa12b643c0, {{336.0, 376.0}, {283.0, 16.0}}, label: '3, 已知的坑'
+                OutlineRow, 0xa12b64500, {{328.0, 396.0}, {300.0, 24.0}}, Disabled
+                  Cell, 0xa12b64640, {{328.0, 396.0}, {300.0, 24.0}}, Keyboard Focused
+                    Button, 0xa12b64780, {{336.0, 400.0}, {283.0, 16.0}}, label: '4, 约定'
+                OutlineRow, 0xa12b648c0, {{328.0, 420.0}, {300.0, 25.0}}, Disabled
+                  Cell, 0xa12b64a00, {{328.0, 420.0}, {300.0, 25.0}}, Keyboard Focused
+                    Button, 0xa12b64b40, {{336.0, 424.0}, {283.0, 17.0}}, label: '3.2, 会话状态生命周期'
+                OutlineRow, 0xa12b64c80, {{328.0, 445.0}, {300.0, 25.0}}, Disabled
+                  Cell, 0xa12b64dc0, {{328.0, 445.0}, {300.0, 25.0}}, Keyboard Focused
+                    Button, 0xa12b64f00, {{336.0, 449.0}, {283.0, 17.0}}, label: '3.3, 会话搜索'
+                OutlineRow, 0xa12b65040, {{328.0, 470.0}, {300.0, 0.0}}, Disabled
+                  Cell, 0xa12b65180, {{328.0, 470.0}, {300.0, 0.0}}, Keyboard Focused
+                    Group, 0xa12b652c0, {{336.0, 470.0}, {283.0, 0.0}}, Disabled
+                OutlineRow, 0xa12b65400, {{328.0, 470.0}, {300.0, 24.0}}, Disabled
+                  Cell, 0xa12b65540, {{328.0, 470.0}, {300.0, 24.0}}, Keyboard Focused
+                    StaticText, 0xa12b65680, {{336.0, 474.0}, {121.0, 16.0}}, value: 给 agent 的开发约定
+                OutlineRow, 0xa12b657c0, {{328.0, 494.0}, {300.0, 25.0}}, Disabled
+                  Cell, 0xa12b65900, {{328.0, 494.0}, {300.0, 25.0}}, Keyboard Focused
+                    Button, 0xa12b65a40, {{336.0, 498.0}, {283.0, 17.0}}, label: '4.1, 测试怎么跑'
+                TableColumn, 0xa12b65b80, {{328.0, 83.0}, {300.0, 625.0}}, identifier: 'ListColumn', Disabled
+          Splitter, 0xa12b65cc0, {{628.0, 83.0}, {1.0, 625.0}}, value: 300, Disabled
+          Group, 0xa12b65e00, {{629.0, 31.0}, {381.0, 677.0}}, Disabled
+            Button, 0xa12b65f40, {{934.0, 632.0}, {52.0, 52.0}}, identifier: 'wiki-chat-fab', label: '1 needs you'
+            SplitGroup, 0xa12b66080, {{629.0, 31.0}, {381.0, 677.0}}, Disabled
+              Group, 0xa12b661c0, {{629.0, 31.0}, {381.0, 677.0}}, Disabled
+                ScrollView, 0xa12b66300, {{629.0, 83.0}, {381.0, 537.0}}, Disabled
+                  Outline, 0xa12b66440, {{628.0, 82.0}, {383.0, 539.0}}
+                    OutlineRow, 0xa12b66580, {{629.0, -85.0}, {364.0, 24.0}}, Disabled
+                      Cell, 0xa12b666c0, {{629.0, -85.0}, {364.0, 24.0}}, Keyboard Focused
+                        Button, 0xa12b66800, {{637.0, -80.5}, {59.0, 15.0}}, label: 'Wiki · 会话'
+                    OutlineRow, 0xa12b66940, {{629.0, -61.0}, {364.0, 34.0}}, Disabled
+                      Cell, 0xa12b66a80, {{629.0, -61.0}, {364.0, 34.0}}, Keyboard Focused
+                        StaticText, 0xa12b66bc0, {{637.0, -57.0}, {210.0, 26.0}}, label: '会话运行模型与长连接'
+                    OutlineRow, 0xa12b66d00, {{629.0, -27.0}, {364.0, 83.0}}, Disabled
+                      Cell, 0xa12b66e40, {{629.0, -27.0}, {364.0, 83.0}}, Keyboard Focused
+                        StaticText, 0xa12b66f80, {{647.0, -20.0}, {24.0, 15.0}}, value: 会话
+                        StaticText, 0xa12b670c0, {{697.0, -20.0}, {61.0, 15.0}}, value: 4 sections
+                        StaticText, 0xa12b67200, {{784.0, -20.0}, {73.0, 15.0}}, value: 12 footnotes
+                        StaticText, 0xa12b67340, {{647.0, 7.0}, {98.0, 15.0}}, value: 5 session quotes
+                        StaticText, 0xa12b67480, {{771.0, 7.0}, {120.0, 15.0}}, value: 4 code & doc quotes
+                        StaticText, 0xa12b675c0, {{647.0, 34.0}, {71.0, 15.0}}, value: 1 task quote
+                        StaticText, 0xa12b67700, {{744.0, 34.0}, {84.0, 15.0}}, value: 1 record quote
+                        StaticText, 0xa12b67840, {{854.0, 34.0}, {35.0, 15.0}}, value: 1 note
+                    OutlineRow, 0xa12b67980, {{629.0, 56.0}, {364.0, 38.0}}, Disabled
+                      Cell, 0xa12b67ac0, {{629.0, 56.0}, {364.0, 38.0}}, Keyboard Focused
+                        StaticText, 0xa12b67c00, {{637.0, 60.0}, {335.0, 30.0}}, value: Updated Sep 28 at ...
+                    OutlineRow, 0xa12b67d40, {{629.0, 94.0}, {364.0, 158.0}}, Disabled
+                      Cell, 0xa12b67e80, {{629.0, 94.0}, {364.0, 158.0}}, Keyboard Focused
+                        Image, 0xa12b68000, {{650.0, 111.0}, {14.0, 13.0}}, identifier: 'exclamationmark.triangle', label: 'Warning'
+                        StaticText, 0xa12b68140, {{675.0, 110.0}, {294.0, 80.0}}, value: Needs review · 8 o...
+                        StaticText, 0xa12b68280, {{681.0, 199.0}, {51.0, 13.0}}, value: No source
+                        StaticText, 0xa12b683c0, {{742.0, 198.0}, {8.0, 15.0}}, value: 5
+                        StaticText, 0xa12b68500, {{764.0, 199.0}, {59.0, 13.0}}, value: Not verified
+                        StaticText, 0xa12b68640, {{833.0, 198.0}, {8.0, 15.0}}, value: 3
+                        StaticText, 0xa12b68780, {{855.0, 199.0}, {55.0, 13.0}}, value: Withdrawn
+                        StaticText, 0xa12b688c0, {{920.0, 198.0}, {6.0, 15.0}}, value: 1
+                        Button, 0xa12b68a00, {{675.0, 221.0}, {81.0, 15.0}}, label: 'Next marked ›'
+                    OutlineRow, 0xa12b68b40, {{629.0, 252.0}, {364.0, 120.0}}, Disabled
+                      Cell, 0xa12b68c80, {{629.0, 252.0}, {364.0, 120.0}}, Keyboard Focused
+                        StaticText, 0xa12b68dc0, {{649.0, 268.0}, {51.0, 15.0}}, value: Question
+                        StaticText, 0xa12b68f00, {{649.0, 291.0}, {314.0, 32.0}}, value: 我想理解一个 session 怎么被...
+                        Button, 0xa12b69040, {{649.0, 340.0}, {323.0, 16.0}}, label: 'Written for · Covers · Not covered, 2 · 5 · 3'
+                    OutlineRow, 0xa12b69180, {{629.0, 372.0}, {364.0, 41.0}}, Disabled
+                      Cell, 0xa12b692c0, {{629.0, 372.0}, {364.0, 41.0}}, Keyboard Focused
+                        StaticText, 0xa12b69400, {{637.0, 390.0}, {8.0, 19.0}}, label: '1'
+                        StaticText, 0xa12b69540, {{653.0, 390.0}, {194.0, 19.0}}, label: '会话运行模型与长连接：总览'
+                    OutlineRow, 0xa12b69680, {{629.0, 413.0}, {364.0, 98.0}}, Disabled
+                      Cell, 0xa12b697c0, {{629.0, 413.0}, {364.0, 98.0}}, Keyboard Focused
+                        StaticText, 0xa12b69900, {{637.0, 417.0}, {342.0, 90.0}}, value: Orbit 中的 session 被...
+                          Link, 0xa12b69a40, {{835.9, 440.0}, {13.1, 25.0}}, identifier: 'orbit-footnote://note?n=1', label: '[1]', Disabled
+                          Link, 0xa12b69b80, {{849.0, 440.0}, {14.5, 25.0}}, identifier: 'orbit-footnote://note?n=2', label: '[2]', Disabled
+                          Link, 0xa12b69cc0, {{664.8, 488.0}, {14.9, 19.0}}, identifier: 'orbit-footnote://note?n=9', label: '[9]', Disabled
+                    OutlineRow, 0xa12b69e00, {{629.0, 511.0}, {364.0, 43.0}}, Disabled
+                      Cell, 0xa12b69f40, {{629.0, 511.0}, {364.0, 43.0}}, Keyboard Focused
+                        StaticText, 0xa12b6a080, {{637.0, 529.5}, {10.0, 19.0}}, label: '2'
+                        StaticText, 0xa12b6a1c0, {{655.0, 529.5}, {60.0, 19.0}}, label: '已知的坑'
+                        StaticText, 0xa12b6a300, {{733.0, 534.5}, {101.0, 13.0}}, label: 'Rewrite pending'
+                    OutlineRow, 0xa12b6a440, {{629.0, 554.0}, {364.0, 192.0}}, Disabled
+                      Cell, 0xa12b6a580, {{629.0, 554.0}, {364.0, 192.0}}, Keyboard Focused
+                        StaticText, 0xa12b6a6c0, {{637.0, 558.0}, {347.0, 184.0}}, value: session 启动窗口内的竞态：客...
+                          Link, 0xa12b6a800, {{872.2, 581.0}, {21.2, 25.0}}, identifier: 'orbit-footnote://note?n=28', label: '[28]', Disabled
+                          Link, 0xa12b6a940, {{796.8, 629.0}, {21.2, 25.0}}, identifier: 'orbit-footnote://note?n=28', label: '[28]', Disabled
+                          Link, 0xa12b6aa80, {{818.0, 629.0}, {21.4, 25.0}}, identifier: 'orbit-footnote://note?n=30', label: '[30]', Disabled
+                          Link, 0xa12b6abc0, {{934.4, 654.0}, {21.4, 25.0}}, identifier: 'orbit-footnote://note?n=30', label: '[30]', Disabled
+                          Link, 0xa12b6ad00, {{637.0, 654.0}, {347.0, 48.0}}, identifier: 'orbit-mark://mark?section=s2&block=0&sentence=2', label: ' Withdrawn ', Disabled
+                          Link, 0xa12b6ae40, {{637.0, 702.0}, {347.0, 40.0}}, identifier: 'orbit-mark://mark?section=s2&block=0&sentence=3', label: ' No source ', Disabled
+                    OutlineRow, 0xa12b6af80, {{629.0, 746.0}, {364.0, 41.0}}, Disabled
+                      Cell, 0xa12b6b0c0, {{629.0, 746.0}, {364.0, 41.0}}, Keyboard Focused
+                        StaticText, 0xa12b6b200, {{637.0, 771.0}, {10.0, 19.0}}, label: '3'
+                        StaticText, 0xa12b6b340, {{655.0, 771.0}, {155.0, 19.0}}, label: 'turn 投递与 inbox 领取'
+                    OutlineRow, 0xa12b6b480, {{629.0, 787.0}, {364.0, 73.0}}, Disabled
+                      Cell, 0xa12b6b5c0, {{629.0, 787.0}, {364.0, 73.0}}, Keyboard Focused
+                        StaticText, 0xa12b6b700, {{637.0, 806.5}, {347.0, 65.0}}, value: 心跳机制用于控制面探测失联的 run...
+                          Link, 0xa12b6b840, {{891.3, 852.5}, {14.7, 19.0}}, identifier: 'orbit-footnote://note?n=5', label: '[5]', Disabled
+                          Link, 0xa12b6b980, {{906.0, 852.5}, {19.4, 19.0}}, identifier: 'orbit-footnote://note?n=12', label: '[12]', Disabled
+                    OutlineRow, 0xa12b6bac0, {{629.0, 860.0}, {364.0, 73.0}}, Disabled
+                      Cell, 0xa12b6bc00, {{629.0, 860.0}, {364.0, 73.0}}, Keyboard Focused
+                        StaticText, 0xa12b6bd40, {{637.0, 872.0}, {346.0, 65.0}}, value: 选择 long-poll 而非 We...
+                          Link, 0xa12b6be80, {{664.8, 918.0}, {14.5, 19.0}}, identifier: 'orbit-footnote://note?n=2', label: '[2]', Disabled
+                    OutlineRow, 0xa12b6c000, {{629.0, 933.0}, {364.0, 41.0}}, Disabled
+                      Cell, 0xa12b6c140, {{629.0, 933.0}, {364.0, 41.0}}, Keyboard Focused
+                        StaticText, 0xa12b6c280, {{637.0, 921.5}, {10.0, 19.0}}, label: '4'
+                        StaticText, 0xa12b6c3c0, {{655.0, 921.5}, {30.0, 19.0}}, label: '约定'
+                    OutlineRow, 0xa12b6c500, {{629.0, 974.0}, {364.0, 100.0}}, Disabled
+                      Cell, 0xa12b6c640, {{629.0, 974.0}, {364.0, 100.0}}, Keyboard Focused
+                        StaticText, 0xa12b6c780, {{637.0, 1007.5}, {346.0, 92.0}}, value: runner-go 全量测试必须在 ...
+                          Link, 0xa12b6c8c0, {{773.7, 1030.5}, {21.4, 25.0}}, identifier: 'orbit-footnote://note?n=39', label: '[39]', Disabled
+                          Link, 0xa12b6ca00, {{803.7, 1055.5}, {21.6, 25.0}}, identifier: 'orbit-footnote://note?n=44', label: '[44]', Disabled
+                          Link, 0xa12b6cb40, {{664.8, 1080.5}, {21.4, 19.0}}, identifier: 'orbit-footnote://note?n=45', label: '[45]', Disabled
+                          Link, 0xa12b6cc80, {{686.2, 1080.5}, {21.6, 19.0}}, identifier: 'orbit-footnote://note?n=46', label: '[46]', Disabled
+                          Link, 0xa12b6cdc0, {{707.8, 1080.5}, {20.9, 19.0}}, identifier: 'orbit-footnote://note?n=47', label: '[47]', Disabled
+                    OutlineRow, 0xa12b6cf00, {{629.0, 1074.0}, {364.0, 42.0}}, Disabled
+                      Cell, 0xa12b6d040, {{629.0, 1074.0}, {364.0, 42.0}}, Keyboard Focused
+                        StaticText, 0xa12b6d180, {{637.0, 1100.0}, {66.0, 16.0}}, value: Footnotes
+                        StaticText, 0xa12b6d2c0, {{709.0, 1101.0}, {264.0, 15.0}}, value: 12 · 5 session quo...
+                    OutlineRow, 0xa12b6d400, {{629.0, 1116.0}, {364.0, 41.0}}, Disabled
+                      Cell, 0xa12b6d540, {{629.0, 1116.0}, {364.0, 41.0}}, Keyboard Focused
+                        Button, 0xa12b6d680, {{637.0, 1112.0}, {347.0, 33.0}}, label: '1., Design doc, docs/architecture.md § Execution model, ✓, “A session is a resumable, multi-turn conversation with one agent runtime”'
+                    OutlineRow, 0xa12b6d7c0, {{629.0, 1157.0}, {364.0, 41.0}}, Disabled
+                      Cell, 0xa12b6d900, {{629.0, 1157.0}, {364.0, 41.0}}, Keyboard Focused
+                        Button, 0xa12b6da40, {{637.0, 1161.0}, {347.0, 33.0}}, label: '2., Contract, contracts/runner.contract.json, ✓, “GET /api/runner/runs/:id/inbox”'
+                    OutlineRow, 0xa12b6db80, {{629.0, 1198.0}, {364.0, 41.0}}, Disabled
+                      Cell, 0xa12b6dcc0, {{629.0, 1198.0}, {364.0, 41.0}}, Keyboard Focused
+                        Button, 0xa12b6de00, {{637.0, 1202.0}, {347.0, 33.0}}, label: '9., Code, src/apiserver/src/realtime/realtime.service.ts · RealtimeService.waitForInbox, ✓, “Park until a turn is enqueued for this run, or the timeout elapses.”'
+                    OutlineRow, 0xa12b6df40, {{629.0, 1239.0}, {364.0, 41.0}}, Disabled
+                      Cell, 0xa12b6e080, {{629.0, 1239.0}, {364.0, 41.0}}, Keyboard Focused
+                        Button, 0xa12b6e1c0, {{637.0, 1247.0}, {347.0, 33.0}}, label: '10., Code, src/runner-go/runloop.go · claimRetryDelayAfter, ✗ no quote, — no quote given'
+                    OutlineRow, 0xa12b6e300, {{629.0, 1280.0}, {364.0, 41.0}}, Disabled
+                      Cell, 0xa12b6e440, {{629.0, 1280.0}, {364.0, 41.0}}, Keyboard Focused
+                        Button, 0xa12b6e580, {{637.0, 1284.0}, {347.0, 33.0}}, label: '11., Session, 执行任务：runner 领取重试 · event #2703 · Sep 15, 01:12, ✗ quote not found, “claimRetryWait honours the context”'
+                    OutlineRow, 0xa12b6e6c0, {{629.0, 1321.0}, {364.0, 57.0}}, Disabled
+                      Cell, 0xa12b6e800, {{629.0, 1321.0}, {364.0, 57.0}}, Keyboard Focused
+                        Button, 0xa12b6e940, {{637.0, 1333.0}, {347.0, 49.0}}, label: '28., Session, 执行任务：session_merge 对「runner 自更新重启」 · event #412 · Sep 14, 03:05, ✓, “于是每次合并都在准入处被判 superseded，且不随时间恢复。”, via 合并失败 merge was superseded 不可区分于真实竞态'
+                    OutlineRow, 0xa12b6ea80, {{629.0, 1378.0}, {364.0, 57.0}}, Disabled
+                      Cell, 0xa12b6ebc0, {{629.0, 1378.0}, {364.0, 57.0}}, Keyboard Focused
+                        Button, 0xa12b6ed00, {{637.0, 1390.0}, {347.0, 49.0}}, label: '30., Session, 执行任务：session_merge 对「runner 自更新重启」 · turn #3 · Sep 14, 02:40, ✗ quote not found, “充要条件是「detach 之后本地再没有替补 supervisor 注册上来」”, via 修复准入放行使合并正常落地，仅留交接在飞真竞态 · Rejected by you'
+                    OutlineRow, 0xa12b6ee40, {{629.0, 1435.0}, {364.0, 57.0}}, Disabled
+                      Cell, 0xa12b6ef80, {{629.0, 1435.0}, {364.0, 57.0}}, Keyboard Focused
+                        Button, 0xa12b6f0c0, {{637.0, 1451.0}, {347.0, 49.0}}, label: '39., Task comment, 修 runner-go 测试环境继承 · comment · Sep 20, 09:30, ✓, “runner-go 全量测试须在 runner 宿主跑”, via runner-go 全量测试须在 runner 宿主跑而非引擎 Bash'
+                    OutlineRow, 0xa12b6f200, {{629.0, 1492.0}, {364.0, 57.0}}, Disabled
+                      Cell, 0xa12b6f340, {{629.0, 1492.0}, {364.0, 57.0}}, Keyboard Focused
+                        Button, 0xa12b6f480, {{637.0, 1504.0}, {347.0, 49.0}}, label: '44., Session, 执行任务：例外待办：模型、FAILED 全路径来源 · turn #4 · Sep 15, 07:37, ✓, “runner — drain 就会把作业杀掉，唤醒不一定送到，你这次就是这么停了六小时”, via 别用 bg 唤醒等长命令，runner drain 会杀作业致卡死'
+                    OutlineRow, 0xa12b6f5c0, {{629.0, 1549.0}, {364.0, 41.0}}, Disabled
+                      Cell, 0xa12b6f700, {{629.0, 1549.0}, {364.0, 41.0}}, Keyboard Focused
+                        Button, 0xa12b6f840, {{637.0, 1553.0}, {347.0, 33.0}}, label: '45., Session, 执行任务：验收 shell · tool call Bash · Sep 16, 10:00, ✓, “timeout 590 grep -m1”'
+                    OutlineRow, 0xa12b6f980, {{629.0, 1590.0}, {364.0, 41.0}}, Disabled
+                      Cell, 0xa12b6fac0, {{629.0, 1590.0}, {364.0, 41.0}}, Keyboard Focused
+                        Button, 0xa12b6fc00, {{637.0, 1578.0}, {347.0, 33.0}}, label: '46., Note, memory/done-marker-watch-dies-with-its-producer.md, ✓, “别等标记文件等作业”'
+                    OutlineRow, 0xa12b6fd40, {{629.0, 1631.0}, {364.0, 41.0}}, Disabled
+                      Cell, 0xa12b6fe80, {{629.0, 1631.0}, {364.0, 41.0}}, Keyboard Focused
+                        Button, 0xa12b70000, {{637.0, 1634.0}, {347.0, 33.0}}, label: '47., Owner decision, 项目推进可靠性 · decision, ✗ not found, “长命令留在本轮”'
+                    OutlineRow, 0xa12b70140, {{629.0, 1672.0}, {364.0, 42.0}}, Disabled
+                      Cell, 0xa12b70280, {{629.0, 1672.0}, {364.0, 42.0}}, Keyboard Focused
+                        StaticText, 0xa12b703c0, {{637.0, 1694.5}, {46.0, 16.0}}, value: Entries
+                        StaticText, 0xa12b70500, {{689.0, 1695.5}, {287.0, 15.0}}, value: the 4 this documen...
+                    OutlineRow, 0xa12b70640, {{629.0, 1714.0}, {364.0, 34.0}}, Disabled
+                      Cell, 0xa12b70780, {{629.0, 1714.0}, {364.0, 34.0}}, Keyboard Focused
+                        StaticText, 0xa12b708c0, {{637.0, 1716.5}, {156.0, 16.0}}, value: Principles & conve...
+                        StaticText, 0xa12b70a00, {{799.0, 1717.5}, {6.0, 15.0}}, value: 1
+                        StaticText, 0xa12b70b40, {{811.0, 1717.5}, {164.0, 15.0}}, value: What every task in...
+                    OutlineRow, 0xa12b70c80, {{629.0, 1748.0}, {364.0, 27.0}}, Disabled
+                      Cell, 0xa12b70dc0, {{629.0, 1748.0}, {364.0, 27.0}}, Keyboard Focused
+                        Button, 0xa12b70f00, {{637.0, 1745.0}, {347.0, 19.0}}, label: 'runner-go 全量测试须在 runner 宿主跑而非引擎 Bash, [39], Auto'
+                    OutlineRow, 0xa12b71040, {{629.0, 1775.0}, {364.0, 34.0}}, Disabled
+                      Cell, 0xa12b71180, {{629.0, 1775.0}, {364.0, 34.0}}, Keyboard Focused
+                        StaticText, 0xa12b712c0, {{637.0, 1792.5}, {62.0, 16.0}}, value: Decisions
+                        StaticText, 0xa12b71400, {{705.0, 1793.5}, {6.0, 15.0}}, value: 1
+                        StaticText, 0xa12b71540, {{717.0, 1793.5}, {165.0, 15.0}}, value: Active decisions, ...
+                    OutlineRow, 0xa12b71680, {{629.0, 1809.0}, {364.0, 43.0}}, Disabled
+                      Cell, 0xa12b717c0, {{629.0, 1809.0}, {364.0, 43.0}}, Keyboard Focused
+                        Button, 0xa12b71900, {{637.0, 1806.0}, {347.0, 35.0}}, label: '修复准入放行使合并正常落地，仅留交接在飞真竞态, [30], Rejected, Rejected by you · its sentence in §2 is withdrawn'
+                    OutlineRow, 0xa12b71a40, {{629.0, 1852.0}, {364.0, 34.0}}, Disabled
+                      Cell, 0xa12b71b80, {{629.0, 1852.0}, {364.0, 34.0}}, Keyboard Focused
+                        StaticText, 0xa12b71cc0, {{637.0, 1862.5}, {44.0, 16.0}}, value: Pitfalls
+                        StaticText, 0xa12b71e00, {{687.0, 1863.5}, {8.0, 15.0}}, value: 2
+                        StaticText, 0xa12b71f40, {{701.0, 1863.5}, {252.0, 15.0}}, value: Traps a run has ac...
+                    OutlineRow, 0xa12b72080, {{629.0, 1886.0}, {364.0, 27.0}}, Disabled
+                      Cell, 0xa12b721c0, {{629.0, 1886.0}, {364.0, 27.0}}, Keyboard Focused
+                        Button, 0xa12b72300, {{637.0, 1867.0}, {347.0, 19.0}}, label: '合并失败 merge was superseded 不可区分于真实竞态, [28], Unreviewed'
+                    OutlineRow, 0xa12b72440, {{629.0, 1913.0}, {364.0, 27.0}}, Disabled
+                      Cell, 0xa12b72580, {{629.0, 1913.0}, {364.0, 27.0}}, Keyboard Focused
+                        Button, 0xa12b726c0, {{637.0, 1917.0}, {347.0, 19.0}}, label: '别用 bg 唤醒等长命令，runner drain 会杀作业致卡死, [44], Auto'
+                    TableColumn, 0xa12b72800, {{629.0, -85.0}, {364.0, 2025.0}}, identifier: 'ListColumn', Disabled
+                  ScrollBar, 0xa12b72940, {{992.0, 82.0}, {19.0, 539.0}}, value: 0.1129032258064516
+                    ValueIndicator, 0xa12b72a80, {{996.0, 127.0}, {11.0, 166.0}}, value: 0.1129032258064516, Disabled
+                    IncrementArrow, 0xa12b72bc0, {{993.0, 83.0}, {0.0, 0.0}}, Disabled
+                    DecrementArrow, 0xa12b72d00, {{993.0, 83.0}, {0.0, 0.0}}, Disabled
+                    Button, 0xa12b72e40, {{996.0, 294.0}, {11.0, 323.0}}, Disabled
+                    Button, 0xa12b72f80, {{996.0, 86.0}, {11.0, 41.0}}, Disabled
+      Toolbar, 0xa12b730c0, {{0.0, 31.0}, {1010.0, 52.0}}, Disabled
+        Button, 0xa12b73200, {{281.0, 31.0}, {47.0, 52.0}}, label: 'Hide Sidebar'
+        Button, 0xa12b73340, {{961.0, 31.0}, {45.0, 52.0}}, identifier: 'list.bullet', label: 'Contents'
+      Button, 0xa12b73480, {{18.0, 49.0}, {16.0, 16.0}}, identifier: '_XCUI:CloseWindow'
+      Button, 0xa12b735c0, {{64.0, 49.0}, {16.0, 16.0}}, identifier: '_XCUI:FullScreenWindow'
+        Group, 0xa12b73700, {{65.0, 50.0}, {14.0, 14.0}}, Disabled
+          Group, 0xa12b73840, {{65.0, 50.0}, {14.0, 14.0}}, Disabled
+      Button, 0xa12b73980, {{41.0, 49.0}, {16.0, 16.0}}, identifier: '_XCUI:MinimizeWindow'
+      StaticText, 0xa12b73ac0, {{332.0, 31.0}, {629.0, 52.0}}
+    MenuBar, 0xa12b73c00, {{0.0, 0.0}, {1024.0, 30.0}}
+      MenuBarItem, 0xa12b73d40, {{10.0, 0.0}, {34.0, 30.0}}, title: 'Apple'
+        Menu, 0xa12b73e80, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0xa12b74000, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_aboutThisMacRequested:', title: 'About This Mac'
+          MenuItem, 0xa12b74140, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_systemInformationRequested:', title: 'System Information'
+          MenuItem, 0xa12b74280, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0xa12b743c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_systemSettingsRequested:', title: 'System Settings…, 1 update'
+          MenuItem, 0xa12b74500, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_appStoreRequested:', title: 'App Store'
+          MenuItem, 0xa12b74640, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0xa12b74780, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentsRequested:', title: 'Recent Items'
+            Menu, 0xa12b748c0, {{0.0, 768.0}, {0.0, 0.0}}
+              MenuItem, 0xa12b74a00, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Applications', Disabled
+              MenuItem, 0xa12b74b40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'C11MacProbe'
+              MenuItem, 0xa12b74c80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Show “C11MacProbe” in Finder'
+              MenuItem, 0xa12b74dc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Installer'
+              MenuItem, 0xa12b74f00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Show “Installer” in Finder'
+              MenuItem, 0xa12b75040, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'System Settings'
+              MenuItem, 0xa12b75180, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Show “System Settings” in Finder'
+              MenuItem, 0xa12b752c0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+              MenuItem, 0xa12b75400, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Documents', Disabled
+              MenuItem, 0xa12b75540, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'AnkaGuestAddons.pkg'
+              MenuItem, 0xa12b75680, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Show “AnkaGuestAddons.pkg” in Finder'
+              MenuItem, 0xa12b757c0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+              MenuItem, 0xa12b75900, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Servers', Disabled
+              MenuItem, 0xa12b75a40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Macintosh HD'
+              MenuItem, 0xa12b75b80, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+              MenuItem, 0xa12b75cc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_clearRecentItemsRequested:', title: 'Clear Menu'
+          MenuItem, 0xa12b75e00, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0xa12b75f40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_forceQuitPanelRequested:', title: 'Force Quit…'
+          MenuItem, 0xa12b76080, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_forceQuitRequested:', title: 'Force Quit C11MacProbe'
+          MenuItem, 0xa12b761c0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0xa12b76300, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_sleepRequested:', title: 'Sleep'
+          MenuItem, 0xa12b76440, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_restartRequested:', title: 'Restart…'
+          MenuItem, 0xa12b76580, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_restartNowRequested:', title: 'Restart'
+          MenuItem, 0xa12b766c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_shutDownRequested:', title: 'Shut Down…'
+          MenuItem, 0xa12b76800, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_shutDownNowRequested:', title: 'Shut Down'
+          MenuItem, 0xa12b76940, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0xa12b76a80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_lockScreenRequested:', title: 'Lock Screen'
+          MenuItem, 0xa12b76bc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_logOutRequested:', title: 'Log Out Anka…'
+          MenuItem, 0xa12b76d00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_logOutNowRequested:', title: 'Log Out Anka'
+          MenuItem, 0xa12b76e40, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+      MenuBarItem, 0xa12b76f80, {{44.0, 0.0}, {108.0, 30.0}}, title: 'C11MacProbe'
+        Menu, 0xa12b770c0, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0xa12b77200, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'orderFrontStandardAboutPanel:', title: 'About C11MacProbe'
+          MenuItem, 0xa12b77340, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0xa12b77480, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Services'
+            Menu, 0xa12b775c0, {{0.0, 768.0}, {0.0, 0.0}}
+              MenuItem, 0xa12b77700, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Activity Monitor'
+              MenuItem, 0xa12b77840, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Allocations & Leaks'
+              MenuItem, 0xa12b77980, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'File Activity'
+              MenuItem, 0xa12b77ac0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'System Trace'
+              MenuItem, 0xa12b77c00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Time Profile Active Application'
+              MenuItem, 0xa12b77d40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Time Profile App Under Mouse'
+              MenuItem, 0xa12b77e80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Time Profile Entire System'
+              MenuItem, 0xa12b78000, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Toggle Instruments Recording'
+              MenuItem, 0xa12b78140, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_configureServicesMenu:', title: 'Services Settings…'
+          MenuItem, 0xa12b78280, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0xa12b783c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'hide:', title: 'Hide C11MacProbe'
+          MenuItem, 0xa12b78500, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'hideOtherApplications:', title: 'Hide Others'
+          MenuItem, 0xa12b78640, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'unhideAllApplications:', title: 'Show All', Disabled
+          MenuItem, 0xa12b78780, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0xa12b788c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'terminate:', title: 'Quit C11MacProbe'
+      MenuBarItem, 0xa12b78a00, {{152.0, 0.0}, {42.0, 30.0}}, title: 'File'
+        Menu, 0xa12b78b40, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0xa12b78c80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'menuAction:', title: 'New Window'
+          MenuItem, 0xa12b78dc0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0xa12b78f00, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0xa12b79040, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'performClose:', title: 'Close'
+          MenuItem, 0xa12b79180, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'closeAll:', title: 'Close All'
+      MenuBarItem, 0xa12b792c0, {{194.0, 0.0}, {44.0, 30.0}}, title: 'Edit'
+        Menu, 0xa12b79400, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0xa12b79540, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'undo:', title: 'Undo', Disabled
+          MenuItem, 0xa12b79680, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'redo:', title: 'Redo', Disabled
+          MenuItem, 0xa12b797c0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0xa12b79900, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'cut:', title: 'Cut', Disabled
+          MenuItem, 0xa12b79a40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'copy:', title: 'Copy', Disabled
+          MenuItem, 0xa12b79b80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'paste:', title: 'Paste', Disabled
+          MenuItem, 0xa12b79cc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'delete:', title: 'Delete', Disabled
+          MenuItem, 0xa12b79e00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'selectAll:', title: 'Select All', Disabled
+          MenuItem, 0xa12b79f40, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0xa12b7a080, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_NSMenuItemAutoFillIdentifier', title: 'AutoFill'
+            Menu, 0xa12b7a1c0, {{0.0, 768.0}, {0.0, 0.0}}
+              MenuItem, 0xa12b7a300, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_handleInsertFromContactsCommand:', title: 'Contact…', Disabled
+              MenuItem, 0xa12b7a440, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_handleInsertFromPasswordsCommand:', title: 'Passwords…', Disabled
+              MenuItem, 0xa12b7a580, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_handleInsertFromCreditCardsCommand:', title: 'Credit Card…', Disabled
+          MenuItem, 0xa12b7a6c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'startDictation:', title: 'Start Dictation…'
+          MenuItem, 0xa12b7a800, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'orderFrontCharacterPalette:', title: 'Emoji & Symbols'
+      MenuBarItem, 0xa12b7a940, {{238.0, 0.0}, {50.0, 30.0}}, title: 'View'
+        Menu, 0xa12b7aa80, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0xa12b7abc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'toggleTabBar:', title: 'Show Tab Bar'
+          MenuItem, 0xa12b7ad00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'toggleTabOverview:', title: 'Show All Tabs'
+          MenuItem, 0xa12b7ae40, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0xa12b7af80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'toggleSidebar:', title: 'Show Sidebar'
+          MenuItem, 0xa12b7b0c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'toggleFullScreen:', title: 'Enter Full Screen'
+      MenuBarItem, 0xa12b7b200, {{288.0, 0.0}, {69.0, 30.0}}, title: 'Window'
+        Menu, 0xa12b7b340, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0xa12b7b480, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'performMiniaturize:', title: 'Minimize'
+          MenuItem, 0xa12b7b5c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'miniaturizeAll:', title: 'Minimize All'
+          MenuItem, 0xa12b7b700, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'performZoom:', title: 'Zoom'
+          MenuItem, 0xa12b7b840, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'zoomAll:', title: 'Zoom All'
+          MenuItem, 0xa12b7b980, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomFill:', title: 'Fill'
+          MenuItem, 0xa12b7bac0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomCenter:', title: 'Center'
+          MenuItem, 0xa12b7bc00, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0xa12b7bd40, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Move & Resize'
+            Menu, 0xa12b7be80, {{0.0, 768.0}, {0.0, 0.0}}
+              MenuItem, 0xa12b7c000, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Halves', Disabled
+              MenuItem, 0xa12b7c140, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomLeft:', title: 'Left'
+              MenuItem, 0xa12b7c280, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomRight:', title: 'Right'
+              MenuItem, 0xa12b7c3c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTop:', title: 'Top'
+              MenuItem, 0xa12b7c500, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottom:', title: 'Bottom'
+              MenuItem, 0xa12b7c640, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+              MenuItem, 0xa12b7c780, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Quarters', Disabled
+              MenuItem, 0xa12b7c8c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTopLeft:', title: 'Top Left'
+              MenuItem, 0xa12b7ca00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTopRight:', title: 'Top Right'
+              MenuItem, 0xa12b7cb40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottomLeft:', title: 'Bottom Left'
+              MenuItem, 0xa12b7cc80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottomRight:', title: 'Bottom Right'
+              MenuItem, 0xa12b7cdc0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+              MenuItem, 0xa12b7cf00, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Arrange', Disabled
+              MenuItem, 0xa12b7d040, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomLeftAndRight:', title: 'Left & Right'
+              MenuItem, 0xa12b7d180, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomLeftThreeUp:', title: 'Left & Quarters'
+              MenuItem, 0xa12b7d2c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomRightAndLeft:', title: 'Right & Left'
+              MenuItem, 0xa12b7d400, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomRightThreeUp:', title: 'Right & Quarters'
+              MenuItem, 0xa12b7d540, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTopAndBottom:', title: 'Top & Bottom'
+              MenuItem, 0xa12b7d680, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTopThreeUp:', title: 'Top & Quarters'
+              MenuItem, 0xa12b7d7c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottomAndTop:', title: 'Bottom & Top'
+              MenuItem, 0xa12b7d900, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottomThreeUp:', title: 'Bottom & Quarters'
+              MenuItem, 0xa12b7da40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomQuarters:', title: 'Quarters'
+              MenuItem, 0xa12b7db80, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+              MenuItem, 0xa12b7dcc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomUntile:', title: 'Return to Previous Size', Disabled
+          MenuItem, 0xa12b7de00, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Full Screen Tile'
+            Menu, 0xa12b7df40, {{0.0, 768.0}, {0.0, 0.0}}
+              MenuItem, 0xa12b7e080, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_tileLeft:', title: 'Left of Screen'
+              MenuItem, 0xa12b7e1c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_tileRight:', title: 'Right of Screen'
+          MenuItem, 0xa12b7e300, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0xa12b7e440, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_removeWindowFromStageManagerSet:', title: 'Remove Window from Set', Disabled
+          MenuItem, 0xa12b7e580, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0xa12b7e6c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'arrangeInFront:', title: 'Bring All to Front'
+          MenuItem, 0xa12b7e800, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'alternateArrangeInFront:', title: 'Arrange in Front'
+          MenuItem, 0xa12b7e940, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+          MenuItem, 0xa12b7ea80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'selectPreviousTab:', title: 'Show Previous Tab', Disabled
+          MenuItem, 0xa12b7ebc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'selectNextTab:', title: 'Show Next Tab', Disabled
+          MenuItem, 0xa12b7ed00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'moveTabToNewWindow:', title: 'Move Tab to New Window', Disabled
+          MenuItem, 0xa12b7ee40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'mergeAllWindows:', title: 'Merge All Windows', Disabled
+          MenuItem, 0xa12b7ef80, {{0.0, 768.0}, {0.0, 0.0}}, Disabled
+      MenuBarItem, 0xa12b7f0c0, {{357.0, 0.0}, {48.0, 30.0}}, title: 'Help'
+        Menu, 0xa12b7f200, {{0.0, 768.0}, {0.0, 0.0}}
+          MenuItem, 0xa12b7f340, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'showHelp:', title: 'C11MacProbe Help'
+    TouchBar, 0xa12b7f480, {{80.0, 0.0}, {685.0, 30.0}}, Disabled
+Path to element:
+ →Application, 0xa12b5e300, pid: 30790, title: 'C11MacProbe', Disabled
+Query chain:
+ →Find: Target Application 'io.orbitd.c11macprobe'
+  Output: {
+    Application, 0xa12b7f5c0, pid: 30790, title: 'C11MacProbe', Disabled
+  }

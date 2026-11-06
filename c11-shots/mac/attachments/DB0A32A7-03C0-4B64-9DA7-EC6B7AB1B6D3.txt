@@ -1,0 +1,418 @@
+Application, 0xa12ba5e00, pid: 34864, title: 'C11MacProbe', Disabled <App element pid: 34864>
+  Window (Main), 0xa12ba5f40, {{0.0, 31.0}, {1010.0, 677.0}}, identifier: 'SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1', Keyboard Focused, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jNwAAAAAAAAA=>
+    Group, 0xa12ba6080, {{0.0, 31.0}, {1010.0, 677.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jOAAAAAAAAAA=>
+      SplitGroup, 0xa12ba61c0, {{0.0, 31.0}, {1010.0, 677.0}}, identifier: 'SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1, SidebarNavigationSplitView', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jPQAAAAAAAAA=>
+        Group, 0xa12ba6300, {{0.0, 31.0}, {300.0, 677.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jQgAAAAAAAAA=>
+          ScrollView, 0xa12ba6440, {{0.0, 83.0}, {300.0, 625.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jZwAAAAAAAAA=>
+            Outline, 0xa12ba6580, {{-1.0, 82.0}, {302.0, 627.0}} <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAA=>
+              OutlineRow, 0xa12ba66c0, {{0.0, 83.0}, {300.0, 43.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD//////////w==>
+                Cell, 0xa12ba6800, {{0.0, 83.0}, {300.0, 43.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD//////////20AAAAAAAAA>
+                  StaticText, 0xa12ba6940, {{8.0, 96.5}, {29.0, 16.0}}, label: 'Wiki' <AX element pid: 34864, token: MIgAAAAAAABvY29jdQAAAAAAAAA=>
+                  StaticText, 0xa12ba6a80, {{47.0, 91.0}, {51.0, 27.0}}, label: 'The codebase this wiki describes', value: orbit <AX element pid: 34864, token: MIgAAAAAAABvY29jdgAAAAAAAAA=>
+              OutlineRow, 0xa12ba6bc0, {{0.0, 126.0}, {300.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD+/////////w==>
+                Cell, 0xa12ba6d00, {{0.0, 126.0}, {300.0, 0.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD+/////////20AAAAAAAAA>
+                  Group, 0xa12ba6e40, {{8.0, 126.0}, {283.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD+/////////20AAAAAAAAAAAAAAAAAAAA=>
+              OutlineRow, 0xa12ba6f80, {{0.0, 126.0}, {300.0, 25.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD9/////////w==>
+                Cell, 0xa12ba70c0, {{0.0, 126.0}, {300.0, 25.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD9/////////20AAAAAAAAA>
+                  Button, 0xa12ba7200, {{8.0, 130.0}, {283.0, 17.0}}, label: 'Home' <AX element pid: 34864, token: MIgAAAAAAABvY29jdwAAAAAAAAA=>
+              OutlineRow, 0xa12ba7340, {{0.0, 151.0}, {300.0, 25.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD8/////////w==>
+                Cell, 0xa12ba7480, {{0.0, 151.0}, {300.0, 25.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD8/////////20AAAAAAAAA>
+                  Button, 0xa12ba75c0, {{8.0, 155.0}, {283.0, 17.0}}, label: 'Browse by category' <AX element pid: 34864, token: MIgAAAAAAABvY29jeAAAAAAAAAA=>
+              OutlineRow, 0xa12ba7700, {{0.0, 176.0}, {300.0, 25.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD7/////////w==>
+                Cell, 0xa12ba7840, {{0.0, 176.0}, {300.0, 25.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD7/////////20AAAAAAAAA>
+                  Button, 0xa12ba7980, {{8.0, 180.0}, {283.0, 17.0}}, label: 'A–Z index' <AX element pid: 34864, token: MIgAAAAAAABvY29jeQAAAAAAAAA=>
+              OutlineRow, 0xa12ba7ac0, {{0.0, 201.0}, {300.0, 25.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD6/////////w==>
+                Cell, 0xa12ba7c00, {{0.0, 201.0}, {300.0, 25.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD6/////////20AAAAAAAAA>
+                  Button, 0xa12ba7d40, {{8.0, 205.0}, {283.0, 17.0}}, label: 'Plan' <AX element pid: 34864, token: MIgAAAAAAABvY29jegAAAAAAAAA=>
+              OutlineRow, 0xa12ba7e80, {{0.0, 226.0}, {300.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD5/////////w==>
+                Cell, 0xa12b9c000, {{0.0, 226.0}, {300.0, 0.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD5/////////20AAAAAAAAA>
+                  Group, 0xa12b9c140, {{8.0, 226.0}, {283.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD5/////////20AAAAAAAAAAAAAAAAAAAA=>
+              OutlineRow, 0xa12b9c280, {{0.0, 226.0}, {300.0, 24.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD4/////////w==>
+                Cell, 0xa12b9c3c0, {{0.0, 226.0}, {300.0, 24.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD4/////////20AAAAAAAAA>
+                  StaticText, 0xa12b9c500, {{8.0, 230.0}, {52.0, 16.0}}, value: 产品概览 <AX element pid: 34864, token: MIgAAAAAAABvY29jgwAAAAAAAAA=>
+              OutlineRow, 0xa12b9c640, {{0.0, 250.0}, {300.0, 25.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD3/////////w==>
+                Cell, 0xa12b9c780, {{0.0, 250.0}, {300.0, 25.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD3/////////20AAAAAAAAA>
+                  Button, 0xa12b9c8c0, {{8.0, 254.0}, {283.0, 17.0}}, label: '1.1, 产品定位与使用场景' <AX element pid: 34864, token: MIgAAAAAAABvY29jhAAAAAAAAAA=>
+              OutlineRow, 0xa12b9ca00, {{0.0, 275.0}, {300.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD2/////////w==>
+                Cell, 0xa12b9cb40, {{0.0, 275.0}, {300.0, 0.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD2/////////20AAAAAAAAA>
+                  Group, 0xa12b9cc80, {{8.0, 275.0}, {283.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD2/////////20AAAAAAAAAAAAAAAAAAAA=>
+              OutlineRow, 0xa12b9cdc0, {{0.0, 275.0}, {300.0, 24.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD1/////////w==>
+                Cell, 0xa12b9cf00, {{0.0, 275.0}, {300.0, 24.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD1/////////20AAAAAAAAA>
+                  StaticText, 0xa12b9d040, {{8.0, 279.0}, {26.0, 16.0}}, value: 会话 <AX element pid: 34864, token: MIgAAAAAAABvY29jhQAAAAAAAAA=>
+              OutlineRow, 0xa12b9d180, {{0.0, 299.0}, {300.0, 25.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD0/////////w==>
+                Cell, 0xa12b9d2c0, {{0.0, 299.0}, {300.0, 25.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAAD0/////////20AAAAAAAAA>
+                  Button, 0xa12b9d400, {{8.0, 303.0}, {283.0, 17.0}}, label: '3.1, 会话运行模型与长连接, Needs review' <AX element pid: 34864, token: MIgAAAAAAABvY29jhgAAAAAAAAA=>
+              OutlineRow, 0xa12b9d540, {{0.0, 324.0}, {300.0, 24.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAADz/////////w==>
+                Cell, 0xa12b9d680, {{0.0, 324.0}, {300.0, 24.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAADz/////////20AAAAAAAAA>
+                  Button, 0xa12b9d7c0, {{8.0, 328.0}, {283.0, 16.0}}, label: '1, 会话运行模型与长连接：总览' <AX element pid: 34864, token: MIgAAAAAAABvY29jhwAAAAAAAAA=>
+              OutlineRow, 0xa12b9d900, {{0.0, 348.0}, {300.0, 24.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAADy/////////w==>
+                Cell, 0xa12b9da40, {{0.0, 348.0}, {300.0, 24.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAADy/////////20AAAAAAAAA>
+                  Button, 0xa12b9db80, {{8.0, 352.0}, {283.0, 16.0}}, label: '2, turn 投递与 inbox 领取：long-poll 与心跳' <AX element pid: 34864, token: MIgAAAAAAABvY29jiAAAAAAAAAA=>
+              OutlineRow, 0xa12b9dcc0, {{0.0, 372.0}, {300.0, 24.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAADx/////////w==>
+                Cell, 0xa12b9de00, {{0.0, 372.0}, {300.0, 24.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAADx/////////20AAAAAAAAA>
+                  Button, 0xa12b9df40, {{8.0, 376.0}, {283.0, 16.0}}, label: '3, 已知的坑' <AX element pid: 34864, token: MIgAAAAAAABvY29jiQAAAAAAAAA=>
+              OutlineRow, 0xa12b9e080, {{0.0, 396.0}, {300.0, 24.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAADw/////////w==>
+                Cell, 0xa12b9e1c0, {{0.0, 396.0}, {300.0, 24.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAADw/////////20AAAAAAAAA>
+                  Button, 0xa12b9e300, {{8.0, 400.0}, {283.0, 16.0}}, label: '4, 约定' <AX element pid: 34864, token: MIgAAAAAAABvY29jigAAAAAAAAA=>
+              OutlineRow, 0xa12b9e440, {{0.0, 420.0}, {300.0, 25.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAADv/////////w==>
+                Cell, 0xa12b9e580, {{0.0, 420.0}, {300.0, 25.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAADv/////////20AAAAAAAAA>
+                  Button, 0xa12b9e6c0, {{8.0, 424.0}, {283.0, 17.0}}, label: '3.2, 会话状态生命周期' <AX element pid: 34864, token: MIgAAAAAAABvY29jiwAAAAAAAAA=>
+              OutlineRow, 0xa12b9e800, {{0.0, 445.0}, {300.0, 25.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAADu/////////w==>
+                Cell, 0xa12b9e940, {{0.0, 445.0}, {300.0, 25.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAADu/////////20AAAAAAAAA>
+                  Button, 0xa12b9ea80, {{8.0, 449.0}, {283.0, 17.0}}, label: '3.3, 会话搜索' <AX element pid: 34864, token: MIgAAAAAAABvY29jjAAAAAAAAAA=>
+              OutlineRow, 0xa12b9ebc0, {{0.0, 470.0}, {300.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAADt/////////w==>
+                Cell, 0xa12b9ed00, {{0.0, 470.0}, {300.0, 0.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAADt/////////20AAAAAAAAA>
+                  Group, 0xa12b9ee40, {{8.0, 470.0}, {283.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAADt/////////20AAAAAAAAAAAAAAAAAAAA=>
+              OutlineRow, 0xa12b9ef80, {{0.0, 470.0}, {300.0, 24.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAADs/////////w==>
+                Cell, 0xa12b9f0c0, {{0.0, 470.0}, {300.0, 24.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAADs/////////20AAAAAAAAA>
+                  StaticText, 0xa12b9f200, {{8.0, 474.0}, {121.0, 16.0}}, value: 给 agent 的开发约定 <AX element pid: 34864, token: MIgAAAAAAABvY29jjQAAAAAAAAA=>
+              OutlineRow, 0xa12b9f340, {{0.0, 494.0}, {300.0, 25.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAADr/////////w==>
+                Cell, 0xa12b9f480, {{0.0, 494.0}, {300.0, 25.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jagAAAAAAAADr/////////20AAAAAAAAA>
+                  Button, 0xa12b9f5c0, {{8.0, 498.0}, {283.0, 17.0}}, label: '4.1, 测试怎么跑' <AX element pid: 34864, token: MIgAAAAAAABvY29jjgAAAAAAAAA=>
+              TableColumn, 0xa12b9f700, {{0.0, 83.0}, {300.0, 625.0}}, identifier: 'ListColumn', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jbQAAAAAAAAA=>
+        Splitter, 0xa12b9f840, {{300.0, 83.0}, {1.0, 625.0}}, value: 301, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jQwAAAAAAAAA=>
+        Group, 0xa12b9f980, {{301.0, 31.0}, {709.0, 677.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jRAAAAAAAAAA=>
+          SplitGroup, 0xa12b9fac0, {{301.0, 31.0}, {709.0, 677.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jaQAAAAAAAAA=>
+            Group, 0xa12b9fc00, {{301.0, 31.0}, {709.0, 677.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jfwAAAAAAAAA=>
+              ScrollView, 0xa12b9fd40, {{301.0, 83.0}, {309.0, 537.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgAAAAAAAAAA=>
+                Outline, 0xa12b9fe80, {{300.0, 82.0}, {311.0, 539.0}} <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAA=>
+                  OutlineRow, 0xa124ec000, {{301.0, -550.0}, {292.0, 24.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD//////////w==>
+                    Cell, 0xa124ec140, {{301.0, -550.0}, {292.0, 24.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD//////////48AAAAAAAAA>
+                      Button, 0xa124ec280, {{309.0, -545.5}, {59.0, 15.0}}, label: 'Wiki · 会话' <AX element pid: 34864, token: MIgAAAAAAABvY29jOQQAAAAAAAA=>
+                  OutlineRow, 0xa124ec3c0, {{301.0, -526.0}, {292.0, 34.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD+/////////w==>
+                    Cell, 0xa124ec500, {{301.0, -526.0}, {292.0, 34.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD+/////////48AAAAAAAAA>
+                      StaticText, 0xa124ec640, {{309.0, -522.0}, {210.0, 26.0}}, label: '会话运行模型与长连接' <AX element pid: 34864, token: MIgAAAAAAABvY29jiQQAAAAAAAA=>
+                  OutlineRow, 0xa124ec780, {{301.0, -492.0}, {292.0, 83.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD9/////////w==>
+                    Cell, 0xa124ec8c0, {{301.0, -492.0}, {292.0, 83.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD9/////////48AAAAAAAAA>
+                      StaticText, 0xa124eca00, {{319.0, -485.0}, {24.0, 15.0}}, value: 会话 <AX element pid: 34864, token: MIgAAAAAAABvY29jIAQAAAAAAAA=>
+                      StaticText, 0xa124ecb40, {{369.0, -485.0}, {61.0, 15.0}}, value: 4 sections <AX element pid: 34864, token: MIgAAAAAAABvY29jIQQAAAAAAAA=>
+                      StaticText, 0xa124ecc80, {{456.0, -485.0}, {73.0, 15.0}}, value: 12 footnotes <AX element pid: 34864, token: MIgAAAAAAABvY29jIgQAAAAAAAA=>
+                      StaticText, 0xa124ecdc0, {{319.0, -458.0}, {98.0, 15.0}}, value: 5 session quotes <AX element pid: 34864, token: MIgAAAAAAABvY29jIwQAAAAAAAA=>
+                      StaticText, 0xa124ecf00, {{443.0, -458.0}, {120.0, 15.0}}, value: 4 code & doc quotes <AX element pid: 34864, token: MIgAAAAAAABvY29jJAQAAAAAAAA=>
+                      StaticText, 0xa124ed040, {{319.0, -431.0}, {71.0, 15.0}}, value: 1 task quote <AX element pid: 34864, token: MIgAAAAAAABvY29jJQQAAAAAAAA=>
+                      StaticText, 0xa124ed180, {{416.0, -431.0}, {84.0, 15.0}}, value: 1 record quote <AX element pid: 34864, token: MIgAAAAAAABvY29jJgQAAAAAAAA=>
+                      StaticText, 0xa124ed2c0, {{526.0, -431.0}, {35.0, 15.0}}, value: 1 note <AX element pid: 34864, token: MIgAAAAAAABvY29jJwQAAAAAAAA=>
+                  OutlineRow, 0xa124ed400, {{301.0, -409.0}, {292.0, 38.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD8/////////w==>
+                    Cell, 0xa124ed540, {{301.0, -409.0}, {292.0, 38.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD8/////////48AAAAAAAAA>
+                      StaticText, 0xa124ed680, {{309.0, -413.0}, {259.0, 30.0}}, value: Updated Sep 28 at ... <AX element pid: 34864, token: MIgAAAAAAABvY29jkwQAAAAAAAA=>
+                  OutlineRow, 0xa124ed7c0, {{301.0, -371.0}, {292.0, 190.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD7/////////w==>
+                    Cell, 0xa124ed900, {{301.0, -371.0}, {292.0, 190.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD7/////////48AAAAAAAAA>
+                      Image, 0xa124eda40, {{322.0, -287.0}, {14.0, 13.0}}, identifier: 'exclamationmark.triangle', label: 'Warning' <AX element pid: 34864, token: MIgAAAAAAABvY29jnQQAAAAAAAA=>
+                      StaticText, 0xa124edb80, {{347.0, -288.5}, {225.0, 112.0}}, value: Needs review · 8 o... <AX element pid: 34864, token: MIgAAAAAAABvY29jngQAAAAAAAA=>
+                      StaticText, 0xa124edcc0, {{353.0, -167.5}, {51.0, 13.0}}, value: No source <AX element pid: 34864, token: MIgAAAAAAABvY29jnwQAAAAAAAA=>
+                      StaticText, 0xa124ede00, {{414.0, -168.5}, {8.0, 15.0}}, value: 5 <AX element pid: 34864, token: MIgAAAAAAABvY29joAQAAAAAAAA=>
+                      StaticText, 0xa124edf40, {{436.0, -167.5}, {59.0, 13.0}}, value: Not verified <AX element pid: 34864, token: MIgAAAAAAABvY29joQQAAAAAAAA=>
+                      StaticText, 0xa124ee080, {{505.0, -168.5}, {8.0, 15.0}}, value: 3 <AX element pid: 34864, token: MIgAAAAAAABvY29jogQAAAAAAAA=>
+                      StaticText, 0xa124ee1c0, {{353.0, -144.5}, {55.0, 13.0}}, value: Withdrawn <AX element pid: 34864, token: MIgAAAAAAABvY29jowQAAAAAAAA=>
+                      StaticText, 0xa124ee300, {{418.0, -145.5}, {6.0, 15.0}}, value: 1 <AX element pid: 34864, token: MIgAAAAAAABvY29jpAQAAAAAAAA=>
+                      Button, 0xa124ee440, {{432.0, -145.0}, {81.0, 15.0}}, label: 'Next marked ›' <AX element pid: 34864, token: MIgAAAAAAABvY29jpQQAAAAAAAA=>
+                  OutlineRow, 0xa124ee580, {{301.0, -181.0}, {292.0, 136.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD6/////////w==>
+                    Cell, 0xa124ee6c0, {{301.0, -181.0}, {292.0, 136.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD6/////////48AAAAAAAAA>
+                      StaticText, 0xa124ee800, {{321.0, -165.0}, {51.0, 15.0}}, value: Question <AX element pid: 34864, token: MIgAAAAAAABvY29jLwQAAAAAAAA=>
+                      StaticText, 0xa124ee940, {{321.0, -142.0}, {249.0, 32.0}}, value: 我想理解一个 session 怎么被... <AX element pid: 34864, token: MIgAAAAAAABvY29jMAQAAAAAAAA=>
+                      Button, 0xa124eea80, {{321.0, -93.0}, {251.0, 32.0}}, label: 'Written for · Covers · Not covered, 2 · 5 · 3' <AX element pid: 34864, token: MIgAAAAAAABvY29jMQQAAAAAAAA=>
+                  OutlineRow, 0xa124eebc0, {{301.0, -45.0}, {292.0, 41.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD5/////////w==>
+                    Cell, 0xa124eed00, {{301.0, -45.0}, {292.0, 41.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD5/////////48AAAAAAAAA>
+                      StaticText, 0xa124eee40, {{309.0, -25.5}, {8.0, 19.0}}, label: '1' <AX element pid: 34864, token: MIgAAAAAAABvY29jlQQAAAAAAAA=>
+                      StaticText, 0xa124eef80, {{325.0, -25.5}, {194.0, 19.0}}, label: '会话运行模型与长连接：总览' <AX element pid: 34864, token: MIgAAAAAAABvY29jlgQAAAAAAAA=>
+                  OutlineRow, 0xa124ef0c0, {{301.0, -4.0}, {292.0, 121.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD4/////////w==>
+                    Cell, 0xa124ef200, {{301.0, -4.0}, {292.0, 121.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD4/////////48AAAAAAAAA>
+                      StaticText, 0xa124ef340, {{309.0, 0.0}, {271.0, 113.0}}, value: Orbit 中的 session 被... <AX element pid: 34864, token: MIgAAAAAAABvY29jqQAAAAAAAAA=>
+                        Link, 0xa124ef480, {{309.0, 46.0}, {13.1, 25.0}}, identifier: 'orbit-footnote://note?n=1', label: '[1]', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29j0gAAAAAAAAA=>
+                        Link, 0xa124ef5c0, {{322.1, 46.0}, {14.5, 25.0}}, identifier: 'orbit-footnote://note?n=2', label: '[2]', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29j0wAAAAAAAAA=>
+                        Link, 0xa124ef700, {{533.4, 71.0}, {14.9, 25.0}}, identifier: 'orbit-footnote://note?n=9', label: '[9]', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29j1AAAAAAAAAA=>
+                  OutlineRow, 0xa124ef840, {{301.0, 117.0}, {292.0, 43.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD3/////////w==>
+                    Cell, 0xa124ef980, {{301.0, 117.0}, {292.0, 43.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD3/////////48AAAAAAAAA>
+                      StaticText, 0xa124efac0, {{309.0, 135.5}, {10.0, 19.0}}, label: '2' <AX element pid: 34864, token: MIgAAAAAAABvY29jqgAAAAAAAAA=>
+                      StaticText, 0xa124efc00, {{327.0, 135.5}, {60.0, 19.0}}, label: '已知的坑' <AX element pid: 34864, token: MIgAAAAAAABvY29jqwAAAAAAAAA=>
+                      StaticText, 0xa124efd40, {{405.0, 140.5}, {101.0, 13.0}}, label: 'Rewrite pending' <AX element pid: 34864, token: MIgAAAAAAABvY29jrAAAAAAAAAA=>
+                  OutlineRow, 0xa124efe80, {{301.0, 160.0}, {292.0, 215.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD2/////////w==>
+                    Cell, 0xa124f0000, {{301.0, 160.0}, {292.0, 215.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD2/////////48AAAAAAAAA>
+                      StaticText, 0xa124f0140, {{309.0, 164.0}, {275.0, 207.0}}, value: session 启动窗口内的竞态：客... <AX element pid: 34864, token: MIgAAAAAAABvY29j+QAAAAAAAAA=>
+                        Link, 0xa124f0280, {{336.8, 210.0}, {21.2, 25.0}}, identifier: 'orbit-footnote://note?n=28', label: '[28]', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jHgEAAAAAAAA=>
+                        Link, 0xa124f03c0, {{409.4, 258.0}, {21.2, 25.0}}, identifier: 'orbit-footnote://note?n=28', label: '[28]', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jHwEAAAAAAAA=>
+                        Link, 0xa124f0500, {{430.7, 258.0}, {21.4, 25.0}}, identifier: 'orbit-footnote://note?n=30', label: '[30]', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jIAEAAAAAAAA=>
+                        Link, 0xa124f0640, {{336.8, 306.0}, {21.4, 25.0}}, identifier: 'orbit-footnote://note?n=30', label: '[30]', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jIQEAAAAAAAA=>
+                        Link, 0xa124f0780, {{361.9, 306.0}, {59.7, 25.0}}, identifier: 'orbit-mark://mark?section=s2&block=0&sentence=2', label: ' Withdrawn ', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jIgEAAAAAAAA=>
+                        Link, 0xa124f08c0, {{507.3, 354.0}, {56.4, 17.0}}, identifier: 'orbit-mark://mark?section=s2&block=0&sentence=3', label: ' No source ', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jIwEAAAAAAAA=>
+                  OutlineRow, 0xa124f0a00, {{301.0, 375.0}, {292.0, 41.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD1/////////w==>
+                    Cell, 0xa124f0b40, {{301.0, 375.0}, {292.0, 41.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD1/////////48AAAAAAAAA>
+                      StaticText, 0xa124f0c80, {{309.0, 393.0}, {10.0, 19.0}}, label: '3' <AX element pid: 34864, token: MIgAAAAAAABvY29jIQIAAAAAAAA=>
+                      StaticText, 0xa124f0dc0, {{327.0, 393.0}, {155.0, 19.0}}, label: 'turn 投递与 inbox 领取' <AX element pid: 34864, token: MIgAAAAAAABvY29jIgIAAAAAAAA=>
+                  OutlineRow, 0xa124f0f00, {{301.0, 416.0}, {292.0, 96.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD0/////////w==>
+                    Cell, 0xa124f1040, {{301.0, 416.0}, {292.0, 96.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAAD0/////////48AAAAAAAAA>
+                      StaticText, 0xa124f1180, {{309.0, 420.0}, {273.0, 88.0}}, value: 心跳机制用于控制面探测失联的 run... <AX element pid: 34864, token: MIgAAAAAAABvY29j+wEAAAAAAAA=>
+                        Link, 0xa124f12c0, {{444.0, 489.0}, {14.7, 19.0}}, identifier: 'orbit-footnote://note?n=5', label: '[5]', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jAwIAAAAAAAA=>
+                        Link, 0xa124f1400, {{458.7, 489.0}, {19.4, 19.0}}, identifier: 'orbit-footnote://note?n=12', label: '[12]', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jBAIAAAAAAAA=>
+                  OutlineRow, 0xa124f1540, {{301.0, 512.0}, {292.0, 73.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADz/////////w==>
+                    Cell, 0xa124f1680, {{301.0, 512.0}, {292.0, 73.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADz/////////48AAAAAAAAA>
+                      StaticText, 0xa124f17c0, {{309.0, 516.0}, {268.0, 65.0}}, value: 选择 long-poll 而非 We... <AX element pid: 34864, token: MIgAAAAAAABvY29jWgIAAAAAAAA=>
+                        Link, 0xa124f1900, {{487.3, 562.0}, {14.5, 19.0}}, identifier: 'orbit-footnote://note?n=2', label: '[2]', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jYQIAAAAAAAA=>
+                  OutlineRow, 0xa124f1a40, {{301.0, 585.0}, {292.0, 41.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADy/////////w==>
+                    Cell, 0xa124f1b80, {{301.0, 585.0}, {292.0, 41.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADy/////////48AAAAAAAAA>
+                      StaticText, 0xa124f1cc0, {{309.0, 603.0}, {10.0, 19.0}}, label: '4' <AX element pid: 34864, token: MIgAAAAAAABvY29jRQIAAAAAAAA=>
+                      StaticText, 0xa124f1e00, {{327.0, 603.0}, {30.0, 19.0}}, label: '约定' <AX element pid: 34864, token: MIgAAAAAAABvY29jRgIAAAAAAAA=>
+                  OutlineRow, 0xa124f1f40, {{301.0, 626.0}, {292.0, 123.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADx/////////w==>
+                    Cell, 0xa124f2080, {{301.0, 626.0}, {292.0, 123.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADx/////////48AAAAAAAAA>
+                      StaticText, 0xa124f21c0, {{309.0, 630.0}, {275.0, 115.0}}, value: runner-go 全量测试必须在 ... <AX element pid: 34864, token: MIgAAAAAAABvY29jOwIAAAAAAAA=>
+                        Link, 0xa124f2300, {{515.2, 653.0}, {21.4, 25.0}}, identifier: 'orbit-footnote://note?n=39', label: '[39]', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jYgIAAAAAAAA=>
+                        Link, 0xa124f2440, {{350.7, 701.0}, {21.6, 25.0}}, identifier: 'orbit-footnote://note?n=44', label: '[44]', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jYwIAAAAAAAA=>
+                        Link, 0xa124f2580, {{556.7, 701.0}, {21.4, 25.0}}, identifier: 'orbit-footnote://note?n=45', label: '[45]', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jZAIAAAAAAAA=>
+                        Link, 0xa124f26c0, {{309.0, 726.0}, {21.6, 19.0}}, identifier: 'orbit-footnote://note?n=46', label: '[46]', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jZQIAAAAAAAA=>
+                        Link, 0xa124f2800, {{330.6, 726.0}, {20.9, 19.0}}, identifier: 'orbit-footnote://note?n=47', label: '[47]', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jZgIAAAAAAAA=>
+                  OutlineRow, 0xa124f2940, {{301.0, 749.0}, {292.0, 42.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADw/////////w==>
+                    Cell, 0xa124f2a80, {{301.0, 749.0}, {292.0, 42.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADw/////////48AAAAAAAAA>
+                      StaticText, 0xa124f2bc0, {{309.0, 771.0}, {66.0, 16.0}}, value: Footnotes <AX element pid: 34864, token: MIgAAAAAAABvY29jKAIAAAAAAAA=>
+                      StaticText, 0xa124f2d00, {{381.0, 772.0}, {190.0, 15.0}}, value: 12 · 5 session quo... <AX element pid: 34864, token: MIgAAAAAAABvY29jKQIAAAAAAAA=>
+                  OutlineRow, 0xa124f2e40, {{301.0, 791.0}, {292.0, 41.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADv/////////w==>
+                    Cell, 0xa124f2f80, {{301.0, 791.0}, {292.0, 41.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADv/////////48AAAAAAAAA>
+                      Button, 0xa124f30c0, {{309.0, 795.0}, {275.0, 33.0}}, label: '1., Design doc, docs/architecture.md § Execution model, ✓, “A session is a resumable, multi-turn conversation with one agent runtime”' <AX element pid: 34864, token: MIgAAAAAAABvY29jXwIAAAAAAAA=>
+                  OutlineRow, 0xa124f3200, {{301.0, 832.0}, {292.0, 41.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADu/////////w==>
+                    Cell, 0xa124f3340, {{301.0, 832.0}, {292.0, 41.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADu/////////48AAAAAAAAA>
+                      Button, 0xa124f3480, {{309.0, 836.0}, {275.0, 33.0}}, label: '2., Contract, contracts/runner.contract.json, ✓, “GET /api/runner/runs/:id/inbox”' <AX element pid: 34864, token: MIgAAAAAAABvY29j2wIAAAAAAAA=>
+                  OutlineRow, 0xa124f35c0, {{301.0, 873.0}, {292.0, 41.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADt/////////w==>
+                    Cell, 0xa124f3700, {{301.0, 873.0}, {292.0, 41.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADt/////////48AAAAAAAAA>
+                      Button, 0xa124f3840, {{309.0, 877.0}, {275.0, 33.0}}, label: '9., Code, src/apiserver/src/realtime/realtime.service.ts · RealtimeService.waitForInbox, ✓, “Park until a turn is enqueued for this run, or the timeout elapses.”' <AX element pid: 34864, token: MIgAAAAAAABvY29j3AIAAAAAAAA=>
+                  OutlineRow, 0xa124f3980, {{301.0, 914.0}, {292.0, 41.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADs/////////w==>
+                    Cell, 0xa124f3ac0, {{301.0, 914.0}, {292.0, 41.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADs/////////48AAAAAAAAA>
+                      Button, 0xa124f3c00, {{309.0, 918.0}, {275.0, 33.0}}, label: '10., Code, src/runner-go/runloop.go · claimRetryDelayAfter, ✗ no quote, — no quote given' <AX element pid: 34864, token: MIgAAAAAAABvY29jKwIAAAAAAAA=>
+                  OutlineRow, 0xa124f3d40, {{301.0, 955.0}, {292.0, 41.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADr/////////w==>
+                    Cell, 0xa124f3e80, {{301.0, 955.0}, {292.0, 41.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADr/////////48AAAAAAAAA>
+                      Button, 0xa124f4000, {{309.0, 959.0}, {275.0, 33.0}}, label: '11., Session, 执行任务：runner 领取重试 · event #2703 · Sep 15, 01:12, ✗ quote not found, “claimRetryWait honours the context”' <AX element pid: 34864, token: MIgAAAAAAABvY29j3QIAAAAAAAA=>
+                  OutlineRow, 0xa124f4140, {{301.0, 996.0}, {292.0, 57.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADq/////////w==>
+                    Cell, 0xa124f4280, {{301.0, 996.0}, {292.0, 57.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADq/////////48AAAAAAAAA>
+                      Button, 0xa124f43c0, {{309.0, 1000.0}, {275.0, 49.0}}, label: '28., Session, 执行任务：session_merge 对「runner 自更新重启」 · event #412 · Sep 14, 03:05, ✓, “于是每次合并都在准入处被判 superseded，且不随时间恢复。”, via 合并失败 merge was superseded 不可区分于真实竞态' <AX element pid: 34864, token: MIgAAAAAAABvY29j3gIAAAAAAAA=>
+                  OutlineRow, 0xa124f4500, {{301.0, 1053.0}, {292.0, 57.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADp/////////w==>
+                    Cell, 0xa124f4640, {{301.0, 1053.0}, {292.0, 57.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADp/////////48AAAAAAAAA>
+                      Button, 0xa124f4780, {{309.0, 1057.0}, {275.0, 49.0}}, label: '30., Session, 执行任务：session_merge 对「runner 自更新重启」 · turn #3 · Sep 14, 02:40, ✗ quote not found, “充要条件是「detach 之后本地再没有替补 supervisor 注册上来」”, via 修复准入放行使合并正常落地，仅留交接在飞真竞态 · Rejected by you' <AX element pid: 34864, token: MIgAAAAAAABvY29jKwQAAAAAAAA=>
+                  OutlineRow, 0xa124f48c0, {{301.0, 1110.0}, {292.0, 57.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADo/////////w==>
+                    Cell, 0xa124f4a00, {{301.0, 1110.0}, {292.0, 57.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADo/////////48AAAAAAAAA>
+                      Button, 0xa124f4b40, {{309.0, 1114.0}, {275.0, 49.0}}, label: '39., Task comment, 修 runner-go 测试环境继承 · comment · Sep 20, 09:30, ✓, “runner-go 全量测试须在 runner 宿主跑”, via runner-go 全量测试须在 runner 宿主跑而非引擎 Bash' <AX element pid: 34864, token: MIgAAAAAAABvY29jGwQAAAAAAAA=>
+                  OutlineRow, 0xa124f4c80, {{301.0, 1167.0}, {292.0, 57.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADn/////////w==>
+                    Cell, 0xa124f4dc0, {{301.0, 1167.0}, {292.0, 57.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADn/////////48AAAAAAAAA>
+                      Button, 0xa124f4f00, {{309.0, 1179.0}, {275.0, 49.0}}, label: '44., Session, 执行任务：例外待办：模型、FAILED 全路径来源 · turn #4 · Sep 15, 07:37, ✓, “runner — drain 就会把作业杀掉，唤醒不一定送到，你这次就是这么停了六小时”, via 别用 bg 唤醒等长命令，runner drain 会杀作业致卡死' <AX element pid: 34864, token: MIgAAAAAAABvY29jqAQAAAAAAAA=>
+                  OutlineRow, 0xa124f5040, {{301.0, 1224.0}, {292.0, 41.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADm/////////w==>
+                    Cell, 0xa124f5180, {{301.0, 1224.0}, {292.0, 41.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADm/////////48AAAAAAAAA>
+                      Button, 0xa124f52c0, {{309.0, 1228.0}, {275.0, 33.0}}, label: '45., Session, 执行任务：验收 shell · tool call Bash · Sep 16, 10:00, ✓, “timeout 590 grep -m1”' <AX element pid: 34864, token: MIgAAAAAAABvY29jNQQAAAAAAAA=>
+                  OutlineRow, 0xa124f5400, {{301.0, 1265.0}, {292.0, 41.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADl/////////w==>
+                    Cell, 0xa124f5540, {{301.0, 1265.0}, {292.0, 41.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADl/////////48AAAAAAAAA>
+                      Button, 0xa124f5680, {{309.0, 1269.0}, {275.0, 33.0}}, label: '46., Note, memory/done-marker-watch-dies-with-its-producer.md, ✓, “别等标记文件等作业”' <AX element pid: 34864, token: MIgAAAAAAABvY29jLAQAAAAAAAA=>
+                  OutlineRow, 0xa124f57c0, {{301.0, 1306.0}, {292.0, 54.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADk/////////w==>
+                    Cell, 0xa124f5900, {{301.0, 1306.0}, {292.0, 54.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADk/////////48AAAAAAAAA>
+                      Button, 0xa124f5a40, {{309.0, 1324.0}, {275.0, 32.0}}, label: '47., Owner decision, 项目推进可靠性 · decision, ✗ not found, “长命令留在本轮”' <AX element pid: 34864, token: MIgAAAAAAABvY29jlAQAAAAAAAA=>
+                  OutlineRow, 0xa124f5b80, {{301.0, 1360.0}, {292.0, 42.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADj/////////w==>
+                    Cell, 0xa124f5cc0, {{301.0, 1360.0}, {292.0, 42.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADj/////////48AAAAAAAAA>
+                      StaticText, 0xa124f5e00, {{309.0, 1308.0}, {46.0, 16.0}}, value: Entries <AX element pid: 34864, token: MIgAAAAAAABvY29jpgQAAAAAAAA=>
+                      StaticText, 0xa124f5f40, {{361.0, 1309.0}, {217.0, 15.0}}, value: the 4 this documen... <AX element pid: 34864, token: MIgAAAAAAABvY29jpwQAAAAAAAA=>
+                  OutlineRow, 0xa124f6080, {{301.0, 1402.0}, {292.0, 50.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADi/////////w==>
+                    Cell, 0xa124f61c0, {{301.0, 1402.0}, {292.0, 50.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADi/////////48AAAAAAAAA>
+                      StaticText, 0xa124f6300, {{309.0, 1432.0}, {121.0, 16.0}}, value: Principles & conve... <AX element pid: 34864, token: MIgAAAAAAABvY29jmgQAAAAAAAA=>
+                      StaticText, 0xa124f6440, {{436.0, 1433.0}, {6.0, 15.0}}, value: 1 <AX element pid: 34864, token: MIgAAAAAAABvY29jmwQAAAAAAAA=>
+                      StaticText, 0xa124f6580, {{448.0, 1433.0}, {129.0, 15.0}}, value: What every task in... <AX element pid: 34864, token: MIgAAAAAAABvY29jnAQAAAAAAAA=>
+                  OutlineRow, 0xa124f66c0, {{301.0, 1452.0}, {292.0, 27.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADh/////////w==>
+                    Cell, 0xa124f6800, {{301.0, 1452.0}, {292.0, 27.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADh/////////48AAAAAAAAA>
+                      Button, 0xa124f6940, {{309.0, 1456.0}, {275.0, 19.0}}, label: 'runner-go 全量测试须在 runner 宿主跑而非引擎 Bash, [39], Auto' <AX element pid: 34864, token: MIgAAAAAAABvY29jLQQAAAAAAAA=>
+                  OutlineRow, 0xa124f6a80, {{301.0, 1479.0}, {292.0, 34.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADg/////////w==>
+                    Cell, 0xa124f6bc0, {{301.0, 1479.0}, {292.0, 34.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADg/////////48AAAAAAAAA>
+                      StaticText, 0xa124f6d00, {{309.0, 1493.0}, {62.0, 16.0}}, value: Decisions <AX element pid: 34864, token: MIgAAAAAAABvY29jHQQAAAAAAAA=>
+                      StaticText, 0xa124f6e40, {{377.0, 1494.0}, {6.0, 15.0}}, value: 1 <AX element pid: 34864, token: MIgAAAAAAABvY29jHgQAAAAAAAA=>
+                      StaticText, 0xa124f6f80, {{389.0, 1494.0}, {165.0, 15.0}}, value: Active decisions, ... <AX element pid: 34864, token: MIgAAAAAAABvY29jHwQAAAAAAAA=>
+                  OutlineRow, 0xa124f70c0, {{301.0, 1513.0}, {292.0, 43.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADf/////////w==>
+                    Cell, 0xa124f7200, {{301.0, 1513.0}, {292.0, 43.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADf/////////48AAAAAAAAA>
+                      Button, 0xa124f7340, {{309.0, 1517.0}, {275.0, 35.0}}, label: '修复准入放行使合并正常落地，仅留交接在飞真竞态, [30], Rejected, Rejected by you · its sentence in §2 is withdrawn' <AX element pid: 34864, token: MIgAAAAAAABvY29jWgQAAAAAAAA=>
+                  OutlineRow, 0xa124f7480, {{301.0, 1556.0}, {292.0, 34.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADe/////////w==>
+                    Cell, 0xa124f75c0, {{301.0, 1556.0}, {292.0, 34.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADe/////////48AAAAAAAAA>
+                      StaticText, 0xa124f7700, {{309.0, 1562.0}, {44.0, 16.0}}, value: Pitfalls <AX element pid: 34864, token: MIgAAAAAAABvY29jlwQAAAAAAAA=>
+                      StaticText, 0xa124f7840, {{359.0, 1563.0}, {8.0, 15.0}}, value: 2 <AX element pid: 34864, token: MIgAAAAAAABvY29jmAQAAAAAAAA=>
+                      StaticText, 0xa124f7980, {{373.0, 1563.0}, {200.0, 15.0}}, value: Traps a run has ac... <AX element pid: 34864, token: MIgAAAAAAABvY29jmQQAAAAAAAA=>
+                  OutlineRow, 0xa124f7ac0, {{301.0, 1590.0}, {292.0, 27.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADd/////////w==>
+                    Cell, 0xa124f7c00, {{301.0, 1590.0}, {292.0, 27.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADd/////////48AAAAAAAAA>
+                      Button, 0xa124f7d40, {{309.0, 1594.0}, {275.0, 19.0}}, label: '合并失败 merge was superseded 不可区分于真实竞态, [28], Unreviewed' <AX element pid: 34864, token: MIgAAAAAAABvY29jKgQAAAAAAAA=>
+                  OutlineRow, 0xa124f7e80, {{301.0, 1617.0}, {292.0, 27.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADc/////////w==>
+                    Cell, 0xa124f8000, {{301.0, 1617.0}, {292.0, 27.0}}, Keyboard Focused <AX element pid: 34864, token: MIgAAAAAAABvY29jgQAAAAAAAADc/////////48AAAAAAAAA>
+                      Button, 0xa124f8140, {{309.0, 1621.0}, {275.0, 19.0}}, label: '别用 bg 唤醒等长命令，runner drain 会杀作业致卡死, [44], Auto' <AX element pid: 34864, token: MIgAAAAAAABvY29jGgQAAAAAAAA=>
+                  TableColumn, 0xa124f8280, {{301.0, -550.0}, {292.0, 2194.0}}, identifier: 'ListColumn', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jjwAAAAAAAAA=>
+                ScrollBar, 0xa124f83c0, {{592.0, 82.0}, {19.0, 539.0}}, value: 0.1538925769462885 <AX element pid: 34864, token: MIgAAAAAAABvY29jggAAAAAAAAA=>
+                  ValueIndicator, 0xa124f8500, {{596.0, 144.0}, {11.0, 154.0}}, value: 0.1538925769462885, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jggAAAAAAAAAAAAAAAAAAAA==>
+                  IncrementArrow, 0xa124f8640, {{593.0, 83.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jggAAAAAAAAABAAAAAAAAAA==>
+                  DecrementArrow, 0xa124f8780, {{593.0, 83.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jggAAAAAAAAACAAAAAAAAAA==>
+                  Button, 0xa124f88c0, {{596.0, 299.0}, {11.0, 318.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jggAAAAAAAAADAAAAAAAAAA==>
+                  Button, 0xa124f8a00, {{596.0, 86.0}, {11.0, 58.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jggAAAAAAAAAEAAAAAAAAAA==>
+            Splitter, 0xa124f8b40, {{610.0, 83.0}, {0.0, 625.0}}, value: 309, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jtQIAAAAAAAA=>
+            Group, 0xa124f8c80, {{610.0, 31.0}, {400.0, 677.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jtgIAAAAAAAA=>
+              MenuButton, 0xa124f8dc0, {{626.0, 102.0}, {61.0, 16.0}}, label: 'New chat' <AX element pid: 34864, token: MIgAAAAAAABvY29jtwIAAAAAAAA=>
+              MenuButton, 0xa124f8f00, {{692.0, 107.0}, {9.0, 6.0}}, identifier: 'chevron.down', label: 'New chat' <AX element pid: 34864, token: MIgAAAAAAABvY29juAIAAAAAAAA=>
+              Button, 0xa124f9040, {{884.0, 95.0}, {30.0, 30.0}}, identifier: 'plus', label: 'New chat' <AX element pid: 34864, token: MIgAAAAAAABvY29juQIAAAAAAAA=>
+              Button, 0xa124f9180, {{924.0, 95.0}, {30.0, 30.0}}, identifier: 'arrow.right', label: 'Open as a full session', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jugIAAAAAAAA=>
+              Button, 0xa124f92c0, {{964.0, 95.0}, {30.0, 30.0}}, identifier: 'xmark', label: 'Hide chat' <AX element pid: 34864, token: MIgAAAAAAABvY29juwIAAAAAAAA=>
+              StaticText, 0xa124f9400, {{626.0, 144.0}, {42.0, 15.0}}, value: Runs in <AX element pid: 34864, token: MIgAAAAAAABvY29jVAMAAAAAAAA=>
+              MenuButton, 0xa124f9540, {{676.0, 144.0}, {112.0, 15.0}}, label: 'Workspace' <AX element pid: 34864, token: MIgAAAAAAABvY29jVQMAAAAAAAA=>
+              MenuButton, 0xa124f9680, {{793.0, 149.0}, {9.0, 6.0}}, identifier: 'chevron.down', label: 'Workspace' <AX element pid: 34864, token: MIgAAAAAAABvY29jVgMAAAAAAAA=>
+              ScrollView, 0xa124f97c0, {{610.0, 167.0}, {400.0, 449.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jVwMAAAAAAAA=>
+                StaticText, 0xa124f9900, {{663.5, 189.0}, {293.0, 35.0}}, identifier: 'wiki-chat-empty', value: Ask about this pag... <AX element pid: 34864, token: MIgAAAAAAABvY29jWwMAAAAAAAA=>
+              ScrollView, 0xa124f9a40, {{636.0, 630.0}, {354.0, 24.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jWAMAAAAAAAA=>
+                Image, 0xa124f9b80, {{645.0, 637.0}, {12.0, 10.0}}, identifier: 'wiki-chat-page-chip', label: 'Bookmark' <AX element pid: 34864, token: MIgAAAAAAABvY29jXAMAAAAAAAA=>
+                StaticText, 0xa124f9cc0, {{662.0, 634.5}, {34.0, 15.0}}, identifier: 'wiki-chat-page-chip', value: 3.1 §2 <AX element pid: 34864, token: MIgAAAAAAABvY29jXQMAAAAAAAA=>
+                Button, 0xa124f9e00, {{704.0, 638.0}, {9.0, 9.0}}, identifier: 'wiki-chat-page-chip', label: 'Remove 3.1 §2' <AX element pid: 34864, token: MIgAAAAAAABvY29jXgMAAAAAAAA=>
+                StaticText, 0xa124f9f40, {{741.0, 634.5}, {114.0, 15.0}}, identifier: 'wiki-chat-quote-chip', value: Runner 每 30 秒发送一次心... <AX element pid: 34864, token: MIgAAAAAAABvY29jXwMAAAAAAAA=>
+                StaticText, 0xa124fa080, {{866.0, 634.5}, {127.0, 15.0}}, identifier: 'wiki-chat-quote-chip', value: 1 sentence · 2 sou... <AX element pid: 34864, token: MIgAAAAAAABvY29jYAMAAAAAAAA=>
+                Button, 0xa124fa1c0, {{1001.0, 638.0}, {9.0, 9.0}}, identifier: 'wiki-chat-quote-chip', label: 'Remove Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。' <AX element pid: 34864, token: MIgAAAAAAABvY29jYQMAAAAAAAA=>
+              TextField, 0xa124fa300, {{635.0, 666.0}, {318.0, 19.0}}, identifier: 'wiki-chat-input', placeholderValue: 'Ask about this page, or say what should change' <AX element pid: 34864, token: MIgAAAAAAABvY29jWQMAAAAAAAA=>
+              Button, 0xa124fa440, {{960.0, 660.0}, {30.0, 30.0}}, identifier: 'wiki-chat-send', label: 'Send', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jWgMAAAAAAAA=>
+    Toolbar, 0xa124fa580, {{0.0, 31.0}, {1010.0, 52.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jOQAAAAAAAAA=>
+      Button, 0xa124fa6c0, {{100.0, 31.0}, {48.0, 52.0}}, label: 'Show Sidebar' <AX element pid: 34864, token: MIgAAAAAAABvY29jPgAAAAAAAAA=>
+      Button, 0xa124fa800, {{961.0, 31.0}, {45.0, 52.0}}, identifier: 'list.bullet', label: 'Contents' <AX element pid: 34864, token: MIgAAAAAAABvY29jewAAAAAAAAA=>
+    Button, 0xa124fa940, {{18.0, 49.0}, {16.0, 16.0}}, identifier: '_XCUI:CloseWindow' <AX element pid: 34864, token: MIgAAAAAAABvY29jOgAAAAAAAAA=>
+    Button, 0xa124faa80, {{64.0, 49.0}, {16.0, 16.0}}, identifier: '_XCUI:FullScreenWindow' <AX element pid: 34864, token: MIgAAAAAAABvY29jOwAAAAAAAAA=>
+      Group, 0xa124fabc0, {{65.0, 50.0}, {14.0, 14.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jPwAAAAAAAAA=>
+        Group, 0xa124fad00, {{65.0, 50.0}, {14.0, 14.0}}, Disabled <AX element pid: 36213, token: dY0AADCIAABvY29jKgAAAAAAAAA=>
+    Button, 0xa124fae40, {{41.0, 49.0}, {16.0, 16.0}}, identifier: '_XCUI:MinimizeWindow' <AX element pid: 34864, token: MIgAAAAAAABvY29jPAAAAAAAAAA=>
+    StaticText, 0xa124faf80, {{148.0, 31.0}, {813.0, 52.0}} <AX element pid: 34864, token: MIgAAAAAAABvY29jNwAAAAAAAAAFAAAAAAAAAA==>
+  MenuBar, 0xa124fb0c0, {{0.0, 0.0}, {1024.0, 30.0}} <AX element pid: 34864, token: MIgAAAAAAABvY29jAgAAAAAAAAA=>
+    MenuBarItem, 0xa124fb200, {{10.0, 0.0}, {34.0, 30.0}}, title: 'Apple' <AX element pid: 34864, token: MIgAAAAAAABvY29jAgAAAAAAAAAAAAAAAAAAAA==>
+      Menu, 0xa124fb340, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAA=>
+        MenuItem, 0xa124fb480, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_aboutThisMacRequested:', title: 'About This Mac' <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAAAAAAAAAAAAA==>
+        MenuItem, 0xa124fb5c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_systemInformationRequested:', title: 'System Information' <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAABAAAAAAAAAA==>
+        MenuItem, 0xa124fb700, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAACAAAAAAAAAA==>
+        MenuItem, 0xa124fb840, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_systemSettingsRequested:', title: 'System Settings…, 1 update' <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAADAAAAAAAAAA==>
+        MenuItem, 0xa124fb980, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_appStoreRequested:', title: 'App Store' <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAAEAAAAAAAAAA==>
+        MenuItem, 0xa124fbac0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAAFAAAAAAAAAA==>
+        MenuItem, 0xa124fbc00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentsRequested:', title: 'Recent Items' <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAAGAAAAAAAAAA==>
+          Menu, 0xa124fbd40, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 34864, token: MIgAAAAAAABvY29jMwAAAAAAAAA=>
+            MenuItem, 0xa124fbe80, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Applications', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jMwAAAAAAAAAAAAAAAAAAAA==>
+            MenuItem, 0xa124fc000, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'C11MacProbe' <AX element pid: 34864, token: MIgAAAAAAABvY29jMwAAAAAAAAABAAAAAAAAAA==>
+            MenuItem, 0xa124fc140, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Show “C11MacProbe” in Finder' <AX element pid: 34864, token: MIgAAAAAAABvY29jMwAAAAAAAAACAAAAAAAAAA==>
+            MenuItem, 0xa124fc280, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Installer' <AX element pid: 34864, token: MIgAAAAAAABvY29jMwAAAAAAAAADAAAAAAAAAA==>
+            MenuItem, 0xa124fc3c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Show “Installer” in Finder' <AX element pid: 34864, token: MIgAAAAAAABvY29jMwAAAAAAAAAEAAAAAAAAAA==>
+            MenuItem, 0xa124fc500, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'System Settings' <AX element pid: 34864, token: MIgAAAAAAABvY29jMwAAAAAAAAAFAAAAAAAAAA==>
+            MenuItem, 0xa124fc640, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Show “System Settings” in Finder' <AX element pid: 34864, token: MIgAAAAAAABvY29jMwAAAAAAAAAGAAAAAAAAAA==>
+            MenuItem, 0xa124fc780, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jMwAAAAAAAAAHAAAAAAAAAA==>
+            MenuItem, 0xa124fc8c0, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Documents', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jMwAAAAAAAAAIAAAAAAAAAA==>
+            MenuItem, 0xa124fca00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'AnkaGuestAddons.pkg' <AX element pid: 34864, token: MIgAAAAAAABvY29jMwAAAAAAAAAJAAAAAAAAAA==>
+            MenuItem, 0xa124fcb40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Show “AnkaGuestAddons.pkg” in Finder' <AX element pid: 34864, token: MIgAAAAAAABvY29jMwAAAAAAAAAKAAAAAAAAAA==>
+            MenuItem, 0xa124fcc80, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jMwAAAAAAAAALAAAAAAAAAA==>
+            MenuItem, 0xa124fcdc0, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Servers', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jMwAAAAAAAAAMAAAAAAAAAA==>
+            MenuItem, 0xa124fcf00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_recentItemRequested:', title: 'Macintosh HD' <AX element pid: 34864, token: MIgAAAAAAABvY29jMwAAAAAAAAANAAAAAAAAAA==>
+            MenuItem, 0xa124fd040, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jMwAAAAAAAAAOAAAAAAAAAA==>
+            MenuItem, 0xa124fd180, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_clearRecentItemsRequested:', title: 'Clear Menu' <AX element pid: 34864, token: MIgAAAAAAABvY29jMwAAAAAAAAAPAAAAAAAAAA==>
+        MenuItem, 0xa124fd2c0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAAHAAAAAAAAAA==>
+        MenuItem, 0xa124fd400, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_forceQuitPanelRequested:', title: 'Force Quit…' <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAAIAAAAAAAAAA==>
+        MenuItem, 0xa124fd540, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_forceQuitRequested:', title: 'Force Quit C11MacProbe' <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAAJAAAAAAAAAA==>
+        MenuItem, 0xa124fd680, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAAKAAAAAAAAAA==>
+        MenuItem, 0xa124fd7c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_sleepRequested:', title: 'Sleep' <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAALAAAAAAAAAA==>
+        MenuItem, 0xa124fd900, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_restartRequested:', title: 'Restart…' <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAAMAAAAAAAAAA==>
+        MenuItem, 0xa124fda40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_restartNowRequested:', title: 'Restart' <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAANAAAAAAAAAA==>
+        MenuItem, 0xa124fdb80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_shutDownRequested:', title: 'Shut Down…' <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAAOAAAAAAAAAA==>
+        MenuItem, 0xa124fdcc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_shutDownNowRequested:', title: 'Shut Down' <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAAPAAAAAAAAAA==>
+        MenuItem, 0xa124fde00, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAAQAAAAAAAAAA==>
+        MenuItem, 0xa124fdf40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_lockScreenRequested:', title: 'Lock Screen' <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAARAAAAAAAAAA==>
+        MenuItem, 0xa124fe080, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_logOutRequested:', title: 'Log Out Anka…' <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAASAAAAAAAAAA==>
+        MenuItem, 0xa124fe1c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_logOutNowRequested:', title: 'Log Out Anka' <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAATAAAAAAAAAA==>
+        MenuItem, 0xa124fe300, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLAAAAAAAAAAUAAAAAAAAAA==>
+    MenuBarItem, 0xa124fe440, {{44.0, 0.0}, {108.0, 30.0}}, title: 'C11MacProbe' <AX element pid: 34864, token: MIgAAAAAAABvY29jAgAAAAAAAAABAAAAAAAAAA==>
+      Menu, 0xa124fe580, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 34864, token: MIgAAAAAAABvY29jLQAAAAAAAAA=>
+        MenuItem, 0xa124fe6c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'orderFrontStandardAboutPanel:', title: 'About C11MacProbe' <AX element pid: 34864, token: MIgAAAAAAABvY29jLQAAAAAAAAAAAAAAAAAAAA==>
+        MenuItem, 0xa124fe800, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLQAAAAAAAAABAAAAAAAAAA==>
+        MenuItem, 0xa124fe940, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Services' <AX element pid: 34864, token: MIgAAAAAAABvY29jLQAAAAAAAAACAAAAAAAAAA==>
+          Menu, 0xa124fea80, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 34864, token: MIgAAAAAAABvY29jNAAAAAAAAAA=>
+            MenuItem, 0xa124febc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Activity Monitor' <AX element pid: 34864, token: MIgAAAAAAABvY29jNAAAAAAAAAAAAAAAAAAAAA==>
+            MenuItem, 0xa124fed00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Allocations & Leaks' <AX element pid: 34864, token: MIgAAAAAAABvY29jNAAAAAAAAAABAAAAAAAAAA==>
+            MenuItem, 0xa124fee40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'File Activity' <AX element pid: 34864, token: MIgAAAAAAABvY29jNAAAAAAAAAACAAAAAAAAAA==>
+            MenuItem, 0xa124fef80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'System Trace' <AX element pid: 34864, token: MIgAAAAAAABvY29jNAAAAAAAAAADAAAAAAAAAA==>
+            MenuItem, 0xa124ff0c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Time Profile Active Application' <AX element pid: 34864, token: MIgAAAAAAABvY29jNAAAAAAAAAAEAAAAAAAAAA==>
+            MenuItem, 0xa124ff200, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Time Profile App Under Mouse' <AX element pid: 34864, token: MIgAAAAAAABvY29jNAAAAAAAAAAFAAAAAAAAAA==>
+            MenuItem, 0xa124ff340, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Time Profile Entire System' <AX element pid: 34864, token: MIgAAAAAAABvY29jNAAAAAAAAAAGAAAAAAAAAA==>
+            MenuItem, 0xa124ff480, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_processRequest:', title: 'Toggle Instruments Recording' <AX element pid: 34864, token: MIgAAAAAAABvY29jNAAAAAAAAAAHAAAAAAAAAA==>
+            MenuItem, 0xa124ff5c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_configureServicesMenu:', title: 'Services Settings…' <AX element pid: 34864, token: MIgAAAAAAABvY29jNAAAAAAAAAAIAAAAAAAAAA==>
+        MenuItem, 0xa124ff700, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLQAAAAAAAAADAAAAAAAAAA==>
+        MenuItem, 0xa124ff840, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'hide:', title: 'Hide C11MacProbe' <AX element pid: 34864, token: MIgAAAAAAABvY29jLQAAAAAAAAAEAAAAAAAAAA==>
+        MenuItem, 0xa124ff980, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'hideOtherApplications:', title: 'Hide Others' <AX element pid: 34864, token: MIgAAAAAAABvY29jLQAAAAAAAAAFAAAAAAAAAA==>
+        MenuItem, 0xa124ffac0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'unhideAllApplications:', title: 'Show All', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLQAAAAAAAAAGAAAAAAAAAA==>
+        MenuItem, 0xa124ffc00, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLQAAAAAAAAAHAAAAAAAAAA==>
+        MenuItem, 0xa124ffd40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'terminate:', title: 'Quit C11MacProbe' <AX element pid: 34864, token: MIgAAAAAAABvY29jLQAAAAAAAAAIAAAAAAAAAA==>
+    MenuBarItem, 0xa124ffe80, {{152.0, 0.0}, {42.0, 30.0}}, title: 'File' <AX element pid: 34864, token: MIgAAAAAAABvY29jAgAAAAAAAAACAAAAAAAAAA==>
+      Menu, 0xa124c8000, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 34864, token: MIgAAAAAAABvY29jLgAAAAAAAAA=>
+        MenuItem, 0xa124c8140, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'menuAction:', title: 'New Window' <AX element pid: 34864, token: MIgAAAAAAABvY29jLgAAAAAAAAAAAAAAAAAAAA==>
+        MenuItem, 0xa124c8280, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLgAAAAAAAAABAAAAAAAAAA==>
+        MenuItem, 0xa124c83c0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLgAAAAAAAAACAAAAAAAAAA==>
+        MenuItem, 0xa124c8500, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'performClose:', title: 'Close' <AX element pid: 34864, token: MIgAAAAAAABvY29jLgAAAAAAAAADAAAAAAAAAA==>
+        MenuItem, 0xa124c8640, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'closeAll:', title: 'Close All' <AX element pid: 34864, token: MIgAAAAAAABvY29jLgAAAAAAAAAEAAAAAAAAAA==>
+    MenuBarItem, 0xa124c8780, {{194.0, 0.0}, {44.0, 30.0}}, title: 'Edit' <AX element pid: 34864, token: MIgAAAAAAABvY29jAgAAAAAAAAADAAAAAAAAAA==>
+      Menu, 0xa124c88c0, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 34864, token: MIgAAAAAAABvY29jLwAAAAAAAAA=>
+        MenuItem, 0xa124c8a00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'undo:', title: 'Undo', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLwAAAAAAAAAAAAAAAAAAAA==>
+        MenuItem, 0xa124c8b40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'redo:', title: 'Redo', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLwAAAAAAAAABAAAAAAAAAA==>
+        MenuItem, 0xa124c8c80, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLwAAAAAAAAACAAAAAAAAAA==>
+        MenuItem, 0xa124c8dc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'cut:', title: 'Cut', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLwAAAAAAAAADAAAAAAAAAA==>
+        MenuItem, 0xa124c8f00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'copy:', title: 'Copy', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLwAAAAAAAAAEAAAAAAAAAA==>
+        MenuItem, 0xa124c9040, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'paste:', title: 'Paste', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLwAAAAAAAAAFAAAAAAAAAA==>
+        MenuItem, 0xa124c9180, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'delete:', title: 'Delete', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLwAAAAAAAAAGAAAAAAAAAA==>
+        MenuItem, 0xa124c92c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'selectAll:', title: 'Select All', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLwAAAAAAAAAHAAAAAAAAAA==>
+        MenuItem, 0xa124c9400, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jLwAAAAAAAAAIAAAAAAAAAA==>
+        MenuItem, 0xa124c9540, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_NSMenuItemAutoFillIdentifier', title: 'AutoFill' <AX element pid: 34864, token: MIgAAAAAAABvY29jLwAAAAAAAAAJAAAAAAAAAA==>
+          Menu, 0xa124c9680, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 34864, token: MIgAAAAAAABvY29jgwQAAAAAAAA=>
+            MenuItem, 0xa124c97c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_handleInsertFromContactsCommand:', title: 'Contact…', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgwQAAAAAAAAAAAAAAAAAAA==>
+            MenuItem, 0xa124c9900, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_handleInsertFromPasswordsCommand:', title: 'Passwords…', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgwQAAAAAAAABAAAAAAAAAA==>
+            MenuItem, 0xa124c9a40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_handleInsertFromCreditCardsCommand:', title: 'Credit Card…', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jgwQAAAAAAAACAAAAAAAAAA==>
+        MenuItem, 0xa124c9b80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'startDictation:', title: 'Start Dictation…' <AX element pid: 34864, token: MIgAAAAAAABvY29jLwAAAAAAAAAKAAAAAAAAAA==>
+        MenuItem, 0xa124c9cc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'orderFrontCharacterPalette:', title: 'Emoji & Symbols' <AX element pid: 34864, token: MIgAAAAAAABvY29jLwAAAAAAAAALAAAAAAAAAA==>
+    MenuBarItem, 0xa124c9e00, {{238.0, 0.0}, {50.0, 30.0}}, title: 'View' <AX element pid: 34864, token: MIgAAAAAAABvY29jAgAAAAAAAAAEAAAAAAAAAA==>
+      Menu, 0xa124c9f40, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 34864, token: MIgAAAAAAABvY29jMAAAAAAAAAA=>
+        MenuItem, 0xa124ca080, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'toggleTabBar:', title: 'Show Tab Bar' <AX element pid: 34864, token: MIgAAAAAAABvY29jMAAAAAAAAAAAAAAAAAAAAA==>
+        MenuItem, 0xa124ca1c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'toggleTabOverview:', title: 'Show All Tabs' <AX element pid: 34864, token: MIgAAAAAAABvY29jMAAAAAAAAAABAAAAAAAAAA==>
+        MenuItem, 0xa124ca300, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jMAAAAAAAAAACAAAAAAAAAA==>
+        MenuItem, 0xa124ca440, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'toggleSidebar:', title: 'Show Sidebar' <AX element pid: 34864, token: MIgAAAAAAABvY29jMAAAAAAAAAADAAAAAAAAAA==>
+        MenuItem, 0xa124ca580, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'toggleFullScreen:', title: 'Enter Full Screen' <AX element pid: 34864, token: MIgAAAAAAABvY29jMAAAAAAAAAAEAAAAAAAAAA==>
+    MenuBarItem, 0xa124ca6c0, {{288.0, 0.0}, {69.0, 30.0}}, title: 'Window' <AX element pid: 34864, token: MIgAAAAAAABvY29jAgAAAAAAAAAFAAAAAAAAAA==>
+      Menu, 0xa124ca800, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAA=>
+        MenuItem, 0xa124ca940, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'performMiniaturize:', title: 'Minimize' <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAAAAAAAAAAAAA==>
+        MenuItem, 0xa124caa80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'miniaturizeAll:', title: 'Minimize All' <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAABAAAAAAAAAA==>
+        MenuItem, 0xa124cabc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'performZoom:', title: 'Zoom' <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAACAAAAAAAAAA==>
+        MenuItem, 0xa124cad00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'zoomAll:', title: 'Zoom All' <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAADAAAAAAAAAA==>
+        MenuItem, 0xa124cae40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomFill:', title: 'Fill' <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAAEAAAAAAAAAA==>
+        MenuItem, 0xa124caf80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomCenter:', title: 'Center' <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAAFAAAAAAAAAA==>
+        MenuItem, 0xa124cb0c0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAAGAAAAAAAAAA==>
+        MenuItem, 0xa124cb200, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Move & Resize' <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAAHAAAAAAAAAA==>
+          Menu, 0xa124cb340, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAA=>
+            MenuItem, 0xa124cb480, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Halves', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAAAAAAAAAAAAA==>
+            MenuItem, 0xa124cb5c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomLeft:', title: 'Left' <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAABAAAAAAAAAA==>
+            MenuItem, 0xa124cb700, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomRight:', title: 'Right' <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAACAAAAAAAAAA==>
+            MenuItem, 0xa124cb840, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTop:', title: 'Top' <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAADAAAAAAAAAA==>
+            MenuItem, 0xa124cb980, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottom:', title: 'Bottom' <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAAEAAAAAAAAAA==>
+            MenuItem, 0xa124cbac0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAAFAAAAAAAAAA==>
+            MenuItem, 0xa124cbc00, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Quarters', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAAGAAAAAAAAAA==>
+            MenuItem, 0xa124cbd40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTopLeft:', title: 'Top Left' <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAAHAAAAAAAAAA==>
+            MenuItem, 0xa124cbe80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTopRight:', title: 'Top Right' <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAAIAAAAAAAAAA==>
+            MenuItem, 0xa124d0000, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottomLeft:', title: 'Bottom Left' <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAAJAAAAAAAAAA==>
+            MenuItem, 0xa124d0140, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottomRight:', title: 'Bottom Right' <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAAKAAAAAAAAAA==>
+            MenuItem, 0xa124d0280, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAALAAAAAAAAAA==>
+            MenuItem, 0xa124d03c0, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Arrange', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAAMAAAAAAAAAA==>
+            MenuItem, 0xa124d0500, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomLeftAndRight:', title: 'Left & Right' <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAANAAAAAAAAAA==>
+            MenuItem, 0xa124d0640, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomLeftThreeUp:', title: 'Left & Quarters' <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAAOAAAAAAAAAA==>
+            MenuItem, 0xa124d0780, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomRightAndLeft:', title: 'Right & Left' <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAAPAAAAAAAAAA==>
+            MenuItem, 0xa124d08c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomRightThreeUp:', title: 'Right & Quarters' <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAAQAAAAAAAAAA==>
+            MenuItem, 0xa124d0a00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTopAndBottom:', title: 'Top & Bottom' <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAARAAAAAAAAAA==>
+            MenuItem, 0xa124d0b40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomTopThreeUp:', title: 'Top & Quarters' <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAASAAAAAAAAAA==>
+            MenuItem, 0xa124d0c80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottomAndTop:', title: 'Bottom & Top' <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAATAAAAAAAAAA==>
+            MenuItem, 0xa124d0dc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomBottomThreeUp:', title: 'Bottom & Quarters' <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAAUAAAAAAAAAA==>
+            MenuItem, 0xa124d0f00, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomQuarters:', title: 'Quarters' <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAAVAAAAAAAAAA==>
+            MenuItem, 0xa124d1040, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAAWAAAAAAAAAA==>
+            MenuItem, 0xa124d1180, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_zoomUntile:', title: 'Return to Previous Size', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jhAQAAAAAAAAXAAAAAAAAAA==>
+        MenuItem, 0xa124d12c0, {{0.0, 768.0}, {0.0, 0.0}}, title: 'Full Screen Tile' <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAAIAAAAAAAAAA==>
+          Menu, 0xa124d1400, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 34864, token: MIgAAAAAAABvY29jggQAAAAAAAA=>
+            MenuItem, 0xa124d1540, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_tileLeft:', title: 'Left of Screen' <AX element pid: 34864, token: MIgAAAAAAABvY29jggQAAAAAAAAAAAAAAAAAAA==>
+            MenuItem, 0xa124d1680, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_tileRight:', title: 'Right of Screen' <AX element pid: 34864, token: MIgAAAAAAABvY29jggQAAAAAAAABAAAAAAAAAA==>
+        MenuItem, 0xa124d17c0, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAAJAAAAAAAAAA==>
+        MenuItem, 0xa124d1900, {{0.0, 768.0}, {0.0, 0.0}}, identifier: '_removeWindowFromStageManagerSet:', title: 'Remove Window from Set', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAAKAAAAAAAAAA==>
+        MenuItem, 0xa124d1a40, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAALAAAAAAAAAA==>
+        MenuItem, 0xa124d1b80, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'arrangeInFront:', title: 'Bring All to Front' <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAAMAAAAAAAAAA==>
+        MenuItem, 0xa124d1cc0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'alternateArrangeInFront:', title: 'Arrange in Front' <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAANAAAAAAAAAA==>
+        MenuItem, 0xa124d1e00, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAAOAAAAAAAAAA==>
+        MenuItem, 0xa124d1f40, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'selectPreviousTab:', title: 'Show Previous Tab', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAAPAAAAAAAAAA==>
+        MenuItem, 0xa124d2080, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'selectNextTab:', title: 'Show Next Tab', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAAQAAAAAAAAAA==>
+        MenuItem, 0xa124d21c0, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'moveTabToNewWindow:', title: 'Move Tab to New Window', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAARAAAAAAAAAA==>
+        MenuItem, 0xa124d2300, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'mergeAllWindows:', title: 'Merge All Windows', Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAASAAAAAAAAAA==>
+        MenuItem, 0xa124d2440, {{0.0, 768.0}, {0.0, 0.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jMQAAAAAAAAATAAAAAAAAAA==>
+    MenuBarItem, 0xa124d2580, {{357.0, 0.0}, {48.0, 30.0}}, title: 'Help' <AX element pid: 34864, token: MIgAAAAAAABvY29jAgAAAAAAAAAGAAAAAAAAAA==>
+      Menu, 0xa124d26c0, {{0.0, 768.0}, {0.0, 0.0}} <AX element pid: 34864, token: MIgAAAAAAABvY29jMgAAAAAAAAA=>
+        MenuItem, 0xa124d2800, {{0.0, 768.0}, {0.0, 0.0}}, identifier: 'showHelp:', title: 'C11MacProbe Help' <AX element pid: 34864, token: MIgAAAAAAABvY29jMgAAAAAAAAAAAAAAAAAAAA==>
+  TouchBar, 0xa124d2940, {{80.0, 0.0}, {685.0, 30.0}}, Disabled <AX element pid: 34864, token: MIgAAAAAAABvY29jKwAAAAAAAAA=>

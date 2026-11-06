@@ -1,0 +1,5 @@
+ios-1-half-sheet-section-3: in view after 8 drag(s) at (36.666666666666664, 294.0, 197.33333333333331, 24.0)
+ios-1-half-sheet: the button at rest: 9 label="Chat" value="" frame=(330.0, 768.0, 56.0, 56.0) hittable=true
+ios-1-half-sheet: the panel's head: 48 label="New chat" value="" frame=(23.363184079601993, 436.95107794361525, 71.69485903814261, 19.52404643449421) hittable=false
+ios-1-half-sheet: the head stands at 0.50 of the screen's height
+ios-1-half-sheet: a drag on the page behind the half sheet took the paragraph from 333.0 to 223.0

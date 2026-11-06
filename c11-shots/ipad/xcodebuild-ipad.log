@@ -1,0 +1,849 @@
+Command line invocation:
+    /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/xcodebuild test -project C11Probe.xcodeproj -scheme C11Probe -destination id=9F9B4A17-4195-40F0-8B46-728F6A6AA8EB -derivedDataPath .dd-C11Probe -resultBundlePath results/ipad.xcresult CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-
+
+Build settings from command line:
+    CODE_SIGN_IDENTITY = -
+    CODE_SIGNING_ALLOWED = YES
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  swift-markdown: https://github.com/apple/swift-markdown @ 0.9.0
+  Sparkle: https://github.com/sparkle-project/Sparkle @ 2.10.1
+  OrbitKit: /Users/runner/work/orbit/orbit/src/macos/OrbitKit
+  cmark-gfm: https://github.com/swiftlang/swift-cmark.git @ 0.9.0
+
+Writing result bundle at path:
+	/Users/runner/work/orbit/orbit/.c11-probe/results/ipad.xcresult
+
+--- xcodebuild: WARNING: Using the first of multiple matching destinations:
+{ platform:iOS Simulator, arch:arm64, id:9F9B4A17-4195-40F0-8B46-728F6A6AA8EB, OS:26.5, name:iPad Pro 13-inch (M5) }
+{ platform:iOS Simulator, arch:x86_64, id:9F9B4A17-4195-40F0-8B46-728F6A6AA8EB, OS:26.5, name:iPad Pro 13-inch (M5) }
+note: Using codesigning identity override: -
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (11 targets)
+    Target 'C11ProbeUITests' in project 'C11Probe'
+        ➜ Explicit dependency on target 'C11Probe' in project 'C11Probe'
+    Target 'C11Probe' in project 'C11Probe'
+        ➜ Explicit dependency on target 'OrbitKit' in project 'OrbitKit'
+    Target 'OrbitKit' in project 'OrbitKit'
+        ➜ Explicit dependency on target 'OrbitKit' in project 'OrbitKit'
+        ➜ Explicit dependency on target 'Markdown' in project 'swift-markdown'
+    Target 'OrbitKit' in project 'OrbitKit'
+        ➜ Explicit dependency on target 'Markdown' in project 'swift-markdown'
+    Target 'Markdown' in project 'swift-markdown'
+        ➜ Explicit dependency on target 'Markdown' in project 'swift-markdown'
+        ➜ Explicit dependency on target 'CAtomic' in project 'swift-markdown'
+        ➜ Explicit dependency on target 'cmark-gfm' in project 'cmark-gfm'
+        ➜ Explicit dependency on target 'cmark-gfm-extensions' in project 'cmark-gfm'
+    Target 'Markdown' in project 'swift-markdown'
+        ➜ Explicit dependency on target 'CAtomic' in project 'swift-markdown'
+        ➜ Explicit dependency on target 'cmark-gfm' in project 'cmark-gfm'
+        ➜ Explicit dependency on target 'cmark-gfm-extensions' in project 'cmark-gfm'
+    Target 'cmark-gfm-extensions' in project 'cmark-gfm'
+        ➜ Explicit dependency on target 'cmark-gfm-extensions' in project 'cmark-gfm'
+        ➜ Explicit dependency on target 'cmark-gfm' in project 'cmark-gfm'
+    Target 'cmark-gfm-extensions' in project 'cmark-gfm'
+        ➜ Explicit dependency on target 'cmark-gfm' in project 'cmark-gfm'
+    Target 'cmark-gfm' in project 'cmark-gfm'
+        ➜ Explicit dependency on target 'cmark-gfm' in project 'cmark-gfm'
+    Target 'cmark-gfm' in project 'cmark-gfm' (no dependencies)
+    Target 'CAtomic' in project 'swift-markdown' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/actool --print-asset-tag-combinations --output-format xml1 /Users/runner/work/orbit/orbit/src/ios/Support/Assets.xcassets
+
+ExecuteExternalTool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+ReadFileContents /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/share/docc/features.json
+
+ExecuteExternalTool /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/actool --version --output-format xml1
+
+Build description signature: 1bacf4e0344d15fd87a849fb6bc0c02a
+Build description path: /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/XCBuildData/1bacf4e0344d15fd87a849fb6bc0c02a.xcbuilddata
+ClangStatCache /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-688ef53f1462e2c8f657fdc38a81448ff45c64a1807a658693f2a61704f17a36.sdkstatcache
+    cd /Users/runner/work/orbit/orbit/.c11-probe/C11Probe.xcodeproj
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -o /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-688ef53f1462e2c8f657fdc38a81448ff45c64a1807a658693f2a61704f17a36.sdkstatcache
+
+CompileAssetCatalogVariant thinned /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11Probe.app /Users/runner/work/orbit/orbit/src/ios/Support/Assets.xcassets (in target 'C11Probe' from project 'C11Probe')
+    cd /Users/runner/work/orbit/orbit/.c11-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/actool /Users/runner/work/orbit/orbit/src/ios/Support/Assets.xcassets --compile /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/C11Probe.build/Debug-iphonesimulator/C11Probe.build/assetcatalog_output/thinned --output-format human-readable-text --notices --warnings --export-dependency-info /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/C11Probe.build/Debug-iphonesimulator/C11Probe.build/assetcatalog_dependencies_thinned --output-partial-info-plist /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/C11Probe.build/Debug-iphonesimulator/C11Probe.build/assetcatalog_generated_info.plist_thinned --app-icon AppIcon --accent-color AccentColor --compress-pngs --enable-on-demand-resources YES --filter-for-thinning-device-configuration iPad17,4-A --filter-for-device-os-version 26.5 --development-region en --target-device iphone --target-device ipad --minimum-deployment-target 17.0 --platform iphonesimulator
+/* com.apple.actool.compilation-results */
+/Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/C11Probe.build/Debug-iphonesimulator/C11Probe.build/assetcatalog_generated_info.plist_thinned
+/Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/C11Probe.build/Debug-iphonesimulator/C11Probe.build/assetcatalog_output/thinned/AppIcon60x60@2x.png
+/Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/C11Probe.build/Debug-iphonesimulator/C11Probe.build/assetcatalog_output/thinned/AppIcon76x76@2x~ipad.png
+/Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/C11Probe.build/Debug-iphonesimulator/C11Probe.build/assetcatalog_output/thinned/Assets.car
+
+
+LinkAssetCatalog /Users/runner/work/orbit/orbit/src/ios/Support/Assets.xcassets (in target 'C11Probe' from project 'C11Probe')
+    cd /Users/runner/work/orbit/orbit/.c11-probe
+    builtin-linkAssetCatalog --thinned /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/C11Probe.build/Debug-iphonesimulator/C11Probe.build/assetcatalog_output/thinned --thinned-dependencies /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/C11Probe.build/Debug-iphonesimulator/C11Probe.build/assetcatalog_dependencies_thinned --thinned-info-plist-content /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/C11Probe.build/Debug-iphonesimulator/C11Probe.build/assetcatalog_generated_info.plist_thinned --unthinned /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/C11Probe.build/Debug-iphonesimulator/C11Probe.build/assetcatalog_output/unthinned --unthinned-dependencies /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/C11Probe.build/Debug-iphonesimulator/C11Probe.build/assetcatalog_dependencies_unthinned --unthinned-info-plist-content /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/C11Probe.build/Debug-iphonesimulator/C11Probe.build/assetcatalog_generated_info.plist_unthinned --output /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11Probe.app --plist-output /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/C11Probe.build/Debug-iphonesimulator/C11Probe.build/assetcatalog_generated_info.plist
+note: Emplaced /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11Probe.app/Assets.car (in target 'C11Probe' from project 'C11Probe')
+note: Emplaced /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11Probe.app/AppIcon76x76@2x~ipad.png (in target 'C11Probe' from project 'C11Probe')
+note: Emplaced /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11Probe.app/AppIcon60x60@2x.png (in target 'C11Probe' from project 'C11Probe')
+
+ProcessInfoPlistFile /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11Probe.app/Info.plist /Users/runner/work/orbit/orbit/.c11-probe/Info.plist (in target 'C11Probe' from project 'C11Probe')
+    cd /Users/runner/work/orbit/orbit/.c11-probe
+    builtin-infoPlistUtility /Users/runner/work/orbit/orbit/.c11-probe/Info.plist -producttype com.apple.product-type.application -genpkginfo /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11Probe.app/PkgInfo -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/C11Probe.build/Debug-iphonesimulator/C11Probe.build/assetcatalog_generated_info.plist -o /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11Probe.app/Info.plist
+
+CopySwiftLibs /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11Probe.app (in target 'C11Probe' from project 'C11Probe')
+    cd /Users/runner/work/orbit/orbit/.c11-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11Probe.app/C11Probe.debug.dylib --scan-folder /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11Probe.app/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11Probe.app/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11Probe.app/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11Probe.app/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.rUTDj7/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11Probe.app/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/C11Probe.build/Debug-iphonesimulator/C11Probe.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+ProcessInfoPlistFile /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11ProbeUITests-Runner.app/PlugIns/C11ProbeUITests.xctest/Info.plist /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/C11Probe.build/Debug-iphonesimulator/C11ProbeUITests.build/empty-C11ProbeUITests.plist (in target 'C11ProbeUITests' from project 'C11Probe')
+    cd /Users/runner/work/orbit/orbit/.c11-probe
+    builtin-infoPlistUtility /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/C11Probe.build/Debug-iphonesimulator/C11ProbeUITests.build/empty-C11ProbeUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/C11Probe.build/Debug-iphonesimulator/C11ProbeUITests.build/ProductTypeInfoPlistAdditions.plist -o /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11ProbeUITests-Runner.app/PlugIns/C11ProbeUITests.xctest/Info.plist
+
+CopySwiftLibs /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11ProbeUITests-Runner.app/PlugIns/C11ProbeUITests.xctest (in target 'C11ProbeUITests' from project 'C11Probe')
+    cd /Users/runner/work/orbit/orbit/.c11-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11ProbeUITests-Runner.app/PlugIns/C11ProbeUITests.xctest/C11ProbeUITests --scan-folder /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11ProbeUITests-Runner.app/PlugIns/C11ProbeUITests.xctest/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11ProbeUITests-Runner.app/PlugIns/C11ProbeUITests.xctest/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11ProbeUITests-Runner.app/PlugIns/C11ProbeUITests.xctest/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11ProbeUITests-Runner.app/PlugIns/C11ProbeUITests.xctest/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.rUTDj7/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Products/Debug-iphonesimulator/C11ProbeUITests-Runner.app/PlugIns/C11ProbeUITests.xctest/Frameworks --strip-bitcode --scan-executable /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.c11-probe/.dd-C11Probe/Build/Intermediates.noindex/C11Probe.build/Debug-iphonesimulator/C11ProbeUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+2026-11-06 22:08:57.129426+0000 C11ProbeUITests-Runner[55834:158183] [Default] Running tests...
+2026-11-06 22:08:57.270875+0000 C11ProbeUITests-Runner[55834:158183] [UIKit App Config] Update the Info.plist: Launch screens will soon be required.
+2026-11-06 22:08:57.278340+0000 C11ProbeUITests-Runner[55834:159307] [General] Failed to send CA Event for app launch measurements for ca_event_type: 0 event_name: com.apple.app_launch_measurement.FirstFramePresentationMetric
+2026-11-06 22:08:57.322333+0000 C11ProbeUITests-Runner[55834:159307] [General] Failed to send CA Event for app launch measurements for ca_event_type: 1 event_name: com.apple.app_launch_measurement.ExtendedLaunchMetrics
+objc[55834]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x108d78310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x108dac398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'All tests' started at 2026-11-06 22:09:08.776.
+Test Suite 'C11ProbeUITests.xctest' started at 2026-11-06 22:09:08.790.
+Test Suite 'WikiChatShotTests' started at 2026-11-06 22:09:08.790.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testFoldedAwayAfterTheRewrite]' started.
+    t =     0.00s Start Test at 2026-11-06 22:09:08.792
+    t =     5.28s Set Up
+2026-11-06 22:09:41.589356+0000 C11ProbeUITests-Runner[55834:161297] [Default] Task <F0391EAF-93F3-43AD-932F-F2DA9AD8D914>.<1> finished with error [-1001] Error Domain=NSURLErrorDomain Code=-1001 "The request timed out." UserInfo={_kCFStreamErrorCodeKey=-2102, NSUnderlyingError=0x10801b240 {Error Domain=kCFErrorDomainCFNetwork Code=-1001 "(null)" UserInfo={_kCFStreamErrorCodeKey=-2102, _kCFStreamErrorDomainKey=4}}, _NSURLErrorFailingURLSessionTaskErrorKey=LocalDataTask <F0391EAF-93F3-43AD-932F-F2DA9AD8D914>.<1>, _NSURLErrorRelatedURLSessionTaskErrorKey=(
+    "LocalDataTask <F0391EAF-93F3-43AD-932F-F2DA9AD8D914>.<1>"
+), NSLocalizedDescription=The request timed out., NSErrorFailingURLStringKey=http://127.0.0.1:8765/__reset, NSErrorFailingURLKey=http://127.0.0.1:8765/__reset, _kCFStreamErrorDomainKey=4}
+    t =    42.09s Open io.orbitd.c11probe
+    t =    42.09s     Launch io.orbitd.c11probe
+2026-11-06 22:10:02.103 xcodebuild[41847:119702] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-06 22:10:02.106 xcodebuild[41847:119702] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   296.78s         Setting up automation session
+    t =   352.31s         Wait for io.orbitd.c11probe to idle
+    t =   359.72s Checking existence of `Any (First Match)`
+    t =   375.29s Checking existence of `Any (First Match)`
+    t =   380.56s Checking existence of `Any (First Match)`
+    t =   396.41s Find the Window (First Match)
+    t =   408.63s Checking existence of `StaticText (First Match)`
+    t =   416.57s Find the StaticText (First Match)
+    t =   421.75s Find the "turn 投递与 inbox 领取" StaticText
+    t =   433.90s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   446.21s Find the "turn 投递与 inbox 领取" StaticText
+    t =   450.40s Press Window (First Match)[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window (First Match)[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   450.40s     Wait for io.orbitd.c11probe to idle
+    t =   450.41s     Find the Window (First Match)
+    t =   450.45s     Check for interrupting elements affecting Window
+    t =   451.04s         Wait for com.apple.springboard to idle
+    t =   451.94s     Synthesize event
+    t =   451.94s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   452.45s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   452.76s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   452.94s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   453.05s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   460.14s     Wait for io.orbitd.c11probe to idle
+    t =   461.19s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   465.40s Find the "turn 投递与 inbox 领取" StaticText
+    t =   468.35s Find the "turn 投递与 inbox 领取" StaticText
+    t =   470.47s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   471.91s Find the "turn 投递与 inbox 领取" StaticText
+    t =   473.75s Press Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   473.75s     Wait for io.orbitd.c11probe to idle
+    t =   473.76s     Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   473.83s     Check for interrupting elements affecting Window
+    t =   474.03s         Wait for com.apple.springboard to idle
+    t =   474.07s     Synthesize event
+    t =   474.07s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   474.16s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   474.26s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   474.33s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   474.39s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   480.96s     Wait for io.orbitd.c11probe to idle
+    t =   481.98s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   482.65s Find the "turn 投递与 inbox 领取" StaticText
+    t =   483.17s Find the "turn 投递与 inbox 领取" StaticText
+    t =   483.63s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   484.09s Find the "turn 投递与 inbox 领取" StaticText
+    t =   484.70s Press Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   484.70s     Wait for io.orbitd.c11probe to idle
+    t =   484.71s     Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   484.72s     Check for interrupting elements affecting Window
+    t =   484.93s         Wait for com.apple.springboard to idle
+    t =   484.99s     Synthesize event
+    t =   484.99s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   485.02s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   485.06s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   485.12s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   485.19s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   491.69s     Wait for io.orbitd.c11probe to idle
+    t =   524.01s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   530.02s Find the "turn 投递与 inbox 领取" StaticText
+    t =   534.01s Find the "turn 投递与 inbox 领取" StaticText
+    t =   538.68s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   541.93s Find the "turn 投递与 inbox 领取" StaticText
+    t =   545.89s Press Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   545.89s     Wait for io.orbitd.c11probe to idle
+    t =   545.92s     Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   546.01s     Check for interrupting elements affecting Window
+    t =   546.68s         Wait for com.apple.springboard to idle
+    t =   546.75s     Synthesize event
+    t =   546.75s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   547.07s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   547.24s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   547.36s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   547.85s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   549.52s     Wait for io.orbitd.c11probe to idle
+    t =   551.04s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   555.58s Find the "turn 投递与 inbox 领取" StaticText
+    t =   557.98s Find the "turn 投递与 inbox 领取" StaticText
+    t =   559.51s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   561.86s Find the "turn 投递与 inbox 领取" StaticText
+    t =   565.90s Press Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   565.90s     Wait for io.orbitd.c11probe to idle
+    t =   565.95s     Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   566.11s     Check for interrupting elements affecting Window
+    t =   566.36s         Wait for com.apple.springboard to idle
+    t =   566.40s     Synthesize event
+    t =   566.40s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   566.55s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   566.66s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   566.73s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   566.77s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   568.36s     Wait for io.orbitd.c11probe to idle
+    t =   570.83s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   572.95s Find the "turn 投递与 inbox 领取" StaticText
+    t =   574.50s Find the "turn 投递与 inbox 领取" StaticText
+    t =   576.78s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   579.06s Find the "turn 投递与 inbox 领取" StaticText
+    t =   580.98s Press Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   580.98s     Wait for io.orbitd.c11probe to idle
+    t =   580.98s     Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   581.14s     Check for interrupting elements affecting Window
+    t =   581.36s         Wait for com.apple.springboard to idle
+    t =   581.41s     Synthesize event
+    t =   581.41s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   581.48s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   581.52s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   581.64s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   581.73s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   583.24s     Wait for io.orbitd.c11probe to idle
+    t =   584.28s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   586.14s Find the "turn 投递与 inbox 领取" StaticText
+    t =   587.61s Find the "turn 投递与 inbox 领取" StaticText
+    t =   589.73s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   590.60s Find the "turn 投递与 inbox 领取" StaticText
+    t =   591.00s Press Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   591.00s     Wait for io.orbitd.c11probe to idle
+    t =   591.00s     Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   591.07s     Check for interrupting elements affecting Window
+    t =   591.52s         Wait for com.apple.springboard to idle
+    t =   591.57s     Synthesize event
+    t =   591.57s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   591.68s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   591.82s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   591.96s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   592.10s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   593.60s     Wait for io.orbitd.c11probe to idle
+    t =   594.63s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   597.10s Find the "turn 投递与 inbox 领取" StaticText
+    t =   600.65s Find the "turn 投递与 inbox 领取" StaticText
+    t =   602.61s Find the "turn 投递与 inbox 领取" StaticText
+    t =   606.06s Checking existence of `Any (First Match)`
+    t =   606.22s Checking existence of `Any (First Match)`
+    t =   608.35s Checking existence of `"wiki-section-updated" Any`
+    t =   612.39s Find the "wiki-section-updated" Any
+    t =   617.16s Find the "wiki-section-updated" Button
+    t =   619.00s Find the "wiki-section-updated" Button
+    t =   621.36s Find the "wiki-section-updated" Button
+    t =   622.87s Find the "wiki-section-updated" Button
+    t =   624.38s Checking existence of `"wiki-section-updated" Button`
+    t =   626.24s Waiting 20.0s for "wiki-chat-fab" Button to exist
+    t =   627.31s     Checking `Expect predicate `existsNoRetry == 1` for object "wiki-chat-fab" Button`
+    t =   627.33s         Checking existence of `"wiki-chat-fab" Button`
+    t =   627.40s Checking existence of `"wiki-chat-fab" Button`
+    t =   627.50s Find the "wiki-chat-fab" Button
+    t =   627.63s Checking existence of `"wiki-chat-fab" Button`
+    t =   627.69s Find the "wiki-chat-fab" Button
+    t =   627.72s Find the Window (First Match)
+    t =   627.75s Checking existence of `"wiki-chat-fab" Button`
+    t =   627.87s Find the "wiki-chat-fab" Button
+    t =   628.40s Added attachment named 'ipad-fab-updated'
+    t =   629.42s Added attachment named 'ipad-3a-folded-updated'
+    t =   629.44s Waiting 10.0s for Button (First Match) to exist
+    t =   630.48s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =   630.48s         Checking existence of `Button (First Match)`
+    t =   630.61s Tap Button (First Match)
+    t =   630.61s     Wait for io.orbitd.c11probe to idle
+    t =   630.61s     Find the Button (First Match)
+    t =   630.71s     Check for interrupting elements affecting "See changes" Button
+    t =   630.94s         Wait for com.apple.springboard to idle
+    t =   630.98s     Synthesize event
+    t =   636.32s     Wait for io.orbitd.c11probe to idle
+    t =   648.14s Checking existence of `Any (First Match)`
+    t =   652.86s Added attachment named 'ipad-3b-see-changes'
+    t =   652.88s Checking existence of `Any (First Match)`
+    t =   653.63s Waiting 5.0s for "Done" Button to exist
+    t =   654.64s     Checking `Expect predicate `existsNoRetry == 1` for object "Done" Button`
+    t =   654.64s         Checking existence of `"Done" Button`
+    t =   655.88s Tap "Done" Button
+    t =   655.88s     Wait for io.orbitd.c11probe to idle
+    t =   655.89s     Find the "Done" Button
+    t =   656.28s     Check for interrupting elements affecting "Done" Button
+    t =   656.51s         Wait for com.apple.springboard to idle
+    t =   656.57s     Synthesize event
+    t =   657.02s     Wait for io.orbitd.c11probe to idle
+    t =   659.09s Waiting 10.0s for "wiki-section-updated" Button to exist
+    t =   660.14s     Checking `Expect predicate `existsNoRetry == 1` for object "wiki-section-updated" Button`
+    t =   660.15s         Checking existence of `"wiki-section-updated" Button`
+    t =   661.76s Tap "wiki-section-updated" Button
+    t =   661.76s     Wait for io.orbitd.c11probe to idle
+    t =   661.76s     Find the "wiki-section-updated" Button
+    t =   663.30s     Check for interrupting elements affecting "wiki-section-updated" Button
+    t =   663.60s         Wait for com.apple.springboard to idle
+    t =   663.87s     Synthesize event
+    t =   664.21s     Wait for io.orbitd.c11probe to idle
+    t =   664.80s Checking existence of `Any (First Match)`
+    t =   668.14s Added attachment named 'ipad-3c-updated-opens-see-changes'
+    t =   668.19s Tear Down
+    t =   668.19s     Added attachment named 'WikiChatShotTeststestFoldedAwayAfterTheRewrite-notes.txt'
+Test Case '-[C11ProbeUITests.WikiChatShotTests testFoldedAwayAfterTheRewrite]' passed (669.327 seconds).
+Test Case '-[C11ProbeUITests.WikiChatShotTests testFullSheetCard]' started.
+    t =     0.00s Start Test at 2026-11-06 22:20:18.126
+    t =     1.95s Set Up
+    t =     2.88s Open io.orbitd.c11probe
+    t =     2.89s     Launch io.orbitd.c11probe
+    t =     2.89s         Terminate io.orbitd.c11probe:60600
+2026-11-06 22:20:33.257 xcodebuild[41847:119702] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-06 22:20:33.264 xcodebuild[41847:119702] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    28.83s         Setting up automation session
+    t =    45.41s         Wait for io.orbitd.c11probe to idle
+    t =    49.66s Checking existence of `Any (First Match)`
+    t =    57.52s Checking existence of `Any (First Match)`
+    t =    59.74s Checking existence of `Any (First Match)`
+    t =    64.38s Find the Window (First Match)
+    t =    64.41s Checking existence of `StaticText (First Match)`
+    t =    66.04s Find the StaticText (First Match)
+    t =    67.06s Find the "turn 投递与 inbox 领取" StaticText
+    t =    67.67s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    68.27s Find the "turn 投递与 inbox 领取" StaticText
+    t =    68.79s Press Window (First Match)[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window (First Match)[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    68.79s     Wait for io.orbitd.c11probe to idle
+    t =    68.80s     Find the Window (First Match)
+    t =    68.82s     Check for interrupting elements affecting Window
+    t =    69.16s         Wait for com.apple.springboard to idle
+    t =    69.34s     Synthesize event
+    t =    69.34s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    69.45s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    69.55s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    69.68s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    69.81s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    71.38s     Wait for io.orbitd.c11probe to idle
+    t =    72.67s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    77.11s Find the "turn 投递与 inbox 领取" StaticText
+    t =    79.54s Find the "turn 投递与 inbox 领取" StaticText
+    t =    82.80s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    88.81s Find the "turn 投递与 inbox 领取" StaticText
+    t =    91.95s Press Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    91.95s     Wait for io.orbitd.c11probe to idle
+    t =    91.96s     Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    92.08s     Check for interrupting elements affecting Window
+    t =    92.38s         Wait for com.apple.springboard to idle
+    t =    92.45s     Synthesize event
+    t =    92.45s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    92.63s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    92.77s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    92.98s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    93.22s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    94.83s     Wait for io.orbitd.c11probe to idle
+    t =   110.04s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   113.77s Find the "turn 投递与 inbox 领取" StaticText
+    t =   116.37s Find the "turn 投递与 inbox 领取" StaticText
+    t =   119.01s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   121.35s Find the "turn 投递与 inbox 领取" StaticText
+    t =   124.10s Press Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   124.10s     Wait for io.orbitd.c11probe to idle
+    t =   124.16s     Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   124.38s     Check for interrupting elements affecting Window
+    t =   124.75s         Wait for com.apple.springboard to idle
+    t =   124.81s     Synthesize event
+    t =   124.81s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   124.98s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   125.11s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   125.22s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   125.31s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   126.86s     Wait for io.orbitd.c11probe to idle
+    t =   127.90s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   132.42s Find the "turn 投递与 inbox 领取" StaticText
+    t =   135.92s Find the "turn 投递与 inbox 领取" StaticText
+    t =   139.29s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   141.62s Find the "turn 投递与 inbox 领取" StaticText
+    t =   144.22s Press Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   144.22s     Wait for io.orbitd.c11probe to idle
+    t =   144.23s     Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   144.36s     Check for interrupting elements affecting Window
+    t =   144.70s         Wait for com.apple.springboard to idle
+    t =   144.75s     Synthesize event
+    t =   144.75s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   145.07s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   145.35s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   145.55s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   145.82s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   147.33s     Wait for io.orbitd.c11probe to idle
+    t =   148.36s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   149.60s Find the "turn 投递与 inbox 领取" StaticText
+    t =   150.08s Find the "turn 投递与 inbox 领取" StaticText
+    t =   150.58s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   151.12s Find the "turn 投递与 inbox 领取" StaticText
+    t =   151.73s Press Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   151.73s     Wait for io.orbitd.c11probe to idle
+    t =   151.73s     Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   151.78s     Check for interrupting elements affecting Window
+    t =   151.96s         Wait for com.apple.springboard to idle
+    t =   152.01s     Synthesize event
+    t =   152.01s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   152.06s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   152.08s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   152.13s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   152.16s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   153.64s     Wait for io.orbitd.c11probe to idle
+    t =   154.72s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =   155.14s Find the "turn 投递与 inbox 领取" StaticText
+    t =   156.08s Find the "turn 投递与 inbox 领取" StaticText
+    t =   158.49s Find the "turn 投递与 inbox 领取" StaticText
+    t =   160.96s Waiting 20.0s for "wiki-chat-fab" Button to exist
+    t =   161.99s     Checking `Expect predicate `existsNoRetry == 1` for object "wiki-chat-fab" Button`
+    t =   162.12s         Checking existence of `"wiki-chat-fab" Button`
+    t =   172.29s Checking existence of `"wiki-chat-fab" Button`
+    t =   173.77s Find the "wiki-chat-fab" Button
+    t =   173.79s Checking existence of `"wiki-chat-fab" Button`
+    t =   173.81s Find the "wiki-chat-fab" Button
+    t =   173.84s Find the Window (First Match)
+    t =   173.86s Checking existence of `"wiki-chat-fab" Button`
+    t =   173.88s Find the "wiki-chat-fab" Button
+    t =   175.22s Added attachment named 'ipad-fab-needs-you'
+    t =   176.13s Added attachment named 'ipad-2a-page-needs-you'
+    t =   176.13s Tap "wiki-chat-fab" Button
+    t =   176.13s     Wait for io.orbitd.c11probe to idle
+    t =   177.04s     Find the "wiki-chat-fab" Button
+    t =   177.07s     Check for interrupting elements affecting "wiki-chat-fab" Button
+    t =   177.98s         Wait for com.apple.springboard to idle
+    t =   178.05s     Synthesize event
+    t =   178.38s     Wait for io.orbitd.c11probe to idle
+    t =   190.27s Checking existence of `Any (First Match)`
+    t =   191.27s Checking existence of `Any (First Match)`
+    t =   193.29s Checking existence of `StaticText (First Match)`
+    t =   194.04s Checking existence of `StaticText (First Match)`
+    t =   194.29s Checking existence of `"wiki-chat-card-apply" Button`
+    t =   194.61s Find the "wiki-chat-card-apply" Button
+    t =   194.93s Find the "wiki-chat-card-apply" Button
+    t =   195.13s Find the "wiki-chat-card-apply" Button
+    t =   195.40s Find the "wiki-chat-card-apply" Button
+    t =   195.66s Find the "wiki-chat-card-apply" Button
+    t =   195.96s Checking existence of `"wiki-chat-card-edit" Button`
+    t =   196.22s Find the "wiki-chat-card-edit" Button
+    t =   196.55s Find the "wiki-chat-card-edit" Button
+    t =   196.93s Find the "wiki-chat-card-edit" Button
+    t =   197.30s Find the "wiki-chat-card-edit" Button
+    t =   197.84s Find the "wiki-chat-card-edit" Button
+    t =   198.21s Checking existence of `"wiki-chat-card-discard" Button`
+    t =   198.59s Find the "wiki-chat-card-discard" Button
+    t =   199.08s Find the "wiki-chat-card-discard" Button
+    t =   199.40s Find the "wiki-chat-card-discard" Button
+    t =   199.76s Find the "wiki-chat-card-discard" Button
+    t =   200.10s Find the "wiki-chat-card-discard" Button
+    t =   200.53s Checking existence of `"wiki-chat-card-apply" Button`
+    t =   200.84s Checking existence of `"wiki-chat-card-edit" Button`
+    t =   201.24s Checking existence of `"wiki-chat-card-discard" Button`
+    t =   201.50s Find the "wiki-chat-card-apply" Button
+    t =   201.88s Find the "wiki-chat-card-edit" Button
+    t =   202.23s Find the "wiki-chat-card-edit" Button
+    t =   202.55s Find the "wiki-chat-card-discard" Button
+    t =   202.93s Find the "wiki-chat-card-apply" Button
+    t =   203.28s Find the "wiki-chat-card-edit" Button
+    t =   203.80s Checking existence of `Any (First Match)`
+    t =   204.46s Checking existence of `Any (First Match)`
+    t =   205.11s Checking existence of `Any (First Match)`
+    t =   205.69s Checking existence of `Any (First Match)`
+    t =   206.12s Checking existence of `Any (First Match)`
+    t =   206.55s Checking existence of `Any (First Match)`
+    t =   207.17s Checking existence of `Any (First Match)`
+    t =   207.62s Checking existence of `"7.1 §2" Button`
+    t =   207.96s Checking existence of `"wiki-section-would-rewrite" Any`
+    t =   209.65s Find the "wiki-section-would-rewrite" Any
+    t =   211.11s Find the "wiki-section-would-rewrite" Image
+    t =   212.51s Find the "wiki-section-would-rewrite" Image
+    t =   214.73s Find the "wiki-section-would-rewrite" Image
+    t =   216.79s Find the "wiki-section-would-rewrite" Image
+    t =   218.77s Checking existence of `"wiki-section-would-rewrite" Image`
+    t =   220.64s Find the "wiki-section-would-rewrite" Image
+    t =   223.77s Added attachment named 'ipad-2b-full-sheet-card'
+    t =   223.83s Tear Down
+    t =   223.84s     Added attachment named 'WikiChatShotTeststestFullSheetCard-notes.txt'
+Test Case '-[C11ProbeUITests.WikiChatShotTests testFullSheetCard]' passed (224.832 seconds).
+Test Case '-[C11ProbeUITests.WikiChatShotTests testHalfSheetAskAndThePageBehindScrolls]' started.
+    t =     0.00s Start Test at 2026-11-06 22:24:02.963
+    t =     0.19s Set Up
+    t =     0.30s Open io.orbitd.c11probe
+    t =     0.31s     Launch io.orbitd.c11probe
+    t =     0.31s         Terminate io.orbitd.c11probe:83488
+2026-11-06 22:24:05.021 xcodebuild[41847:119702] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-06 22:24:05.021 xcodebuild[41847:119702] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     7.67s         Setting up automation session
+    t =    16.68s         Wait for io.orbitd.c11probe to idle
+    t =    48.87s Checking existence of `Any (First Match)`
+    t =    52.32s Find the Window (First Match)
+    t =    52.95s Checking existence of `StaticText (First Match)`
+    t =    53.38s Find the StaticText (First Match)
+    t =    53.83s Find the "turn 投递与 inbox 领取" StaticText
+    t =    54.49s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    55.15s Find the "turn 投递与 inbox 领取" StaticText
+    t =    55.49s Press Window (First Match)[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window (First Match)[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    55.49s     Wait for io.orbitd.c11probe to idle
+    t =    55.49s     Find the Window (First Match)
+    t =    55.53s     Check for interrupting elements affecting Window
+    t =    55.91s         Wait for com.apple.springboard to idle
+    t =    56.21s     Synthesize event
+    t =    56.21s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    56.25s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    56.27s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    56.30s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    56.32s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    57.87s     Wait for io.orbitd.c11probe to idle
+    t =    59.21s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    59.63s Find the "turn 投递与 inbox 领取" StaticText
+    t =    59.95s Find the "turn 投递与 inbox 领取" StaticText
+    t =    60.41s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    60.74s Find the "turn 投递与 inbox 领取" StaticText
+    t =    61.10s Press Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    61.10s     Wait for io.orbitd.c11probe to idle
+    t =    61.10s     Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    61.11s     Check for interrupting elements affecting Window
+    t =    61.28s         Wait for com.apple.springboard to idle
+    t =    61.33s     Synthesize event
+    t =    61.33s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    61.35s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    61.37s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    61.39s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    61.41s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    62.88s     Wait for io.orbitd.c11probe to idle
+    t =    63.89s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    64.34s Find the "turn 投递与 inbox 领取" StaticText
+    t =    64.81s Find the "turn 投递与 inbox 领取" StaticText
+    t =    65.18s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    65.71s Find the "turn 投递与 inbox 领取" StaticText
+    t =    66.18s Press Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    66.18s     Wait for io.orbitd.c11probe to idle
+    t =    66.18s     Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    66.20s     Check for interrupting elements affecting Window
+    t =    66.39s         Wait for com.apple.springboard to idle
+    t =    66.44s     Synthesize event
+    t =    66.44s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    66.46s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    66.51s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    66.54s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    66.57s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    68.05s     Wait for io.orbitd.c11probe to idle
+    t =    69.07s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    69.39s Find the "turn 投递与 inbox 领取" StaticText
+    t =    69.80s Find the "turn 投递与 inbox 领取" StaticText
+    t =    70.24s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    70.65s Find the "turn 投递与 inbox 领取" StaticText
+    t =    71.20s Press Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    71.20s     Wait for io.orbitd.c11probe to idle
+    t =    71.20s     Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    71.22s     Check for interrupting elements affecting Window
+    t =    71.55s         Wait for com.apple.springboard to idle
+    t =    71.63s     Synthesize event
+    t =    71.63s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    71.66s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    71.68s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    71.71s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    71.75s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    73.24s     Wait for io.orbitd.c11probe to idle
+    t =    74.28s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    74.68s Find the "turn 投递与 inbox 领取" StaticText
+    t =    75.03s Find the "turn 投递与 inbox 领取" StaticText
+    t =    75.41s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    75.76s Find the "turn 投递与 inbox 领取" StaticText
+    t =    76.18s Press Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    76.18s     Wait for io.orbitd.c11probe to idle
+    t =    76.19s     Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    76.21s     Check for interrupting elements affecting Window
+    t =    76.40s         Wait for com.apple.springboard to idle
+    t =    76.46s     Synthesize event
+    t =    76.46s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    76.48s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    76.51s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    76.53s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    76.56s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    78.04s     Wait for io.orbitd.c11probe to idle
+    t =    79.06s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    79.55s Find the "turn 投递与 inbox 领取" StaticText
+    t =    80.01s Find the "turn 投递与 inbox 领取" StaticText
+    t =    80.54s Find the "turn 投递与 inbox 领取" StaticText
+    t =    82.12s Waiting 20.0s for "wiki-chat-fab" Button to exist
+    t =    83.18s     Checking `Expect predicate `existsNoRetry == 1` for object "wiki-chat-fab" Button`
+    t =    83.18s         Checking existence of `"wiki-chat-fab" Button`
+    t =    83.28s Checking existence of `"wiki-chat-fab" Button`
+    t =    83.35s Find the "wiki-chat-fab" Button
+    t =    83.37s Find the "wiki-chat-fab" Button
+    t =    83.44s Find the "wiki-chat-fab" Button
+    t =    83.47s Find the "wiki-chat-fab" Button
+    t =    83.53s Find the "wiki-chat-fab" Button
+    t =    83.67s Checking existence of `"wiki-chat-fab" Button`
+    t =    83.72s Find the "wiki-chat-fab" Button
+    t =    84.92s Added attachment named 'ipad-0-page-at-rest'
+    t =    84.92s Checking existence of `"wiki-chat-fab" Button`
+    t =    85.06s Find the "wiki-chat-fab" Button
+    t =    85.16s Find the Window (First Match)
+    t =    85.20s Checking existence of `"wiki-chat-fab" Button`
+    t =    85.24s Find the "wiki-chat-fab" Button
+    t =    85.28s Added attachment named 'ipad-fab-idle'
+    t =    85.28s Waiting 20.0s for StaticText (First Match) to exist
+    t =    86.31s     Checking `Expect predicate `existsNoRetry == 1` for object StaticText (First Match)`
+    t =    86.31s         Checking existence of `StaticText (First Match)`
+    t =    86.80s Press StaticText (First Match) for 1.3 seconds
+    t =    86.80s     Wait for io.orbitd.c11probe to idle
+    t =    86.81s     Find the StaticText (First Match)
+    t =    87.30s     Check for interrupting elements affecting "心跳机制用于控制面探测失联的 runner。 Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。[5][12] " StaticText
+    t =    87.50s         Wait for com.apple.springboard to idle
+    t =    87.54s     Synthesize event
+    t =    89.18s     Wait for io.orbitd.c11probe to idle
+    t =    90.31s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Ask"'
+    t =    91.54s Checking existence of `Button (Element at index 0)`
+    t =    91.83s Find the Button (Element at index 0)
+    t =    92.19s Waiting 10.0s for "ellipsis.bubble" Button to exist
+    t =    93.24s     Checking `Expect predicate `existsNoRetry == 1` for object "ellipsis.bubble" Button`
+    t =    93.24s         Checking existence of `"ellipsis.bubble" Button`
+    t =    94.47s Added attachment named 'ipad-1a-paragraph-menu'
+    t =    94.48s Tap "ellipsis.bubble" Button
+    t =    94.48s     Wait for io.orbitd.c11probe to idle
+    t =    94.49s     Find the "ellipsis.bubble" Button
+    t =    94.79s     Check for interrupting elements affecting "ellipsis.bubble" Button
+    t =    95.20s         Wait for com.apple.springboard to idle
+    t =    95.27s Ignoring failure to get hierarchy for remote element in process 94411 (Error getting main window kAXErrorServerNotFound)
+    t =    95.28s Ignoring failure to get hierarchy for remote element in process 94411 (Error getting main window kAXErrorServerNotFound)
+    t =    95.31s     Synthesize event
+    t =    95.70s     Wait for io.orbitd.c11probe to idle
+    t =    98.98s Waiting 15.0s for Button (First Match) to exist
+    t =   100.07s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =   100.07s         Checking existence of `Button (First Match)`
+    t =   101.93s Tap Button (First Match)
+    t =   101.93s     Wait for io.orbitd.c11probe to idle
+    t =   101.94s     Find the Button (First Match)
+    t =   102.56s     Check for interrupting elements affecting "Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。[5][12]" Button
+    t =   102.83s         Wait for com.apple.springboard to idle
+    t =   102.88s Ignoring failure to get hierarchy for remote element in process 94411 (Error getting main window kAXErrorServerNotFound)
+    t =   102.88s Ignoring failure to get hierarchy for remote element in process 94411 (Error getting main window kAXErrorServerNotFound)
+    t =   102.89s     Synthesize event
+    t =   103.22s     Wait for io.orbitd.c11probe to idle
+    t =   105.01s Added attachment named 'ipad-1b-ask-sheet'
+    t =   105.02s Checking existence of `"wiki-chat-ask-done" Button`
+    t =   105.27s Find the "wiki-chat-ask-done" Button
+    t =   105.56s Tap "wiki-chat-ask-done" Button
+    t =   105.56s     Wait for io.orbitd.c11probe to idle
+    t =   105.57s     Find the "wiki-chat-ask-done" Button
+    t =   105.81s     Check for interrupting elements affecting "wiki-chat-ask-done" Button
+    t =   105.98s         Wait for com.apple.springboard to idle
+    t =   106.03s Ignoring failure to get hierarchy for remote element in process 94411 (Error getting main window kAXErrorServerNotFound)
+    t =   106.03s Ignoring failure to get hierarchy for remote element in process 94411 (Error getting main window kAXErrorServerNotFound)
+    t =   106.04s     Synthesize event
+    t =   106.35s     Wait for io.orbitd.c11probe to idle
+    t =   108.53s Checking existence of `Any (First Match)`
+    t =   109.07s Checking existence of `Any (First Match)`
+    t =   109.37s Checking existence of `StaticText (First Match)`
+    t =   109.68s Find the StaticText (First Match)
+    t =   110.14s Find the "New chat" StaticText
+    t =   110.37s Find the "New chat" StaticText
+    t =   110.65s Find the "New chat" StaticText
+    t =   110.98s Find the "New chat" StaticText
+    t =   111.25s Find the Window (First Match)
+    t =   111.34s Checking existence of `"New chat" StaticText`
+    t =   111.64s Checking existence of `"New chat" StaticText`
+    t =   111.91s Find the "New chat" StaticText
+    t =   113.18s Added attachment named 'ipad-1c-half-sheet-quote'
+    t =   113.19s Checking existence of `"心跳机制用于控制面探测失联的 runner。 Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。[5][12] " StaticText`
+    t =   113.70s Find the "心跳机制用于控制面探测失联的 runner。 Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。[5][12] " StaticText
+    t =   114.74s Press Window (First Match)[0.30, 0.34] for 0.1 seconds, then drag to Window (First Match)[0.30, 0.34] -> (0.0, -120.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   114.74s     Wait for io.orbitd.c11probe to idle
+    t =   114.74s     Find the Window (First Match)
+    t =   114.76s     Check for interrupting elements affecting Window
+    t =   114.95s         Wait for com.apple.springboard to idle
+    t =   115.00s Ignoring failure to get hierarchy for remote element in process 94411 (Error getting main window kAXErrorServerNotFound)
+    t =   115.00s Ignoring failure to get hierarchy for remote element in process 94411 (Error getting main window kAXErrorServerNotFound)
+    t =   115.01s     Synthesize event
+    t =   115.01s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   115.06s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   115.09s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   115.12s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   115.15s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =   116.56s     Wait for io.orbitd.c11probe to idle
+    t =   117.78s Checking existence of `"心跳机制用于控制面探测失联的 runner。 Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。[5][12] " StaticText`
+    t =   118.46s Find the "心跳机制用于控制面探测失联的 runner。 Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。[5][12] " StaticText
+    t =   119.59s Checking existence of `"New chat" StaticText`
+    t =   120.98s Added attachment named 'ipad-1d-page-behind-scrolled'
+    t =   120.99s Tear Down
+    t =   120.99s     Added attachment named 'WikiChatShotTeststestHalfSheetAskAndThePageBehindScrolls-notes.txt'
+Test Case '-[C11ProbeUITests.WikiChatShotTests testHalfSheetAskAndThePageBehindScrolls]' passed (121.659 seconds).
+Test Case '-[C11ProbeUITests.WikiChatShotTests testWorkingLook]' started.
+    t =     0.00s Start Test at 2026-11-06 22:26:04.621
+    t =     0.09s Set Up
+    t =     0.17s Open io.orbitd.c11probe
+    t =     0.17s     Launch io.orbitd.c11probe
+    t =     0.17s         Terminate io.orbitd.c11probe:89954
+2026-11-06 22:26:06.905 xcodebuild[41847:119702] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-06 22:26:06.913 xcodebuild[41847:119702] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     4.65s         Setting up automation session
+    t =    10.12s         Wait for io.orbitd.c11probe to idle
+    t =    13.11s Checking existence of `Any (First Match)`
+    t =    15.80s Checking existence of `Any (First Match)`
+    t =    20.04s Find the Window (First Match)
+    t =    20.11s Checking existence of `StaticText (First Match)`
+    t =    25.03s Find the StaticText (First Match)
+    t =    28.90s Find the "turn 投递与 inbox 领取" StaticText
+    t =    32.08s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    34.62s Find the "turn 投递与 inbox 领取" StaticText
+    t =    35.11s Press Window (First Match)[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window (First Match)[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    35.12s     Wait for io.orbitd.c11probe to idle
+    t =    35.12s     Find the Window (First Match)
+    t =    35.14s     Check for interrupting elements affecting Window
+    t =    35.36s         Wait for com.apple.springboard to idle
+    t =    35.51s Ignoring failure to get hierarchy for remote element in process 94411 (Error getting main window kAXErrorServerNotFound)
+    t =    35.51s Ignoring failure to get hierarchy for remote element in process 94411 (Error getting main window kAXErrorServerNotFound)
+    t =    35.53s     Synthesize event
+    t =    35.53s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    35.62s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    35.67s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    35.75s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    35.81s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    37.34s     Wait for io.orbitd.c11probe to idle
+    t =    38.54s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    39.22s Find the "turn 投递与 inbox 领取" StaticText
+    t =    40.14s Find the "turn 投递与 inbox 领取" StaticText
+    t =    42.33s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    44.70s Find the "turn 投递与 inbox 领取" StaticText
+    t =    49.16s Press Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    49.16s     Wait for io.orbitd.c11probe to idle
+    t =    49.16s     Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    49.32s     Check for interrupting elements affecting Window
+    t =    49.56s         Wait for com.apple.springboard to idle
+    t =    49.63s Ignoring failure to get hierarchy for remote element in process 94411 (Error getting main window kAXErrorServerNotFound)
+    t =    49.63s Ignoring failure to get hierarchy for remote element in process 94411 (Error getting main window kAXErrorServerNotFound)
+    t =    49.65s     Synthesize event
+    t =    49.65s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    49.76s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    49.88s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    50.06s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    50.14s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    51.67s     Wait for io.orbitd.c11probe to idle
+    t =    52.70s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    55.03s Find the "turn 投递与 inbox 领取" StaticText
+    t =    57.86s Find the "turn 投递与 inbox 领取" StaticText
+    t =    59.43s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    60.84s Find the "turn 投递与 inbox 领取" StaticText
+    t =    63.42s Press Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    63.42s     Wait for io.orbitd.c11probe to idle
+    t =    63.44s     Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    63.49s     Check for interrupting elements affecting Window
+    t =    64.00s         Wait for com.apple.springboard to idle
+    t =    64.04s Ignoring failure to get hierarchy for remote element in process 94411 (Error getting main window kAXErrorServerNotFound)
+    t =    64.04s Ignoring failure to get hierarchy for remote element in process 94411 (Error getting main window kAXErrorServerNotFound)
+    t =    64.05s     Synthesize event
+    t =    64.06s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    64.28s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    64.41s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    64.59s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    64.78s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    66.35s     Wait for io.orbitd.c11probe to idle
+    t =    67.41s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    69.82s Find the "turn 投递与 inbox 领取" StaticText
+    t =    70.78s Find the "turn 投递与 inbox 领取" StaticText
+    t =    72.09s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    73.37s Find the "turn 投递与 inbox 领取" StaticText
+    t =    74.81s Press Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    74.81s     Wait for io.orbitd.c11probe to idle
+    t =    74.81s     Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    74.85s     Check for interrupting elements affecting Window
+    t =    75.01s         Wait for com.apple.springboard to idle
+    t =    75.04s Ignoring failure to get hierarchy for remote element in process 94411 (Error getting main window kAXErrorServerNotFound)
+    t =    75.04s Ignoring failure to get hierarchy for remote element in process 94411 (Error getting main window kAXErrorServerNotFound)
+    t =    75.04s     Synthesize event
+    t =    75.04s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    75.11s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    75.17s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    75.21s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    75.26s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    76.74s     Wait for io.orbitd.c11probe to idle
+    t =    77.76s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    78.73s Find the "turn 投递与 inbox 领取" StaticText
+    t =    79.36s Find the "turn 投递与 inbox 领取" StaticText
+    t =    80.20s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    81.21s Find the "turn 投递与 inbox 领取" StaticText
+    t =    82.18s Press Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {1032.0, 1376.0}}[0.00, 0.62] -> (12.0, 0.0) -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    82.18s     Wait for io.orbitd.c11probe to idle
+    t =    82.18s     Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    82.24s     Check for interrupting elements affecting Window
+    t =    82.40s         Wait for com.apple.springboard to idle
+    t =    82.44s Ignoring failure to get hierarchy for remote element in process 94411 (Error getting main window kAXErrorServerNotFound)
+    t =    82.44s Ignoring failure to get hierarchy for remote element in process 94411 (Error getting main window kAXErrorServerNotFound)
+    t =    82.44s     Synthesize event
+    t =    82.45s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    82.50s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    82.59s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    82.77s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    82.89s         Find the Window at {{0.0, 0.0}, {1032.0, 1376.0}}
+    t =    84.38s     Wait for io.orbitd.c11probe to idle
+    t =    85.40s Checking existence of `"turn 投递与 inbox 领取" StaticText`
+    t =    86.12s Find the "turn 投递与 inbox 领取" StaticText
+    t =    86.81s Find the "turn 投递与 inbox 领取" StaticText
+    t =    87.32s Find the "turn 投递与 inbox 领取" StaticText
+    t =    88.82s Waiting 20.0s for "wiki-chat-fab" Button to exist
+    t =    89.88s     Checking `Expect predicate `existsNoRetry == 1` for object "wiki-chat-fab" Button`
+    t =    89.89s         Checking existence of `"wiki-chat-fab" Button`
+    t =    90.75s Checking existence of `"wiki-chat-fab" Button`
+    t =    90.79s Find the "wiki-chat-fab" Button
+    t =    91.23s Checking existence of `"wiki-chat-fab" Button`
+    t =    91.31s Find the "wiki-chat-fab" Button
+    t =    91.36s Find the Window (First Match)
+    t =    91.40s Checking existence of `"wiki-chat-fab" Button`
+    t =    91.44s Find the "wiki-chat-fab" Button
+    t =    91.54s Added attachment named 'ipad-fab-working'
+    t =    92.47s Added attachment named 'ipad-4a-page-working'
+    t =    92.48s Tear Down
+    t =    92.48s     Added attachment named 'WikiChatShotTeststestWorkingLook-notes.txt'
+Test Case '-[C11ProbeUITests.WikiChatShotTests testWorkingLook]' passed (93.307 seconds).
+Test Suite 'WikiChatShotTests' passed at 2026-11-06 22:27:37.928.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 1109.124 (1109.138) seconds
+Test Suite 'C11ProbeUITests.xctest' passed at 2026-11-06 22:27:37.929.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 1109.124 (1109.139) seconds
+Test Suite 'All tests' passed at 2026-11-06 22:27:37.929.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 1109.124 (1109.153) seconds
+2026-11-06 22:28:06.506 xcodebuild[41847:119702] [MT] IDETestOperationsObserverDebug: 1203.310 elapsed -- Testing started completed.
+2026-11-06 22:28:06.507 xcodebuild[41847:119702] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-06 22:28:06.507 xcodebuild[41847:119702] [MT] IDETestOperationsObserverDebug: 1203.310 sec, +1203.310 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.c11-probe/results/ipad.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

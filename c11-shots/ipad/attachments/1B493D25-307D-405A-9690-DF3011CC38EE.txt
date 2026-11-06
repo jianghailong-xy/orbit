@@ -1,0 +1,3 @@
+ipad-2-card-section-3: in view after 5 drag(s) at (40.5, 272.0, 197.5, 24.0)
+ipad-2-card: Apply 9 label="Apply" value="" frame=(660.0, 469.5, 344.0, 44.0) hittable=true; Edit 9 label="Edit" value="" frame=(660.0, 521.5, 168.0, 44.0) hittable=true; Discard 9 label="Discard" value="" frame=(836.0, 521.5, 168.0, 44.0) hittable=true
+ipad-2-card: the would-rewrite mark: 43 label="pencil.line" value="" frame=(24.0, 408.5, 15.5, 14.5) hittable=false

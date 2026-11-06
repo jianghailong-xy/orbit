@@ -1,0 +1,2 @@
+mac-4-working: no window after launch; File > New Window
+mac-4-working-section-3: never in the band 61.0–200.25; last frame (missing)

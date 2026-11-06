@@ -1,0 +1,164 @@
+==> iPhone FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC: iPhone 17 Pro (FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC) (Shutdown) 
+==> stub ready on 127.0.0.1:8765 (pid 3820, after 4s)
+==> ios
+Test Case '-[C11ProbeUITests.WikiChatShotTests testFoldedAwayAfterTheRewrite]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testFoldedAwayAfterTheRewrite]' passed (153.716 seconds).
+Test Case '-[C11ProbeUITests.WikiChatShotTests testFullSheetCard]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testFullSheetCard]' passed (94.748 seconds).
+Test Case '-[C11ProbeUITests.WikiChatShotTests testHalfSheetAskAndThePageBehindScrolls]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testHalfSheetAskAndThePageBehindScrolls]' passed (84.043 seconds).
+Test Case '-[C11ProbeUITests.WikiChatShotTests testWorkingLook]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testWorkingLook]' passed (69.075 seconds).
+	 Executed 4 tests, with 0 failures (0 unexpected) in 401.581 (401.586) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 401.581 (401.588) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 401.581 (401.591) seconds
+** TEST SUCCEEDED **
+==> iPad 9F9B4A17-4195-40F0-8B46-728F6A6AA8EB: iPad Pro 13-inch (M5) (9F9B4A17-4195-40F0-8B46-728F6A6AA8EB) (Shutdown) 
+==> stub ready on 127.0.0.1:8765 (pid 41598, after 2s)
+==> ipad
+Test Case '-[C11ProbeUITests.WikiChatShotTests testFoldedAwayAfterTheRewrite]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testFoldedAwayAfterTheRewrite]' passed (669.327 seconds).
+Test Case '-[C11ProbeUITests.WikiChatShotTests testFullSheetCard]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testFullSheetCard]' passed (224.832 seconds).
+Test Case '-[C11ProbeUITests.WikiChatShotTests testHalfSheetAskAndThePageBehindScrolls]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testHalfSheetAskAndThePageBehindScrolls]' passed (121.659 seconds).
+Test Case '-[C11ProbeUITests.WikiChatShotTests testWorkingLook]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testWorkingLook]' passed (93.307 seconds).
+	 Executed 4 tests, with 0 failures (0 unexpected) in 1109.124 (1109.138) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 1109.124 (1109.139) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 1109.124 (1109.153) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 99990, after 2s)
+==> mac
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testFoldedAwayAfterTheRewrite]' started.
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testFoldedAwayAfterTheRewrite]' passed (87.272 seconds).
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testFullSheetCard]' started.
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testFullSheetCard]' passed (87.045 seconds).
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testHalfSheetAskAndThePageBehindScrolls]' started.
+/Users/runner/work/orbit/orbit/.c11-probe/UITests/WikiChatShotTests.swift:94: error: -[C11MacProbeUITests.WikiChatShotTests testHalfSheetAskAndThePageBehindScrolls] : XCTAssertTrue failed - mac-1-half-sheet: the page chip never showed
+/Users/runner/work/orbit/orbit/.c11-probe/UITests/ProbeCase.swift:175: error: -[C11MacProbeUITests.WikiChatShotTests testHalfSheetAskAndThePageBehindScrolls] : Failed to get matching snapshot: Find single matching element. Multiple matching elements found for <XCUIElementQuery: 0xa136a6d00>.
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testHalfSheetAskAndThePageBehindScrolls]' failed (96.166 seconds).
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testWorkingLook]' started.
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testWorkingLook]' passed (77.404 seconds).
+	 Executed 4 tests, with 2 failures (0 unexpected) in 347.887 (347.894) seconds
+	 Executed 4 tests, with 2 failures (0 unexpected) in 347.887 (347.896) seconds
+	 Executed 4 tests, with 2 failures (0 unexpected) in 347.887 (347.897) seconds
+** TEST FAILED **
+.c11-probe/run.sh: line 130: 99990 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.c11-probe/shots:
+total 0
+drwxr-xr-x   5 runner  staff   160 Nov  6 21:37 .
+drwxr-xr-x  20 runner  staff   640 Nov  6 22:28 ..
+drwxr-xr-x  34 runner  staff  1088 Nov  6 22:43 ios
+drwxr-xr-x  33 runner  staff  1056 Nov  6 22:43 ipad
+drwxr-xr-x  34 runner  staff  1088 Nov  6 22:43 mac
+
+/Users/runner/work/orbit/orbit/.c11-probe/shots/ios:
+total 13664
+drwxr-xr-x  34 runner  staff    1088 Nov  6 22:43 .
+drwxr-xr-x   5 runner  staff     160 Nov  6 21:37 ..
+drwxr-xr-x  26 runner  staff     832 Nov  6 21:58 attachments
+-rw-r--r--   1 runner  staff   12322 Nov  6 21:58 compiled-ios.txt
+-rw-r--r--   1 runner  staff     262 Nov  6 21:58 Complete Issue Description.txt
+-rw-r--r--   1 runner  staff      46 Nov  6 21:58 diagnostics-ios.txt
+-rw-r--r--   1 runner  staff  486322 Nov  6 21:55 ios-0-page-at-rest.png
+-rw-r--r--   1 runner  staff  683174 Nov  6 21:55 ios-1a-paragraph-menu.png
+-rw-r--r--   1 runner  staff  192106 Nov  6 21:56 ios-1b-ask-sheet.png
+-rw-r--r--   1 runner  staff  694914 Nov  6 21:56 ios-1c-half-sheet-quote.png
+-rw-r--r--   1 runner  staff  665558 Nov  6 21:56 ios-1d-page-behind-scrolled.png
+-rw-r--r--   1 runner  staff  487203 Nov  6 21:54 ios-2a-page-needs-you.png
+-rw-r--r--   1 runner  staff  288799 Nov  6 21:54 ios-2b-full-sheet-card.png
+-rw-r--r--   1 runner  staff  602705 Nov  6 21:52 ios-3a-folded-updated.png
+-rw-r--r--   1 runner  staff  749379 Nov  6 21:52 ios-3b-see-changes.png
+-rw-r--r--   1 runner  staff  749690 Nov  6 21:53 ios-3c-updated-opens-see-changes.png
+-rw-r--r--   1 runner  staff  487786 Nov  6 21:57 ios-4a-page-working.png
+-rw-r--r--   1 runner  staff   10703 Nov  6 21:55 ios-fab-idle.png
+-rw-r--r--   1 runner  staff   10764 Nov  6 21:54 ios-fab-needs-you.png
+-rw-r--r--   1 runner  staff   11446 Nov  6 21:52 ios-fab-updated.png
+-rw-r--r--   1 runner  staff   11311 Nov  6 21:57 ios-fab-working.png
+-rw-r--r--   1 runner  staff    1634 Nov  6 22:43 not-served.txt
+-rw-r--r--   1 runner  staff   27622 Nov  6 21:57 requests.log
+-rw-r--r--   1 runner  staff      49 Nov  6 21:40 requests.log.out
+-rw-r--r--   1 runner  staff     249 Nov  6 21:58 WikiChatShotTeststestFoldedAwayAfterTheRewrite-notes
+-rw-r--r--@  1 runner  staff     249 Nov  6 21:53 WikiChatShotTeststestFoldedAwayAfterTheRewrite-notes.txt
+-rw-r--r--   1 runner  staff     739 Nov  6 21:58 WikiChatShotTeststestFullSheetCard-notes
+-rw-r--r--@  1 runner  staff     739 Nov  6 21:54 WikiChatShotTeststestFullSheetCard-notes.txt
+-rw-r--r--   1 runner  staff     545 Nov  6 21:58 WikiChatShotTeststestHalfSheetAskAndThePageBehindScrolls-notes
+-rw-r--r--@  1 runner  staff     545 Nov  6 21:56 WikiChatShotTeststestHalfSheetAskAndThePageBehindScrolls-notes.txt
+-rw-r--r--   1 runner  staff     105 Nov  6 21:58 WikiChatShotTeststestWorkingLook-notes
+-rw-r--r--@  1 runner  staff     105 Nov  6 21:57 WikiChatShotTeststestWorkingLook-notes.txt
+-rw-r--r--   1 runner  staff     787 Nov  6 22:43 writes.txt
+-rw-r--r--   1 runner  staff  738331 Nov  6 21:58 xcodebuild-ios.log
+
+/Users/runner/work/orbit/orbit/.c11-probe/shots/ipad:
+total 16312
+drwxr-xr-x  33 runner  staff    1056 Nov  6 22:43 .
+drwxr-xr-x   5 runner  staff     160 Nov  6 21:37 ..
+drwxr-xr-x  22 runner  staff     704 Nov  6 22:28 attachments
+-rw-r--r--   1 runner  staff       0 Nov  6 22:28 compiled-ipad.txt
+-rw-r--r--   1 runner  staff      46 Nov  6 22:28 diagnostics-ipad.txt
+-rw-r--r--   1 runner  staff  674741 Nov  6 22:25 ipad-0-page-at-rest.png
+-rw-r--r--   1 runner  staff  716756 Nov  6 22:25 ipad-1a-paragraph-menu.png
+-rw-r--r--   1 runner  staff  735225 Nov  6 22:25 ipad-1b-ask-sheet.png
+-rw-r--r--   1 runner  staff  725232 Nov  6 22:25 ipad-1c-half-sheet-quote.png
+-rw-r--r--   1 runner  staff  720121 Nov  6 22:26 ipad-1d-page-behind-scrolled.png
+-rw-r--r--   1 runner  staff  678406 Nov  6 22:23 ipad-2a-page-needs-you.png
+-rw-r--r--   1 runner  staff  799186 Nov  6 22:24 ipad-2b-full-sheet-card.png
+-rw-r--r--   1 runner  staff  734283 Nov  6 22:19 ipad-3a-folded-updated.png
+-rw-r--r--   1 runner  staff  836469 Nov  6 22:20 ipad-3b-see-changes.png
+-rw-r--r--   1 runner  staff  836473 Nov  6 22:20 ipad-3c-updated-opens-see-changes.png
+-rw-r--r--   1 runner  staff  679528 Nov  6 22:27 ipad-4a-page-working.png
+-rw-r--r--   1 runner  staff    5950 Nov  6 22:25 ipad-fab-idle.png
+-rw-r--r--   1 runner  staff    6072 Nov  6 22:23 ipad-fab-needs-you.png
+-rw-r--r--   1 runner  staff    6485 Nov  6 22:19 ipad-fab-updated.png
+-rw-r--r--   1 runner  staff    6295 Nov  6 22:27 ipad-fab-working.png
+-rw-r--r--   1 runner  staff    1634 Nov  6 22:43 not-served.txt
+-rw-r--r--   1 runner  staff   33867 Nov  6 22:27 requests.log
+-rw-r--r--   1 runner  staff    1858 Nov  6 22:09 requests.log.out
+-rw-r--r--   1 runner  staff     216 Nov  6 22:28 WikiChatShotTeststestFoldedAwayAfterTheRewrite-notes
+-rw-r--r--@  1 runner  staff     216 Nov  6 22:20 WikiChatShotTeststestFoldedAwayAfterTheRewrite-notes.txt
+-rw-r--r--   1 runner  staff     446 Nov  6 22:28 WikiChatShotTeststestFullSheetCard-notes
+-rw-r--r--@  1 runner  staff     446 Nov  6 22:24 WikiChatShotTeststestFullSheetCard-notes.txt
+-rw-r--r--   1 runner  staff     479 Nov  6 22:28 WikiChatShotTeststestHalfSheetAskAndThePageBehindScrolls-notes
+-rw-r--r--@  1 runner  staff     479 Nov  6 22:26 WikiChatShotTeststestHalfSheetAskAndThePageBehindScrolls-notes.txt
+-rw-r--r--   1 runner  staff      79 Nov  6 22:28 WikiChatShotTeststestWorkingLook-notes
+-rw-r--r--@  1 runner  staff      79 Nov  6 22:27 WikiChatShotTeststestWorkingLook-notes.txt
+-rw-r--r--   1 runner  staff     862 Nov  6 22:43 writes.txt
+-rw-r--r--   1 runner  staff   73229 Nov  6 22:28 xcodebuild-ipad.log
+
+/Users/runner/work/orbit/orbit/.c11-probe/shots/mac:
+total 6024
+drwxr-xr-x   34 runner  staff    1088 Nov  6 22:43 .
+drwxr-xr-x    5 runner  staff     160 Nov  6 21:37 ..
+-rw-r--r--    1 runner  staff   72946 Nov  6 22:43 App UI hierarchy for io.orbitd
+drwxr-xr-x  122 runner  staff    3904 Nov  6 22:43 attachments
+-rw-r--r--    1 runner  staff   12508 Nov  6 22:43 compiled-mac.txt
+-rw-r--r--    1 runner  staff    1156 Nov  6 22:43 Complete Issue Description.txt
+-rw-r--r--    1 runner  staff     141 Nov  6 22:43 Debug description for `Window (First Match)`
+-rw-r--r--    1 runner  staff      46 Nov  6 22:43 diagnostics-mac.txt
+-rw-r--r--    1 runner  staff  184402 Nov  6 22:43 mac-0-page-at-rest.png
+-rw-r--r--    1 runner  staff  183430 Nov  6 22:43 mac-1a-paragraph-menu.png
+-rw-r--r--    1 runner  staff  184907 Nov  6 22:43 mac-1b-ask-sheet.png
+-rw-r--r--    1 runner  staff  185232 Nov  6 22:43 mac-2a-page-needs-you.png
+-rw-r--r--    1 runner  staff  210072 Nov  6 22:43 mac-2b-full-sheet-card.png
+-rw-r--r--    1 runner  staff  192017 Nov  6 22:43 mac-3a-folded-updated.png
+-rw-r--r--    1 runner  staff  197236 Nov  6 22:43 mac-3b-see-changes.png
+-rw-r--r--    1 runner  staff  195973 Nov  6 22:43 mac-3c-updated-opens-see-changes.png
+-rw-r--r--    1 runner  staff  184891 Nov  6 22:43 mac-4a-page-working.png
+-rw-r--r--    1 runner  staff    6176 Nov  6 22:43 mac-fab-idle.png
+-rw-r--r--    1 runner  staff    6249 Nov  6 22:43 mac-fab-needs-you.png
+-rw-r--r--    1 runner  staff    6749 Nov  6 22:43 mac-fab-updated.png
+-rw-r--r--    1 runner  staff    6262 Nov  6 22:43 mac-fab-working.png
+-rw-r--r--    1 runner  staff   45721 Nov  6 22:43 missing-band-mac-1-half-sheet-section-3
+-rw-r--r--    1 runner  staff   45728 Nov  6 22:43 missing-band-mac-2-card-section-3
+-rw-r--r--    1 runner  staff   46315 Nov  6 22:43 missing-band-mac-3-updated-section-3
+-rw-r--r--    1 runner  staff   45727 Nov  6 22:43 missing-band-mac-4-working-section-3
+-rw-r--r--    1 runner  staff    1032 Nov  6 22:43 not-served.txt
+-rw-r--r--    1 runner  staff   20571 Nov  6 22:42 requests.log
+-rw-r--r--    1 runner  staff      49 Nov  6 22:28 requests.log.out
+-rw-r--r--    1 runner  staff     253 Nov  6 22:43 WikiChatShotTeststestFoldedAwayAfterTheRewrite-notes
+-rw-r--r--    1 runner  staff     586 Nov  6 22:43 WikiChatShotTeststestFullSheetCard-notes
+-rw-r--r--    1 runner  staff     250 Nov  6 22:43 WikiChatShotTeststestHalfSheetAskAndThePageBehindScrolls-notes
+-rw-r--r--    1 runner  staff     135 Nov  6 22:43 WikiChatShotTeststestWorkingLook-notes
+-rw-r--r--    1 runner  staff     787 Nov  6 22:43 writes.txt
+-rw-r--r--    1 runner  staff  958417 Nov  6 22:43 xcodebuild-mac.log

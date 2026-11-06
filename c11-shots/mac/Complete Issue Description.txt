@@ -1,0 +1,11 @@
+Failed to get matching snapshot: Find single matching element. Multiple matching elements found for <XCUIElementQuery: 0xa136a6d00>.
+Sparse tree of matches:
+→Application, pid: 34864, title: 'C11MacProbe'
+  ↳Window, identifier: 'SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1'
+    ↳Group
+      ↳SplitGroup, identifier: 'SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1, SidebarNavigationSplitView'
+        ↳Group
+          ↳SplitGroup
+            ↳Group
+              ↳MenuButton, label: 'New chat'
+              ↳MenuButton, identifier: 'chevron.down', label: 'New chat'

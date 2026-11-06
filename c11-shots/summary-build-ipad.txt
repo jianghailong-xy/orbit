@@ -1,0 +1,12 @@
+Test Case '-[C11ProbeUITests.WikiChatShotTests testFoldedAwayAfterTheRewrite]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testFoldedAwayAfterTheRewrite]' passed (669.327 seconds).
+Test Case '-[C11ProbeUITests.WikiChatShotTests testFullSheetCard]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testFullSheetCard]' passed (224.832 seconds).
+Test Case '-[C11ProbeUITests.WikiChatShotTests testHalfSheetAskAndThePageBehindScrolls]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testHalfSheetAskAndThePageBehindScrolls]' passed (121.659 seconds).
+Test Case '-[C11ProbeUITests.WikiChatShotTests testWorkingLook]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testWorkingLook]' passed (93.307 seconds).
+	 Executed 4 tests, with 0 failures (0 unexpected) in 1109.124 (1109.138) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 1109.124 (1109.139) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 1109.124 (1109.153) seconds
+** TEST SUCCEEDED **

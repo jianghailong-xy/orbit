@@ -1,0 +1,18 @@
+    POST /__reset body: 
+21:50:57.083 [ask] "POST /__reset HTTP/1.1" 200 -
+    POST /__set body: {"stage": "updated"}
+21:50:57.148 [updated] "POST /__set HTTP/1.1" 200 -
+    POST /api/wiki/chat-drafts/D1/seen body: 
+21:52:50.915 [updated] "POST /api/wiki/chat-drafts/D1/seen HTTP/1.1" 409 -
+    POST /__reset body: 
+21:53:20.597 [ask] "POST /__reset HTTP/1.1" 200 -
+    POST /__set body: {"stage": "card"}
+21:53:20.614 [card] "POST /__set HTTP/1.1" 200 -
+    POST /__reset body: 
+21:54:54.457 [ask] "POST /__reset HTTP/1.1" 200 -
+    POST /__set body: {"stage": "ask"}
+21:54:54.494 [ask] "POST /__set HTTP/1.1" 200 -
+    POST /__reset body: 
+21:56:18.510 [ask] "POST /__reset HTTP/1.1" 200 -
+    POST /__set body: {"stage": "working"}
+21:56:18.581 [working] "POST /__set HTTP/1.1" 200 -

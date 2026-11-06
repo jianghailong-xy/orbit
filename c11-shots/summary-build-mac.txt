@@ -1,0 +1,14 @@
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testFoldedAwayAfterTheRewrite]' started.
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testFoldedAwayAfterTheRewrite]' passed (87.272 seconds).
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testFullSheetCard]' started.
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testFullSheetCard]' passed (87.045 seconds).
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testHalfSheetAskAndThePageBehindScrolls]' started.
+/Users/runner/work/orbit/orbit/.c11-probe/UITests/WikiChatShotTests.swift:94: error: -[C11MacProbeUITests.WikiChatShotTests testHalfSheetAskAndThePageBehindScrolls] : XCTAssertTrue failed - mac-1-half-sheet: the page chip never showed
+/Users/runner/work/orbit/orbit/.c11-probe/UITests/ProbeCase.swift:175: error: -[C11MacProbeUITests.WikiChatShotTests testHalfSheetAskAndThePageBehindScrolls] : Failed to get matching snapshot: Find single matching element. Multiple matching elements found for <XCUIElementQuery: 0xa136a6d00>.
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testHalfSheetAskAndThePageBehindScrolls]' failed (96.166 seconds).
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testWorkingLook]' started.
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testWorkingLook]' passed (77.404 seconds).
+	 Executed 4 tests, with 2 failures (0 unexpected) in 347.887 (347.894) seconds
+	 Executed 4 tests, with 2 failures (0 unexpected) in 347.887 (347.896) seconds
+	 Executed 4 tests, with 2 failures (0 unexpected) in 347.887 (347.897) seconds
+** TEST FAILED **

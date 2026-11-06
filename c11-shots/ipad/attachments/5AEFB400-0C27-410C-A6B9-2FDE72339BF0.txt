@@ -1,0 +1,5 @@
+ipad-1-half-sheet-section-3: in view after 5 drag(s) at (40.5, 280.5, 197.5, 24.0)
+ipad-1-half-sheet: the button at rest: 9 label="Chat" value="" frame=(956.0, 1275.0, 52.0, 52.0) hittable=true
+ipad-1-half-sheet: the panel's head: 48 label="New chat" value="" frame=(648.0, 48.75, 75.0, 20.5) hittable=false
+ipad-1-half-sheet: the panel's head starts at 0.63 of the window's width
+ipad-1-half-sheet: a drag on the page behind the half sheet took the paragraph from 398.0 to 288.5
