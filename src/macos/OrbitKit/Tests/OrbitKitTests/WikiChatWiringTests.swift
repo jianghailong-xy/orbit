@@ -267,7 +267,9 @@ final class WikiChatWiringTests: XCTestCase {
                               "seen = stored > 0 ? stored : now", "UserDefaults.standard.set(now, forKey: key)"],
                     "the document's stamp: the look before this one, else this visit's start")
         XCTAssertTrue(screens.contains(".onDisappear { leaveSeen(wiki) }"), "leaving moves the stamp, as the web's page does")
-        XCTAssertTrue(screens.contains("would: model.wikiChat?.wouldRewrite ?? [])"))
+        XCTAssertTrue(screens.contains("would: model.wikiChat?.wouldRewrite ?? [], underSheet: model.wikiChat?.asSheet ?? false)"))
+        XCTAssertTrue(page.contains("let line = headingTops.page.map { $0.minY + $0.height * CGFloat(WikiChatLogic.readingLine(underSheet: underSheet)) } ?? 300"),
+                      "the page chip's section is read off the line where the page shows it")
         XCTAssertTrue(screens.contains("docSlug: doc.slug, sectionKey: section.key, place: place, versionID: section.change?.versionId)], draftID: nil)"),
                       "Updated opens the write it names")
         let views = code(try source("Views/WikiChatViews.swift"))

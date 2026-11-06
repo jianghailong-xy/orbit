@@ -197,6 +197,18 @@ final class WikiChatLogicTests: XCTestCase {
 
     // MARK: Updated beside a section
 
+    /// The page chip's section is the lowest heading above the reading line: just above a phone's half sheet, which
+    /// covers the lower half (board 42 ⑤); a third of the way down a page shown whole, so a short section at the top of
+    /// an iPad's or a Mac's page is the one named, not the next heading down.
+    func testTheReadingLineSitsAboveAPhonesSheetAndHighOnAPageShownWhole() {
+        XCTAssertEqual(WikiChatLogic.readingLine(underSheet: true), 0.45)
+        XCTAssertEqual(WikiChatLogic.readingLine(underSheet: false), 0.3)
+        // A Mac's page 625 high from 83: section 3 opened at the top, section 4's heading 210 under it.
+        let line = 83 + 625 * WikiChatLogic.readingLine(underSheet: false)
+        let tops: [String: Double] = ["s3": 90, "s4": 300]
+        XCTAssertEqual(tops.filter { $0.value <= line }.max { $0.value < $1.value }?.key, "s3")
+    }
+
     func testASectionIsUpdatedWhenWrittenSinceTheReaderLooked() throws {
         let decoder = JSONDecoder()
         let change = try decoder.decode(WikiDocSectionChange.self, from: Data(

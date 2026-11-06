@@ -618,6 +618,17 @@ public enum WikiChatLogic {
                      sources: sources, selected: run.count)
     }
 
+    // MARK: the section the reader is in (design §4.2)
+
+    /// Where a page's reading line falls, as a share of its height: the section the page chip names is the lowest heading
+    /// above it (design §4.2: the nearest section heading by scroll position). Just above a phone's half sheet, which
+    /// covers the lower half (board 42 ⑤); higher on a page shown whole — an iPad's or a Mac's, beside the chat's
+    /// column — so a short section at the top is the one counted, as the web's directory counts the first section in
+    /// the top half, rather than the next heading down.
+    public static func readingLine(underSheet: Bool) -> Double {
+        underSheet ? 0.45 : 0.3
+    }
+
     // MARK: Updated beside a section (contract `docs.versions.reads.doc`)
 
     /// Whether a section was written since the reader last looked: its latest change is newer than `seen` (seconds

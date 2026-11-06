@@ -68,6 +68,8 @@ struct WikiDocPage: View {
     var quoted: Set<String> = []
     /// `<doc>#<key>` of each section an open card of the chat beside the page would rewrite (board 42 ②).
     var would: Set<String> = []
+    /// The chat is a sheet over the page's lower half here (a phone's), which moves the reading line down to its edge.
+    var underSheet = false
 
     @State private var openNote: WikiDocOpenNote?
     @State private var openMark: WikiDocOpenMark?
@@ -169,11 +171,11 @@ struct WikiDocPage: View {
     }
 
     /// The section the reader is in (design §4.2: the nearest section heading by scroll position): the lowest heading
-    /// above the reading line, a little under the middle of what the page shows — the half a phone's chat sheet leaves
-    /// is above it; with none above it, the one already counted — or, at the document's top, its first section.
+    /// above the reading line (`WikiChatLogic.readingLine`) — just above a phone's half sheet, nearer the top of a page
+    /// shown whole; with none above it, the one already counted — or, at the document's top, its first section.
     private func headingMoved(_ key: String, top: CGFloat?) {
         headingTops.tops[key] = top
-        let line = headingTops.page.map { $0.minY + $0.height * 0.45 } ?? 300
+        let line = headingTops.page.map { $0.minY + $0.height * CGFloat(WikiChatLogic.readingLine(underSheet: underSheet)) } ?? 300
         let above = headingTops.tops.filter { $0.value <= line }.max { $0.value < $1.value }?.key
         let first = (doc.sections ?? []).first?.key
         let below = headingTops.tops.min { $0.value < $1.value }?.key

@@ -66,7 +66,7 @@ struct WikiDocScreen: View {
                     WikiDocPage(doc: doc, github: WikiDocLogic.githubRepo(wiki.currentSpace?.repoUrlNorm), written: written(wiki),
                                 summaries: summaries(wiki), section: address.section, actions: actions(doc),
                                 seen: seen, added: added(doc), quoted: quoted(doc),
-                                would: model.wikiChat?.wouldRewrite ?? [])
+                                would: model.wikiChat?.wouldRewrite ?? [], underSheet: model.wikiChat?.asSheet ?? false)
                         // The sections written since the reader looked: their versions, for the new sentences' line.
                         .task(id: updatedSections(doc)) { await loadVersions(doc) }
                 } else if wiki.missingDocs.contains(address.slug) {
