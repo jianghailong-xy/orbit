@@ -34,7 +34,7 @@ func TestDoctorSaysTheLinkWelcomedThisMachine(t *testing.T) {
 			t.Errorf("the report does not say %q:\n%s", want, report)
 		}
 	}
-	conns, _, _, _ := g.snapshot()
+	conns, _ := g.snapshot()
 	linkWaitFor(t, 5*time.Second, "the doctor's connection to end", func() bool {
 		g.mu.Lock()
 		defer g.mu.Unlock()
@@ -171,14 +171,14 @@ func TestDoctorReportsTheGatewaysOwnRefusal(t *testing.T) {
 	}
 }
 
-// A server without the runner link has nothing for doctor to check, which is no fault of the machine's; doctor's
+// A server without the runner link is one this runner cannot work with, which is no fault of the machine's; doctor's
 // section says so.
 func TestDoctorSaysTheServerHasNoLink(t *testing.T) {
 	cp := newFakeLinkControlPlane(t, "wss://127.0.0.1:1")
 	cp.tokenStatus = http.StatusNotFound
 	var out bytes.Buffer
 	checkRunnerLink(&RunnerConfig{ServerURL: cp.URL, RunnerToken: "runner-token"}, &out)
-	want := "\nRunner link:\n  – not configured on this server (POST /api/runner/link-token answered 404 RUNNER_LINK_NOT_CONFIGURED): nothing to check\n"
+	want := "\nRunner link:\n  ✗ not configured on this server (POST /api/runner/link-token answered 404 RUNNER_LINK_NOT_CONFIGURED): this runner works only over the link, so it cannot work until the server turns it on\n"
 	if out.String() != want {
 		t.Errorf("doctor printed %q, want %q", out.String(), want)
 	}

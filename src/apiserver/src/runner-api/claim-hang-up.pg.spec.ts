@@ -1,13 +1,16 @@
 /**
- * A claim long poll whose runner hung up claims nothing.
+ * A claim whose runner hung up claims nothing.
  *
  * WHAT THIS DRIVES
  * ----------------
  * The 2026-10-03 incident, at the control plane's own HTTP door: a runner re-executed into a
  * self-update with a `GET /runner/sessions/claim` still open, the new process came up, and a task's
- * session queued 4s later was claimed by the poll the old process had abandoned — PENDING -> RUNNING,
+ * session queued 4s later was claimed by the call the old process had abandoned — PENDING -> RUNNING,
  * answered to a closed connection. No process took it over, and it read "Starting" until an
  * unrelated failed claim made the new process reconcile, 15 minutes later.
+ *
+ * A claim answers at once now, but for one that lost a row lock, which asks again for about 5 s
+ * (QueueService.claimSessionForRunner): a runner can still stop while it does.
  *
  * The door is the real `RunnerApiController` behind the real `RunnerAuthGuard` and `QueueService`,
  * over a disposable PostgreSQL. The runner is a plain HTTP client that opens a claim and drops its
@@ -15,12 +18,11 @@
  *
  * WHAT IT ASSERTS
  * ---------------
- *   * (1) a session queued after the runner hung up is still PENDING once the abandoned poll has had
- *     every chance to claim it — woken by the queue signal and past its 5s re-poll;
- *   * (2) that session is claimable: a connected poll takes it at once;
- *   * (3) a connected poll still waits for work and claims it when it arrives, rather than reading its
- *     own open connection as a hang-up — a poll that ended early would turn each runner's claim loop
- *     into a busy loop.
+ *   * (1) a session whose row lock its claim lost is still PENDING once its runner hung up and the
+ *     lock came free: the abandoned claim had every chance to ask again;
+ *   * (2) that session is claimable: a connected claim takes it at once;
+ *   * (3) a connected claim that lost the lock asks again and takes the session once the lock is free,
+ *     rather than reading its own open connection as a hang-up.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/claim-hang-up.pg.spec.ts
  */
@@ -57,6 +59,7 @@ import { TasksService } from '../tasks/tasks.service';
 import { RunnerApiController } from './runner-api.controller';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
+import '../test-support/daemon-routes-over-http';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -75,7 +78,7 @@ const RUNNER_TOKEN = `the-runner-that-hung-up:${randomUUID()}`;
 const silent = (): unknown =>
   new Proxy({}, { get: (_target, key) => (key === 'then' ? undefined : () => undefined) });
 
-test('a claim long poll whose runner hung up claims nothing', {
+test('a claim whose runner hung up claims nothing', {
   skip,
   concurrency: 1,
   timeout: 120_000,
@@ -181,7 +184,7 @@ test('a claim long poll whose runner hung up claims nothing', {
     return rows[0];
   }
 
-  /** Open one claim long poll as the runner, on its own connection. */
+  /** Open one claim as the runner, on its own connection. */
   function openClaim(): { answer: Promise<{ sessionId?: string } | null>; hangUp: () => void } {
     const req = httpRequest({
       host: '127.0.0.1',
@@ -219,34 +222,49 @@ test('a claim long poll whose runner hung up claims nothing', {
     ]);
   }
 
-  // ── (1) the runner hangs up mid-poll; the session queued after it must stay queued ─────────────
+  /** Hold a session's row on a connection of its own, as an inbox fetch does: a claim loses its lock to it. */
+  async function holdRow(sessionId: string): Promise<() => Promise<void>> {
+    const holder = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+    await holder.connect();
+    await holder.query('BEGIN');
+    await holder.query('SELECT id FROM "session" WHERE id = $1 FOR UPDATE', [sessionId]);
+    return async () => {
+      await holder.query('ROLLBACK');
+      await holder.end();
+    };
+  }
+
+  // ── (1) the runner hangs up while its claim asks again; the session must stay queued ────────
+  const queuedAfter = await queueSession('its runner re-executed while the claim asked again');
+  let release = await holdRow(queuedAfter);
   const abandoned = openClaim();
   abandoned.answer.catch(() => undefined); // the connection this side destroys
-  await sleep(1_000); // nothing queued: the poll is waiting on the queue signal now
+  await sleep(300); // it found the row held: it waits between attempts now
   abandoned.hangUp();
   await sleep(300);
-
-  const queuedAfter = await queueSession('queued after the runner re-executed');
-  // Past the 5s re-poll, so an abandoned poll that slept through the signal would have retried too.
-  await sleep(6_500);
+  await release();
+  await sleep(1_500); // past the longest wait between attempts
   const untouched = await row(queuedAfter);
   assert.equal(
     untouched.status,
     RunStatus.PENDING,
-    'a poll whose runner had hung up claimed the session: RUNNING, and answered to nobody',
+    'a claim whose runner had hung up claimed the session: RUNNING, and answered to nobody',
   );
-  assert.equal(untouched.startedAt, null, 'the abandoned poll stamped a start on a session it never handed over');
+  assert.equal(untouched.startedAt, null, 'the abandoned claim stamped a start on a session it never handed over');
 
-  // ── (2) the session is claimable: a connected poll takes it at once ────────────────────────────
+  // ── (2) the session is claimable: a connected claim takes it at once ───────────────────────
   const connected = await within(5_000, 'a claim with work already queued', openClaim().answer);
   assert.equal(connected?.sessionId, queuedAfter);
   assert.equal((await row(queuedAfter)).status, RunStatus.RUNNING);
 
-  // ── (3) a connected poll waits for work and claims it when it arrives ──────────────────────────
+  // ── (3) a connected claim that lost the lock asks again and takes the session ──────────────
+  const arrived = await queueSession('its row held while a connected runner asked');
+  release = await holdRow(arrived);
   const waiting = openClaim();
-  await sleep(2_000); // nothing queued: this poll has to still be open, not answered empty
-  const arrived = await queueSession('queued while a connected runner was waiting');
-  const claimed = await within(5_000, 'a connected poll after work was queued', waiting.answer);
-  assert.equal(claimed?.sessionId, arrived, 'the connected poll was ended before the work it waited for arrived');
+  await sleep(300);
+  assert.equal((await row(arrived)).status, RunStatus.PENDING, 'the claim took a row another transaction held');
+  await release();
+  const claimed = await within(5_000, 'a connected claim once the lock came free', waiting.answer);
+  assert.equal(claimed?.sessionId, arrived, 'the connected claim ended before it could take the session');
   assert.equal((await row(arrived)).status, RunStatus.RUNNING);
 });

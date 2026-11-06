@@ -81,6 +81,7 @@ import {
 import { MANAGED_RUNNER_KUBE_CLIENT_FACTORY, MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-runner-runtime';
 import { ManagedRunnerWorker } from './managed-runner-worker';
 import { ManagedRunnerService } from './managed-runner.service';
+import '../test-support/daemon-routes-over-http';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -669,7 +670,7 @@ test('managed runner instance binding over HTTP: the authorized instance only, a
     assert.equal(claim.status, 200, claim.text);
     assert.equal(toUuid(claim.json.sessionId), sessionId, 'the managed runner claimed its session');
     for (const [label, method, route, body] of runnerCalls(sessionId)) {
-      if (label === 'claim' || label === 'inbox') continue; // long polls; the claim was just made
+      if (label === 'claim' || label === 'inbox') continue; // the claim was just made, and the inbox names a generation
       const reply = await call(server, method, route, generation1.credential, body, generation1.headers);
       assert.ok(![401, 403, 503].includes(reply.status) || !/MANAGED_RUNNER_INSTANCE/.test(reply.text), `${label}: ${reply.status} ${reply.text}`);
     }

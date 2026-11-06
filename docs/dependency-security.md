@@ -233,9 +233,8 @@ The runner's link client and its shadow connection (`src/runner-go/link_*.go`, `
   runner's code, fourteen in its module scan, all fixed in go1.27.2. These are the gateway's toolchain findings above.
 - **Reach.** The runner only dials. It reads frames from the connections it opened itself, over TLS verified against the
   system's roots, to the link address the control plane hands out with the link token. A message is capped at 256 KiB
-  (a frame in pieces at 8 MiB), and compression is off. During the shadow period nothing it reads changes the runner's
-  work: it counts answers, and follows Drain and Close. With the shadow off (`ORBIT_LINK_SHADOW=0`), only
-  `orbit doctor` dials the link.
+  (a frame in pieces at 8 MiB), and compression is off. Since the cut-over the runner's work goes over the link, so
+  what it reads there (the control plane's answers, hints, Drain and Close) is what the runner acts on.
 - **Updates.** Dependabot's existing `gomod` entry for `/src/runner-go` covers both. Keep them at the gateway's
   versions.
 

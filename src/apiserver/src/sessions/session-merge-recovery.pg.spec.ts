@@ -40,8 +40,7 @@ const URL = process.env.COORDINATOR_PG_URL;
     check: { status: 'unconfigured' },
   };
   await sessions.mergeToMain(ownerId, sessionId, 'develop', undefined, { recoveryAction: 'preview' });
-  assert.deepEqual(await realtime.drainMergeRequests(runnerId, leaseOwner, false), []);
-  const [preview] = await realtime.drainMergeRequests(runnerId, leaseOwner, true);
+  const [preview] = await realtime.drainMergeRequests(runnerId, leaseOwner);
   assert.equal(preview.recoveryAction, 'preview');
   await api.mergeResult({ id: runnerId }, sessionId, {
     status: 'error', operationId: preview.operationId, leaseOwner,
@@ -53,7 +52,7 @@ const URL = process.env.COORDINATOR_PG_URL;
     { recoveryAction: 'apply', previewId: 'stale' }), ConflictException);
 
   await sessions.mergeToMain(ownerId, sessionId, 'develop', undefined, { recoveryAction: 'apply', previewId: 'reviewed' });
-  const [apply] = await realtime.drainMergeRequests(runnerId, leaseOwner, true);
+  const [apply] = await realtime.drainMergeRequests(runnerId, leaseOwner);
   assert.deepEqual(apply.recovery, reviewed);
   await assert.rejects(() => api.mergeResult({ id: runnerId }, sessionId, {
     status: 'merged', operationId: apply.operationId, leaseOwner, sourceSha: reviewed.sourceSha,
@@ -75,7 +74,7 @@ const URL = process.env.COORDINATOR_PG_URL;
   assert.equal(await db.sessionMergeReceipt.count({ where: { sessionId, result: 'MERGED' } }), 1);
 
   await sessions.mergeToMain(ownerId, sessionId, 'develop', undefined, { recoveryAction: 'sync-local', previewId: 'reviewed' });
-  const [sync] = await realtime.drainMergeRequests(runnerId, leaseOwner, true);
+  const [sync] = await realtime.drainMergeRequests(runnerId, leaseOwner);
   assert.equal(sync.recoveryAction, 'sync-local');
   assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).branchMerged, true);
   await api.mergeResult({ id: runnerId }, sessionId, {

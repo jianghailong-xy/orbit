@@ -5,8 +5,8 @@
  *
  * The mark is a symbol the internal listener sets on the request before the app sees it. It is
  * not a header, so nothing that arrives on the public listener can claim to be a link call: the
- * answers a link call gets (no long poll, the link's error envelope) stay the link's, and every
- * HTTPS request is served exactly as it was before the link existed.
+ * daemon's routes, which refuse HTTPS (runner-api/runner-link-required.ts), and the answers a link
+ * call gets (an approval's decision at once, the link's error envelope) stay the link's.
  *
  * Here rather than beside the listener because the error boundary in this directory reads it too.
  */

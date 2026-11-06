@@ -18,6 +18,7 @@ import {
   readRunnerLink,
   runnerLinkCredential,
   runnerLinkFrom,
+  runnerLinkNotConfigured,
   sameOriginLinkUrl,
   signRunnerLinkToken,
   verifyRunnerLinkToken,
@@ -131,7 +132,8 @@ test('a missing or unusable setting leaves the link off, and says which, once ea
   const state = runnerLinkFrom({ get: (name: string) => ({ RUNNER_LINK_URL: LINK_URL } as Record<string, string>)[name] }, { error: (line: string) => logged.push(line) });
   assert.equal(state.config, null);
   assert.deepEqual(logged, state.problems, 'each problem is logged once, as it was found');
-  assert.deepEqual(runnerLinkFrom({ get: () => undefined }, { error: () => assert.fail('nothing set is nothing to log') }).problems, []);
+  // Nothing set is no problem with what is set, and is said once all the same (the test below).
+  assert.deepEqual(runnerLinkFrom({ get: () => undefined }, { error: () => {} }).problems, []);
 });
 
 test('a token names the runner, its tenant, the cell and its address, the process and the credential, for an hour', () => {
@@ -370,6 +372,19 @@ test("the gateway's guard: 401 for anything but its secret, through for the secr
     assert.equal((refused.body as { code: string }).code, 'RUNNER_LINK_GATEWAY_UNAUTHORIZED');
   }
   assert.equal(guard.canActivate(asGateway(`Bearer ${GATEWAY_TOKEN}`)), true);
+});
+
+test('with nothing set, this build says at boot that no runner can work, once', () => {
+  const logged: string[] = [];
+  const state = runnerLinkFrom({ get: () => undefined }, { error: (line: string) => logged.push(line) });
+  assert.equal(state.config, null);
+  assert.deepEqual(logged, ['The runner link is not configured, and runners work only over it: no runner can work with this server']);
+});
+
+test('the link routes\' 404 says what the server lacks and what to run there', () => {
+  const body = runnerLinkNotConfigured().getResponse() as { code: string; message: string };
+  assert.equal(body.code, RUNNER_LINK_NOT_CONFIGURED);
+  assert.match(body.message, /runners work only over it.*\.claude\/skills\/upgrade\/upgrade\.sh/);
 });
 
 // ── RUNNER_LINK_URL=same-origin ─────────────────────────────────────────────────────────────────────────────────────────

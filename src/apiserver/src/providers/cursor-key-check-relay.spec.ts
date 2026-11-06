@@ -140,7 +140,7 @@ test(`P2 follow-up a runner is asked at most ${CURSOR_KEY_CHECKS_PER_RUNNER} che
   assert.equal(await answers[0], 'VALID');
 });
 
-test('P2 follow-up the heartbeat hands a key only to a process that declares cursor-key-check/v1, and only when one is waiting', async () => {
+test('P2 follow-up the heartbeat hands a key over once, and only when one is waiting', async () => {
   const RUNNER = '33333333-3333-4333-8333-333333333333';
   const prisma = {
     runnerPresence: { upsert: async () => ({}) },
@@ -159,10 +159,6 @@ test('P2 follow-up the heartbeat hands a key only to a process that declares cur
   assert.equal('cursorKeyChecks' in await beat(`provider:cursor,${CURSOR_KEY_CHECK_V1}`), false, 'a beat with nothing to hand over has a new key');
   const answer = cursorKeyCheckRelay.ask(RUNNER, KEY);
   try {
-    // An older process of the same machine, or one that never declared it, is handed nothing.
-    for (const older of [undefined, 'provider:cursor', 'provider:cursor,cursor-account-login/v1']) {
-      assert.equal('cursorKeyChecks' in await beat(older), false, `a process declaring ${older} was handed a key`);
-    }
     const handed = await beat(`session-worktree-ops-v1,${CURSOR_KEY_CHECK_V1}`);
     assert.equal(handed.cursorKeyChecks?.length, 1);
     assert.equal(handed.cursorKeyChecks?.[0].apiKey, KEY);

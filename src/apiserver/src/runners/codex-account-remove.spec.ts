@@ -194,16 +194,6 @@ test('a runner that cannot remove accounts is refused, in the words the page sho
   assert.equal(await silent.beat(null), undefined);
 });
 
-test('a runner whose declared capabilities went stale is refused at the heartbeat too', async () => {
-  // The row says it can remove accounts; the process heartbeating says nothing of the sort. A
-  // request filed in between must not sit pending until it times out.
-  const h = harness();
-  await h.remove(SLOT);
-  assert.equal(await h.beat('session-worktree-ops-v1'), undefined);
-  assert.equal(h.state().status, 'failed');
-  assert.match(h.state().message ?? '', /too old to remove a Codex account/);
-});
-
 test('Default is never handed to the runner: removed from Orbit only, and only beside another Codex account', async () => {
   const h = harness();
   for (const account of ['default', '../../.codex', 'Work', '']) {

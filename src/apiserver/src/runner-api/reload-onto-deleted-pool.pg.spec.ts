@@ -43,6 +43,8 @@ import { SessionsService } from '../sessions/sessions.service';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { RunnerApiController } from './runner-api.controller';
 import { PROVIDER_UNAVAILABLE_ERROR } from './runner-provider-support';
+import '../test-support/dequeue-under-lease';
+import { sessionLease } from '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 // The spec encrypts the member's key and the doors decrypt it; both only need the same secret.
@@ -131,16 +133,17 @@ suite('a reload onto an account pool deleted before the inbox hands it out, on r
   const runnerApi = new RunnerApiController(
     prisma, queue, realtime, {} as never, {} as never, new ReferenceExpansionService(prisma),
   );
-  /** The inbox's own body, for a poll that finds nothing to hand out and would otherwise long-poll. */
+  /** The inbox's own body. */
   const dequeue = (runnerApi as unknown as {
     dequeueTurn(sessionId: string, runnerId: string, leaseGeneration: string | null): Promise<RunInboxResponse | null>;
   }).dequeueTurn.bind(runnerApi);
 
   /** The runner's inbox poll, as GET /runner/sessions/:id/inbox runs it. */
-  const inbox = (on: Machine, sessionId: string) => runnerApi.inbox({ id: on.runnerId }, sessionId, undefined, '1');
+  const inbox = async (on: Machine, sessionId: string) =>
+    runnerApi.inbox({ id: on.runnerId }, sessionId, await sessionLease(prisma, sessionId), '1');
   /** The runner asking for work — which has to be `sessionId`. */
   async function claim(on: Machine, sessionId: string) {
-    const claimed = await queue.claimSessionForRunner({ id: on.runnerId }, 0, false, false);
+    const claimed = await queue.claimSessionForRunner({ id: on.runnerId });
     assert.equal(claimed?.sessionId, sessionId, 'the runner was not handed the session');
   }
   /** What the session was given after its opening turn, in the order it was queued. */
@@ -213,7 +216,7 @@ suite('a reload onto an account pool deleted before the inbox hands it out, on r
 
     // The next message waits for a claim, which holds the session saying the same thing while the pool is gone…
     const message = await sessions.createTurn(me, live, { clientTurnId: randomUUID(), content: 'still there?' });
-    assert.equal(await queue.claimSessionForRunner({ id: box.runnerId }, 0, false, false), null, 'the runner was handed the session');
+    assert.equal(await queue.claimSessionForRunner({ id: box.runnerId }), null, 'the runner was handed the session');
     assert.deepEqual(await recorded(live), { status: RunStatus.PENDING, error: PROVIDER_UNAVAILABLE_ERROR });
     // …and once its person moves it onto a provider that runs, the claim clears it and the message is handed out.
     await sessions.updateConfig(me, live, { provider: 'claude' });

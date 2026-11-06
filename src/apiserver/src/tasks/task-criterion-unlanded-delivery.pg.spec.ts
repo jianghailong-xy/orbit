@@ -44,6 +44,7 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * `CRITERION_UNLANDED`: the criterion whose work is finished and is on nobody's default branch.

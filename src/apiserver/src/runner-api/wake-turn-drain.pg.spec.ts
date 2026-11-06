@@ -68,6 +68,7 @@ import { RunnerApiController } from './runner-api.controller';
 import { RunnerSessionsController } from './runner-sessions.controller';
 import { lastLoopRun, ScheduledWakeupDto } from './scheduled-wakeup';
 import { ScheduledWakeupWorker } from './scheduled-wakeup.worker';
+import '../test-support/dequeue-under-lease';
 
 const PG_URL = process.env.COORDINATOR_PG_URL;
 const skip = !PG_URL;
@@ -318,7 +319,7 @@ test('a wakeup filed onto a queued turn that its session\'s end drains is settle
   }
   /** The runner's claim of a session queued for a turn — the queue's own — then the inbox. */
   async function claim(m: Machine, sessionId: string) {
-    const claimed = await claims.claimSessionForRunner({ id: m.runnerId, supportedProviders: [AgentProvider.CLAUDE] }, 0, true);
+    const claimed = await claims.claimSessionForRunner({ id: m.runnerId, supportedProviders: [AgentProvider.CLAUDE] });
     assert.equal(claimed?.sessionId, sessionId, 'the runner was offered another session, or none');
     return handedOut(m, sessionId);
   }

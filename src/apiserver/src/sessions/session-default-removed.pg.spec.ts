@@ -58,6 +58,7 @@ import { QueueService as RealQueueService } from '../queue/queue.service';
 import { AutoRetryService } from './auto-retry.service';
 import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
 import { SessionsService } from './sessions.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -244,7 +245,7 @@ test('no session runs on a Default its owner removed from Orbit', {
       )
     ).rows as Array<{ content: string }>;
   const claimOn = async (runnerId: string) => {
-    const claimed = await claims.claimSessionForRunner({ id: runnerId }, 0, false, false);
+    const claimed = await claims.claimSessionForRunner({ id: runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     return claimed;
   };
@@ -340,7 +341,7 @@ test('no session runs on a Default its owner removed from Orbit', {
     // Both paused by hand: Team's pause ends first, and the session waits for it, still not running.
     const paused = await machine('all-paused', { others: [WORK, TEAM], pauses: { codex: { [WORK]: THIRD, [TEAM]: SECOND } } });
     const held = await sessionOn(paused, 'codex', RunStatus.PENDING, { codexAccountPinned: true });
-    assert.equal(await claims.claimSessionForRunner({ id: paused.runnerId }, 0, false, false), null, 'dispatched while every account is paused');
+    assert.equal(await claims.claimSessionForRunner({ id: paused.runnerId }), null, 'dispatched while every account is paused');
     const waiting = await row(held);
     assert.deepEqual({ status: waiting.status, error: waiting.error }, { status: 'PENDING', error: `Account paused until ${SECOND}` });
     // Team resumed: the claim starts it there.
@@ -396,7 +397,7 @@ test('no session runs on a Default its owner removed from Orbit', {
     await new AutoRetryService(prisma, sessions, quiet).sweep(at);
     const revived = await db.session.findUniqueOrThrow({ where: { id }, select: { status: true, retryAttempts: true } });
     assert.deepEqual(revived, { status: RunStatus.PENDING, retryAttempts: 1 }, 'held back by the quota of a Default nobody uses');
-    const claimed = await claims.claimSessionForRunner({ id: m.runnerId }, 0, true, false);
+    const claimed = await claims.claimSessionForRunner({ id: m.runnerId });
     assert.equal(claimed?.agent.env?.CLAUDE_CONFIG_DIR, home('claude', WORK));
   });
 

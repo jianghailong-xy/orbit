@@ -349,9 +349,9 @@ suite("a pool of one's own ChatGPT login, at every door — its owner's, and nob
     const mine = await sessions.create(owner.id, {
       prompt: 'hello', title: 'claimed', workspaceId: owner.workspaceId, provider: pool.slug,
     });
-    let claim = await queue.claimSessionForRunner({ id: owner.runnerId }, 0, false, false);
+    let claim = await queue.claimSessionForRunner({ id: owner.runnerId });
     while (claim && claim.sessionId !== mine.id) {
-      claim = await queue.claimSessionForRunner({ id: owner.runnerId }, 0, false, false);
+      claim = await queue.claimSessionForRunner({ id: owner.runnerId });
     }
     assert.ok(claim, 'the runner was offered no session');
     const env = claim.agent.env ?? {};

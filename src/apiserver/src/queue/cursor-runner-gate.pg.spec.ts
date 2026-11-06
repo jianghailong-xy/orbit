@@ -57,7 +57,7 @@ test('P1 Cursor CLI runner gate on PostgreSQL', { timeout: 300_000 }, async (t) 
     drainCommitRequests: async () => [], drainArtifactRequests: async () => [],
   } as unknown as RealtimeService;
   const queue = new QueueService(db as unknown as PrismaService, realtime);
-  const api = new RunnerApiController(db as never, queue as never, realtime as never, {} as never, {} as never, {} as never);
+  const api = new RunnerApiController(db as never, queue as never, realtime as never, {} as never, { issue: async () => 'orchestration-credential' } as never, {} as never);
 
   async function fixture(maxConcurrent = 8) {
     const ownerId = randomUUID();
@@ -83,10 +83,10 @@ test('P1 Cursor CLI runner gate on PostgreSQL', { timeout: 300_000 }, async (t) 
         permissionMode: PermissionMode.ACCEPT_EDITS,
       } })).id;
     const claim = (providers?: readonly AgentProvider[]) => queue.claimSessionForRunner({ id, supportedProviders: providers });
-    const reclaim = (providers?: readonly AgentProvider[]) => api.reclaim(runner, undefined, providers?.join(','));
+    const reclaim = (providers?: readonly AgentProvider[]) => api.reclaim(runner, providers?.join(','));
     const poll = (providers?: readonly AgentProvider[]) => {
       const res = { once: (_event: string, close: () => void) => setTimeout(close, 100) };
-      return api.claim(runner, undefined, providers?.join(','), res as never);
+      return api.claim(runner, providers?.join(','), res as never);
     };
     return { runner, beat, session, claim, reclaim, poll };
   }
@@ -154,7 +154,7 @@ test('P1 Cursor CLI runner gate on PostgreSQL', { timeout: 300_000 }, async (t) 
     assert.equal((await f.claim(CURRENT))?.sessionId, id);
     const owner = randomUUID();
     const takeover = (leaseOwner: string, expectedLeaseOwner: string | null, providers?: readonly AgentProvider[]) =>
-      api.takeoverLeases(f.runner, id, { leaseOwner, expectedLeaseOwner } as never, undefined, providers?.join(','));
+      api.takeoverLeases(f.runner, id, { leaseOwner, expectedLeaseOwner } as never, providers?.join(','));
     for (const declaration of [undefined, LEGACY]) {
       await assert.rejects(() => takeover(owner, null, declaration), UPGRADE);
     }

@@ -11,6 +11,7 @@ import {
   type KeyObject,
 } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { MANAGED_RUNNERS_ENABLED_ENV, readManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import { MANAGED_RUNNERS_PROFILE_ENV } from '../managed-runners/managed-runner-profile';
 
 /**
@@ -32,7 +33,7 @@ import { MANAGED_RUNNERS_PROFILE_ENV } from '../managed-runners/managed-runner-p
  *   RUNNER_LINK_GATEWAY_TOKEN  the secret the gateway presents to read the revocations
  *
  * None set, the link is off and both of its routes answer 404 RUNNER_LINK_NOT_CONFIGURED, which is
- * what a server older than them answers too. Some set, or one unreadable, it is off as well, and
+ * what a server older than them answers too, and no runner can work. Some set, or one unreadable, it is off as well, and
  * each problem is logged once at boot: a mistake in the link's configuration never stops the server
  * the HTTP protocol runs on.
  */
@@ -192,6 +193,8 @@ export function runnerLinkFrom(
 ): RunnerLinkState {
   const state = readRunnerLink(runnerLinkSettings(config));
   for (const problem of state.problems) log.error(problem);
+  // Compose refuses to start this apiserver without the signing key. Outside Compose, this is what says so.
+  if (!state.config && state.problems.length === 0) log.error('The runner link is not configured, and runners work only over it: no runner can work with this server');
   return state;
 }
 
@@ -202,7 +205,10 @@ export function runnerLinkSettings(config: Pick<ConfigService, 'get'>) {
     linkUrl: config.get<string>('RUNNER_LINK_URL'),
     gatewayToken: config.get<string>('RUNNER_LINK_GATEWAY_TOKEN'),
     publicOrigin: config.get<string>('PUBLIC_ORIGIN'),
-    managedRunnerServerUrl: managedRunnerServerUrl(config.get<string>(MANAGED_RUNNERS_PROFILE_ENV)),
+    // Read only where managed runners are on: off, the process reads no profile (managed-runner-gate.ts).
+    managedRunnerServerUrl: readManagedRunnerGate(config.get<string>(MANAGED_RUNNERS_ENABLED_ENV)).enabled
+      ? managedRunnerServerUrl(config.get<string>(MANAGED_RUNNERS_PROFILE_ENV))
+      : undefined,
   };
 }
 
@@ -282,7 +288,7 @@ function directHosts(serverUrl: string | undefined): string[] {
 export function runnerLinkNotConfigured(): NotFoundException {
   return new NotFoundException({
     code: RUNNER_LINK_NOT_CONFIGURED,
-    message: 'The runner link is not configured on this Orbit server; runners keep working over HTTP.',
+    message: 'This Orbit server has no runner link, and runners work only over it. On the server, run .claude/skills/upgrade/upgrade.sh, which sets it up (docs/self-hosting.md, "Runner link").',
   });
 }
 

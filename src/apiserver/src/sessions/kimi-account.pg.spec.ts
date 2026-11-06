@@ -43,10 +43,12 @@ import {
 import { KIMI_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { QueueService as RealQueueService } from '../queue/queue.service';
-import { KIMI_ACCOUNT_LOGIN_V1, RunnerApiController } from '../runner-api/runner-api.controller';
+import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { RunnersService } from '../runners/runners.service';
 import { SessionsService } from './sessions.service';
+import '../test-support/dequeue-under-lease';
 
+const KIMI_ACCOUNT_LOGIN_V1 = 'kimi-account-login/v1';
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
 
@@ -198,7 +200,7 @@ test('which of its runner’s Kimi Code accounts a session runs on', { skip, con
     ).rows as Array<{ content: string; status: string }>;
   /** What the runner is handed when it claims its one PENDING session: that session's environment. */
   const claimedEnv = async (runnerId: string) => {
-    const claimed = await claims.claimSessionForRunner({ id: runnerId }, 0, false, false);
+    const claimed = await claims.claimSessionForRunner({ id: runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     return claimed.agent.env ?? {};
   };
@@ -266,20 +268,7 @@ test('which of its runner’s Kimi Code accounts a session runs on', { skip, con
     assert.equal((await claimedEnv(older.runnerId)).KIMI_CODE_HOME, undefined);
   });
 
-  await t.test('(3) a named Kimi sign-in goes only to a runner that declares kimi-account-login/v1', async () => {
-    const refusal = 'This runner is too old to sign in another Kimi account — update it, then try again.';
-    // It chooses Kimi's site, but keeps one Kimi login: a named sign-in would land on Default's.
-    const old = await machine('login-old', { capabilities: [KIMI_LOGIN_REGION_V1] });
-    for (const dto of [
-      { engine: 'kimi' as const, accountName: 'Work', region: 'global' as const },
-      { engine: 'kimi' as const, account: WORK },
-    ]) {
-      await runners.startLogin(old.ownerId, old.runnerId, dto);
-      assert.equal(await internals.drainLoginRequest(old.runnerId, KIMI_LOGIN_REGION_V1), undefined, JSON.stringify(dto));
-      const state = await runners.getLoginState(old.ownerId, old.runnerId);
-      assert.deepEqual({ status: state.status, message: state.message }, { status: 'failed', message: refusal });
-    }
-
+  await t.test('(3) a named Kimi sign-in goes to the runner with the site it is added on', async () => {
     const current = await machine('login-current', { capabilities: [KIMI_LOGIN_REGION_V1, KIMI_ACCOUNT_LOGIN_V1] });
     await runners.startLogin(current.ownerId, current.runnerId, { engine: 'kimi', accountName: ' Work ', region: 'global' });
     const stored = await db.runner.findUniqueOrThrow({ where: { id: current.runnerId } });

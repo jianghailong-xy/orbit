@@ -82,6 +82,7 @@ import {
   waitForWikiRepoOpAsJob,
   wikiRepoFileText,
 } from './wiki-repo-ops';
+import '../test-support/daemon-routes-over-http';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const skip = !URL_;

@@ -71,7 +71,7 @@ func TestSelfUpdateWaitsForAnAcceptanceCommandInFlight(t *testing.T) {
 	// And what the update does stop is an idle session, which detaches resumable for the updated
 	// runner to reclaim — it is not ended.
 	waitUntil(t, func() bool { return pool.count() == 0 }, "the supervisor never detached for the update")
-	if s.requested("/finalize") || s.requested("/complete") {
+	if s.requested("/finalize") {
 		t.Fatal("the update ended the session instead of detaching it")
 	}
 }

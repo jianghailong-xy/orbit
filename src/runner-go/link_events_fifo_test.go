@@ -16,7 +16,6 @@ import (
 func TestAnEmitterNeverWaitsForAStreamBeingReadFromTheSpool(t *testing.T) {
 	m, _ := linkEventsOffline(t)
 	home := os.Getenv("ORBIT_HOME")
-	m.events.setOnLink(true)
 	m.events.creditBlocked.Store(true)
 	busy := m.events.open("session-busy")
 	defer busy.release()

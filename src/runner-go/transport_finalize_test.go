@@ -38,29 +38,23 @@ func TestFinalizeRunUsesCanonicalRoute(t *testing.T) {
 	}
 }
 
-func TestFinalizeRunFallsBackToLegacyCompleteRouteOn404(t *testing.T) {
+// A control plane that answers /finalize with an error, a 404 among them, keeps the checkout: nothing else is asked.
+func TestFinalizeRunKeepsTheCheckoutOnA404(t *testing.T) {
 	var paths []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, r.URL.Path)
-		if r.URL.Path == "/api/runner/sessions/session-1/finalize" {
-			http.NotFound(w, r)
-			return
-		}
-		_ = json.NewEncoder(w).Encode(RunFinalizeResponse{Ok: true, KeepCheckout: true})
+		http.NotFound(w, r)
 	}))
 	defer server.Close()
 
 	keep, err := NewTransport(server.URL, "").finalizeRun(context.Background(), "session-1", RunFinalizeRequest{Status: "CANCELLED"})
-	if err != nil {
-		t.Fatalf("finalizeRun fallback: %v", err)
+	if err == nil {
+		t.Fatal("finalizeRun answered 404 reported no error")
 	}
 	if !keep {
-		t.Fatal("resumable session checkout should be kept")
+		t.Fatal("the checkout must be kept when the control plane did not settle the run")
 	}
-	want := []string{
-		"/api/runner/sessions/session-1/finalize",
-		"/api/runner/sessions/session-1/complete",
-	}
+	want := []string{"/api/runner/sessions/session-1/finalize"}
 	if !reflect.DeepEqual(paths, want) {
 		t.Fatalf("paths = %v, want %v", paths, want)
 	}

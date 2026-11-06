@@ -65,6 +65,7 @@ import { SESSION_MOVE_V1 } from '../sessions/session-move';
 import { SessionsService } from '../sessions/sessions.service';
 import { planTaskRunRoute, taskRouteReads } from '../tasks/task-route-decision';
 import { QueueService } from './queue.service';
+import '../test-support/dequeue-under-lease';
 
 process.env.PROVIDER_SECRET_KEY ??= 'claude-region-hold-spec';
 
@@ -223,7 +224,7 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
     return { id, turnId: turn.id };
   }
   const claim = (m: Machine): Promise<ClaimedSession | null> =>
-    queue.claimSessionForRunner({ id: m.runnerId, supportedProviders: [AgentProvider.CLAUDE] }, 0, true);
+    queue.claimSessionForRunner({ id: m.runnerId, supportedProviders: [AgentProvider.CLAUDE] });
   const row = (id: string) => db.session.findUniqueOrThrow({
     where: { id },
     select: { status: true, error: true, provider: true, assignedRunnerId: true, finishedAt: true, cancelRequestedAt: true, numTurns: true },

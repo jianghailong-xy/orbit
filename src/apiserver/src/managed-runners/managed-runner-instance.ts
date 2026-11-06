@@ -170,18 +170,3 @@ export async function authorizeManagedRunnerInstance(
   if (!verdict.authorized) throw refusal(verdict);
   return verdict.instance;
 }
-
-/** Re-read the mapping and refuse an instance that is no longer authorized (a long poll's later rounds). */
-export async function reauthorizeManagedRunnerInstance(
-  prisma: Pick<PrismaService, 'managedRunner'>,
-  instance: ManagedRunnerInstance,
-): Promise<void> {
-  const mapping = await prisma.managedRunner.findUnique({
-    where: { id: instance.mappingId },
-    select: { id: true, generation: true, podUid: true, managementState: true },
-  });
-  const verdict = mapping
-    ? managedRunnerInstanceVerdict(mapping, { declared: true, generation: String(instance.generation), podUid: instance.podUid })
-    : refused(403, MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED, 'This managed runner has no mapping any more.');
-  if (!verdict.authorized) throw refusal(verdict);
-}

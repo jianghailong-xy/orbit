@@ -42,6 +42,7 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { PROVIDER_UNAVAILABLE_ERROR } from '../runner-api/runner-provider-support';
 import { TasksService } from '../tasks/tasks.service';
 import { SessionsService } from './sessions.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 // The spec encrypts the members' keys and the doors decrypt them; both only need the same secret.
@@ -187,12 +188,12 @@ suite('an account pool through the doors that take a provider, on real PostgreSQ
   const tasks = new TasksService(prisma, sessions, realtime);
   const providers = new ProvidersService(prisma, realtime, usage);
   const runnerApi = new RunnerApiController(
-    db as never, queue as never, realtime as never, {} as never, {} as never, {} as never,
+    db as never, queue as never, realtime as never, {} as never, { issue: async () => 'orchestration-credential' } as never, {} as never,
   );
 
   /** The runner asking for work — which has to be `sessionId`. */
   async function claim(runnerId: string, sessionId: string): Promise<ClaimedSession> {
-    const claimed = await queue.claimSessionForRunner({ id: runnerId }, 0, false, false);
+    const claimed = await queue.claimSessionForRunner({ id: runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     assert.equal(claimed.sessionId, sessionId);
     return claimed;

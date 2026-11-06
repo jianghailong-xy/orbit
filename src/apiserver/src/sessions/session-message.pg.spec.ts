@@ -95,6 +95,8 @@ import {
 } from './session-message';
 import { SessionsService } from './sessions.service';
 import { AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
+import '../test-support/daemon-routes-over-http';
+import { sessionLease } from '../test-support/dequeue-under-lease';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -352,7 +354,7 @@ test('one session’s message to another is signed, delivered as such, and bound
       await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
       await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
     });
-    const delivered = await http('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox`);
+    const delivered = await http('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox?leaseGeneration=${await sessionLease(prisma, sessionId)}`);
     assert.equal(delivered.status, 200, `inbox answered ${delivered.status}: ${delivered.text}`);
     return delivered;
   }
@@ -361,7 +363,7 @@ test('one session’s message to another is signed, delivered as such, and bound
   async function claimToMessage(sessionId: string): Promise<Answer> {
     let delivered = await claimAndPoll(sessionId);
     for (let i = 0; i < 2 && delivered.json.kind !== 'message'; i++) {
-      delivered = await http('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox`);
+      delivered = await http('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox?leaseGeneration=${await sessionLease(prisma, sessionId)}`);
       assert.equal(delivered.status, 200, `inbox answered ${delivered.status}: ${delivered.text}`);
     }
     assert.equal(delivered.json.kind, 'message', `the inbox never handed out the message: ${delivered.text}`);

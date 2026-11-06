@@ -2,37 +2,77 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"strconv"
 
 	"orbit/linkpb"
 )
 
-// The heartbeat over the link (docs/runner-link-design.md §5.7). In link mode POST /runner/heartbeat is sent as a
-// Heartbeat frame: the process, whether it is draining, its idle capacity and its sessions as typed fields, and every
-// other member of today's body (HeartbeatRequest) as one Fact, the member's JSON with its SHA-256. The mapping is the
-// one the shadow's mirror uses and the gateway forwards by (src/link-gateway/README.md), so the heartbeat route reads
-// the body it reads over HTTPS.
+// The heartbeat over the link (docs/runner-link-design.md §5.7). POST /runner/heartbeat is sent as a Heartbeat frame: the
+// process, whether it is draining, its idle capacity and its sessions as typed fields, and every other member of the
+// body (HeartbeatRequest) as one Fact, the member's JSON with its SHA-256. The mapping is the one the gateway forwards
+// by (src/link-gateway/README.md), so the heartbeat route reads the body it always read.
 //
 // A part travels whole only when the gateway does not hold it: the first beat on a connection, a part that changed
 // since it was last sent whole, and a part the gateway asks for (HeartbeatAck.want_facts), which is sent at once.
 // Otherwise its digest alone stands for it, and the gateway fills it in from what that connection sent before.
 //
-// The HeartbeatAck's reconcile_json is the heartbeat route's answer, today's HeartbeatResponse, which the runner applies
-// as it applies the HTTPS answer: every command keeps its contract. An ack with no reconcile_json reconciled nothing,
-// and the beat failed, as an HTTPS heartbeat that got no 2xx does.
+// The HeartbeatAck's reconcile_json is the heartbeat route's answer, a HeartbeatResponse, which the runner applies: every
+// command keeps its contract. An ack with no reconcile_json reconciled nothing, and the beat failed.
 
 var errLinkBeatUnreconciled = errors.New("the heartbeat reached the runner link but no reconcile came back")
 
-// heartbeat sends one heartbeat over the link and reads the route's answer into out, as doHTTP reads the answer to
-// POST /runner/heartbeat.
+// linkHeartbeatTyped are the members of the heartbeat body that are not Facts: four typed fields of Heartbeat, and status
+// and version, which the link does not carry (the version travels in Hello).
+var linkHeartbeatTyped = map[string]bool{
+	"leaseOwner": true, "idleCapacity": true, "draining": true, "supervisedSessionIds": true, "status": true, "version": true,
+}
+
+// linkHeartbeatOf is the Heartbeat frame of a POST /runner/heartbeat body (src/link-gateway/README.md, "What the runner
+// sends"): process_id is leaseOwner, idle_capacity idleCapacity, draining draining and session_ids supervisedSessionIds;
+// every other member but status and version is one Fact, its kind the member's name, its json the member's bytes as
+// they were encoded and its sha256 their digest. supported_providers is what X-Orbit-Supported-Providers says.
+func linkHeartbeatOf(body []byte, providers string) (*linkpb.Heartbeat, error) {
+	var members map[string]json.RawMessage
+	if err := json.Unmarshal(body, &members); err != nil || members == nil {
+		return nil, errors.New("the heartbeat body is not a JSON object")
+	}
+	hb := &linkpb.Heartbeat{SupportedProviders: linkList(providers)}
+	_ = json.Unmarshal(members["leaseOwner"], &hb.ProcessId)
+	_ = json.Unmarshal(members["draining"], &hb.Draining)
+	_ = json.Unmarshal(members["supervisedSessionIds"], &hb.SessionIds)
+	var idle json.Number
+	if json.Unmarshal(members["idleCapacity"], &idle) == nil {
+		if n, err := strconv.ParseUint(idle.String(), 10, 32); err == nil {
+			hb.IdleCapacity = uint32(n)
+		}
+	}
+	names := make([]string, 0, len(members))
+	for name := range members {
+		if !linkHeartbeatTyped[name] {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		sum := sha256.Sum256(members[name])
+		hb.Facts = append(hb.Facts, &linkpb.Fact{Kind: name, Sha256: hex.EncodeToString(sum[:]), Json: members[name]})
+	}
+	return hb, nil
+}
+
+// heartbeat sends one heartbeat over the link and reads the route's answer into out.
 func (m *linkMode) heartbeat(ctx context.Context, body, out interface{}) error {
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return err
 	}
-	hb, err := linkMirrorOfHeartbeat(raw, supportedProvidersHeader())
+	hb, err := linkHeartbeatOf(raw, supportedProvidersHeader())
 	if err != nil {
 		return err
 	}
@@ -55,7 +95,7 @@ func (m *linkMode) heartbeat(ctx context.Context, body, out interface{}) error {
 			continue // beat forgot them on conn: the next beat carries them whole
 		}
 		if ack.GetMode() == linkpb.Mode_MODE_HTTP {
-			return errLinkModeHTTP
+			return errLinkGatewayModeHTTP
 		}
 		if len(ack.GetReconcileJson()) == 0 {
 			return errLinkBeatUnreconciled

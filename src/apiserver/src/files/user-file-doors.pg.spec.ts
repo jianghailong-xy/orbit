@@ -24,6 +24,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { bootScrubbedApiserver } from '../test-support/managed-runner-apiserver';
 import { startS3 } from '../test-support/s3-test-server';
+import '../test-support/daemon-routes-over-http';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const EMAIL = `user-file-doors-${randomUUID().slice(0, 8)}@example.invalid`;
