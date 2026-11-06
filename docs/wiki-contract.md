@@ -214,6 +214,12 @@ pg spec 用执行计划钉住了这一点。它声明为 IMMUTABLE（里面的 `
   - 这两个写入都只属于 owner：带会话头回 `WIKI_OWNER_CHANNEL_ONLY`，个人访问令牌回 `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，因为谁在 space 里就是谁能读它的条目。两者都不动游标：加入的 workspace 从 space 当前的水位往后读。
   - 会话所在 workspace 不在任何 space 时返回 `WIKI_SPACE_UNBOUND`，并用一句话说明怎么绑；被留在外面的 workspace 返回同一个码，并说明这一点。项目通过其 codebase 的仓库地址找到 space，没有单独的表。
   - Wiki 设置的 Workspaces 卡（web、macOS/iOS、Android，在 Review mode 和 Maintenance 之间，效果图 38）读 `GET /api/wiki/spaces/:id/workspaces`：`{ workspaces, addable }`，每行 `{ id, name, runner, inWiki }`。`workspaces` 是这个仓库上、或这个 space 的行点名的活 workspace，按名字排（不分大小写），切开关时行不跳，被留在外面的留在列表里，`inWiki` 为 false。`addable` 是 `Add workspace…` 能加的：没有仓库、也不在任何 wiki 里（被别的 space 留在外面的算不在）。
+- **删除**（`space.delete`）：`DELETE /api/wiki/spaces/:id` 永久删除一个 wiki，回 `{ spaceId }`；别人的或已经没有的回普通 404。
+  - 只属于 owner：带会话头回 `WIKI_OWNER_CHANNEL_ONLY`，个人访问令牌回 `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，没有 agent 工具和 CLI 命令。
+  - 一个事务里按外键删掉 space 下的全部内容，包括公开链接；不能撤销，失败时什么都不少。Workspace、会话、任务和项目不动；文字里的 `orbit-wiki:` 链接从此指向不存在的内容。
+  - 不等、也不拒绝在跑的作业：作业行随 space 一起没了，它按租约写的都匹配不到行，下一次需要 space 的写入失败，这次尝试就结束，也没有行可以重排。仓库操作的结果回 404，runner 当作操作已不存在。
+  - 有仓库的 wiki 会被这个仓库下一个调 wiki 工具的会话重新建出来，是空的，和任何新 space 一样请求 plan 的初稿；它的 workspace 行随旧 space 没了，留在外面的标记也一样。没有仓库的不会回来，绑在它上面的会话回 `WIKI_SPACE_UNBOUND`。
+  - 入口：web 在侧栏的 wiki 行和 Wiki 设置页底部，macOS/iOS 和 Android 在 Wiki 设置页底部；都先确认，写明 wiki 的名字和要删的条目数、文档数（效果图 `docs/mocks/wiki-delete`）。
 - **设置**（`settings` jsonb，缺省的键按默认值读）：
   - `push`，默认开（owner 2026-09-25 拍板：推送默认开，每个 space 可以关）；
   - `autoAcceptReinforce`，默认开：非 owner 的 reinforce 立即生效；关掉后进 Review；
@@ -792,12 +798,23 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
 
   | 工具 | 注解 | 参数 | 返回 |
   | --- | --- | --- | --- |
-  | `wiki_search` | readOnly | query, kinds?, topic?, paths?, limit ≤10 | 只返回条目：id, kind, title, summary, trust, anchorState, match（keyword / semantic / path）, score |
+  | `wiki_search` | readOnly | query, kinds?, topic?, paths?, limit ≤10 | 只返回条目：id, kind, title, summary, trust, anchorState, match（keyword / semantic / path）, score，以及新旧：recordedAt, changedAt, anchorCheckedRef, anchorCheckedAt（见下） |
   | `wiki_get` | readOnly | ids ≤10, include?（sources, anchors, history） | 完整条目；锚点带最近复验（ref 与时间）；出处带 `orbit-*` 链接 |
   | `wiki_propose` | 不带 destructive | ops, rationale, idempotencyKey, dryRun? | 逐 op：pending（Automatic 等核实的带 `waitsFor: "verification"`）/ applied / conflict（当前版与 diff）/ refused（理由），add 与 supersede 旁附 `similar[]` |
   | `wiki_note` | 不带 destructive | text ≤2000, paths? ≤10（每条 ≤200）, corrects? | `{ noted, noteId, created, readBy, challenged? }`，见下面的 `wiki_note` |
 
   CLI 同名同参：`orbit wiki search | get | propose | note`。**没有**接受、确认、决定、硬删、整页覆盖的工具；确认只存在于 owner 通道。
+- **`wiki_search` 的每条结果都说明条目新旧**（JSON 的 `toolSpecs.wiki_search.hit` 与 `age`，2026-11-06 的 wiki_search 评审）：
+  `anchorState: verified` 只说明上次核对时锚点照原样还在，不说明条目内容仍然成立，所以把时间交给读的人自己判断。
+  runner 门和 owner 的 `GET /api/wiki/search` 给的是同一形状；时间是 UTC 的 ISO 8601。
+  - `recordedAt`：条目写入的时间，即这条 lineage 诞生的时间（`wiki_entry.recorded_at`），amend 不改它；supersede 是新的 lineage。
+  - `changedAt`：当前修订写入的时间（当前 revision 的 `created_at`），即内容最后一次改动。锚点核对不写修订，也不改它。
+  - `anchorCheckedRef` / `anchorCheckedAt`：锚点最后一次核对的提交和时间（`wiki_entry.anchor_checked_ref` / `anchor_checked_at`）。
+    从没核对过时两者都是 null；amend 重给锚点时清空，只改别的字段时保留，所以核对可能早于 `changedAt`。
+  - 字段的顺序和集合由 `hit` 列出，各端各自钉住：服务端的回答（`wiki-search.pg.spec.ts`）、runner 的 `wikiSearchHit` 结构体与 outputSchema
+    （`TestWikiAgentSurfaceIsTheContracts`；MCP 的 structuredContent 和 `orbit wiki search --json` 都是这个结构体序列化出来的，不在结构体里的字段到不了 agent，
+    服务端给的 null 在这里省掉，不写成空串），OrbitKit 与 Android 的 `WikiSearchHit` 模型（OrbitKit `WikiContractTests`、Android `WikiContractTest`）。
+    给结果加字段就走这条路。
 - **`orbit wiki verify --space ID [--json]`**（JSON 的 `agentSurface.verify`）：和 `orbit wiki import`（§5.1）一样没有 MCP 工具对应——它把会话
   的活交给服务端、等它做完，是命令的等待，不是一次工具调用。它请服务端核实本会话提议到这个 Automatic space、还在等核实的 op
   （`reviewModes.verification.routes.request`），再读列表的 `waiting`（`routes.list`）直到归零，打印服务端核实了几个。列表不说

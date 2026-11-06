@@ -414,8 +414,13 @@ body), not a stop followed by a send.
 ### Per-turn `result` = end-of-turn, not terminal
 `msg["type"]=="result"` → emit `turn_end{turnSeq,subtype,usage}`, POST `/turn-complete`, set run `AWAITING_INPUT`, park. The process dies only on EOF / idle reap / crash / cancel / **per-turn timeout**. If `result.subtype` indicates the process hit its own `--max-turns`/`--max-budget-usd`, the runner marks the **session terminal** (not `AWAITING_INPUT`) and `/complete`s, because those limits are process-wide for a long-lived process (RT: hang high).
 
-`/turn-complete` writes `modelUsage` to `usage` as one row per reported model, preserving the
-engine's token and cost breakdown. When `modelUsage` is absent and `usage` is present (Codex),
+Claude's `total_cost_usd` and `modelUsage` are running totals of its process, which a `--resume`
+restores from the transcript's last saved state, so `/turn-complete` books each turn's own share:
+the totals less those of the same process's previous completion, or less what the process restored
+when it started, which the runner reads from the transcript before the spawn (`runningTotals`;
+apiserver `runner-api/running-totals.ts`, runner `claude_running_totals.go`). It adds that cost to
+`session.cost_usd` and writes one `usage` row per model the turn used, preserving the engine's token
+and cost breakdown. When `modelUsage` is absent and `usage` is present (Codex),
 it writes one row using the session's current model and the four reported token counters, with
 `cost_usd = 0`. A session whose model is still null keeps the legacy behavior until claim/reclaim
 materializes its model. The write shares the turn acknowledgement transaction, so replaying a

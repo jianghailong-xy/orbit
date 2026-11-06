@@ -311,7 +311,7 @@ func antigravityMCPServers(agent AgentExecConfig, orbitExe string) map[string]in
 func antigravityInstructions(job *ClaimedSession, orbitExe string) string {
 	text := strings.Join(nonEmptyStrings(
 		job.Agent.SystemPrompt,
-		withOrbitCLIInstructions(job.Agent.AppendSystemPrompt, orbitExe, job.insideRecordedWork(), job.watchesOn()),
+		withOrbitCLIInstructions(job.appendSystemPrompt(), orbitExe, job.insideRecordedWork(), job.watchesOn()),
 	), "\n\n")
 	// agy reaches an MCP tool through its generic call_mcp_tool rather than by the tool's own name.
 	return strings.Replace(text, "the `mcp__orbit__*` tools", "the tools of the `orbit` MCP server (call_mcp_tool with ServerName \"orbit\")", 1)

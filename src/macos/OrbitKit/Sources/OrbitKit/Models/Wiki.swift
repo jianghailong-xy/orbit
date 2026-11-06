@@ -950,6 +950,13 @@ public struct WikiSearchHit: Codable, Equatable, Sendable, Identifiable {
     /// `keyword` / `path` (and `semantic`, phase 2), kept as the words they are.
     public let match: [String]?
     public let topics: [String]?
+    /// How old the entry is (contract `agentSurface.toolSpecs.wiki_search.age`), as the server spells
+    /// each time: when it was recorded, when its current revision was written, and the commit and time
+    /// its anchors were last checked at. Nil from a server that predates them, and for a check not made yet.
+    public let recordedAt: String?
+    public let changedAt: String?
+    public let anchorCheckedRef: String?
+    public let anchorCheckedAt: String?
 }
 
 // MARK: - writes

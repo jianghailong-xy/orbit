@@ -418,7 +418,7 @@ func dshAgentOverlayPatch(home string, agent DshAgentOverlay) ([]byte, error) {
 // dshSessionAgentOverlay is the session's instructions in the order every runtime uses: the
 // agent's own prompt, its appended prompt, then Orbit's CLI guidance.
 func dshSessionAgentOverlay(job *ClaimedSession) *DshAgentOverlay {
-	configured := strings.TrimSpace(strings.Join([]string{strings.TrimSpace(job.Agent.SystemPrompt), job.Agent.AppendSystemPrompt}, "\n\n"))
+	configured := strings.TrimSpace(strings.Join([]string{strings.TrimSpace(job.Agent.SystemPrompt), job.appendSystemPrompt()}, "\n\n"))
 	return &DshAgentOverlay{AppendSystemPrompt: withOrbitCLIInstructions(configured, orbitCLIExecutable(), job.insideRecordedWork(), job.watchesOn())}
 }
 

@@ -477,7 +477,7 @@ internal data class WikiHomeContent(val space: WikiSpace, val spaces: List<WikiS
 
 internal object WikiModeLogic {
     /** The settings page's sections, top to bottom — the web's order (`WIKI_SETTINGS_SECTIONS`). */
-    enum class SettingsSection(val title: String) { REVIEW_MODE(WikiModeCopy.reviewMode), WORKSPACES(WikiModeCopy.workspaces), MAINTENANCE(WikiModeCopy.maintenance) }
+    enum class SettingsSection(val title: String) { REVIEW_MODE(WikiModeCopy.reviewMode), WORKSPACES(WikiModeCopy.workspaces), MAINTENANCE(WikiModeCopy.maintenance), DELETE(WikiModeCopy.deleteTitle) }
     val modes = listOf("manual", "tiered", "automatic")
     const val defaultMode = "tiered"
     fun mode(settings: WikiSpaceSettings?): String = settings?.reviewMode?.takeIf { it in modes } ?: "manual"

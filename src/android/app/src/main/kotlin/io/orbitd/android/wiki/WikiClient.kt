@@ -80,6 +80,8 @@ internal class WikiClient(private val api: OrbitApi, private val handle: Session
     suspend fun leaveWorkspaceOut(spaceId: String, workspaceId: String) {
         raw(spacePath(spaceId, "workspaces", workspaceId), method = HttpMethod.DELETE)
     }
+    /** Delete a wiki and all it holds, for good. Refused to every session. */
+    suspend fun deleteSpace(id: String) { raw(spacePath(id), method = HttpMethod.DELETE) }
     suspend fun confirmEntry(id: String) { raw(listOf("wiki", "entries", id, "confirm"), method = HttpMethod.POST) }
     suspend fun rejectEntry(id: String, reason: String) {
         raw(listOf("wiki", "entries", id, "reject"), method = HttpMethod.POST, body = buildJsonObject { put("reason", reason) })

@@ -56,6 +56,33 @@ export const WIKI_WORKSPACES_JOIN_NO_REPOSITORY = 'This wiki has no repository b
 export const WIKI_WORKSPACES_EMPTY = 'No workspace is in this wiki yet.';
 export const WIKI_ADD_WORKSPACE = 'Add workspace…';
 export const WIKI_ADD_WORKSPACE_GROUP = 'Workspaces with no repository';
+
+/** Delete wiki (docs/mocks/wiki-delete, contract `space.delete`): the foot of the page, and the question it asks. */
+export const WIKI_DELETE_TITLE = 'Delete this wiki';
+export const WIKI_DELETE_NOTE = 'Its entries, documents and history are permanently deleted.';
+export const WIKI_DELETE_OPEN = 'Delete wiki…';
+export const WIKI_DELETE_CONFIRM = 'Delete wiki';
+export const WIKI_DELETE_KEPT = 'Workspaces and sessions are kept.';
+export const wikiDeleteQuestion = (name: string): string => `Delete wiki “${name}”?`;
+export const wikiDeleted = (name: string): string => `Deleted wiki “${name}”`;
+/** What a wiki with a repository does after it: `bindOnFirstUse` makes it again. */
+export const wikiDeleteComesBack = (repository: string): string =>
+  `The next session on ${repository} to use the wiki starts a new, empty one.`;
+
+/**
+ * What the question says it takes. `entries` is null until the health read answers, or when it fails: the sentence
+ * still says what goes, with no number in it.
+ */
+export function wikiDeleteBody(entries: number | null, documents: number): string {
+  const counted = (count: number, one: string, many: string): string => `${count.toLocaleString('en-US')} ${count === 1 ? one : many}`;
+  const things = [
+    ...(entries === null ? ['entries'] : entries > 0 ? [counted(entries, 'entry', 'entries')] : []),
+    ...(documents > 0 ? [counted(documents, 'document', 'documents')] : []),
+  ];
+  const whose = entries === 1 && documents === 0 ? 'its' : 'their';
+  const subject = things.length === 0 ? 'Its history' : `Its ${things.join(', ')} and ${whose} history`;
+  return `${subject} will be permanently deleted. This cannot be undone.`;
+}
 export const WIKI_MODE_DEFAULT = 'default';
 
 /** The three modes, in the order both clients list them, each with its one sentence. */
@@ -178,7 +205,7 @@ export function wikiWorkspaceLabel(workspace: { name?: string | null; runner?: {
  * The sections of the settings page, top to bottom — the order both clients draw them in, which
  * `WikiReviewModeCopyParityTests` reads out of the page and holds `WikiLogic.SettingsSection` to.
  */
-export const WIKI_SETTINGS_SECTIONS = [WIKI_REVIEW_MODE, WIKI_WORKSPACES, WIKI_MAINTENANCE] as const;
+export const WIKI_SETTINGS_SECTIONS = [WIKI_REVIEW_MODE, WIKI_WORKSPACES, WIKI_MAINTENANCE, WIKI_DELETE_TITLE] as const;
 
 // ── The marks an entry wears, and the owner's two answers (mocks 17–18) ─────────────────────────
 

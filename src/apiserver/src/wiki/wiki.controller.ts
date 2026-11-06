@@ -138,6 +138,20 @@ export class WikiController {
     return this.wiki.updateSpace(user.userId, id, dto, actingSession(request.headers), user.credential);
   }
 
+  /**
+   * Delete this space and all it holds, for good (contract `space.delete`). The owner's alone, as who is in a space is:
+   * a session header is refused WIKI_OWNER_CHANNEL_ONLY and a personal access token at the guard.
+   */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Delete('spaces/:id')
+  deleteSpace(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.wiki.deleteSpace(user.userId, id, actingSession(request.headers));
+  }
+
   /** Who is in this space and who can be added: the Workspaces card of Wiki settings (contract `space.workspaces`). */
   @PatScope('wiki:read', { workspaceConfinable: false })
   @Get('spaces/:id/workspaces')

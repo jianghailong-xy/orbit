@@ -217,6 +217,34 @@ internal object WikiModeCopy {
     const val workspacesEmpty = "No workspace is in this wiki yet."
     const val addWorkspace = "Add workspace…"
     const val addWorkspaceGroup = "Workspaces with no repository"
+
+    // Delete wiki (docs/mocks/wiki-delete, iOS `WikiModeCopy`).
+    const val deleteTitle = "Delete this wiki"
+    const val deleteNote = "Its entries, documents and history are permanently deleted."
+    const val deleteOpen = "Delete wiki…"
+    const val deleteConfirm = "Delete wiki"
+    const val deleteKept = "Workspaces and sessions are kept."
+    /** What an alert titles a refusal; the web says one inside its dialog, with no title. */
+    const val deleteFailed = "Couldn't delete the wiki"
+    fun deleteQuestion(name: String) = "Delete wiki “$name”?"
+    fun deleted(name: String) = "Deleted wiki “$name”"
+    /** What a wiki with a repository does after it: the next session on the repository makes it again. */
+    fun deleteComesBack(repository: String) = "The next session on $repository to use the wiki starts a new, empty one."
+    /** What the question says it takes. [entries] is null when the health read has not answered: the sentence still
+     * says what goes, with no number in it. */
+    fun deleteBody(entries: Int?, documents: Int): String {
+        fun counted(count: Int, one: String, many: String) = "${"%,d".format(java.util.Locale.US, count)} ${if (count == 1) one else many}"
+        val things = buildList {
+            if (entries == null) add("entries") else if (entries > 0) add(counted(entries, "entry", "entries"))
+            if (documents > 0) add(counted(documents, "document", "documents"))
+        }
+        val whose = if (entries == 1 && documents == 0) "its" else "their"
+        val subject = if (things.isEmpty()) "Its history" else "Its ${things.joinToString(", ")} and $whose history"
+        return "$subject will be permanently deleted. This cannot be undone."
+    }
+    /** The question's whole message: what goes, what a repository's wiki does next, and what stays. */
+    fun deleteMessage(entries: Int?, documents: Int, repository: String?) =
+        listOfNotNull(deleteBody(entries, documents), repository?.let(::deleteComesBack), deleteKept).joinToString("\n\n")
     fun modeLabel(mode: String?) = when (mode) { "manual" -> "Manual"; "tiered" -> "Tiered"; "automatic" -> "Automatic"; else -> "" }
     fun modeNote(mode: String?) = when (mode) {
         "manual" -> "Every change from sessions, maintenance and imports waits for you in Review."

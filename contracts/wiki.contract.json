@@ -81,6 +81,16 @@
       "addable": "The live workspaces Wiki settings' Add workspace offers: no repository, and in no wiki. One the owner left out of another space counts as in none. inWiki is false in every row.",
       "clients": "Web, macOS/iOS and Android draw it as the Workspaces section between Review mode and Maintenance (docs/mocks/wiki/38-workspaces)."
     },
+    "delete": {
+      "route": "DELETE /api/wiki/spaces/:id",
+      "answer": "{ spaceId }. Another account's space, or one already gone, is the plain 404.",
+      "who": "The owner's alone: a request with a session header is refused WIKI_OWNER_CHANNEL_ONLY and a personal access token OWNER_INTERACTIVE_CREDENTIAL_REQUIRED. No agent tool and no CLI command reaches it.",
+      "takes": "The space and everything hanging off it, by foreign key in one transaction, its public link included. It cannot be undone, and a failure leaves all of it.",
+      "keeps": "Workspaces, sessions, tasks and projects. Text that names an entry keeps its words, and an orbit-wiki: link in it names nothing.",
+      "runningJobs": "Not waited for and not refused: a job's row goes with its space, so every write of its claim matches nothing, and its next write that needs the space fails, which ends the attempt with nothing left to requeue. A repository operation's result is answered 404, which a runner takes as the operation being gone.",
+      "repository": "A space with a repository is made again, empty, by the next session on that repository to use a wiki tool (`binding.automatic`), and asks for its plan's first draft like any new space. Its workspaces' rows went with the old space, a left-out mark among them. A space with no repository stays gone, and a session bound to it is refused WIKI_SPACE_UNBOUND.",
+      "clients": "Web has it on a wiki's sidebar row and at the foot of Wiki settings; macOS/iOS and Android at the foot of Wiki settings. Each asks first, naming the wiki and how many entries and documents go (docs/mocks/wiki-delete)."
+    },
     "list": {
       "route": "GET /api/wiki/spaces",
       "row": "Every space of the owner, by slug: the space as GET /api/wiki/spaces/:id answers it, with pendingOps, planWaiting, chatWaiting, workspaceIds and docs, which the one-space read does not carry. A client reading a server older than the last four takes them as absent.",
@@ -2716,7 +2726,15 @@
       "wiki_search": {
         "readOnly": true,
         "params": { "query": "required", "kinds": "optional", "topic": "optional", "paths": "optional", "limit": "optional, 1 to limits.searchLimitMax" },
-        "returns": "entries only: id, kind, title, summary, trust, anchorState, match (searchMatches) and score"
+        "returns": "entries only: id, kind, title, summary, trust, anchorState, match (searchMatches), score, and how old each one is (age)",
+        "hit": ["id", "kind", "title", "summary", "trust", "anchorState", "match", "score", "recordedAt", "changedAt", "anchorCheckedRef", "anchorCheckedAt"],
+        "age": {
+          "why": "So that a caller can judge for itself how old what an entry says is (the wiki_search review, 2026-11-06): anchorState verified says that the last check found the anchors as recorded (anchorStates), never that what the entry says still holds. Every hit carries all four, on the runner door and on the owner's GET /api/wiki/search alike; a time is ISO 8601 in UTC.",
+          "recordedAt": "When the entry was recorded: the birth of its lineage (wiki_entry.recorded_at), when it was first proposed or written. No amend moves it; a supersede is a lineage of its own.",
+          "changedAt": "When its current revision was written (the created_at of the wiki_entry_revision at its current_revision): the last change to what it says. An anchor check writes no revision and leaves it as it was. Null only for an entry deleted while the search read it.",
+          "anchorCheckedRef": "The ref its anchors were last checked at (wiki_entry.anchor_checked_ref): a commit of the space's main, as the maintenance run reports it. Null until the first check, and again after an amend that gives the anchors anew (anchorRules.verify.aggregate); an amend that leaves them alone keeps it, so a check can be older than changedAt.",
+          "anchorCheckedAt": "When that check was made (wiki_entry.anchor_checked_at); null exactly when anchorCheckedRef is."
+        }
       },
       "wiki_get": {
         "readOnly": true,
@@ -2916,6 +2934,7 @@
       "a changeset recorded something, after its transaction commits",
       "the owner decided ops, after the transaction commits",
       "a space was created, its settings changed, or a workspace was added to it, turned back on or left out",
+      "a space was deleted, after its transaction commits",
       "the owner reverted a changeset or rejected an entry, after the transaction commits",
       "a verdict was recorded, after its transaction commits",
       "pending ops expired or were withdrawn",

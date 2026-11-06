@@ -1337,15 +1337,16 @@ export const wikiEntryQuery = (entryId: string | null) =>
  * `SessionSearchHit` would fail on the whole answer), and every session hit's click goes to
  * `/sessions/:id`, which is not where an entry lives.
  *
- * `include=space,topics,anchor` because this caller OPENS what it finds: an entry's page is
- * `/wiki/<space>/e/<id>`, a space AND an id (`WikiSearchRowAdditions`).
+ * `include=space,topics` because this caller OPENS what it finds: an entry's page is
+ * `/wiki/<space>/e/<id>`, a space AND an id (`WikiSearchRowAdditions`). The last anchor check its row
+ * marks comes on every hit.
  */
 export const wikiSearchQuery = (q: string) =>
   queryOptions({
     queryKey: ['wiki', 'search', q] as const,
     queryFn: () =>
       api<{ q: string; semantic: boolean; hits: WikiSearchRow[] }>(
-        `/wiki/search?q=${encodeURIComponent(q)}&include=space,topics,anchor`,
+        `/wiki/search?q=${encodeURIComponent(q)}&include=space,topics`,
       ),
     // The same minute the session search keeps: a result set is a snapshot of a corpus that moves
     // when somebody writes, and one palette session is not a reason to re-read it per keystroke.

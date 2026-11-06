@@ -678,7 +678,7 @@ func setupSourceWorktree(job *ClaimedSession, baseDir string, atRest bool) strin
 	}
 
 	base := pin
-	add := []string{"worktree", "add", "-b", job.Branch, wtPath, pin}
+	add := []string{"-b", job.Branch, wtPath, pin}
 	revived := branchExists(repoRoot, job.Branch)
 	hadBaseRef := false
 	if revived {
@@ -697,10 +697,10 @@ func setupSourceWorktree(job *ClaimedSession, baseDir string, atRest bool) strin
 		}
 		// Whatever took the checkout may have left git believing it is still there.
 		_, _ = git(repoRoot, "worktree", "prune")
-		add = []string{"worktree", "add", wtPath, job.Branch}
+		add = []string{wtPath, job.Branch}
 	}
 	_, _ = git(repoRoot, "update-ref", baseRefName(job.SessionID), base)
-	if _, err := git(repoRoot, add...); err != nil {
+	if err := addSessionCheckout(job.SessionID, repoRoot, wtPath, base, add...); err != nil {
 		if !hadBaseRef {
 			_, _ = git(repoRoot, "update-ref", "-d", baseRefName(job.SessionID))
 		}
@@ -859,7 +859,7 @@ func setupCheckout(job *ClaimedSession, baseDir string, atRest bool) string {
 		}
 		// Whatever took the checkout may have left git believing it is still there.
 		_, _ = git(repoRoot, "worktree", "prune")
-		_, err = git(repoRoot, "worktree", "add", wtPath, job.Branch)
+		err = addSessionCheckout(job.SessionID, repoRoot, wtPath, base, wtPath, job.Branch)
 		if err != nil && kept != "" {
 			// This session has had a checkout, its base ref says so, and that is where it goes on. A disk
 			// too full to hold it, or the branch checked out somewhere else, is why it did not come back,
@@ -871,7 +871,7 @@ func setupCheckout(job *ClaimedSession, baseDir string, atRest bool) string {
 		_, _ = git(repoRoot, "update-ref", "-d", absentRefName(job.SessionID))
 	} else {
 		_, _ = git(repoRoot, "update-ref", baseRefName(job.SessionID), base)
-		_, err = git(repoRoot, "worktree", "add", "-b", job.Branch, wtPath, base)
+		err = addSessionCheckout(job.SessionID, repoRoot, wtPath, base, "-b", job.Branch, wtPath, base)
 	}
 	if err != nil {
 		_, _ = git(repoRoot, "update-ref", "-d", baseRefName(job.SessionID))
@@ -1135,13 +1135,20 @@ func (ops worktreeGitOps) stagedLiveDiff(wt *Worktree, withPatch bool) ([]Change
 	// every tracked file: 1.5–14 s per call on Orbit's own 18k-file checkout under load
 	// (2026-10-09), and a turn's completion — the session leaving Running after a Stop — waited
 	// on it.
-	if !ops.seedIndexFromCheckout(wt.Path, idx, env) {
+	add := []string{"add", "-A"}
+	if ops.seedIndexFromCheckout(wt.Path, idx, env) {
+		// --sparse in a sparse checkout (addAllArgs), over this index only: it keeps the skip-worktree mark of
+		// every path the checkout leaves out, and one read fresh from HEAD has none, so there --sparse would
+		// stage the deletion of each of them. Without it git leaves those paths alone, and a new file under one
+		// makes the live diff fail rather than lie.
+		add = ops.addAllArgs(wt.Path)
+	} else {
 		_ = os.Remove(idx)
 		if _, err := ops.runEnv(wt.Path, env, "read-tree", "HEAD"); err != nil {
 			return nil, nil
 		}
 	}
-	if _, err := ops.runEnv(wt.Path, env, "add", "-A"); err != nil {
+	if _, err := ops.runEnv(wt.Path, env, add...); err != nil {
 		return nil, nil
 	}
 	numOut, err := ops.runEnv(wt.Path, env, "diff", "--cached", "--numstat", baseSha)
@@ -1367,8 +1374,9 @@ func buildFilePatches(files []ChangedFile, byPath map[string]string) []FilePatch
 
 // removeWorktree tears down the session's checkout (the branch is kept) and drops the base
 // ref. Called only from gcWorktrees, which has asked the control plane whether this one may go.
-// Finalization leaves every checkout standing.
-func removeWorktree(wt *Worktree) {
+// Finalization leaves every checkout standing. Under a storage budget, storage counts the
+// checkout's bytes once it is gone (checkoutStorage.removing); nil counts nothing.
+func removeWorktree(wt *Worktree, storage *checkoutStorage) {
 	// The checkout is dropped on the belief that finalizeWorktree already put its contents on the
 	// branch. Confirm that belief instead of acting on it: staging or committing can fail, and
 	// `worktree remove --force` is then the step that destroys the session's only copy of its
@@ -1379,10 +1387,14 @@ func removeWorktree(wt *Worktree) {
 		return
 	}
 	teardownWorktreeProcesses(wt.Path)
+	removal := storage.removing(wt.Path)
 	if _, err := git(wt.RepoDir, "worktree", "remove", "--force", wt.Path); err != nil {
 		logln("worktree remove failed for", wt.Session+":", err)
 		_ = os.RemoveAll(wt.Path)
 		_, _ = git(wt.RepoDir, "worktree", "prune")
+	}
+	if checkoutAbsent(wt.Path) {
+		removal.done()
 	}
 	_, _ = git(wt.RepoDir, "update-ref", "-d", baseRefName(wt.Session))
 }
@@ -2312,7 +2324,7 @@ func commitWorktree(req CommitCommand) commitOutcome {
 		}
 		return out
 	}
-	if err := gitIndex("add", "-A"); err != nil {
+	if err := gitIndex(addAllArgs(wtPath)...); err != nil {
 		return fail(err)
 	}
 	// `diff --cached --quiet` exits 0 when nothing is staged → the tree is already clean.
@@ -2347,7 +2359,7 @@ func indexLockHeld(err error) bool {
 // oldest four days old.
 const staleIndexLockAge = time.Minute
 
-// stageForFinalize is `git add -A` for finalizeWorktree, plus the one recovery the finalize
+// stageForFinalize is `git add -A` (addAllArgs) for finalizeWorktree, plus the one recovery the finalize
 // moment can justify: breaking an index.lock nobody is using.
 //
 // A lock left behind by a git that crashed or was killed — a runner restart or self-update is the
@@ -2358,7 +2370,8 @@ const staleIndexLockAge = time.Minute
 // can be mid-index-write here. breakStaleIndexLock adds the evidence the runner cannot get from
 // that alone, and staging is retried once when the lock is gone.
 func stageForFinalize(dir string) error {
-	_, err := git(dir, "add", "-A")
+	add := addAllArgs(dir)
+	_, err := git(dir, add...)
 	if err == nil || !indexLockHeld(err) {
 		return err
 	}
@@ -2368,7 +2381,7 @@ func stageForFinalize(dir string) error {
 		return err
 	}
 	logln("broke", why, "— retrying the staging it was refusing")
-	_, retried := git(dir, "add", "-A")
+	_, retried := git(dir, add...)
 	return retried
 }
 
@@ -2778,6 +2791,13 @@ type worktreeGCPressure struct {
 	// floorMb is Runner.minFreeDiskMb as this machine's control plane last reported it; 0 is
 	// "no floor configured", which is also what an older control plane's silence stores.
 	floorMb int64
+	// budget is the storage budget the reading was judged against (checkoutStorage.judge), nil
+	// without one. With one, freeBytes is already what the budget leaves, the floor is its
+	// FloorBytes, and floorMb is not read.
+	budget *StorageBudget
+	// storage is where the sweep counts the checkouts it removes against that budget, so that the
+	// reading taken again counts them too. Nil without a budget, which counts and measures nothing.
+	storage *checkoutStorage
 	// reread takes the reading again, for a sweep that has just freed space. Nil for a reading that
 	// stands as it is.
 	reread func() worktreeGCPressure
@@ -2796,8 +2816,12 @@ func (p worktreeGCPressure) again() worktreeGCPressure {
 // no reading and no floor both mean NO GATE, because a gate that fires on absent information
 // would reclaim checkouts precisely on the machines it knows nothing about, and the failure it
 // guards against — a volume filling up — is one its own silence cannot evidence. Documented as
-// fail-open on the server side too (workspaces.service.ts).
+// fail-open on the server side too (workspaces.service.ts). A storage budget's floor follows the
+// same rule: zero is no gate.
 func (p worktreeGCPressure) belowFloor() bool {
+	if p.budget != nil {
+		return p.measured && p.budget.FloorBytes > 0 && p.freeBytes < uint64(p.budget.FloorBytes)
+	}
 	if !p.measured || p.floorMb <= 0 {
 		return false
 	}
@@ -2806,11 +2830,13 @@ func (p worktreeGCPressure) belowFloor() bool {
 
 // measureWorktreePressure reads the filesystem holding the worktrees root. That root, rather than
 // the machine as a whole, because it is the only filesystem this sweep can free space on — the
-// same reason the control plane measures per working directory instead of per machine.
-func measureWorktreePressure(floorMb int64) worktreeGCPressure {
+// same reason the control plane measures per working directory instead of per machine. Where the
+// control plane sent a storage budget, the reading is judged against that (checkoutStorage.judge).
+func measureWorktreePressure(floorMb int64, storage *checkoutStorage) worktreeGCPressure {
 	free, _, ok := diskUsage(worktreesDir())
-	return worktreeGCPressure{freeBytes: free, measured: ok, floorMb: floorMb,
-		reread: func() worktreeGCPressure { return measureWorktreePressure(floorMb) }}
+	pressure := storage.judge(worktreeGCPressure{freeBytes: free, measured: ok, floorMb: floorMb})
+	pressure.reread = func() worktreeGCPressure { return measureWorktreePressure(floorMb, storage) }
+	return pressure
 }
 
 // maxRetainedEligibleCheckouts caps how many removable checkouts a roomy disk is allowed to keep.
@@ -2933,7 +2959,7 @@ func gcWorktrees(t *Transport, live map[string]bool, pressure worktreeGCPressure
 			if !filepath.IsAbs(common) {
 				common = filepath.Join(path, common)
 			}
-			removeWorktree(&Worktree{Path: path, RepoDir: filepath.Dir(common), Session: c.name})
+			removeWorktree(&Worktree{Path: path, RepoDir: filepath.Dir(common), Session: c.name}, pressure.storage)
 			// removeWorktree refuses a checkout still holding work no branch has, and logs its
 			// own reason for doing so. Only claim the reclamation that actually happened —
 			// "reclaimed" beside a directory still on disk is what makes a leak hard to read.
@@ -2945,7 +2971,10 @@ func gcWorktrees(t *Transport, live map[string]bool, pressure worktreeGCPressure
 		// Not a worktree of anything we can find: there is no repo to unregister it from and no
 		// base ref we could name, so the directory itself is all there is to remove.
 		teardownWorktreeProcesses(path)
-		_ = os.RemoveAll(path)
+		removal := pressure.storage.removing(path)
+		if os.RemoveAll(path) == nil {
+			removal.done()
+		}
 		logln("gc: removed orphan worktree dir", c.name, "—", reason)
 	}
 }
@@ -3148,15 +3177,21 @@ func checkoutHasNothingToLose(path, branch string, inDependencies bool) bool {
 		}
 	}
 	// `git status` says nothing about a file marked assume-unchanged or skip-worktree, whatever has been
-	// done to it. Anything but H in this listing is one.
-	tracked, err := gitCtx(ctx, path, "ls-files", "-v")
+	// done to it. Anything but H in this listing is one, except a skip-worktree path with nothing on disk,
+	// which is how a sparse checkout leaves a path out: what it holds is in the index, and status reads that.
+	// -z, so that a name git would quote is looked for on disk as it is.
+	tracked, err := gitCtx(ctx, path, "ls-files", "-v", "-z")
 	if err != nil {
 		return false
 	}
-	for _, line := range strings.Split(tracked, "\n") {
-		if line != "" && line[0] != 'H' {
-			return false
+	for _, line := range strings.Split(tracked, "\x00") {
+		if line == "" || line[0] == 'H' {
+			continue
 		}
+		if name, ok := strings.CutPrefix(line, "S "); ok && checkoutAbsent(filepath.Join(path, name)) {
+			continue
+		}
+		return false
 	}
 	// With no remote this counts all of history, so a repository with nowhere to push to keeps them.
 	unpushed, err := gitCtx(ctx, path, "rev-list", "--count", "HEAD", "--not", "--remotes")
@@ -3339,7 +3374,7 @@ func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPr
 				now.Sub(spending).Round(time.Second), resumableSweepBudget, len(candidates)-i))
 			return false
 		}
-		taken, err := reclaimResumableCheckout(t, pool, root, c.name)
+		taken, err := reclaimResumableCheckout(t, pool, root, c.name, pressure.storage)
 		if (taken || err != nil) && spending.IsZero() {
 			spending = now
 		}
@@ -3363,7 +3398,10 @@ func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPr
 //
 // False with no error is the rule keeping it. An error says this checkout could not be judged or taken at all,
 // which is no answer about it and starts no wait: on a disk too full to write the mark, the next sweep may be able to.
-func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string) (bool, error) {
+//
+// Under a storage budget, storage counts the checkout's bytes once it is gone (checkoutStorage.removing); nil counts
+// nothing.
+func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string, storage *checkoutStorage) (bool, error) {
 	if pool.checkoutDriven(name) {
 		return false, nil
 	}
@@ -3399,6 +3437,7 @@ func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string
 	}
 	repo := gitCommonDir(path)
 	aside := filepath.Join(root, reclaimingCheckoutPrefix+name)
+	removal := storage.removing(path)
 	if err := os.Rename(path, aside); err != nil {
 		_, _ = git(path, "update-ref", "-d", absentRefName(name))
 		logln("gc: keeping checkout", name+": moving it aside failed:", err)
@@ -3406,6 +3445,8 @@ func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string
 	}
 	if err := os.RemoveAll(aside); err != nil {
 		logln("gc: removing checkout", name, "failed, the next sweep tries again:", err)
+	} else {
+		removal.done()
 	}
 	if repo != "" {
 		_, _ = git(repo, "worktree", "prune")
@@ -3490,7 +3531,7 @@ func restoreAbsentCheckout(pool *sessionPool, job *ClaimedSession) {
 	}
 	// Whatever took the checkout may have left git believing it is still there.
 	_, _ = git(wt.RepoDir, "worktree", "prune")
-	if _, err := git(wt.RepoDir, "worktree", "add", wt.Path, branch); err != nil {
+	if err := addSessionCheckout(job.SessionID, wt.RepoDir, wt.Path, wt.baseSha(), wt.Path, branch); err != nil {
 		refuseSourceWorktree(job, sourceRefusalWorktreeRequired, fmt.Sprintf("the session's checkout could not be restored from %s: %v", branch, err))
 		pool.refuseSupervisorCheckout(job.SessionID, job.SourceRefusal)
 		return
