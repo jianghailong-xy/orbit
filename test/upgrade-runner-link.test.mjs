@@ -534,23 +534,42 @@ function compose(dir, args, env = {}) {
   return execFileSync('docker', ['compose', ...args], { cwd: dir, env: { ...clean, ...env }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
-test('a production-shaped .env renders link-gateway and nats with the config hash they had before this change: nothing to recreate', { skip: !composeThere }, (t) => {
+// `up` recreates a container when its service hashes otherwise than the container's com.docker.compose.config-hash label
+// says. It hashes the service as `config` renders it: its env_file merged into its environment, and dropped. So does
+// `config --hash`, except from Compose v2.22.0 to v5.4.x, the v2.38.2 on main's CI among them, which hash the env_file
+// entries as written: for a service with one, they print a hash that `up` does not compute (docker/compose#14001).
+test('a production-shaped .env renders link-gateway and nats as before this change, so `up` hashes them as before: nothing to recreate', { skip: !composeThere }, (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), 'orbit-compose-hash-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   mkdirSync(path.join(dir, 'src/link-gateway'), { recursive: true });
   copyFileSync(path.join(repo, 'src/link-gateway/nats.conf'), path.join(dir, 'src/link-gateway/nats.conf'));
   writeFileSync(path.join(dir, '.env'), PRODUCTION_SHAPED);
   const now = readFileSync(path.join(repo, 'docker-compose.yml'), 'utf8');
-  writeFileSync(path.join(dir, 'docker-compose.yml'), now);
-  // The apiserver's lines are no part of what this compares, and a production-shaped .env fills them either way.
-  const current = compose(dir, ['config', '--hash', 'link-gateway,nats']);
+  const envFileLine = /^ *env_file: \["\$\{RUNNER_LINK_ENV_FILE:-\/dev\/null\}"\]\n/m;
+  const portLine = '- "${RUNNER_LINK_BIND:-}:${RUNNER_LINK_PORT:-8443}:8443"';
+  assert.match(now, envFileLine);
+  assert.ok(now.includes(portLine), portLine);
   // The two lines as they were before this change.
-  const before = now
-    .replace(/^ *env_file: \["\$\{RUNNER_LINK_ENV_FILE:-\/dev\/null\}"\]\n/m, '')
-    .replace('- "${RUNNER_LINK_BIND:-}:${RUNNER_LINK_PORT:-8443}:8443"', '- "${RUNNER_LINK_PORT:-8443}:8443"');
-  assert.notEqual(before, now);
-  writeFileSync(path.join(dir, 'docker-compose.yml'), before);
-  assert.equal(current, compose(dir, ['config', '--hash', 'link-gateway,nats']));
+  const before = now.replace(envFileLine, '').replace(portLine, '- "${RUNNER_LINK_PORT:-8443}:8443"');
+  // The apiserver's lines are no part of what this compares, and a production-shaped .env fills them either way.
+  const render = (text) => {
+    writeFileSync(path.join(dir, 'docker-compose.yml'), text);
+    const { services } = JSON.parse(compose(dir, ['config', '--format', 'json', 'link-gateway', 'nats']));
+    assert.ok(services['link-gateway'] && services.nats, 'both render');
+    return { services: [services['link-gateway'], services.nats], hash: compose(dir, ['config', '--hash', 'link-gateway,nats']) };
+  };
+  const current = render(now);
+  const old = render(before);
+  assert.deepEqual(current.services, old.services);
+  // The hash this Compose prints is the same too where it merges an env_file as `up` does, and elsewhere once
+  // link-gateway's env_file line is taken out.
+  const probe = (lines) => {
+    writeFileSync(path.join(dir, 'probe.yml'), `services:\n  probe:\n    image: alpine\n${lines}`);
+    return compose(dir, ['-f', 'probe.yml', 'config', '--hash', 'probe']);
+  };
+  const mergesEnvFile = probe('') === probe('    env_file: [/dev/null]\n');
+  t.diagnostic(mergesEnvFile ? 'this Compose hashes a service as up does' : 'this Compose hashes env_file entries as written');
+  assert.equal(mergesEnvFile ? current.hash : render(now.replace(envFileLine, '')).hash, old.hash);
 });
 
 test('the lines an upgrade writes render a gateway behind the web gateway: plain, on loopback, on no port of its choosing', { skip: !composeThere }, (t) => {

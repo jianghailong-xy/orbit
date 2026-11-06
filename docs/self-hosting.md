@@ -786,6 +786,16 @@ order.
   3. It closes what is left within 80 seconds.
 
   Compose waits up to 90 seconds before it stops the container. Runners come back to the new gateway once it is up.
+- **What recreates it.** `docker compose up` recreates the gateway, draining it as above, when its image or its rendered
+  definition changes. It also does so once after Compose itself moves to a version that hashes the same definition
+  otherwise: the first `up` of v5.5.1 recreates a gateway that v2.38.2 created. On
+  [a link of its own](#a-link-gateway-of-its-own), `RUNNER_LINK_ENV_FILE` and `RUNNER_LINK_BIND` are unset: the
+  `env_file` line adds nothing and the port is published on every address, so the definition is the one it had before
+  a `same-origin` link needed those lines, and `up` leaves the gateway running. Compose from v2.22.0 to v5.4.x even so
+  prints a `docker compose config --hash link-gateway` that differs from the container's `com.docker.compose.config-hash`
+  label: it hashes the `env_file` line as written, where `up` merges it into the environment first
+  ([docker/compose#14001](https://github.com/docker/compose/issues/14001)). To see what `up` would do, run
+  `docker compose --dry-run up -d --no-deps link-gateway`: it prints `Recreate` for a gateway it would recreate.
 - **Certificate rotation.** In ACME mode it is automatic. With files, replace them. Either way,
   `link_tls_certificate_not_after_timestamp_seconds` shows the expiry of the certificate in use (files mode).
 - **Replacing the signing key.**
