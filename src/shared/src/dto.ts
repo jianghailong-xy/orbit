@@ -2520,9 +2520,15 @@ export interface TurnCompleteRequest {
    *  un-files one. */
   subtype?: string;
   numTurns?: number;
+  /** The turn's cost, except on a Claude completion: there it is the engine's running total
+   *  (`total_cost_usd`), as `modelUsage` is, and the control plane books the difference. */
   costUsd?: number;
   usage?: TokenUsage;
   modelUsage?: Record<string, ModelUsage>;
+  /** Which engine process `costUsd` and `modelUsage` are running totals of, and what it started
+   *  from. Omitted by runners older than it, whose Claude totals are measured from what the session
+   *  last booked instead (runner-api/running-totals.ts). */
+  runningTotals?: RunningTotals;
   /** Provider-neutral runtime session/thread id discovered during this turn. */
   runtimeSessionId?: string;
   // ── Live worktree state (so the composer's status bar updates each turn) ──
@@ -2545,6 +2551,21 @@ export interface TurnCompleteRequest {
   branchSha?: string;
   /** The worktree's actual current HEAD branch (see SessionLiveState.worktreeBranch). */
   worktreeBranch?: string;
+}
+
+/**
+ * Claude Code counts cost and tokens per process, and a process started with `--resume` restores
+ * the totals its transcript last saved, which a killed process never wrote. A completion's
+ * `costUsd` and `modelUsage` are such totals; this says whose, so the turn's own share is their
+ * difference from the totals booked before (runner-go/claude_running_totals.go).
+ */
+export interface RunningTotals {
+  /** One id per engine process the runner started. */
+  process: string;
+  /** What that process restored when it started: its first completion is measured from these,
+   *  and each later one from the completion before it. Zero for a new conversation, and for a
+   *  transcript that saved nothing. */
+  restored: { costUsd: number; modelUsage: Record<string, ModelUsage> };
 }
 
 /**

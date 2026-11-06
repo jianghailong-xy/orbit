@@ -1557,6 +1557,10 @@ type TurnCompleteRequest struct {
 	CostUsd       float64                `json:"costUsd"`
 	Usage         *TokenUsage            `json:"usage,omitempty"`
 	ModelUsage    map[string]interface{} `json:"modelUsage,omitempty"`
+	// RunningTotals says CostUsd and ModelUsage are Claude Code's running totals of one engine
+	// process, and what that process started from, so the control plane books the turn's own share
+	// (claude_running_totals.go). Nil from engines that report a turn's own numbers.
+	RunningTotals *RunningTotals `json:"runningTotals,omitempty"`
 	// UsageUnknown: the runtime measured no cost or tokens for this turn (DeepSeek Harness reports
 	// neither). costUsd is then left off the wire instead of claiming a measured $0.
 	UsageUnknown bool `json:"-"`

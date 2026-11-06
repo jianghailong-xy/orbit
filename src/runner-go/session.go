@@ -2140,6 +2140,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		}
 	}
 	args := claudeCommandArgs(job, scratchDir, firstSpawn)
+	// What this process's running totals start from, read from the transcript --resume is about to
+	// read, before it reads it: every completion it sends carries it (claude_running_totals.go).
+	runningTotals := claudeRunningTotals(job, execDir, firstSpawn)
 
 	procCtx, procCancel := context.WithCancel(ctx)
 	defer procCancel()
@@ -3103,6 +3106,7 @@ scanLoop:
 					CostUsd:          r.CostUsd,
 					Usage:            r.Usage,
 					ModelUsage:       r.ModelUsage,
+					RunningTotals:    runningTotals,
 					RuntimeSessionID: currentRuntimeSessionID(job),
 					IsolationStatus:  job.IsolationStatus,
 					ChangedFiles:     liveFiles,

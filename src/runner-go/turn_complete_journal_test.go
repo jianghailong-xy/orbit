@@ -34,7 +34,8 @@ func oneTurnScript(text string) []fakeStep {
 }
 
 // completionWireBody is a turn completion's body as the control plane reads it, without what differs from process to
-// process: the lease owner, and the engine's own session id.
+// process: the lease owner, the engine's own session id, and the id its running totals name the engine process by
+// (what that process restored stays in).
 func completionWireBody(t *testing.T, body []byte) string {
 	t.Helper()
 	var m map[string]interface{}
@@ -43,6 +44,9 @@ func completionWireBody(t *testing.T, body []byte) string {
 	}
 	delete(m, "leaseOwner")
 	delete(m, "runtimeSessionId")
+	if totals, ok := m["runningTotals"].(map[string]interface{}); ok {
+		delete(totals, "process")
+	}
 	out, _ := json.Marshal(m)
 	return string(out)
 }

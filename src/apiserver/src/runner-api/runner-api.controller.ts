@@ -354,6 +354,7 @@ import { bgLaunchConfirmed, bgLaunchKind } from './bg-launch-receipt';
 import { enginePhaseAfter, enginePhaseSinceAfter, engineTurnActiveAfter } from './engine-turn';
 import { hasSessionActivity } from './session-activity';
 import { stripNul } from './strip-nul';
+import { bookedAfter, ownCost, ownModelUsage, reportsRunningTotals, runningTotalsBase } from './running-totals';
 import { SessionNamingDto } from './session-naming';
 import { normalizeToolOutputEvent } from './tool-output';
 import type { KeyObject } from 'node:crypto';
@@ -6021,6 +6022,9 @@ export class RunnerApiController {
           },
           mergeStatus: true,
           mergedSourceSha: true,
+          // The engine's running totals as last booked, which a Claude turn's own share is measured
+          // from (running-totals.ts). Read under the lock with everything else the booking decides.
+          engineUsageTotals: true,
           // Armed by the event batch that carried this turn's error (the runner flushes events
           // before it reports the turn), so by now it answers "is this failure one the server
           // intends to undo by itself" — which is what keeps the STATUS published below from
@@ -6462,7 +6466,15 @@ export class RunnerApiController {
       // (2026-11-01: a Codex session told "no reply needed" was handed one note three times, and its run
       // was then failed as swallowing it). One no engine turn ran (`noEngineTurnRan`, the retry below) is
       // still owed its delivery, as anyone's is.
-      const noEngineTurnRan = dto.numTurns === 0 && (dto.costUsd ?? 0) === 0;
+      //
+      // "Nothing billed" is the turn's own cost. A Claude completion reports the running total of its
+      // process, which a resumed process starts with what it restored, so the turn's share is the
+      // difference (running-totals.ts); every other engine reports its turn's own.
+      const totalsBase = reportsRunningTotals(dto)
+        ? await runningTotalsBase(tx, sessionId, dto, current.engineUsageTotals)
+        : null;
+      const turnCostUsd = totalsBase ? ownCost(dto.costUsd, totalsBase) : (dto.costUsd ?? 0);
+      const noEngineTurnRan = dto.numTurns === 0 && turnCostUsd === 0;
       const settledByItsRun =
         completedTurn?.senderSessionId != null && dto.status === RunStatus.SUCCEEDED && !noEngineTurnRan;
       const unanswered =
@@ -6994,7 +7006,9 @@ export class RunnerApiController {
           runtimeSessionId: dto.runtimeSessionId ?? undefined,
           lastTurnAt: new Date(),
           numTurns: { increment: turnInc },
-          costUsd: { increment: dto.costUsd ?? 0 },
+          costUsd: { increment: turnCostUsd },
+          // The totals this turn was measured to, for the next completion to be measured from.
+          ...(totalsBase ? { engineUsageTotals: bookedAfter(dto) } : {}),
           // Folded into the park for the same reason the merge-state clear is: one write, and
           // conditional on the row still being the one this turn ran on. A turn put back in the
           // queue with no arm behind it is what the "engine never came up" case used to look
@@ -7104,8 +7118,9 @@ export class RunnerApiController {
           },
         });
       }
-      if (dto.modelUsage) {
-        const rows = Object.entries(dto.modelUsage).map(([model, mu]) => ({
+      if (totalsBase) {
+        // Each model's own share of this turn; a model the turn did not use writes no row.
+        const rows = Object.entries(ownModelUsage(dto.modelUsage ?? {}, totalsBase)).map(([model, mu]) => ({
           sessionId,
           model,
           inputTokens: mu.inputTokens ?? 0,

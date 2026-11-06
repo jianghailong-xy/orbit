@@ -2704,7 +2704,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved
       // triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it is not
       // another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored job satisfies both as it stands.
-      '0477_wiki_docs_follow'],
+      '0477_wiki_docs_follow',
+      // 0478 adds one nullable jsonb column to `session` (`engine_usage_totals`, the engine's running totals as last
+      // booked) and nothing else. `session` is not a preserved relation, no column any preserved trigger reads is
+      // touched, and no function, trigger, type or constraint is created, replaced or dropped, so it is not another
+      // writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored session reads NULL in it.
+      '0478_session_engine_usage_totals'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
