@@ -188,7 +188,7 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
   const planDoc = await prisma.wikiPlanDoc.create({
     data: {
       planId, ownerId: owner.id, position: 0, category: 'runtime', slug: 'sessions-runtime', title: 'Sessions runtime',
-      question: 'How does a session run?', audience: ['A new contributor'], scopeIn: ['Turns'], scopeOut: [], lengthMin: 100, lengthMax: 2000,
+      question: 'How does a session run?', audience: ['A new contributor'], scopeIn: ['Turns'], scopeOut: [] as never, lengthMin: 100, lengthMax: 2000,
     },
   });
   const planSections = [
@@ -269,6 +269,7 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
 
   await t.test('1. a chat is made through the session create and listed with where it runs', async () => {
     await beat(hpc);
+    await beat(delivery);
     firstClientTurnId = randomUUID();
     const answer = await create({ workspaceId: pub(wsDev), content: WORDS, clientTurnId: firstClientTurnId, wikiContext: firstContext });
     assert.equal(answer.status, 201, answer.text);
@@ -391,7 +392,7 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
           async findFirst({ args, query }) {
             const found = await query(args);
             // The create's first read of its workspace, then a person turning worktrees off before its transaction.
-            if (flip && (args as { select?: { enableWorktree?: boolean } }).select?.enableWorktree) {
+            if (flip && (args as unknown as { select?: { enableWorktree?: boolean } }).select?.enableWorktree) {
               await sql.query(`UPDATE "workspace" SET "enable_worktree" = false WHERE "id" = $1::uuid`, [flip]);
               flip = null;
             }
