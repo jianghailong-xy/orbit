@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -45,6 +45,10 @@ function space(settings: Partial<WikiSpaceSettings> = {}): WikiSpaceRow {
 }
 
 let patches: Array<Record<string, unknown>> = [];
+/** Every `DELETE /api/wiki/spaces/:id` the page sent; a refusal when `deleteRefused` is set. */
+let deletes: string[] = [];
+let deleteRefused: string | null = null;
+let pathname = '';
 /** What `GET /api/wiki/spaces/:id/workspaces` answers, and the writes the Workspaces card made. */
 let members: WikiSpaceWorkspaces = { workspaces: [], addable: [] };
 let memberWrites: string[] = [];
@@ -92,7 +96,13 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
     patches.push(JSON.parse(String(init.body)));
     return reply(200, {});
   }
+  if (init?.method === 'DELETE' && url === `/api/wiki/spaces/${SPACE_ID}`) {
+    deletes.push(url);
+    return deleteRefused ? reply(503, { message: deleteRefused }) : reply(200, { spaceId: SPACE_ID });
+  }
   reads.push(url);
+  if (url === `/api/wiki/spaces/${SPACE_ID}/health`) return reply(200, { entries: 2606, maintenance: { look: 'off' } });
+  if (url === '/api/wiki/spaces') return reply(200, [space()]);
   const members_ = `/api/wiki/spaces/${SPACE_ID}/workspaces`;
   if (url === members_ && (init?.method ?? 'GET') === 'GET') return reply(200, members);
   if (url.startsWith(members_)) {
@@ -124,6 +134,8 @@ beforeEach(() => {
   }));
   vi.stubGlobal('fetch', vi.fn(serve));
   patches = [];
+  deletes = [];
+  deleteRefused = null;
   members = { workspaces: [], addable: [] };
   memberWrites = [];
   reads = [];
@@ -140,6 +152,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+function RouterProbe() {
+  pathname = useLocation().pathname;
+  return null;
+}
+
 async function settle(): Promise<void> {
   for (let tick = 0; tick < 5; tick += 1) {
     await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
@@ -151,8 +168,9 @@ async function mount(row: WikiSpaceRow): Promise<void> {
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
-        <MemoryRouter>
+        <MemoryRouter initialEntries={['/wiki/orbit/settings']}>
           <WikiSettingsPage space={row} />
+          <RouterProbe />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -193,13 +211,13 @@ function button(label: string, scope: ParentNode = document.body): HTMLButtonEle
 }
 
 describe('Wiki settings', () => {
-  it('draws Review mode, Workspaces, then Maintenance, the three modes in order with Tiered the default', async () => {
+  it('draws Review mode, Workspaces, Maintenance, then Delete, the three modes in order with Tiered the default', async () => {
     await mount(space({ reviewMode: 'tiered' }));
     const page = text();
     expect(page).toContain('Wiki settings');
     expect(page).toContain('orbit · github.com/jianghailong-xy/orbit');
     const titles = [...container.querySelectorAll('.orbit-card-title')].map((node) => node.textContent);
-    expect(titles).toEqual(['Review mode', 'Workspaces', 'Maintenance']);
+    expect(titles).toEqual(['Review mode', 'Workspaces', 'Maintenance', 'Delete this wiki']);
     expect(page).toContain('Only you can switch it');
     const modes = [...container.querySelectorAll('.wk-mode .wk-mode-t')].map((node) => node.textContent);
     expect(modes).toEqual(['Manual', 'Tiered', 'Automatic']);
@@ -373,6 +391,51 @@ describe('The Workspaces card (mock 38)', () => {
     expect(text()).toContain('This wiki has no repository behind it, so a workspace joins only when you add it.');
     expect(text()).not.toContain('New workspaces on this repository');
     expect(button('Add workspace…')).toBeTruthy();
+  });
+});
+
+describe('Delete this wiki (docs/mocks/wiki-delete)', () => {
+  const dialog = () => document.body.querySelector<HTMLElement>('[role="alertdialog"]');
+
+  it('says what goes, and asks before it deletes anything', async () => {
+    await mount(space());
+    expect(text()).toContain('Delete this wiki');
+    expect(text()).toContain('Its entries, documents and history are permanently deleted.');
+    await press(button('Delete wiki…'));
+    const asked = dialog()!;
+    expect(asked.textContent).toContain('Delete wiki “orbit”?');
+    expect(asked.textContent).toContain('Its 2,606 entries and their history will be permanently deleted. This cannot be undone.');
+    expect(asked.textContent).toContain('The next session on github.com/jianghailong-xy/orbit to use the wiki starts a new, empty one.');
+    expect(asked.textContent).toContain('Workspaces and sessions are kept.');
+    expect(deletes).toEqual([]);
+
+    await press(button('Cancel', asked));
+    expect(dialog()).toBeNull();
+    expect(deletes).toEqual([]);
+    expect(pathname).toBe('/wiki/orbit/settings');
+  });
+
+  it('does not say a wiki with no repository comes back', async () => {
+    await mount({ ...space(), repoUrlNorm: null, title: 'orbit · vLLM preview' });
+    await press(button('Delete wiki…'));
+    expect(dialog()!.textContent).not.toContain('The next session');
+  });
+
+  it('deletes through the owner’s door and leaves for the wiki `/wiki` opens', async () => {
+    await mount(space());
+    await press(button('Delete wiki…'));
+    await press(button('Delete wiki', dialog()!));
+    expect(deletes).toEqual([`/api/wiki/spaces/${SPACE_ID}`]);
+    expect(pathname).toBe('/wiki');
+  });
+
+  it('says a refusal in the dialog, and stays on the page', async () => {
+    deleteRefused = 'Couldn’t reach the server. Nothing was deleted. Try again.';
+    await mount(space());
+    await press(button('Delete wiki…'));
+    await press(button('Delete wiki', dialog()!));
+    expect(dialog()!.querySelector('[role="alert"]')?.textContent).toBe(deleteRefused);
+    expect(pathname).toBe('/wiki/orbit/settings');
   });
 });
 

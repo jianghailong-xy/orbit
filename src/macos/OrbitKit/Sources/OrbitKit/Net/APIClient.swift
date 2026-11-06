@@ -1298,6 +1298,10 @@ public final class APIClient: @unchecked Sendable {
     public func leaveWikiWorkspaceOut(spaceID: String, workspaceID: String) async throws {
         try await deleteRaw("wiki/spaces/\(spaceID)/workspaces/\(workspaceID)")
     }
+    /// `DELETE /wiki/spaces/:id`: delete a wiki and all it holds, for good. Refused to every session.
+    public func deleteWikiSpace(_ id: String) async throws {
+        try await deleteRaw("wiki/spaces/\(id)")
+    }
     /// `POST /wiki/entries/:id/confirm`: the owner vouching for what a review mode applied — the entry
     /// becomes Confirmed and is pushed from then on.
     public func confirmWikiEntry(_ id: String) async throws {

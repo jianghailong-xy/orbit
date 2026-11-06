@@ -73,7 +73,8 @@ import {
   sidebarProjects,
   type SidebarProject,
 } from '../lib/projectAttention';
-import { wikiShown, wikiSpacePath, wikiWaitingOnYou } from '../lib/wiki';
+import { WIKI_PATH, wikiShown, wikiSpacePath, wikiWaitingOnYou, type WikiSpaceRow } from '../lib/wiki';
+import { WIKI_DELETE_OPEN, WIKI_SETTINGS_TITLE, wikiSettingsPath } from '../lib/wikiReviewMode';
 import {
   readWikiFromWorkspace,
   readWikiLastSpace,
@@ -87,6 +88,7 @@ import { SidebarNavIcon } from './SidebarNavIcon';
 import { Avatar } from './ui/Avatar';
 import { useConfirm } from './ui/ConfirmDialog';
 import { Menu, type MenuItem } from './ui/Menu';
+import { useDeleteWiki } from './WikiDeleteDialog';
 import { Tooltip } from './ui/Tooltip';
 
 const IS_MAC_PLATFORM =
@@ -636,6 +638,32 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
       },
     ];
   };
+  // A wiki's row has the same two ways to its actions (docs/mocks/wiki-delete). Deleting the wiki on screen leaves for
+  // the one `/wiki` opens; deleting another leaves the reader where they are.
+  const [askDeleteWiki, wikiDeleteConfirmation] = useDeleteWiki((space) => {
+    if (wikiOnScreen?.id !== space.id) return;
+    onNavigate?.();
+    navigate(WIKI_PATH);
+  });
+  const wikiMenu = (space: WikiSpaceRow): MenuItem[] => [
+    {
+      key: 'settings',
+      icon: <SettingOutlined />,
+      label: WIKI_SETTINGS_TITLE,
+      onSelect: () => {
+        onNavigate?.();
+        navigate(wikiSettingsPath(space.slug));
+      },
+    },
+    { type: 'separator' as const, key: 'divider' },
+    {
+      key: 'delete',
+      icon: <DeleteOutlined />,
+      label: WIKI_DELETE_OPEN,
+      danger: true,
+      onSelect: () => askDeleteWiki(space, wikiNames.get(space.id) ?? space.title),
+    },
+  ];
   // Measured before paint, and again whenever the list or the Workspaces group changes size. With no
   // ResizeObserver (jsdom) the default stands: the two groups scroll as one.
   const hasWorkspaceRows = orderedWorkspaces.length > 0 || bareMachines.length > 0;
@@ -1048,6 +1076,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                 </div>
               ))}
             {confirmation}
+            {wikiDeleteConfirmation}
           </div>
 
           {hasWorkspaceRows && hasWikis && <div className="tp-divider" />}
@@ -1070,6 +1099,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     waiting={wikiWaitingIn(space)}
                     active={sel === `wiki:${space.slug}`}
                     onOpen={() => openWiki(space.slug)}
+                    menu={wikiMenu(space)}
                   />
                 ))}
             </div>
@@ -1277,17 +1307,24 @@ export function WikiRow({
   waiting,
   active,
   onOpen,
+  menu,
 }: {
   name: string;
   waiting: number;
   active: boolean;
   onOpen: () => void;
+  menu: MenuItem[];
 }) {
   const waitingOnYou = wikiWaitingOnYou(waiting);
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <div
-      className={`tp-item ${active ? 'active' : ''}`}
+      className={`tp-item ${active ? 'active' : ''}${menuOpen ? ' menu-open' : ''}`}
       onClick={onOpen}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setMenuOpen(true);
+      }}
       onKeyDown={(event) => handleNavActivation(event, onOpen)}
       role="link"
       tabIndex={0}
@@ -1302,6 +1339,21 @@ export function WikiRow({
           {waiting}
         </span>
       )}
+      {/* Inside the row's link: a press or an Enter on the menu is the menu's, and opens no wiki. */}
+      <span className="tp-workspace-actions" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+        <Menu
+          side="bottom"
+          align="end"
+          items={menu}
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
+          trigger={
+            <button type="button" className="tp-workspace-more" aria-label={`${name} actions`} title="Actions">
+              <MoreOutlined />
+            </button>
+          }
+        />
+      </span>
     </div>
   );
 }

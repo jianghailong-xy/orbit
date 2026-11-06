@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ExclamationCircleOutlined, RightOutlined } from '@ant-design/icons';
 import {
@@ -8,9 +8,10 @@ import {
   type WikiReviewMode,
   type WikiSystemModelStatus,
 } from '@orbit/shared';
-import { wikiSpaceWorkspacesQuery, wikiSystemModelQuery, workspacesQuery } from '../lib/queries';
+import { wikiSpacesQuery, wikiSpaceWorkspacesQuery, wikiSystemModelQuery, workspacesQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
-import { WIKI_SETTINGS_SAVED, WIKI_TITLE, wikiSpacePath, type WikiSpaceRow } from '../lib/wiki';
+import { WIKI_PATH, WIKI_SETTINGS_SAVED, WIKI_TITLE, wikiSpacePath, type WikiSpaceRow } from '../lib/wiki';
+import { wikiSpaceNames } from '../lib/wikiSpace';
 import {
   WIKI_DAILY_LIMIT,
   WIKI_DEFAULT_REVIEW_MODE,
@@ -44,6 +45,9 @@ import {
   wikiLookbackLabel,
   wikiModeFallback,
   wikiRunsADay,
+  WIKI_DELETE_NOTE,
+  WIKI_DELETE_OPEN,
+  WIKI_DELETE_TITLE,
   WIKI_WORKSPACE_LEFT_OUT,
   WIKI_WORKSPACES,
   WIKI_WORKSPACES_EMPTY,
@@ -53,6 +57,7 @@ import {
   wikiWorkspaceLabel,
 } from '../lib/wikiReviewMode';
 import { addWikiWorkspace, leaveWikiWorkspaceOut, updateWikiSpace, useWikiWrite, type WikiSpaceUpdate } from '../lib/wikiWrites';
+import { useDeleteWiki } from './WikiDeleteDialog';
 import { WikiModelLine, WikiPrivacyNote } from './WikiSystemModel';
 import { WikiSetUpDialog } from './WikiSetUpDialog';
 import { Button } from './ui/Button';
@@ -187,10 +192,29 @@ export function WikiSettingsPage({ space }: { space: WikiSpaceRow }) {
         )}
       </Card>
 
+      <WikiDeleteCard space={space} />
+
       {setUp && (
         <WikiSetUpDialog space={space} onClose={() => setSetUp(false)} />
       )}
     </div>
+  );
+}
+
+/** The last card of the page (docs/mocks/wiki-delete): it asks first, as nothing else on this page does. */
+function WikiDeleteCard({ space }: { space: WikiSpaceRow }) {
+  const navigate = useNavigate();
+  const spaces = useQuery(wikiSpacesQuery());
+  const [ask, confirmation] = useDeleteWiki(() => navigate(WIKI_PATH));
+  const name = wikiSpaceNames(spaces.data ?? []).get(space.id) ?? space.title;
+  return (
+    <Card className="wk-settings-card" title={WIKI_DELETE_TITLE}>
+      <div className="wk-delete">
+        <div className="wk-maint-d">{WIKI_DELETE_NOTE}</div>
+        <Button danger onClick={() => ask(space, name)}>{WIKI_DELETE_OPEN}</Button>
+      </div>
+      {confirmation}
+    </Card>
   );
 }
 

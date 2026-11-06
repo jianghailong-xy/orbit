@@ -302,6 +302,8 @@ test('the owner channel refuses a personal access token door by door and field b
       login: 200,
       observe: () => db.wikiSpaceWorkspace.count({ where: { workspaceId, spaceId, leftOutAt: null } }),
     },
+    // A space nobody has: a login that got past the door would delete the wiki the cases around it read.
+    { route: 'DELETE /wiki/spaces/:id', path: `/wiki/spaces/${nobody()}`, login: 404 },
     { route: 'GET /wiki/changesets/:id', path: `/wiki/changesets/${nobody()}`, login: 404 },
     { route: 'GET /wiki/spaces/:id/plan', path: `/wiki/spaces/${spaceId}/plan`, login: 200 },
     { route: 'GET /wiki/spaces/:id/plan/versions', path: `/wiki/spaces/${spaceId}/plan/versions`, login: 200 },
