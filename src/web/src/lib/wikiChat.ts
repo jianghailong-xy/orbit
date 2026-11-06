@@ -83,6 +83,8 @@ export const WIKI_CHAT_WORKSPACE = 'Workspace';
 export const WIKI_CHAT_MODEL = 'Model';
 export const WIKI_CHAT_MODE = 'Mode';
 export const WIKI_CHAT_SEND_FAILED = 'The message couldn’t be sent. Check the connection, then try again.';
+/** The phone's Ask sheet (docs/wiki-comment-to-session-design.md §5): over the paragraph's sentences, each picked by a tap. */
+export const WIKI_CHAT_PICK_SENTENCES = 'Tap the sentences you mean';
 export const wikiChatRemove = (what: string): string => `Remove ${what}`;
 
 /** The composer's line once its chat takes no more messages (C8 review): why, and the way on. */
