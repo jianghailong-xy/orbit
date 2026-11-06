@@ -29,8 +29,7 @@ import (
 // The runner link client (docs/runner-link-design.md §5.4, §7): the one WebSocket a runner keeps to its cell's link
 // gateway. It trades the runner token for a connection token over HTTPS (POST /api/runner/link-token), dials the
 // link over TLS through whatever proxy HTTPS_PROXY names, says Hello and reads Welcome. What a connection carries
-// and when the next one is opened belong to whoever drives it: during the shadow period that is link_shadow.go,
-// which only mirrors, and the runner's work stays on HTTPS.
+// and when the next one is opened belong to whoever drives it: the runner's work (link_work.go), or `orbit doctor`.
 //
 // Nothing here logs: `orbit doctor` dials with it too, and prints what it found on its own.
 

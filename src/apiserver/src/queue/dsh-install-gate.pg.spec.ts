@@ -15,7 +15,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { encryptSecret } from '../providers/provider-crypto';
 import { RealtimeService } from '../realtime/realtime.service';
-import { RunnerApiController, SESSION_TERMINAL_HANDOFF_V1 } from '../runner-api/runner-api.controller';
+import { RunnerApiController } from '../runner-api/runner-api.controller';
 import {
   DSH_NOT_INSTALLED_ERROR,
   DSH_PLATFORM_UNSUPPORTED_ERROR,
@@ -57,7 +57,7 @@ test('dsh install gate on PostgreSQL', { timeout: 300_000 }, async (t) => {
     drainMergeRequests: async () => [], drainCommitRequests: async () => [], drainArtifactRequests: async () => [],
   } as unknown as RealtimeService;
   const queue = new QueueService(db as unknown as PrismaService, realtime);
-  const api = new RunnerApiController(db as never, queue as never, realtime as never, {} as never, {} as never, {} as never);
+  const api = new RunnerApiController(db as never, queue as never, realtime as never, {} as never, { issue: async () => 'orchestration-credential' } as never, {} as never);
   const sessions = new SessionsService(db as unknown as PrismaService,
     { notifySessionQueued: () => undefined, accountPoolRefusal: async () => null } as never, realtime);
 
@@ -79,7 +79,7 @@ test('dsh install gate on PostgreSQL', { timeout: 300_000 }, async (t) => {
     // over its terminal handoff marker.
     const poll = (providers: readonly AgentProvider[]) => {
       const res = { once: (_event: string, close: () => void) => setTimeout(close, 100) };
-      return api.claim(runner, SESSION_TERMINAL_HANDOFF_V1, providers.join(','), res as never);
+      return api.claim(runner, providers.join(','), res as never);
     };
     const configured = `harness-${randomUUID()}`;
     await db.modelProvider.create({ data: {

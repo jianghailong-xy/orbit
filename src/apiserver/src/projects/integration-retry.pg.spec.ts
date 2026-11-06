@@ -50,6 +50,7 @@ import { ProjectPromotionService } from './project-promotion.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * `integration_retry` (docs/project-integration-line-contract.md §2.3 J-T1b): a project's coordinator

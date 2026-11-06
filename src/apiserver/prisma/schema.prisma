@@ -516,10 +516,11 @@ model DispatchPause {
 }
 
 /// The runner link's cut-over switch, RUNNER_LINK_REQUIRED (docs/runner-link-design.md §11.3, §11.4, D15;
-/// migration 0446): at most one row, id 1, written only by an administrator through
-/// PUT /api/admin/runner-link-required (runner-api/runner-link-required.ts). While `required`, the runner
-/// daemon's routes answer HTTPS 426 UPGRADE_REQUIRED and the link gateway tells runners MODE_LINK. No row is
-/// the same as a row that is off. `runner_link_switch_one_row_chk` (`id` = 1) lives only in the migration.
+/// migration 0446): at most one row, id 1. The cut-over is over and nothing in this build reads or writes it:
+/// the runner daemon's routes always answer HTTPS 426 UPGRADE_REQUIRED. The table stays for a rollback to a build
+/// from before the cleanup, which reads the row: there, while `required`, those routes answer 426 and the link
+/// gateway tells runners MODE_LINK, and no row is the same as a row that is off.
+/// `runner_link_switch_one_row_chk` (`id` = 1) lives only in the migration.
 model RunnerLinkSwitch {
   id          Int      @id @default(1) @db.SmallInt
   required    Boolean

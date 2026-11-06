@@ -20,6 +20,7 @@ import { ListEventsService } from '../task-lists/list-events.service';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import { TasksService } from '../tasks/tasks.service';
+import '../test-support/daemon-routes-over-http';
 
 /**
  * `POST /api/runner/sessions/:id/source/pin` over real HTTP.

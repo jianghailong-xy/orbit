@@ -86,16 +86,6 @@ test('pause commits its waiting state before telling a warm runner to release ow
   await assert.rejects(h.dequeue(), ConflictException, 'an old poller cannot keep its local permit alive');
 });
 
-test('a legacy NULL generation also gets a committed ownership-loss response and a fence', async () => {
-  const h = harness(null);
-  await assert.rejects(h.dequeue(), ConflictException);
-  const result = h.snapshot();
-  assert.equal(result.state.status, RunStatus.PENDING);
-  assert.match(result.state.inboxLeaseGeneration!, /^[0-9a-f-]{36}$/);
-  assert.equal(result.retired, true);
-  assert.equal(result.committed, true);
-});
-
 test('a live turn keeps ownership and its permit until it finishes', async () => {
   const h = harness(GENERATION, true);
   assert.equal(await h.dequeue(), null);

@@ -4,7 +4,6 @@ import { hostname } from 'node:os';
 import { Logger } from '@nestjs/common';
 
 import type { PrismaService } from '../prisma/prisma.service';
-import { RunnerLinkSwitch } from '../runner-api/runner-link-required';
 import { DockerBackend } from './docker-backend';
 import { dockerChannelFromProfile, type DockerChannel } from './docker-channel-client';
 import type { ManagedKubeClient } from './kube-client';
@@ -70,12 +69,8 @@ export function createManagedRunnerRuntime(deps: {
     log.error(`managed runners are enabled but unavailable: ${problem}`);
     return { available: false, problems: [problem] };
   }
-  // A link-only server, while the cut-over's switch exists, is one with it on. The switch's removal
-  // (docs/runner-link-design.md §13) takes these lines with it, and the manager's default, link-only, is left.
-  const linkSwitch = new RunnerLinkSwitch(deps.prisma);
   const manager = new ManagedRunnerManager(deps.prisma, backend, profile, {
     holder: `${hostname()}/${process.pid}/${randomUUID()}`,
-    linkOnly: () => linkSwitch.required(),
   });
   const worker = new ManagedRunnerWorker(manager, profile.lifecycle.pollIntervalSeconds * 1000);
   const where = profile.backend === 'docker' ? `Docker instance ${profile.docker.instanceId}` : `namespace ${profile.kubernetes.namespace}`;

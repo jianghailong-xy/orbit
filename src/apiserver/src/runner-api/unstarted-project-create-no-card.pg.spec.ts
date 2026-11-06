@@ -77,6 +77,7 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import { RunnerTasksController } from './runner-tasks.controller';
 import { AUTOMATIC_COORDINATOR_DECIDES_MESSAGE, START_CARD_REVIEWS_MESSAGE } from './unstarted-project-create';
+import '../test-support/daemon-routes-over-http';
 
 declare global {
   interface BigInt { toJSON(): string; }

@@ -70,6 +70,7 @@ import {
   CONFIRMATION_RETURN_TURN_KEY_PREFIX,
   OWNER_CONFIRMATION_REVIEW_TURN_KEY_PREFIX,
 } from './watch-turn-key';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;

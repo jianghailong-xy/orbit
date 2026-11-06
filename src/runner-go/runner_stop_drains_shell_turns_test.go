@@ -54,7 +54,7 @@ func TestARunnerStopLetsAnAcceptanceCommandInFlightFinish(t *testing.T) {
 	// What the stop does to the session once the command is done is what it always did to an idle
 	// one: detach it, resumable, rather than end it.
 	waitUntil(t, func() bool { return pool.count() == 0 }, "the supervisor never detached for the stop")
-	if s.requested("/finalize") || s.requested("/complete") {
+	if s.requested("/finalize") {
 		t.Fatal("the stop ended the session instead of detaching it")
 	}
 }

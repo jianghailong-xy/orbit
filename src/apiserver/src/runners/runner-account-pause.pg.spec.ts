@@ -9,6 +9,7 @@ import { QueueService } from '../queue/queue.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
 import { ConflictException } from '@nestjs/common';
+import '../test-support/dequeue-under-lease';
 
 const url = process.env.COORDINATOR_PG_URL;
 const work = '1fda3f43';

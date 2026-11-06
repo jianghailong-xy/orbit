@@ -338,7 +338,6 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /runner/sessions/:id/turn-complete': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/events': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/finalize': 'RunnerApiController.assertEngineSessionById',
-  'POST /runner/sessions/:id/complete': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/import-result': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/merge-result': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/commit-result': 'RunnerApiController.assertEngineSessionById',

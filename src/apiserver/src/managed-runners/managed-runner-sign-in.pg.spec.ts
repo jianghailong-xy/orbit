@@ -102,6 +102,7 @@ import {
 import { MANAGED_RUNNER_KUBE_CLIENT_FACTORY, MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-runner-runtime';
 import { ManagedRunnerWorker } from './managed-runner-worker';
 import { ManagedRunnerService } from './managed-runner.service';
+import '../test-support/daemon-routes-over-http';
 
 declare global {
   interface BigInt { toJSON(): string; }

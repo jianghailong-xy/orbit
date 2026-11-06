@@ -99,14 +99,10 @@ func (p *linkTurnPrefixPart) add(chunk string) {
 func (p *linkTurnPrefixPart) String() string { return string(p.b) }
 
 // emitted takes an event as its session emits it, in emission order, under the session's buffer lock, and says what
-// becomes of it, with the payload it goes with: in link mode, by linkEventFateOf, and otherwise durable as over HTTPS.
-// Every event is read for the turn prefix, whatever the mode, so a TurnPrefixRequest that comes just after the link
-// came into use still finds the turn whole. A live event is queued for the live stream when it may go.
+// becomes of it, with the payload it goes with (linkEventFateOf). Every event is read for the turn prefix. A live event
+// is queued for the live stream when it may go.
 func (s *linkEventStream) emitted(turnID, eventType string, payload map[string]interface{}, now time.Time, provider string) (linkEventFate, map[string]interface{}) {
-	fate := linkDurable
-	if s.onLink() {
-		fate, payload = linkEventFateOf(eventType, payload, provider)
-	}
+	fate, payload := linkEventFateOf(eventType, payload, provider)
 	l := &s.live
 	l.mu.Lock()
 	defer l.mu.Unlock()

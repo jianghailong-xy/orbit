@@ -42,7 +42,7 @@ test('P1b dsh claim requires request and persisted heartbeat declarations', asyn
       providers = value.supportedProviders;
       return null;
     } };
-    await controller(prisma, queue).claim(runner, SESSION_SOURCE_PIN_V1, request);
+    await controller(prisma, queue).claim(runner, request);
     assert.equal(providers.includes(AgentProvider.DSH), expected);
     if (request) assert.equal(providers.includes(AgentProvider.CLAUDE), true);
   }
@@ -57,7 +57,7 @@ test('P1b dsh reclaim withholds unsupported Harness while retaining legacy check
       // run_event max(seq) for the reclaim snapshot — raw SQL, never `aggregate`.
       $queryRaw: async () => [{ max: 0 }],
     };
-    const response = await controller(prisma, {}).reclaim(runner, SESSION_SOURCE_PIN_V1, request);
+    const response = await controller(prisma, {}).reclaim(runner, request);
     assert.deepEqual(response.sessions.map((session) => session.sessionId), ['claude']);
   }
 });
@@ -76,7 +76,7 @@ test('P1b dsh provider notices distinguish native and legacy colliding identitie
       updateMany: async (args: { where: unknown; data: { error: string } }) => { marked.push(args); return { count: 1 }; },
     },
   };
-  await controller(prisma, { claimSessionForRunner: async () => null }).claim(runner, SESSION_SOURCE_PIN_V1, 'claude,codex,opencode,antigravity,cursor');
+  await controller(prisma, { claimSessionForRunner: async () => null }).claim(runner, 'claude,codex,opencode,antigravity,cursor');
   assert.equal(marked.length, 1);
   assert.equal(marked[0].data.error, DSH_RUNNER_UPGRADE_ERROR);
   // A session recorded on Harness is noticed whatever key it spends; one without an engine by the old

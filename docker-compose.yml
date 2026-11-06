@@ -224,13 +224,15 @@ services:
       FCM_PRIVATE_KEY: "${FCM_PRIVATE_KEY:-}"
       FCM_ANDROID_PACKAGE: "${FCM_ANDROID_PACKAGE:-io.orbitd.android}"
       # The runner link (docs/self-hosting.md, "Runner link"): the connection tokens a runner trades its runner token for,
-      # to reach the link gateway. A fresh install and /upgrade generate them. All three or none: unset, the link is off,
-      # its routes answer 404 and runners work over HTTP as before. The signing key is base64 of an Ed25519 private key in
-      # PEM; the gateway is given only its public key. The URL is the gateway's ws:// or wss:// address, or same-origin:
+      # to reach the link gateway. A fresh install and /upgrade generate them. This build serves runners only over the link,
+      # so the signing key is required: without it Compose renders nothing, and says what to run, rather than start an
+      # apiserver no runner could work with. /upgrade's script reads that requirement too (its section on the link). The
+      # signing key is base64 of an Ed25519 private key in PEM; the gateway is given only its public key. The URL is the
+      # gateway's ws:// or wss:// address, or same-origin:
       # each runner is told the address it reached this server at, through the web gateway (runner-link-token.ts,
       # sameOriginLinkUrl), which PUBLIC_ORIGIN above decides. The gateway token is the secret the gateway presents to
       # read revoked credentials.
-      RUNNER_LINK_SIGNING_KEY: "${RUNNER_LINK_SIGNING_KEY:-}"
+      RUNNER_LINK_SIGNING_KEY: "${RUNNER_LINK_SIGNING_KEY:?this build serves runners only over the runner link, and this deployment has none. Run .claude/skills/upgrade/upgrade.sh, which sets it up. docs/self-hosting.md, Runner link}"
       RUNNER_LINK_URL: "${RUNNER_LINK_URL:-}"
       RUNNER_LINK_GATEWAY_TOKEN: "${RUNNER_LINK_GATEWAY_TOKEN:-}"
       # The runner link's hints (src/apiserver/src/realtime/runner-hints.ts): each wake for a runner is also published

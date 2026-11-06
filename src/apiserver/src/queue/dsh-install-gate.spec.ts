@@ -92,7 +92,7 @@ test('dsh install gate: a declaring runner without the CLI keeps its declaration
     [[{ ...INSTALLED[0], dsh: { ...INSTALLED[0].dsh, versionCompatible: false } }], DSH_VERSION_INCOMPATIBLE_ERROR],
   ] as const) {
     const f = claimController({ capabilities: ['provider:dsh', 'provider:cursor'], capabilitiesReportedAt: new Date(), engines });
-    await f.api.claim(runner, SESSION_SOURCE_PIN_V1, header);
+    await f.api.claim(runner, header);
     assert.equal(f.handed.length, 1);
     assert.ok(f.handed[0].supportedProviders.includes(AgentProvider.DSH), 'the protocol declaration was rewritten');
     assert.equal(f.handed[0].dshUnavailable, notice);
@@ -102,7 +102,7 @@ test('dsh install gate: a declaring runner without the CLI keeps its declaration
 
 test('dsh install gate: an installed CLI is handed dsh rows, and a runner without the declaration still waits for an upgrade', async () => {
   const ready = claimController({ capabilities: ['provider:dsh', 'provider:cursor'], capabilitiesReportedAt: new Date(), engines: INSTALLED });
-  await ready.api.claim(runner, SESSION_SOURCE_PIN_V1, header);
+  await ready.api.claim(runner, header);
   assert.ok(ready.handed[0].supportedProviders.includes(AgentProvider.DSH));
   assert.ok(!('dshUnavailable' in ready.handed[0]), 'a ready runner was handed a reason');
   assert.equal(ready.marked.length, 0, 'a ready runner stamped a notice');
@@ -112,7 +112,7 @@ test('dsh install gate: an installed CLI is handed dsh rows, and a runner withou
     ['claude,codex,opencode,antigravity,cursor', { capabilities: ['provider:dsh', 'provider:cursor'], capabilitiesReportedAt: new Date(), engines: NOT_INSTALLED }],
   ] as const) {
     const f = claimController(snapshot);
-    await f.api.claim(runner, SESSION_SOURCE_PIN_V1, request);
+    await f.api.claim(runner, request);
     assert.ok(!f.handed[0].supportedProviders.includes(AgentProvider.DSH));
     assert.ok(!('dshUnavailable' in f.handed[0]));
     assert.deepEqual(f.marked.map((m) => m.data.error), [DSH_RUNNER_UPGRADE_ERROR]);

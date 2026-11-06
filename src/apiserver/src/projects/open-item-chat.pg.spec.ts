@@ -48,6 +48,7 @@ import { ProjectPromotionService } from './project-promotion.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * "Chat about this" on an exception item, as `GET /projects/:id/open-items` serves it

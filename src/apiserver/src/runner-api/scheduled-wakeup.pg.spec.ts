@@ -45,6 +45,8 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import '../test-support/daemon-routes-over-http';
+import { sessionLease } from '../test-support/dequeue-under-lease';
 
 const PG_URL = process.env.COORDINATOR_PG_URL;
 const skip = !PG_URL;
@@ -261,7 +263,7 @@ test('a scheduled wakeup is held by the control plane and delivered as a turn wh
   /** What the runner's claim does to a queued session, then the inbox poll that follows it. */
   async function claimAndPoll(sessionId: string): Promise<Reply> {
     await prisma.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
-    return request(api, 'GET', `/api/runner/sessions/${uuidToBase62(sessionId)}/inbox`);
+    return request(api, 'GET', `/api/runner/sessions/${uuidToBase62(sessionId)}/inbox?leaseGeneration=${await sessionLease(prisma, sessionId)}`);
   }
 
   const on = {

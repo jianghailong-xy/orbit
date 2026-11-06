@@ -46,6 +46,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * What a task's ABNORMAL end owes the coordinator, and what may not be allowed to authorize it.

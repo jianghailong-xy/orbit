@@ -71,6 +71,7 @@ import { INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND } from './project-integ
 import { configureProjectIntegration } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectPromotionService } from './project-promotion.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;

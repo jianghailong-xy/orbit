@@ -739,8 +739,7 @@ export class RunnersService {
    *
    * A runner that has not declared that engine's account-removal capability is refused in words the
    * person who pressed the button can act on — the alternative is a request that sits pending until
-   * the relay's timeout and then fails with nothing useful in it. The heartbeat refuses it too, for
-   * a runner whose declared capabilities went stale between this call and its next check-in.
+   * the relay's timeout and then fails with nothing useful in it.
    *
    * Removing an account the runner no longer reports is allowed and ends the same way: the runner
    * finds nothing left to remove and reports done. A workspace that had selected the slot keeps

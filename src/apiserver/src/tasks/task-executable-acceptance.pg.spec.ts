@@ -49,6 +49,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE } from './reclaim-stalled-task';
 import { TasksService } from './tasks.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const suite = URL ? test : test.skip;
@@ -71,7 +72,7 @@ function controller(db: PrismaClient): RunnerApiController {
     markRunnerChanged: () => undefined,
     publish: () => undefined,
     notifyInbox: () => undefined,
-    waitForInbox: async () => undefined,
+    waitForNotice: async () => undefined,
   } as unknown as RealtimeService;
   const prisma = db as unknown as PrismaService;
   return new RunnerApiController(

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"runtime"
@@ -185,45 +184,6 @@ func TestLinkModeKeepsLiveEventsAndPingsOffTheDurableSeqs(t *testing.T) {
 	}
 	if got := strings.Join(liveTypes, " "); got != "thinking_delta text_delta text_delta tool_output background_output task_progress" {
 		t.Errorf("live events: %s", got)
-	}
-}
-
-// Events numbered while the session's events went over HTTPS can still be in the buffer when the link comes into use:
-// a live event among them goes as the bare ping holding its seq, which the ingest acknowledges and stores nowhere,
-// as HTTPS never stored the live event either. Nothing is tombstoned, and no batch is refused for a gap.
-func TestEventsNumberedUnderHTTPModeCrossTheCutOverAsBarePings(t *testing.T) {
-	r, in := newLinkEventsRig(t)
-	s, buf := linkSessionBuffer(r, "session-cut")
-	defer s.release()
-	buf.add("turn-1", evAssistant, map[string]interface{}{"text": "one"}, nil)
-	buf.add("turn-1", evTextDelta, map[string]interface{}{"text": "tw"}, nil)
-	buf.add("turn-1", evTextDelta, map[string]interface{}{"text": "o"}, nil)
-	buf.add("turn-1", evSystem, map[string]interface{}{"subtype": "status", "model": nil, "sessionId": "rt"}, nil)
-	buf.add("turn-1", evAssistant, map[string]interface{}{"text": "two"}, nil)
-	taken := buf.take()
-	if len(taken) != 5 || taken[4].Seq != 5 {
-		t.Fatalf("under HTTP mode every event takes a seq: %+v", taken)
-	}
-	r.useLink(t) // the cut-over
-	if err := s.submit(taken); err != nil {
-		t.Fatal(err)
-	}
-	linkWaitStored(t, s, 10*time.Second)
-	for _, seq := range []uint64{2, 3} {
-		ping := in.ping("session-cut", seq)
-		if ping == nil || ping.GetType() != evSystem || string(ping.GetPayloadJson()) != `{"subtype":"live_event_seq"}` {
-			t.Errorf("seq %d went as %v, want the bare live_event_seq ping", seq, ping)
-		}
-	}
-	if ping := in.ping("session-cut", 4); ping == nil {
-		t.Error("the status ping numbered under HTTP mode did not go as itself")
-	}
-	seqs, tombstones, pings := in.storedSeqs("session-cut")
-	if fmt.Sprint(seqs) != "[1 5]" || tombstones != 0 || pings != 3 {
-		t.Errorf("the ingest holds rows %v, %d tombstones, %d unstored pings", seqs, tombstones, pings)
-	}
-	if codes := in.refusalCodes(); len(codes) != 0 {
-		t.Errorf("batches refused: %v", codes)
 	}
 }
 
@@ -455,32 +415,6 @@ func TestATurnPrefixIsWhatTheTurnHasStreamedSoFar(t *testing.T) {
 	})
 }
 
-// Over HTTPS nothing of this applies: a session buffer with a stream whose link is not in use numbers every event,
-// live ones and pings included, exactly as one without a link mode does.
-func TestSessionEventBufferNumbersEveryEventOffTheLink(t *testing.T) {
-	r, _ := newLinkEventsRig(t)
-	s, linked := linkSessionBuffer(r, "session-http")
-	defer s.release()
-	plain := &sessionEventBuffer{next: 1, clock: &thinkingClock{}}
-	for _, b := range []*sessionEventBuffer{linked, plain} {
-		b.add("turn-1", evTextDelta, map[string]interface{}{"text": "a"}, nil)
-		b.add("turn-1", evSystem, map[string]interface{}{"subtype": "status", "model": nil, "sessionId": "x"}, nil)
-		b.add("turn-1", evSystem, map[string]interface{}{"subtype": "context_compacted"}, nil)
-		b.add("turn-1", evSystem, map[string]interface{}{"subtype": "context", "contextTokens": float64(1)}, nil)
-		b.add("turn-1", evSystem, map[string]interface{}{"subtype": "context", "contextTokens": float64(2)}, nil)
-		b.add("turn-1", evAssistant, map[string]interface{}{"text": "a"}, nil)
-	}
-	got, want := linked.take(), plain.take()
-	if len(got) != 6 || len(want) != 6 {
-		t.Fatalf("%d and %d events", len(got), len(want))
-	}
-	for i := range want {
-		if got[i].Seq != want[i].Seq || got[i].Type != want[i].Type || fmt.Sprint(got[i].Payload) != fmt.Sprint(want[i].Payload) {
-			t.Errorf("event %d: %+v with a link mode, %+v without", i, got[i], want[i])
-		}
-	}
-}
-
 // A session supervised over the link, from its first turn to its completion: the engine's deltas go live, its pings
 // nowhere, and its durable events in EventBatches whose seqs count up from 1 without a gap or a tombstone; the turn's
 // completion waits for them (after_seq).
@@ -567,88 +501,6 @@ func TestASessionOverTheLink(t *testing.T) {
 	}
 }
 
-// RUNNER_LINK_REQUIRED switched off in the middle of a session's event stream (task D0): a HeartbeatAck says MODE_HTTP
-// and the runner's work goes back to HTTPS while an EventBatch is unacknowledged. What the session's stream holds goes
-// over HTTPS first, then what the engine wrote after it. Whichever way each seq went, it is there once, and the seqs
-// count up from 1 without a gap.
-func TestTheSwitchTurnedOffMidStreamLosesNothing(t *testing.T) {
-	r, in := newLinkEventsRig(t)
-	in.ackDelay = 3 * time.Second // the batch in flight is answered only after the switch
-	pool := newSessionPool(2)
-	sup := superviseClaudeSessionOverLink(t, r, pool,
-		fakeStep{Await: "user"},
-		fakeStep{Emit: "replay_user"},
-		fakeStep{Emit: "system_init"},
-		fakeStep{Emit: "assistant", Text: "one"},
-		fakeStep{Emit: "tool_use", ToolUseID: "toolu_1", ToolName: "Bash", Input: map[string]interface{}{"command": "ls"}},
-		fakeStep{Emit: "tool_result", ToolUseID: "toolu_1", Text: "a.go"},
-		fakeStep{Await: "release", Text: "switched"},
-		fakeStep{Emit: "assistant", Text: "two"},
-		fakeStep{Emit: "result", Text: "two"},
-	)
-	id := sup.job.SessionID
-	linkWaitFor(t, 15*time.Second, "a batch in flight", func() bool { return len(in.batchesOf(id)) > 0 })
-	r.g.setMode(linkpb.Mode_MODE_HTTP)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if _, err := r.t.heartbeat(linkTestHeartbeat(r.t.leaseOwner)); err != nil {
-		t.Fatal(err)
-	}
-	linkWaitFor(t, 5*time.Second, "the work to go back to HTTPS", func() bool { return !r.m.inUse() && ctx.Err() == nil })
-	sup.fake.Release("switched")
-	sup.awaitParked("turn-1")
-	viaHTTPS := map[int]int{}
-	sup.mu.Lock()
-	for _, ev := range sup.events {
-		viaHTTPS[ev.Seq]++
-	}
-	sup.mu.Unlock()
-	linkSeqs, tombstones, pings := in.storedSeqs(id)
-	if tombstones != 0 || pings != 0 {
-		t.Fatalf("the link's ingest holds %d tombstones and %d unstored pings", tombstones, pings)
-	}
-	all := map[int]bool{}
-	for _, seq := range linkSeqs {
-		all[int(seq)] = true
-	}
-	for seq := range viaHTTPS {
-		all[seq] = true
-	}
-	if len(linkSeqs) == 0 || len(viaHTTPS) == 0 {
-		t.Fatalf("seqs %v went over the link and %v over HTTPS: the switch did not come mid-stream", linkSeqs, viaHTTPS)
-	}
-	for seq := 1; seq <= len(all); seq++ {
-		if !all[seq] {
-			t.Fatalf("seq %d is nowhere: %d over the link, %v over HTTPS", seq, len(linkSeqs), viaHTTPS)
-		}
-	}
-	last := 0
-	for seq := range all {
-		last = max(last, seq)
-	}
-	if last != len(all) {
-		t.Fatalf("the seqs run to %d with %d of them stored", last, len(all))
-	}
-	var types []string
-	for seq := 1; seq <= last; seq++ {
-		if ev := in.event(id, uint64(seq)); ev != nil {
-			types = append(types, ev.GetType())
-			continue
-		}
-		sup.mu.Lock()
-		for _, ev := range sup.events {
-			if ev.Seq == seq {
-				types = append(types, ev.Type)
-				break
-			}
-		}
-		sup.mu.Unlock()
-	}
-	if joined := strings.Join(types, " "); !strings.HasSuffix(joined, "assistant turn_end") {
-		t.Errorf("the session's events run %s", joined)
-	}
-}
-
 // A client draws deltas into a draft the durable event that ends it replaces. Over the link the live stream is the
 // faster of the two, so the deltas emitted before an assistant block go at once, ahead of it, and those emitted after
 // it (the next block's) wait until it is stored: a client never draws a block's text again after its end, nor loses
@@ -719,19 +571,12 @@ func linkLiveTexts(f *linkpb.Frame) string {
 	return strings.Join(out, " ")
 }
 
-// A boundary event numbered over the link has the session's flush hand it over at once, not at its next tick; over
-// HTTPS the flush keeps its tick.
+// A boundary event has the session's flush hand it over at once, not at its next tick.
 func TestABoundaryOverTheLinkWakesTheFlush(t *testing.T) {
 	r, _ := newLinkEventsRig(t)
 	s, buf := linkSessionBuffer(r, "session-soon")
 	defer s.release()
 	buf.soon = make(chan struct{}, 1)
-	buf.add("turn-1", evTurnEnd, map[string]interface{}{}, nil)
-	select {
-	case <-buf.soon:
-		t.Fatal("over HTTPS a boundary woke the flush")
-	default:
-	}
 	r.useLink(t)
 	buf.add("turn-1", evToolUse, map[string]interface{}{"id": "toolu_1"}, nil)
 	select {
@@ -743,6 +588,6 @@ func TestABoundaryOverTheLinkWakesTheFlush(t *testing.T) {
 	select {
 	case <-buf.soon:
 	default:
-		t.Fatal("a boundary over the link did not wake the flush")
+		t.Fatal("a boundary did not wake the flush")
 	}
 }

@@ -55,6 +55,7 @@ import { encryptSecret } from './provider-crypto';
 import { ProvidersService } from './providers.service';
 import { POOL_GATEWAY_TOKEN_TTL_MS } from './shared-pool';
 import { SharedPoolsService } from './shared-pools.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'shared-pool-claim-spec';
@@ -149,7 +150,7 @@ suite('a shared pool at the claim: the gateway and a session token, nothing of a
   const providers = new ProvidersService(prisma, realtime, usage);
   const pools = new SharedPoolsService(prisma, realtime, providers);
   const runnerApi = new RunnerApiController(
-    db as never, queue as never, realtime as never, {} as never, {} as never, {} as never,
+    db as never, queue as never, realtime as never, {} as never, { issue: async () => 'orchestration-credential' } as never, {} as never,
   );
   t.after(async () => {
     await db.$disconnect();
@@ -159,7 +160,7 @@ suite('a shared pool at the claim: the gateway and a session token, nothing of a
   /** The runner asking for work — which has to be `sessionId` — and the session parked again after. */
   async function claim(who: Person, sessionId: string): Promise<ClaimedSession> {
     await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING } });
-    const claimed = await queue.claimSessionForRunner({ id: who.runnerId }, 0, false, false);
+    const claimed = await queue.claimSessionForRunner({ id: who.runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     assert.equal(claimed.sessionId, sessionId);
     await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
@@ -169,7 +170,7 @@ suite('a shared pool at the claim: the gateway and a session token, nothing of a
    *  it is not dispatched at all — it waits, PENDING, saying why — and is parked again after. */
   async function heldBack(who: Person, sessionId: string): Promise<void> {
     await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING } });
-    assert.equal(await queue.claimSessionForRunner({ id: who.runnerId }, 0, false, false), null, 'the runner was offered a session');
+    assert.equal(await queue.claimSessionForRunner({ id: who.runnerId }), null, 'the runner was offered a session');
     const { error } = await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { error: true } });
     assert.equal(error, PROVIDER_UNAVAILABLE_ERROR);
     await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });

@@ -319,15 +319,13 @@ export function isTransientTransactionError(cause: unknown): boolean {
 }
 
 /**
- * How long the runner door's two long polls (the session claim, the per-session inbox) may wait
- * for a pool connection.
+ * How long the session claim and the per-session inbox may wait for a pool connection.
  *
- * Both requests already sit on a 25s deadline waiting for WORK, so a poll that cannot get a
- * connection should queue behind the pool rather than fail. The 2s interactive default turned a
- * momentarily busy pool — a 40s dependency walk, a page scan over run_event, an
- * autovacuum-churned insert — into a 500 the runner retried immediately, and that retry churn is
- * most of what the 2026-09-16 pool contention was made of. Deliberately below the poll's own
- * deadline, which the caller still keeps.
+ * A runner asks again for either of them on its own, so a call that cannot get a connection should
+ * queue behind the pool rather than fail. The 2s interactive default turned a momentarily busy
+ * pool — a 40s dependency walk, a page scan over run_event, an autovacuum-churned insert — into a
+ * 500 the runner retried immediately, and that retry churn is most of what the 2026-09-16 pool
+ * contention was made of.
  */
 export const RUNNER_POLL_TRANSACTION_MAX_WAIT_MS = 20_000;
 

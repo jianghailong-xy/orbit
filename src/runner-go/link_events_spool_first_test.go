@@ -3,31 +3,23 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
-
 )
 
-// What a stopped runner left unacknowledged in the link spool is the session's, whatever carries its events next (task
-// 34mumXbJjOvZUwNmDNzmY, from the C1a rollback drill of 2026-10-27). There a runner stopped with its link gateway down
-// and kept seqs 10..65 of a session in the spool; started again with ORBIT_LINK_MODE=off, it never read them and
-// numbered its own events from the server's seq 9, so seqs 10..21 went to other events and 12 of the spool's were
-// acknowledged as stored when the link mode sent them later. So:
+// What a stopped runner left unacknowledged in the link spool goes first (task 34mumXbJjOvZUwNmDNzmY, from the C1a
+// rollback drill of 2026-10-27):
 //
-//   - the session's next supervisor sends what the spool holds first, by its own seqs, in link mode or not, and emits
-//     nothing until it is stored;
+//   - the session's next supervisor sends what the spool holds first, by its own seqs, and emits nothing until it is
+//     stored;
 //   - it numbers its own events after the spool's, never over them;
-//   - a runner that stops while its link is down sends what it holds over HTTPS, when the control plane still takes
-//     HTTPS, and keeps only what is left in the spool;
+//   - a runner that stops while its link is down keeps what it holds in the spool;
 //   - the spool's 72-hour cleanup says, session by session, what it loses.
 
 // spoolLeftBehind writes, in the spool in dir, what a runner in link mode leaves of a session when it stops with its link
@@ -56,165 +48,8 @@ func spoolFiles(dir string) []string {
 	return files
 }
 
-// seqStore is the control plane's run_event as a test sees it over HTTPS: the first event at each seq, and every
-// later delivery at a seq that is another event (what run-event-seq-conflicts.ts counts on the server).
-type seqStore struct {
-	mu        sync.Mutex
-	stored    map[int]RunEvent
-	conflicts []string
-}
-
-func (st *seqStore) take(events []RunEvent) {
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	if st.stored == nil {
-		st.stored = map[int]RunEvent{}
-	}
-	for _, e := range events {
-		prev, ok := st.stored[e.Seq]
-		if !ok {
-			st.stored[e.Seq] = e
-			continue
-		}
-		if prev.Type != e.Type || prev.TurnID != e.TurnID || prev.TS != e.TS {
-			st.conflicts = append(st.conflicts, fmt.Sprintf("seq %d: %s %v where %s %v is stored", e.Seq, e.Type, e.Payload, prev.Type, prev.Payload))
-		}
-	}
-}
-
-// With the link mode off, the supervisor of a session the spool holds events of sends them over HTTPS before it emits
-// anything, by their own seqs, and numbers its own events after them: none of them takes a seq of the spool's.
-func TestTheSpoolGoesFirstOverHTTPSWithTheLinkModeOff(t *testing.T) {
-	pool := newSessionPool(4)
-	logs := &linkTestLog{}
-	var spool []*linkEvent
-	var spoolDir string
-	var store seqStore
-	var mu sync.Mutex
-	var batches [][]int
-	var spoolAnswered, firstInbox time.Time
-	release := make(chan struct{})
-	s := superviseClaudeSessionVia(t, pool, t.TempDir(), context.Background(), func(s *supervisedSession, apiURL string) *Transport {
-		// The server holds the session's seqs 1..9; the spool, 10..65: ticks 6 to 60 and the turn's end.
-		s.job.MaxSeq = 9
-		spoolDir = linkSpoolDir()
-		spool = spoolLeftBehind(t, spoolDir, s.job.SessionID, 10, 56, "turn-0")
-		front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			switch {
-			case strings.HasSuffix(r.URL.Path, "/inbox"):
-				mu.Lock()
-				if firstInbox.IsZero() {
-					firstInbox = time.Now()
-				}
-				mu.Unlock()
-			case strings.HasSuffix(r.URL.Path, "/events") && r.Method == http.MethodPost:
-				body, _ := io.ReadAll(r.Body)
-				r.Body = io.NopCloser(bytes.NewReader(body))
-				var batch RunEventBatch
-				_ = json.Unmarshal(body, &batch)
-				var seqs []int
-				for _, e := range batch.Events {
-					seqs = append(seqs, e.Seq)
-				}
-				mu.Lock()
-				batches = append(batches, seqs)
-				first := len(batches) == 1
-				mu.Unlock()
-				if first {
-					// The spool's batch is answered only once the test has looked at what the supervisor did meanwhile.
-					select {
-					case <-release:
-					case <-time.After(20 * time.Second):
-					}
-				}
-				store.take(batch.Events)
-				s.serve(w, r)
-				if first {
-					mu.Lock()
-					spoolAnswered = time.Now()
-					mu.Unlock()
-				}
-				return
-			}
-			s.serve(w, r)
-		}))
-		t.Cleanup(front.Close)
-		tr := NewTransport(front.URL, "runner-token")
-		tr.spooled = newLinkEvents(nil, logs.log)
-		t.Cleanup(tr.spooled.close)
-		return tr
-	},
-		fakeStep{Await: "user"},
-		fakeStep{Emit: "replay_user"},
-		fakeStep{Emit: "system_init"},
-		fakeStep{Emit: "assistant", Text: "answered after the restart"},
-		fakeStep{Emit: "result", Text: "answered after the restart"},
-	)
-
-	// While the spool's batch waits for its answer, the supervisor emits nothing: no other batch, no turn fetched, no
-	// engine started.
-	waitUntil(t, func() bool {
-		mu.Lock()
-		defer mu.Unlock()
-		return len(batches) == 1
-	}, "the spool's events were never sent")
-	time.Sleep(300 * time.Millisecond)
-	mu.Lock()
-	sentMeanwhile, fetched := len(batches)-1, !firstInbox.IsZero()
-	mu.Unlock()
-	if sentMeanwhile != 0 || fetched || len(s.fake.Spawns()) != 0 {
-		t.Errorf("before the spool was stored the supervisor sent %d other batch(es), fetched a turn %v, started %d engine(s)",
-			sentMeanwhile, fetched, len(s.fake.Spawns()))
-	}
-	close(release)
-
-	s.awaitEvents("the turn's end", 1, func(e RunEvent) bool { return e.Type == evTurnEnd && e.TurnID == "turn-1" })
-	s.awaitParked("turn-1")
-	mu.Lock()
-	defer mu.Unlock()
-	if want := seqRange(10, 65); fmt.Sprint(batches[0]) != fmt.Sprint(want) {
-		t.Fatalf("the first batch carried %v, want the spool's seqs %v", batches[0], want)
-	}
-	if !firstInbox.After(spoolAnswered) {
-		t.Errorf("the first turn was fetched at %s, before the spool was stored at %s", firstInbox, spoolAnswered)
-	}
-	// Every seq once, from the spool's on, the spool's events at their own seqs and the session's after them.
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if len(store.conflicts) > 0 {
-		t.Errorf("events were sent at seqs holding others: %v", store.conflicts)
-	}
-	last := 0
-	for seq := range store.stored {
-		last = max(last, seq)
-	}
-	for seq := 10; seq <= last; seq++ {
-		e, ok := store.stored[seq]
-		if !ok {
-			t.Fatalf("seq %d was never sent (seqs 10..%d)", seq, last)
-		}
-		if seq <= 65 {
-			want := spool[seq-10]
-			if e.Type != want.typ || e.TurnID != "turn-0" || e.Payload["text"] != want.runEvent().Payload["text"] {
-				t.Errorf("seq %d carried %s %v, want the spool's %s %s", seq, e.Type, e.Payload, want.typ, want.payload)
-			}
-		} else if e.TurnID == "turn-0" {
-			t.Errorf("seq %d is the session's own event, yet carries the spool's turn: %+v", seq, e)
-		}
-	}
-	if last <= 65 {
-		t.Fatalf("the session's own events stop at seq %d: none was numbered after the spool", last)
-	}
-	if files := spoolFiles(spoolDir); len(files) != 0 {
-		t.Errorf("the spool still holds %v once its events are stored", files)
-	}
-	if !logged(logs, "has 56 events through seq 65 an earlier process could not send; they go first") {
-		t.Errorf("the runner never said what it found in the spool: %v", logs.all())
-	}
-}
-
-// In link mode the same holds: the spool goes first on the link, the supervisor emits nothing until it is stored, and
-// its own events are numbered after it.
+// The spool goes first on the link, the supervisor emits nothing until it is stored, and its own events are numbered
+// after it.
 func TestTheSpoolGoesFirstOverTheLinkBeforeTheSupervisorEmits(t *testing.T) {
 	r, in := newLinkEventsRig(t)
 	pool := newSessionPool(4)
@@ -280,8 +115,8 @@ func TestTheSpoolGoesFirstOverTheLinkBeforeTheSupervisorEmits(t *testing.T) {
 	}
 }
 
-// The seq the next supervisor numbers from is after both the server's last seq and the spool's, whichever is later,
-// with the link mode off as on: the spool's seqs are never taken again.
+// The seq the next supervisor numbers from is after both the server's last seq and the spool's, whichever is later: the
+// spool's seqs are never taken again.
 func TestNumberingStartsAfterTheSpoolAndTheServer(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	spoolLeftBehind(t, linkSpoolDir(), "session-n", 10, 56, "turn-0")
@@ -296,112 +131,50 @@ func TestNumberingStartsAfterTheSpoolAndTheServer(t *testing.T) {
 	}
 }
 
-// A runner stopping while its link has no connection does not wait for it: unless the control plane refused HTTPS, the
-// work goes back to HTTPS at once, so what the sessions' streams hold goes there within the stop's grace. One that
-// still has its connection keeps it, and goes back to HTTPS at once if it loses it while stopping.
-func TestAStoppingRunnerDoesNotWaitForALinkWithoutAConnection(t *testing.T) {
-	t.Run("not connected", func(t *testing.T) {
-		r, _ := newLinkEventsRig(t)
-		c := r.useLink(t)
-		down(r.g)
-		c.drop()
-		linkWaitFor(t, 5*time.Second, "the connection to be lost", func() bool { return r.m.work.current() == nil })
-		r.m.stopping()
-		if r.m.inUse() {
-			t.Fatal("a stopping runner without a link connection still waits for the link")
-		}
-		if !logged(r.logs, "runner link mode: off — the runner is stopping and the runner link is not connected; daemon calls go over HTTPS") {
-			t.Errorf("the runner never said why it went back to HTTPS: %v", r.logs.all())
-		}
-	})
-	t.Run("HTTPS refused", func(t *testing.T) {
-		r, _ := newLinkEventsRig(t)
-		c := r.useLink(t)
-		r.m.upgradeRequired("POST /runner/sessions/s/events") // RUNNER_LINK_REQUIRED: nothing else carries the work
-		down(r.g)
-		c.drop()
-		linkWaitFor(t, 5*time.Second, "the connection to be lost", func() bool { return r.m.work.current() == nil })
-		r.m.stopping()
-		time.Sleep(200 * time.Millisecond)
-		if !r.m.inUse() {
-			t.Fatal("with HTTPS refused, a stopping runner gave up the link")
-		}
-	})
-	t.Run("connected, then lost", func(t *testing.T) {
-		r, _ := newLinkEventsRig(t)
-		c := r.useLink(t)
-		r.m.stopping()
-		if !r.m.inUse() {
-			t.Fatal("a stopping runner gave up a link that is connected")
-		}
-		down(r.g)
-		c.drop()
-		linkWaitFor(t, 5*time.Second, "the work to go back to HTTPS", func() bool { return !r.m.inUse() })
-		if !logged(r.logs, "the runner is stopping and lost its runner link connection") {
-			t.Errorf("the runner never said why it went back to HTTPS: %v", r.logs.all())
-		}
-	})
-}
-
 // down has the gateway refuse every connection from now on, as one that is not there does.
 func down(g *fakeWorkGateway) {
 	g.mu.Lock()
-	g.refuse = func(*http.Request) (int, string, string) { return http.StatusServiceUnavailable, "the gateway is down", "" }
+	g.refuse = func(*http.Request) (int, string, string) {
+		return http.StatusServiceUnavailable, "the gateway is down", ""
+	}
 	g.mu.Unlock()
 }
 
-// A session whose turn ends while the link is down, on a runner that then stops with the control plane still taking
-// HTTPS: the turn's events and its completion go over HTTPS within the stop's grace, and the spool is left empty.
-func TestARunnerStoppingWithItsLinkDownSendsWhatItHoldsOverHTTPS(t *testing.T) {
-	r, in := newLinkEventsRig(t)
-	pool := newSessionPool(4)
-	shutdown, stop := context.WithCancel(context.Background())
-	defer stop()
-	s := superviseClaudeSessionOverLinkVia(t, r, pool, shutdown, nil,
-		fakeStep{Await: "user"},
-		fakeStep{Emit: "replay_user"},
-		fakeStep{Emit: "system_init"},
-		fakeStep{Emit: "assistant", Text: "on the link"},
-		fakeStep{Await: "release", Text: "gateway-down"},
-		fakeStep{Emit: "assistant", Text: "with the link down"},
-		fakeStep{Emit: "result", Text: "with the link down"},
-	)
-	linkWaitFor(t, 20*time.Second, "the first answer to be stored over the link", func() bool {
-		seqs, _, _ := in.storedSeqs(s.job.SessionID)
-		for _, seq := range seqs {
-			if e := in.event(s.job.SessionID, seq); e != nil && strings.Contains(string(e.GetPayloadJson()), "on the link") {
-				return true
-			}
-		}
-		return false
-	})
+// A session whose turn ends while the link is down, on a runner that then stops: nothing goes over HTTPS, and what the
+// stream holds is kept for the next process.
+func TestARunnerStoppingWithItsLinkDownKeepsWhatItHolds(t *testing.T) {
+	r, _ := newLinkEventsRig(t)
+	first := r.useLink(t)
+	stream, buf := linkSessionBuffer(r, "session-down")
+	defer stream.release()
 	down(r.g)
-	for _, c := range r.g.open() {
-		c.drop()
-	}
+	first.drop()
 	linkWaitFor(t, 5*time.Second, "the connection to be lost", func() bool { return r.m.work.current() == nil })
-	s.fake.Release("gateway-down")
-	stream := r.m.events.stream(s.job.SessionID)
-	linkWaitFor(t, 10*time.Second, "the turn's end to be handed to the stream", func() bool {
-		return streamHolds(stream, func(ev *linkEvent) bool { return ev.typ == evTurnEnd && ev.turnID == "turn-1" })
-	})
-	if n := s.countEvents(func(RunEvent) bool { return true }); n != 0 {
-		t.Fatalf("%d events went over HTTPS while the link was in use", n)
+	buf.add("turn-1", evAssistant, map[string]interface{}{"text": "with the link down"}, nil)
+	buf.add("turn-1", evTurnEnd, map[string]interface{}{}, nil)
+	if err := stream.submit(buf.take()); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	if err := stream.waitStored(ctx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("a wait for events with the link down: %v, want it to last its deadline", err)
 	}
 
-	// The runner stops, as runLoop's loopCtx tells the link mode and the supervisors.
-	stop()
-	r.m.stopping()
-	s.awaitEvents("the turn's end over HTTPS", 1, func(e RunEvent) bool { return e.Type == evTurnEnd && e.TurnID == "turn-1" })
-	waitUntil(t, func() bool { return s.settledTurn("turn-1") != nil }, "the turn's completion never reached the control plane")
-	if s.countEvents(func(e RunEvent) bool { return e.Payload["text"] == "with the link down" }) != 1 {
-		t.Errorf("the answer written with the link down reached the control plane over HTTPS %d time(s), want once",
-			s.countEvents(func(e RunEvent) bool { return e.Payload["text"] == "with the link down" }))
-	}
-	waitUntil(t, func() bool { held, _ := stream.holding(); return held == 0 }, "the stream still holds events once HTTPS stored them")
 	r.m.close()
-	if files := spoolFiles(r.m.events.spool.dir); len(files) != 0 {
-		t.Errorf("the spool holds %v after a stop that could send everything over HTTPS", files)
+	if n := len(r.cp.requests("/api/runner/sessions/session-down/events")); n != 0 {
+		t.Errorf("%d batches went over HTTPS", n)
+	}
+	files := spoolFiles(r.m.events.spool.dir)
+	if len(files) == 0 {
+		t.Fatal("the runner stopped with its link down and left nothing in the spool")
+	}
+	body, err := os.ReadFile(files[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(body, []byte(evTurnEnd)) {
+		t.Errorf("the spool holds %s, without the turn's end", body)
 	}
 }
 
@@ -479,4 +252,3 @@ func seqRangeU(from, to uint64) []uint64 {
 	}
 	return out
 }
-

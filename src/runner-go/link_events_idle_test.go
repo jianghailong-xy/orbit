@@ -2,12 +2,8 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
@@ -42,71 +38,8 @@ func idleSession(t *testing.T, tr *Transport, pool *sessionPool, sessionID strin
 	return job, live, cancel, done
 }
 
-// With the link mode off the spool goes over HTTPS at once, under this process's lease, though nobody claims the
-// session; the session stays idle meanwhile.
-func TestAnIdleSessionsSpoolGoesAtStartupOverHTTPS(t *testing.T) {
-	t.Setenv("ORBIT_HOME", t.TempDir())
-	logs := &linkTestLog{}
-	var store seqStore
-	var mu sync.Mutex
-	var owners []string
-	var tr *Transport
-	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/runner/sessions/sess-idle/events") && r.Method == http.MethodPost {
-			var batch RunEventBatch
-			_ = json.NewDecoder(r.Body).Decode(&batch)
-			store.take(batch.Events)
-			mu.Lock()
-			owners = append(owners, batch.LeaseOwner)
-			mu.Unlock()
-		}
-		_, _ = w.Write([]byte(`{}`))
-	}))
-	t.Cleanup(api.Close)
-	tr = NewTransport(api.URL, "runner-token")
-	tr.spooled = newLinkEvents(nil, logs.log)
-	t.Cleanup(tr.spooled.close)
-	spool := spoolLeftBehind(t, linkSpoolDir(), "sess-idle", 10, 56, "turn-0")
-	pool := newSessionPool(4)
-	_, live, _, done := idleSession(t, tr, pool, "sess-idle")
-
-	waitUntil(t, func() bool { return len(spoolFiles(linkSpoolDir())) == 0 }, "the idle session's spool was never sent")
-	// The last segment goes as its batch is stored; the send says so on its next pass, once it finds nothing held.
-	waitUntil(t, func() bool { return logged(logs, "the events idle session sess-idle held through seq 65 are stored") },
-		"the runner never said the idle session's spool was stored")
-	store.mu.Lock()
-	for i, want := range spool {
-		got, ok := store.stored[int(want.seq)]
-		if !ok || got.Type != want.typ || got.TurnID != "turn-0" {
-			t.Errorf("seq %d holds %+v, want the spool's %s (event %d)", want.seq, got, want.typ, i)
-		}
-	}
-	stored := len(store.stored)
-	store.mu.Unlock()
-	if stored != 56 {
-		t.Errorf("%d seqs stored, want the spool's 56", stored)
-	}
-	mu.Lock()
-	for _, owner := range owners {
-		if owner != tr.leaseOwner {
-			t.Errorf("a batch went under lease owner %q, want this process's %q", owner, tr.leaseOwner)
-		}
-	}
-	mu.Unlock()
-	if pool.isActive(live) {
-		t.Error("sending the spool made the idle session active")
-	}
-	select {
-	case <-done:
-		t.Error("the idle session stopped waiting for its claim once its spool was sent")
-	default:
-	}
-	if !logged(logs, "session sess-idle is idle; the 56 events through seq 65 an earlier process could not send go now, not at its next claim") {
-		t.Errorf("the runner did not say what it sent: %v", logs.all())
-	}
-}
-
-// Over the link the same: the stream's sender sends it on the work connection, and the spool is emptied.
+// The stream's sender sends it on the work connection at once, under this process's lease, though nobody claims the
+// session; the session stays idle meanwhile, and the spool is emptied.
 func TestAnIdleSessionsSpoolGoesAtStartupOverTheLink(t *testing.T) {
 	r, in := newLinkEventsRig(t)
 	in.preload("session-idle", seqRangeU(1, 9)...)
@@ -120,6 +53,11 @@ func TestAnIdleSessionsSpoolGoesAtStartupOverTheLink(t *testing.T) {
 	})
 	in.assertContiguous(t, "session-idle", 1, 65)
 	linkWaitFor(t, 5*time.Second, "the spool to be emptied", func() bool { return len(spoolFiles(r.m.events.spool.dir)) == 0 })
+	// The last segment goes as its batch is stored; the send says so on its next pass, once it finds nothing held.
+	waitUntil(t, func() bool {
+		return logged(r.logs, "the events idle session session-idle held through seq 65 are stored")
+	},
+		"the runner never said the idle session's spool was stored")
 	if pool.isActive(live) {
 		t.Error("sending the spool made the idle session active")
 	}
@@ -128,40 +66,22 @@ func TestAnIdleSessionsSpoolGoesAtStartupOverTheLink(t *testing.T) {
 		t.Error("the idle session stopped waiting for its claim once its spool was sent")
 	default:
 	}
+	if !logged(r.logs, "session session-idle is idle; the 56 events through seq 65 an earlier process could not send go now, not at its next claim") {
+		t.Errorf("the runner did not say what it sent: %v", r.logs.all())
+	}
 }
 
 // A claim while the spool is still going ends the send at once: the session's supervisor starts, and sends what is left
 // first itself. What was out is still on disk.
 func TestAClaimEndsTheIdleSessionsSendAndItsSupervisorTakesOver(t *testing.T) {
-	t.Setenv("ORBIT_HOME", t.TempDir())
-	logs := &linkTestLog{}
-	arrived := make(chan struct{})
-	release := make(chan struct{})
-	var once sync.Once
-	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/events") {
-			once.Do(func() { close(arrived) })
-			select {
-			case <-release:
-			case <-r.Context().Done():
-				return
-			}
-		}
-		_, _ = w.Write([]byte(`{}`))
-	}))
-	t.Cleanup(api.Close)
-	t.Cleanup(func() { close(release) })
-	tr := NewTransport(api.URL, "runner-token")
-	tr.spooled = newLinkEvents(nil, logs.log)
-	t.Cleanup(tr.spooled.close)
-	spoolLeftBehind(t, linkSpoolDir(), "sess-claimed", 10, 20, "turn-0")
+	r, in := newLinkEventsRig(t)
+	in.preload("sess-claimed", seqRangeU(1, 9)...)
+	in.setDown(true) // the control plane stores nothing while the send goes on
+	spoolLeftBehind(t, r.m.events.spool.dir, "sess-claimed", 10, 20, "turn-0")
+	r.useLink(t)
 	pool := newSessionPool(4)
-	job, _, _, done := idleSession(t, tr, pool, "sess-claimed")
-	select {
-	case <-arrived:
-	case <-time.After(10 * time.Second):
-		t.Fatal("the idle session's spool was never sent")
-	}
+	job, _, _, done := idleSession(t, r.t, pool, "sess-claimed")
+	linkWaitFor(t, 10*time.Second, "the idle session's spool to be sent", func() bool { return len(in.batchesOf("sess-claimed")) > 0 })
 	if _, ok := pool.activate(job); !ok {
 		t.Fatal("the claim did not activate the session")
 	}
@@ -173,10 +93,10 @@ func TestAClaimEndsTheIdleSessionsSendAndItsSupervisorTakesOver(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the claim did not end the idle session's wait: the send held it up")
 	}
-	if files := spoolFiles(linkSpoolDir()); len(files) != 1 {
+	if files := spoolFiles(r.m.events.spool.dir); len(files) != 1 {
 		t.Errorf("the spool holds %v, want the segment that was out, for the supervisor", files)
 	}
-	s := tr.spooled.open("sess-claimed")
+	s := r.m.events.open("sess-claimed")
 	defer s.release()
 	if held, through := s.holding(); held != 20 || through != 29 {
 		t.Errorf("the session's stream holds %d events through seq %d for its supervisor, want 20 through 29", held, through)

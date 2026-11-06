@@ -290,6 +290,7 @@ const USER_DRIVERS: Readonly<Record<string, Drive>> = {
   'POST /sessions/:id/merge-receipts': (s, w, id) =>
     s.receipts.record(w.ownerId, id, { result: 'ERROR', sourceSha: 'a'.repeat(40), targetBranch: 'main' }, 'USER'),
   'POST /sessions/:id/commit': (s, w, id) => s.sessions.commitWorktree(w.ownerId, id),
+  'POST /sessions/:id/checkout/discard': (s, w, id) => s.sessions.discardCheckout(w.ownerId, id),
   'POST /sessions/:id/adopt-branch': (s, w, id) => s.sessions.adoptWorktreeBranch(w.ownerId, id),
   'POST /sessions/:id/retry-message': (s, w, id) => s.autoRetry.resendRetryMessage(w.ownerId, id),
   'POST /sessions/:id/auto-retry': (s, w, id) => s.sessions.armAutoRetry(w.ownerId, id, future()),
@@ -355,8 +356,6 @@ const RUNNER_DRIVERS: Readonly<Record<string, Drive>> = {
     s.api.events({ id: w.runnerId, ownerId: w.ownerId } as never, id, { events: [] } as never),
   'POST /runner/sessions/:id/finalize': (s, w, id) =>
     s.api.finalize({ id: w.runnerId, ownerId: w.ownerId } as never, id, { status: 'CANCELLED' } as never),
-  'POST /runner/sessions/:id/complete': (s, w, id) =>
-    s.api.complete({ id: w.runnerId, ownerId: w.ownerId } as never, id, { status: 'CANCELLED' } as never),
   'POST /runner/sessions/:id/import-result': (s, w, id) =>
     s.api.importResult({ id: w.runnerId, ownerId: w.ownerId } as never, id, { ok: true }),
   'POST /runner/sessions/:id/merge-result': (s, w, id) =>

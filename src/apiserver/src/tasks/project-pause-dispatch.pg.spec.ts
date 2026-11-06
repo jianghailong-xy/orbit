@@ -97,6 +97,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { AUTO_RUN_RETRY_BACKOFF_MS } from './task-retry-policy';
 import { TaskOwnerConfirmationService } from './task-owner-confirmation.service';
 import { TasksService } from './tasks.service';
+import '../test-support/dequeue-under-lease';
 
 declare global {
   interface BigInt { toJSON(): string; }
