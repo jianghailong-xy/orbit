@@ -88,17 +88,10 @@ const SCANS: readonly KindFilteredScan[] = [
   },
   {
     file: 'src/runner-api/runner-api.controller.ts',
-    name: 'markProviderUpgradeRequired and markSourceProtocolUnsupported marks',
+    name: 'markProviderUpgradeRequired marks',
     anchor: 'const marked = await this.prisma.session.updateMany({',
     filter: "sessionKind: 'CONVERSATION',",
     within: 400,
-  },
-  {
-    file: 'src/runner-api/runner-api.controller.ts',
-    name: 'markSourceProtocolUnsupported (the PENDING pick)',
-    anchor: 'const pending = await this.prisma.session.findMany({\n      where: {\n        assignedRunnerId: runnerId,\n        status: RunStatus.PENDING,',
-    filter: "sessionKind: 'CONVERSATION',",
-    within: 220,
   },
   {
     file: 'src/realtime/realtime.service.ts',

@@ -47,6 +47,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * The three guardrails that keep "merge it" from becoming a machine that never stops.

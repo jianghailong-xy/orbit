@@ -19,9 +19,8 @@ import (
 	"orbit/linkpb"
 )
 
-// The runner link's durable event stream (docs/runner-link-design.md §5.8; task B8). While a session's work goes over
-// the link, its durable events go in EventBatch frames on the work connection rather than in POSTs to
-// /runner/sessions/<id>/events, and an EventAck says how far they are stored.
+// The runner link's durable event stream (docs/runner-link-design.md §5.8; task B8). A session's durable events go in
+// EventBatch frames on the work connection, and an EventAck says how far they are stored.
 //
 // What a session hands over stays here until an EventAck covers it: in memory up to linkSessionMemoryBytes for the
 // session and linkTotalMemoryBytes for all of them, then on disk under ~/.orbit/link-spool, up to linkSpoolMaxBytes
@@ -42,14 +41,13 @@ import (
 // names in rejected are held by tombstones on the server and are never sent again. A retryable failure has everything
 // after durable_seq sent again, in order, after the wait it names. One that is not retryable is the session's own
 // (CONFLICT, FORBIDDEN, NOT_FOUND) when the server stores no more of its events: the session is no longer open, or this
-// process lost its lease. Nothing is sent again, and the session's flush says so as the lease ownership error the
-// HTTPS path would have met, which ends its supervisor. Any other refusal (a 413, a 500 the data decided) is one the
-// HTTPS path sends again, flush after flush: the stream keeps the events and sends them again after a wait, as after a
-// retryable failure, and a wait for them is told of the refusal, as an HTTPS flush is. As HTTPS does, it gives up after
-// maxEventFlushServerRejections of them in a row (eventFlushRetryPolicy). HTTPS then drops the batch and goes on, but a
-// stream holds its events in seq order, and a batch never stored would hold back every one after it: the stream is
-// given up instead (abandonLocked). Nothing more is sent, what it holds is written to the spool rather than dropped,
-// and the session's supervisor ends the session with the refusal as its error (session.go).
+// process lost its lease. Nothing is sent again, and the session's flush says so as a lease ownership error, which ends
+// its supervisor. Any other refusal (a 413, a 500 the data decided) may pass: the stream keeps the events and sends them
+// again after a wait, as after a retryable failure, and a wait for them is told of the refusal. It gives up after
+// maxEventFlushServerRejections of them in a row. A stream holds its events in seq order, and a batch never stored would
+// hold back every one after it, so the stream is given up (abandonLocked). Nothing more is sent, what it holds is written
+// to the spool rather than dropped, and the session's supervisor ends the session with the refusal as its error
+// (session.go).
 //
 // Reconnecting. A new connection's Welcome says how far each session's events are stored (durable_seq, task B4a). What
 // is held after that is sent again from its smallest seq, every seq of it: a seq skipped would be a hole on the server
@@ -58,17 +56,13 @@ import (
 // last seq handed over and the claim's MaxSeq, plus one. A Welcome that names no session says nothing about it, and
 // everything held for it is sent again too.
 //
-// Back to HTTPS. When the link goes out of use (MODE_HTTP, the switch off), what is held is sent over HTTPS first, in
-// seq order, before anything newer (session.go). The server stores each seq once whichever way it came.
-//
 // Stopping. When the runner stops, what is held is written to the spool, and the next process's supervisor for the
 // session sends it first and numbers after it. A crash loses what was only in memory, at most linkSessionMemoryBytes
-// per session, as a crash of the HTTPS runner does.
+// per session.
 
 const (
 	// linkEventCadence is how often a session's durable events are sent when nothing sends them sooner (§5.8: about
-	// every one to three seconds). The HTTPS flush runs every 250ms, so an event that is not a boundary reaches
-	// clients up to about 0.75s later over the link; a boundary goes at once.
+	// every one to three seconds); a boundary goes at once.
 	linkEventCadence = time.Second
 	// The memory unacknowledged events may take before newer ones go to the spool on disk.
 	linkSessionMemoryBytes = 8 << 20
@@ -97,11 +91,6 @@ const (
 var linkEventRetryMax = 10 * time.Second
 
 var (
-	// errLinkEventsOffLink is a wait for a session's events that ended because the link went out of use: what is held
-	// goes over HTTPS instead.
-	errLinkEventsOffLink = errors.New("the runner link is no longer in use: the session's events go over HTTPS")
-	// errLinkEventsMoved is an HTTPS event batch answered UPGRADE_REQUIRED: the link carries the session's events now.
-	errLinkEventsMoved = errors.New("the control plane takes this session's events only over the runner link now")
 	// errLinkEventsSuperseded is events handed to a stream after its supervisor returned, while a newer supervisor of the
 	// session holds a stream of its own: they are not sent (linkEventStream.submit).
 	errLinkEventsSuperseded = errors.New("a newer supervisor holds the session's event stream: events handed over after their supervisor returned are not sent")
@@ -150,7 +139,7 @@ func (ev *linkEvent) proto() *linkpb.Event {
 	return &linkpb.Event{Seq: ev.seq, Type: ev.typ, TsUnixMs: ev.tsMs, TurnId: ev.turnID, PayloadJson: ev.payload}
 }
 
-// runEvent is the event as an HTTPS batch carries it.
+// runEvent is the event as a session's emitters made it, which criticalEventFlushFence reads.
 func (ev *linkEvent) runEvent() RunEvent {
 	var payload map[string]interface{}
 	_ = json.Unmarshal(ev.payload, &payload)
@@ -166,8 +155,8 @@ func linkEventTime(ts string) int64 {
 	return time.Now().UnixMilli()
 }
 
-// linkEvents is the durable event stream of one link mode: every session's unacknowledged events, the connection they
-// go out on, and its credit.
+// linkEvents is the durable event stream of the link: every session's unacknowledged events, the connection they go out
+// on, and its credit.
 type linkEvents struct {
 	m     *linkMode
 	log   func(...any)
@@ -176,9 +165,6 @@ type linkEvents struct {
 	wake chan struct{}
 	stop chan struct{}
 	done chan struct{}
-	// onLink is whether the link is in use (linkMode.inUse), kept here so that nothing of the stream asks the link mode,
-	// which calls into the stream while it holds its own lock. useChanged is closed, and replaced, whenever it changes.
-	onLink atomic.Bool
 	// creditBlocked is set while a session holds events the connection's credit has no room for (§5.8: the live stream
 	// is dropped then, and progress reports merge).
 	creditBlocked atomic.Bool
@@ -191,15 +177,14 @@ type linkEvents struct {
 	overBytes atomic.Int64
 
 	// mu is held only for moments, never across the disk or the network: emitters and the sender take it.
-	mu         sync.Mutex
-	streams    map[string]*linkEventStream // by session, as decodeSessionID spells it
-	loading    map[string]chan struct{}    // sessions whose stream open reads from the spool, closed once it is in streams
-	conn       *linkWorkConn               // the welcomed connection batches go out on; nil while there is none
-	credit     linkCredit                  // conn's
-	inflight   linkCredit                  // sent on conn and not acknowledged
-	useChanged chan struct{}
-	order      int // where the sender's next pass starts, so that no session always goes last
-	closed     bool
+	mu       sync.Mutex
+	streams  map[string]*linkEventStream // by session, as decodeSessionID spells it
+	loading  map[string]chan struct{}    // sessions whose stream open reads from the spool, closed once it is in streams
+	conn     *linkWorkConn               // the welcomed connection batches go out on; nil while there is none
+	credit   linkCredit                  // conn's
+	inflight linkCredit                  // sent on conn and not acknowledged
+	order    int                         // where the sender's next pass starts, so that no session always goes last
+	closed   bool
 }
 
 func newLinkEvents(m *linkMode, log func(...any)) *linkEvents {
@@ -207,7 +192,6 @@ func newLinkEvents(m *linkMode, log func(...any)) *linkEvents {
 		m: m, log: log, spool: newLinkSpool(linkSpoolDir(), log),
 		wake: make(chan struct{}, 1), stop: make(chan struct{}), done: make(chan struct{}),
 		streams: map[string]*linkEventStream{}, loading: map[string]chan struct{}{}, credit: linkDefaultCredit,
-		useChanged: make(chan struct{}),
 	}
 	go e.run()
 	return e
@@ -219,30 +203,6 @@ func (e *linkEvents) poke() {
 	case e.wake <- struct{}{}:
 	default:
 	}
-}
-
-// setOnLink takes whether the link is in use now. A wait for a session's events ends when it goes out of use.
-func (e *linkEvents) setOnLink(use bool) {
-	if e.onLink.Swap(use) == use {
-		return
-	}
-	e.mu.Lock()
-	close(e.useChanged)
-	e.useChanged = make(chan struct{})
-	if !use {
-		e.conn = nil
-	}
-	e.mu.Unlock()
-	if !use {
-		e.creditBlocked.Store(false) // credit is the link's: over HTTPS nothing holds events back
-	}
-	e.poke()
-}
-
-func (e *linkEvents) useChange() <-chan struct{} {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.useChanged
 }
 
 // open is the stream of a session a supervisor starts for, held until it releases it: the one this process already
@@ -479,7 +439,7 @@ func (e *linkEvents) pass(now time.Time) time.Time {
 	e.mu.Lock()
 	conn := e.conn
 	e.mu.Unlock()
-	if conn == nil || conn.ended() || !e.onLink.Load() {
+	if conn == nil || conn.ended() {
 		return next
 	}
 	blocked := false
@@ -529,7 +489,7 @@ type linkEventStream struct {
 	lastRow, storedRow uint64
 	// refused is the last refusal that was neither retryable nor the session's own, which the stream sends again after
 	// like a retryable failure; refusals counts them, so that a wait tells of one that came while it waited. refusedInARow
-	// counts those since the last ack that stored or failed retryably, as the HTTPS flush counts its 500s: at
+	// counts those since the last ack that stored or failed retryably: at
 	// maxEventFlushServerRejections the stream is given up (abandonLocked).
 	refused       error
 	refusals      int
@@ -546,7 +506,7 @@ type linkEventStream struct {
 	batchConn   *linkWorkConn
 	batchAmount linkCredit
 	// tail is the highest seq ever handed over; stored, the highest seq the control plane is known to hold every event
-	// of the session through (acks, Welcomes, and what went over HTTPS).
+	// of the session through (acks and Welcomes).
 	tail, stored uint64
 	// unsentSince is when the earliest event not yet sent was handed over; urgent sends the session's events without
 	// waiting for the cadence.
@@ -587,9 +547,6 @@ func newLinkEventStream(e *linkEvents, id, key string) *linkEventStream {
 	}
 	return s
 }
-
-// onLink reports whether the session's events go over the link now.
-func (s *linkEventStream) onLink() bool { return s.e.onLink.Load() }
 
 // holding is how many events the stream holds that are not known stored, and the highest seq handed over.
 func (s *linkEventStream) holding() (int, uint64) {
@@ -797,13 +754,9 @@ func (s *linkEventStream) holdLocked(ev *linkEvent) error {
 	return nil
 }
 
-// linkEventOf is re as the stream holds it. A live-only event numbered while the session's events went over HTTPS goes
-// as a bare ping holding its seq (linkLiveEventSeqPlaceholder). An event too large for any frame is trimmed.
+// linkEventOf is re as the stream holds it. An event too large for any frame is trimmed.
 func (s *linkEventStream) linkEventOf(re RunEvent) *linkEvent {
 	payload := re.Payload
-	if linkLiveOnlyTypes[re.Type] {
-		re.Type, payload = evSystem, linkLiveEventSeqPlaceholder()
-	}
 	raw, err := json.Marshal(payload)
 	if err != nil || payload == nil {
 		raw = []byte("{}")
@@ -836,7 +789,7 @@ func (s *linkEventStream) oneEventFrameSize(ev *linkEvent) int {
 // an emitter, which never waits: a stream busy with its spool leaves the report to take a seq of its own.
 func (s *linkEventStream) mergeProgress(buf []RunEvent, newest int, turnID, eventType string, payload map[string]interface{}) bool {
 	kind := linkProgressKind(eventType, payload)
-	if kind == "" || !s.onLink() || !s.e.creditBlocked.Load() {
+	if kind == "" || !s.e.creditBlocked.Load() {
 		return false
 	}
 	if n := len(buf); n > 0 {
@@ -1000,7 +953,7 @@ func (s *linkEventStream) acked(conn *linkWorkConn, ack *linkpb.EventAck) {
 			s.failLocked(refusal)
 			return
 		}
-		// Not the session's own: HTTPS sends such a batch again, and so does the stream, until it has been refused
+		// Not the session's own: the stream sends such a batch again, until it has been refused
 		// maxEventFlushServerRejections times in a row (eventFlushRetryPolicy). A wait for the events hears of each
 		// refusal, as an HTTPS flush would.
 		s.refusedInARow++
@@ -1123,15 +1076,6 @@ func (s *linkEventStream) forgetIfIdleLocked() {
 	}
 }
 
-// fail ends the stream for a refusal that came another way: over HTTPS, while the link was out of use.
-func (s *linkEventStream) fail(err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.failure == nil {
-		s.failLocked(err)
-	}
-}
-
 // failLocked ends the stream: the server stores nothing more of the session's, so what is held is dropped.
 func (s *linkEventStream) failLocked(err error) {
 	s.failure = err
@@ -1204,9 +1148,9 @@ func (s *linkEventStream) givenUp() error {
 	return nil
 }
 
-// linkEventsRefusal is a refusal that was not retryable, as the HTTPS answer the session's flush reads it as: the
-// session no longer open or this process's lease lost (CONFLICT, FORBIDDEN, NOT_FOUND) as the lease ownership error it
-// is (isLeaseOwnershipError).
+// linkEventsRefusal is a refusal that was not retryable, as the answer the session's flush reads it as: the session no
+// longer open or this process's lease lost (CONFLICT, FORBIDDEN, NOT_FOUND) as the lease ownership error it is
+// (isLeaseOwnershipError).
 func linkEventsRefusal(sessionID string, f *linkpb.Failure) error {
 	status := http.StatusBadRequest
 	switch f.GetCode() {
@@ -1243,10 +1187,9 @@ func (s *linkEventStream) resend(durable uint64, named bool) {
 }
 
 // waitStored waits until everything handed over so far is stored. It returns the refusal that ended the stream, if one
-// does, and errLinkEventsOffLink once the link is out of use: what is held then goes over HTTPS. A refusal the stream
-// sends again after (linkEventStream.refused) ends the wait too, as an HTTPS flush returns its error and keeps the
-// events for the next one. A stream a newer supervisor's took the place of waits only for what it holds itself: what
-// was handed to it after that was not sent (submit).
+// does. A refusal the stream sends again after (linkEventStream.refused) ends the wait too: the flush returns its error
+// and the stream keeps the events. A stream a newer supervisor's took the place of waits only for what it holds itself:
+// what was handed to it after that was not sent (submit).
 func (s *linkEventStream) waitStored(ctx context.Context) error {
 	s.mu.Lock()
 	target, refusals := s.tail, s.refusals
@@ -1254,10 +1197,6 @@ func (s *linkEventStream) waitStored(ctx context.Context) error {
 	s.mu.Unlock()
 	s.e.poke()
 	for {
-		useChanged := s.e.useChange()
-		if !s.onLink() {
-			return errLinkEventsOffLink
-		}
 		s.mu.Lock()
 		failure, stored, changed := s.failure, s.stored, s.changed
 		refused := s.refused
@@ -1276,73 +1215,19 @@ func (s *linkEventStream) waitStored(ctx context.Context) error {
 		}
 		select {
 		case <-changed:
-		case <-useChanged:
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
 }
 
-// heldHead is the earliest events held, up to about maxBytes of payload, as an HTTPS batch carries them: what goes
-// over HTTPS before anything newer once the link is out of use. Nothing while the link is in use again: the link sends
-// them, and the batch it has in flight stays as it is, counted against its connection's credit until its ack.
-func (s *linkEventStream) heldHead(maxBytes int) []RunEvent {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.failure != nil || s.onLink() {
-		return nil
-	}
-	// A batch in flight went on a connection that is gone: what it carried goes over HTTPS.
-	s.sentN, s.batchConn, s.batchAmount = 0, nil, linkCredit{}
-	s.fillLocked()
-	var out []RunEvent
-	size := 0
-	for _, ev := range s.mem {
-		if len(out) > 0 && size+len(ev.payload) > maxBytes {
-			break
-		}
-		out = append(out, ev.runEvent())
-		size += len(ev.payload)
-	}
-	return out
-}
-
-// storedOverHTTPS takes that HTTPS stored the session's events first through last. What the stream holds of them is
-// dropped, unless it still holds something older: HTTPS stores whatever it is given, so the batch says nothing about
-// the seqs before it.
-func (s *linkEventStream) storedOverHTTPS(first, last int) {
-	if last <= 0 {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if head, ok := s.headLocked(); ok && head < uint64(first) {
-		return
-	}
-	s.raiseStoredLocked(uint64(last))
-	s.dropThroughLocked(uint64(last))
-}
-
-// headLocked is the smallest seq the stream holds, if it holds any.
-func (s *linkEventStream) headLocked() (uint64, bool) {
-	switch {
-	case len(s.mem) > 0:
-		return s.mem[0].seq, true
-	case s.disk.count() > 0:
-		return s.disk.first(), true
-	case len(s.over) > 0:
-		return s.over[0].seq, true
-	}
-	return 0, false
-}
-
 // linkStoredSeqAfterTakeover is next, or one more than the highest seq the session has stored after it, when that is
-// later: where a supervisor that starts in link mode numbers from. The claim's MaxSeq was read before this process
+// later: where a supervisor numbers from. The claim's MaxSeq was read before this process
 // took over the session's lease, and a batch the process it took the session from had in flight can commit between
 // the two: a seq numbered again is skipped by the stored-once ingest, and its event is lost. Once the takeover has run,
 // which it has when a supervisor starts, the lease fence holds and the read sees every such batch. It cannot see a
 // tombstone at the very end of one (the route returns what a transcript replays), and a failed read leaves next as it
-// was; HTTPS reads nothing, and has the same window.
+// was.
 func linkStoredSeqAfterTakeover(ctx context.Context, t *Transport, sessionID string, next int) int {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -1362,24 +1247,6 @@ func linkStoredSeqAfterTakeover(ctx context.Context, t *Transport, sessionID str
 			return next
 		}
 	}
-}
-
-// deliver hands a session's events to its stream and waits until they are stored: postEvents, for a caller that is not
-// the session's supervisor, which holds its stream itself (session.go).
-func (e *linkEvents) deliver(ctx context.Context, sessionID string, events []RunEvent) error {
-	// What a Hello resumes the session from, and what its turn completion waits for, as over HTTPS (link_mode.go):
-	// kept beyond the stream, which goes once it holds nothing.
-	e.m.sentEvents(sessionID, events)
-	s := e.open(sessionID)
-	defer s.release()
-	if err := s.submit(events); err != nil {
-		return err
-	}
-	err := s.waitStored(ctx)
-	if err == nil {
-		e.m.storedEvents(sessionID, events)
-	}
-	return err
 }
 
 // persist writes what the stream holds to the spool, for the next process: the runner is stopping. What the disk

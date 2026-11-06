@@ -79,6 +79,7 @@ import { testManagedRunnerProfile } from '../test-support/managed-runner-profile
 import type { PersistentVolumeClaim, Pod, Secret } from './kube-client';
 import { GENERATION_ANNOTATION, bootstrapCredentialOf, managedPodName, managedSecretName } from './managed-runner-resources';
 import { MANAGED_RUNNER_KUBE_CLIENT_FACTORY, MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-runner-runtime';
+import '../test-support/daemon-routes-over-http';
 
 declare global {
   interface BigInt { toJSON(): string; }

@@ -271,37 +271,17 @@ suite('SOURCE freeze and pin, on real PostgreSQL', async (t) => {
   // S2.06 — the compatibility refusal
   // ---------------------------------------------------------------------------------------
 
-  await t.test('S2.06 a runner without source-pin/v1 is not offered the session, and it stays SELECTED', async () => {
+  await t.test('S2.06 a session with a resolved SOURCE goes to its runner with what it pins', async () => {
     await emptyWorld(client);
     const w = await world(db, 'capability');
     const sessionId = await createSession(db, w, w.taskId);
     const queue = queueService(db);
+    // A session an older control plane stalled still says so, until a claim disproves it.
+    await db.session.update({ where: { id: sessionId }, data: { error: SOURCE_PROTOCOL_UNSUPPORTED_ERROR } });
 
-    const refused = await queue.claimSessionForRunner({ id: w.runnerId }, 0, false, false);
-    assert.equal(refused, null, 'an incapable runner was handed a session with a resolved SOURCE');
-    // The marker is written by the claim preflight, exactly as the OpenCode one is: without it the
-    // row sits PENDING with nothing on it to say the machine, not the queue, is the reason.
-    await new RunnerApiController(
-      db as unknown as PrismaService,
-      queue,
-      { publishSessionCreated: () => {} } as unknown as RealtimeService,
-      {} as never, {} as never, {} as never, {} as never,
-    ).claim({ id: w.runnerId, ownerId: w.ownerId }, 'gpu');
-    const stalled = await db.session.findUniqueOrThrow({
-      where: { id: sessionId },
-      select: { status: true, sourceState: true, sourceRefusalCode: true, error: true },
-    });
-    assert.equal(stalled.error, SOURCE_PROTOCOL_UNSUPPORTED_ERROR);
-    // Not REFUSED: the state machine's refusal is terminal and recovery from it is a NEW session,
-    // whereas this row becomes runnable the moment a newer runner appears. Withholding is the
-    // whole answer (SR35).
-    assert.equal(stalled.status, RunStatus.PENDING);
-    assert.equal(stalled.sourceState, 'SELECTED');
-    assert.equal(stalled.sourceRefusalCode, null);
-
-    const claimed = await queue.claimSessionForRunner({ id: w.runnerId }, 0, false, true);
+    const claimed = await queue.claimSessionForRunner({ id: w.runnerId });
     assert.equal(claimed?.sessionId, sessionId);
-    // The stall was disproved by the claim itself, so its explanation goes: a running session that
+    // The stall is disproved by the claim itself, so its explanation goes: a running session that
     // still reads "no runner supports this" describes the one machine that just took it.
     const started = await db.session.findUniqueOrThrow({
       where: { id: sessionId }, select: { error: true },
@@ -317,7 +297,7 @@ suite('SOURCE freeze and pin, on real PostgreSQL', async (t) => {
     await emptyWorld(client);
     const w = await world(db, 'legacyclaim');
     const sessionId = await createSession(db, w, w.codelessTaskId);
-    const claimed = await queueService(db).claimSessionForRunner({ id: w.runnerId }, 0, false, false);
+    const claimed = await queueService(db).claimSessionForRunner({ id: w.runnerId });
     assert.equal(claimed?.sessionId, sessionId);
     // Absent, not "an object saying UNBOUND": an omitted field is exactly the payload every runner
     // has always received, which is what makes the compatibility claim a structural one (SR46).
@@ -398,7 +378,7 @@ suite('SOURCE freeze and pin, on real PostgreSQL', async (t) => {
     });
 
     // S2.05: the claim path (a resume) and the reclaim path (a runner restart) both READ.
-    const resumed = await queueService(db).claimSessionForRunner({ id: w.runnerId }, 0, false, true);
+    const resumed = await queueService(db).claimSessionForRunner({ id: w.runnerId });
     assert.equal(resumed?.sessionId, sessionId);
     assert.equal(resumed?.source?.state, 'PINNED');
     assert.equal(resumed?.source?.baseSha, startedFrom);

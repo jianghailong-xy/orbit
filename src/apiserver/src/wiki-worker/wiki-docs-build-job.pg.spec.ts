@@ -699,6 +699,16 @@ test('the confirmation makes a docs_build job and no task; the worker builds eve
     ['ended', 'succeeded', v2, { written: 1, unchanged: 2, failed: 0 }]);
   // The snapshot was not sent again: the space already held that commit.
   assert.deepEqual(runner.ops.filter((op) => op.kind === 'snapshot').map((op) => op.input.skipSha), [null, HEAD]);
+  // The overview it wrote again kept the one it replaced, as replaced by this build of v2 (docs.versions); the first
+  // build replaced nothing, and the two sections left as they were keep nothing.
+  const versions = await h.sql.query<{ section_key: string; reason: string; reason_plan_version: number | null; job_id: string; texts: number }>(
+    `SELECT "section_key", "reason", "reason_plan_version", "job_id"::text, jsonb_array_length("sentences")::int AS "texts"
+       FROM "wiki_doc_section_version" WHERE "space_id" = $1`,
+    [s.spaceId],
+  );
+  assert.deepEqual(versions.rows.map((row) => [row.section_key, row.reason, row.reason_plan_version, row.job_id]),
+    [[sections[0].key, 'build', v2, second!.job_id]]);
+  assert.ok(versions.rows[0].texts > 0, 'it holds the overview the first build wrote');
 });
 
 // ── references a draft was stored with, not found ──────────────────────────────────────────────────

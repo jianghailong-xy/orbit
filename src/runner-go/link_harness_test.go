@@ -8,12 +8,10 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha1"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,7 +20,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -36,8 +33,7 @@ import (
 )
 
 // The runner link tests' doubles: a control plane that mints link tokens and takes heartbeats and event batches, a
-// link gateway over TLS that greets, answers and compares mirrors by the rules of src/link-gateway/README.md, and a
-// proxy that tunnels, refuses or intercepts.
+// link gateway over TLS that greets and answers, and a proxy that tunnels, refuses or intercepts.
 
 // ── The control plane ───────────────────────────────────────────────────────────────────────────
 
@@ -121,6 +117,13 @@ func (cp *fakeLinkControlPlane) serve(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(`{}`))
 }
 
+// everything is what reached the control plane, in order.
+func (cp *fakeLinkControlPlane) everything() []fakeLinkRequest {
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+	return append([]fakeLinkRequest{}, cp.received...)
+}
+
 // requests is what reached path, in order.
 func (cp *fakeLinkControlPlane) requests(path string) []fakeLinkRequest {
 	cp.mu.Lock()
@@ -148,9 +151,8 @@ func fakeLinkToken(now time.Time, lifetime time.Duration, leaseOwner string, n i
 
 // ── The gateway ─────────────────────────────────────────────────────────────────────────────────
 
-// fakeLinkGateway is a link gateway over TLS for the tests: it checks the token names the Hello's process, greets
-// with Welcome in MODE_HTTP, answers every Heartbeat and Rpc, and pairs mirrors and compares them as the real one
-// does (compareLinkMirror).
+// fakeLinkGateway is a link gateway over TLS for the tests of the connection itself: it checks the token names the
+// Hello's process, greets with Welcome in MODE_HTTP, and answers every Heartbeat and Rpc.
 type fakeLinkGateway struct {
 	*httptest.Server
 	t *testing.T
@@ -161,9 +163,7 @@ type fakeLinkGateway struct {
 	// refuse, when it says so, refuses an upgrade with that status, body and Retry-After.
 	refuse func(r *http.Request) (status int, body, retryAfter string)
 	// stall, when set, stops reading a connection once it is welcomed: a gateway that takes no more.
-	stall    bool
-	pairs    []fakeLinkPair
-	unpaired []string
+	stall bool
 }
 
 type fakeLinkConn struct {
@@ -178,16 +178,6 @@ type fakeLinkConn struct {
 	ended  time.Time
 	status websocket.StatusCode
 	done   chan struct{}
-	typed  map[uint64]*linkpb.Frame
-}
-
-// fakeLinkPair is one mirror the gateway compared.
-type fakeLinkPair struct {
-	conn  string
-	kind  string
-	diffs []string
-	raw   *linkpb.TunnelRequest
-	typed *linkpb.Frame
 }
 
 func newFakeLinkGateway(t *testing.T) *fakeLinkGateway {
@@ -239,8 +229,7 @@ func (g *fakeLinkGateway) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	ws.SetReadLimit(1 << 20)
 	g.mu.Lock()
-	c := &fakeLinkConn{g: g, id: fmt.Sprintf("c-%016x", len(g.conns)+1), ws: ws, status: -1, done: make(chan struct{}),
-		typed: map[uint64]*linkpb.Frame{}}
+	c := &fakeLinkConn{g: g, id: fmt.Sprintf("c-%016x", len(g.conns)+1), ws: ws, status: -1, done: make(chan struct{})}
 	g.conns = append(g.conns, c)
 	stall := g.stall
 	g.mu.Unlock()
@@ -294,49 +283,17 @@ func (g *fakeLinkGateway) serve(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			g.mu.Lock()
 			c.ended, c.status = time.Now(), websocket.CloseStatus(err)
-			for id := range c.typed {
-				g.unpaired = append(g.unpaired, fmt.Sprintf("typed %s:%d closed", c.id, id))
-			}
 			g.mu.Unlock()
 			return
 		}
 		switch body := f.GetBody().(type) {
 		case *linkpb.Frame_Heartbeat:
 			c.send(&linkpb.Frame{Body: &linkpb.Frame_HeartbeatAck{HeartbeatAck: &linkpb.HeartbeatAck{Mode: linkpb.Mode_MODE_HTTP}}})
-			g.mu.Lock()
-			c.typed[f.GetId()] = f
-			g.mu.Unlock()
-		case *linkpb.Frame_EventBatch:
-			g.mu.Lock()
-			c.typed[f.GetId()] = f
-			g.mu.Unlock()
 		case *linkpb.Frame_Rpc:
-			g.takeRaw(c, body.Rpc)
 			c.send(&linkpb.Frame{Body: &linkpb.Frame_RpcResult{RpcResult: &linkpb.RpcResult{RequestId: body.Rpc.GetRequestId(),
 				Outcome: &linkpb.RpcResult_Failure{Failure: &linkpb.Failure{Code: "LINK_MODE_HTTP"}}}}})
 		}
 	}
-}
-
-// takeRaw pairs a raw half with the typed half its request_id names, and compares them.
-func (g *fakeLinkGateway) takeRaw(c *fakeLinkConn, rpc *linkpb.Rpc) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	rest, ok := strings.CutPrefix(rpc.GetRequestId(), linkShadowPrefix)
-	i := strings.LastIndexByte(rest, ':')
-	if !ok || i <= 0 || rest[:i] != c.id || rpc.GetTunnel() == nil {
-		g.unpaired = append(g.unpaired, "raw "+rpc.GetRequestId())
-		return
-	}
-	id, err := strconv.ParseUint(rest[i+1:], 10, 64)
-	typed := c.typed[id]
-	if err != nil || typed == nil {
-		g.unpaired = append(g.unpaired, "raw "+rpc.GetRequestId()+" names no typed half")
-		return
-	}
-	delete(c.typed, id)
-	kind, diffs := compareLinkMirror(typed, rpc.GetTunnel(), c.hello)
-	g.pairs = append(g.pairs, fakeLinkPair{conn: c.id, kind: kind, diffs: diffs, raw: rpc.GetTunnel(), typed: typed})
 }
 
 // fakeLinkTokenLease is the leaseOwner claim of the bearer token in authorization.
@@ -368,11 +325,10 @@ func (c *fakeLinkConn) send(f *linkpb.Frame) {
 }
 
 // snapshot is what the gateway has seen so far.
-func (g *fakeLinkGateway) snapshot() (conns []*fakeLinkConn, pairs []fakeLinkPair, unpaired []string, upgrades []time.Time) {
+func (g *fakeLinkGateway) snapshot() (conns []*fakeLinkConn, upgrades []time.Time) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return append([]*fakeLinkConn{}, g.conns...), append([]fakeLinkPair{}, g.pairs...), append([]string{}, g.unpaired...),
-		append([]time.Time{}, g.upgrades...)
+	return append([]*fakeLinkConn{}, g.conns...), append([]time.Time{}, g.upgrades...)
 }
 
 // linkWaitFor polls cond until it holds or d passes.
@@ -388,201 +344,6 @@ func linkWaitFor(t *testing.T, d time.Duration, what string, cond func() bool) {
 }
 
 // ── The comparison, by src/link-gateway/README.md ──────────────────────────────────────────────
-
-// compareLinkMirror compares a typed half with the raw half naming it, by the rules of the gateway's README
-// ("How the gateway compares"), and returns the kind and the fields that differ.
-func compareLinkMirror(typed *linkpb.Frame, req *linkpb.TunnelRequest, hello *linkpb.Hello) (string, []string) {
-	var diffs []string
-	add := func(format string, args ...any) { diffs = append(diffs, fmt.Sprintf(format, args...)) }
-	var members map[string]json.RawMessage
-	if json.Unmarshal(req.GetJsonBody(), &members) != nil || members == nil {
-		return "?", []string{"body: not a JSON object"}
-	}
-	str := func(m map[string]json.RawMessage, k string) string {
-		var s string
-		_ = json.Unmarshal(m[k], &s)
-		return s
-	}
-	switch {
-	case typed.GetHeartbeat() != nil:
-		hb := typed.GetHeartbeat()
-		if req.GetMethod() != "POST" || req.GetPath() != "/runner/heartbeat" {
-			add("route: %s %s", req.GetMethod(), req.GetPath())
-		}
-		if !strings.EqualFold(str(members, "leaseOwner"), hb.GetProcessId()) {
-			add("leaseOwner")
-		}
-		if n := strings.TrimSpace(string(members["idleCapacity"])); (n == "" && hb.GetIdleCapacity() != 0) ||
-			(n != "" && n != strconv.FormatUint(uint64(hb.GetIdleCapacity()), 10)) {
-			add("idleCapacity: HTTP %s, link %d", n, hb.GetIdleCapacity())
-		}
-		var draining bool
-		_ = json.Unmarshal(members["draining"], &draining)
-		if draining != hb.GetDraining() {
-			add("draining")
-		}
-		var ids []string
-		_ = json.Unmarshal(members["supervisedSessionIds"], &ids)
-		a, b := append([]string{}, ids...), append([]string{}, hb.GetSessionIds()...)
-		sort.Strings(a)
-		sort.Strings(b)
-		if strings.Join(a, ",") != strings.Join(b, ",") {
-			add("supervisedSessionIds")
-		}
-		if _, ok := members["version"]; ok && str(members, "version") != hello.GetRunnerVersion() {
-			add("version: HTTP %q, Hello %q", str(members, "version"), hello.GetRunnerVersion())
-		}
-		if _, ok := members["status"]; ok && str(members, "status") != "ONLINE" {
-			add("status")
-		}
-		facts := map[string]*linkpb.Fact{}
-		for _, f := range hb.GetFacts() {
-			if facts[f.GetKind()] != nil {
-				add("fact_duplicate: %s", f.GetKind())
-			}
-			facts[f.GetKind()] = f
-		}
-		for name, raw := range members {
-			if linkHeartbeatTyped[name] {
-				continue
-			}
-			f := facts[name]
-			switch {
-			case f == nil:
-				add("fact_missing: %s", name)
-			case len(f.GetJson()) == 0:
-				add("fact_json_missing: %s", name)
-			default:
-				if sum := sha256.Sum256(f.GetJson()); hex.EncodeToString(sum[:]) != f.GetSha256() {
-					add("fact_digest: %s", name)
-				}
-				if !linkJSONEqual(f.GetJson(), raw) {
-					add("fact_value: %s", name)
-				}
-			}
-		}
-		for kind := range facts {
-			if _, ok := members[kind]; !ok || linkHeartbeatTyped[kind] {
-				add("fact_extra: %s", kind)
-			}
-		}
-		sort.Strings(diffs)
-		return linkMirrorHeartbeat, diffs
-	case typed.GetEventBatch() != nil:
-		eb := typed.GetEventBatch()
-		if want := "/runner/sessions/" + eb.GetSessionId() + "/events"; req.GetMethod() != "POST" || req.GetPath() != want {
-			add("route: %s %s", req.GetMethod(), req.GetPath())
-		}
-		for name := range members {
-			if name != "leaseOwner" && name != "events" {
-				add("batch_member: %s", name)
-			}
-		}
-		if lo := str(members, "leaseOwner"); lo != "" && !strings.EqualFold(lo, hello.GetProcessId()) {
-			add("leaseOwner")
-		}
-		var events []map[string]json.RawMessage
-		_ = json.Unmarshal(members["events"], &events)
-		if len(events) != len(eb.GetEvents()) {
-			add("events_length: HTTP %d, link %d", len(events), len(eb.GetEvents()))
-		}
-		for i := range min(len(events), len(eb.GetEvents())) {
-			ev, le := events[i], eb.GetEvents()[i]
-			if s := strings.TrimSpace(string(ev["seq"])); s != strconv.FormatUint(le.GetSeq(), 10) {
-				add("seq %d", i)
-			}
-			if str(ev, "type") != le.GetType() {
-				add("type %d", i)
-			}
-			if ts, err := time.Parse(time.RFC3339Nano, str(ev, "ts")); err != nil || ts.UnixMilli() != le.GetTsUnixMs() {
-				add("ts %d", i)
-			}
-			if str(ev, "turnId") != le.GetTurnId() {
-				add("turnId %d", i)
-			}
-			payload, ok := ev["payload"]
-			if !ok {
-				payload = json.RawMessage("null")
-			}
-			if !linkJSONEqual(payload, le.GetPayloadJson()) {
-				add("payload %d", i)
-			}
-			for name := range ev {
-				switch name {
-				case "seq", "type", "ts", "turnId", "payload":
-				default:
-					add("event_member %d: %s", i, name)
-				}
-			}
-		}
-		sort.Strings(diffs)
-		return linkMirrorEvents, diffs
-	}
-	return "?", []string{"typed half is neither a Heartbeat nor an EventBatch"}
-}
-
-// linkJSONEqual compares two JSON texts as values: whitespace, member order, escapes and the spelling of a number do
-// not count.
-func linkJSONEqual(a, b []byte) bool {
-	x, errX := linkJSONValue(a)
-	y, errY := linkJSONValue(b)
-	return errX == nil && errY == nil && linkValueEqual(x, y)
-}
-
-func linkJSONValue(b []byte) (any, error) {
-	d := json.NewDecoder(bytes.NewReader(b))
-	d.UseNumber()
-	var v any
-	if err := d.Decode(&v); err != nil {
-		return nil, err
-	}
-	if _, err := d.Token(); err != io.EOF {
-		return nil, fmt.Errorf("data after the value")
-	}
-	return v, nil
-}
-
-func linkValueEqual(a, b any) bool {
-	switch x := a.(type) {
-	case json.Number:
-		y, ok := b.(json.Number)
-		if !ok {
-			return false
-		}
-		if i, err := strconv.ParseInt(string(x), 10, 64); err == nil {
-			j, err := strconv.ParseInt(string(y), 10, 64)
-			return err == nil && i == j
-		}
-		f, errX := strconv.ParseFloat(string(x), 64)
-		g, errY := strconv.ParseFloat(string(y), 64)
-		return errX == nil && errY == nil && f == g
-	case []any:
-		y, ok := b.([]any)
-		if !ok || len(x) != len(y) {
-			return false
-		}
-		for i := range x {
-			if !linkValueEqual(x[i], y[i]) {
-				return false
-			}
-		}
-		return true
-	case map[string]any:
-		y, ok := b.(map[string]any)
-		if !ok || len(x) != len(y) {
-			return false
-		}
-		for k, v := range x {
-			w, ok := y[k]
-			if !ok || !linkValueEqual(v, w) {
-				return false
-			}
-		}
-		return true
-	default:
-		return a == b
-	}
-}
 
 // ── The proxy ───────────────────────────────────────────────────────────────────────────────────
 
@@ -763,73 +524,37 @@ func newLinkTestClient(cp *fakeLinkControlPlane, processID string, roots *x509.C
 	return c
 }
 
-// linkTestRig is a runner's daemon transport against a control plane, with a shadow mirroring it to a gateway.
-type linkTestRig struct {
-	cp     *fakeLinkControlPlane
-	g      *fakeLinkGateway
-	t      *Transport
-	shadow *linkShadow
-	logs   *linkTestLog
-	stop   func()
-}
-
-// newLinkTestRig builds the rig; start runs its shadow.
-func newLinkTestRig(t *testing.T) *linkTestRig {
-	t.Helper()
-	g := newFakeLinkGateway(t)
-	cp := newFakeLinkControlPlane(t, g.linkURL())
-	tr := NewTransport(cp.URL, "runner-token")
-	logs := &linkTestLog{}
-	s := newLinkShadow(newLinkTestClient(cp, tr.leaseOwner, g.roots(), nil), logs.log)
-	s.pingEvery, s.settleWait = 200*time.Millisecond, 2*time.Second
-	if err := installLinkShadowTap(tr, s); err != nil {
-		t.Fatal(err)
+// linkTestHeartbeat is a heartbeat with something in every kind of member.
+func linkTestHeartbeat(leaseOwner string) HeartbeatRequest {
+	runsAsRoot := false
+	free := uint64(1<<62 + 1)
+	return HeartbeatRequest{
+		Status: "ONLINE", IdleCapacity: 3, Version: version, LeaseOwner: leaseOwner,
+		SupervisedSessionIDs: []string{"session-b", "session-a"},
+		Commands:             []SlashCommandInfo{{Name: "review", Description: "Review <changes> & report → naïve café 中文"}},
+		RuntimeDefaultModels: map[string]string{},
+		Engines:              []EngineHealthReport{{Engine: "claude", Installed: true, Version: "2.1.300", Auth: "yes"}},
+		AgentDirProbes:       []AgentDirProbe{{AgentID: "a1", WorkDir: "~/w", Exists: true, IsGitRepo: true, FreeBytes: &free}},
+		ReposRoot:            "/srv/repos/é",
+		RunsAsRoot:           &runsAsRoot,
+		SelfUpdate:           &SelfUpdateReport{State: "enabled"},
 	}
-	return &linkTestRig{cp: cp, g: g, t: tr, shadow: s, logs: logs}
 }
 
-func (r *linkTestRig) start(t *testing.T) {
-	t.Helper()
-	r.stop = r.shadow.start()
-	t.Cleanup(r.stop)
-}
-
-// connected waits until the gateway has welcomed n connections. That is the gateway's side only: it marks a
-// connection welcomed as it sends the Welcome, before the shadow has read it (taken).
-func (r *linkTestRig) connected(t *testing.T, n int) {
-	t.Helper()
-	linkWaitFor(t, 10*time.Second, fmt.Sprintf("%d welcomed connections", n), func() bool {
-		conns, _, _, _ := r.g.snapshot()
-		welcomed := 0
-		for _, c := range conns {
-			r.g.mu.Lock()
-			if !c.welcomed.IsZero() {
-				welcomed++
-			}
-			r.g.mu.Unlock()
+// linkTestEvents is a batch of n events from seq from, with a payload of about payloadBytes in every third.
+func linkTestEvents(from, n int, payloadBytes int) RunEventBatch {
+	var batch RunEventBatch
+	for i := 0; i < n; i++ {
+		ev := RunEvent{Seq: from + i, Type: "assistant", TS: nowISO(), TurnID: "turn-1",
+			Payload: map[string]interface{}{"text": fmt.Sprintf("<b>step %d</b> & \"quotes\" → 中文 %s", from+i,
+				strings.Repeat("x", payloadBytes)), "n": 1.5, "list": []interface{}{1, "two", nil, true}}}
+		switch i % 3 {
+		case 1:
+			ev.Payload, ev.TurnID = nil, "" // payload null, no turn
+		case 2:
+			ev.Type = "tool_result"
 		}
-		return welcomed >= n
-	})
-}
-
-// taken waits until the shadow has read the Welcome of the gateway's nth welcomed connection and taken it as its
-// own: after a time without one ("connected ...") or in place of the one before ("... replaced by ..."). What the
-// shadow counts and logs of a connection is written then, so a test that reads either after connected waits for this.
-func (r *linkTestRig) taken(t *testing.T, n int) {
-	t.Helper()
-	r.connected(t, n)
-	conns, _, _, _ := r.g.snapshot()
-	id := ""
-	r.g.mu.Lock()
-	for i, welcomed := 0, 0; i < len(conns) && id == ""; i++ {
-		if !conns[i].welcomed.IsZero() {
-			if welcomed++; welcomed == n {
-				id = conns[i].id
-			}
-		}
+		batch.Events = append(batch.Events, ev)
 	}
-	r.g.mu.Unlock()
-	linkWaitFor(t, 10*time.Second, "the shadow to take connection "+id, func() bool {
-		return logged(r.logs, "link shadow: connected "+id+" ") || logged(r.logs, " replaced by "+id+" (")
-	})
+	return batch
 }

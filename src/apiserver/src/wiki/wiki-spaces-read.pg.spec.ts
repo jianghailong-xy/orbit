@@ -383,7 +383,7 @@ test('each space carries what of its plan waits on the owner, the workspaces bou
     repoSha: 'c'.repeat(40),
     model: 'qwen3.8-27b-fp8',
     sections: [{ key: 's1', materialSha256: 'd'.repeat(64), markdown: 'Orbit 的会话跑在 runner 上。turn 先落库再投递。', footnotes: [] }],
-  });
+  }, { reason: 'build', jobId: randomUUID(), planVersion: v1 });
   for (const slug of ['wiki-plan', 'wiki-docs']) {
     await h.plans.proposeServer(drafter, {
       reason: `The plan has no document for ${slug}.`,

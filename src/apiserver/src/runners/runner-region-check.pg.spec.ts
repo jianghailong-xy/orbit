@@ -14,14 +14,13 @@
  *   3. GET /api/runners and /api/runners/:id carry the effective verdict, allowed once a blocked one is 24 hours old,
  *      and null for a runner that does not declare claude-region/v1 or that no check has decided.
  *   4. Check again: the owner's alone, refused offline and for a runner without the capability; the request reaches the
- *      runner in every heartbeat answer, over HTTPS and over the link, until a check at or after it reaches the route,
- *      and not past ten minutes. A newer request outlives an older check.
+ *      runner in every heartbeat answer, with no link context and over the link, until a check at or after it reaches the
+ *      route, and not past ten minutes. A newer request outlives an older check.
  *   5. A link call to the route is unknown, whatever its headers say: its connection is the link's.
- *   6. The route answers while RUNNER_LINK_REQUIRED is on, when the daemon's own routes answer 426.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runners/runner-region-check.pg.spec.ts
  *
- * Not destructive: every row belongs to the accounts this run creates, and the switch is left off.
+ * Not destructive: every row belongs to the accounts this run creates.
  */
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
@@ -38,6 +37,7 @@ import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-te
 import { hashPassword, sha256 } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import '../test-support/daemon-routes-over-http';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -71,7 +71,6 @@ test('the Claude region check: trusted headers only, kept without an address, re
   const db: PrismaClient = prismaClientFor(url);
   let server: Apiserver | undefined;
   t.after(async () => {
-    await sql.query(`UPDATE "runner_link_switch" SET "required" = false WHERE "id" = 1`).catch(() => undefined);
     await server?.stop();
     await db.$disconnect().catch(() => undefined);
     await sql.end().catch(() => undefined);
@@ -134,7 +133,7 @@ test('the Claude region check: trusted headers only, kept without an address, re
     (await db.runner.findUniqueOrThrow({ where: { id: runner.id }, select: { region: true } })).region as Record<string, unknown> | null;
   const requestedAtOf = async (runner: { id: string }) =>
     (await db.runner.findUniqueOrThrow({ where: { id: runner.id }, select: { regionCheckRequestedAt: true } })).regionCheckRequestedAt;
-  /** One HTTPS heartbeat, declaring the capability or not. */
+  /** One heartbeat with no link context, declaring the capability or not. */
   const beat = async (runner: { token: string }, capable = true) =>
     expect(await api('POST', '/runner/heartbeat', runner.token, { status: 'ONLINE', idleCapacity: 1 }, capable ? CAPABLE : {}), 201, 'a heartbeat');
 
@@ -259,7 +258,7 @@ test('the Claude region check: trusted headers only, kept without an address, re
     assert.equal((await regionOf(runner))?.verdict, 'blocked', 'declared again, the row reads again');
   });
 
-  await t.test('4. Check again reaches the runner in a heartbeat answer, over HTTPS and over the link, until a check answers it', async () => {
+  await t.test('4. Check again reaches the runner in a heartbeat answer, with no link context and over the link, until a check answers it', async () => {
     const runner = await machine('again');
     const ask = (who = owner.login, id = runner.id) => api('POST', `/runners/${uuidToBase62(id)}/region-check`, who);
     // Refused while it is offline: it has never beaten.
@@ -274,7 +273,7 @@ test('the Claude region check: trusted headers only, kept without an address, re
     await beat(runner);
     const asked = expect(await ask(), 201, 'Check again');
     assert.equal((await requestedAtOf(runner))?.toISOString(), asked.requestedAt);
-    // Over HTTPS: every answer carries it while it waits, and only to a process that declares the capability.
+    // Every answer carries it while it waits, and only to a process that declares the capability.
     for (let i = 0; i < 2; i += 1) assert.deepEqual((await beat(runner)).regionCheckRequest, { requestedAt: asked.requestedAt });
     assert.equal((await beat(runner, false)).regionCheckRequest, undefined, 'not to a process that would not check');
 
@@ -323,25 +322,4 @@ test('the Claude region check: trusted headers only, kept without an address, re
     assert.equal(await stored(runner), null);
   });
 
-  await t.test('6. the route answers while RUNNER_LINK_REQUIRED is on', async () => {
-    const runner = await machine('required');
-    await sql.query(
-      `INSERT INTO "runner_link_switch" ("id", "required", "updated_at") VALUES (1, true, now())
-       ON CONFLICT ("id") DO UPDATE SET "required" = true, "updated_at" = now()`,
-    );
-    // The switch is read again at most a second later (RUNNER_LINK_SWITCH_TTL_MS): wait for a daemon route to say so.
-    const started = Date.now();
-    for (;;) {
-      const me = await api('GET', '/runner/me', runner.token);
-      if (me.status === 426) break;
-      assert.ok(Date.now() - started < 10_000, `GET /runner/me still answers ${me.status}: ${me.text}`);
-      await sleep(100);
-    }
-    assert.equal((await api('POST', '/runner/heartbeat', runner.token, { status: 'ONLINE' }, CAPABLE)).status, 426, 'the daemon\'s beat is refused');
-    assert.deepEqual(await answerOf(runner, throughEdge('SG'), '1'), {
-      verdict: 'allowed', country: 'SG', regionCode: null, name: 'Singapore', viaProxy: true, asOf: CLAUDE_REGIONS_AS_OF,
-    });
-    assert.equal((await stored(runner))!.country, 'SG', 'and kept');
-    await sql.query(`UPDATE "runner_link_switch" SET "required" = false WHERE "id" = 1`);
-  });
 });

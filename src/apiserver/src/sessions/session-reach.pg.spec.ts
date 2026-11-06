@@ -77,6 +77,8 @@ import { TasksService } from '../tasks/tasks.service';
 import { MergeReceiptService } from './merge-receipt.service';
 import { SessionRequestService } from './session-request.service';
 import { SessionsService } from './sessions.service';
+import '../test-support/daemon-routes-over-http';
+import { sessionLease } from '../test-support/dequeue-under-lease';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -425,7 +427,7 @@ test('a session reaches a wider session only as the table says', {
       await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
     });
     for (let i = 0; i < 4; i++) {
-      const next = await send('GET', `${path(sessionId)}/inbox`);
+      const next = await send('GET', `${path(sessionId)}/inbox?leaseGeneration=${await sessionLease(prisma, sessionId)}`);
       assert.equal(next.status, 200, `inbox answered ${next.status}: ${next.text}`);
       if (next.json.kind === 'message') return { content: String(next.json.content), turnId: next.json.turnId ?? next.json.id };
     }
@@ -1057,7 +1059,7 @@ test('a session reaches a wider session only as the table says', {
     await deliveredTo(child);
     const sent = await send('POST', `${path(child)}/turns`, { message: 'hello', clientTurnId: randomUUID() }, await asSession(parent));
     assert.equal(sent.json.placement, 'steer', sent.text);
-    const steer = await send('GET', `${path(child)}/inbox?acceptsSteer=1`);
+    const steer = await send('GET', `${path(child)}/inbox?acceptsSteer=1&leaseGeneration=${await sessionLease(prisma, child)}`);
     assert.equal(steer.json.kind, 'steer', steer.text);
     assert.match(String(steer.json.content), /from-mode="default"/);
     assert.match(String(steer.json.content), /The sender runs in default, which is narrower than this session's auto\./);

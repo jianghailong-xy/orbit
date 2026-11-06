@@ -1,0 +1,737 @@
+{
+  "about": [
+    "The wiki chat's vectors (contracts/wiki.contract.json `chat`, `docs.follow`, `docs.versions`; docs/wiki-contract.md",
+    "§28–§30; docs/wiki-chat-design.md §3–§8): what a card shows and offers in each state, the line under an applied card,",
+    "the round button's look, what adds to the Wiki's waiting count, why a follow job waits, which two jobs of a space may",
+    "run at once, which sections a card rewrites, the sentence-level comparison See changes draws, what an attachment line",
+    "says, what a message's wikiContext may hold, and the Docs rows of Activity.",
+    "",
+    "src/shared/src/wikiChatContract.spec.ts runs every case through src/shared/src/wikiChat.ts, the functions the server",
+    "computes its states and counts with. OrbitKit mirrors the client half (the card, the line, the button, the counts,",
+    "the notes and the rows) and reads this same file; the web reads the shared functions themselves. Plain JSON, no",
+    "comments and no TypeScript, so both ends read one answer. The words are the contract's `chat.copy`, `docs.follow.copy`",
+    "and `docs.versions.copy`, which the spec holds to WIKI_CHAT_COPY.",
+    "",
+    "A card here is { kind, state, undoable, rewrite }: the card read's fields these derivations use (contract",
+    "`chat.drafts.read`). `facts` are what `state` is derived from (contract `chat.drafts.derivation`)."
+  ],
+  "cards": [
+    {
+      "name": "a fresh draft of one add",
+      "facts": { "decision": null, "undone": false, "replaced": false, "chatOpen": true, "baseMoved": false },
+      "kind": "entry",
+      "ops": [{ "op": "add", "kind": "decision" }],
+      "undoable": false,
+      "state": "draft",
+      "label": "Add decision",
+      "title": "Draft · Add decision",
+      "actions": ["apply", "edit", "discard"],
+      "needsYou": true
+    },
+    {
+      "name": "a fresh draft of an amend",
+      "facts": { "decision": null, "undone": false, "replaced": false, "chatOpen": true, "baseMoved": false },
+      "kind": "entry",
+      "ops": [{ "op": "amend" }],
+      "undoable": false,
+      "state": "draft",
+      "label": "Amend entry",
+      "title": "Draft · Amend entry",
+      "actions": ["apply", "edit", "discard"],
+      "needsYou": true
+    },
+    {
+      "name": "a draft of two ops",
+      "facts": { "decision": null, "undone": false, "replaced": false, "chatOpen": true, "baseMoved": false },
+      "kind": "entry",
+      "ops": [{ "op": "amend" }, { "op": "reinforce" }],
+      "undoable": false,
+      "state": "draft",
+      "label": "2 changes",
+      "title": "Draft · 2 changes",
+      "actions": ["apply", "edit", "discard"],
+      "needsYou": true
+    },
+    {
+      "name": "a rewrite drafted from main",
+      "facts": { "decision": null, "undone": false, "replaced": false, "chatOpen": true, "baseMoved": false },
+      "kind": "rewrite",
+      "ops": [],
+      "undoable": false,
+      "state": "draft",
+      "label": "Rewrite from main",
+      "title": "Draft · Rewrite from main",
+      "actions": ["rewrite", "discard"],
+      "needsYou": true
+    },
+    {
+      "name": "a plan change",
+      "facts": { "decision": null, "undone": false, "replaced": false, "chatOpen": true, "baseMoved": false },
+      "kind": "plan",
+      "ops": [],
+      "undoable": false,
+      "state": "draft",
+      "label": "Plan change",
+      "title": "Draft · Plan change",
+      "actions": ["apply_rebuild", "open_in_plan", "discard"],
+      "needsYou": true
+    },
+    {
+      "name": "replaced by a newer draft of the chat",
+      "facts": { "decision": null, "undone": false, "replaced": true, "chatOpen": true, "baseMoved": false },
+      "kind": "entry",
+      "ops": [{ "op": "add", "kind": "pitfall" }],
+      "undoable": false,
+      "state": "replaced",
+      "label": "Add pitfall",
+      "title": "Replaced",
+      "actions": [],
+      "needsYou": false
+    },
+    {
+      "name": "replaced, in a chat that has ended since: replaced is what happened to it first",
+      "facts": { "decision": null, "undone": false, "replaced": true, "chatOpen": false, "baseMoved": true },
+      "kind": "entry",
+      "ops": [{ "op": "add", "kind": "pitfall" }],
+      "undoable": false,
+      "state": "replaced",
+      "label": "Add pitfall",
+      "title": "Replaced",
+      "actions": [],
+      "needsYou": false
+    },
+    {
+      "name": "the entry moved off the draft's baseRevision",
+      "facts": { "decision": null, "undone": false, "replaced": false, "chatOpen": true, "baseMoved": true },
+      "kind": "entry",
+      "ops": [{ "op": "amend" }],
+      "undoable": false,
+      "state": "changed",
+      "label": "Amend entry",
+      "title": "Changed since this draft",
+      "actions": ["redo", "discard"],
+      "needsYou": true
+    },
+    {
+      "name": "the chat ended with the draft unanswered",
+      "facts": { "decision": null, "undone": false, "replaced": false, "chatOpen": false, "baseMoved": false },
+      "kind": "entry",
+      "ops": [{ "op": "add", "kind": "convention" }],
+      "undoable": false,
+      "state": "not_applied",
+      "label": "Add convention",
+      "title": "Not applied",
+      "actions": [],
+      "needsYou": false
+    },
+    {
+      "name": "the chat ended and the base moved: not applied, nothing left to press",
+      "facts": { "decision": null, "undone": false, "replaced": false, "chatOpen": false, "baseMoved": true },
+      "kind": "rewrite",
+      "ops": [],
+      "undoable": false,
+      "state": "not_applied",
+      "label": "Rewrite from main",
+      "title": "Not applied",
+      "actions": [],
+      "needsYou": false
+    },
+    {
+      "name": "applied: Undo and Open entry",
+      "facts": { "decision": "applied", "undone": false, "replaced": false, "chatOpen": true, "baseMoved": false },
+      "kind": "entry",
+      "ops": [{ "op": "add", "kind": "decision" }],
+      "undoable": true,
+      "state": "applied",
+      "label": "Add decision",
+      "title": "Applied · Confirmed by you",
+      "actions": ["undo", "open_entry"],
+      "needsYou": false
+    },
+    {
+      "name": "edited and applied in one press reads the same as applied",
+      "facts": { "decision": "edited", "undone": false, "replaced": false, "chatOpen": true, "baseMoved": false },
+      "kind": "entry",
+      "ops": [{ "op": "amend" }],
+      "undoable": true,
+      "state": "applied",
+      "label": "Amend entry",
+      "title": "Applied · Confirmed by you",
+      "actions": ["undo", "open_entry"],
+      "needsYou": false
+    },
+    {
+      "name": "a supersede applied: it ended a lineage, so no Undo",
+      "facts": { "decision": "applied", "undone": false, "replaced": false, "chatOpen": true, "baseMoved": true },
+      "kind": "entry",
+      "ops": [{ "op": "supersede" }],
+      "undoable": false,
+      "state": "applied",
+      "label": "Supersede entry",
+      "title": "Applied · Confirmed by you",
+      "actions": ["open_entry"],
+      "needsYou": false
+    },
+    {
+      "name": "applied in a chat that has ended since: the press stands",
+      "facts": { "decision": "applied", "undone": false, "replaced": false, "chatOpen": false, "baseMoved": false },
+      "kind": "rewrite",
+      "ops": [],
+      "undoable": true,
+      "state": "applied",
+      "label": "Rewrite from main",
+      "title": "Applied · Confirmed by you",
+      "actions": ["undo"],
+      "needsYou": false
+    },
+    {
+      "name": "applied, then undone",
+      "facts": { "decision": "applied", "undone": true, "replaced": false, "chatOpen": true, "baseMoved": false },
+      "kind": "entry",
+      "ops": [{ "op": "add", "kind": "decision" }],
+      "undoable": false,
+      "state": "undone",
+      "label": "Add decision",
+      "title": "Undone",
+      "actions": [],
+      "needsYou": false
+    },
+    {
+      "name": "discarded",
+      "facts": { "decision": "discarded", "undone": false, "replaced": true, "chatOpen": false, "baseMoved": true },
+      "kind": "entry",
+      "ops": [{ "op": "retire" }],
+      "undoable": false,
+      "state": "discarded",
+      "label": "Retire entry",
+      "title": "Discarded",
+      "actions": [],
+      "needsYou": false
+    }
+  ],
+  "results": [
+    {
+      "name": "queued or running, before the job named its commit",
+      "card": { "kind": "entry", "state": "applied", "undoable": true,
+        "rewrite": { "result": "rewriting", "reason": null, "sha": null, "seen": false,
+          "sections": [{ "where": "3.1 §3", "result": null }, { "where": "7.1 §2", "result": null }] } },
+      "line": "Rewriting 3.1 §3 and 7.1 §2…",
+      "actions": ["undo", "open_entry"],
+      "waits": false,
+      "needsYou": false
+    },
+    {
+      "name": "running from a commit (board 42 ③)",
+      "card": { "kind": "entry", "state": "applied", "undoable": true,
+        "rewrite": { "result": "rewriting", "reason": null, "sha": "7f3e2a1c9b8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f", "seen": false,
+          "sections": [{ "where": "3.1 §3", "result": null }, { "where": "7.1 §2", "result": null }] } },
+      "line": "Rewriting 3.1 §3 and 7.1 §2 from main@7f3e2a1…",
+      "actions": ["undo", "open_entry"],
+      "waits": false,
+      "needsYou": false
+    },
+    {
+      "name": "three sections, listed with a comma and an and",
+      "card": { "kind": "rewrite", "state": "applied", "undoable": true,
+        "rewrite": { "result": "rewriting", "reason": null, "sha": null, "seen": false,
+          "sections": [{ "where": "3.1 §3", "result": null }, { "where": "3.1 §4", "result": null }, { "where": "7.1 §2", "result": null }] } },
+      "line": "Rewriting 3.1 §3, 3.1 §4 and 7.1 §2…",
+      "actions": ["undo"],
+      "waits": false,
+      "needsYou": false
+    },
+    {
+      "name": "held up by maintenance writing the documents",
+      "card": { "kind": "entry", "state": "applied", "undoable": true,
+        "rewrite": { "result": "waiting", "reason": "maintenance_running", "sha": null, "seen": false,
+          "sections": [{ "where": "3.1 §3", "result": null }] } },
+      "line": "Rewrite waiting · Maintenance is running",
+      "actions": ["undo", "open_entry"],
+      "waits": true,
+      "needsYou": true
+    },
+    {
+      "name": "held up by what the owner fixes in Settings, which seeing does not settle",
+      "card": { "kind": "entry", "state": "applied", "undoable": true,
+        "rewrite": { "result": "waiting", "reason": "no_workspace", "sha": null, "seen": true,
+          "sections": [{ "where": "3.1 §3", "result": null }] } },
+      "line": "Rewrite waiting · Maintenance has no workspace",
+      "actions": ["undo", "open_entry", "settings"],
+      "waits": true,
+      "needsYou": true
+    },
+    {
+      "name": "one section changed and one reads the same (board 42 ③): it waits until the owner has seen it",
+      "card": { "kind": "entry", "state": "applied", "undoable": true,
+        "rewrite": { "result": "same", "reason": null, "sha": "7f3e2a1c9b8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f", "seen": false,
+          "sections": [{ "where": "3.1 §3", "result": "updated", "changed": 1 }, { "where": "7.1 §2", "result": "same" }] } },
+      "line": "Wiki updated · 3.1 §3 — 1 sentence · 7.1 §2 — reads the same",
+      "actions": ["undo", "open_entry", "see_changes"],
+      "waits": true,
+      "needsYou": true
+    },
+    {
+      "name": "the same, once seen",
+      "card": { "kind": "entry", "state": "applied", "undoable": true,
+        "rewrite": { "result": "same", "reason": null, "sha": "7f3e2a1c9b8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f", "seen": true,
+          "sections": [{ "where": "3.1 §3", "result": "updated", "changed": 1 }, { "where": "7.1 §2", "result": "same" }] } },
+      "line": "Wiki updated · 3.1 §3 — 1 sentence · 7.1 §2 — reads the same",
+      "actions": ["undo", "open_entry", "see_changes"],
+      "waits": false,
+      "needsYou": false
+    },
+    {
+      "name": "every section changed",
+      "card": { "kind": "entry", "state": "applied", "undoable": true,
+        "rewrite": { "result": "updated", "reason": null, "sha": "7f3e2a1c9b8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f", "seen": false,
+          "sections": [{ "where": "3.1 §3", "result": "updated", "changed": 2 }] } },
+      "line": "Wiki updated · 3.1 §3 — 2 sentences",
+      "actions": ["undo", "open_entry", "see_changes"],
+      "waits": false,
+      "needsYou": false
+    },
+    {
+      "name": "read the same, alone",
+      "card": { "kind": "rewrite", "state": "applied", "undoable": true,
+        "rewrite": { "result": "same", "reason": null, "sha": "7f3e2a1c9b8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f", "seen": false,
+          "sections": [{ "where": "3.1 §3", "result": "same" }] } },
+      "line": "3.1 §3 — reads the same",
+      "actions": ["undo", "see_changes"],
+      "waits": true,
+      "needsYou": true
+    },
+    {
+      "name": "failed: Try again",
+      "card": { "kind": "entry", "state": "applied", "undoable": true,
+        "rewrite": { "result": "failed", "reason": null, "sha": "7f3e2a1c9b8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f", "seen": false,
+          "sections": [{ "where": "3.1 §3", "result": "failed" }, { "where": "7.1 §2", "result": "updated", "changed": 1 }] } },
+      "line": "Rewrite failed",
+      "actions": ["undo", "open_entry", "try_again"],
+      "waits": true,
+      "needsYou": true
+    },
+    {
+      "name": "failed and seen: the owner knows, and the section stays stale for the next maintenance run",
+      "card": { "kind": "entry", "state": "applied", "undoable": false,
+        "rewrite": { "result": "failed", "reason": null, "sha": null, "seen": true,
+          "sections": [{ "where": "3.1 §3", "result": "failed" }] } },
+      "line": "Rewrite failed",
+      "actions": ["open_entry", "try_again"],
+      "waits": false,
+      "needsYou": false
+    },
+    {
+      "name": "the plan no longer has the section (design §10)",
+      "card": { "kind": "entry", "state": "applied", "undoable": true,
+        "rewrite": { "result": "gone", "reason": null, "sha": null, "seen": false,
+          "sections": [{ "where": "3.1 §3", "result": "gone" }] } },
+      "line": "3.1 §3 — no longer in the plan",
+      "actions": ["undo", "open_entry"],
+      "waits": false,
+      "needsYou": false
+    },
+    {
+      "name": "undone: what its rewrite did no longer waits on anyone",
+      "card": { "kind": "entry", "state": "undone", "undoable": false,
+        "rewrite": { "result": "failed", "reason": null, "sha": null, "seen": false,
+          "sections": [{ "where": "3.1 §3", "result": "failed" }] } },
+      "line": "Rewrite failed",
+      "actions": [],
+      "waits": false,
+      "needsYou": false
+    }
+  ],
+  "fab": [
+    {
+      "name": "no chat yet",
+      "chats": [],
+      "counts": { "needsYou": 0, "working": false, "updated": 0 },
+      "state": "idle",
+      "label": "Chat"
+    },
+    {
+      "name": "a turn running",
+      "chats": [{ "open": true, "turnActive": true, "approvals": 0, "cards": [] }],
+      "counts": { "needsYou": 0, "working": true, "updated": 0 },
+      "state": "working",
+      "label": "Working…"
+    },
+    {
+      "name": "one draft waiting for Apply",
+      "chats": [{ "open": true, "turnActive": false, "approvals": 0,
+        "cards": [{ "kind": "entry", "state": "draft", "undoable": false, "rewrite": null }] }],
+      "counts": { "needsYou": 1, "working": false, "updated": 0 },
+      "state": "needs_you",
+      "label": "1 needs you"
+    },
+    {
+      "name": "a draft, an approval and a failed rewrite: needs you beats working",
+      "chats": [
+        { "open": true, "turnActive": true, "approvals": 1,
+          "cards": [{ "kind": "entry", "state": "draft", "undoable": false, "rewrite": null }] },
+        { "open": false, "turnActive": false, "approvals": 0,
+          "cards": [{ "kind": "entry", "state": "applied", "undoable": true,
+            "rewrite": { "result": "failed", "reason": null, "sha": null, "seen": false, "sections": [{ "where": "3.1 §3", "result": "failed" }] } }] }
+      ],
+      "counts": { "needsYou": 3, "working": true, "updated": 0 },
+      "state": "needs_you",
+      "label": "3 need you"
+    },
+    {
+      "name": "an ended chat: its approvals are no one's, its unanswered drafts are not applied",
+      "chats": [{ "open": false, "turnActive": false, "approvals": 2,
+        "cards": [{ "kind": "entry", "state": "not_applied", "undoable": false, "rewrite": null }] }],
+      "counts": { "needsYou": 0, "working": false, "updated": 0 },
+      "state": "idle",
+      "label": "Chat"
+    },
+    {
+      "name": "a rewrite in progress is work",
+      "chats": [{ "open": true, "turnActive": false, "approvals": 0,
+        "cards": [{ "kind": "entry", "state": "applied", "undoable": true,
+          "rewrite": { "result": "rewriting", "reason": null, "sha": null, "seen": false, "sections": [{ "where": "3.1 §3", "result": null }] } }] }],
+      "counts": { "needsYou": 0, "working": true, "updated": 0 },
+      "state": "working",
+      "label": "Working…"
+    },
+    {
+      "name": "a rewrite done and not opened yet",
+      "chats": [{ "open": true, "turnActive": false, "approvals": 0,
+        "cards": [{ "kind": "entry", "state": "applied", "undoable": true,
+          "rewrite": { "result": "updated", "reason": null, "sha": null, "seen": false, "sections": [{ "where": "3.1 §3", "result": "updated", "changed": 1 }] } }] }],
+      "counts": { "needsYou": 0, "working": false, "updated": 1 },
+      "state": "updated",
+      "label": "Wiki updated"
+    },
+    {
+      "name": "opened: the check goes away",
+      "chats": [{ "open": true, "turnActive": false, "approvals": 0,
+        "cards": [{ "kind": "entry", "state": "applied", "undoable": true,
+          "rewrite": { "result": "updated", "reason": null, "sha": null, "seen": true, "sections": [{ "where": "3.1 §3", "result": "updated", "changed": 1 }] } }] }],
+      "counts": { "needsYou": 0, "working": false, "updated": 0 },
+      "state": "idle",
+      "label": "Chat"
+    },
+    {
+      "name": "working beats a rewrite done",
+      "chats": [{ "open": true, "turnActive": true, "approvals": 0,
+        "cards": [{ "kind": "entry", "state": "applied", "undoable": true,
+          "rewrite": { "result": "updated", "reason": null, "sha": null, "seen": false, "sections": [{ "where": "3.1 §3", "result": "updated", "changed": 1 }] } }] }],
+      "counts": { "needsYou": 0, "working": true, "updated": 1 },
+      "state": "working",
+      "label": "Working…"
+    }
+  ],
+  "waiting": [
+    {
+      "name": "what W adds for a space: rewrites that wait, never drafts or approvals",
+      "cards": [
+        { "kind": "entry", "state": "draft", "undoable": false, "rewrite": null },
+        { "kind": "entry", "state": "changed", "undoable": false, "rewrite": null },
+        { "kind": "entry", "state": "applied", "undoable": true,
+          "rewrite": { "result": "waiting", "reason": "runner_offline", "sha": null, "seen": true, "sections": [{ "where": "3.1 §3", "result": null }] } },
+        { "kind": "entry", "state": "applied", "undoable": true,
+          "rewrite": { "result": "same", "reason": null, "sha": null, "seen": false, "sections": [{ "where": "7.1 §2", "result": "same" }] } },
+        { "kind": "rewrite", "state": "applied", "undoable": true,
+          "rewrite": { "result": "failed", "reason": null, "sha": null, "seen": true, "sections": [{ "where": "2.4 §1", "result": "failed" }] } },
+        { "kind": "entry", "state": "applied", "undoable": true,
+          "rewrite": { "result": "updated", "reason": null, "sha": null, "seen": false, "sections": [{ "where": "3.1 §3", "result": "updated", "changed": 1 }] } }
+      ],
+      "chatWaiting": 2,
+      "banner": "2 rewrites need you"
+    },
+    {
+      "name": "one",
+      "cards": [
+        { "kind": "entry", "state": "applied", "undoable": true,
+          "rewrite": { "result": "failed", "reason": null, "sha": null, "seen": false, "sections": [{ "where": "3.1 §3", "result": "failed" }] } }
+      ],
+      "chatWaiting": 1,
+      "banner": "1 rewrite needs you"
+    },
+    {
+      "name": "none",
+      "cards": [],
+      "chatWaiting": 0,
+      "banner": null
+    }
+  ],
+  "followWaiting": [
+    { "name": "maintenance is writing the documents", "facts": { "state": "queued", "waitingFor": null, "writerRunning": "maintain", "model": "up", "repo": "ready" }, "reason": "maintenance_running" },
+    { "name": "a build of the plan", "facts": { "state": "queued", "waitingFor": null, "writerRunning": "docs_build", "model": "up", "repo": "ready" }, "reason": "build_running" },
+    { "name": "a revision of the plan", "facts": { "state": "queued", "waitingFor": null, "writerRunning": "plan_revise", "model": "up", "repo": "ready" }, "reason": "plan_running" },
+    { "name": "a draft of the plan", "facts": { "state": "queued", "waitingFor": null, "writerRunning": "plan_draft", "model": "down", "repo": "runner_offline" }, "reason": "plan_running" },
+    { "name": "another follow job", "facts": { "state": "queued", "waitingFor": null, "writerRunning": "docs_follow", "model": "up", "repo": "ready" }, "reason": "rewrite_running" },
+    { "name": "an articles job writes no document: it holds nothing up", "facts": { "state": "queued", "waitingFor": null, "writerRunning": "articles", "model": "up", "repo": "ready" }, "reason": null },
+    { "name": "the worker is not running", "facts": { "state": "queued", "waitingFor": null, "writerRunning": null, "model": "worker_not_running", "repo": "runner_offline" }, "reason": "worker_not_running" },
+    { "name": "the model before the runner", "facts": { "state": "queued", "waitingFor": null, "writerRunning": null, "model": "unconfigured", "repo": "runner_offline" }, "reason": "model_unconfigured" },
+    { "name": "the key refused", "facts": { "state": "queued", "waitingFor": null, "writerRunning": null, "model": "auth_failed", "repo": "ready" }, "reason": "model_auth_failed" },
+    { "name": "the model away", "facts": { "state": "queued", "waitingFor": null, "writerRunning": null, "model": "down", "repo": "ready" }, "reason": "model_down" },
+    { "name": "no maintenance workspace", "facts": { "state": "queued", "waitingFor": null, "writerRunning": null, "model": "up", "repo": "no_workspace" }, "reason": "no_workspace" },
+    { "name": "a workspace with no runner", "facts": { "state": "queued", "waitingFor": null, "writerRunning": null, "model": "up", "repo": "runner_missing" }, "reason": "runner_missing" },
+    { "name": "the runner offline", "facts": { "state": "queued", "waitingFor": null, "writerRunning": null, "model": "up", "repo": "runner_offline" }, "reason": "runner_offline" },
+    { "name": "merely in line", "facts": { "state": "queued", "waitingFor": null, "writerRunning": null, "model": "up", "repo": "ready" }, "reason": null },
+    { "name": "running is rewriting, whatever the model says now", "facts": { "state": "running", "waitingFor": null, "writerRunning": null, "model": "down", "repo": "runner_offline" }, "reason": null },
+    { "name": "parked on the repository", "facts": { "state": "waiting", "waitingFor": "repo", "writerRunning": null, "model": "up", "repo": "runner_upgrade" }, "reason": "runner_upgrade" },
+    { "name": "parked on the model", "facts": { "state": "waiting", "waitingFor": "model", "writerRunning": null, "model": "auth_failed", "repo": "ready" }, "reason": "model_auth_failed" }
+  ],
+  "overlap": [
+    ["docs_follow", "articles", true],
+    ["verify", "docs_follow", true],
+    ["docs_follow", "import", true],
+    ["docs_follow", "smoke", true],
+    ["docs_follow", "maintain", false],
+    ["docs_build", "docs_follow", false],
+    ["docs_follow", "plan_draft", false],
+    ["docs_follow", "plan_revise", false],
+    ["docs_follow", "docs_follow", false],
+    ["articles", "verify", false],
+    ["maintain", "articles", false],
+    ["import", "smoke", false]
+  ],
+  "rewrites": [
+    {
+      "name": "the attached section first, then the sections that cite the entry, then where a new entry fits: five at most",
+      "input": {
+        "plan": [
+          { "doc": "sessions-runtime", "key": "overview" },
+          { "doc": "sessions-runtime", "key": "turn-delivery" },
+          { "doc": "sessions-runtime", "key": "process-lifecycle" },
+          { "doc": "runner-architecture", "key": "registration" },
+          { "doc": "runner-architecture", "key": "heartbeat" },
+          { "doc": "runner-architecture", "key": "offline" },
+          { "doc": "known-pitfalls", "key": "runners" }
+        ],
+        "attached": [{ "doc": "sessions-runtime", "key": "turn-delivery" }],
+        "cited": [
+          { "doc": "runner-architecture", "key": "offline" },
+          { "doc": "runner-architecture", "key": "heartbeat" }
+        ],
+        "fit": [
+          { "doc": "known-pitfalls", "key": "runners", "score": 4 },
+          { "doc": "sessions-runtime", "key": "process-lifecycle", "score": 4 },
+          { "doc": "runner-architecture", "key": "registration", "score": 2 }
+        ]
+      },
+      "sections": [
+        { "doc": "sessions-runtime", "key": "turn-delivery" },
+        { "doc": "runner-architecture", "key": "heartbeat" },
+        { "doc": "runner-architecture", "key": "offline" },
+        { "doc": "sessions-runtime", "key": "process-lifecycle" },
+        { "doc": "known-pitfalls", "key": "runners" }
+      ]
+    },
+    {
+      "name": "each section once, only written sections of the confirmed plan, and no fit of score 0",
+      "input": {
+        "plan": [
+          { "doc": "sessions-runtime", "key": "turn-delivery" },
+          { "doc": "runner-architecture", "key": "offline" }
+        ],
+        "attached": [
+          { "doc": "sessions-runtime", "key": "turn-delivery" },
+          { "doc": "sessions-runtime", "key": "a-section-the-plan-dropped" }
+        ],
+        "cited": [{ "doc": "sessions-runtime", "key": "turn-delivery" }],
+        "fit": [
+          { "doc": "runner-architecture", "key": "offline", "score": 0 },
+          { "doc": "sessions-runtime", "key": "turn-delivery", "score": 3 }
+        ]
+      },
+      "sections": [{ "doc": "sessions-runtime", "key": "turn-delivery" }]
+    },
+    {
+      "name": "ties of fit go in the plan's order",
+      "input": {
+        "plan": [
+          { "doc": "a", "key": "one" },
+          { "doc": "a", "key": "two" },
+          { "doc": "b", "key": "one" }
+        ],
+        "attached": [],
+        "cited": [],
+        "fit": [
+          { "doc": "b", "key": "one", "score": 1 },
+          { "doc": "a", "key": "two", "score": 3 },
+          { "doc": "a", "key": "one", "score": 1 }
+        ]
+      },
+      "sections": [
+        { "doc": "a", "key": "two" },
+        { "doc": "a", "key": "one" },
+        { "doc": "b", "key": "one" }
+      ]
+    },
+    {
+      "name": "nothing found: the card rewrites nothing, and Apply writes the entries alone",
+      "input": { "plan": [{ "doc": "a", "key": "one" }], "attached": [], "cited": [], "fit": [] },
+      "sections": []
+    }
+  ],
+  "sentenceDiff": [
+    {
+      "name": "one sentence added (board 42 ③)",
+      "before": [
+        "Runner 每 30 秒发送一次心跳。",
+        "控制面连续 90 秒未收到心跳即判定 runner 离线。",
+        "该机制确保控制面能及时感知 runner 状态变化。"
+      ],
+      "after": [
+        "Runner 每 30 秒发送一次心跳。",
+        "控制面连续 90 秒未收到心跳即判定 runner 离线。",
+        "留三次余量是为了扛住一次网关重启，一次抖动不会让 Resume 失效。",
+        "该机制确保控制面能及时感知 runner 状态变化。"
+      ],
+      "rows": [
+        { "op": "same", "text": "Runner 每 30 秒发送一次心跳。" },
+        { "op": "same", "text": "控制面连续 90 秒未收到心跳即判定 runner 离线。" },
+        { "op": "added", "text": "留三次余量是为了扛住一次网关重启，一次抖动不会让 Resume 失效。" },
+        { "op": "same", "text": "该机制确保控制面能及时感知 runner 状态变化。" }
+      ],
+      "changed": 1
+    },
+    {
+      "name": "one sentence rewritten is one change, the old struck first",
+      "before": ["The runner polls.", "It is offline after 90 seconds.", "Resume needs it online."],
+      "after": ["The runner polls.", "It is offline after 45 seconds.", "Resume needs it online."],
+      "rows": [
+        { "op": "same", "text": "The runner polls." },
+        { "op": "removed", "text": "It is offline after 90 seconds." },
+        { "op": "added", "text": "It is offline after 45 seconds." },
+        { "op": "same", "text": "Resume needs it online." }
+      ],
+      "changed": 1
+    },
+    {
+      "name": "spacing alone reads the same",
+      "before": ["  The runner polls.", "It is offline after 90   seconds."],
+      "after": ["The runner polls. ", "It is offline after 90 seconds."],
+      "rows": [
+        { "op": "same", "text": "The runner polls." },
+        { "op": "same", "text": "It is offline after 90 seconds." }
+      ],
+      "changed": 0
+    },
+    {
+      "name": "two removed for one added is two changes",
+      "before": ["A.", "B.", "C.", "D."],
+      "after": ["A.", "X.", "D."],
+      "rows": [
+        { "op": "same", "text": "A." },
+        { "op": "removed", "text": "B." },
+        { "op": "removed", "text": "C." },
+        { "op": "added", "text": "X." },
+        { "op": "same", "text": "D." }
+      ],
+      "changed": 2
+    },
+    {
+      "name": "one removed",
+      "before": ["A.", "B.", "C."],
+      "after": ["A.", "C."],
+      "rows": [
+        { "op": "same", "text": "A." },
+        { "op": "removed", "text": "B." },
+        { "op": "same", "text": "C." }
+      ],
+      "changed": 1
+    },
+    {
+      "name": "two sentences swapped are two changes",
+      "before": ["A.", "B."],
+      "after": ["B.", "A."],
+      "rows": [
+        { "op": "removed", "text": "A." },
+        { "op": "same", "text": "B." },
+        { "op": "added", "text": "A." }
+      ],
+      "changed": 2
+    },
+    {
+      "name": "every sentence new: each added one is a change",
+      "before": [],
+      "after": ["A.", "B."],
+      "rows": [
+        { "op": "added", "text": "A." },
+        { "op": "added", "text": "B." }
+      ],
+      "changed": 2
+    }
+  ],
+  "notes": [
+    { "name": "the chat's rules", "note": { "kind": "chat" }, "label": "Wiki chat" },
+    { "name": "the page, a document's section", "note": { "kind": "page", "of": "doc", "doc": "3.1", "section": 3 }, "label": "Wiki page · 3.1 §3" },
+    { "name": "the page, an entry", "note": { "kind": "page", "of": "entry", "title": "Runner offline detection keeps three missed heartbeats" }, "label": "Wiki entry · Runner offline detection keeps three missed heartbeats" },
+    { "name": "the page, the plan's document", "note": { "kind": "page", "of": "plan", "doc": "3.1" }, "label": "Wiki plan · 3.1" },
+    { "name": "a selection (board 42 ②)", "note": { "kind": "selection", "doc": "3.1", "section": 3, "sentences": 1, "sources": 2 }, "label": "Wiki selection · 3.1 §3 · 1 sentence · 2 sources" },
+    { "name": "a selection running into the next section", "note": { "kind": "selection", "doc": "3.1", "section": 3, "toSection": 4, "sentences": 3, "sources": 1 }, "label": "Wiki selection · 3.1 §3–§4 · 3 sentences · 1 source" },
+    { "name": "what the owner pressed since the agent's last turn", "note": { "kind": "drafts", "applied": 1, "edited": 0, "discarded": 1, "undone": 0 }, "label": "Wiki drafts · 1 applied, 1 discarded" },
+    { "name": "an edit and an undo", "note": { "kind": "drafts", "applied": 0, "edited": 2, "discarded": 0, "undone": 1 }, "label": "Wiki drafts · 2 edited, 1 undone" }
+  ],
+  "contexts": [
+    { "name": "the page and a one-sentence selection", "value": { "page": { "kind": "doc", "docSlug": "sessions-runtime", "sectionKey": "turn-delivery" }, "selection": { "docSlug": "sessions-runtime", "sectionKey": "turn-delivery", "sentenceIds": ["34sentenceA0000000000"] } }, "errors": [] },
+    { "name": "both crossed out", "value": {}, "errors": [] },
+    { "name": "an entry open in the drawer", "value": { "page": { "kind": "entry", "entryId": "34UuAT2stjMI2hEFUKr9X" } }, "errors": [] },
+    { "name": "the plan page", "value": { "page": { "kind": "plan", "docSlug": "sessions-runtime" } }, "errors": [] },
+    { "name": "twenty sentences", "value": { "selection": { "docSlug": "d", "sectionKey": "s", "sentenceIds": ["s01", "s02", "s03", "s04", "s05", "s06", "s07", "s08", "s09", "s10", "s11", "s12", "s13", "s14", "s15", "s16", "s17", "s18", "s19", "s20"] } }, "errors": [] },
+    { "name": "twenty-one sentences", "value": { "selection": { "docSlug": "d", "sectionKey": "s", "sentenceIds": ["s01", "s02", "s03", "s04", "s05", "s06", "s07", "s08", "s09", "s10", "s11", "s12", "s13", "s14", "s15", "s16", "s17", "s18", "s19", "s20", "s21"] } }, "errors": ["wikiContext.selection.sentenceIds"] },
+    { "name": "a sentence twice", "value": { "selection": { "docSlug": "d", "sectionKey": "s", "sentenceIds": ["s01", "s01"] } }, "errors": ["wikiContext.selection.sentenceIds"] },
+    { "name": "a selection of nothing", "value": { "selection": { "docSlug": "d", "sectionKey": "s", "sentenceIds": [] } }, "errors": ["wikiContext.selection.sentenceIds"] },
+    { "name": "no section", "value": { "selection": { "docSlug": "d", "sentenceIds": ["s01"] } }, "errors": ["wikiContext.selection.sectionKey"] },
+    { "name": "a page of no known kind", "value": { "page": { "kind": "section", "docSlug": "d" } }, "errors": ["wikiContext.page.kind"] },
+    { "name": "an entry page without its entry", "value": { "page": { "kind": "entry" } }, "errors": ["wikiContext.page.entryId"] },
+    { "name": "a page carrying sentences", "value": { "page": { "kind": "doc", "docSlug": "d", "sectionKey": "s", "sentenceIds": ["s01"] } }, "errors": ["wikiContext.page.sentenceIds"] },
+    { "name": "a key of its own", "value": { "page": { "kind": "plan", "docSlug": "d" }, "docText": "the whole page" }, "errors": ["wikiContext.docText"] },
+    { "name": "not an object", "value": "3.1 §3", "errors": ["wikiContext"] }
+  ],
+  "changes": [
+    {
+      "name": "after a session's merge",
+      "change": { "kind": "section", "where": "3.1 §3", "reason": { "kind": "merge", "title": "Shorten the runner offline window", "sha": "7f3e2a1c9b8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f" }, "changed": 1 },
+      "line": "3.1 §3 rewritten · after Shorten the runner offline window merged · 1 sentence changed",
+      "heading": "After Shorten the runner offline window merged · 7f3e2a1"
+    },
+    {
+      "name": "after a chat's press, reading the same",
+      "change": { "kind": "section", "where": "7.1 §2", "reason": { "kind": "chat", "title": "Why the runner waits for three heartbeats" }, "changed": 0 },
+      "line": "7.1 §2 rewritten · after chat Why the runner waits for three heartbeats · reads the same",
+      "heading": "After chat Why the runner waits for three heartbeats"
+    },
+    {
+      "name": "after maintenance",
+      "change": { "kind": "section", "where": "2.4 §1", "reason": { "kind": "maintenance" }, "changed": 3 },
+      "line": "2.4 §1 rewritten · after maintenance · 3 sentences changed",
+      "heading": "After maintenance"
+    },
+    {
+      "name": "after a build",
+      "change": { "kind": "section", "where": "1.1 §2", "reason": { "kind": "build", "planVersion": 27 }, "changed": 4 },
+      "line": "1.1 §2 rewritten · after the build of plan version 27 · 4 sentences changed",
+      "heading": "After the build of plan version 27"
+    },
+    {
+      "name": "after a landing into main",
+      "change": { "kind": "section", "where": "5.2 §4", "reason": { "kind": "landing", "title": "Wiki chat window", "sha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678" }, "changed": 2 },
+      "line": "5.2 §4 rewritten · after Wiki chat window landed · 2 sentences changed",
+      "heading": "After Wiki chat window landed · a1b2c3d"
+    },
+    {
+      "name": "restored by the owner",
+      "change": { "kind": "section", "where": "3.1 §3", "reason": { "kind": "restore" }, "changed": 1 },
+      "line": "3.1 §3 restored · 1 sentence changed",
+      "heading": "Restored by you"
+    },
+    {
+      "name": "one section past the day's follow budget",
+      "change": { "kind": "left", "left": 1 },
+      "line": "1 section left for the next maintenance run",
+      "heading": null
+    },
+    {
+      "name": "twelve sections past it",
+      "change": { "kind": "left", "left": 12 },
+      "line": "12 sections left for the next maintenance run",
+      "heading": null
+    }
+  ]
+}

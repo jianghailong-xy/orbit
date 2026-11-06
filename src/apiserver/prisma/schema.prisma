@@ -516,10 +516,11 @@ model DispatchPause {
 }
 
 /// The runner link's cut-over switch, RUNNER_LINK_REQUIRED (docs/runner-link-design.md §11.3, §11.4, D15;
-/// migration 0446): at most one row, id 1, written only by an administrator through
-/// PUT /api/admin/runner-link-required (runner-api/runner-link-required.ts). While `required`, the runner
-/// daemon's routes answer HTTPS 426 UPGRADE_REQUIRED and the link gateway tells runners MODE_LINK. No row is
-/// the same as a row that is off. `runner_link_switch_one_row_chk` (`id` = 1) lives only in the migration.
+/// migration 0446): at most one row, id 1. The cut-over is over and nothing in this build reads or writes it:
+/// the runner daemon's routes always answer HTTPS 426 UPGRADE_REQUIRED. The table stays for a rollback to a build
+/// from before the cleanup, which reads the row: there, while `required`, those routes answer 426 and the link
+/// gateway tells runners MODE_LINK, and no row is the same as a row that is off.
+/// `runner_link_switch_one_row_chk` (`id` = 1) lives only in the migration.
 model RunnerLinkSwitch {
   id          Int      @id @default(1) @db.SmallInt
   required    Boolean
@@ -7392,6 +7393,8 @@ model WikiSpace {
   planJobs        WikiPlanJob[]
   /// Its documents, written section by section from the confirmed plan (0326).
   docs            WikiDoc[]
+  /// The sections its documents' writes replaced, as they stood (0475).
+  docVersions     WikiDocSectionVersion[]
   /// Its public links, live and ended (0403).
   shareLinks      ShareLink[]
 
@@ -8225,6 +8228,51 @@ model WikiDocFootnote {
   @@unique([id, ownerId], map: "wiki_doc_footnote_id_owner_id_key")
   @@unique([sentenceId, position], map: "wiki_doc_footnote_sentence_id_position_key")
   @@map("wiki_doc_footnote")
+}
+
+/// A section as it stood before a write replaced it, and why (migration 0475, contract `docs.versions`): kept by
+/// `WikiDocs.write` and the owner's restore, at most 5 a section. Named by the document's slug and the section's key,
+/// as the plan names them, so it outlives the section row it was taken from.
+model WikiDocSectionVersion {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  spaceId           String    @map("space_id") @db.Uuid
+  ownerId           String    @map("owner_id") @db.Uuid
+  space             WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_doc_section_version_space_fkey")
+  docSlug           String    @map("doc_slug")
+  sectionKey        String    @map("section_key")
+  /// The section's blocks as they stood.
+  blocks            Json
+  /// `[{ block, text, status, notes, newTokens, withdrawn }, …]`: its sentences in order, `notes` the places of their
+  /// footnotes in `footnotes`.
+  sentences         Json
+  /// `[{ kind, ref, sha, lineStart, lineEnd, charStart, charEnd, locator, quote, excerpt, verdict, checkedBy, viaEntryId }, …]`.
+  footnotes         Json
+  repoSha           String    @map("repo_sha")
+  materialSha256    String    @map("material_sha256") @db.Char(64)
+  model             String?
+  stats             Json      @default("{}")
+  dispositions      Json      @default("[]")
+  generatedAt       DateTime  @map("generated_at") @db.Timestamptz(3)
+  /// `maintenance` | `build` | `merge` | `landing` | `chat` | `restore`: why it was replaced.
+  reason            String
+  /// The session's, task's, project's or chat's title (merge, landing, chat).
+  reasonTitle       String?   @map("reason_title")
+  /// The commit a merge or a landing put on main.
+  reasonSha         String?   @map("reason_sha")
+  /// The plan version a build wrote.
+  reasonPlanVersion Int?      @map("reason_plan_version")
+  /// The job whose write replaced it; NULL for the owner's restore. A history reference with no foreign key.
+  jobId             String?   @map("job_id") @db.Uuid
+  /// The version the owner's restore put back in its place. A history reference with no foreign key.
+  restoredVersionId String?   @map("restored_version_id") @db.Uuid
+  replacedAt        DateTime  @default(now()) @map("replaced_at") @db.Timestamptz(3)
+  /// The order a section's versions were kept in, the newest last.
+  seq               BigInt    @default(autoincrement())
+
+  @@unique([id, ownerId], map: "wiki_doc_section_version_id_owner_id_key")
+  @@index([spaceId, docSlug, sectionKey, seq], map: "wiki_doc_section_version_section_idx")
+  @@index([spaceId, seq], map: "wiki_doc_section_version_space_seq_idx")
+  @@map("wiki_doc_section_version")
 }
 
 /// The System model as the wiki-worker last found it, and the worker's heartbeat (migration 0400, contract

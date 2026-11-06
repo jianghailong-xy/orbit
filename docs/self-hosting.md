@@ -458,7 +458,7 @@ the queue until it is started again.
 ## Runner link
 
 Each runner keeps one WebSocket to a link gateway, which is part of this stack. Whenever work waits for a runner, the
-apiserver tells it over that connection at once, rather than the runner asking again and again. The `link-gateway`
+apiserver tells it over that connection at once, and all of the runner's work travels over it. The `link-gateway`
 service runs under the `runner-link` Compose profile, with the `nats` service beside it under the same profile.
 
 ### What you need to do
@@ -471,7 +471,7 @@ question to answer. What they do, by what `.env` holds:
 | --- | --- |
 | No `RUNNER_LINK_*` value and no `runner-link` profile | The link's secrets are generated once, and appended to `.env` with `RUNNER_LINK_URL=same-origin`. The existing lines stay as they were, byte for byte. `COMPOSE_PROFILES` gains `runner-link` in a line of its own at the end, repeating the list above it, since Compose takes the last. None of it is printed. `nats` and `link-gateway` start, and the web gateway is recreated if the `gateway/nginx.conf` it runs is not this checkout's. |
 | `RUNNER_LINK_URL=same-origin` | `.env` stays as it is. The gateway's image is rebuilt, and named by the last commit under `src/link-gateway`, so that a commit elsewhere recreates nothing. |
-| Anything else: a link you set up yourself, as under [A link gateway of its own](#a-link-gateway-of-its-own) | `.env` is not opened for writing, and `link-gateway` and `nats` are neither built nor restarted. An unfinished link is named in a warning, and it stays yours to finish. |
+| Anything else: a link you set up yourself, as under [A link gateway of its own](#a-link-gateway-of-its-own) | `.env` is not opened for writing, and `link-gateway` and `nats` are neither built nor restarted. An unfinished link, or a `link-gateway` that is not healthy, stops the upgrade before anything is built, naming what is missing, never its value. |
 
 An upgrade that sets the link up prints these lines:
 
@@ -488,19 +488,11 @@ An upgrade that sets the link up prints these lines:
 **Keep the new `.env` lines with the deployment's other secrets**, in the backup you already keep of `JWT_SECRET` and
 `PROVIDER_SECRET_KEY`. Losing them costs little: with new ones in `.env`, runners fetch new tokens by themselves.
 
-**Your first upgrade across this change.** Where `/upgrade`'s script is older than this change and pulls the new commit
-itself, as it does in a checkout on `main`, it finishes the steps it started with: everything upgrades, it says
-complete, and no link is set up. The next run sets it up. To have it in one run, pull first:
+**An old `/upgrade` script.** Where the script is older than the link's and pulls this build itself, as it does in a
+checkout on `main`, it stops when Compose refuses to render, having recreated nothing. Run it again: it is the new one now.
+From the link's script on, a script that a pull changes runs the new one by itself.
 
-```bash
-git pull --ff-only
-.claude/skills/upgrade/upgrade.sh
-```
-
-From this change on, a script that a pull changes runs the new one by itself.
-
-**A hand-written `.env`, or `docker compose up -d --build` by hand,** sets nothing up: the deployment goes on as it was,
-with no link. Run `.claude/skills/upgrade/upgrade.sh` once.
+**A hand-written `.env`:** run `.claude/skills/upgrade/upgrade.sh` once. Compose refuses to start a deployment with no link.
 
 ### How a runner reaches the link
 
@@ -552,23 +544,22 @@ build of the same source takes seconds and recreates nothing.
 
 ### If the link does not come up
 
-An upgrade starts `nats` and `link-gateway` before it recreates the apiserver, and then asks the web gateway's
-`/runner-link`, and `PUBLIC_ORIGIN`'s where it has one of its own, for the link gateway's own refusal of a request with
-no token. When a step fails, the rest of the upgrade still runs and your runners stay on HTTPS. Its last lines say which
-step and why, with the state and log tail of both services, and it exits 1, never saying complete:
+This build serves runners only over the link, so it has to be up before anything changes. An upgrade starts `nats` and
+`link-gateway` before it recreates the apiserver, and then asks the web gateway's `/runner-link`, and `PUBLIC_ORIGIN`'s
+where it has one of its own, for the link gateway's own refusal of a request with no token. When a step fails, the upgrade
+stops there and exits 1. The apiserver is not recreated, so the deployment goes on running the build it has, and its
+runners keep working:
 
 ```text
-!!  The runner link is NOT working: nats or link-gateway did not come up within 3 minutes
-!!    NAME              IMAGE                      SERVICE        STATUS
-!!    ...
-!!  This deployment keeps working: everything else was upgraded, and its runners stay on HTTPS. A later build
-!!  serves them only over the link and will not start without it, so fix this first, then run this script again:
-!!  it keeps what it already wrote to .env. docs/self-hosting.md, "Runner link".
-✗ The upgrade finished, and the runner link is not working (above).
+error: this build serves runners only over the runner link, and it did not come up: nats or link-gateway did not come up within 3 minutes
+       NAME              IMAGE                      SERVICE        STATUS
+       ...
+       The apiserver was not recreated: this deployment goes on running the build it has, and its runners keep
+       working. Fix that and run this script again: it keeps what it already wrote to .env.
+       docs/self-hosting.md, "Runner link".
 ```
 
-Fix what it names and run the script again. The secrets it wrote stay, and it writes none twice. While the link is
-not working, the apiserver logs once a minute that it dropped hints and that NATS is unreachable, which is harmless.
+Fix what it names and run the script again. The secrets it wrote stay, and it writes none twice.
 
 | Answer the check names | What it means |
 | --- | --- |
@@ -577,19 +568,13 @@ not working, the apiserver logs once a minute that it dropped hints and that NAT
 | Any other status at your origin | It does not send `/runner-link` to this deployment at all |
 | `could not be checked from here` | This host cannot reach its own public address. That proves nothing: the runners' own logs and `orbit doctor` will say |
 
-### Builds that serve runners only over the link
+**`docker compose up -d --build` by hand,** on a deployment with no link, gets a refusal from Compose:
+`required variable RUNNER_LINK_SIGNING_KEY is missing a value`, naming the script. That holds for every Compose command in
+that checkout, `ps`, `logs` and `down` among them, until the script has run, and nothing is recreated. To read logs
+meanwhile, use `docker logs orbit-apiserver`.
 
-A later build deletes the HTTPS work path. `/upgrade`'s script and Compose both know such a build by the required
-`RUNNER_LINK_SIGNING_KEY` in its `docker-compose.yml`, and what you see at that moment depends on how you take it:
-
-- **With `/upgrade`'s script,** the link comes up first. If it does not, the upgrade stops before the apiserver is
-  recreated and exits 1, naming the reason. The deployment goes on running the build it has, and its runners keep working.
-- **With `docker compose up -d --build` by hand,** on a deployment with no link, Compose refuses to render anything,
-  says `required variable RUNNER_LINK_SIGNING_KEY is missing a value` and names the script. That holds for every Compose
-  command in that checkout, `ps`, `logs` and `down` among them, until the script has run. Nothing is recreated. To read
-  logs meanwhile, use `docker logs orbit-apiserver`.
-- **If the gateway stops later,** `docker compose ps` shows `link-gateway` down or unhealthy, the runners log that the link
-  is not connected and go offline in the Runners page, and they come back by themselves once it runs.
+**If the gateway stops later,** `docker compose ps` shows `link-gateway` down or unhealthy, the runners log that the link
+is not connected and go offline in the Runners page, and they come back by themselves once it runs.
 
 ### Old runners
 
@@ -597,52 +582,33 @@ A runner takes its updates from your deployment's own `/dl`, with the release it
 those two stay on HTTP(S) in every build, so an upgrade of the server brings runners with it. A runner that is idle
 updates itself within 10 minutes; a busy one waits for its turns to end.
 
-In a build that serves runners only over the link, one from before 0.1.237 does not wait: its first call is refused with
-426, and it stops. The service `orbit register` installs starts it again within seconds (systemd's `Restart=always`,
-launchd's `KeepAlive`), and it then updates itself at once and comes back on the link, carrying on a turn it was
-running. A runner started another way, such as `orbit run` in a terminal, stays stopped until you start it again.
+One from before 0.1.237 does not wait: its first call is refused with 426, and it stops. The service `orbit register`
+installs starts it again within seconds (systemd's `Restart=always`, launchd's `KeepAlive`), and it then updates itself
+at once and comes back on the link, carrying on a turn it was running. A runner started another way, such as `orbit run`
+in a terminal, stays stopped until you start it again.
 
 A [managed runner](#managed-runners) never updates itself either: it takes the new image with its next container, made
-when it wakes after it next sleeps, or, for one from before 0.1.237 on a build that serves runners only over the link, when
-the manager replaces it ([What an upgrade does](#what-an-upgrade-does)). Until then it runs the binary its container
-started with, as a runner with self-update off does.
+when it wakes after it next sleeps, or, for one from before 0.1.237, when it exits at the 426 or the manager replaces it
+([What an upgrade does](#what-an-upgrade-does)). Until then it runs the binary its container started with, as a runner
+with self-update off does. One of those that is busy when you upgrade loses what its turns do after the upgrade, so let
+them finish first.
 
 A runner with self-update off (`ORBIT_NO_SELFUPDATE`, or an install directory it cannot write to):
 
 - at 0.1.237 or later, speaks the link and needs nothing;
-- older, cannot. In a build that keeps its HTTPS path it goes on working. In a build that serves runners only over the
-  link, its first call is refused with 426 and it stops, and its log says `Run \`orbit upgrade\` to update this runner`
-  each time its service starts it. Do what it says on that machine.
-
-### Moving runners onto the link now
-
-Until a build requires it, a runner connected to the link does its work over HTTPS beside that connection, and the
-gateway compares what it mirrors. Nothing moves them until a build does, or an administrator does. No script writes
-this switch. To move them now and back again, without a restart:
-
-```bash
-curl -H "Authorization: Bearer $TOKEN" http://192.168.1.20:2086/api/admin/runner-link-required
-curl -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"required":true}' http://192.168.1.20:2086/api/admin/runner-link-required
-```
-
-`$TOKEN` is a signed-in administrator's access token. Within a second, the apiserver answers a runner's HTTPS calls `426`,
-the gateway tells runners `MODE_LINK`, and they move their work to the link. `{"required":false}` sends them back.
+- older, cannot. Its first call is refused with 426 and it stops, and its log says
+  `Run \`orbit upgrade\` to update this runner` each time its service starts it. Do what it says on that machine.
 
 ### How the link runs
 
-While the switch is off, runners keep working over HTTPS. The gateway authenticates their connections, keeps them alive,
-and compares the heartbeats and event batches runners mirror to it with what the HTTPS side received. It forwards
-nothing to the control plane, so stopping it changes no runner's work. Once the switch is on, the gateway forwards each
-runner's requests, heartbeats and events to the apiserver's [internal listener](#runner-link-calls), and its live stream
-to NATS while someone watches the session.
+The gateway forwards each runner's requests, heartbeats and events to the apiserver's [internal
+listener](#runner-link-calls), and its live stream to NATS while someone watches the session.
 
 Whenever work waits for a runner (a queued session, a message in its inbox, or a sign-in, merge or update that its
 heartbeat delivers), the apiserver also publishes a hint on NATS, on the subject of that runner alone. The gateway
-subscribes for the runners it holds connections of and relays each hint to that runner. While the switch is off, hints
-are counted and not sent. NATS keeps nothing: no JetStream, no volume. It has no port on the host, and a hint lost
-while it is down costs a runner one heartbeat interval. The apiserver publishes only while the connection tokens below
-are configured, to `nats://nats:4222` unless `RUNNER_LINK_NATS_URL` names another server. With NATS unreachable, it
+subscribes for the runners it holds connections of and relays each hint to that runner. NATS keeps nothing: no JetStream,
+no volume. It has no port on the host, and a hint lost while it is down costs a runner one heartbeat interval. The
+apiserver publishes to `nats://nats:4222` unless `RUNNER_LINK_NATS_URL` names another server. With NATS unreachable, it
 logs the hints it dropped once a minute and goes on. Session content crosses NATS too (the live stream, and the text a
 turn has streamed so far), so NATS admits only the apiserver and the gateway, each by its own
 [nkey](#nats-credentials).
@@ -738,7 +704,8 @@ What missing values look like:
 
 - Either public key empty or unset: `nats` refuses to start, and `docker compose logs nats` says
   `User entry requires a user` (empty) or `variable reference for 'RUNNER_LINK_NATS_…_KEY' … can not be found`
-  (unset). Hints, and the live stream once the link is switched over, stop; runners on HTTPS are not affected.
+  (unset). Hints and the live stream stop: runners learn of work at their next heartbeat, and a reply shows only as it
+  is stored.
 - The apiserver's seed unset: its log warns `RUNNER_LINK_NATS_SEED is not set` and then that NATS is unreachable
   (`Authorization Violation`); it drops hints and counts them.
 - The gateway's seed unset: its log warns `LINK_NATS_SEED is not set`, `link_nats_connected` stays `0`, and no hint is
@@ -808,7 +775,7 @@ order.
    `link_revocation_fetches_total{result="ok"}` rising every 30 seconds shows that the gateway reads the apiserver
    with the right secret. `link_nats_connected 1`, and `connected to NATS` in the apiserver's log, show that hints flow,
    both clients signed in with their seeds. `runner link calls are served on 0.0.0.0:3001` in the apiserver's log shows
-   the listener the gateway forwards to once the link is switched over.
+   the listener the gateway forwards to.
 
 ### Operate the link gateway
 
@@ -838,7 +805,7 @@ order.
 - **Monitoring.** `/metrics` on the metrics port (`docker compose port link-gateway 9464` finds it on a `same-origin`
   link, which takes a free port) counts connections, handshakes by result and their duration,
   disconnects by reason, ping round trips, token refusals by reason, revocation reads, the shadow comparison, and
-  hints by kind and by what became of them. Once the link is switched over it also counts forwarded calls by result and
+  hints by kind and by what became of them. It also counts forwarded calls by result and
   their latency, retries across apiserver instances, events stored and their acknowledgement latency, the ingest queue
   and the credit it grants, the live stream by what became of it, and frames dropped or connections closed for slow
   reading.
@@ -846,9 +813,7 @@ order.
 - **Logs.** `docker compose logs link-gateway` shows one line per connection event. Set `LINK_FRAME_LOG=all` in the
   service's environment to log a summary of every frame, too. The gateway decodes frames that it or a runner logged:
   `docker compose logs link-gateway | docker compose exec -T link-gateway /link-gateway dump`.
-- **Turning it off,** in a build with an HTTPS work path. Take `runner-link` out of every `COMPOSE_PROFILES` line, then
-  run `docker compose stop link-gateway nats && docker compose rm -f link-gateway nats`. Runners keep working over HTTPS.
-  An upgrade then treats the link as yours, and warns that it is not running.
+- **Turning it off** stops every runner: runners work only over the link.
 
 ## Large deployments
 
@@ -949,11 +914,8 @@ apiservers (below):
 It sends everything else a person does to the first apiserver. A Codex "Sign in with ChatGPT" runs its sign-in in the
 process that started it, so all of one person's other requests must reach that same process.
 
-**Only where the link carries the runners' work.** Run several apiservers in a cell whose runners work over the
-[runner link](#runner-link), with `RUNNER_LINK_REQUIRED` on. A runner that works over HTTPS posts the deltas of its
-replies to the first apiserver, which hands them to its own streams alone. A stream on another apiserver then shows
-that runner's replies only as each one is stored, not as it is written. Until the switch is on, the link gateway runs
-in shadow and forwards nothing, so the other apiservers would carry no runner calls anyway.
+**Runners on the link.** Several apiservers need every runner to work over the [runner link](#runner-link), as every
+runner of this release does.
 
 Add the other apiservers in `docker-compose.override.yml` beside `docker-compose.yml`. Compose reads the file with
 every command run in the checkout:
@@ -1067,11 +1029,6 @@ from the database instead.
   - The owner's lists are not re-read for the sessions it has no stream of. If another apiserver changed one of them in
     those seconds, the change shows at the session's next change, or when the list is next loaded.
 
-**Turning the switch off.** Before turning `RUNNER_LINK_REQUIRED` off, put every session stream back on the first
-apiserver, where runners that go back to HTTPS post their deltas. Either remove the gateway's lines from
-`docker-compose.override.yml` and run `docker compose up -d gateway`, or stop the other apiservers with
-`docker compose stop apiserver-2`. Then turn the switch off ([the design's rollback](runner-link-design.md#114-回滚)).
-
 This was tested with Docker Compose v5.5.1. Versions have treated `extends` from a service with `depends_on`
 differently. `docker compose config apiserver-2` should list both `postgres` and `apiserver` under its `depends_on`.
 
@@ -1107,10 +1064,10 @@ window, one turn's tool approvals ring the owner's phone once, and an agent's `n
 The apiserver a runner's heartbeat lands on asks that one for them over the runner link's NATS, so they reach the runner
 whichever apiserver the link gateway hands its heartbeats to.
 
-**Before production.** Several apiservers rely on all of the following. The first is a setting; the others are in the
-apiserver, and this section says how each works:
+**Before production.** Several apiservers rely on all of the following. The first is the runners'; the others are in
+the apiserver, and this section says how each works:
 
-- `RUNNER_LINK_REQUIRED` is on, and every runner works over the runner link.
+- Every runner works over the runner link.
 - The reaper, the task scheduler's sweep and the auto-retry sweep run in one apiserver at a time.
 - Antigravity's pasted sign-in code and the Cursor key check reach the runner from any apiserver.
 - Recaps, approval alerts and agents' notifications are decided on the database rows they are about.
@@ -1322,9 +1279,9 @@ one through the API (`POST /api/managed-runner/sleep`), and only while nothing r
 and the stop proof are as for any sleep. A container of the previous image that was made and never started is never started: the
 channel removes it and makes a new one from the current image.
 
-The exception is a runner from before the runner link's client, in a container made before about 2026-10-25, on a
-server that takes the runner daemon's calls over the [runner link](#runner-link) alone. That server answers each of its
-calls 426, and what happens next depends on whether it is busy:
+The exception is a runner from before the runner link's client, in a container made before about 2026-10-25. This
+version takes the runner daemon's calls over the [runner link](#runner-link) alone ([Old runners](#old-runners)) and
+answers each of that runner's calls 426, and what happens next depends on whether it is busy:
 
 - **Idle**, or with a slot free, it asks for work, takes the 426 as final and exits. The manager starts it again from the
   current image, on the same volume and with the same runner, as after any stop: in the drill of 2026-11-06 it was
@@ -1340,8 +1297,8 @@ calls 426, and what happens next depends on whether it is busy:
 What a busy runner does after the upgrade is lost to its sessions. In the drill, each of two agent turns ran 46 tool
 steps; the server holds the first 10, and the other 36, 12 commits among them, ran unseen for 11 minutes before the
 container was stopped. Both sessions ended `FAILED`, so a new message to either is refused, and those commits were made
-only in each session's worktree on the runner's volume. So before you take such a version, let every managed runner from
-before the link client finish its turns. On a deployment already at a version from after 2026-10-25, you can also stop
+only in each session's worktree on the runner's volume. So before you upgrade to this version from one that still takes
+runners' calls over HTTPS, let every managed runner from before the link client finish its turns. On a deployment already at a version from after 2026-10-25, you can also stop
 each such container once it is idle (`docker stop mr-<runner id>`), and the manager makes its next one from the current
 image, which has the link client. The `docker ps` command a few paragraphs below lists the containers and their images.
 
@@ -1693,7 +1650,7 @@ runners](#what-an-upgrade-does) as it found them.
 
 These steps do not set up the [runner link](#runner-link), or bring a new image of it, or recreate the web gateway for a
 new `gateway/nginx.conf`, which it reads only as it starts. `/upgrade`'s script (`.claude/skills/upgrade/upgrade.sh`) does
-all three, and a build that serves runners only over the link refuses these steps until it has run once.
+all three, and Compose refuses these steps on a deployment with no link until it has run once.
 
 `pgbackup` keeps the `scripts/pg-backup.sh` it started on until it is recreated, and these steps recreate it only when
 its Compose definition changes. After a change to the script alone, run `docker compose up -d --no-deps --force-recreate

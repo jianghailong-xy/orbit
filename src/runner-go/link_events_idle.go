@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 )
 
@@ -18,11 +17,10 @@ import (
 
 // sendHeld sends what a session's stream holds, which an earlier process left in its spool, and returns once it is
 // stored, or once ctx ends: the session's claim, its end, the runner's stop. Its supervisor then sends what is left
-// first, as always. Over the link the stream's sender sends it; over HTTPS it goes from here, a batch at a time in seq
-// order, as the supervisor's flush sends it (session.go). A refusal the HTTPS flush gives up on, or one of the session's
-// own (it is not this process's, or no longer open), ends the send: the first leaves the events to the supervisor's
-// flush, the second drops them, as the flush does.
-func (e *linkEvents) sendHeld(ctx context.Context, t *Transport, sessionID string) error {
+// first, as always. The stream's sender sends it; this waits. A refusal the stream gives up on, or one of the session's
+// own (it is not this process's, or no longer open), ends the wait: the first leaves the events in the spool, the second
+// drops them, as the supervisor's flush does.
+func (e *linkEvents) sendHeld(ctx context.Context, sessionID string) error {
 	s := e.open(sessionID)
 	defer s.release()
 	held, through := s.holding()
@@ -36,41 +34,9 @@ func (e *linkEvents) sendHeld(ctx context.Context, t *Transport, sessionID strin
 			e.log(fmt.Sprintf("runner link: the events idle session %s held through seq %d are stored", sessionID, through))
 			return nil
 		}
-		if s.onLink() {
-			err := s.waitStored(ctx)
-			if errors.Is(err, errLinkEventsOffLink) {
-				continue // what the stream holds goes over HTTPS
-			}
-			if err != nil {
-				return err
-			}
-			continue
-		}
-		batch := s.heldHead(maxEventBatchBytes)
-		if len(batch) == 0 {
-			if err := s.givenUp(); err != nil {
-				return err // what it holds stays in the spool
-			}
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			continue // the link came back in use meanwhile, or a segment held only what is stored already
-		}
-		rejections := 0
-		retry := eventFlushRetryPolicy(&rejections)
-		err := retryIdempotentWhile(ctx, func(attemptCtx context.Context) error {
-			return t.postEventsHTTPS(attemptCtx, sessionID, RunEventBatch{Events: batch})
-		}, func(err error) bool { return !errors.Is(err, errLinkEventsMoved) && retry(err) })
-		if errors.Is(err, errLinkEventsMoved) {
-			continue // the control plane takes the session's events over the link now
-		}
-		if isLeaseOwnershipError(err) {
-			s.fail(err)
-		}
-		if err != nil {
+		if err := s.waitStored(ctx); err != nil {
 			return err
 		}
-		s.storedOverHTTPS(batch[0].Seq, batch[len(batch)-1].Seq)
 	}
 }
 
@@ -86,7 +52,7 @@ func waitActiveSendingHeld(t *Transport, pool *sessionPool, live *liveSession, s
 	sent := make(chan struct{})
 	go func() {
 		defer close(sent)
-		if err := streams.sendHeld(sendCtx, t, sessionID); err != nil && sendCtx.Err() == nil {
+		if err := streams.sendHeld(sendCtx, sessionID); err != nil && sendCtx.Err() == nil {
 			streams.log(fmt.Sprintf("runner link: what idle session %s held is not all stored (%v); its next supervisor sends it first", sessionID, err))
 		}
 	}()

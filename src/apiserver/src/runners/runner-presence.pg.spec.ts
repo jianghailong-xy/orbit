@@ -72,6 +72,7 @@ import {
   runnerLastBeatSql,
   runnerOfflineSql,
 } from './runner-presence';
+import '../test-support/daemon-routes-over-http';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);

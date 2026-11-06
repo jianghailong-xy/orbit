@@ -60,6 +60,7 @@ import { TaskDispatchRefusalProducer } from './task-dispatch-refusal.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { RUN_STOPPED_WAKE_COORDINATOR_DISABLED, TaskRunStoppedProducer } from './task-run-stopped.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;

@@ -51,7 +51,7 @@ test('P1b DeepSeek Harness provider gate on PostgreSQL', { timeout: 300_000 }, a
     drainCommitRequests: async () => [], drainArtifactRequests: async () => [],
   } as unknown as RealtimeService;
   const queue = new QueueService(db as unknown as PrismaService, realtime);
-  const api = new RunnerApiController(db as never, queue as never, realtime as never, {} as never, {} as never, {} as never);
+  const api = new RunnerApiController(db as never, queue as never, realtime as never, {} as never, { issue: async () => 'orchestration-credential' } as never, {} as never);
 
   async function fixture(maxConcurrent = 8) {
     const ownerId = randomUUID();
@@ -84,10 +84,10 @@ test('P1b DeepSeek Harness provider gate on PostgreSQL', { timeout: 300_000 }, a
       return { slug, key };
     };
     const claim = (providers?: readonly AgentProvider[]) => queue.claimSessionForRunner({ id, supportedProviders: providers });
-    const reclaim = (providers?: readonly AgentProvider[]) => api.reclaim(runner, undefined, providers?.join(','));
+    const reclaim = (providers?: readonly AgentProvider[]) => api.reclaim(runner, providers?.join(','));
     const poll = (providers?: readonly AgentProvider[]) => {
       const res = { once: (_event: string, close: () => void) => setTimeout(close, 100) };
-      return api.claim(runner, undefined, providers?.join(','), res as never);
+      return api.claim(runner, providers?.join(','), res as never);
     };
     return { runner, beat, session, provider, claim, reclaim, poll };
   }
@@ -251,9 +251,9 @@ test('P1b DeepSeek Harness provider gate on PostgreSQL', { timeout: 300_000 }, a
     const active = claimed[0]!.sessionId;
     const owners = [randomUUID(), randomUUID()];
     await assert.rejects(() => api.takeoverLeases(f.runner, active,
-      { leaseOwner: owners[0], expectedLeaseOwner: null } as never, undefined, LEGACY.join(',')), /DeepSeek|update|newer/i);
+      { leaseOwner: owners[0], expectedLeaseOwner: null } as never, LEGACY.join(',')), /DeepSeek|update|newer/i);
     const takeovers = await Promise.allSettled(owners.map((leaseOwner) => api.takeoverLeases(f.runner, active,
-      { leaseOwner, expectedLeaseOwner: null } as never, undefined, CURRENT.join(','))));
+      { leaseOwner, expectedLeaseOwner: null } as never, CURRENT.join(','))));
     assert.equal(takeovers.filter((result) => result.status === 'fulfilled').length, 1, 'only one reclaim process wins the owner CAS');
     const winner = owners[takeovers.findIndex((result) => result.status === 'fulfilled')];
     assert.equal((await row(active)).inboxLeaseOwner, winner);
@@ -266,7 +266,7 @@ test('P1b DeepSeek Harness provider gate on PostgreSQL', { timeout: 300_000 }, a
     // Capability withdrawal applies even to an idempotent activation of the installed generation.
     await assert.rejects(() => api.activateLeases(f.runner, active, activation, CURRENT.join(',')), /DeepSeek|update|newer/i);
     await assert.rejects(() => api.takeoverLeases(f.runner, active,
-      { leaseOwner: randomUUID(), expectedLeaseOwner: winner } as never, undefined, CURRENT.join(',')), /DeepSeek|update|newer/i);
+      { leaseOwner: randomUUID(), expectedLeaseOwner: winner } as never, CURRENT.join(',')), /DeepSeek|update|newer/i);
     assert.equal((await row(active)).inboxLeaseOwner, winner);
   });
 

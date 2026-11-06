@@ -7,28 +7,26 @@
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/realtime/runner-hints.pg.spec.ts
  *
- * Two runners of one account, A and B, each with a workspace of its own. B keeps a claim long poll open throughout, and
- * is never handed a session.
+ * Two runners of one account, A and B, each with a workspace of its own. B keeps asking for work throughout, and is
+ * never handed a session.
  *
- *   1. a session opened in A's workspace is hinted to A alone: one claim hint on rnr.<A> and nothing on rnr.<B>. B's
- *      long poll stays open, and A's claim takes the session over HTTPS, as before, and wakes its inbox: one inbox
- *      hint naming it, on rnr.<A>;
+ *   1. a session opened in A's workspace is hinted to A alone: one claim hint on rnr.<A> and nothing on rnr.<B>. A's
+ *      claim takes the session and wakes its inbox: one inbox hint naming it, on rnr.<A>;
  *   2. a message sent to that session while it runs is hinted to A alone, as an inbox hint naming the session;
- *   3. Update Runner Now on B is hinted to B alone, as a commands hint, and B's wake poll returns as before;
+ *   3. Update Runner Now on B is hinted to B alone, as a commands hint;
  *   4. a message sent to a session of A's that is between turns queues it again: a claim hint for A alone, and A's
  *      claim of it an inbox hint, as in 1;
  *   5. an approval A asks for on its running session, decided by the account owner through the Web API, is hinted to A
  *      alone, naming the session and the approval, once the decision is stored; a second click on it hints nothing, a
- *      deny is hinted like an allow, and A's approval poll reads each decision over HTTPS as before;
- *   6. with NATS gone, a session opened on A is still handed to A's claim long poll at once over HTTPS and nothing is
- *      published; the apiserver logs the disconnect and, a minute later, the number of hints it dropped.
+ *      deny is hinted like an allow, and A reads each decision;
+ *   6. with NATS gone, a session opened on A is still handed to A's next claim and nothing is published; the apiserver
+ *      logs the disconnect and, a minute later, the number of hints it dropped.
  *
  * Not destructive: every row belongs to the account this run creates.
  */
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
-import http from 'node:http';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -43,6 +41,7 @@ import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-te
 import { hashPassword, sha256 } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import '../test-support/daemon-routes-over-http';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -108,45 +107,6 @@ class NatsStandIn {
   }
 }
 
-/** A long poll held open on a connection of its own, which the caller can drop. */
-interface Held {
-  answer: Promise<Reply>;
-  settled(): boolean;
-  hangUp(): void;
-}
-
-function hold(server: Apiserver, route: string, token: string): Held {
-  let done = false;
-  const req = http.request({
-    host: '127.0.0.1', port: server.port, method: 'GET', path: route, agent: false,
-    headers: { authorization: `Bearer ${token}` },
-  });
-  const answer = new Promise<Reply>((resolve, reject) => {
-    req.on('response', (res) => {
-      const parts: Buffer[] = [];
-      res.on('data', (chunk: Buffer) => parts.push(chunk));
-      res.on('end', () => {
-        done = true;
-        const text = Buffer.concat(parts).toString('utf8');
-        let json: unknown = null;
-        try {
-          json = JSON.parse(text);
-        } catch {
-          json = null;
-        }
-        resolve({ status: res.statusCode ?? 0, json, text, headers: res.headers });
-      });
-    });
-    req.on('error', (error) => {
-      done = true;
-      reject(error);
-    });
-  });
-  answer.catch(() => undefined);
-  req.end();
-  return { answer, settled: () => done, hangUp: () => req.destroy() };
-}
-
 async function within<T>(ms: number, what: string, promise: Promise<T>): Promise<T> {
   return Promise.race([
     promise,
@@ -179,13 +139,11 @@ test('each wake is hinted on NATS to the runner it concerns alone, and HTTPS wor
   const natsPort = await nats.listen();
   let server: Apiserver | undefined;
   let beating: ReturnType<typeof setInterval> | undefined;
-  const held: Held[] = [];
   let bWaiting: Promise<void> | undefined;
   let bStops = false;
   t.after(async () => {
     if (beating) clearInterval(beating);
     bStops = true;
-    for (const poll of held) poll.hangUp();
     await bWaiting;
     await server?.stop();
     await nats.stop().catch(() => undefined);
@@ -262,26 +220,24 @@ test('each wake is hinted on NATS to the runner it concerns alone, and HTTPS wor
   const statusOf = async (sessionId: string) =>
     (await sql.query<{ status: string }>(`SELECT "status" FROM "session" WHERE "id" = $1::uuid`, [sessionId])).rows[0].status;
 
-  // B waits for work the whole time, one claim long poll after another (each answers empty after 25 s): the polls the
-  // in-process signal wakes, every one of them, as it always has. Every session B is ever handed is kept here.
+  // B asks for work the whole time. Every session B is ever handed is kept here.
   const bClaimed: string[] = [];
   bWaiting = (async () => {
     while (!bStops) {
-      const poll = hold(server!, '/api/runner/sessions/claim', b.token);
-      held.push(poll);
-      const reply = await poll.answer.catch(() => null);
+      const reply = await api('GET', '/api/runner/sessions/claim', b.token).catch(() => null);
       if (reply?.json?.sessionId) bClaimed.push(toUuid(reply.json.sessionId));
+      await sleep(250);
     }
   })();
   await sleep(500);
 
   let onA = '';
-  await t.test('1. a session opened on A is hinted to A alone, and A claims it over HTTPS', async () => {
+  await t.test('1. a session opened on A is hinted to A alone, and A claims it', async () => {
     let mark = nats.published.length;
     onA = await openSession(a.workspaceId, 'work for machine A');
     assert.deepEqual(await publishedSince(mark, 1), [{ subject: `rnr.${a.id}`, message: claimHint }],
       'one claim hint, for the runner the session is queued for, and none for B');
-    assert.deepEqual(bClaimed, [], "B's claim long poll was handed a session");
+    assert.deepEqual(bClaimed, [], "B's claim was handed a session");
     mark = nats.published.length;
     const claimed = await within(10_000, "A's claim", api('GET', '/api/runner/sessions/claim', a.token));
     assert.equal(claimed.status, 200, claimed.text);
@@ -302,14 +258,11 @@ test('each wake is hinted on NATS to the runner it concerns alone, and HTTPS wor
     assert.deepEqual(bClaimed, []);
   });
 
-  await t.test('3. Update Runner Now on B is a commands hint to B alone, and B\'s wake poll returns as before', async () => {
+  await t.test('3. Update Runner Now on B is a commands hint to B alone', async () => {
     const mark = nats.published.length;
     const asked = await api('POST', `/api/runners/${uuidToBase62(b.id)}/self-update`, ownerToken);
     assert.equal(asked.status, 201, asked.text);
     assert.deepEqual(await publishedSince(mark, 1), [{ subject: `rnr.${b.id}`, message: commandsHint }]);
-    const woken = await within(5_000, "B's wake poll", api('GET', '/api/runner/wake', b.token));
-    assert.equal(woken.status, 200, woken.text);
-    assert.equal(woken.json?.wake, true, woken.text);
   });
 
   await t.test('4. a message to a session of A\'s between turns queues it again, hinted to A alone', async () => {
@@ -384,17 +337,10 @@ test('each wake is hinted on NATS to the runner it concerns alone, and HTTPS wor
     await nats.stop();
     await until(10_000, 'the apiserver noticing NATS is gone', () => /disconnected from NATS at /.test(server!.output()));
     const published = nats.published.length;
-    const aWaits = hold(server!, '/api/runner/sessions/claim', a.token);
-    held.push(aWaits);
-    await sleep(6_500); // past the claim's own 5 s re-poll, so an answer well inside the next one is the wake's
-    assert.equal(aWaits.settled(), false);
-    const openedAt = Date.now();
     const offline = await openSession(a.workspaceId, 'work for machine A while NATS is gone');
-    const answer = await within(10_000, "A's claim long poll", aWaits.answer);
-    const latency = Date.now() - openedAt;
+    const answer = await within(10_000, "A's claim", api('GET', '/api/runner/sessions/claim', a.token));
     assert.equal(answer.status, 200, answer.text);
     assert.equal(toUuid(answer.json?.sessionId), offline);
-    assert.ok(latency < 2_500, `the claim answered ${latency} ms after the session was opened: it was not woken`);
     assert.equal(nats.published.length, published, 'nothing reached a NATS that is not there');
     assert.deepEqual(bClaimed, []);
     // Counted, and reported once a minute rather than once per hint.

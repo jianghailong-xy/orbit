@@ -347,14 +347,14 @@ suite('which door materialises a run past a list cap, on real PostgreSQL', async
     // ceiling of one, and the claim hands it out — a second ask is answered null, because the first
     // is now RUNNING and `batchActiveTurns` counts it.
     const runner = { id: f.ids.runnerId, supportedProviders: [] };
-    const first = await queue.claimSessionForRunner(runner, 0);
+    const first = await queue.claimSessionForRunner(runner);
     assert.ok(first, 'the claim offered nothing from a batch with one queued run');
     assert.ok(
       after.some((row) => row.id === first!.sessionId),
       'the claim handed out a session that is not one of this batch',
     );
     assert.equal(
-      await queue.claimSessionForRunner(runner, 0),
+      await queue.claimSessionForRunner(runner),
       null,
       'the claim handed out a second run under a ceiling of one — the cap was not compressed',
     );
@@ -407,9 +407,9 @@ suite('which door materialises a run past a list cap, on real PostgreSQL', async
 
     // Neither door's overshoot reaches the gate: the claim still hands out the cap, not the count.
     const runner = { id: f.ids.runnerId, supportedProviders: [] };
-    assert.ok(await queue.claimSessionForRunner(runner, 0), 'the claim offered nothing');
+    assert.ok(await queue.claimSessionForRunner(runner), 'the claim offered nothing');
     assert.equal(
-      await queue.claimSessionForRunner(runner, 0),
+      await queue.claimSessionForRunner(runner),
       null,
       'the claim handed out a second run under a ceiling of one',
     );

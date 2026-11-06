@@ -215,7 +215,7 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
 
 ### 5.6 控制请求
 
-- **不再挂起。** 现在的几种长轮询（claim、inbox、wake、审批）都改成收到提示后立即调用、不挂起（`wait=0`）。
+- **不再挂起。** 原来的几种长轮询（claim、inbox、wake、审批）都改成收到提示后立即调用、不挂起（`wait=0`）。例外是领会话时某个会话的行锁被别的事务占着（`FOR UPDATE NOWAIT` 拿不到，常见的是同一会话正在取消息）：这次领会话先自己再试，最多约 5 秒，间隔从 50 毫秒起翻倍、最长 1 秒，两次之间不占领活锁，runner 断开就停（`QueueService.claimSessionForRunner`，5d28c667a）。切换后清理（§13）删掉了长轮询本身：`/runner/wake` 只回 426，只有 `orbit mcp` 经 HTTPS 读审批时仍最多挂起 25 秒（§15.11）。
 - **每个请求带 `request_id`，重发返回同一个结果。**
   - 取消息：同一个进程再来取、而它手上没有正在执行的那条时，立即重新投递，不再等 300 秒租约过期（`runner-api.controller.ts:4160`、`:480`）。runner 本来就按 turnId 去重。
   - 领会话：重试时返回同一个会话，取代现在事后靠 reclaim 对账。代码里已有先例：`TASK_RUN_REQUEST_IN_PROGRESS`（`src/runner-go/transport.go:176`）。
@@ -424,6 +424,10 @@ apiserver 进程数和数据库规格按 C2b 在单元规模上的实测补齐�
 
 ### 11.4 回滚
 
+> **历史：切换后清理之后不再适用（§13、§15.11）。** 切换开关和 runner 的 HTTP 工作路径都已删除：服务端不再读 `runner_link_switch`，守护进程路由对 HTTPS 一律回 426；runner 没有 HTTP 工作路径，`Welcome` 说 `MODE_HTTP` 时留在链路上等，不退回。所以“关闭切换开关”这条退路已经没有了，下面写的只适用于清理之前的版本。清理之后的退路是服务端版本回滚，见 §15.11。
+>
+> 复验时测到的（34s3o06uFqPEpYxniDlvC，报告文件 34s7Y4wL3cApo6EmztEty；staging 上的真实栈 f8b9964f3，两台 0.1.245 的真实 runner）：网关正常时，关开关后 runner 在 3.6–30.2 秒内退回 HTTPS（5 次）；网关停着时关开关，300 秒内一台也没有退回。runner 只从网关的 `Welcome` / `HeartbeatAck` 得知开关已关，HTTPS 被拒之后它不会自己再试 HTTPS，所以关开关要让 runner 回到 HTTPS，必须有一个在运行、连得上 runner 的网关；网关起不来时，只能重启 runner 进程。
+
 - **首选：关闭切换开关。** 旧路由恢复，runner 按 `Welcome` / `HeartbeatAck` 里的模式退回 HTTP。开关是运行时的，用 `PUT /api/admin/runner-link-required` 关，1 秒内生效，不用部署，见 §15.1。
   - **有多个 apiserver 时，关开关之前先让会话流都回到第一个 apiserver。** 退回 HTTPS 的 runner 把增量发到第一个 apiserver，只有那个进程上的流看得到（§15.3）。二选一：从 `docker-compose.override.yml` 去掉 web 网关挂载 `gateway/several-apiservers/` 的那一行，执行 `docker compose up -d gateway`；或者停掉多出来的 apiserver（`docker compose stop apiserver-2` 等）。然后再关开关。见 [self-hosting.md 的 "Several apiservers"](./self-hosting.md#several-apiservers)。
 - **第二道退路：版本回滚。** 服务端回到 vN-1，`/runner/release` 指定 vN-1 并标记回滚（`src/runner-go/selfupdate.go:420`），runner 降级后重新走 HTTP。
@@ -466,6 +470,8 @@ runner 本地的两种暂存，回滚和降级时这样处理：
 
 ## 13. 切换后清理
 
+已完成（D2，34bsPmWGZjo7CPt4BFI5G）。删了什么、留下了什么以及为什么留，见 §15.11。原计划：
+
 - 删除服务端 14 处 `runnerSupportsCapability` 能力判断、旧式轮询的兼容分支、旧的 `/complete` 路由、写入契约摘要 header、长轮询相关的代码和常量（包括 `/runner/wake`）。
 - 删除影子期代码。
 - 删除切换开关和 runner 的 HTTP 工作路径（D15）。
@@ -490,6 +496,8 @@ runner 本地的两种暂存，回滚和降级时这样处理：
 下面各条是实现落地后，和上文设计不一样或设计里没写到的地方，每条注明出处任务，并按项目分支 4a493f6b8（2026-10-27）上的代码核对过。正文相关的地方有一句指向这里；两处说法不一致时，以本节为准。
 
 ### 15.1 `RUNNER_LINK_REQUIRED` 是运行时开关
+
+> 历史：开关已在切换后清理中删除，见 §15.11。
 
 出处：D0（34lqlVVjIXZRmKyCWzATR）。涉及 D15、§11.3、§11.4。
 
@@ -695,3 +703,19 @@ runner 本地的两种暂存，回滚和降级时这样处理：
 - **容量。** 每个 runner 占 nginx 一个 worker 的 1024 个连接中的两个，一个 worker 大约带 500 个 runner，worker 数等于 CPU 数。超过时给链路单独的域名。所有 runner 在网关看来是同一个地址，所以这种形态把网关的单地址限速提到和全局限速一样。
 - **没有自动翻开关。** 脚本不写 `runner_link_switch`：这是管理员的门（有日志和唤醒），而且 D2 马上会删掉它；无人值守的升级也不该在有 turn 运行时翻开关。D2 之前，部署走 HTTPS，影子连接连着；D2 的构建把它们带到链路上。管理员想提前切，仍然用 `PUT /api/admin/runner-link-required`。
 - **`.env` 的三种状态和失败时的行为，** 见 [self-hosting.md 的 "Runner link"](./self-hosting.md#runner-link)。生产那种自己配置的链路，`.env` 不打开写，网关和 NATS 不构建也不重启；它的 web 网关在升级到这个版本时重建一次，因为 gateway/nginx.conf 变了。
+
+### 15.11 切换后清理（D2）
+
+出处：D2（34bsPmWGZjo7CPt4BFI5G）。涉及 §5.6、§11.3、§11.4、§13、§15.1、§15.9、D13、D14、D15。
+
+- **守护进程路由。** RunnerApiController 现在有 55 个路由（含 11-05 加入的废弃检出清单 `POST /runner/abandoned-checkouts`）：48 个守护进程路由对没有链路上下文的调用（即 HTTPS）一律回 426 `UPGRADE_REQUIRED`，不读开关；7 个按 D14 留在 HTTPS（注册的 3 个、附件的 2 个、Claude 地区检查、agent 保留文件的上传）。处理器本身留着：网关经内部监听把链路调用转给同一批路由（D13），它们就是链路的业务逻辑。
+- **带调用方标记的调用。** 任务给了两种做法，选的是第二种：路由保留，只给带 `X-Orbit-Runner-Caller` 标记的请求用，而且只在 8 个路由上（`@CalledByNamedCallers()`）：`GET /runner/me`、`POST /runner/deregister`、审批的两个、`scheduled-wakeup`、`orchestration-credential`、会话 meta、读会话事件。这是 runner-go 里 `orbit mcp`、Antigravity 审批钩子和 CLI（`newCallerTransport`）实际调用的全部守护进程路由。其余 40 个路由带了标记也回 426。`POST /runner/notify` 不在这个控制器上，不受影响。
+- **`GET /runner/wake` 留成一个只回 426 的入口。** 它不读任何东西，谁调都一样。0.1.246 的 runner 进程启动时可能经 HTTPS 调一次 wake：得到 404 它的 wake 循环就永久停止，得到 426 则转到链路上再试。`POST /runner/sessions/:id/complete` 删了：0.1.246 只在 `/finalize` 回 404 时才调用它。
+- **开关。** `GET` / `PUT /api/admin/runner-link-required` 删了（404）。表 `runner_link_switch` 和它的 Prisma 模型留着，没有迁移：服务端回滚到清理之前的版本时会读这一行，生产上它是打开的。网关读的 `GET /api/runner/link/mode` 留着，对网关一直答 `{"required": true}`，不读表：网关读不到它，就对 runner 说 `MODE_HTTP`，什么也不转。链路没配置时它和 `POST /api/runner/link-token` 一样回 404 `RUNNER_LINK_NOT_CONFIGURED`。
+- **长轮询。** 删了 `LONG_POLL_MS`、`INBOX_LONG_POLL_MS`、`waitForSignal`、`waitForInbox`、`waitForRunnerWake` 和它们的等待者。领会话和取消息立即应答；领会话失去行锁时约 5 秒的重试留着（§5.6）。`APPROVAL_LONG_POLL_MS` 留着：`orbit mcp` 经 HTTPS 读审批时仍挂起 25 秒。
+- **能力判断和旧式轮询。** 删了 2026-10-25 统计的 14 处 `runnerSupportsCapability` 和它们守着的旧分支：这些能力最晚由 0.1.232 的 runner 开始声明，而能和这个服务端工作的 runner 都有链路（0.1.237 起），都声明了它们。2026-11-01 加上的第 15 处留着：Claude 地区检查的"再查一次"只交给声明 `claude-region/v1` 的进程，而这个能力从 0.1.242 才有，0.1.237–0.1.241 的 runner 走链路照常工作、却不会检查。11-05 随废弃检出清单加入的 `abandoned-checkout-v1` 判断也留着：到 0.1.246 为止没有 runner 声明它。`RunnersService` 里读已持久化能力的登录门槛不是这种判断，留着。取消息必须带租约代次，不带回 400；`release-leases` 必须带代次和所有者。
+- **写入契约摘要。** 服务端不再读、也不再发摘要 header 和应答里的 `X-Orbit-Server-*`，修订号照旧校验。runner 照旧发摘要和能力声明：清理之前的服务端缺了摘要会拒绝修订（`RUNNER_PROTOCOL_CONTRACT_MISMATCH`），能力声明它也照读。等再也没有清理之前的服务端，下一次清理才能删 runner 这一侧。
+- **runner。** 删了 HTTP 工作路径（`ORBIT_LINK_MODE`、config.json 的 `linkMode`、链路 5 分钟不可达就退回 HTTPS、HTTPS 上的事件补发、`/complete` 回退）、影子连接（`ORBIT_LINK_SHADOW`）和守护进程的 wake 长轮询。守护进程的调用只走链路；`Welcome` 或 `HeartbeatAck` 说 `MODE_HTTP` 时 runner 不退回，留在链路上等。`orbit doctor` 对这种情况和没配链路的服务端都写 ✗。没有链路的传输只留给不是守护进程的进程（`orbit mcp`、CLI、钩子）；单元测试也用它驱动会话循环。
+- **没动。** 网关（`mode.go` 读模式、`LINK_MODE`、`shadow.go`、`MODE_HTTP` 的连接、`client_switch.go` 的演练）和“暂停派发”开关。网关的清理是单独的任务：网关一发布，runner 要断开 4–56 秒。
+- **发布顺序。** 服务端和 runner 谁先发布都可以：0.1.246 的 runner 在 `MODE_LINK` 下只走链路，对着清理之后的服务端照常工作；清理之后的 runner 对着清理之前、开关打开的服务端也照常工作。清理之后的服务端回滚到清理之前的版本时，开关那一行还是打开的，所以清理之后的 runner 照常工作；有人再把开关关上，这些 runner 就停工，因为它们没有 HTTP 路径。没有链路的部署（开关关着、或没配链路）用不了清理之后的服务端和 runner，所以默认安装和升级要先带上链路（34sREuYT2DCEXiW6qZuOh）。
+- **没有链路的旧 runner（0.1.237 之前）。** 它们的守护进程调用一律得到 426，第一次心跳被拒就以退出码 0 退出（日志 `⏸ interactive run … detached for shutdown (resumable)`），这时不会自更新。由 `orbit register` 装的服务（systemd 的 `Restart=always`、launchd 的 `KeepAlive`）几秒后把它拉起来，启动时的自更新经 `GET /runner/release`（仍走 HTTPS）换成 `/dl` 上的版本，随即走链路、接管会话，手上正在跑的 turn 也接着跑完（case 4c：turn 完成，事件 1..42 连续）；在终端里手动 `orbit run`、或没有重启策略的容器里跑的，会一直停着，直到有人再启动它，手上的 turn 以 runner 离线结束（case 4b，停了 13 分钟）。关了自更新的，每次启动都打印 426 的提示（`Run \`orbit upgrade\``）后退出。生产从 D1 打开开关起就是这样；自托管部署在第一次升级到清理之后的版本时遇到（34sREuYT2DCEXiW6qZuOh 的 case 4b 和 4c，0.1.233 的 runner）。

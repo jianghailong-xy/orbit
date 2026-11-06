@@ -53,7 +53,7 @@ test('P1 cursor claim requires the request and the persisted heartbeat to declar
       providers = value.supportedProviders;
       return null;
     } };
-    await controller(prisma, queue).claim(runner, SESSION_SOURCE_PIN_V1, request);
+    await controller(prisma, queue).claim(runner, request);
     assert.equal(providers.includes(AgentProvider.CURSOR), expected, `${request}/${JSON.stringify(snapshot)}`);
     // Nothing else the request names is taken away with it.
     if (request) assert.equal(providers.includes(AgentProvider.CLAUDE), true);
@@ -74,7 +74,7 @@ test('P1 cursor rows on a runner that has not declared Cursor CLI carry the upgr
         updateMany: async (args: { where: unknown; data: { error: string } }) => { marked.push(args); return { count: 1 }; },
       },
     };
-    await controller(prisma, { claimSessionForRunner: async () => null }).claim(runner, SESSION_SOURCE_PIN_V1, request);
+    await controller(prisma, { claimSessionForRunner: async () => null }).claim(runner, request);
     assert.equal(marked.length, 1);
     assert.equal(marked[0].data.error, CURSOR_RUNNER_UPGRADE_ERROR);
     // Recorded on Cursor CLI whatever credential it spends, and — for a row without an engine — the slug.
@@ -102,7 +102,7 @@ test('P1 cursor reclaim withholds Cursor CLI sessions from a runner that has not
       // run_event max(seq) for the reclaim snapshot — raw SQL, never `aggregate`.
       $queryRaw: async () => [{ max: 0 }],
     };
-    const response = await controller(prisma, {}).reclaim(runner, SESSION_SOURCE_PIN_V1, request);
+    const response = await controller(prisma, {}).reclaim(runner, request);
     assert.deepEqual(response.sessions.map((session) => session.sessionId), handsBack ? ['cursor', 'claude'] : ['claude']);
     if (handsBack) assert.equal(response.sessions[0].provider, AgentProvider.CURSOR);
   }

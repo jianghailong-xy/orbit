@@ -21,7 +21,7 @@ func TestLaunchdGivesTheRunnerItsWholeStop(t *testing.T) {
 	if testing.Short() {
 		t.Skip("sits through a whole stop")
 	}
-	latest := hostStopBudget.envelope + shutdownLastBeatWait + linkShadowStopWait + linkCloseWait
+	latest := hostStopBudget.envelope + shutdownLastBeatWait + linkCloseWait
 	dir := t.TempDir()
 	label := fmt.Sprintf("com.orbit.probe.stop-%d", os.Getpid())
 	ready := filepath.Join(dir, "ready")
