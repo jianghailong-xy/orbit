@@ -29,11 +29,29 @@ serve() {  # $1 = log file. The stub must answer before anything runs, or the pa
 
 STUB_PID=""
 STATUS=0
-run_pass() {  # $1 label, $2 scheme, $3 destination, $4 shots dir
+run_pass() {  # $1 label, $2 scheme, $3 destination, $4 shots dir, $5 simulator to boot again (optional)
   echo "==> $1"
-  SHOTS_DIR="$4" TEST_RUNNER_SHOTS_DIR="$4" xcodebuild test -project C11Probe.xcodeproj -scheme "$2" \
-    -destination "$3" -derivedDataPath ".dd-$2" -resultBundlePath "results/$1.xcresult" \
-    CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- > "build-$1.log" 2>&1 || STATUS=1
+  local try
+  for try in 1 2; do
+    if SHOTS_DIR="$4" TEST_RUNNER_SHOTS_DIR="$4" xcodebuild test -project C11Probe.xcodeproj -scheme "$2" \
+      -destination "$3" -derivedDataPath ".dd-$2" -resultBundlePath "results/$1.xcresult" \
+      CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- > "build-$1.log" 2>&1; then
+      break
+    fi
+    # Round 6: xcodebuild did not see a simulator simctl listed and had booted. Once more, after booting it again.
+    if [ "$try" = 1 ] && grep -q "Unable to find a device matching" "build-$1.log"; then
+      echo "==> $1: xcodebuild did not find the simulator; booting it again, retrying in 30 s"
+      if [ -n "${5:-}" ]; then
+        xcrun simctl boot "$5" 2>/dev/null || true
+        xcrun simctl bootstatus "$5" -b >/dev/null 2>&1 || true
+      fi
+      sleep 30
+      rm -rf "results/$1.xcresult"
+      continue
+    fi
+    STATUS=1
+    break
+  done
   grep -E "Test Case|Executed|error:|\*\* TEST" "build-$1.log" | tail -80 || true
   cp "build-$1.log" "$4/xcodebuild-$1.log"
   # The files this task added or changed, as this build compiled them into the probe app, and what the compiler said.
@@ -90,7 +108,7 @@ for pass in $PASSES; do
         xcrun simctl spawn "$IPHONE_UDID" defaults write "$domain" DidShowContinuousPathIntroduction -bool true 2>/dev/null || true
       done
       serve "$OUT/ios/requests.log"
-      run_pass ios C11Probe "id=$IPHONE_UDID" "$OUT/ios"
+      run_pass ios C11Probe "id=$IPHONE_UDID" "$OUT/ios" "$IPHONE_UDID"
       ;;
     ipad)
       [ -n "$IPAD_UDID" ] || { echo "==> no iPad Pro 13-inch simulator"; continue; }
@@ -99,7 +117,7 @@ for pass in $PASSES; do
       xcrun simctl bootstatus "$IPAD_UDID" -b >/dev/null 2>&1 || true
       xcrun simctl status_bar "$IPAD_UDID" override --time "9:41" --batteryState charged --batteryLevel 100 2>/dev/null || true
       serve "$OUT/ipad/requests.log"
-      run_pass ipad C11Probe "id=$IPAD_UDID" "$OUT/ipad"
+      run_pass ipad C11Probe "id=$IPAD_UDID" "$OUT/ipad" "$IPAD_UDID"
       ;;
     mac)
       serve "$OUT/mac/requests.log"

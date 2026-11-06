@@ -92,7 +92,7 @@ final class WikiChatShotTests: ProbeCase {
         #endif
         XCTAssertTrue(appears(app, chipWords, timeout: 15), "\(tag): the quote chip never showed")
         XCTAssertTrue(appears(app, "3.1 §3", timeout: 5), "\(tag): the page chip never showed")
-        let head = words(app, "New chat")
+        let head = panelHead(app, "New chat")
         note("\(tag): the panel's head: \(describe(head))")
         let screen = app.windows.firstMatch.frame
         if head.exists && phone {
@@ -137,6 +137,11 @@ final class WikiChatShotTests: ProbeCase {
         shot(fab, "\(platform)-fab-needs-you")
         shot("\(platform)-2a-page-needs-you")
         press(fab)
+        // Round 6 lost this tap once on a busy simulator: pressed once more if nothing opened, and said so.
+        if !appears(app, "DRAFT · ADD DECISION", timeout: 12), fab.exists, fab.isHittable {
+            note("\(tag): the button's first press opened nothing; pressed again")
+            press(fab)
+        }
         guard appears(app, "DRAFT · ADD DECISION", timeout: 40) else {
             shot("\(tag)-no-card")
             tree(app, "\(tag)-no-card")
@@ -276,7 +281,10 @@ final class WikiChatShotTests: ProbeCase {
         #else
         let bandTop = window.minY + 60
         #endif
-        bring(app, heading, between: bandTop, and: window.minY + window.height * 0.4, missingIsAbove: false, "\(tag)-section-3")
+        // Under a phone's half sheet the page chip reads its section off a line 45% down; a page shown whole, 30%
+        // (`WikiChatLogic.readingLine`): the heading stands above either.
+        bring(app, heading, between: bandTop, and: window.minY + window.height * (phone ? 0.4 : 0.25), missingIsAbove: false,
+              "\(tag)-section-3")
         settle(1)
         return app
     }
@@ -308,9 +316,26 @@ final class WikiChatShotTests: ProbeCase {
     /// Board 42 ⑤'s section 3 heading on the page.
     private func sectionThree(_ app: XCUIApplication) -> XCUIElement {
         let words = "turn 投递与 inbox 领取"
+        #if os(macOS)
+        // The heading's text exactly: the CONTAINS query below found nothing on a Mac in round 6, though the text was there.
+        return exactly(app, words)
+        #else
         return app.staticTexts.matching(NSPredicate(
             format: "(value CONTAINS %@ OR label CONTAINS %@) AND NOT (value CONTAINS %@ OR label CONTAINS %@)",
             words, words, "long-poll", "long-poll")).firstMatch
+        #endif
+    }
+
+    /// The panel's title: a text on a phone, the history menu's button on a Mac.
+    private func panelHead(_ app: XCUIApplication, _ title: String) -> XCUIElement {
+        #if os(macOS)
+        for candidate in [app.menuButtons[title], app.popUpButtons[title], app.buttons[title]] where candidate.exists {
+            return candidate
+        }
+        return exactly(app, title)
+        #else
+        return words(app, title)
+        #endif
     }
 
     /// A text whose words are exactly these.
