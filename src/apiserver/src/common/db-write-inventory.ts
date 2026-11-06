@@ -2871,6 +2871,8 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: 'managed-runners/managed-runner-work.ts#recordManagedDemand', class: 'ONE_ROW_CAS', statements: 1, note: 'Demand: the mapping by its unique runner id, unless deleted or its owner\'s account is disabled (a key read of the owner row in the same statement) — the demand counter and time, and RUNNING desired. A runner without a mapping matches no row. It does not move the revision: the manager\'s sleep decisions compare the demand revision itself.' },
   { at: 'managed-runners/managed-runner.service.ts#sleep', class: 'ONE_ROW_CAS', statements: 1, note: 'An owner\'s explicit sleep: the mapping by id and owner, only while READY and wanted running at the revision the owner read, to SLEEPING desired with the request\'s idempotency key.' },
   { at: 'managed-runners/managed-runner.service.ts#wake', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'An owner\'s explicit wake records demand (recordManagedDemand) and then the request\'s idempotency key on the mapping by id and owner.' },
+  // A managed runner's volume as its backend measured it (migration 0480).
+  { at: 'managed-runners/managed-runner-manager.ts#recordVolumeMeasurement', class: 'ONE_ROW_CAS', statements: 1, note: 'What the backend measured of the recorded volume, kept for the runner\'s heartbeat: `volume_measurement` on the mapping by id, only while this replica holds its lease, and only when the figures differ from the ones the pass read. A predicate write of its own column: it leaves `revision` alone, so no step\'s compare-and-set misses for it. A lease lost meanwhile matches nothing, and the next pass reads the volume again.' },
 ];
 
 export interface TriggerWriteSource {

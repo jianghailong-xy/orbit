@@ -1072,6 +1072,20 @@ export interface SessionLiveState {
   worktreeBranch?: string;
 }
 
+/** A managed runner's storage budget (RunnerHeartbeatResponse.storageBudget; the runner's
+ *  `StorageBudget`, src/runner-go/types.go). The byte counts are integers. */
+export interface StorageBudget {
+  /** The most the volume may hold: past it, the channel stops the container (VOLUME_OVER_LIMIT). */
+  limitBytes: number;
+  /** What it held when measured, as Docker's GET /system/df sizes a volume. */
+  usageBytes: number;
+  /** When that measurement was taken, RFC 3339: never earlier than when it finished, since the
+   *  runner adds back every checkout it began removing after this time. */
+  measuredAt: string;
+  /** The free space below which the runner reclaims checkouts. Zero is no floor. */
+  floorBytes: number;
+}
+
 export interface RunnerHeartbeatResponse {
   /** Session IDs the control plane wants the runner to interrupt / end. */
   cancelSessionIds: string[];
@@ -1133,8 +1147,23 @@ export interface RunnerHeartbeatResponse {
    *  Unlike `maxConcurrent`, absence here is a value rather than "no news": null is what a
    *  machine with no floor configured stores, an older control plane sends nothing, and both
    *  mean the same thing — no gate. The runner must therefore treat an absent field as "no
-   *  floor" and not as "keep whatever you last heard". */
+   *  floor" and not as "keep whatever you last heard".
+   *
+   *  A Kubernetes managed runner whose owner set no floor is sent a default instead, a quarter of
+   *  its PVC's size (docs/session-checkout-storage-design.md §5). The default is not stored, so the
+   *  auto-run disk gate still reads the owner's setting. */
   minFreeDiskMb?: number | null;
+  /** The storage budget a Docker managed runner's checkouts are held to: its data volume as the
+   *  restricted Docker channel last measured it, and the floor to reclaim at
+   *  (docs/session-checkout-storage-design.md §5). statfs inside the container reports the host's
+   *  disk, not the volume's limit, so the runner judges free space against this instead.
+   *
+   *  Absence is a value, as for `minFreeDiskMb`: the runner reads an answer without it as no budget.
+   *  Only a Docker managed runner's answer carries one, and a managed runner's every beat reconciles
+   *  in full, so every answer it gets carries it; the link's quiet answer, which goes to other
+   *  runners only, never does. Absent on older control planes, for every other runner, while the
+   *  managed runner switch is off, and while the channel has measured nothing. */
+  storageBudget?: StorageBudget;
   /** The one Codex rate-limit reset step this runner process should perform
    *  (docs/codex-rate-limit-reset-contract.md §6). Sent only to a process that declared
    *  `codex-rate-limit-reset-v1`, heartbeats with a leaseOwner and is not draining; redelivered
