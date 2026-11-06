@@ -985,6 +985,10 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// same way and stored beside the floor, with the checkouts the sweep has removed since it was
 	// measured (checkoutStorage). No budget is the floor's rule as it was.
 	var storage checkoutStorage
+	// Whether session checkouts here are cloned from their workspace's checkout or written out by git: the worktrees
+	// root's filesystem is probed at start, so that the log says which before the first checkout is made. A checkout
+	// made later probes again only on a filesystem not probed yet (clone_checkout.go).
+	_, _ = clonableFilesystem(worktreesDir())
 
 	loopCtx, stopLoop := context.WithCancelCause(context.Background())
 	loopCancel := func() { stopLoop(nil) }

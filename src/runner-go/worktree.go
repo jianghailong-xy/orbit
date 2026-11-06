@@ -700,7 +700,8 @@ func setupSourceWorktree(job *ClaimedSession, baseDir string, atRest bool) strin
 		add = []string{wtPath, job.Branch}
 	}
 	_, _ = git(repoRoot, "update-ref", baseRefName(job.SessionID), base)
-	if err := addSessionCheckout(job.SessionID, repoRoot, wtPath, base, add...); err != nil {
+	cloned, err := addSessionCheckout(job.SessionID, repoRoot, wtPath, base, add...)
+	if err != nil {
 		if !hadBaseRef {
 			_, _ = git(repoRoot, "update-ref", "-d", baseRefName(job.SessionID))
 		}
@@ -711,6 +712,7 @@ func setupSourceWorktree(job *ClaimedSession, baseDir string, atRest bool) strin
 	}
 	job.WT = &Worktree{Path: wtPath, Branch: job.Branch, BaseSha: base, RepoDir: repoRoot, Session: job.SessionID}
 	job.IsolationStatus = isoWorktree
+	job.CheckoutCreation = checkoutCreation(cloned)
 	logln(fmt.Sprintf("session %s — isolated in worktree %s (branch %s @ pinned %s)", job.SessionID, wtPath, job.Branch, shortSha(base)))
 	return execDir
 }
@@ -845,6 +847,7 @@ func setupCheckout(job *ClaimedSession, baseDir string, atRest bool) string {
 	}
 	// Record the fork point as a ref so it survives a runner restart (the in-memory
 	// BaseSha would be lost on reclaim), then create the worktree on the session's branch.
+	var cloned bool
 	if branchExists(repoRoot, job.Branch) {
 		// Re-creating a checkout for a branch that already exists (GC'd after a park, revived
 		// later): the repo HEAD has moved past the branch's fork by now, so stamping it as the
@@ -859,7 +862,7 @@ func setupCheckout(job *ClaimedSession, baseDir string, atRest bool) string {
 		}
 		// Whatever took the checkout may have left git believing it is still there.
 		_, _ = git(repoRoot, "worktree", "prune")
-		err = addSessionCheckout(job.SessionID, repoRoot, wtPath, base, wtPath, job.Branch)
+		cloned, err = addSessionCheckout(job.SessionID, repoRoot, wtPath, base, wtPath, job.Branch)
 		if err != nil && kept != "" {
 			// This session has had a checkout, its base ref says so, and that is where it goes on. A disk
 			// too full to hold it, or the branch checked out somewhere else, is why it did not come back,
@@ -871,7 +874,7 @@ func setupCheckout(job *ClaimedSession, baseDir string, atRest bool) string {
 		_, _ = git(repoRoot, "update-ref", "-d", absentRefName(job.SessionID))
 	} else {
 		_, _ = git(repoRoot, "update-ref", baseRefName(job.SessionID), base)
-		err = addSessionCheckout(job.SessionID, repoRoot, wtPath, base, "-b", job.Branch, wtPath, base)
+		cloned, err = addSessionCheckout(job.SessionID, repoRoot, wtPath, base, "-b", job.Branch, wtPath, base)
 	}
 	if err != nil {
 		_, _ = git(repoRoot, "update-ref", "-d", baseRefName(job.SessionID))
@@ -881,6 +884,7 @@ func setupCheckout(job *ClaimedSession, baseDir string, atRest bool) string {
 	}
 	job.WT = &Worktree{Path: wtPath, Branch: job.Branch, BaseSha: base, RepoDir: repoRoot, Session: job.SessionID}
 	job.IsolationStatus = isoWorktree
+	job.CheckoutCreation = checkoutCreation(cloned)
 	logln(fmt.Sprintf("session %s — isolated in worktree %s (branch %s @ %s)", job.SessionID, wtPath, job.Branch, shortSha(base)))
 	return execDir
 }
@@ -3516,6 +3520,16 @@ func (p *sessionPool) refuseSupervisorCheckout(id string, refusal *SourcePinRefu
 	}
 }
 
+// recordCheckoutCreation makes how the supervisor's checkout came back its own, which activatePrepared carries onto
+// the claim it activates, as it carries the checkout itself.
+func (p *sessionPool) recordCheckoutCreation(id, how string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if s := p.sessions[id]; s != nil && s.job != nil {
+		s.job.CheckoutCreation = how
+	}
+}
+
 // restoreAbsentCheckout puts back the checkout of a session whose claim is about to wake its supervisor,
 // whatever took it. Everything else that supervisor knows about the checkout still stands, and it is the
 // claim loop that calls this, so no sweep runs beside it. A checkout that cannot come back ends the run with
@@ -3531,11 +3545,14 @@ func restoreAbsentCheckout(pool *sessionPool, job *ClaimedSession) {
 	}
 	// Whatever took the checkout may have left git believing it is still there.
 	_, _ = git(wt.RepoDir, "worktree", "prune")
-	if err := addSessionCheckout(job.SessionID, wt.RepoDir, wt.Path, wt.baseSha(), wt.Path, branch); err != nil {
+	cloned, err := addSessionCheckout(job.SessionID, wt.RepoDir, wt.Path, wt.baseSha(), wt.Path, branch)
+	if err != nil {
 		refuseSourceWorktree(job, sourceRefusalWorktreeRequired, fmt.Sprintf("the session's checkout could not be restored from %s: %v", branch, err))
 		pool.refuseSupervisorCheckout(job.SessionID, job.SourceRefusal)
 		return
 	}
+	job.CheckoutCreation = checkoutCreation(cloned)
+	pool.recordCheckoutCreation(job.SessionID, job.CheckoutCreation)
 	_, _ = git(wt.RepoDir, "update-ref", "-d", absentRefName(job.SessionID))
 	logln(fmt.Sprintf("session %s — restored its checkout %s (branch %s)", job.SessionID, wt.Path, branch))
 	uncommitParkCheckpoint(wt)
