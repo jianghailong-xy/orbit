@@ -588,9 +588,10 @@ at once and comes back on the link, carrying on a turn it was running. A runner 
 in a terminal, stays stopped until you start it again.
 
 A [managed runner](#managed-runners) never updates itself either: it takes the new image with its next container, made
-when it wakes after it next sleeps, or, for one from before 0.1.237 on a build that serves runners only over the link, when
-the manager replaces it ([What an upgrade does](#what-an-upgrade-does)). Until then it runs the binary its container
-started with, as a runner with self-update off does.
+when it wakes after it next sleeps, or, for one from before 0.1.237, when it exits at the 426 or the manager replaces it
+([What an upgrade does](#what-an-upgrade-does)). Until then it runs the binary its container started with, as a runner
+with self-update off does. One of those that is busy when you upgrade loses what its turns do after the upgrade, so let
+them finish first.
 
 A runner with self-update off (`ORBIT_NO_SELFUPDATE`, or an install directory it cannot write to):
 
@@ -1268,9 +1269,9 @@ one through the API (`POST /api/managed-runner/sleep`), and only while nothing r
 and the stop proof are as for any sleep. A container of the previous image that was made and never started is never started: the
 channel removes it and makes a new one from the current image.
 
-The exception is a runner from before the runner link's client, in a container made before about 2026-10-25, on a
-server that takes the runner daemon's calls over the [runner link](#runner-link) alone. That server answers each of its
-calls 426, and what happens next depends on whether it is busy:
+The exception is a runner from before the runner link's client, in a container made before about 2026-10-25. This
+version takes the runner daemon's calls over the [runner link](#runner-link) alone ([Old runners](#old-runners)) and
+answers each of that runner's calls 426, and what happens next depends on whether it is busy:
 
 - **Idle**, or with a slot free, it asks for work, takes the 426 as final and exits. The manager starts it again from the
   current image, on the same volume and with the same runner, as after any stop: in the drill of 2026-11-06 it was
@@ -1286,8 +1287,8 @@ calls 426, and what happens next depends on whether it is busy:
 What a busy runner does after the upgrade is lost to its sessions. In the drill, each of two agent turns ran 46 tool
 steps; the server holds the first 10, and the other 36, 12 commits among them, ran unseen for 11 minutes before the
 container was stopped. Both sessions ended `FAILED`, so a new message to either is refused, and those commits were made
-only in each session's worktree on the runner's volume. So before you take such a version, let every managed runner from
-before the link client finish its turns. On a deployment already at a version from after 2026-10-25, you can also stop
+only in each session's worktree on the runner's volume. So before you upgrade to this version from one that still takes
+runners' calls over HTTPS, let every managed runner from before the link client finish its turns. On a deployment already at a version from after 2026-10-25, you can also stop
 each such container once it is idle (`docker stop mr-<runner id>`), and the manager makes its next one from the current
 image, which has the link client. The `docker ps` command a few paragraphs below lists the containers and their images.
 
