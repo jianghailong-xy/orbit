@@ -376,6 +376,12 @@ export interface WikiDocsDirectory {
 }
 
 export interface WikiDocSentenceView {
+  /**
+   * The sentence's public id: what a wiki chat's selection names (contract `chat.notes.wikiContext`), read
+   * again at delivery. A section written again gets new sentences and so new ids. Absent from a server
+   * older than the chat.
+   */
+  id?: string;
   text: string;
   status: WikiDocSentenceStatus;
   /** The document's footnote numbers it carries. */

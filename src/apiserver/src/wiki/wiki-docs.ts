@@ -2099,6 +2099,7 @@ export class WikiDocs {
             sentences: {
               orderBy: { position: 'asc' },
               select: {
+                id: true,
                 block: true,
                 text: true,
                 status: true,
@@ -2175,6 +2176,8 @@ export class WikiDocs {
         const status = sentence.status as WikiDocSentenceStatus;
         statuses.push(status);
         blocks[sentence.block]?.sentences.push({
+          // What a chat's selection names (contract `chat.notes.wikiContext`); rendered as a public id.
+          id: sentence.id,
           text: sentence.text,
           status,
           notes: [...new Set(sentence.footnotes.map(noteOf))],
