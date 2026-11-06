@@ -18,15 +18,13 @@
  *   5. the turn that was running carries on — its events, an approval its owner answers, its completion —
  *      and leaves the list;
  *   6. a message the owner sends stays PENDING, no session is claimed and no queued integration job is;
- *   7. switched off, the claim that waited through the pause is woken at once, every held session is claimed
- *      and every held message, reload and integration job is handed out.
+ *   7. switched off, every held session is claimed and every held message, reload and integration job is handed out.
  *
  * Not destructive: every row belongs to accounts this run creates.
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
-import http from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -43,53 +41,11 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { enqueueForDoneTask, INTEGRATION_JOB_CLAIM } from '../projects/project-integration-job';
 import { configureProjectIntegration } from '../projects/project-integration-line';
 import { TasksService } from '../tasks/tasks.service';
+import '../test-support/daemon-routes-over-http';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
 const RUNNER_TOKEN = `dispatch-pause-runner-${randomUUID()}`;
-
-/** A long poll held open on a connection of its own, which the caller can drop. */
-interface Held {
-  answer: Promise<Reply>;
-  settled(): boolean;
-  hangUp(): void;
-}
-
-function hold(server: Apiserver, route: string): Held {
-  let done = false;
-  const req = http.request({
-    host: '127.0.0.1',
-    port: server.port,
-    method: 'GET',
-    path: route,
-    agent: false,
-    headers: { authorization: `Bearer ${RUNNER_TOKEN}` },
-  });
-  const answer = new Promise<Reply>((resolve, reject) => {
-    req.on('response', (res) => {
-      const parts: Buffer[] = [];
-      res.on('data', (chunk: Buffer) => parts.push(chunk));
-      res.on('end', () => {
-        done = true;
-        const text = Buffer.concat(parts).toString('utf8');
-        let json: unknown = null;
-        try {
-          json = JSON.parse(text);
-        } catch {
-          json = null;
-        }
-        resolve({ status: res.statusCode ?? 0, json, text, headers: res.headers });
-      });
-    });
-    req.on('error', (error) => {
-      done = true;
-      reject(error);
-    });
-  });
-  answer.catch(() => undefined);
-  req.end();
-  return { answer, settled: () => done, hangUp: () => req.destroy() };
-}
 
 async function within<T>(ms: number, what: string, promise: Promise<T>): Promise<T> {
   return Promise.race([
@@ -218,8 +174,17 @@ test('the runner dispatch pause holds new work, lets running work finish, and ha
   const idleLease = { owner: randomUUID(), generation: randomUUID() };
   const idle = await session(RunStatus.AWAITING_INPUT, idleLease, { numTurns: 1 });
   const idleReload = await turn(idle, 'reload');
-  // A merge asked for on a finished session, not yet carried out.
+  // A merge asked for on a finished session, not yet carried out: its machine has not beaten since, so nothing has
+  // taken it up. (Any beat of the machine a merge waits for takes it up: drainMergeRequests.)
+  const mergeRunnerId = randomUUID();
+  await prisma.runner.create({
+    data: {
+      id: mergeRunnerId, ownerId: owner.id, name: 'the machine a merge waits for', tokenHash: sha256(`merge-${RUN}`),
+      maxConcurrent: 1, status: RunnerStatus.ONLINE, lastHeartbeatAt: new Date(),
+    },
+  });
   const merging = await session(RunStatus.SUCCEEDED, undefined, {
+    assignedRunnerId: mergeRunnerId,
     branch: `orbit/merge-${RUN}`, finishedAt: new Date(), mergeStatus: 'pending', mergeOperationId: randomUUID(),
   });
   await sql.query(`UPDATE "session" SET "merge_requested_at" = now() - interval '20 seconds' WHERE "id" = $1::uuid`, [merging]);
@@ -351,7 +316,6 @@ test('the runner dispatch pause holds new work, lets running work finish, and ha
     assert.ok(merge.elapsedSeconds >= 15 && merge.elapsedSeconds < 3_600, on.text);
   });
 
-  let idleHeld: Held | undefined;
   await t.test('the inbox hands out interrupt, end and a steer into the running turn, and nothing that starts one', async () => {
     assert.deepEqual(handed(await runner('GET', inbox(running, runningLease.generation))), [interrupt, 'interrupt']);
     assert.deepEqual(handed(await runner('GET', inbox(running, runningLease.generation))), [end, 'end']);
@@ -366,9 +330,6 @@ test('the runner dispatch pause holds new work, lets running work finish, and ha
     assert.equal(await turnStatusOf(claimedMessage), 'PENDING');
     const fence = await sql.query(`SELECT "retired_at" FROM "inbox_lease_generation" WHERE "generation" = $1::uuid`, [claimedLease.generation]);
     assert.ok(fence.rows[0]?.retired_at, 'the engine that gave the run back can still take its turns');
-
-    // The resident engine's reload waits too; this poll runs its whole course while the pause is on.
-    idleHeld = hold(server!, inbox(idle, idleLease.generation));
   });
 
   let followUp = '';
@@ -427,42 +388,25 @@ test('the runner dispatch pause holds new work, lets running work finish, and ha
     assert.equal(pausedBeat.json.integrationJobs, undefined, `a queued integration job was claimed while paused: ${pausedBeat.text}`);
     assert.equal(await jobStateOf(heldBack), 'QUEUED');
 
-    // The reload's poll ran out with nothing handed over.
-    const idleAnswer = await within(40_000, 'the resident engine\'s inbox poll', idleHeld!.answer);
+    // The resident engine's reload waits too.
+    const idleAnswer = await runner('GET', inbox(idle, idleLease.generation));
     assert.equal(idleAnswer.status, 200, idleAnswer.text);
     assert.equal(idleAnswer.json.turnId, '', `the inbox handed out a turn while paused: ${idleAnswer.text}`);
     assert.equal(await turnStatusOf(idleReload), 'PENDING');
   });
 
-  await t.test('switched off, the waiting claim is woken at once and everything held is handed out', async () => {
-    // Take any runner wake owed from before, so the one asked for below is the resume's.
-    const owed = hold(server!, '/api/runner/wake');
-    await sleep(1_000);
-    owed.hangUp();
-    await sleep(300);
-
-    // Opened 6.5 s before the switch: past the claim's own 5 s re-poll, and 3.5 s short of the next one, so
-    // an answer well inside that is the wake's.
-    const waiting = hold(server!, '/api/runner/sessions/claim');
-    await sleep(6_500);
-    assert.equal(waiting.settled(), false, 'a session was claimed while paused');
+  await t.test('switched off, everything held is handed out', async () => {
+    const whilePaused = await runner('GET', '/api/runner/sessions/claim');
+    assert.equal(whilePaused.status, 200, whilePaused.text);
+    assert.equal(whilePaused.json?.sessionId, undefined, `a session was claimed while paused: ${whilePaused.text}`);
     for (const id of [queued, claimed, running, idle]) assert.equal(await statusOf(id), 'PENDING');
     for (const id of [queuedMessage, claimedMessage, followUp, idleReload, sentMessage]) assert.equal(await turnStatusOf(id), 'PENDING');
 
-    const resumedAt = Date.now();
     const off = await switchTo(false);
     assert.equal(off.status, 200, off.text);
     assert.equal(off.json.paused, false);
     assert.notEqual(off.json.updatedAt, switchedAt);
-    const first = await within(10_000, 'the claim that waited through the pause', waiting.answer);
-    const latency = Date.now() - resumedAt;
-    assert.equal(first.status, 200, first.text);
-    assert.ok(first.json?.sessionId, `the claim that waited through the pause came back empty: ${first.text}`);
-    assert.ok(latency < 2_500, `the waiting claim answered ${latency} ms after the switch: it was not woken`);
-    const woken = await within(5_000, 'the runner wake', hold(server!, '/api/runner/wake').answer);
-    assert.equal(woken.json?.wake, true, 'the runner a queued integration job waits for was not woken');
-
-    const claimedNow = new Set([toUuid(first.json.sessionId)]);
+    const claimedNow = new Set<string>();
     for (let round = 0; round < 6 && claimedNow.size < 4; round += 1) {
       const next = await runner('GET', '/api/runner/sessions/claim');
       assert.equal(next.status, 200, next.text);

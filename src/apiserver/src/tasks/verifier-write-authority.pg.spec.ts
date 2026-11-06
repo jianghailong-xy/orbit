@@ -37,6 +37,7 @@ import { Client } from 'pg';
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import '../test-support/daemon-routes-over-http';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);

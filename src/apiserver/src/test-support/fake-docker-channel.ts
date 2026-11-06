@@ -53,6 +53,8 @@ export class FakeDockerChannel implements DockerChannel {
   limits: Record<string, number> = {};
   /** Set: the host's firewall for managed runners is configured and not in force, and the channel starts no container. */
   firewallDown: string | null = null;
+  /** Unset: a stop is taken in and the container goes on running, in its grace, until `exit` reports it. */
+  stopsAtOnce = true;
   private failures: Array<{ call: string; failure: Failure }> = [];
 
   /**
@@ -171,7 +173,7 @@ export class FakeDockerChannel implements DockerChannel {
       }
       const container: StoredContainer = {
         name: request.name, uid: randomUUID(), ownerId: request.ownerId, runnerId: request.runnerId, generation: request.generation,
-        volumeUid: request.volume.uid, volume: request.volume.name, node: this.host.name, status: 'running', running: true,
+        volumeUid: request.volume.uid, volume: request.volume.name, image: request.image, node: this.host.name, status: 'running', running: true,
         neverStarted: false, exitCode: null, startedAt: new Date().toISOString(), finishedAt: null, oomKilled: false, stopping: false,
         evicted: null, request,
       };
@@ -192,7 +194,8 @@ export class FakeDockerChannel implements DockerChannel {
       if (found.uid !== uid) throw new DockerChannelError(409, 'UID_MISMATCH', 'not the container with that UID');
       this.stopRequests.push({ name, uid });
       // SIGTERM, the grace, then a kill: Docker records the exit either way.
-      if (found.status === 'running') Object.assign(found, { status: 'exited', running: false, exitCode: 143, finishedAt: new Date().toISOString() });
+      if (found.status === 'running' && !this.stopsAtOnce) found.stopping = true;
+      else if (found.status === 'running') Object.assign(found, { status: 'exited', running: false, exitCode: 143, finishedAt: new Date().toISOString() });
       return found;
     });
   }

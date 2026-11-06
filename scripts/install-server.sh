@@ -5,8 +5,12 @@
 # A fresh install only. A .env, or a database under data/postgres, means a deployment already lives
 # here, and the script stops before it changes anything: a second run would replace that deployment's
 # secrets and decide its managed runners for it. Upgrade a deployment with
-# .claude/skills/upgrade/upgrade.sh, which never writes .env either, so managed runners stay as that
-# deployment's own .env has them.
+# .claude/skills/upgrade/upgrade.sh, which leaves managed runners as that deployment's own .env has them.
+#
+# The runner link is on in a new deployment (docs/self-hosting.md, "Runner link"). Runners reach it through the web
+# gateway's port, at the address they reach this server at: no port, certificate or firewall rule of its own. For it this
+# script builds the link gateway's image, has that image make the link's secrets, and writes them into .env, unshown. It
+# never writes RUNNER_LINK_REQUIRED, which is an administrator's.
 #
 # Managed runners are on in a new deployment (docs/self-hosting.md, "Managed runners"): every account
 # gets a runner of its own, a container on this host's Docker, when it signs in. For them this script
@@ -167,9 +171,12 @@ if [ "$ENABLE_FIREWALL" -eq 1 ]; then
   if grep -Eq "^[[:space:]]*COMPOSE_PROFILES=.*$FW_PROFILE" .env; then
     die "the managed runners' firewall is on for this deployment already ($FW_PROFILE is in COMPOSE_PROFILES)."
   fi
-  [ "$(grep -Ec '^[[:space:]]*COMPOSE_PROFILES=' .env)" = 1 ] && grep -qx 'COMPOSE_PROFILES=managed-runners-docker' .env \
-    || die ".env's COMPOSE_PROFILES is not the line an install writes (COMPOSE_PROFILES=managed-runners-docker): add
+  # What an install writes, with the runner link's later line where it wrote one or an upgrade added one.
+  if grep -E '^[[:space:]]*COMPOSE_PROFILES=' .env | grep -vxE 'COMPOSE_PROFILES=managed-runners-docker(,runner-link)?' >/dev/null \
+    || ! grep -qx 'COMPOSE_PROFILES=managed-runners-docker' .env; then
+    die ".env's COMPOSE_PROFILES is not the line an install writes (COMPOSE_PROFILES=managed-runners-docker): add
        $FW_PROFILE to it by hand, as docs/managed-runner-docker-operations.md describes."
+  fi
   MR_DIR="$(sed -n 's/^[[:space:]]*ORBIT_MANAGED_RUNNERS_DIR=//p' .env | tail -n 1)"
   MR_DIR="${MR_DIR%\"}"
   MR_DIR="${MR_DIR#\"}"
@@ -313,6 +320,69 @@ firewall_reach_check() {
        docker compose logs managed-runner-firewall."
 }
 
+# ── the runner link ─────────────────────────────────────────────────────────────────────────────────
+
+# The link's secrets, from the link gateway's own image, which this host then needs nothing else to make them: no
+# OpenSSL with Ed25519, no base64 that takes -w0. Named by the last commit under src/link-gateway, as /upgrade builds it,
+# so the first upgrade recreates nothing. The lines stay in this variable and in .env.
+LINK_IMAGE=orbit-link-gateway:local
+LINK_SECRETS=""
+prepare_runner_link() {
+  local flags=() source_sha
+  source_sha="$(git log -1 --format=%H -- src/link-gateway 2>/dev/null || true)"
+  if docker build --help 2>/dev/null | grep -e --provenance >/dev/null; then flags+=(--provenance=false); fi
+  echo "==> Building the link gateway from src/link-gateway ($LINK_IMAGE, local, never pushed)"
+  docker build ${flags[@]+"${flags[@]}"} --build-arg "ORBIT_SOURCE_SHA=$source_sha" -t "$LINK_IMAGE" src/link-gateway
+  LINK_SECRETS="$(docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges "$LINK_IMAGE" secrets)" \
+    || die "the link gateway's image did not make the runner link's secrets (above)"
+  [ "$(printf '%s\n' "$LINK_SECRETS" | grep -cE '^RUNNER_LINK_(SIGNING_KEY|PUBLIC_KEY|GATEWAY_TOKEN|NATS_(APISERVER|GATEWAY)_(SEED|KEY))="[^"]+"$')" = 7 ] \
+    || die "the link gateway's image made something other than the runner link's seven secrets"
+}
+
+# The link's lines, appended to the .env being written. Compose takes the last COMPOSE_PROFILES, so this one repeats
+# what the managed runners' line says, where there is one.
+write_link_lines() {
+  local profiles
+  profiles="$(sed -n 's/^COMPOSE_PROFILES=//p' "$1" | tail -n 1)"
+  echo
+  echo "# ─────────── Runner link: written by scripts/install-server.sh at $STAMP ───────────"
+  echo "# docs/self-hosting.md, \"Runner link\". Keep these with this deployment's other secrets; no upgrade replaces them."
+  echo "# Runners reach the link through the web gateway's port, at the address they reach this server at"
+  echo "# (RUNNER_LINK_URL=same-origin), so the gateway's own ports go on this host's loopback, where nothing else can collide"
+  echo "# with them. Compose takes the last COMPOSE_PROFILES in this file: this one is whatever came before it, with runner-link."
+  echo "RUNNER_LINK_URL=same-origin"
+  echo "RUNNER_LINK_ENV_FILE=./deploy/runner-link/behind-web-gateway.env"
+  echo "RUNNER_LINK_BIND=127.0.0.1"
+  echo "RUNNER_LINK_PORT=0"
+  echo "RUNNER_LINK_METRICS_PORT=0"
+  printf '%s\n' "$LINK_SECRETS"
+  echo "COMPOSE_PROFILES=${profiles:+$profiles,}runner-link"
+}
+
+# Once the stack is up: the way a runner takes, through the web gateway (scripts/runner-link/door-check.js).
+runner_link_check() {
+  local answer
+  echo "==> Checking that the web gateway's /runner-link reaches the link gateway"
+  answer="$(docker compose run --rm --no-deps -T apiserver node - http://gateway/runner-link <scripts/runner-link/door-check.js 2>/dev/null \
+    || echo "unreachable the check did not run")"
+  case "$answer" in
+    "401 UNAUTHENTICATED"*) ;;
+    *) die "the web gateway's /runner-link answered: $answer, not the link gateway's refusal of a request with no token. Check
+       docker compose ps and docker compose logs link-gateway nats." ;;
+  esac
+}
+
+runner_link_warning() {
+  case "${PUBLIC_ORIGIN:-http://localhost:2086}" in
+    https://*) ;;
+    *)
+      echo "!! warning: this deployment's address is plain http, so its runner link is plain ws://: session content and one-hour" >&2
+      echo "!! link tokens cross the network unencrypted, as its HTTP does. Put TLS in front of anything beyond a trusted LAN" >&2
+      echo "!! (docs/self-hosting.md, \"Put HTTPS in front\")." >&2
+      ;;
+  esac
+}
+
 # ── an administrator adds the firewall to a deployment that has managed runners ─────────────────────
 
 if [ "$ENABLE_FIREWALL" -eq 1 ]; then
@@ -333,6 +403,7 @@ if [ "$ENABLE_FIREWALL" -eq 1 ]; then
   trap 'rm -f "$NEW_ENV"' EXIT
   # The note an install with --no-managed-runner-firewall left goes too: it would say the firewall is off.
   sed -e "s/^COMPOSE_PROFILES=managed-runners-docker\$/COMPOSE_PROFILES=managed-runners-docker,$FW_PROFILE/" \
+      -e "s/^COMPOSE_PROFILES=managed-runners-docker,runner-link\$/COMPOSE_PROFILES=managed-runners-docker,$FW_PROFILE,runner-link/" \
       -e "/^# The managed runners' host firewall is OFF:/,/--enable-managed-runner-firewall adds it\.\$/d" .env >"$NEW_ENV"
   if [ -n "$FW_LOCK_LINE" ]; then echo "$FW_LOCK_LINE" >>"$NEW_ENV"; fi
   mv "$NEW_ENV" .env
@@ -492,6 +563,9 @@ fi
 if [ "$MANAGED" -eq 1 ] && [ "$FIREWALL" -eq 1 ]; then
   firewall_configure "$MR_GATEWAY"
 fi
+if [ "$ENABLE_EXISTING" -eq 0 ]; then
+  prepare_runner_link
+fi
 
 echo "==> Writing .env"
 NEW_ENV="$(mktemp .env.install.XXXXXX)"
@@ -520,6 +594,10 @@ else
   unset JWT_SECRET PROVIDER_SECRET_KEY
 fi
 write_managed_lines >>"$NEW_ENV"
+if [ "$ENABLE_EXISTING" -eq 0 ]; then
+  write_link_lines "$NEW_ENV" >>"$NEW_ENV"
+  LINK_SECRETS=""
+fi
 mv "$NEW_ENV" .env
 trap - EXIT
 
@@ -529,6 +607,9 @@ if [ "$START" -eq 0 ]; then
   fi
   if [ "$MANAGED" -eq 1 ] && [ "$FIREWALL" -eq 0 ]; then
     echo "!! warning: $FIREWALL_OFF_WARNING" >&2
+  fi
+  if [ "$ENABLE_EXISTING" -eq 0 ]; then
+    runner_link_warning
   fi
   echo "✓ Configuration written. Start the stack with: docker compose up -d --build --wait"
   exit 0
@@ -547,7 +628,8 @@ if [ "$ENABLE_EXISTING" -eq 1 ]; then
   docker compose up -d --wait --wait-timeout 300 --no-deps docker-channel apiserver
 else
   echo "==> Building the images"
-  docker compose build
+  # All but the link gateway's, built above.
+  docker compose build $(docker compose config --services | grep -vx link-gateway)
   # A new database takes every migration at once, which on a slow disk outlasts the apiserver's health
   # check at its first boot; applied first, the apiserver starts with nothing left to apply. The same
   # command its image runs at boot, resolving the Prisma CLI rather than naming its path.
@@ -568,6 +650,10 @@ if [ "$MANAGED" -eq 1 ]; then
   else
     echo "!! warning: $FIREWALL_OFF_WARNING" >&2
   fi
+fi
+if [ "$ENABLE_EXISTING" -eq 0 ]; then
+  runner_link_check
+  runner_link_warning
 fi
 if [ "$ENABLE_EXISTING" -eq 1 ]; then
   echo "✓ Managed runners are on: every account that signs in from now on gets one."

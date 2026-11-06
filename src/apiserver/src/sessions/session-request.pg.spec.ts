@@ -129,6 +129,7 @@ import { SessionRequestService, sessionReplyCommentId } from './session-request.
 import { SessionRequestWorker } from './session-request.worker';
 import { SessionsService } from './sessions.service';
 import { AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
+import '../test-support/dequeue-under-lease';
 
 declare global {
   interface BigInt { toJSON(): string; }

@@ -36,6 +36,7 @@
     "test:outcome-reconciler:full-clients": "bash scripts/outcome-reconciler-full-clients.sh",
     "test:outcome-reconciler:restart-postgres": "node --test --test-concurrency=1 --test-reporter=tap test/outcome-reconciler-restart-postgres.test.mjs",
     "test:upgrade-source-sha": "node --test test/upgrade-source-sha.test.mjs",
+    "test:upgrade-runner-link": "node --test test/upgrade-runner-link.test.mjs",
     "test:pg-backup-offhost": "node --test test/pg-backup-offhost.test.mjs",
     "test:macos-runner-signing": "node --test test/macos-runner-signing.test.mjs",
     "test:compose-topology": "node --test --test-reporter=tap test/compose-topology.test.mjs",

@@ -54,6 +54,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { ProjectsService } from './projects.service';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * The four deliveries a machine may not settle, and where each of them is put: the one about the

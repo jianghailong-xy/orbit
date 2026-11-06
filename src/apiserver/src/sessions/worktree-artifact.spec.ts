@@ -96,7 +96,7 @@ function fixture() {
     }
   };
   // RealtimeService's two halves of a file request's wait: the runner's answer (notifyWaiters) wakes the request
-  // parked on it (waitForInbox), as across replicas.
+  // parked on it (waitForNotice), as across replicas.
   const waiters = new EventEmitter();
   const notified: string[] = [];
   const api = new RunnerApiController(db as never, {} as never, {
@@ -110,7 +110,7 @@ function fixture() {
     {} as never,
     {
       notifyRunnerWake: (runnerId: string) => void woken.push(runnerId),
-      waitForInbox: (key: string, timeoutMs: number) => new Promise<void>((resolve) => {
+      waitForNotice: (key: string, timeoutMs: number) => new Promise<void>((resolve) => {
         const timer = setTimeout(done, timeoutMs);
         function done() { clearTimeout(timer); waiters.off(key, done); resolve(); }
         waiters.once(key, done);

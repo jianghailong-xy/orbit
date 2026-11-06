@@ -4,7 +4,7 @@
  *
  * WHY THE COMMIT IS THE SUBJECT, NOT THE NUDGE
  * -------------------------------------------
- * A runner parks in `GET /runner/wake` and beats the moment the control plane asks it to; without a
+ * A runner beats the moment the control plane hints it to; without a
  * wake, the job queued for it waits for that machine's next 30s heartbeat before it even starts.
  * That floor was taken out from under a Merge press on 2026-10-06 (sessions.service calls
  * `notifyRunnerWake` after its transaction commits) and is still there for every task the platform

@@ -49,6 +49,7 @@ import {
 import { TASK_ACCEPTANCE_CLIENT_TURN_PREFIX } from '../tasks/executable-acceptance-round';
 import { BACKGROUND_WAKE_TURN_PREFIX } from './background-job-wake';
 import { RunnerApiController } from './runner-api.controller';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;

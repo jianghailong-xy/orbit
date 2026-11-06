@@ -12,16 +12,17 @@ import (
 
 // The late check has to come after the last moment the control plane can still commit a claim the
 // runner gave up on, or it looks before that claim lands and the session stays RUNNING with nobody
-// supervising it. Read from the control plane's own source, so a longer poll there fails here instead
-// of quietly reopening the window.
+// supervising it. A claim answers at once, but for one that lost a row lock: that one asks again until
+// LOST_LOCK_RETRY_MS has passed, waiting at most LOST_LOCK_MAX_WAIT_MS between attempts. Read from the
+// control plane's own source, so a longer claim there fails here instead of quietly reopening the window.
 func TestTheLateClaimCheckWaitsOutTheControlPlanesClaim(t *testing.T) {
-	longPoll := tsMillis(t, filepath.Join("..", "apiserver", "src", "runner-api", "runner-api.controller.ts"),
-		`const LONG_POLL_MS = ([\d_]+);`)
+	queue := filepath.Join("..", "apiserver", "src", "queue", "queue.service.ts")
+	retries := tsMillis(t, queue, `const LOST_LOCK_RETRY_MS = ([\d_]+);`) + tsMillis(t, queue, `const LOST_LOCK_MAX_WAIT_MS = ([\d_]+);`)
 	connectionWait := tsMillis(t, filepath.Join("..", "apiserver", "src", "common", "transaction-retry.ts"),
 		`export const RUNNER_POLL_TRANSACTION_MAX_WAIT_MS = ([\d_]+);`)
 	// The claim sets no transaction timeout of its own, so it runs under Prisma's default.
 	const transactionTimeout = 5 * time.Second
-	if latest := longPoll + connectionWait + transactionTimeout; lateClaimWindow <= latest {
+	if latest := retries + connectionWait + transactionTimeout; lateClaimWindow <= latest {
 		t.Fatalf("lateClaimWindow is %s, but the control plane can commit a claim %s after the request began", lateClaimWindow, latest)
 	}
 }

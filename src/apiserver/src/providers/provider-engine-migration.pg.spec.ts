@@ -256,7 +256,7 @@ test('T4 provider-engine migration on PostgreSQL', { timeout: 900_000 }, async (
   async function claimAll(at: Machine): Promise<Map<string, ClaimedSession>> {
     const jobs = new Map<string, ClaimedSession>();
     for (;;) {
-      const job = await queue.claimSessionForRunner({ id: at.id, supportedProviders: ALL }, 0, true);
+      const job = await queue.claimSessionForRunner({ id: at.id, supportedProviders: ALL });
       if (!job) return jobs;
       jobs.set(job.sessionId, job);
     }

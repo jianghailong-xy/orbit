@@ -67,6 +67,7 @@ import { OwnerConfirmationReviewService } from './owner-confirmation-review.serv
 import { TaskOwnerConfirmationController } from './task-owner-confirmation.controller';
 import { TaskOwnerConfirmationService } from './task-owner-confirmation.service';
 import { TasksService } from './tasks.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const suite = URL ? test : test.skip;

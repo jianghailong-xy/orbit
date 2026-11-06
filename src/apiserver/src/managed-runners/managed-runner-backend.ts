@@ -47,8 +47,10 @@ import type { FencingReceiptVerdict, ManagedRunnerPredecessor, ObservedStopProof
  *     ended, which is half a stop proof; `exit` says how it ended (exit code, out of memory), for
  *     the log and the owner's reason. Only a backend whose host reports every stop it makes may
  *     also stop an instance (`stopInstance`, Docker), and the manager asks it only for a drain that
- *     overran its drain time. A stop asked for is never a proof: the same report and removal are
- *     waited for. Kubernetes has no such call — a deleted Pod on an unreachable node proves nothing.
+ *     overran its drain time, or for an instance of a previous image (`previousImage`) that a
+ *     link-only server has long stopped hearing. A stop asked for is never a proof: the same report
+ *     and removal are waited for. Kubernetes has no such call — a deleted Pod on an unreachable node
+ *     proves nothing.
  *   - Removal by UID. An instance or a credential is removed only by the UID it was observed with,
  *     so a successor under the same name is never removed; and an instance only once its stop is
  *     proven (the manager's gate).
@@ -158,6 +160,9 @@ export interface ManagedInstance {
   /** How it ended, by its host's report: its runner's exit code (null when the host gives none) and
    *  whether it was killed at its memory limit. Null while it has not ended, or when it never ran. */
   readonly exit: { readonly code: number | null; readonly outOfMemory: boolean } | null;
+  /** The image it was made from, when its host says and that is not the one this backend makes instances from
+   *  now (Docker: the image ID against the profile's `runner.image`, which an upgrade moves on). Absent otherwise. */
+  readonly previousImage?: string;
 }
 
 /** A fencing receipt left for an instance, and what reading it concluded. */

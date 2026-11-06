@@ -41,6 +41,7 @@ import type { CreateWatchDto } from './dto';
 import { WatchDeliveryOptions, WatchDeliveryService } from './watch-delivery.service';
 import { WatchEvaluatorOptions, WatchEvaluatorService } from './watch-evaluator.service';
 import { WatchesService } from './watches.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -658,7 +659,7 @@ qa('QA-02', 'normal path, RESUME_SESSION: a settled target wakes a parked observ
   assert.equal(await statusOf(observer), 'PENDING');
 
   // A runner slot claims the observer.
-  const claimed = await door.queue.claimSessionForRunner({ id: runner, supportedProviders: ['claude'] as never }, 0, false, false);
+  const claimed = await door.queue.claimSessionForRunner({ id: runner, supportedProviders: ['claude'] as never });
   assert.equal(claimed?.sessionId, observer, 'the runner claimed something other than the woken observer');
   assert.equal(await statusOf(observer), 'RUNNING');
 

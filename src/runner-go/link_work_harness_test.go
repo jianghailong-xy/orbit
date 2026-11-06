@@ -24,11 +24,11 @@ import (
 	"orbit/linkpb"
 )
 
-// The doubles of the link mode's tests: a link gateway in MODE_LINK that forwards each Rpc to a backend the test
+// The doubles of the link's tests: a link gateway in MODE_LINK that forwards each Rpc to a backend the test
 // writes, answers heartbeats by the rules of src/link-gateway/README.md (facts by digest, want_facts), supersedes a
 // process's older connection when its newer one is welcomed, closes a connection whose token expires, and can drop a
 // connection, drain it, refresh its token, redirect it or hint it whenever a test says. And a runner whose daemon
-// transport has a link mode pointed at it.
+// transport has a link pointed at it.
 
 // fakeWorkGateway is a link gateway over TLS for the work path's tests.
 type fakeWorkGateway struct {
@@ -447,7 +447,7 @@ func fakeLinkTokenExpiry(token string) time.Time {
 
 // ── The runner side ─────────────────────────────────────────────────────────────────────────────
 
-// linkWorkRig is a daemon transport with a link mode, against a control plane and a gateway.
+// linkWorkRig is a daemon transport with a link, against a control plane and a gateway.
 type linkWorkRig struct {
 	cp   *fakeLinkControlPlane
 	g    *fakeWorkGateway
@@ -456,10 +456,10 @@ type linkWorkRig struct {
 	logs *linkTestLog
 }
 
-// newLinkWorkRig builds the rig. Its link is not in use until something puts it there.
+// newLinkWorkRig builds the rig. Its link opens no connection until the test starts it (useLink).
 func newLinkWorkRig(t *testing.T) *linkWorkRig {
 	t.Helper()
-	// What the link mode's event streams still hold when it closes goes to the spool under ORBIT_HOME.
+	// What the link's event streams still hold when it closes goes to the spool under ORBIT_HOME.
 	if os.Getenv("ORBIT_HOME") == "" || !strings.HasPrefix(os.Getenv("ORBIT_HOME"), os.TempDir()) {
 		t.Setenv("ORBIT_HOME", t.TempDir())
 	}
@@ -481,12 +481,12 @@ func (r *linkWorkRig) trust(roots *x509.CertPool, proxy func(*http.Request) (*ur
 	r.m.work.client.dial = &http.Client{Transport: newLinkHTTPTransport(proxy, &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12})}
 }
 
-// useLink puts the link in use, as a gateway saying MODE_LINK on the shadow's connection does, and waits for the work
-// connection.
+// useLink starts the link, as startLink does, and waits for the work connection.
 func (r *linkWorkRig) useLink(t *testing.T) *fakeWorkConn {
 	t.Helper()
-	r.m.observe(linkpb.Mode_MODE_LINK, "the test")
-	c := r.g.waitWelcomed(t, len(r.g.welcomed())+1)
+	welcomed := len(r.g.welcomed())
+	r.m.start()
+	c := r.g.waitWelcomed(t, welcomed+1)
 	linkWaitFor(t, 5*time.Second, "the work connection to be adopted", func() bool {
 		cur := r.m.work.current()
 		return cur != nil && cur.id == c.id
@@ -494,10 +494,22 @@ func (r *linkWorkRig) useLink(t *testing.T) *fakeWorkConn {
 	return c
 }
 
-// shortenLinkWaits shortens the link mode's waits for one test.
-func shortenLinkWaits(t *testing.T, longPoll, approval, afterSeq time.Duration) {
+// shortenLinkWaits shortens the link's waits for one test.
+func shortenLinkWaits(t *testing.T, hint, approval, afterSeq time.Duration) {
 	t.Helper()
-	oldPoll, oldApproval, oldAfter := linkLongPoll, linkApprovalRecheck, linkAfterSeqWait
-	linkLongPoll, linkApprovalRecheck, linkAfterSeqWait = longPoll, approval, afterSeq
-	t.Cleanup(func() { linkLongPoll, linkApprovalRecheck, linkAfterSeqWait = oldPoll, oldApproval, oldAfter })
+	oldHint, oldApproval, oldAfter := linkHintWait, linkApprovalRecheck, linkAfterSeqWait
+	linkHintWait, linkApprovalRecheck, linkAfterSeqWait = hint, approval, afterSeq
+	t.Cleanup(func() { linkHintWait, linkApprovalRecheck, linkAfterSeqWait = oldHint, oldApproval, oldAfter })
+}
+
+// deliver is what a session's supervisor does with its events (session.go): it holds the session's stream, here for the
+// rest of the test, hands them over and waits until they are stored.
+func (r *linkWorkRig) deliver(t *testing.T, ctx context.Context, sessionID string, batch RunEventBatch) error {
+	t.Helper()
+	s := r.m.events.open(sessionID)
+	t.Cleanup(s.release)
+	if err := s.submit(batch.Events); err != nil {
+		return err
+	}
+	return s.waitStored(ctx)
 }

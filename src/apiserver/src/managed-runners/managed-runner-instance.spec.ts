@@ -30,7 +30,6 @@ import {
   managedRunnerInstanceClaimable,
   managedRunnerInstanceOffer,
   managedRunnerInstanceVerdict,
-  reauthorizeManagedRunnerInstance,
   type ManagedRunnerInstanceRecord,
 } from './managed-runner-instance';
 
@@ -101,17 +100,6 @@ test('work is handed out only to an instance still authorized and not draining',
   assert.equal(managedRunnerInstanceClaimable(mapping({ podUid: OTHER_POD }), instance), false, 'another Pod recorded');
   assert.equal(managedRunnerInstanceClaimable(null, instance), false, 'no mapping');
   assert.equal(managedRunnerInstanceClaimable(mapping({ id: OTHER_POD }), instance), false, 'another mapping');
-});
-
-test('a long poll’s later rounds re-read the mapping: a fenced instance is refused there too', async () => {
-  const instance = { mappingId: MAPPING, generation: 3, podUid: POD };
-  const reading = (row: ManagedRunnerInstanceRecord | null) => ({ managedRunner: { findUnique: async () => row } });
-  await reauthorizeManagedRunnerInstance(reading(mapping()) as never, instance);
-  await assert.rejects(reauthorizeManagedRunnerInstance(reading(mapping({ managementState: 'FENCING' })) as never, instance),
-    (e: any) => e.getStatus() === 403 && e.getResponse().code === MANAGED_RUNNER_INSTANCE_FENCED);
-  await assert.rejects(reauthorizeManagedRunnerInstance(reading(mapping({ generation: 4, podUid: null })) as never, instance),
-    (e: any) => e.getStatus() === 403 && e.getResponse().code === MANAGED_RUNNER_INSTANCE_SUPERSEDED);
-  await assert.rejects(reauthorizeManagedRunnerInstance(reading(null) as never, instance), (e: any) => e.getStatus() === 403);
 });
 
 /**

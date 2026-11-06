@@ -69,6 +69,7 @@ import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { TasksService } from '../tasks/tasks.service';
 import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsService } from './sessions.service';
+import '../test-support/daemon-routes-over-http';
 
 declare global {
   interface BigInt { toJSON(): string; }

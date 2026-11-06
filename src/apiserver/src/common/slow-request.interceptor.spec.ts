@@ -11,7 +11,7 @@ import { SlowRequestInterceptor } from './slow-request.interceptor';
  * and this file reads it through the clock instead: a request is timed by mocking `Date`, ticking
  * past 500 ms, and reading the line back. What IS asserted is the shape of the line (method, route
  * TEMPLATE, elapsed) and that the routes which hold by design never produce one, since a log full
- * of the 25 s runner polls is the failure mode that would make the whole thing worth deleting.
+ * of the 25 s approval polls is the failure mode that would make the whole thing worth deleting.
  */
 
 /** Captures the lines, so the assertion is about what a reader sees rather than a call count. */
@@ -69,9 +69,6 @@ test('a route that is supposed to hold is never timed', async (t) => {
   const { warnings, restore } = captureWarnings();
   try {
     const held = [
-      '/api/runner/sessions/claim',
-      '/api/runner/wake',
-      '/api/runner/sessions/:id/inbox',
       '/api/runner/sessions/:id/approvals/:approvalId',
       '/api/events',
       '/api/sessions/:id/events',

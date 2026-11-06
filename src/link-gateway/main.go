@@ -20,6 +20,7 @@ const usage = `usage: link-gateway [command]
   client    a test runner: connect, heartbeat, mirror, follow Drain (link-gateway client -h)
   health    exit 0 when this container's gateway answers its health check
   nkey      print a new NATS user nkey pair (seed and public key), for LINK_NATS_SEED and nats.conf
+  secrets   print a new deployment's runner link secrets as .env lines (scripts/install-server.sh and /upgrade write them)
   version   print the version
 `
 
@@ -43,6 +44,8 @@ func run(args []string) int {
 		return healthMain(args)
 	case "nkey":
 		return nkeyMain(args, os.Stdout, os.Stderr)
+	case "secrets":
+		return secretsMain(args, os.Stdout, os.Stderr)
 	case "version":
 		fmt.Println(version)
 		return 0

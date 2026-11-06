@@ -39,7 +39,7 @@
 // confirmed: design D1 and section 11.5 put the gateway in Compose, its coordinator filed the service) added one more
 // service, link-gateway: the WebSocket endpoint runners connect to directly, on a port of its own. It is given the token
 // signing key's public half and the gateway's secret, never the signing key itself, and no database, Docker socket or
-// host network, under a profile of its own that no install switches on, whose whole definition (o) pins. A deployment
+// host network, under a profile of its own that no install switched on then, whose whole definition (o) pins. A deployment
 // whose .env does not name that profile runs exactly what it ran.
 //
 // On 2026-10-25 the runner link's hints (project 34bc0CsOzPh9KshG7H3DW, task B1, of the plan the account owner confirmed:
@@ -104,6 +104,19 @@
 // sets it, and the two values pgbackup keeps base backups by, with pgbackup's own defaults, so that the grace period reads
 // the same numbers rather than a second one that could drift. No service, mount or port is added, and pgbackup's block is
 // unchanged. The block below pins them.
+//
+// On 2026-11-05 the account owner decided that a default install and an upgrade bring the runner link up before task D2
+// deletes the HTTPS work path (project 34bc0CsOzPh9KshG7H3DW, task 34sREuYT2DCEXiW6qZuOh; its coordinator approved this
+// pin): the runner-link profile is now what scripts/install-server.sh and /upgrade switch on in .env for a deployment with
+// no link. No service is added. link-gateway gains two things, so that its gateway can sit behind the web gateway's port:
+// env_file, /dev/null unless .env names deploy/runner-link/behind-web-gateway.env, which turns its TLS off and lifts its
+// limit per address, and a bind address on its port, empty unless .env sets it. A deployment that sets neither renders
+// the service with the same config hash as before, so Compose recreates nothing: (o) pins the lines and
+// test/upgrade-runner-link.test.mjs the rendering.
+//
+// Task D2 (34bsPmWGZjo7CPt4BFI5G), which the owner confirmed on 2026-11-05, deletes the HTTPS work path, so the same task's
+// guard (the coordinator's decision of that day) makes the apiserver's signing key required: a deployment with no link gets
+// a refusal from Compose naming what to run, and /upgrade's script reads the requirement as the mark of a link-only build.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -340,7 +353,7 @@ const APPROVED_APISERVER_BLOCKS = [
   // gateway's address and the secret the gateway reads revocations with, each empty unless the host's .env sets it.
   // Listed before the managed runners' because the lines come before theirs in the file.
   [
-    '      RUNNER_LINK_SIGNING_KEY: "${RUNNER_LINK_SIGNING_KEY:-}"',
+    '      RUNNER_LINK_SIGNING_KEY: "${RUNNER_LINK_SIGNING_KEY:?this build serves runners only over the runner link, and this deployment has none. Run .claude/skills/upgrade/upgrade.sh, which sets it up. docs/self-hosting.md, Runner link}"',
     '      RUNNER_LINK_URL: "${RUNNER_LINK_URL:-}"',
     '      RUNNER_LINK_GATEWAY_TOKEN: "${RUNNER_LINK_GATEWAY_TOKEN:-}"',
   ],
@@ -640,6 +653,7 @@ test('(o) the runner link gateway is exactly the service the runner link project
     '    image: orbit-link-gateway:local',
     '    container_name: orbit-link-gateway',
     '    restart: unless-stopped',
+    '    env_file: ["${RUNNER_LINK_ENV_FILE:-/dev/null}"]',
     '    stop_grace_period: 90s',
     '    read_only: true',
     '    cap_drop: [ALL]',
@@ -657,7 +671,7 @@ test('(o) the runner link gateway is exactly the service the runner link project
     '      LINK_ACME_EMAIL: "${RUNNER_LINK_ACME_EMAIL:-}"',
     '      LINK_ACME_CACHE_DIR: /var/lib/orbit-link-gateway/acme',
     '    ports:',
-    '      - "${RUNNER_LINK_PORT:-8443}:8443"',
+    '      - "${RUNNER_LINK_BIND:-}:${RUNNER_LINK_PORT:-8443}:8443"',
     '      - "127.0.0.1:${RUNNER_LINK_METRICS_PORT:-9464}:9464"',
     '    volumes:',
     '      - "${RUNNER_LINK_GATEWAY_DIR:-/dev/null}:/var/lib/orbit-link-gateway"',

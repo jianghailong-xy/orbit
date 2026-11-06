@@ -1,8 +1,10 @@
 # Runner link gateway
 
 The link gateway is the WebSocket endpoint each runner keeps one connection to
-([docs/runner-link-design.md](../../docs/runner-link-design.md) §4, §5.4, §6.1). Runners reach it directly, on a port of
-its own, never through Cloudflare or the web gateway (decision D1). Frames are the protobuf messages of
+([docs/runner-link-design.md](../../docs/runner-link-design.md) §4, §5.4, §6.1). Where it has a host name of its own, as
+production's has, runners reach it directly on a port of its own, never through Cloudflare or the web gateway (decision
+D1). On a default install they reach it through the web gateway's port (§15.10; [docs/self-hosting.md](../../docs/self-hosting.md#how-a-runner-reaches-the-link)),
+and it speaks plain `ws://` inside the project's network. Frames are the protobuf messages of
 [contracts/runner-link/v1](../../contracts/runner-link/v1/runner_link.proto); `linkpb/` is their generated Go.
 
 It authenticates connections, greets runners, keeps connections alive and drains them, and relays the
@@ -30,6 +32,7 @@ It is one static binary with these subcommands:
 | `link-gateway client` | A test runner for staging and drills. See [Test client](#test-client). |
 | `link-gateway health` | The container health check: exits 0 when `/healthz` on the metrics port answers 200. |
 | `link-gateway nkey` | Print a new NATS user nkey pair, `seed=` then `public=`, once to standard output. See [NATS](#nats). |
+| `link-gateway secrets` | Print a new deployment's link secrets as `.env` lines, once to standard output: the signing key and its public half, the gateway token, and both NATS pairs. `scripts/install-server.sh` and `/upgrade`'s script write them into `.env`. |
 | `link-gateway version` | Print the commit the binary was built from. |
 
 ## Configuration
@@ -42,7 +45,7 @@ It is one static binary with these subcommands:
 | `LINK_CELL_ID` | `cell-1` | The cell this gateway serves. A token for another cell is refused. |
 | `LINK_LISTEN_ADDR` | `:8443` | The runners' port. |
 | `LINK_METRICS_ADDR` | `:9464` | `/metrics` and `/healthz`, plain HTTP. Never expose it publicly. |
-| `LINK_TLS_MODE` | `acme` when `LINK_ACME_DOMAINS` is set, else `files` | `files`, `acme`, or `off` (plain `ws://`, for development only). |
+| `LINK_TLS_MODE` | `acme` when `LINK_ACME_DOMAINS` is set, else `files` | `files`, `acme`, or `off` (plain `ws://`, for development, and behind a web gateway that carries the deployment's own TLS: `deploy/runner-link/behind-web-gateway.env`). |
 | `LINK_TLS_CERT_FILE`, `LINK_TLS_KEY_FILE` | required in `files` mode | The certificate chain and its key, PEM. When either file changes, they are read again every `LINK_TLS_RELOAD_INTERVAL` (30s) and at once on `SIGHUP`. A renewal or rotation needs no restart. A pair that does not load leaves the certificate in use alone. |
 | `LINK_ACME_DOMAINS` | — | Comma-separated names to obtain certificates for over ACME (TLS-ALPN-01). The ACME server must reach this gateway on port 443. |
 | `LINK_ACME_EMAIL` | — | The ACME account's contact address. |
@@ -61,7 +64,7 @@ It is one static binary with these subcommands:
 | `LINK_INGEST_QUEUE_MAX_EVENTS`, `LINK_INGEST_QUEUE_MAX_BYTES` | `200000`, `134217728` | The most durable events, and payload bytes, the [ingest queue](#durable-events-and-credit) holds across all connections, however many there are. At the defaults that is about half a gigabyte of the gateway's memory: 200,000 events of 660 bytes are about 470 MiB, at the 2.4 KB each that task C2b measured, and 128 MiB of larger events, which the bytes bound stops first, about 600 MiB. Size it to the gateway's memory beside its connections (about 158 KiB each: 2.3 GiB for 15,000). Each must be at least one connection's credit, 10,000 events and 64 MiB. The credit's high- and low-water marks are half and a quarter of it. |
 | `LINK_HELLO_TIMEOUT` | `10s` | How long after the upgrade a Hello may take. |
 | `LINK_HANDSHAKE_TIMEOUT` | `5s` | How long the TLS handshake and the upgrade request may take, together. |
-| `LINK_IP_RATE`, `LINK_IP_BURST` | `1`, `20` | New connections per second per client address, and the burst allowed. |
+| `LINK_IP_RATE`, `LINK_IP_BURST` | `1`, `20` | New connections per second per client address, and the burst allowed. Behind a web gateway every runner is one address: `deploy/runner-link/behind-web-gateway.env` raises these to the limit across all clients. |
 | `LINK_HANDSHAKE_RATE`, `LINK_HANDSHAKE_BURST` | `200`, `400` | New connections per second across all clients, and the burst allowed. |
 | `LINK_DRAIN_BATCH`, `LINK_DRAIN_BATCH_INTERVAL` | `250`, `1s` | How many connections are sent Drain at a time, and how far apart. |
 | `LINK_DRAIN_RECONNECT_MIN`, `LINK_DRAIN_RECONNECT_MAX` | `1s`, `30s` | The range the per-connection reconnect delay is drawn from, uniformly. |

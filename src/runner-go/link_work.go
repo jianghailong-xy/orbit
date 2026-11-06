@@ -17,8 +17,8 @@ import (
 	"orbit/linkpb"
 )
 
-// The work connection (docs/runner-link-design.md §5.4, §7, decisions D10 and D15): the one connection the daemon's
-// work goes over in link mode, opened by linkClient (link_client.go) over TLS through whatever proxy HTTPS_PROXY names.
+// The work connection (docs/runner-link-design.md §5.4, §7, decision D10): the one connection the daemon's work goes
+// over, opened by linkClient (link_client.go) over TLS through whatever proxy HTTPS_PROXY names.
 //
 // Identity. The process's identity is the daemon transport's leaseOwner, which its link tokens and every Hello name,
 // and which no reconnect changes: leases belong to the process, so a dropped connection costs none of them. Each
@@ -45,10 +45,8 @@ const (
 	// linkRPCBackoffMax caps the wait before a call is sent again after a failure that said it may be: the gateway's
 	// own retries across backends have already taken their 5s.
 	linkRPCBackoffMax = 2 * time.Second
-	// linkUnreachableFallback is how long the link may stay unreachable before the work goes back to HTTPS, when only a
-	// gateway's MODE_LINK put it there and the control plane never refused HTTPS: a gateway that said MODE_LINK and
-	// then went away must not leave the runner working over nothing. Once HTTPS is refused, nothing sends it back.
-	linkUnreachableFallback = 5 * time.Minute
+	// linkLogQuiet is how long a connection failure that repeats goes unlogged.
+	linkLogQuiet = 10 * time.Minute
 )
 
 var (
@@ -56,6 +54,8 @@ var (
 	errLinkNotConnected = errors.New("the runner link is not connected")
 	// errLinkConnEnded is a connection that ended before it answered: the call goes again on the next one.
 	errLinkConnEnded = errors.New("the runner link connection ended before it answered")
+	// errLinkClosed is a call made once the link has closed: the runner is stopping.
+	errLinkClosed = errors.New("the runner link is closed: the runner is stopping")
 )
 
 // linkWork keeps the work connection of one link mode.
@@ -74,30 +74,19 @@ type linkWork struct {
 	done    chan struct{}      // closed when the last loop started has ended
 	lastErr error              // why the last connection could not be had, for the calls waiting on one
 	attempt int                // failed connection attempts since the work started or a connection was welcomed
-	// flaps counts the starts in a row that met a Welcome saying MODE_HTTP: the link was asked for and the gateway
-	// would not carry it, which, repeated, opens and closes connections as fast as the two answers arrive.
-	flaps  int
-	calls  map[string]*linkCall
-	events chan linkWorkEvent
+	calls   map[string]*linkCall
+	events  chan linkWorkEvent
 
 	loggedErr   string
 	loggedErrAt time.Time
-	// lostAt is when the work last had a connection and lost it, zero while it has one; stoppedAt, when the work last
-	// stopped, which a time on HTTPS follows.
-	lostAt    time.Time
-	stoppedAt time.Time
-	// runnerStopping is set once the runner has begun to stop (linkMode.stopping): a time without a connection then
-	// sends the work back to HTTPS at once, not after linkUnreachableFallback.
-	runnerStopping bool
+	// lostAt is when the work last had a connection and lost it, zero while it has one.
+	lostAt time.Time
 }
 
 // linkWorkConn is the work's state of one of its connections.
 type linkWorkConn struct {
 	*linkConn
 	ready chan struct{} // closed once linkConn is set: frames read before that wait for it
-	// dialed is when the runner began to open it: its Welcome states the mode its gateway gave it on taking the
-	// upgrade, which came after.
-	dialed time.Time
 
 	beatMu  sync.Mutex
 	acks    chan *linkpb.HeartbeatAck // the next HeartbeatAck, for the beat waiting on it
@@ -168,21 +157,6 @@ func (w *linkWork) stop() {
 	w.notifyLocked()
 }
 
-// stopping marks the runner stopping, and reports whether the work is running without a connection now.
-func (w *linkWork) stopping() bool {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.runnerStopping = true
-	return w.cancel != nil && (w.cur == nil || w.cur.ended())
-}
-
-// stoppingWithoutConn reports whether the runner is stopping while the work has no connection.
-func (w *linkWork) stoppingWithoutConn() bool {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.runnerStopping && w.cur == nil
-}
-
 // wait waits for the last loop to end, at most d.
 func (w *linkWork) wait(d time.Duration) {
 	w.mu.Lock()
@@ -202,8 +176,8 @@ func (w *linkWork) notifyLocked() {
 	w.changed = make(chan struct{})
 }
 
-// waitConn is the connection a call goes out on now: the newest, once one is welcomed. It waits for one while the
-// link is in use, and says errLinkModeHTTP once it is not.
+// waitConn is the connection a call goes out on now: the newest, once one is welcomed. It waits for one until ctx ends,
+// and says errLinkClosed once the link has closed.
 func (w *linkWork) waitConn(ctx context.Context) (*linkWorkConn, error) {
 	for {
 		w.mu.Lock()
@@ -213,7 +187,7 @@ func (w *linkWork) waitConn(ctx context.Context) (*linkWorkConn, error) {
 			return cur, nil
 		}
 		if !running {
-			return nil, errLinkModeHTTP
+			return nil, errLinkClosed
 		}
 		select {
 		case <-changed:
@@ -244,11 +218,6 @@ func (w *linkWork) loop(ctx context.Context) {
 	var retryAt, renewAt, drainAt time.Time
 	w.mu.Lock()
 	w.attempt = 0
-	if w.flaps > 0 && w.now().Sub(w.stoppedAt) < linkBackoffMax {
-		// Started again soon after a Welcome sent the work back to HTTPS: not at once, or two disagreeing answers would
-		// have the connection opened and closed as fast as they arrive.
-		retryAt = w.now().Add(linkBackoff(w.flaps - 1))
-	}
 	w.mu.Unlock()
 	for ctx.Err() == nil {
 		cur := w.current()
@@ -265,9 +234,7 @@ func (w *linkWork) loop(ctx context.Context) {
 				continue
 			}
 			if !w.adopt(conn, nil, "") {
-				// A Welcome said MODE_HTTP: the work stops, or, said too soon after HTTPS refused it, waits for the
-				// connection opened once the gateway can have read the switch.
-				retryAt = w.m.httpNewsAt()
+				retryAt = w.now().Add(w.failed(errLinkGatewayModeHTTP))
 				continue
 			}
 			renewAt, drainAt = conn.token.renewAt(), time.Time{}
@@ -284,9 +251,6 @@ func (w *linkWork) loop(ctx context.Context) {
 			}
 			w.setCurrent(cur, nil)
 			retryAt, drainAt = w.now().Add(wait), time.Time{}
-			if w.stoppingWithoutConn() {
-				w.m.linkUnusable("the runner is stopping and lost its runner link connection")
-			}
 		case ev := <-w.events:
 			if ev.conn != cur {
 				continue // from a connection replaced since
@@ -333,9 +297,7 @@ func (w *linkWork) loop(ctx context.Context) {
 				continue
 			}
 			if !w.adopt(conn, cur, why) {
-				if at := w.m.httpNewsAt(); at.After(renewAt) {
-					renewAt = at // cur carries the work meanwhile
-				}
+				renewAt = w.now().Add(w.failed(errLinkGatewayModeHTTP)) // cur carries the work meanwhile
 				continue
 			}
 			renewAt, drainAt = conn.token.renewAt(), time.Time{}
@@ -385,7 +347,7 @@ func (w *linkWork) setCurrent(prev, next *linkWorkConn) {
 
 // dial opens one connection, with a goroutine pinging it.
 func (w *linkWork) dial(ctx context.Context) (*linkWorkConn, error) {
-	conn := &linkWorkConn{ready: make(chan struct{}), dialed: time.Now(), acks: make(chan *linkpb.HeartbeatAck, 1), facts: map[string]string{}}
+	conn := &linkWorkConn{ready: make(chan struct{}), acks: make(chan *linkpb.HeartbeatAck, 1), facts: map[string]string{}}
 	lc, err := w.client.connect(ctx, func(_ *linkConn, f *linkpb.Frame) {
 		<-conn.ready
 		w.onFrame(conn, f)
@@ -400,20 +362,15 @@ func (w *linkWork) dial(ctx context.Context) (*linkWorkConn, error) {
 	return conn, nil
 }
 
-// adopt makes conn, just welcomed, the connection calls go out on, in place of old (nil after a time without one). A
-// Welcome saying MODE_HTTP is not adopted: the control plane has sent the work back to HTTPS, and the work stops, unless
-// it came too soon after HTTPS refused a call for the gateway to have read the switch (linkMode.observeSince).
+// adopt makes conn, just welcomed, the connection calls go out on, in place of old (nil after a time without one). It
+// reports false for a Welcome saying MODE_HTTP: the gateway forwards nothing for such a connection, so it is closed, and
+// the next one opens after a wait, as after any connection that could not be had.
 func (w *linkWork) adopt(conn, old *linkWorkConn, why string) bool {
 	welcome := conn.welcome
-	w.m.observeSince(welcome.GetMode(), "the Welcome of "+conn.id, conn.dialed)
 	if welcome.GetMode() == linkpb.Mode_MODE_HTTP {
 		reason := "the Welcome said MODE_HTTP"
 		conn.retired.Store(&reason)
 		conn.close(websocket.StatusNormalClosure, reason)
-		w.mu.Lock()
-		w.flaps++
-		w.lastErr = errors.New("the gateway's Welcome said MODE_HTTP")
-		w.mu.Unlock()
 		return false
 	}
 	// Taken before the connection carries anything: a beat can go out on it the moment it is current, and has to find
@@ -421,7 +378,7 @@ func (w *linkWork) adopt(conn, old *linkWorkConn, why string) bool {
 	w.m.assignRelease(welcome.GetRelease())
 	w.mu.Lock()
 	w.cur = conn
-	w.attempt, w.flaps, w.lastErr, w.loggedErr = 0, 0, nil, ""
+	w.attempt, w.lastErr, w.loggedErr = 0, nil, ""
 	lostAt := w.lostAt
 	w.lostAt = time.Time{}
 	w.notifyLocked()
@@ -467,15 +424,11 @@ func (w *linkWork) failed(err error) time.Duration {
 	now := w.now()
 	// A next connection that cannot be had while the current one still carries the work (a renewal, a drain) leaves
 	// the runner with a link: only a time with none counts as one without it.
-	var lostFor time.Duration
-	if w.cur == nil {
-		if w.lostAt.IsZero() {
-			w.lostAt = now
-		}
-		lostFor = now.Sub(w.lostAt)
+	if w.cur == nil && w.lostAt.IsZero() {
+		w.lostAt = now
 	}
 	msg := err.Error()
-	quiet := msg == w.loggedErr && now.Sub(w.loggedErrAt) < linkShadowLogQuiet
+	quiet := msg == w.loggedErr && now.Sub(w.loggedErrAt) < linkLogQuiet
 	if !quiet {
 		w.loggedErr, w.loggedErrAt = msg, now
 	}
@@ -486,11 +439,6 @@ func (w *linkWork) failed(err error) time.Duration {
 	}
 	if !quiet {
 		w.log(fmt.Sprintf("runner link: cannot connect (%s); next try in %s", msg, wait.Round(time.Millisecond)))
-	}
-	if lostFor >= linkUnreachableFallback {
-		w.m.linkUnusable(fmt.Sprintf("the runner link has been unreachable for %s", lostFor.Round(time.Second)))
-	} else if w.stoppingWithoutConn() {
-		w.m.linkUnusable("the runner is stopping and cannot connect to the runner link")
 	}
 	return wait
 }
@@ -534,12 +482,10 @@ func (w *linkWork) lost(conn *linkWorkConn) time.Duration {
 	return wait
 }
 
-// upgradeRequired takes a gateway that speaks no protocol version this binary does: the runner checks its release now,
-// and works over HTTPS meanwhile, unless the control plane has refused that too.
+// upgradeRequired takes a gateway that speaks no protocol version this binary does: the runner checks its release now.
 func (w *linkWork) upgradeRequired() {
 	w.m.selfUpdateOwed.Store(true)
 	w.m.gates.markWake()
-	w.m.linkUnusable("the gateway speaks no link protocol version this binary does")
 }
 
 // finish closes every connection the loop opened, once it stops.
@@ -547,14 +493,13 @@ func (w *linkWork) finish() {
 	w.mu.Lock()
 	cur := w.cur
 	w.cur = nil
-	// What follows is a time on HTTPS, not one without a link: the next start counts afresh.
-	w.lostAt, w.loggedErr, w.stoppedAt = time.Time{}, "", w.now()
+	w.lostAt, w.loggedErr = time.Time{}, ""
 	w.notifyLocked()
 	w.mu.Unlock()
 	if cur != nil {
-		reason := "the runner link is no longer in use"
+		reason := "the runner is stopping"
 		cur.retired.Store(&reason)
-		cur.close(websocket.StatusGoingAway, "link mode off")
+		cur.close(websocket.StatusGoingAway, reason)
 		w.log("runner link: connection " + cur.id + " closed")
 	}
 }
@@ -599,7 +544,6 @@ func (w *linkWork) onFrame(conn *linkWorkConn, f *linkpb.Frame) {
 		}
 	case *linkpb.Frame_HeartbeatAck:
 		ack := body.HeartbeatAck
-		w.m.observe(ack.GetMode(), "a HeartbeatAck on "+conn.id)
 		w.m.gates.state(ack.GetHints())
 		w.m.events.hintState(ack.GetHints())
 		if len(ack.GetReconcileJson()) > 0 || ack.GetRelease() != nil {
@@ -668,8 +612,9 @@ func linkFrameKind(ev linkWorkEvent) string {
 }
 
 // rpc sends rpc and returns the route's answer. It sends it again, under the same request_id, whenever no answer came:
-// the connection ended first, or the gateway said no backend answered and the call may be sent again. It returns
-// errLinkModeHTTP when the control plane sent the work back to HTTPS before the call was answered.
+// the connection ended first, or the gateway said no backend answered and the call may be sent again, or that it
+// forwards nothing because its server's RUNNER_LINK_REQUIRED is off (LINK_MODE_HTTP, an older server's: nothing else
+// would carry the call).
 func (w *linkWork) rpc(ctx context.Context, rpc *linkpb.Rpc) (*linkpb.TunnelResponse, error) {
 	call := &linkCall{result: make(chan *linkpb.RpcResult, 1)}
 	id := rpc.GetRequestId()
@@ -716,11 +661,7 @@ func (w *linkWork) rpc(ctx context.Context, rpc *linkpb.Rpc) (*linkpb.TunnelResp
 			return t, nil
 		}
 		f := res.GetFailure()
-		if f.GetCode() == "LINK_MODE_HTTP" {
-			w.m.observe(linkpb.Mode_MODE_HTTP, "connection "+conn.id+" refusing a call for MODE_HTTP")
-			return nil, errLinkModeHTTP
-		}
-		if !f.GetRetryable() {
+		if !f.GetRetryable() && f.GetCode() != "LINK_MODE_HTTP" {
 			return nil, linkFailureAnswer(rpc, f)
 		}
 		wait := max(time.Duration(f.GetRetryAfterMs())*time.Millisecond, linkRPCBackoff(attempt))

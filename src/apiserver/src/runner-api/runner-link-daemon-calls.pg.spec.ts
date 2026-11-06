@@ -6,17 +6,15 @@
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/runner-link-daemon-calls.pg.spec.ts
  *
- *   1. Never switched, over HTTPS as a runner has always sent them: the answer settles the check the owner waits on and
- *      is kept on the key, and a session's own key check is kept on the key.
- *   2. The same for the alert, on the daemon's own route: answered by the push channel exactly as the agents' door
- *      (POST /runner/notify) answers the same alert, and refused for another machine's session.
- *   3. Over the link — the internal listener, the gateway's secret and the runner's link token — the same three calls
- *      are served and take effect the same way, where the two Cursor calls were refused 404
+ *   1. Over the link — the internal listener, the gateway's secret and the runner's link token — the three calls are
+ *      served: the answer settles the check the owner waits on and is kept on the key, a session's own key check is
+ *      kept on the key, and the alert is answered by the push channel exactly as the agents' door (POST /runner/notify)
+ *      answers the same alert, and refused for another machine's session. The two Cursor calls were refused 404
  *      RUNNER_LINK_ROUTE_NOT_ON_LINK before; the agent tool API beside them still is.
- *   4. Switched on, the three answer an HTTPS call 426 UPGRADE_REQUIRED and change nothing, over the link they are
- *      served and take effect, and the agents' door is still served to `orbit mcp` over HTTPS.
+ *   2. The three answer an HTTPS call 426 UPGRADE_REQUIRED and change nothing, over the link they are served and take
+ *      effect, and the agents' door is still served to `orbit mcp` over HTTPS.
  *
- * Not destructive: every row belongs to accounts this run creates, and the switch is left off.
+ * Not destructive: every row belongs to accounts this run creates.
  */
 import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync, randomUUID } from 'node:crypto';
@@ -64,7 +62,7 @@ async function freePort(): Promise<number> {
 
 const isUpgradeRequired = (reply: Reply) => reply.status === 426 && reply.json?.code === 'UPGRADE_REQUIRED';
 
-test('the daemon\'s Cursor key checks and job alerts: on the link, and over HTTPS as before while the switch is off', {
+test('the daemon\'s Cursor key checks and job alerts: on the link, and refused over HTTPS', {
   skip: !URL_, concurrency: 1, timeout: 600_000,
 }, async (t) => {
   const url = URL_!;
@@ -75,7 +73,6 @@ test('the daemon\'s Cursor key checks and job alerts: on the link, and over HTTP
   const prisma: PrismaClient = prismaClientFor(url);
   let server: Apiserver | undefined;
   t.after(async () => {
-    await sql.query(`UPDATE "runner_link_switch" SET "required" = false WHERE "id" = 1`).catch(() => undefined);
     await server?.stop();
     await prisma.$disconnect().catch(() => undefined);
     await sql.end().catch(() => undefined);
@@ -218,30 +215,7 @@ test('the daemon\'s Cursor key checks and job alerts: on the link, and over HTTP
   const agentsAlert = () => call(api, 'POST', '/api/runner/notify', machine.token, { message: alertText },
     { 'x-orbit-session-id': sessionId, 'x-orbit-runner-caller': 'mcp' });
 
-  await t.test('(1) never switched, over HTTPS as a runner has always sent them: the Cursor key checks', async () => {
-    const answered = await checkAgain(overHttps,
-      (result) => overHttps('POST', '/api/runner/cursor-key-check-result', result), 'INVALID');
-    assert.deepEqual([answered.recorded, answered.keyCheckState], [true, 'INVALID'], 'the owner\'s check answers what the machine said');
-    assert.equal(await keyCheckState(), 'INVALID');
-
-    const reported = await overHttps('POST', sessionRoute('cursor-key-check'), { state: 'VALID', keyFingerprint: fingerprint(apiKey) });
-    assert.deepEqual([reported.status, reported.json], [200, { recorded: true }], reported.text);
-    assert.equal(await keyCheckState(), 'VALID', 'the session\'s check is kept on the key');
-    const replaced = await overHttps('POST', sessionRoute('cursor-key-check'), { state: 'INVALID', keyFingerprint: fingerprint(newKey()) });
-    assert.deepEqual([replaced.status, replaced.json], [200, { recorded: false }], 'a check of another key is kept on nothing');
-    assert.equal(await keyCheckState(), 'VALID');
-  });
-
-  await t.test('(2) never switched, over HTTPS: the job alert, answered as the agents\' door answers it', async () => {
-    const alert = await overHttps('POST', sessionRoute('notify'), { message: alertText });
-    assert.deepEqual([alert.status, alert.json], [200, NO_PUSH], alert.text);
-    const asAgent = await agentsAlert();
-    assert.deepEqual([asAgent.status, asAgent.json], [201, NO_PUSH], `the agents' door answers the same: ${asAgent.text}`);
-    const notMine = await overHttps('POST', `/api/runner/sessions/${othersSession}/notify`, { message: alertText });
-    assert.equal(notMine.status, 403, `another machine's session: ${notMine.text}`);
-  });
-
-  await t.test('(3) over the link: served, and taken as over HTTPS; the agent tool API is still not on the link', async () => {
+  await t.test('(1) over the link: served; the agent tool API is still not on the link', async () => {
     const answered = await checkAgain(overLink,
       (result) => overLink('POST', '/api/runner/cursor-key-check-result', result), 'INVALID');
     assert.deepEqual([answered.recorded, answered.keyCheckState], [true, 'INVALID'], 'the owner\'s check answers what the machine said');
@@ -250,9 +224,14 @@ test('the daemon\'s Cursor key checks and job alerts: on the link, and over HTTP
     const reported = await overLink('POST', sessionRoute('cursor-key-check'), { state: 'VALID', keyFingerprint: fingerprint(apiKey) });
     assert.deepEqual([reported.status, reported.json], [200, { recorded: true }], reported.text);
     assert.equal(await keyCheckState(), 'VALID', 'the session\'s check is kept on the key');
+    const replaced = await overLink('POST', sessionRoute('cursor-key-check'), { state: 'INVALID', keyFingerprint: fingerprint(newKey()) });
+    assert.deepEqual([replaced.status, replaced.json], [200, { recorded: false }], 'a check of another key is kept on nothing');
+    assert.equal(await keyCheckState(), 'VALID');
 
     const alert = await overLink('POST', sessionRoute('notify'), { message: alertText });
     assert.deepEqual([alert.status, alert.json], [200, NO_PUSH], alert.text);
+    const asAgent = await agentsAlert();
+    assert.deepEqual([asAgent.status, asAgent.json], [201, NO_PUSH], `the agents' door answers the same: ${asAgent.text}`);
     const notMine = await overLink('POST', `/api/runner/sessions/${othersSession}/notify`, { message: alertText });
     assert.equal(notMine.status, 403, `another machine's session: ${notMine.text}`);
 
@@ -263,11 +242,9 @@ test('the daemon\'s Cursor key checks and job alerts: on the link, and over HTTP
     }
   });
 
-  await t.test('(4) switched on: HTTPS is refused 426 and changes nothing, the link serves them, `orbit mcp` keeps its door', async () => {
-    const on = await call(api, 'PUT', '/api/admin/runner-link-required', adminToken, { required: true });
-    assert.deepEqual([on.status, on.json?.required], [200, true], on.text);
+  await t.test('(2) HTTPS is refused 426 and changes nothing, the link serves them, `orbit mcp` keeps its door', async () => {
     const beat = await overHttps('POST', '/api/runner/heartbeat', { leaseOwner, status: 'ONLINE', idleCapacity: 1, engines: PINNED }, DECLARES);
-    assert.ok(isUpgradeRequired(beat), `the switch is on: ${beat.status} ${beat.text}`);
+    assert.ok(isUpgradeRequired(beat), `the heartbeat over HTTPS: ${beat.status} ${beat.text}`);
 
     // The answer over HTTPS is refused and settles nothing; the same answer over the link then does.
     let refused: Reply | undefined;
@@ -291,8 +268,5 @@ test('the daemon\'s Cursor key checks and job alerts: on the link, and over HTTP
     assert.deepEqual([linkAlert.status, linkAlert.json], [200, NO_PUSH], linkAlert.text);
     const asAgent = await agentsAlert();
     assert.deepEqual([asAgent.status, asAgent.json], [201, NO_PUSH], `the agents' door is not the daemon's: ${asAgent.text}`);
-
-    const off = await call(api, 'PUT', '/api/admin/runner-link-required', adminToken, { required: false });
-    assert.deepEqual([off.status, off.json?.required], [200, false], off.text);
   });
 });

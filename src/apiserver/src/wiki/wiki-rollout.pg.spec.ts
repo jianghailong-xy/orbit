@@ -398,19 +398,19 @@ test('the wiki rollout flag, over both doors and the runner\'s claim', { skip, c
       prisma as unknown as PrismaService,
       queue,
       realtime as unknown as RealtimeService,
-      {} as never, {} as never, {} as never,
+      {} as never, { issue: async () => 'orchestration-credential' } as never, {} as never,
     );
 
     /** Queue one session for the account and claim it on the account's runner: the payload a runner receives. */
     const claim = async (who: Account): Promise<{ sessionId: string; wikiDisabled?: boolean }> => {
       const sessionId = await pendingSession({ id: who.id, runnerId: who.runnerId, workspaceId: who.workspaceId });
-      const claimed = await queue.claimSessionForRunner({ id: who.runnerId }, 0, false, true);
+      const claimed = await queue.claimSessionForRunner({ id: who.runnerId });
       assert.equal(claimed?.sessionId, sessionId, `${who.id}'s runner was handed another session`);
       return { sessionId, wikiDisabled: claimed?.wikiDisabled };
     };
     /** What the account's runner is told about every session it hosts when it restarts. */
     const reclaim = async (who: Account): Promise<Map<string, boolean | undefined>> => {
-      const answer = await runnerDoor.reclaim({ id: who.runnerId, ownerId: who.id }, undefined, undefined);
+      const answer = await runnerDoor.reclaim({ id: who.runnerId, ownerId: who.id }, undefined);
       assert.ok(answer.sessions.length > 0, `${who.id}'s runner reclaimed nothing`);
       return new Map(answer.sessions.map((session) => [toUuid(session.sessionId), session.wikiDisabled]));
     };

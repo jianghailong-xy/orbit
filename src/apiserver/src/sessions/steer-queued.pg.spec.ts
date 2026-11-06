@@ -29,6 +29,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from './sessions.service';
+import '../test-support/dequeue-under-lease';
 
 declare global {
   interface BigInt { toJSON(): string; }

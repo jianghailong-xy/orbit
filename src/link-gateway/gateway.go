@@ -197,8 +197,9 @@ func bearer(r *http.Request) string {
 	return ""
 }
 
-// clientIP is the connecting address. Runners connect to the gateway directly (D1), so no forwarding header is
-// believed.
+// clientIP is the connecting address. Runners connect to the gateway directly (D1), or through this deployment's web
+// gateway, which is then the address of them all and has the limit per address raised for it
+// (deploy/runner-link/behind-web-gateway.env), so no forwarding header is believed.
 func clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

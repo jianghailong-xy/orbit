@@ -25,8 +25,8 @@ import { RunnerReleaseController } from './runner-release.controller';
 import { RunnerLinkGatewayGuard, RunnerLinkTokenController } from './runner-link-token.controller';
 import { RunnerLinkWelcomeController } from './runner-link-welcome.controller';
 import { RunnerLinkEventsController, RunnerLinkGatewayCallGuard } from './runner-link-events.controller';
-import { RunnerLinkModeController, RunnerLinkRequiredController } from './runner-link-required.controller';
-import { RunnerLinkRequiredInterceptor, RunnerLinkSwitch } from './runner-link-required';
+import { RunnerLinkModeController } from './runner-link-required.controller';
+import { RunnerLinkRequiredInterceptor } from './runner-link-required';
 import { RunnerReleaseFeed } from './runner-release-feed';
 import { RUNNER_LINK, runnerLinkFrom } from './runner-link-token';
 import { RunnerSessionAuthGuard } from './runner-session-auth.guard';
@@ -114,9 +114,7 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerLinkWelcomeController,
     // The link gateway's merged call: several sessions' event batches in one transaction (link-events.ts).
     RunnerLinkEventsController,
-    // RUNNER_LINK_REQUIRED, the cut-over switch: switched by an administrator, read by the link gateway
-    // (runner-link-required.ts).
-    RunnerLinkRequiredController,
+    // What the link gateway tells runners (runner-link-required.controller.ts).
     RunnerLinkModeController,
   ],
   providers: [
@@ -125,10 +123,9 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerLinkGatewayGuard,
     RunnerLinkGatewayCallGuard,
     RunnerWriteProtocolInterceptor,
-    // The cut-over switch and RunnerApiController's interceptor that answers it (runner-link-required.ts).
-    // AdminRoleGuard depends only on the global PrismaService; UsersModule does not export it.
-    RunnerLinkSwitch,
+    // RunnerApiController's refusal of an HTTPS call (runner-link-required.ts).
     RunnerLinkRequiredInterceptor,
+    // AdminRoleGuard depends only on the global PrismaService; UsersModule does not export it.
     AdminRoleGuard,
     {
       provide: RUNNER_LINK,

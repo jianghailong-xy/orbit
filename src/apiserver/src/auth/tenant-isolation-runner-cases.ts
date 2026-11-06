@@ -77,12 +77,13 @@ export interface RunnerObjects {
   leaseGeneration: string;
   /** RUNNING, an interrupt waiting in its inbox. */
   inboxSessionId: string;
+  /** The inbox session's live lease generation, which an inbox fetch names. */
+  inboxLeaseGeneration: string;
   /** RUNNING, the shell turn `shellTurnId` in flight. */
   turnSessionId: string;
   shellTurnId: string;
   /** RUNNING, to be finalized and completed. */
   finalizeSessionId: string;
-  completeSessionId: string;
   /**
    * Of `machineSessionId`: a file it holds, an approval already allowed, a file request waiting on it. The file is also
    * cited by `evidenceRevisionId`, so its doors are asked about the one kind of file that reaches past a session.
@@ -309,9 +310,19 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       body: { leaseOwner: of.runner.leaseOwner, leaseGeneration: of.runner.leaseGeneration },
     }),
   },
-  'POST /runner/sessions/:id/release-leases': { as: RUNNER, request: (of) => ({ params: { id: of.runner.machineSessionId }, body: {} }) },
+  // A release names the generation and the owner it releases (400 otherwise, before anything is read).
+  'POST /runner/sessions/:id/release-leases': {
+    as: RUNNER,
+    request: (of) => ({
+      params: { id: of.runner.machineSessionId },
+      body: { leaseOwner: of.runner.leaseOwner, leaseGeneration: of.runner.leaseGeneration },
+    }),
+  },
   'POST /runner/sessions/:id/orchestration-credential': { as: RUNNER, request: (of) => ({ params: { id: of.runner.callingSessionId } }) },
-  'GET /runner/sessions/:id/inbox': { as: RUNNER, request: (of) => ({ params: { id: of.runner.inboxSessionId } }) },
+  'GET /runner/sessions/:id/inbox': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.inboxSessionId }, query: { leaseGeneration: of.runner.inboxLeaseGeneration } }),
+  },
   'GET /runner/sessions/:id/attachments/:attId': {
     as: RUNNER,
     request: (of) => ({ params: { id: of.runner.machineSessionId, attId: of.runner.sessionAttachmentId } }),
@@ -404,7 +415,6 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
   },
   'POST /runner/sessions/:id/events': { as: RUNNER, request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { events: [] } }) },
   'POST /runner/sessions/:id/finalize': { as: RUNNER, request: (of) => ({ params: { id: of.runner.finalizeSessionId }, body: { status: 'CANCELLED' } }) },
-  'POST /runner/sessions/:id/complete': { as: RUNNER, request: (of) => ({ params: { id: of.runner.completeSessionId }, body: { status: 'CANCELLED' } }) },
   'POST /runner/sessions/:id/import-result': { as: RUNNER, request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { ok: true } }) },
   'POST /runner/sessions/:id/merge-result': {
     as: RUNNER,
@@ -1338,10 +1348,6 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     + '(runner-api.controller.ts:6151)',
   'POST /runner/sessions/:id/finalize body runtimeSessionId':
     'the engine\'s own id for its conversation, stored on the session the path names (runner-api.controller.ts:6151)',
-  'POST /runner/sessions/:id/complete body claudeSessionId':
-    'as finalize\'s: complete is finalize under another name (runner-api.controller.ts:6151)',
-  'POST /runner/sessions/:id/complete body runtimeSessionId':
-    'as finalize\'s: complete is finalize under another name (runner-api.controller.ts:6151)',
   'POST /runner/sessions/:id/merge-result body operationId':
     'the merge attempt token the server minted for the session the path names, compared only with that locked row '
     + '(runner-api.controller.ts:6554)',
@@ -1411,6 +1417,12 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
  * any other — and the reading, with file:line, of what it reads.
  */
 export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly string[]; reading: string }>> = {
+  'POST /runner/link-token request': {
+    reads: [],
+    reading: 'the whole request, for how it arrived: X-Orbit-Request-Host, X-Orbit-Request-Proto, X-Forwarded-For and '
+      + 'X-Real-IP, none of them an id. They choose only the link address the answer names, for this runner\'s own token '
+      + '(runner-api/runner-link-token.controller.ts:61, sameOriginLinkUrl in runner-link-token.ts)',
+  },
   'POST /runner/wiki/repo-ops/:id/result body result.*': {
     reads: [],
     reading: 'the runner\'s own answer — a snapshot\'s index, a read\'s text, a diff\'s paths, an anchor\'s states — '
@@ -1640,7 +1652,9 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
     + 'the gateway sends it to the events route, which refuses it there as it refuses any runner\'s call',
   'GET /runner/link/mode':
     'the runner link gateway\'s door, behind the same gateway service secret (RunnerLinkGatewayGuard, 404 with the '
-    + 'link off) — runner-link-required.controller.ts:58, runner-link-token.controller.ts:61, runner-link-token.ts:241; '
-    + 'it takes no id, and answers only whether RUNNER_LINK_REQUIRED is on, read from the deployment\'s one switch row, '
-    + 'which names no account and no runner — runner-link-required.controller.ts:64, runner-link-required.ts:129',
+    + 'link off) — runner-link-required.controller.ts:17, runner-link-token.controller.ts:61, runner-link-token.ts:241; '
+    + 'it takes no id, reads nothing and answers one constant — runner-link-required.controller.ts:21',
+  'GET /runner/wake':
+    'the long poll this path was is gone. It answers every caller 426 UPGRADE_REQUIRED before it reads anything, for the '
+    + 'runners of 0.1.246 that still ask once as they start — runner-api.controller.ts:3571',
 };

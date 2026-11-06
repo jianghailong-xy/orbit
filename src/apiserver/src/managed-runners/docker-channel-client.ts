@@ -47,6 +47,8 @@ export interface ChannelContainer {
   /** The data volume UID it was authorized for. */
   volumeUid: string | null;
   volume: string | null;
+  /** The image ID it was made from: the configured one, or a previous one after an upgrade. Absent from an older channel. */
+  image?: string | null;
   node: string | null;
   /** Docker's own state: created, running, paused, restarting, removing, exited or dead. */
   status: string;

@@ -68,10 +68,6 @@ var (
 // batch, noise pings included.
 var linkCoordinatorBoundarySubtypes = map[string]bool{"compact_boundary": true, "compact_summary": true, "context_compacted": true}
 
-// linkLiveEventSeqSubtype names the bare ping that holds the seq of a live event numbered while the session's events
-// went over HTTPS, when that event is sent over the link after all (linkLiveEventSeqPlaceholder).
-const linkLiveEventSeqSubtype = "live_event_seq"
-
 // linkNoiseSystemEvent is the server's isNoiseSystemEvent: a system event carrying nothing anybody could use. Its
 // payload holds nothing but the ping keys, and its subtype is not one something reads.
 func linkNoiseSystemEvent(eventType string, payload map[string]interface{}) bool {
@@ -120,16 +116,6 @@ func linkWithProvider(payload map[string]interface{}, provider string) map[strin
 	}
 	out["provider"] = provider
 	return out
-}
-
-// linkLiveEventSeqPlaceholder is what an EventBatch carries in place of a live event that took a durable seq while the
-// session's events went over HTTPS, and is sent over the link after all: at the cut-over, events numbered before the
-// first UPGRADE_REQUIRED are still in the buffer. A bare ping, so the server acknowledges it without storing,
-// broadcasting or tombstoning it, as HTTPS never stored the live event either. Only seqs numbered under HTTP mode are
-// ever held this way. The live event itself is not sent: by now it is stale, and the durable assistant and thinking
-// events carry its text.
-func linkLiveEventSeqPlaceholder() map[string]interface{} {
-	return map[string]interface{}{"subtype": linkLiveEventSeqSubtype}
 }
 
 // linkBoundaryEvent reports whether an event is one the session's durable stream sends at once rather than at its next
