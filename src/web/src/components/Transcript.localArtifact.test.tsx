@@ -90,6 +90,34 @@ describe('a path in the session’s own directories', () => {
     expect(container.querySelector('img.md-image')).not.toBeNull();
   });
 
+  // A reply names a file the way the agent worked with it: relative to the checkout. The runner
+  // uploads one it can, but a reply whose upload was lost keeps the path — and the artifact route
+  // reads it back from that same checkout.
+  it('draws an image named relative to the checkout', async () => {
+    resolve.mockResolvedValue('blob:mock-image');
+    await renderReply('![成稿态](docs/ppt-design/design/2026-11-06-studio-v2-prototype/screens/done.png)\n');
+    expect(resolve).toHaveBeenCalledWith(
+      SESSION,
+      'docs/ppt-design/design/2026-11-06-studio-v2-prototype/screens/done.png',
+    );
+    expect(container.querySelector('img.md-image')?.getAttribute('src')).toBe('blob:mock-image');
+    expect(container.querySelector('button.chat-file')).toBeNull();
+  });
+
+  it('falls back to the chip when a checkout-relative image is gone', async () => {
+    resolve.mockRejectedValue(new Error('artifact not found'));
+    await renderReply('![成稿态](docs/mocks/gone.png)\n');
+    expect(resolve).toHaveBeenCalledWith(SESSION, 'docs/mocks/gone.png');
+    expect(container.querySelector('img.md-image')).toBeNull();
+    expect(container.querySelector('button.chat-file')).not.toBeNull();
+  });
+
+  it('leaves a remote image as the picture it is', async () => {
+    await renderReply('![logo](https://example.com/logo.png)\n');
+    expect(resolve).not.toHaveBeenCalled();
+    expect(container.querySelector('img.md-image')?.getAttribute('src')).toBe('https://example.com/logo.png');
+  });
+
   it('also previews an older ordinary link when its path is an image', async () => {
     resolve.mockResolvedValue('blob:mock-image');
     await renderReply(`[Blocker 卡片](${UPLOADS_IMAGE})\n`);
