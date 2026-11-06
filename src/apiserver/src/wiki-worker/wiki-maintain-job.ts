@@ -2133,7 +2133,7 @@ function stripQuotes(body: Record<string, unknown>): void {
 }
 
 /** The paths a plan section's sources name: files, and directories. */
-function sectionPaths(section: { sources?: { docs?: Array<{ path: string }> | null; code?: Array<{ path: string }> | null; contracts?: Array<{ path: string }> | null } }): string[] {
+export function sectionPaths(section: { sources?: { docs?: Array<{ path: string }> | null; code?: Array<{ path: string }> | null; contracts?: Array<{ path: string }> | null } }): string[] {
   const out: string[] = [];
   for (const source of section.sources?.docs ?? []) out.push(wikiDocCleanPath(source.path));
   for (const source of section.sources?.code ?? []) out.push(wikiDocCleanPath(source.path));
@@ -2142,7 +2142,7 @@ function sectionPaths(section: { sources?: { docs?: Array<{ path: string }> | nu
 }
 
 /** A settled `diff` operation's answer: what `git diff --name-status -M` named, and the documents it added or renamed into place. */
-function diffAnswerOf(settled: WikiRepoOpWait): { files: Array<{ status: string; path: string; from: string | null }>; docs: string[] } {
+export function diffAnswerOf(settled: WikiRepoOpWait): { files: Array<{ status: string; path: string; from: string | null }>; docs: string[] } {
   const answer = (settled.result?.diff ?? {}) as { files?: Array<{ status?: string; path?: string; from?: string }>; docs?: string[] };
   return {
     files: (answer.files ?? []).map((file) => ({ status: String(file.status ?? ''), path: String(file.path ?? ''), from: file.from ?? null })),
@@ -2151,7 +2151,7 @@ function diffAnswerOf(settled: WikiRepoOpWait): { files: Array<{ status: string;
 }
 
 /** Whether a changed path is one the section names: the file itself, or a file under a directory it names. */
-function pathNamed(changed: string, named: readonly string[]): boolean {
+export function pathNamed(changed: string, named: readonly string[]): boolean {
   for (const path of named) {
     if (path === '') continue;
     if (changed === path || changed.startsWith(`${path.replace(/\/+$/u, '')}/`)) return true;
@@ -2164,7 +2164,7 @@ function pathNamed(changed: string, named: readonly string[]): boolean {
  * --name-status -M`: a rename under its old path (R, `to` its new one) and its new path once more, as added (A); a
  * copy's new path as added; any other change under its path, by its status's first letter.
  */
-function gitChangesOf(files: ReadonlyArray<{ status: string; path: string; from: string | null }>): Map<string, { status: string; to: string }> {
+export function gitChangesOf(files: ReadonlyArray<{ status: string; path: string; from: string | null }>): Map<string, { status: string; to: string }> {
   const changes = new Map<string, { status: string; to: string }>();
   for (const file of files) {
     const status = file.status.slice(0, 1);
@@ -2187,7 +2187,7 @@ function gitChangesOf(files: ReadonlyArray<{ status: string; path: string; from:
  * one is read there too. The files whose sizes the head does not carry are marked with one byte, which is what
  * lets a read of them answer at all (their content is still whatever git holds).
  */
-function baseTreeOf(
+export function baseTreeOf(
   headFiles: readonly string[],
   headSizes: ReadonlyMap<string, number>,
   files: ReadonlyArray<{ status: string; path: string; from: string | null }>,
@@ -2217,7 +2217,7 @@ function baseTreeOf(
 }
 
 /** Whether two readings of a section's repository material say the same thing. */
-function samePieces(a: readonly WikiDocPiece[], b: readonly WikiDocPiece[]): boolean {
+export function samePieces(a: readonly WikiDocPiece[], b: readonly WikiDocPiece[]): boolean {
   if (a.length !== b.length) return false;
   return a.every((piece, i) => piece.kind === b[i].kind && piece.path === b[i].path && piece.section === b[i].section
     && piece.symbol === b[i].symbol && piece.text === b[i].text);

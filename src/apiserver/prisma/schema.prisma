@@ -8300,15 +8300,15 @@ model WikiModelStatus {
 /// docs/wiki-server-execution-design.md §5.1). The wiki-worker claims it the way the Watch delivery
 /// worker claims a delivery — `UPDATE … FROM (SELECT … FOR UPDATE SKIP LOCKED)`, a fresh lease
 /// generation per claim, every later write a compare-and-set on that generation — holds one space's
-/// single running job at a time (a partial unique index over `space_id`), and ends it with what it
-/// reported. At most one kind runs today (`smoke`, the queue's own end-to-end probe); the pipeline
-/// kinds arrive with the phases that implement them.
+/// single running job at a time (partial unique indexes over `space_id`), with one exception since
+/// 0477: a `docs_follow` job runs beside a job of its space that writes no document (contract
+/// `jobs.onePerSpace`) — and ends it with what it reported.
 model WikiJob {
   id      String    @id @default(uuid(7)) @db.Uuid
   ownerId String    @map("owner_id") @db.Uuid
   spaceId String    @map("space_id") @db.Uuid
   space   WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_job_space_fkey")
-  /// `verify` | `articles` | `import` | `plan_draft` | `plan_revise` | `docs_build` | `maintain` | `smoke`.
+  /// `verify` | `articles` | `import` | `plan_draft` | `plan_revise` | `docs_build` | `maintain` | `smoke` | `docs_follow`.
   kind  String
   /// The job's own material: what to verify, draft, build — never the model's address or key.
   input Json   @default("{}")
@@ -8342,9 +8342,10 @@ model WikiJob {
   @@index([priority(sort: Desc), createdAt, id], map: "wiki_job_claim_idx")
   /// The lease-expiry sweep, as the migration creates it: partial over running rows.
   @@index([leaseDeadlineAt], map: "wiki_job_lease_expiry_idx")
-  /// One running job per space: what the claim skips a busy space by, and what holds it anyway —
-  /// a partial unique index the migration creates (`wiki_job_space_running_key`), which Prisma's own
-  /// index syntax cannot express, so it lives in the SQL and nowhere else.
+  /// One running job per space, the follow job's exception aside: what the claim skips a busy space by,
+  /// and what holds it anyway — two partial unique indexes 0477 creates (`wiki_job_space_running_other_key`,
+  /// `wiki_job_space_running_writer_key`, in place of 0401's `wiki_job_space_running_key`), which Prisma's
+  /// own index syntax cannot express, so they live in the SQL and nowhere else.
   @@map("wiki_job")
 }
 
