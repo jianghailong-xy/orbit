@@ -52,7 +52,7 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 	orbitExe := orbitCLIExecutable()
 	args = appendClaudeAgentInstructionArgs(
 		args,
-		a,
+		job.instructionAgent(),
 		orbitExe,
 		job.AllowOrchestration,
 		job.insideRecordedWork(),

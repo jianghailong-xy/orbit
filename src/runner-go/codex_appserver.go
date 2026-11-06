@@ -1316,7 +1316,7 @@ func (a *codexAppServer) startOrResumeThread(ctx context.Context, job *ClaimedSe
 
 func (a *codexAppServer) startTurn(ctx context.Context, threadID string, job *ClaimedSession, execDir, upDir, orbitTurnID, prompt string, imagePaths []string) (string, error) {
 	mode, generation := a.prepareInstructionContext(func() error {
-		return a.injectAgentContext(ctx, threadID, job.Agent, job.insideRecordedWork(), job.watchesOn())
+		return a.injectAgentContext(ctx, threadID, job.instructionAgent(), job.insideRecordedWork(), job.watchesOn())
 	})
 	result, err := a.request(ctx, "turn/start", codexTurnParams(
 		threadID, job, execDir, upDir, orbitTurnID, prompt, imagePaths,
@@ -1540,7 +1540,7 @@ func codexLegacyAgentContext(agent AgentExecConfig, executable string, insideRec
 func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbitTurnID, prompt string, imagePaths []string, contextOptions codexTurnContextOptions) map[string]interface{} {
 	input := []map[string]interface{}{}
 	if contextOptions.Mode == codexInstructionsUserInput {
-		if context := codexLegacyAgentContext(job.Agent, contextOptions.Executable, job.insideRecordedWork(), job.watchesOn()); context != "" {
+		if context := codexLegacyAgentContext(job.instructionAgent(), contextOptions.Executable, job.insideRecordedWork(), job.watchesOn()); context != "" {
 			input = append(input, map[string]interface{}{"type": "text", "text": context})
 		}
 	}
@@ -1564,7 +1564,7 @@ func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbit
 	}
 	if contextOptions.Mode == codexInstructionsAdditionalContext {
 		if additional := codexAgentAdditionalContext(
-			job.Agent, contextOptions.Executable, contextOptions.Generation, job.insideRecordedWork(), job.watchesOn(),
+			job.instructionAgent(), contextOptions.Executable, contextOptions.Generation, job.insideRecordedWork(), job.watchesOn(),
 		); len(additional) > 0 {
 			// Application context becomes developer-role fragments without replacing
 			// local/project developer_instructions. Keys stay stable across ordinary

@@ -110,6 +110,10 @@ The runner judges pressure against the storage it may use:
 - **Docker backend.** The apiserver already receives each volume's `usageBytes` and `limitBytes` from the channel
   (`ChannelVolume` in `src/apiserver/src/managed-runners/docker-channel-client.ts`). It relays them to the managed
   runner in the heartbeat response, next to `minFreeDiskMb` (D1).
+- **Field names as implemented** (`StorageBudget` in `src/runner-go/types.go`): the heartbeat response's
+  `storageBudget` is `{limitBytes, usageBytes, measuredAt, floorBytes}`, the byte counts as integers and `measuredAt`
+  as RFC 3339, the time the channel's measurement finished. Like `minFreeDiskMb`, an answer without `storageBudget`
+  means no budget, so every answer carries it, the link's quiet answer included.
 - **Kubernetes backend.** `statfs` is already right. Provisioning sets `Runner.minFreeDiskMb` from the PVC size when the
   owner has not set it.
 - **Default floor for managed runners:** 25% of the budget (D5). On a 20 GiB volume that is 5 GiB, which covers the
