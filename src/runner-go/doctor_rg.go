@@ -20,8 +20,9 @@ type rgShell int
 const (
 	// rgShellPlain: the account's shell, not a login shell, on the PATH the runner gives the engine.
 	rgShellPlain rgShell = iota
-	// rgShellOwn: the engine brings its own rg. Claude Code's Bash tool defines rg (with grep and find) as
-	// a shell function that runs the claude binary, which embeds ripgrep, and its Grep tool runs the same.
+	// rgShellOwn: the engine brings its own rg where the PATH has none. Claude Code's Bash tool then defines
+	// rg as a shell function that runs the claude binary, which embeds ripgrep; with an rg on the PATH, its
+	// commands resolve that one (both seen in real sessions on HPC, before and after ripgrep was installed).
 	rgShellOwn
 	// rgShellCodex: a login shell of the account's shell, unless the Codex config turns login shells off,
 	// with Codex's codex-path directory first on PATH either way: Codex puts it on its own PATH, and
@@ -59,6 +60,9 @@ func checkEngineRg(h engineHealth, servicePath string) engineRg {
 	}
 	switch engineRgShell(h.spec.bin) {
 	case rgShellOwn:
+		if rg, ok := lookPathIn("rg", servicePath); ok {
+			return engineRg{checked: true, path: rg}
+		}
 		return engineRg{checked: true, path: "rg", source: h.spec.name + "'s own"}
 	case rgShellCodex:
 		login := codexAllowsLoginShell()

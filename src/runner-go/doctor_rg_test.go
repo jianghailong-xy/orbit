@@ -97,13 +97,19 @@ func TestDoctorFlagsAnEngineWhoseShellHasNoRg(t *testing.T) {
 	}
 }
 
-// Claude Code's commands find the rg built into the claude binary, whatever the PATH holds; an engine that is not
-// installed gets no line at all.
+// Claude Code's commands find the rg built into the claude binary where the PATH has none, and the PATH's rg where
+// it has one; an engine that is not installed gets no line at all.
 func TestDoctorClaudeCodeBringsItsOwnRg(t *testing.T) {
 	h := installedEngine(t, providerClaude, "/opt/claude/bin/claude")
-	h.rg = checkEngineRg(h, t.TempDir())
+	servicePath := t.TempDir()
+	h.rg = checkEngineRg(h, servicePath)
 	if got := formatEngineRgLine(h); got != "✓ Claude Code — Claude Code's own rg" {
 		t.Fatalf("line = %q", got)
+	}
+	rg := writeFakeBin(t, servicePath, "rg", "exit 0")
+	h.rg = checkEngineRg(h, servicePath)
+	if got := formatEngineRgLine(h); got != "✓ Claude Code — "+rg {
+		t.Fatalf("with rg on the runner's PATH the line = %q", got)
 	}
 	missing, _ := specFor(providerOpenCode)
 	if rg := checkEngineRg(engineHealth{spec: missing}, t.TempDir()); rg.checked {
