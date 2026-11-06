@@ -11,6 +11,7 @@ import {
   type KeyObject,
 } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { MANAGED_RUNNERS_ENABLED_ENV, readManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import { MANAGED_RUNNERS_PROFILE_ENV } from '../managed-runners/managed-runner-profile';
 
 /**
@@ -204,7 +205,10 @@ export function runnerLinkSettings(config: Pick<ConfigService, 'get'>) {
     linkUrl: config.get<string>('RUNNER_LINK_URL'),
     gatewayToken: config.get<string>('RUNNER_LINK_GATEWAY_TOKEN'),
     publicOrigin: config.get<string>('PUBLIC_ORIGIN'),
-    managedRunnerServerUrl: managedRunnerServerUrl(config.get<string>(MANAGED_RUNNERS_PROFILE_ENV)),
+    // Read only where managed runners are on: off, the process reads no profile (managed-runner-gate.ts).
+    managedRunnerServerUrl: readManagedRunnerGate(config.get<string>(MANAGED_RUNNERS_ENABLED_ENV)).enabled
+      ? managedRunnerServerUrl(config.get<string>(MANAGED_RUNNERS_PROFILE_ENV))
+      : undefined,
   };
 }
 
