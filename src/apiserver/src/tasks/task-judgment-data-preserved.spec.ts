@@ -2724,7 +2724,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // DELETE: every stored mapping reads NULL in it.
       '0480_managed_runner_volume_measurement',
       // A nullable column for what a wiki model call was made from, and a CHECK of its shape: nothing to preserve, no row
-      // written.
+      // written. One DO statement takes wiki_model_request's lock in short tries and adds both, the CHECK NOT VALID;
+      // after a COMMIT, a VALIDATE reads the stored rows under SHARE UPDATE EXCLUSIVE.
       '0482_wiki_model_request_material'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
