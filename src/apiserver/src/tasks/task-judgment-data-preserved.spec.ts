@@ -2701,10 +2701,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // DONE fence. No INSERT, UPDATE or DELETE: every stored row reads NULL in both new columns.
       '0476_wiki_chat_session',
       // 0477 widens `wiki_job_kind_chk` by `docs_follow` and replaces `wiki_job_space_running_key` with two partial unique
-      // indexes over the same table (contract `jobs.onePerSpace`'s exception for the follow job). `wiki_job` is not a
-      // preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved
-      // triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it is not
-      // another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored job satisfies both as it stands.
+      // indexes over the same table (contract `jobs.onePerSpace`'s exception for the follow job), all in one DO statement
+      // that takes wiki_job's lock in short tries and writes no row. `wiki_job` is not a preserved relation, no `task`,
+      // `session`, `project` or `project_acceptance_*` object nor any of the six preserved triggers/functions is named,
+      // and no function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence.
+      // No INSERT, UPDATE or DELETE: every stored job satisfies both as it stands.
       '0477_wiki_docs_follow',
       // 0478 adds one nullable jsonb column to `session` (`engine_usage_totals`, the engine's running totals as last
       // booked) and nothing else. `session` is not a preserved relation, no column any preserved trigger reads is
