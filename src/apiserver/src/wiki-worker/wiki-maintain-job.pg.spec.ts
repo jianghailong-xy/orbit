@@ -1124,6 +1124,8 @@ interface ComparisonSeen {
   docs: Record<string, unknown>;
   withdrawals: unknown[];
   rewritten: string[];
+  /** The versions the run's writes kept (docs.versions): `<slug>#<key> <reason> <whose job>`, sorted. */
+  versions: string[];
   ops: Array<{ kind: string; sha: string; from: string; to: string; paths: string[]; createdAt: Date; endedAt: Date | null }>;
 }
 
@@ -1178,7 +1180,7 @@ async function runComparison(h: Harness, which: ComparisonCase): Promise<Compari
             ? [{ kind: 'design_doc', path: section.cites, sha, lines: { start: 3, end: 5 }, section: 'Part', quote: 'The part', verified: true }]
             : [],
         })),
-      });
+      }, { reason: 'maintenance', jobId: fx.jobId });
     }
   }
   // The paths the run withdraws, as it asks the documents' writer to.
@@ -1206,6 +1208,10 @@ async function runComparison(h: Harness, which: ComparisonCase): Promise<Compari
     `SELECT "kind", "input", "created_at", "ended_at" FROM "wiki_repo_op" WHERE "job_id" = $1 ORDER BY "created_at", "id"`,
     [fx.jobId],
   );
+  const versions = await h.sql.query<{ doc_slug: string; section_key: string; reason: string; job_id: string | null }>(
+    `SELECT "doc_slug", "section_key", "reason", "job_id"::text FROM "wiki_doc_section_version" WHERE "space_id" = $1`,
+    [fx.spaceId],
+  );
   return {
     outcome: run.outcome,
     docs: (run.report as { docs?: Record<string, unknown> } | null)?.docs ?? {},
@@ -1214,6 +1220,9 @@ async function runComparison(h: Harness, which: ComparisonCase): Promise<Compari
     rewritten: sections.rows
       .filter((row) => row.repo_sha === REPO.sha && writtenAt.get(`${row.slug}#${row.key}`) !== REPO.sha)
       .map((row) => `${row.slug}#${row.key}`)
+      .sort(),
+    versions: versions.rows
+      .map((row) => `${row.doc_slug}#${row.section_key} ${row.reason} ${row.job_id === fx.jobId ? 'this run' : String(row.job_id)}`)
       .sort(),
     ops: ops.rows.map((op) => ({
       kind: op.kind,
@@ -1388,6 +1397,9 @@ test('the documents step writes again the same sections and withdraws the same p
   );
   assert.deepEqual(seen.docs.affected, { byEntries: 0, byRepo: 8, stale: 1, unwritten: 0, total: 9 });
   assert.deepEqual(seen.docs.sections, { written: 9, unchanged: 0, failed: 0 });
+  // Every section it wrote again kept the one it replaced, as replaced by this maintenance run (docs.versions); the
+  // writes that put them there first replaced nothing and kept nothing.
+  assert.deepEqual(seen.versions, seen.rewritten.map((at) => `${at} maintenance this run`));
   assert.deepEqual(seen.docs.withdrawn, { paths: 2, sentences: 1 });
   assert.deepEqual(seen.withdrawals, [{
     repoSha: REPO.sha,

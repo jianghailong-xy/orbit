@@ -312,6 +312,8 @@ test('the owner channel refuses a personal access token door by door and field b
     // The space has no version 1 (its read above is a 404): the door answers a login 404, no such version of the plan.
     { route: 'POST /wiki/spaces/:id/plan/versions/:version/build', path: `/wiki/spaces/${spaceId}/plan/versions/1/build`, body: {}, login: 404 },
     { route: 'POST /wiki/plan-proposals/:id/decide', path: `/wiki/plan-proposals/${nobody()}/decide`, body: { action: 'reject' }, login: 404 },
+    // A version that names nothing: the login is answered the door's 404 for another owner's version, or none.
+    { route: 'POST /wiki/doc-versions/:id/restore', path: `/wiki/doc-versions/${nobody()}/restore`, login: 404 },
     // A chat that says nothing is not made: the door answers a login 400, content is the owner's first message.
     { route: 'POST /wiki/spaces/:id/chats', path: `/wiki/spaces/${spaceId}/chats`, body: {}, login: 400 },
   ];

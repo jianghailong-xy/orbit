@@ -613,6 +613,13 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // bundle a reader opens to browse the upload it came with. An address, never a fence. Named for
   // Orbit Files because `bundleId` on the wire is a push device's app bundle (`io.orbitd.app`).
   'fileBundleId',
+  // The versions a section keeps (migration 0475, contract `docs.versions`): a version's id as the document read,
+  // Activity's Docs rows and a write's answer name it (`versionId`), the version a restore put back
+  // (`restoredVersionId`, a history reference with no foreign key) and the one it kept of what it replaced
+  // (`keptVersionId`). `POST /wiki/doc-versions/:id/restore` takes each back. Addresses, never a fence.
+  'versionId',
+  'restoredVersionId',
+  'keptVersionId',
   // The wiki space a session is a chat of (migration 0476, wiki contract `chat.binding.read`): what the
   // session page's From Wiki label opens. A history reference with no foreign key, so it may 404 —
   // never a fence.

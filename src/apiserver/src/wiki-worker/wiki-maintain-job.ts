@@ -1825,7 +1825,11 @@ class WikiMaintainRun {
     try {
       // What the model wrote goes to the shared writer without any U+0000 (contract `jobs.serverWrites`): Postgres keeps
       // none, and a model may copy one out of the code it was shown — the runner gate drops it from a report the same way.
-      const answer = await this.deps.docs.write(this.jobPrincipal(), job.spaceId, slug, stripNul(request) as unknown as Record<string, unknown>);
+      // Every section it writes over is kept as it stood, as replaced by this maintenance run (docs.versions).
+      const answer = await this.deps.docs.write(this.jobPrincipal(), job.spaceId, slug, stripNul(request) as unknown as Record<string, unknown>, {
+        reason: 'maintenance',
+        jobId: job.id,
+      });
       return { status: answer.status, sections: answer.sections, counts: answer.counts };
     } catch (error) {
       if (error instanceof WikiRefusalError) throw new WikiDocsWriteRefused(refusalText(job.spaceId, error));

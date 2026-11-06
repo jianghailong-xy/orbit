@@ -113,6 +113,9 @@ export interface Tenant {
   wikiArticleSlug: string;
   wikiArticlePart: number;
   wikiDocSlug: string;
+  /** The census document's one section, and the version a rewrite of it kept (`docs.versions`). */
+  wikiDocSectionKey: string;
+  wikiDocVersionId: string;
   wikiTopicSlug: string;
   /** For /admin/*: a user an administrator acts on (with a profile photo), one of its tokens, a global provider. */
   adminSubjectId: string;
@@ -724,6 +727,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /wiki/spaces/:id/docs': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/doc-index': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/docs/:slug': { request: (of) => ({ params: { id: of.wikiSpaceId, slug: of.wikiDocSlug } }) },
+  'GET /wiki/spaces/:id/docs/:slug/sections/:key/versions': {
+    request: (of) => ({ params: { id: of.wikiSpaceId, slug: of.wikiDocSlug, key: of.wikiDocSectionKey } }),
+  },
+  'GET /wiki/spaces/:id/doc-changes': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
+  // The owner puts the census section back as its version kept it: written, never a 404.
+  'POST /wiki/doc-versions/:id/restore': { request: (of) => ({ params: { id: of.wikiDocVersionId } }) },
   'GET /wiki/spaces/:id/share': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'PUT /wiki/spaces/:id/share': { request: (of) => ({ params: { id: of.wikiSpaceId }, body: {} }) },
   'DELETE /wiki/spaces/:id/share': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },

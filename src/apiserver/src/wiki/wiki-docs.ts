@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import {
@@ -11,9 +11,14 @@ import {
   WIKI_DOC_REPO_KINDS,
   WIKI_DOC_RULES,
   WIKI_DOC_SCHEMA,
+  WIKI_DOC_VERSIONS,
   WIKI_DOCS_AFFECTED_RULES,
+  wikiChatWhere,
+  wikiDocSentenceDiff,
   type WikiAnchorState,
   type WikiDocBlockKind,
+  type WikiDocChangeRow,
+  type WikiDocChanges,
   type WikiDocChecker,
   type WikiDocDisposition,
   type WikiDocDispositionAction,
@@ -21,14 +26,20 @@ import {
   type WikiDocFootnoteView,
   type WikiDocRecordKind,
   type WikiDocRepoKind,
+  type WikiDocRestoreResult,
   type WikiDocSchemaLevel,
+  type WikiDocSectionChange,
   type WikiDocSectionStats,
+  type WikiDocSectionVersions,
   type WikiDocSectionView,
   type WikiDocSentenceCounts,
   type WikiDocSentenceStatus,
   type WikiDocSentenceView,
   type WikiDocStatus,
   type WikiDocVerdict,
+  type WikiDocVersionReason,
+  type WikiDocVersionReasonKind,
+  type WikiDocVersionReplacedBy,
   type WikiDocView,
   type WikiDocViaEntry,
   type WikiDocWithdrawReason,
@@ -78,6 +89,11 @@ import { WikiRefusalError, WikiService, type WikiPrincipal } from './wiki.servic
  * A VIEW. Nothing points at these tables: no source kind names them, so a document is never a source;
  * the push and the agent's search and get read `wiki_entry` and nothing else. The owner reads, on the
  * user door; the server's own jobs write (`assertWriter`).
+ *
+ * WHAT A REWRITE KEEPS (contract `docs.versions`, migration 0475). Every section a write replaces is kept as it
+ * stood, with why it was replaced, in the write's own transaction (`store`), at most five a section; the owner
+ * reads them sentence by sentence against what replaced them, and can put one back (`restore`), which is the
+ * user door's one write to a document and keeps what it replaces the same way.
  *
  * NOT A SESSIONS OR PROJECTS DEPENDENCY: this reads the wiki's rows, the records a footnote names and
  * the titles a page shows, through Prisma, like the articles and the plan beside it.
@@ -911,10 +927,263 @@ interface PreparedSection {
   materialSha256: string;
   dispositions: WikiDocDisposition[];
   blocks: BodyBlock[];
-  sentences: Array<BodySentence & { status: WikiDocSentenceStatus; newTokens: string[] }>;
+  /** `withdrawn`: a sentence a restored version kept withdrawn, which stays so (only a restore brings one). */
+  sentences: Array<BodySentence & { status: WikiDocSentenceStatus; newTokens: string[]; withdrawn?: KeptWithdrawal | null }>;
   footnotes: FootnoteRow[];
   stats: WikiDocSectionStats;
 }
+
+// ── Versions (contract `docs.versions`, migration 0475) ─────────────────────────────────────────
+
+/**
+ * Why a write replaces the sections it replaces (contract `docs.versions.reasons`): what each version it keeps says
+ * it was replaced for, and by which job. Every writer states its own — a maintenance run, a build of a plan version,
+ * a follow job for a session's merge or a landing into main (with the title and the commit), or for a chat's press
+ * (with the chat's title). The owner's restore is the writer's own (`WikiDocs.restore`) and no caller's to name.
+ */
+export type WikiDocWriteCause =
+  | { reason: 'maintenance'; jobId: string }
+  | { reason: 'build'; jobId: string; planVersion: number }
+  | { reason: 'merge' | 'landing'; jobId: string; title: string; sha: string }
+  | { reason: 'chat'; jobId: string; title: string };
+
+/** What a version says replaced it: a writer's cause, or the owner's restore of another version. */
+type VersionCause = WikiDocWriteCause | { reason: 'restore'; versionId: string };
+
+/** A withdrawal as a version keeps a withdrawn sentence's. */
+interface KeptWithdrawal {
+  at: string;
+  entryId: string | null;
+  path: string | null;
+  reason: WikiDocWithdrawReason;
+}
+
+/** A sentence as a version keeps it (`wiki_doc_section_version.sentences`): `notes` are places in its `footnotes`. */
+interface KeptSentence {
+  block: number;
+  text: string;
+  status: WikiDocSentenceStatus;
+  notes: number[];
+  newTokens: string[];
+  withdrawn: KeptWithdrawal | null;
+}
+
+/** A section's blocks, sentences and footnotes as they stood: what a version keeps of it. */
+interface KeptSection {
+  blocks: BodyBlock[];
+  sentences: KeptSentence[];
+  footnotes: FootnoteRow[];
+}
+
+/** The owner's restore, as the transaction writes it: the version, and the section's fields as it kept them. */
+interface Restoring {
+  versionId: string;
+  repoSha: string;
+  model: string | null;
+  generatedAt: Date;
+  materialSha256: string;
+  kept: KeptSection;
+}
+
+/** A stored section's sentences and footnotes, as `standingSections` reads them. */
+const KEPT_SELECT = {
+  id: true,
+  blocks: true,
+  sentences: {
+    orderBy: { position: 'asc' },
+    select: {
+      block: true,
+      text: true,
+      status: true,
+      newTokens: true,
+      withdrawnAt: true,
+      withdrawnEntryId: true,
+      withdrawnPath: true,
+      withdrawnReason: true,
+      footnotes: {
+        orderBy: { position: 'asc' },
+        select: {
+          kind: true,
+          ref: true,
+          sha: true,
+          lineStart: true,
+          lineEnd: true,
+          charStart: true,
+          charEnd: true,
+          locator: true,
+          quote: true,
+          excerpt: true,
+          verdict: true,
+          checkedBy: true,
+          viaEntryId: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.WikiDocSectionSelect;
+
+/**
+ * Sections as they stand, as a version keeps them (contract `docs.versions.row`): their blocks, their sentences in
+ * order, and their footnotes, each one once — a sentence's `notes` are the places of its own, in its order, so the
+ * rows it had come back as they were.
+ */
+async function standingSections(db: Pick<Tx, 'wikiDocSection'>, ownerId: string, ids: readonly string[]): Promise<Map<string, KeptSection>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db.wikiDocSection.findMany({ where: { ownerId, id: { in: [...ids] } }, select: KEPT_SELECT });
+  return new Map(rows.map((row) => {
+    const footnotes: FootnoteRow[] = [];
+    const placeOf = new Map<string, number>();
+    const sentences = row.sentences.map((sentence): KeptSentence => ({
+      block: sentence.block,
+      text: sentence.text,
+      status: sentence.status as WikiDocSentenceStatus,
+      notes: sentence.footnotes.map((footnote) => {
+        const kept: FootnoteRow = {
+          kind: footnote.kind as WikiDocFootnoteKind,
+          ref: footnote.ref,
+          sha: footnote.sha,
+          lineStart: footnote.lineStart,
+          lineEnd: footnote.lineEnd,
+          charStart: footnote.charStart,
+          charEnd: footnote.charEnd,
+          locator: (footnote.locator ?? {}) as Record<string, unknown>,
+          quote: footnote.quote,
+          excerpt: footnote.excerpt,
+          verdict: footnote.verdict as WikiDocVerdict,
+          checkedBy: footnote.checkedBy as WikiDocChecker,
+          viaEntryId: footnote.viaEntryId,
+        };
+        const same = canonical(kept);
+        let at = placeOf.get(same);
+        if (at === undefined) {
+          at = footnotes.length;
+          placeOf.set(same, at);
+          footnotes.push(kept);
+        }
+        return at;
+      }),
+      newTokens: sentence.newTokens,
+      withdrawn: sentence.withdrawnAt
+        ? {
+          at: sentence.withdrawnAt.toISOString(),
+          entryId: sentence.withdrawnEntryId,
+          path: sentence.withdrawnPath,
+          reason: sentence.withdrawnReason as WikiDocWithdrawReason,
+        }
+        : null,
+    }));
+    return [row.id, { blocks: (row.blocks as unknown as BodyBlock[]) ?? [], sentences, footnotes }];
+  }));
+}
+
+/**
+ * What a restore compares a section with a version by (contract `docs.versions.restore`): its blocks, each sentence's
+ * block, text and footnotes, its fingerprint and its commit — what a version holds. Not what a write derives from the
+ * document and the entries around the section (statuses, new tokens, withdrawals, staleness): writing the version
+ * again would derive those from them as they are now, so they say nothing about whether it already stands.
+ */
+function restoreIdentity(kept: KeptSection, materialSha256: string, repoSha: string): string {
+  return canonical({
+    blocks: kept.blocks,
+    sentences: kept.sentences.map((sentence) => ({
+      block: sentence.block,
+      text: sentence.text,
+      footnotes: sentence.notes.map((n) => kept.footnotes[n] ?? null),
+    })),
+    materialSha256,
+    repoSha,
+  });
+}
+
+/** A value as JSON with every object's keys sorted: two that say the same thing read the same, however they were stored. */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).filter(([, v]) => v !== undefined).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(',')}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
+/** The text of a kept section's sentences, in order: what `wikiDocSentenceDiff` compares. */
+function keptTexts(sentences: unknown): string[] {
+  return ((sentences as KeptSentence[] | null) ?? []).map((sentence) => sentence.text);
+}
+
+/** A cut title, as `reason_title` holds it: at most 500 characters, never blank. */
+function reasonTitle(title: string): string {
+  const text = Array.from(title.trim()).slice(0, 500).join('').trim();
+  if (text === '') throw new Error('a merge, a landing or a chat names the title the section was written again for, and this one is blank');
+  return text;
+}
+
+/** A version's reason and what replaced it, as its columns hold them. */
+function causeColumns(cause: VersionCause): {
+  reason: WikiDocVersionReasonKind;
+  reasonTitle: string | null;
+  reasonSha: string | null;
+  reasonPlanVersion: number | null;
+  jobId: string | null;
+  restoredVersionId: string | null;
+} {
+  const none = { reasonTitle: null, reasonSha: null, reasonPlanVersion: null, jobId: null, restoredVersionId: null };
+  switch (cause.reason) {
+    case 'maintenance':
+      return { ...none, reason: cause.reason, jobId: cause.jobId };
+    case 'build':
+      return { ...none, reason: cause.reason, jobId: cause.jobId, reasonPlanVersion: cause.planVersion };
+    case 'merge':
+    case 'landing':
+      return { ...none, reason: cause.reason, jobId: cause.jobId, reasonTitle: reasonTitle(cause.title), reasonSha: cause.sha };
+    case 'chat':
+      return { ...none, reason: cause.reason, jobId: cause.jobId, reasonTitle: reasonTitle(cause.title) };
+    case 'restore':
+      return { ...none, reason: cause.reason, restoredVersionId: cause.versionId };
+  }
+}
+
+/** A version's reason as the clients say it (`wikiDocVersionReason`, `wikiDocVersionHeading`): only what it names. */
+function reasonOf(row: { reason: string; reasonTitle: string | null; reasonSha: string | null; reasonPlanVersion: number | null }): WikiDocVersionReason {
+  return {
+    kind: row.reason as WikiDocVersionReasonKind,
+    ...(row.reasonTitle !== null ? { title: row.reasonTitle } : {}),
+    ...(row.reasonSha !== null ? { sha: row.reasonSha } : {}),
+    ...(row.reasonPlanVersion !== null ? { planVersion: row.reasonPlanVersion } : {}),
+  };
+}
+
+/** What replaced a version: the job that wrote, or the owner's restore of another version. */
+function replacedByOf(row: { jobId: string | null; restoredVersionId: string | null }): WikiDocVersionReplacedBy {
+  return row.restoredVersionId !== null ? { kind: 'restore', versionId: row.restoredVersionId } : { kind: 'job', jobId: row.jobId! };
+}
+
+/** A version as the reads that go by SQL take it (`seq` orders it there and is never served: it is a bigint). */
+interface VersionRow {
+  id: string;
+  docSlug: string;
+  sectionKey: string;
+  sentences: unknown;
+  reason: string;
+  reasonTitle: string | null;
+  reasonSha: string | null;
+  reasonPlanVersion: number | null;
+  replacedAt: Date;
+}
+
+/** A version's columns as the reads take them (`seq` orders them in SQL and is never served: it is a bigint). */
+const VERSION_READ_SELECT = {
+  id: true,
+  docSlug: true,
+  sectionKey: true,
+  sentences: true,
+  reason: true,
+  reasonTitle: true,
+  reasonSha: true,
+  reasonPlanVersion: true,
+  jobId: true,
+  restoredVersionId: true,
+  replacedAt: true,
+} satisfies Prisma.WikiDocSectionVersionSelect;
 
 export const PLAN_SELECT = {
   id: true,
@@ -1139,9 +1408,10 @@ export class WikiDocs {
    * version (else WIKI_PLAN_STALE); it has the schema's shape and names the plan document's sections and
    * the space's entries (else WIKI_DOC_INVALID, everything wrong at once). Then every record footnote is
    * read again, redacted and checked, before the one transaction that stores the sections and classifies
-   * the whole document again.
+   * the whole document again — and keeps every section it replaces as a version, saying it was replaced for
+   * `cause` (contract `docs.versions.kept`).
    */
-  async write(principal: WikiPrincipal, spaceId: string, slug: string, body: unknown): Promise<WikiDocWriteResult> {
+  async write(principal: WikiPrincipal, spaceId: string, slug: string, body: unknown, cause: WikiDocWriteCause): Promise<WikiDocWriteResult> {
     await this.assertWriter(principal, spaceId);
     const { ownerId } = principal;
     const confirmed = await requireConfirmedPlan(this.prisma, { ownerId, spaceId });
@@ -1223,7 +1493,7 @@ export class WikiDocs {
     const outcome = await withTransactionRetry(
       this.prisma,
       async (tx) => {
-        return this.store(tx, { ownerId, spaceId, plan, planDoc, request, prepared, viaIds });
+        return this.store(tx, { ownerId, spaceId, plan, planDoc, request, prepared, viaIds, cause, restoring: null });
       },
       loggedRetry(this.logger, 'wiki.writeDoc'),
     );
@@ -1237,8 +1507,128 @@ export class WikiDocs {
       status: outcome.status,
       sections: request.sections.map((section) => {
         const written = outcome.written.includes(section.key);
-        return { key: section.key, outcome: written ? 'written' : 'unchanged', stats: written ? statsOf.get(section.key)! : null };
+        const version = outcome.versions.get(section.key);
+        return {
+          key: section.key,
+          outcome: written ? 'written' : 'unchanged',
+          stats: written ? statsOf.get(section.key)! : null,
+          versionId: version?.id ?? null,
+          changed: version?.changed ?? null,
+        };
       }),
+      counts: outcome.counts,
+    };
+  }
+
+  /**
+   * Put a section back as a version kept it (contract `docs.versions.restore`): the owner's one write to a document,
+   * `POST /api/wiki/doc-versions/:id/restore`, and the one a chat's Undo restores through (`chat.presses.undo`).
+   *
+   * In order: a request with a session header is refused WIKI_OWNER_CHANNEL_ONLY before anything is read; another
+   * owner's version, or none, is the plain 404; a caller that names the section it means (`section`) and names
+   * another than the version's is a 409; the space has a confirmed plan (`requireConfirmedPlan`), and a section that
+   * plan no longer has is a 409. Then one transaction writes the section back as `store` writes any — the via entries
+   * FOR SHARE first, a sentence through an entry withdrawn since stored withdrawn and its section stale — with the
+   * version's blocks, sentences, footnotes, repoSha, materialSha256 and generatedAt, so the next maintenance run
+   * finds the fingerprint it was written from and does not write it again for nothing; and the text it replaces is
+   * kept as a version too (reason restore), so a restore is taken back the same way. A section already standing as
+   * the version kept it — its blocks, each sentence's block, text and footnotes, its fingerprint and its commit — is
+   * unchanged: nothing is written and nothing kept, however its statuses read now.
+   */
+  async restore(
+    ownerId: string,
+    versionId: string,
+    actingSessionId: string | null,
+    section?: { slug: string; key: string },
+  ): Promise<WikiDocRestoreResult> {
+    if (actingSessionId) {
+      throw new WikiRefusalError({
+        code: 'WIKI_OWNER_CHANNEL_ONLY',
+        message:
+          'restoring a section is the account owner\'s, through an owner channel with no acting session: a session reads '
+            + 'and writes no document, and what it wants changed it drafts for the owner to apply.',
+      });
+    }
+    const version = await this.prisma.wikiDocSectionVersion.findFirst({
+      where: { id: versionId, ownerId },
+      select: {
+        id: true,
+        spaceId: true,
+        docSlug: true,
+        sectionKey: true,
+        blocks: true,
+        sentences: true,
+        footnotes: true,
+        repoSha: true,
+        materialSha256: true,
+        model: true,
+        stats: true,
+        dispositions: true,
+        generatedAt: true,
+      },
+    });
+    if (!version) throw new NotFoundException('no such version of a section');
+    const { spaceId, docSlug: slug, sectionKey: key } = version;
+    if (section && (section.slug !== slug || section.key !== key)) {
+      throw new ConflictException(`this version is one section ${key} of ${slug} kept, not section ${section.key} of ${section.slug}: nothing was restored`);
+    }
+    await requireConfirmedPlan(this.prisma, { ownerId, spaceId });
+    const plan = await this.confirmedPlan(this.prisma, ownerId, spaceId);
+    const planDoc = plan?.docs.find((doc) => doc.slug === slug);
+    const planSection = planDoc?.sections.find((one) => one.key === key);
+    if (!plan || !planDoc || !planSection) {
+      throw new ConflictException(`section ${key} of ${slug} is no longer in the plan in force, so it is written nowhere: nothing was restored`);
+    }
+    const kept: KeptSection = {
+      blocks: (version.blocks as unknown as BodyBlock[]) ?? [],
+      sentences: (version.sentences as unknown as KeptSentence[]) ?? [],
+      footnotes: (version.footnotes as unknown as FootnoteRow[]) ?? [],
+    };
+    const prepared: PreparedSection = {
+      key,
+      planSectionId: planSection.id,
+      materialSha256: version.materialSha256,
+      dispositions: (version.dispositions as unknown as WikiDocDisposition[]) ?? [],
+      blocks: kept.blocks,
+      sentences: kept.sentences.map((sentence) => ({
+        block: sentence.block,
+        text: sentence.text,
+        notes: sentence.notes,
+        status: sentence.notes.length === 0 ? 'transition' : 'unverified',
+        newTokens: [],
+        withdrawn: sentence.withdrawn,
+      })),
+      footnotes: kept.footnotes,
+      stats: version.stats as unknown as WikiDocSectionStats,
+    };
+    const viaIds = [...new Set(kept.footnotes.map((footnote) => footnote.viaEntryId).filter((id): id is string => id !== null))];
+    const restoring: Restoring = {
+      versionId: version.id,
+      repoSha: version.repoSha,
+      model: version.model,
+      generatedAt: version.generatedAt,
+      materialSha256: version.materialSha256,
+      kept,
+    };
+    const request: DocWrite = { planVersion: plan.version, repoSha: version.repoSha, model: version.model, sections: [] };
+    const outcome = await withTransactionRetry(
+      this.prisma,
+      async (tx) => this.store(tx, {
+        ownerId, spaceId, plan, planDoc, request, prepared: [prepared], viaIds, cause: { reason: 'restore', versionId: version.id }, restoring,
+      }),
+      loggedRetry(this.logger, 'wiki.restoreDocVersion'),
+    );
+    if (outcome.written.length > 0) this.realtime?.publishWikiChanged(ownerId, spaceId);
+    const replaced = outcome.versions.get(key);
+    return {
+      spaceId,
+      slug,
+      key,
+      versionId: version.id,
+      outcome: outcome.written.length > 0 ? 'restored' : 'unchanged',
+      keptVersionId: replaced?.id ?? null,
+      changed: replaced?.changed ?? null,
+      status: outcome.status,
       counts: outcome.counts,
     };
   }
@@ -1324,9 +1714,12 @@ export class WikiDocs {
   }
 
   /**
-   * The transaction a write is (db-write-inventory `wiki.writeDoc`): its via entries FOR SHARE, the plan
-   * checked again, the document made if it is new and locked, the sections that need it replaced, and
-   * every sentence of the document classified again.
+   * The transaction a write is (db-write-inventory `wiki.writeDoc`, and `wiki.restoreDocVersion` for a restore): its
+   * via entries FOR SHARE, the plan checked again, the document made if it is new and locked, every section it
+   * replaces kept as a version for `cause` (the newest `perSection` of each kept), the sections that need it
+   * replaced, and every sentence of the document classified again. A restore (`restoring`) writes its section
+   * whatever the stored fingerprint says, as the version kept it, and leaves the document's plan version and commit
+   * as they are: it brings back what a job wrote and reads no repository of its own.
    */
   private async store(
     tx: Tx,
@@ -1338,9 +1731,18 @@ export class WikiDocs {
       request: DocWrite;
       prepared: PreparedSection[];
       viaIds: string[];
+      cause: VersionCause;
+      restoring: Restoring | null;
     },
-  ): Promise<{ docId: string; written: string[]; status: WikiDocStatus; counts: WikiDocSentenceCounts }> {
-    const { ownerId, spaceId, plan, planDoc, request, prepared, viaIds } = input;
+  ): Promise<{
+    docId: string;
+    written: string[];
+    status: WikiDocStatus;
+    counts: WikiDocSentenceCounts;
+    /** The version each written section's predecessor was kept as, and how many sentences the write changed. */
+    versions: Map<string, { id: string; changed: number }>;
+  }> {
+    const { ownerId, spaceId, plan, planDoc, request, prepared, viaIds, cause, restoring } = input;
     // The via entries first, FOR SHARE and in id order: a rejection of one waits for this to commit and
     // then withdraws what it wrote (`wiki-doc-withdrawal.ts`), and what they are now decides what is withdrawn here.
     const standing = viaIds.length === 0
@@ -1372,20 +1774,78 @@ export class WikiDocs {
        FOR NO KEY UPDATE`);
     const stored = await tx.wikiDocSection.findMany({
       where: { docId: doc.id, ownerId },
-      select: { id: true, key: true, materialSha256: true, staleAt: true, blocks: true },
+      select: {
+        id: true, key: true, materialSha256: true, staleAt: true, blocks: true, repoSha: true, model: true, stats: true, dispositions: true, generatedAt: true,
+      },
     });
     const storedByKey = new Map(stored.map((section) => [section.key, section]));
-    // Unchanged: the fingerprint it was written from, and nothing withdrawn from it since.
-    const toWrite = prepared.filter((section) => {
-      const old = storedByKey.get(section.key);
-      return !old || old.materialSha256 !== section.materialSha256 || old.staleAt !== null;
-    });
+    // Unchanged: the fingerprint it was written from, and nothing withdrawn from it since. A restore is written
+    // whatever the fingerprint says — the text it puts back is what changes — unless the section already stands as
+    // the version kept it (`restoreIdentity`): then it is left as it is, its stale mark too.
+    let toWrite = restoring
+      ? prepared
+      : prepared.filter((section) => {
+        const old = storedByKey.get(section.key);
+        return !old || old.materialSha256 !== section.materialSha256 || old.staleAt !== null;
+      });
+    // The sections written over, as they stand: each is kept as a version below (contract `docs.versions.kept`).
+    const overwritten = stored.filter((section) => toWrite.some((write) => write.key === section.key));
+    const asTheyStand = await standingSections(tx, ownerId, overwritten.map((section) => section.id));
+    if (restoring) {
+      const current = overwritten[0];
+      const same = current !== undefined
+        && restoreIdentity(asTheyStand.get(current.id)!, current.materialSha256, current.repoSha)
+          === restoreIdentity(restoring.kept, restoring.materialSha256, restoring.repoSha);
+      if (same) toWrite = [];
+    }
     const planKeys = new Set(planDoc.sections.map((section) => section.key));
     const dropped = stored.filter((section) => !planKeys.has(section.key));
-    if (toWrite.length === 0 && dropped.length === 0 && doc.planVersion === plan.version) {
+    if (toWrite.length === 0 && (restoring !== null || (dropped.length === 0 && doc.planVersion === plan.version))) {
       const statuses = await tx.wikiDocSentence.findMany({ where: { ownerId, section: { docId: doc.id } }, select: { status: true } });
       const counts = countSentences(statuses.map((row) => row.status as WikiDocSentenceStatus));
-      return { docId: doc.id, written: [], status: docStatusOf(counts), counts };
+      return { docId: doc.id, written: [], status: docStatusOf(counts), counts, versions: new Map() };
+    }
+
+    // What each overwritten section held, kept with why it was replaced; then the newest `perSection` of each.
+    const versions = new Map<string, { id: string; changed: number }>();
+    if (overwritten.length > 0) {
+      const columns = causeColumns(cause);
+      const rows = overwritten.map((section) => {
+        const kept = asTheyStand.get(section.id)!;
+        const next = toWrite.find((write) => write.key === section.key)!;
+        const id = randomUUID();
+        versions.set(section.key, { id, changed: wikiDocSentenceDiff(kept.sentences.map((one) => one.text), next.sentences.map((one) => one.text)).changed });
+        return {
+          id,
+          spaceId,
+          ownerId,
+          docSlug: planDoc.slug,
+          sectionKey: section.key,
+          blocks: kept.blocks as unknown as Prisma.InputJsonValue,
+          sentences: kept.sentences as unknown as Prisma.InputJsonValue,
+          footnotes: kept.footnotes as unknown as Prisma.InputJsonValue,
+          repoSha: section.repoSha,
+          materialSha256: section.materialSha256,
+          model: section.model,
+          stats: (section.stats ?? {}) as Prisma.InputJsonValue,
+          dispositions: (section.dispositions ?? []) as Prisma.InputJsonValue,
+          generatedAt: section.generatedAt,
+          ...columns,
+          replacedAt: now,
+        };
+      });
+      await tx.wikiDocSectionVersion.createMany({ data: rows });
+      const keys = overwritten.map((section) => section.key);
+      await tx.$executeRaw(Prisma.sql`
+        DELETE FROM "wiki_doc_section_version"
+         WHERE "id" IN (
+           SELECT "ranked"."id" FROM (
+             SELECT v."id", row_number() OVER (PARTITION BY v."section_key" ORDER BY v."seq" DESC) AS "n"
+               FROM "wiki_doc_section_version" v
+              WHERE v."owner_id" = ${ownerId}::uuid AND v."space_id" = ${spaceId}::uuid AND v."doc_slug" = ${planDoc.slug}
+                AND v."section_key" = ANY(${keys}::text[])
+           ) "ranked"
+            WHERE "ranked"."n" > ${WIKI_DOC_VERSIONS.perSection})`);
     }
 
     // Sections the plan's document no longer has, and the ones rewritten: their sentences and footnotes go with them.
@@ -1410,9 +1870,14 @@ export class WikiDocs {
 
     // The new sentences' own statuses: withdrawn through an entry that no longer stands, sourced by a
     // verified footnote, unverified when none is; the rest are classified with the whole document below.
+    // A sentence a restored version kept withdrawn stays withdrawn, as it was.
     const withdrawals = new Map<PreparedSection['sentences'][number], { reason: WikiDocWithdrawReason; entryId: string }>();
     for (const section of toWrite) {
       for (const sentence of section.sentences) {
+        if (sentence.withdrawn) {
+          sentence.status = 'withdrawn';
+          continue;
+        }
         if (sentence.notes.length === 0) continue;
         const cited = sentence.notes.map((n) => section.footnotes[n]);
         const through = cited.find((footnote) => footnote.viaEntryId !== null && withdrawn.has(footnote.viaEntryId));
@@ -1440,7 +1905,8 @@ export class WikiDocs {
 
     for (const section of toWrite) {
       const sectionId = randomUUID();
-      const stale = section.sentences.some((sentence) => withdrawals.has(sentence));
+      // A withdrawn sentence leaves its section for the next maintenance run to write again.
+      const stale = section.sentences.some((sentence) => withdrawals.has(sentence) || Boolean(sentence.withdrawn));
       await tx.wikiDocSection.create({
         data: {
           id: sectionId,
@@ -1450,11 +1916,12 @@ export class WikiDocs {
           planSectionId: section.planSectionId,
           materialSha256: section.materialSha256,
           blocks: section.blocks as unknown as Prisma.InputJsonValue,
-          repoSha: request.repoSha,
-          model: request.model,
+          // A restored section is the version's: the commit and the model it was written with, and when.
+          repoSha: restoring ? restoring.repoSha : request.repoSha,
+          model: restoring ? restoring.model : request.model,
           stats: section.stats as unknown as Prisma.InputJsonValue,
           dispositions: section.dispositions as unknown as Prisma.InputJsonValue,
-          generatedAt: now,
+          generatedAt: restoring ? restoring.generatedAt : now,
           staleAt: stale ? now : null,
         },
         select: { id: true },
@@ -1464,6 +1931,7 @@ export class WikiDocs {
         data: section.sentences.map((sentence, position) => {
           const verdict = judgedOf.get(sentence)!;
           const withdrawal = withdrawals.get(sentence);
+          const keptWithdrawal = sentence.withdrawn ?? null;
           return {
             id: sentenceIds[position],
             sectionId,
@@ -1473,9 +1941,10 @@ export class WikiDocs {
             text: sentence.text,
             status: verdict.status,
             newTokens: verdict.status === 'unsourced' ? verdict.newTokens : [],
-            withdrawnAt: withdrawal ? now : null,
-            withdrawnEntryId: withdrawal?.entryId ?? null,
-            withdrawnReason: withdrawal?.reason ?? null,
+            withdrawnAt: withdrawal ? now : keptWithdrawal ? new Date(keptWithdrawal.at) : null,
+            withdrawnEntryId: withdrawal?.entryId ?? keptWithdrawal?.entryId ?? null,
+            withdrawnReason: withdrawal?.reason ?? keptWithdrawal?.reason ?? null,
+            withdrawnPath: withdrawal ? null : (keptWithdrawal?.path ?? null),
           };
         }),
       });
@@ -1516,16 +1985,18 @@ export class WikiDocs {
     const status = docStatusOf(counts);
     await tx.wikiDoc.updateMany({
       where: { id: doc.id, ownerId },
-      data: {
-        planId: plan.id,
-        planVersion: plan.version,
-        planDocId: planDoc.id,
-        status,
-        repoSha: request.repoSha,
-        updatedAt: now,
-      },
+      data: restoring
+        ? { status, updatedAt: now }
+        : {
+          planId: plan.id,
+          planVersion: plan.version,
+          planDocId: planDoc.id,
+          status,
+          repoSha: request.repoSha,
+          updatedAt: now,
+        },
     });
-    return { docId: doc.id, written: toWrite.map((section) => section.key), status, counts };
+    return { docId: doc.id, written: toWrite.map((section) => section.key), status, counts, versions };
   }
 
   // ── The owner's three reads ───────────────────────────────────────────────────────────────────
@@ -1661,6 +2132,19 @@ export class WikiDocs {
       },
     });
     const storedSections = new Map((stored?.sections ?? []).map((section) => [section.key, section]));
+    // Each section's latest change (contract `docs.versions.reads.doc`): the newest version it kept, against what
+    // it holds now.
+    const latest = new Map((await this.latestVersions(ownerId, spaceId, slug)).map((version) => [version.sectionKey, version]));
+    const changeOf = (key: string, sentences: ReadonlyArray<{ text: string }>): WikiDocSectionChange | null => {
+      const version = latest.get(key);
+      if (!version) return null;
+      return {
+        versionId: version.id,
+        reason: reasonOf(version),
+        at: version.replacedAt.toISOString(),
+        changed: wikiDocSentenceDiff(keptTexts(version.sentences), sentences.map((sentence) => sentence.text)).changed,
+      };
+    };
 
     // Footnotes numbered by first appearance: the same original, place and quote cited twice is one number.
     type StoredFootnote = NonNullable<typeof stored>['sections'][number]['sentences'][number]['footnotes'][number];
@@ -1720,6 +2204,7 @@ export class WikiDocs {
         model: section?.model ?? null,
         dispositions: (section?.dispositions as unknown as WikiDocDisposition[] | undefined) ?? [],
         blocks,
+        change: changeOf(planSection.key, section?.sentences ?? []),
       };
     });
 
@@ -1892,6 +2377,122 @@ export class WikiDocs {
       return (a.sectionNumber ?? 0) - (b.sectionNumber ?? 0);
     });
     return { spaceId, plan: { version: plan.version, confirmedAt: plan.confirmedAt!.toISOString() }, items };
+  }
+
+  // ── The versions a section keeps (contract `docs.versions.reads`) ─────────────────────────────
+
+  /**
+   * A section's versions, newest first, at most `perSection` (contract `docs.versions.reads.versions`): each compared
+   * sentence by sentence with the text that replaced it — the next version's, or the section as it stands for the
+   * newest. Another owner's space, and a section the confirmed plan does not have, are the plain 404.
+   */
+  async sectionVersions(ownerId: string, spaceId: string, slug: string, key: string): Promise<WikiDocSectionVersions> {
+    await this.requireSpace(ownerId, spaceId);
+    const plan = await this.confirmedPlan(this.prisma, ownerId, spaceId);
+    const planDoc = plan?.docs.find((doc) => doc.slug === slug);
+    if (!planDoc || !planDoc.sections.some((section) => section.key === key)) throw new NotFoundException('no such section in this space\'s plan');
+    const [versions, current] = await Promise.all([
+      this.prisma.wikiDocSectionVersion.findMany({
+        where: { ownerId, spaceId, docSlug: slug, sectionKey: key },
+        orderBy: { seq: 'desc' },
+        take: WIKI_DOC_VERSIONS.perSection,
+        select: VERSION_READ_SELECT,
+      }),
+      this.currentTexts(ownerId, spaceId, [{ slug, key }]),
+    ]);
+    let after = current.get(`${slug}#${key}`) ?? [];
+    return {
+      spaceId,
+      slug,
+      key,
+      versions: versions.map((version) => {
+        const before = keptTexts(version.sentences);
+        const { rows, changed } = wikiDocSentenceDiff(before, after);
+        after = before;
+        return { id: version.id, reason: reasonOf(version), at: version.replacedAt.toISOString(), replacedBy: replacedByOf(version), changed, rows };
+      }),
+    };
+  }
+
+  /**
+   * Activity's Docs rows (contract `docs.versions.reads.changes`): the space's versions of the sections the confirmed
+   * plan has, newest first, at most `changesListed`, each with how many sentences the write that kept it changed.
+   * Every version newer than a row listed is listed too, so what replaced a row is the next listed version of its
+   * section, or the section as it stands. A follow job's `left` rows come with the follow job (`docs.follow`), whose
+   * report says them: no job of that kind exists before it.
+   */
+  async docChanges(ownerId: string, spaceId: string): Promise<WikiDocChanges> {
+    await this.requireSpace(ownerId, spaceId);
+    const plan = await this.confirmedPlan(this.prisma, ownerId, spaceId);
+    if (!plan) return { spaceId, changes: [] };
+    const numbers = numbering(plan);
+    const places = new Map<string, { slug: string; key: string; where: string; title: string }>();
+    for (const doc of plan.docs) {
+      doc.sections.forEach((section, i) => places.set(`${doc.slug}#${section.key}`, {
+        slug: doc.slug, key: section.key, where: wikiChatWhere(numbers.get(doc.slug)!.number, i + 1), title: section.title,
+      }));
+    }
+    if (places.size === 0) return { spaceId, changes: [] };
+    const pairs = [...places.values()].map((place) => Prisma.sql`(${place.slug}, ${place.key})`);
+    const rows = await this.prisma.$queryRaw<VersionRow[]>(Prisma.sql`
+      SELECT v."id"::text AS "id", v."doc_slug" AS "docSlug", v."section_key" AS "sectionKey", v."sentences" AS "sentences",
+             v."reason" AS "reason", v."reason_title" AS "reasonTitle", v."reason_sha" AS "reasonSha",
+             v."reason_plan_version" AS "reasonPlanVersion", v."replaced_at" AS "replacedAt"
+        FROM "wiki_doc_section_version" v
+       WHERE v."owner_id" = ${ownerId}::uuid AND v."space_id" = ${spaceId}::uuid
+         AND (v."doc_slug", v."section_key") IN (${Prisma.join(pairs)})
+       ORDER BY v."seq" DESC
+       LIMIT ${WIKI_DOC_VERSIONS.changesListed}`);
+    const current = await this.currentTexts(
+      ownerId,
+      spaceId,
+      [...new Set(rows.map((row) => `${row.docSlug}#${row.sectionKey}`))].map((at) => places.get(at)!),
+    );
+    const after = new Map<string, string[]>();
+    const changes = rows.map((row): WikiDocChangeRow => {
+      const at = `${row.docSlug}#${row.sectionKey}`;
+      const before = keptTexts(row.sentences);
+      const { changed } = wikiDocSentenceDiff(before, after.get(at) ?? current.get(at) ?? []);
+      after.set(at, before);
+      const place = places.get(at)!;
+      return {
+        kind: 'section',
+        doc: row.docSlug,
+        key: row.sectionKey,
+        where: place.where,
+        title: place.title,
+        versionId: row.id,
+        reason: reasonOf(row),
+        at: row.replacedAt.toISOString(),
+        changed,
+      };
+    });
+    return { spaceId, changes };
+  }
+
+  /** The newest version each section of one document kept, for the document read's `change`. */
+  private async latestVersions(ownerId: string, spaceId: string, slug: string): Promise<VersionRow[]> {
+    return this.prisma.$queryRaw<VersionRow[]>(Prisma.sql`
+      SELECT DISTINCT ON (v."section_key")
+             v."id"::text AS "id", v."doc_slug" AS "docSlug", v."section_key" AS "sectionKey", v."sentences" AS "sentences",
+             v."reason" AS "reason", v."reason_title" AS "reasonTitle", v."reason_sha" AS "reasonSha",
+             v."reason_plan_version" AS "reasonPlanVersion", v."replaced_at" AS "replacedAt"
+        FROM "wiki_doc_section_version" v
+       WHERE v."owner_id" = ${ownerId}::uuid AND v."space_id" = ${spaceId}::uuid AND v."doc_slug" = ${slug}
+       ORDER BY v."section_key", v."seq" DESC`);
+  }
+
+  /** The sentences these sections hold now, by `<slug>#<key>`; one not written holds none. */
+  private async currentTexts(ownerId: string, spaceId: string, sections: ReadonlyArray<{ slug: string; key: string }>): Promise<Map<string, string[]>> {
+    if (sections.length === 0) return new Map();
+    const wanted = new Set(sections.map((section) => `${section.slug}#${section.key}`));
+    const rows = await this.prisma.wikiDocSection.findMany({
+      where: { ownerId, key: { in: [...new Set(sections.map((section) => section.key))] }, doc: { spaceId, slug: { in: [...new Set(sections.map((section) => section.slug))] } } },
+      select: { key: true, doc: { select: { slug: true } }, sentences: { orderBy: { position: 'asc' }, select: { text: true } } },
+    });
+    return new Map(rows
+      .filter((row) => wanted.has(`${row.doc.slug}#${row.key}`))
+      .map((row) => [`${row.doc.slug}#${row.key}`, row.sentences.map((sentence) => sentence.text)]));
   }
 }
 
