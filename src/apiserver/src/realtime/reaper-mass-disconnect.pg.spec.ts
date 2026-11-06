@@ -12,22 +12,22 @@
  * there. Each case runs on the clock, after the reaper's startup grace:
  *
  *   (1) one runner lost in a cell otherwise heard: its run is reaped `runner offline` at the first sweep after it is past
- *       the 90 s line, as it always was;
- *   (2) every runner cut off at once, more than eight in ten back within 60 s and the rest between 95 and 150 s: no run is
- *       reaped, though the reaper reads the late runners as offline and says so (`not reaping`);
- *   (3) every runner cut off at once, nine in ten back within 30 s and the rest between 95 and 150 s: the same;
+ *       the five-minute reap line, as it always was;
+ *   (2) every runner cut off at once, more than eight in ten back within 60 s and the rest between 350 and 410 s: no run
+ *       is reaped, though the reaper reads the late runners as offline and says so (`not reaping`);
+ *   (3) every runner cut off at once, nine in ten back within 30 s and the rest between 350 and 410 s: the same;
  *   (4) a runner lost on its own a minute into (3), inside the window (3)'s runners are held for: reaped as in (1);
  *   (5) every runner cut off at once and none of them back: no run is reaped while its runner has been silent for no
  *       longer than RUNNER_SILENT_AFTER_MS + MASS_SILENCE_WINDOW_MS, and each is reaped at the first sweep after that.
  *
  * Throughout, the lock stays with the process that took it, and the other process's reaper says nothing.
  *
- * By default only (1) runs, as a smoke of the cell: about 5 minutes, most of it the reaper's startup grace, inside the
- * 600 s a spec gets from scripts/run-pg-spec.sh and from CI's pg shards (scripts/project-pg-matrix.sh). (2) to (5) take
- * about 20 minutes more on the clock and run only when REAPER_MASS_DISCONNECT_CASES names them. Every case, about 25
- * minutes:
+ * By default only (1) runs, as a smoke of the cell: about 6 minutes, most of it the five-minute reap line (the runner
+ * is cut before the reaper's grace ends, so the grace runs inside the line), inside the 600 s a spec gets from
+ * scripts/run-pg-spec.sh and from CI's pg shards (scripts/project-pg-matrix.sh). (2) to (5) take about 25 minutes more
+ * on the clock and run only when REAPER_MASS_DISCONNECT_CASES names them. Every case, about 40 minutes:
  *
- *   REAPER_MASS_DISCONNECT_CASES=1,2,3,4,5 RUN_PG_SPEC_TIMEOUT=2700 \
+ *   REAPER_MASS_DISCONNECT_CASES=1,2,3,4,5 RUN_PG_SPEC_TIMEOUT=3000 \
  *     bash scripts/run-pg-spec.sh src/apiserver/src/realtime/reaper-mass-disconnect.pg.spec.ts
  *
  * A case left out is not registered at all, because both harnesses count a skipped case as red. `2,3` is the control
@@ -50,9 +50,9 @@ import { sha256 } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { readRunnerLink, runnerLinkCredential, signRunnerLinkToken } from '../runner-api/runner-link-token';
-import { RUNNER_HEARTBEAT_EVERY_MS, RUNNER_OFFLINE_AFTER_MS, RUNNER_SILENT_AFTER_MS } from '../runners/runner-presence';
+import { RUNNER_HEARTBEAT_EVERY_MS, RUNNER_SILENT_AFTER_MS } from '../runners/runner-presence';
 import { SINGLETON_SWEEPS_LOCK } from './control-plane-leader';
-import { MASS_SILENCE_WINDOW_MS, STARTUP_GRACE_MS } from './reaper.service';
+import { MASS_SILENCE_WINDOW_MS, RUNNER_REAP_AFTER_MS, STARTUP_GRACE_MS } from './reaper.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const SECOND = 1_000;
@@ -162,7 +162,7 @@ test('a mass disconnection reaps no run whose runner comes back, on a cell of tw
   const random = prng(SEED);
   t.diagnostic(`seed ${SEED}`);
   if (process.env.REAPER_MASS_DISCONNECT_CASES === undefined) {
-    t.diagnostic('case (1) alone, the smoke: REAPER_MASS_DISCONNECT_CASES=1,2,3,4,5 RUN_PG_SPEC_TIMEOUT=2700 runs every case');
+    t.diagnostic('case (1) alone, the smoke: REAPER_MASS_DISCONNECT_CASES=1,2,3,4,5 RUN_PG_SPEC_TIMEOUT=3000 runs every case');
   }
 
   // ── the cell's two apiservers, the runner link on in both ───────────────────────────────────────────────────────
@@ -364,11 +364,11 @@ test('a mass disconnection reaps no run whose runner comes back, on a cell of tw
     return s.finishedAt!.getTime();
   };
   /**
-   * A reaping one runner lost on its own gets, as it always did: past the offline line, at the first sweep after it —
-   * no sooner than RUNNER_OFFLINE_AFTER_MS after its last beat and no later than a sweep interval past that.
+   * A reaping one runner lost on its own gets, as it always did: past the reap line, at the first sweep after it —
+   * no sooner than RUNNER_REAP_AFTER_MS after its last beat and no later than a sweep interval past that.
    */
   const reapedAsAlone = async (r: Sim, lastBeat: number) => {
-    const deadline = lastBeat + RUNNER_OFFLINE_AFTER_MS + SWEEP_EVERY + SWEEP_SLACK;
+    const deadline = lastBeat + RUNNER_REAP_AFTER_MS + SWEEP_EVERY + SWEEP_SLACK;
     let at: number | null = null;
     while (at === null && Date.now() < deadline + SECOND) {
       at = await reapedAt(r);
@@ -377,8 +377,8 @@ test('a mass disconnection reaps no run whose runner comes back, on a cell of tw
     assert.ok(at !== null, `${r.name}'s run was not reaped within ${Math.round((deadline - lastBeat) / SECOND)} s of its last beat`);
     const after = at - lastBeat;
     t.diagnostic(`${r.name}: reaped ${(after / SECOND).toFixed(1)} s after its last beat`);
-    assert.ok(after > RUNNER_OFFLINE_AFTER_MS, `${r.name} is reaped past the offline line, not ${after} ms after its last beat`);
-    assert.ok(after <= RUNNER_OFFLINE_AFTER_MS + SWEEP_EVERY + SWEEP_SLACK, `${r.name} is reaped at the first sweep past the line: ${after} ms`);
+    assert.ok(after > RUNNER_REAP_AFTER_MS, `${r.name} is reaped past the reap line, not ${after} ms after its last beat`);
+    assert.ok(after <= RUNNER_REAP_AFTER_MS + SWEEP_EVERY + SWEEP_SLACK, `${r.name} is reaped at the first sweep past the line: ${after} ms`);
   };
   /**
    * Every runner of the fleet cut off at once, each back `backAfter[i]` ms after the cut; then the fleet beats on. No run
@@ -416,7 +416,7 @@ test('a mass disconnection reaps no run whose runner comes back, on a cell of tw
       if (word || row.status !== RunStatus.RUNNING) reaped.push(`${r.name} (${word ?? row.status})`);
     }
     assert.deepEqual(reaped, [], `${label}: no run is reaped`);
-    const seen = back.filter((b) => b.silentMs - RUNNER_OFFLINE_AFTER_MS > SWEEP_EVERY + SWEEP_SLACK).map((b) => b.r);
+    const seen = back.filter((b) => b.silentMs - RUNNER_REAP_AFTER_MS > SWEEP_EVERY + SWEEP_SLACK).map((b) => b.r);
     assert.ok(seen.length > 0, `${label}: some runner was past the offline line for a whole sweep interval`);
     const held = seen.filter((r) => said.some((line) => line.includes('not reaping') && line.includes(r.sessionId)));
     assert.deepEqual(held.map((r) => r.name), seen.map((r) => r.name),
@@ -428,11 +428,11 @@ test('a mass disconnection reaps no run whose runner comes back, on a cell of tw
   const spread = (n: number, fromS: number, toS: number) =>
     Array.from({ length: n }, (_, k) => Math.round((fromS + ((toS - fromS) * (k + random())) / n) * SECOND));
   /**
-   * The fleet's return times: `early` of them within `withinS`, the rest between 95 and 150 s, the last of those after
-   * 140 s, past the offline line for longer than a sweep interval whatever its last beat; shuffled over the fleet.
+   * The fleet's return times: `early` of them within `withinS`, the rest between 350 and 405 s, the last of those after
+   * 400 s: past the reap line for longer than a sweep interval whatever its last beat; shuffled over the fleet.
    */
   const schedule = (early: number, withinS: number) => {
-    const times = [...spread(early, 1, withinS), ...spread(FLEET - early - 1, 95, 140), ...spread(1, 140, 150)];
+    const times = [...spread(early, 1, withinS), ...spread(FLEET - early - 1, 350, 405), ...spread(1, 400, 410)];
     for (let i = times.length - 1; i > 0; i -= 1) {
       const j = Math.floor(random() * (i + 1));
       [times[i], times[j]] = [times[j]!, times[i]!];
@@ -441,13 +441,15 @@ test('a mass disconnection reaps no run whose runner comes back, on a cell of tw
   };
 
   // The leader's reaper reaps nothing for silence inside its startup grace, counted from when it took the lock.
+  // Case (1) cuts its runner first, so that the grace runs inside the five-minute reap line and the reap is still
+  // the first sweep past the line; the case waits out both, which keeps the smoke inside the 600 s a spec gets.
+  const alone1LastBeat = CASES.has('1') ? await cutAfterItsNextBeat(alone1) : null;
   await sleep(bootedAt + STARTUP_GRACE_MS + SECOND - Date.now());
   assert.deepEqual(failures, [], 'every call the runners made was answered');
 
-  if (CASES.has('1')) {
-    await t.test('(1) one runner lost in a cell otherwise heard is reaped at the first sweep past the 90 s line', async () => {
-      const lastBeat = await cutAfterItsNextBeat(alone1);
-      await reapedAsAlone(alone1, lastBeat);
+  if (alone1LastBeat !== null) {
+    await t.test('(1) one runner lost in a cell otherwise heard is reaped at the first sweep past the five-minute line', async () => {
+      await reapedAsAlone(alone1, alone1LastBeat);
       await stillLeads();
     });
   }
@@ -456,7 +458,7 @@ test('a mass disconnection reaps no run whose runner comes back, on a cell of tw
   await signOff(alone1);
 
   if (CASES.has('2')) {
-    await t.test('(2) every runner cut off at once, more than eight in ten back within 60 s, the rest in 95–150 s: no run is reaped', async () => {
+    await t.test('(2) every runner cut off at once, more than eight in ten back within 60 s, the rest in 350–410 s: no run is reaped', async () => {
       // 20 of 24: the four late ones are a sixth of the cell, under the fifth "silent at once" ever counted.
       const early = 20;
       assert.ok(early / FLEET > 0.8);
@@ -465,7 +467,7 @@ test('a mass disconnection reaps no run whose runner comes back, on a cell of tw
   }
 
   if (CASES.has('3')) {
-    await t.test('(3) nine in ten back within 30 s, the rest in 95–150 s: no run is reaped; (4) one lost alone meanwhile is', async () => {
+    await t.test('(3) nine in ten back within 30 s, the rest in 350–410 s: no run is reaped; (4) one lost alone meanwhile is', async () => {
       const early = Math.ceil(FLEET * 0.9);
       assert.ok(early / FLEET >= 0.9);
       await reconnection('(3)', schedule(early, 30), CASES.has('4') ? async (cutAt) => {

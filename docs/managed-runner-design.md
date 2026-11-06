@@ -26,7 +26,7 @@ Self-managed runners remain supported alongside the optional managed runner.
 | [Auth service](../src/apiserver/src/auth/auth.service.ts) | Login and bootstrap currently issue tokens; refresh also calls `tokenFor`. Add provisioning intent after successful login/bootstrap, not inside token issuance or token refresh. |
 | [Workspaces service](../src/apiserver/src/workspaces/workspaces.service.ts) | Binding verifies runner ownership; deletion is soft deletion and protects project coordinators. Reuse those checks and preserve workspace IDs and ordering. |
 | [Queue service](../src/apiserver/src/queue/queue.service.ts) | Claims use a transaction advisory lock, owner predicates, provider capabilities, and active-turn caps. These are session execution limits, not infrastructure admission or storage fencing. |
-| [Reaper service](../src/apiserver/src/realtime/reaper.service.ts) | Sweeps every 30 seconds; runner silence exceeds its offline threshold at 90 seconds. Active turns can be finalized after losing a runner; idle `AWAITING_INPUT` sessions can survive. Silence does not prove a node stopped writing. |
+| [Reaper service](../src/apiserver/src/realtime/reaper.service.ts) | Sweeps every 30 seconds; a RUNNING session is finalized `runner offline` after five minutes of runner silence (the runner list still calls a machine offline at 90 seconds). Active turns can be finalized after losing a runner; idle `AWAITING_INPUT` sessions can survive. Silence does not prove a node stopped writing. |
 | [Runner config](../src/runner-go/config.go) | `config.json` persists runner ID and credential under `ORBIT_HOME`; private directory/file modes are 0700/0600. `runs` and `codex-state` also live there. |
 | [Run loop](../src/runner-go/runloop.go) and [session shutdown](../src/runner-go/session.go) | Heartbeats run every 30 seconds and continue during drain, including while work the heartbeat started (a landing's checks, repository operations) finishes; one last beat is sent at exit. The current supervisor shutdown envelope is 170 seconds, including the 100-second turn drain and release/flush backstops. Heartbeat work gets the same 100 seconds; a landing still checking then is stopped with its process tree, its scratch worktree removed and its claim handed back for immediate re-dispatch ([stop sequence](../src/runner-go/shutdown_drain.go), contract §2.2 J-T11), inside the same envelope. Kubernetes termination must leave time beyond that envelope. |
 | [Worktrees](../src/runner-go/worktree.go) | Per-session checkouts and upload scratch live under `ORBIT_HOME`; Git metadata contains absolute paths. Preserve both the primary checkout and worktree root. Existing GC is distinct from PVC lifecycle. |
@@ -805,7 +805,7 @@ scheduler or a LimitRange and a long landing during a drain were not reached.
 
 One finding was fixed there. A woken instance claims at once, while its first heartbeat waits for its 30-second ticker, so the runner
 row's `lastHeartbeatAt` was still from before the sleep and the reaper finalized the instance's first run as `runner offline` within a
-second of its claim. The reaper now takes the run's claim (`run_claimed_at`) inside its 90-second window as presence, in its sweep and in
+second of its claim. The reaper now takes the run's claim (`run_claimed_at`) inside its reap window as presence, in its sweep and in
 the finalizing write's WHERE (`reaper.service.ts`, `reaper-claim-presence.spec.ts`).
 
 The local evidence is `managed-runner-capacity.pg.spec.ts`, `managed-runner-sleep.pg.spec.ts`,

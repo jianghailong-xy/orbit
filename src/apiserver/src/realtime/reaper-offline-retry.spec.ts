@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus, TaskStatus } from '@prisma/client';
-import { ReaperService } from './reaper.service';
+import { RUNNER_REAP_AFTER_MS, ReaperService } from './reaper.service';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
@@ -34,7 +34,7 @@ function sweepWithOfflineRunner(task: { autoRunWhenReady: boolean } | null) {
     runner: {
       findUnique: async () => ({
         status: 'ONLINE',
-        lastHeartbeatAt: new Date(Date.now() - 120_000),
+        lastHeartbeatAt: new Date(Date.now() - RUNNER_REAP_AFTER_MS - 60_000),
       }),
     },
     // `findUnique` is the open-item lookup the failure path makes: this fixture's task is under no
@@ -85,8 +85,8 @@ function sweepWithOfflineRunner(task: { autoRunWhenReady: boolean } | null) {
             endReason: null,
             task: taskRow,
             workspace: { provider: 'claude', providerBuiltin: true },
-            // Three missed heartbeats: what the reaper reads as gone.
-            assignedRunner: { status: 'ONLINE', lastHeartbeatAt: new Date(Date.now() - 120_000) },
+            // Well past the reap line: what the reaper reads as gone.
+            assignedRunner: { status: 'ONLINE', lastHeartbeatAt: new Date(Date.now() - RUNNER_REAP_AFTER_MS - 60_000) },
           },
         ];
       },
