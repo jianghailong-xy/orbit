@@ -94,12 +94,19 @@ class DeploymentBoundaryTest(unittest.TestCase):
                                   f"a default entry point names a part of deploy/managed-runner other than the Docker backend: {line}")
 
     def test_upgrade_never_writes_the_switch(self):
-        # Neither copy of /upgrade names the switch, its directory or its profile, or writes .env at all.
-        for needle in (SWITCH, "ORBIT_MANAGED_RUNNERS_DIR", "COMPOSE_PROFILES"):
+        # Neither copy of /upgrade names the switch or its directory. COMPOSE_PROFILES and a write to .env are the runner
+        # link's alone, in its section of the script, by the account owner's decision of 2026-11-05 (docs/self-hosting.md,
+        # "Runner link"): it appends its own lines there, and test/upgrade-runner-link.test.mjs holds what those are.
+        for needle in (SWITCH, "ORBIT_MANAGED_RUNNERS_DIR"):
             with self.subTest(needle=needle):
                 self.assertEqual(self.git_grep("-F", needle, paths=UPGRADE), [], f"/upgrade names {needle}")
-        self.assertEqual(self.git_grep("-E", r"(>>?|tee( -a)?|sed -i.*) *\.?/?\.env\b", paths=UPGRADE), [],
-                         "/upgrade writes .env")
+        for script in (".claude/skills/upgrade/upgrade.sh", ".agents/skills/upgrade/scripts/upgrade.sh"):
+            with self.subTest(script=script):
+                text = (REPO / script).read_text()
+                start = text.index("# ── Runner link: this section is the same in both copies")
+                rest = text[:start] + text[text.index("# ── end of the runner link's section", start):]
+                self.assertNotIn("COMPOSE_PROFILES", rest, "/upgrade names COMPOSE_PROFILES outside the runner link's section")
+                self.assertIsNone(re.search(r"(>>?|tee( -a)?|sed -i.*) *\.?/?\.env\b", rest), "/upgrade writes .env outside it")
 
     def test_upgrade_never_starts_the_firewall(self):
         # Where an upgrade names the firewall's service at all, it is to leave it out: in a comment, or in the
@@ -108,7 +115,8 @@ class DeploymentBoundaryTest(unittest.TestCase):
         for line in named:
             with self.subTest(line=line):
                 text = line.split(":", 2)[2].strip()
-                self.assertTrue(text.startswith("#") or "grep -vxE 'docker-channel|managed-runner-firewall'" in text, line)
+                self.assertTrue(text.startswith("#") or "grep -vxE 'docker-channel|managed-runner-firewall|nats|link-gateway'" in text
+                                or "grep -vxE 'docker-channel|managed-runner-firewall'" in text, line)
         self.assertEqual(self.git_grep("-F", "deploy/managed-runner/firewall", paths=UPGRADE), [])
 
     def test_copying_env_example_alone_switches_nothing_on(self):

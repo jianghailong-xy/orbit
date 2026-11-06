@@ -98,10 +98,12 @@ scripts/install-server.sh
 docker compose ps
 ```
 
-The install script writes `.env` with two independently generated secrets (never commit it), switches on
-[managed runners](docs/self-hosting.md#managed-runners), builds the images and starts the stack. With managed
-runners on, every account gets a runner of its own, a container on this host's Docker, when it signs in. Read who
-gets one and how far a container isolates it before you open sign-up. `--no-managed-runners` installs without them.
+The install script writes `.env` with independently generated secrets (never commit it), switches on
+[managed runners](docs/self-hosting.md#managed-runners), sets up the [runner link](docs/self-hosting.md#runner-link), builds
+the images and starts the stack. With managed runners on, every account gets a runner of its own, a container on this
+host's Docker, when it signs in. Read who gets one and how far a container isolates it before you open sign-up.
+`--no-managed-runners` installs without them. The link needs no port or certificate of its own: runners reach it through
+the same port as the web, encrypted where that is.
 To install by hand instead, write `.env` as [self-hosting](docs/self-hosting.md#1-configure-the-deployment)
 describes and run `docker compose up -d --build`.
 

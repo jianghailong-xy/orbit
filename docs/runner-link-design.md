@@ -72,7 +72,7 @@ runner 只主动发出站 HTTPS，路径是 Cloudflare → nginx → apiserver�
 
 | # | 问题 | 决议 |
 |---|---|---|
-| D1 | runner 链路是否经过 Cloudflare | 不经过。用独立域名，DNS 只解析不代理，直连单元的四层入口 |
+| D1 | runner 链路是否经过 Cloudflare | 不经过。用独立域名，DNS 只解析不代理，直连单元的四层入口（生产和按单元部署都这样）。默认安装例外：runner 走 web 网关的同一个端口，见 §15.10 |
 | D2 | 编码 | protobuf |
 | D3 | 持久事件如何进入写库路径 | 网关直接调用，不引入 JetStream 这类持久消息中间件 |
 | D4 | 旧协议 | 不保留，直接切换；runner 直接升级，不做兼容 |
@@ -441,9 +441,8 @@ runner 本地的两种暂存，回滚和降级时这样处理：
 
 ### 11.5 自托管用户
 
-- **升级服务端就等于强制升级 runner。** 开着自更新的 runner 会自动升级；关了自更新的会看到 `UPGRADE_REQUIRED` 提示，需要手动执行 `orbit upgrade`。
-- **发布说明要写清楚：** 需要新开一个链路域名或端口（不经过 Cloudflare）、新增 NATS 容器、调整防火墙规则。
-- docker-compose 里增加网关和 NATS。
+- **升级服务端就等于强制升级 runner。** 开着自更新的 runner 会自动升级；关了自更新的会看到 `UPGRADE_REQUIRED` 提示，需要手动执行 `orbit upgrade`。0.1.237 及以后的 runner 不用升级就能走链路。
+- **默认安装和 `/upgrade` 会把链路带上，自托管用户不用做任何事：** 不新开域名或端口，不用证书，不改防火墙（§15.10）。docker-compose 里的网关和 NATS 由它们打开。只有想给链路单独一个域名的部署，才按 [self-hosting.md 的 "A link gateway of its own"](./self-hosting.md#a-link-gateway-of-its-own) 配。
 
 ---
 
@@ -680,3 +679,19 @@ runner 本地的两种暂存，回滚和降级时这样处理：
   - 守护进程的控制面调用，链路在用时全部走链路。例外只有 D14 列的几项：取连接令牌（`POST /runner/link-token`，在链路建立之前）；自更新（`GET /runner/release`，链路下发了版本时不再调用；`/dl` 下的 `version.json` 和二进制）；附件（`GET /runner/sessions/:id/attachments/:id`、`POST /runner/sessions/:id/attachments`）。
   - `orbit mcp`、CLI 和 Antigravity 审批钩子不是守护进程，没有自己的链路，都走 HTTPS，并用 `X-Orbit-Runner-Caller` 标明身份。它们用到的守护进程路由（审批、编排凭证续期、`GET /runner/me`、会话 meta 等），开关不拒绝（§15.1）。`orbit doctor` 检查开关时有意不带这个标记。
   - 守护进程直接访问的外部服务不是控制面，不归链路管：Cursor、Kimi、Claude 的用量接口，Kimi 的令牌刷新，引擎版本检查，Cursor CLI 和 dsh 的下载。
+
+### 15.10 默认安装的链路走 web 网关的端口（偏离 D1）
+
+出处：34sREuYT2DCEXiW6qZuOh。账号所有者 2026-11-05T17:47Z 决定：默认安装和升级先把链路带上，D2 才能落地，否则每个自托管部署都会在带 D2 的那次升级时停摆。涉及 D1、§6.1、§8、§11.5。
+
+- **偏离的内容。** D1 要求 runner 直连网关，不经过 Cloudflare，也不经过 web 网关。生产和按单元部署照旧。默认安装可能只有一个局域网地址，没有公网证书，开新端口又要用户动防火墙，所以 runner 走 web 网关的同一个端口：`location = /runner-link`（gateway/nginx.conf）转给项目网络里的 `link-gateway:8443`，网关关掉 TLS（deploy/runner-link/behind-web-gateway.env）。不新开端口，不用证书，不改防火墙。托管 runner 的防火墙本来就放行这个端口。
+- **D1 的理由这里不成立。** D1 防的是 CDN 终止和检查连接，以及它的故障和限额变成链路的问题，还有单元规模下 web 流量和链路互相影响。默认安装的规模到不了那里；前面有用户自己的 CDN 时，代价由用户选择。
+- **加密。** 链路和部署自己的 HTTP 加密情况一样：部署是 https，链路就是 wss；部署是纯 http，链路就是纯 ws，会话内容和一小时的连接令牌明文传输（同一部署今天的会话内容和长期 runner 令牌本来就明文传）。安装和升级每次运行警告一次。这是账号所有者的取舍，见任务证据。
+- **地址。** 固定的 `RUNNER_LINK_URL` 在这里给不对：`PUBLIC_ORIGIN` 默认是 localhost，托管 runner 只能到容器网络上的网关地址。所以新增取值 `RUNNER_LINK_URL=same-origin`，apiserver 按每个 runner 到达的地址回答（`sameOriginLinkUrl`，runner-link-token.ts）：
+  - `PUBLIC_ORIGIN` 是 https：一律回答它的 `wss://`，请求头改变不了。唯一例外是托管 runner 配置里写明的明文地址，并且请求没有经过前置代理的迹象。
+  - `PUBLIC_ORIGIN` 是 http：回答请求到达时的 `Host`（只接受主机和端口）。部署可能并不知道自己的地址。`X-Forwarded-Proto` 只能把 ws 升成 wss，不能反过来。`Host` 只影响带着它的那个请求的回答，不缓存。
+  - 不需要 `TRUSTED_PROXIES`。它列出的代理只会让请求算作经过了前置代理。
+  - 只改 apiserver 和 nginx，不改 runner，不需要发版：runner 从有链路的第一个版本起就接受 `ws://` 和路径。
+- **容量。** 每个 runner 占 nginx 一个 worker 的 1024 个连接中的两个，一个 worker 大约带 500 个 runner，worker 数等于 CPU 数。超过时给链路单独的域名。所有 runner 在网关看来是同一个地址，所以这种形态把网关的单地址限速提到和全局限速一样。
+- **没有自动翻开关。** 脚本不写 `runner_link_switch`：这是管理员的门（有日志和唤醒），而且 D2 马上会删掉它；无人值守的升级也不该在有 turn 运行时翻开关。D2 之前，部署走 HTTPS，影子连接连着；D2 的构建把它们带到链路上。管理员想提前切，仍然用 `PUT /api/admin/runner-link-required`。
+- **`.env` 的三种状态和失败时的行为，** 见 [self-hosting.md 的 "Runner link"](./self-hosting.md#runner-link)。生产那种自己配置的链路，`.env` 不打开写，网关和 NATS 不构建也不重启；它的 web 网关在升级到这个版本时重建一次，因为 gateway/nginx.conf 变了。

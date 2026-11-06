@@ -56,10 +56,10 @@ It will, in order:
    rollback"). With no `orbit-web` container running, nothing is kept.
 3. `docker compose up -d --wait apiserver wiki-worker web gateway` — recreate only the
    services whose image or config changed (the freshly built `apiserver`/`web`,
-   `wiki-worker` with the `apiserver` image it runs, and `gateway` only if its
-   image or mounted `nginx.conf` changed), and block
+   `wiki-worker` with the `apiserver` image it runs), and block
    until they pass their healthcheck (apiserver runs migrations on boot).
-   `postgres` is left running untouched — it is not in the recreate set.
+   `postgres` is left running untouched — it is not in the recreate set. The web gateway
+   has been seen to already (see [Runner link](#runner-link)).
 4. `docker compose up -d --wait --no-deps apiserver-2 …` — only where
    `docker-compose.override.yml` adds other apiservers (`apiserver-2` and on,
    docs/self-hosting.md, "Several apiservers"), and only once `apiserver` is healthy
@@ -105,6 +105,32 @@ which follows the apiserver as above.
 ```bash
 .claude/skills/upgrade/upgrade.sh --prune
 ```
+
+## Runner link
+
+Runners work over the runner link (docs/self-hosting.md, "Runner link"), so the script
+brings it up, in the section of the script marked as the same in both copies. What `.env`
+says decides what it may do, and no line of `.env` ever changes:
+
+- **No link in it.** It builds `src/link-gateway`, has that image make the link's secrets,
+  and appends them to `.env` with `RUNNER_LINK_URL=same-origin`, in one write, unprinted.
+- **`RUNNER_LINK_URL=same-origin`.** It rebuilds the gateway, named by the last commit
+  under `src/link-gateway`, so that a commit elsewhere recreates nothing.
+- **Anything else,** as production's own host name: `.env` is not opened for writing, and
+  `link-gateway` and `nats` are neither built nor restarted. An unfinished link gets a
+  warning, by name, never by value.
+
+After the images are built and before the apiserver is recreated, it starts `nats` and
+`link-gateway`, recreates the web gateway if the `gateway/nginx.conf` it runs is not this
+checkout's (a single-file bind mount Compose does not see change: a moment's break for web
+traffic and streams, once per change), and checks that `/runner-link` reaches the link
+gateway. A failure there stops nothing else: the runners stay on HTTPS, the last lines say
+why, and the script exits 1. In a build whose `docker-compose.yml` requires
+`RUNNER_LINK_SIGNING_KEY`, one with no HTTPS work path, the same failure stops the upgrade
+before the apiserver is recreated. It never writes `RUNNER_LINK_REQUIRED`, which is an
+administrator's.
+
+A pull that changes this script runs the new one, from the start.
 
 ## Where to run it
 
