@@ -2381,6 +2381,7 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
 - CHECK：租约三列与 `running` 互为条件；只有结束态有 `ended_at`；`succeeded` 没有 `error`；`report` / `progress` 是对象。
 - `kind` 闭集：`verify` / `articles` / `import` / `plan_draft` / `plan_revise` / `docs_build` / `maintain`，加上本期的 `smoke`——
   只调一次模型、把答案和用量写进 `report`，是队列最短的一条端到端路径（`wiki-jobs.pg.spec.ts` 对 fake 端点跑通它）；`verify` 自 P3 起有实现（§24.7）。
+  wiki 聊天（迁移 0477，C4）起多一个 `docs_follow`：跟进作业（§29）。
   还没落地的种类留在队列里：领取只取本 build 认识的种类，不会被交给一个只能失败的 worker。
 - `import`（P5，§5.1 的服务端执行、契约 `jobs.kindRuns.import`）：由 runner 门的 `POST .../import-jobs` 建，输入是命令交来的 note
   和调用会话，报告就是命令打印并记下的那份（`wiki-import-job.ts`）。执行中写 `progress`（`snapshot` / `reading` / `proposing` 和计数）。
@@ -2425,17 +2426,17 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
 - 过期回收：`running` 且租约过期的行回到 `queued`，`attempts + 1`，`next_attempt_at = now + 退避`（§24.4），`failure_kind = 'infra'`，
   `error` 是 `LEASE_EXPIRED: the worker holding this job stopped before settling it`；接管者从头跑这个作业，已经发出过的请求由请求行本身
   回答重放（§25.3）。回收碰到的都是没人交还的租约——worker 崩溃、被杀，或者没来得及交还就退出；停机交还的作业不经过回收（§24.3）。
-- 同一空间同时只跑一个作业：领取的谓词跳过一个在跑作业的空间，`wiki_job_space_running_key`（`space_id` 上的部分唯一索引）是数据库里
-  同一条规则；两个调度器同时读表时，输的一方拿到的是空领取，不是错误。
+- 同一空间同时只跑一个作业（下一条是唯一的例外）：领取的谓词跳过一个在跑作业的空间，`space_id` 上的部分唯一索引是数据库里同一条规则
+  （0401 是 `wiki_job_space_running_key`，0477 起换成下一条的两条）；两个调度器同时读表时，输的一方拿到的是空领取，不是错误。
 - **唯一的例外：跟进作业只绕开不写文档的作业**（owner 2026-11-06 定，设计 `docs/wiki-chat-design.md` §8.5，`jobs.onePerSpace`）：`docs_follow`（§29）
   可以和同一空间正在跑的 `articles`、`verify`、`import`、`smoke` 同时跑——这些作业不写 `wiki_doc_*`——遇到 `maintain`、`docs_build`、`plan_draft`、
   `plan_revise` 和另一个 `docs_follow` 照等，卡上写 `Rewrite waiting · Maintenance is running` 之类（§29.6）。所以一个空间里同时跑两个作业，只可能是
   一个 `docs_follow` 加一个不写文档的作业；别的任意两种照旧互斥，`articles` 与 `verify` 也一样（`wikiJobsMayOverlap`）。领取时取空间自己顺序里
   第一个不被在跑作业排斥的到期作业；数据库里换成两条部分唯一索引：`WHERE state = 'running' AND kind <> 'docs_follow'`（除跟进作业外至多一个）
   和 `WHERE state = 'running' AND kind IN ('maintain', 'docs_build', 'plan_draft', 'plan_revise', 'docs_follow')`（写文档的至多一个），替掉
-  `wiki_job_space_running_key`。`verify` 的结论在条目自己的事务里撤句、给节写 `stale_at`，锁序和文档写入一致（先条目、后文档），并行不会死锁成环，
-  由实现任务（C4）用 pg spec 证明。留下的代价：维护正在写文档时按下的仍要等它写完，等多久是设计 §14 第 2 项要量的数。`docs_follow` 成为作业种类之前，
-  这一条读作原样：一个空间一个作业。
+  `wiki_job_space_running_key`（迁移 0477：`wiki_job_space_running_other_key` 与 `wiki_job_space_running_writer_key`）。`verify` 的结论在条目自己的事务里
+  撤句、给节写 `stale_at`，锁序和文档写入一致（先条目、后文档），并行不会死锁成环，`src/apiserver/src/wiki-worker/wiki-docs-follow-job.pg.spec.ts` 证明了这一点。
+  留下的代价：维护正在写文档时按下的仍要等它写完，等多久是设计 §14 第 2 项要量的数。
 - 一个 worker 同时执行 `maxConcurrentPerWorker` = 4 个作业。
 
 ### 24.3 开机与停机
@@ -2630,6 +2631,8 @@ P11（2026-10-19）删除：没有执行器开关（24.5），也就没有「不
     这些）；每一条记下的结论（运行自己的和收养的）；文档步写成的节、拿起的节和原因、撤回的路径和句子、存下的 plan 提议、在文档步
     花的时间。锚点不进 `carry`：重放在同一提交上把之前检查过的条目算作 skipped，报告从条目本身读回——检查时间晚于运行第一次开始的，
     就是这次运行查的（同一空间同时只有一次运行，服务端执行的账号没有别人记锚点检查），算作检查过、不算 skipped。
+  - `docs_follow`：写成的节，照报告的样子（§29.7）。重放不再给按压的节写 `stale_at`，所以不会写第二遍；合并的节已经写在当前提交上，重放不再拿起；
+    报告每节一次，结果是写下它的那次尝试的。
   - `import`、`plan_draft` / `plan_revise`、`smoke` 不带：导入的输入固定，重放把每条 note 再读一遍（请求复用），提议同一批 op、用
     同一个幂等键，报告本来就是整个作业的；plan 作业的材料第一次就存在 plan 作业上，重放问同样的问题、从第一轮重走一遍（请求复用），
     tokens 本来就按作业的全部请求算，seconds 从 plan 作业开始算；smoke 只调一次。
@@ -3228,8 +3231,10 @@ JSON 里是 `docs.follow`；设计 `docs/wiki-chat-design.md` §8.1–§8.3、§
   合进别的分支的，等落地线把它带进 main 才算。
 - 哪些 space：回执所属 owner、仓库与回执相同的 space（会话的 workspace、或项目 codebase 的仓库，按 `repo_url_norm` 规范化）；没有已确认 plan 的 space 不写文档，不排。
 - **每个 space 最多排一个**：排队中再来的事实在一次写里并进去——强制节和它们的按压、合并都追加，优先级取所带最高——运行中再来的等它结束后再排一个。
-  并入在 space 行锁（`wiki_space FOR UPDATE`）下做，同时来的两个事实只建一个作业。
-- `docs_follow` 是 wiki-worker 的 `wiki_job` 种类，随 C4 的迁移进 `jobs.kinds`、`kindRuns`、`carry.kinds` 与 `wiki_job_kind_chk`；在那之前没有作业是这个种类。
+  并入在 space 行锁（`wiki_space FOR NO KEY UPDATE`，space 的 plan 与维护写入方取的同一把锁）下做，同时来的两个事实只建一个作业；同一次 main 的改动
+  ——重复送达的回执，或一次晋升为它的每个任务各写的回执，都是同一段提交——只带一次。
+- `docs_follow` 是 wiki-worker 的 `wiki_job` 种类，迁移 0477（C4）起在 `jobs.kinds`、`kindRuns`、`carry.kinds` 与 `wiki_job_kind_chk` 里。作业在
+  `src/apiserver/src/wiki-worker/wiki-docs-follow-job.ts`，事实的并入在 `src/apiserver/src/wiki/wiki-docs-follow.ts`。
 
 ### 29.2 写哪几节
 
@@ -3346,5 +3351,5 @@ See changes 逐句对照（`wikiDocSentenceDiff`）：一版的句子和替换�
   恢复它就撤回这次恢复。恢复不改文档行的 plan 版本和提交。
 - **聊天的 Undo**（C6）走同一个写入方：`WikiDocs.restore(ownerId, versionId, null, { slug, key })`，给了节就核对，版本不是这一节的回 409。它自己开事务；
   要和撤回变更集放进同一个事务时，从同一个 `store` 接进去，锁序照旧先条目、后文档。
-- **Activity 的 `left` 行随 C4**：跟进作业成为作业种类之前没有这种行，`doc-changes` 现在只列 `section` 行。
+- **Activity 的 `left` 行随 C4**：`doc-changes` 把留下了节的跟进作业（报告的 `left` 大于 0）作为 `left` 行，按结束时刻和 `section` 行一起新的在前排。
 - 迁移 `0475_wiki_doc_section_version`，一节的版本按 `seq` 排先后；pg spec 是 `src/apiserver/src/wiki/wiki-doc-versions.pg.spec.ts`。

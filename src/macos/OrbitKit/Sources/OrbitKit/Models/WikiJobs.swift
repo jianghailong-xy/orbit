@@ -93,6 +93,7 @@ public enum WikiJobKind: String, Codable, Sendable, CaseIterable {
     case planRevise = "plan_revise"
     case docsBuild = "docs_build"
     case maintain, smoke
+    case docsFollow = "docs_follow"
     case unknown
 
     public init(from decoder: Decoder) throws {
@@ -100,8 +101,8 @@ public enum WikiJobKind: String, Codable, Sendable, CaseIterable {
         self = WikiJobKind(rawValue: raw) ?? .unknown
     }
 
-    /// The eight the contract names, in its order.
-    public static let contractOrder: [WikiJobKind] = [.verify, .articles, .import, .planDraft, .planRevise, .docsBuild, .maintain, .smoke]
+    /// The nine the contract names, in its order.
+    public static let contractOrder: [WikiJobKind] = [.verify, .articles, .import, .planDraft, .planRevise, .docsBuild, .maintain, .smoke, .docsFollow]
 }
 
 /// Where a server run is (contract `jobs.states`).

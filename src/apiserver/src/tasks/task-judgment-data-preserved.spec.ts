@@ -2698,7 +2698,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // and a nullable `conversation_turn.wiki_context`. Neither table is a preserved relation, nothing here names
       // `task`, `project` or `project_acceptance_*`, and the one function it creates writes no row, so it is not another
       // writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored row reads NULL in both new columns.
-      '0476_wiki_chat_session'],
+      '0476_wiki_chat_session',
+      // 0477 widens `wiki_job_kind_chk` by `docs_follow` and replaces `wiki_job_space_running_key` with two partial unique
+      // indexes over the same table (contract `jobs.onePerSpace`'s exception for the follow job). `wiki_job` is not a
+      // preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved
+      // triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it is not
+      // another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored job satisfies both as it stands.
+      '0477_wiki_docs_follow'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -229,6 +229,7 @@ import {
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
+import { followWikiDocsAfterReceipts, followWikiDocsAfterSessionMerge } from '../wiki/wiki-docs-follow';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
 import { appendWikiChatNotes } from '../wiki/wiki-chat-notes';
 import {
@@ -2724,6 +2725,9 @@ export class RunnerApiController {
           ownerItemIds: after.ownerItemIds,
         })
         .catch((error) => this.logger.warn(`integration landing facts not delivered: ${(error as Error)?.message}`));
+      // A landing into main — a task's on a MAIN line, or a project's promotion — is a fact the wiki follows (contract
+      // `docs.follow.triggers.landing`): the receipts the result wrote, after the commit, logged and never raised.
+      if ((after.receiptIds?.length ?? 0) > 0) await followWikiDocsAfterReceipts(this.prisma, after.receiptIds ?? []);
       if (after.openItemIds.length > 0) {
         await this.openItems?.deliverForItems(after.openItemIds)
           .catch((error) => this.logger.warn(`integration exception item not delivered: ${(error as Error)?.message}`));
@@ -9589,6 +9593,9 @@ export class RunnerApiController {
     // The owner items the receipt opened (§10.6 O-R3), pushed once after the commit (§7.6 V12). Keyed by
     // project, so a retried closure overwrites rather than accumulates.
     const openedOwnerItems = new Map<string, string[]>();
+    // The landed merge this request recorded, which the wiki follows after the commit (contract
+    // `docs.follow.triggers.merge`). Keyed by session, so a retried closure overwrites rather than accumulates.
+    const landedMerges = new Map<string, { sessionId: string; sourceSha: string; targetBranch: string }>();
     // Retried whole. The worktree-op claim is re-read under its row lock inside the closure, so a
     // re-run either still owns the operation it is reporting on or finds it reclaimed — the same
     // two outcomes a first attempt has.
@@ -9803,6 +9810,9 @@ export class RunnerApiController {
             })),
         });
         if (task?.projectId) openedOwnerItems.set(task.projectId, written.ownerItemIds);
+        if (receiptResult === 'MERGED' || receiptResult === 'ALREADY_MERGED') {
+          landedMerges.set(sessionId, { sessionId, sourceSha, targetBranch });
+        }
         if (task?.projectId && current.taskId
             && (receiptResult === 'MERGED' || receiptResult === 'ALREADY_MERGED')) {
           landedReceipts.set(`${task.projectId}:${current.taskId}`, {
@@ -9825,6 +9835,9 @@ export class RunnerApiController {
         ownerItemIds: openedOwnerItems.get(projectId),
       });
     }
+    // A merge into main is a fact the wiki follows (contract `docs.follow.triggers.merge`): after the commit, logged
+    // and never raised.
+    for (const landed of landedMerges.values()) await followWikiDocsAfterSessionMerge(this.prisma, landed);
     // §2.9 LS3 / errata E5: the merge also landed a task segment whose candidate this request
     // retired (M-T13). Its own transaction, after the receipt committed.
     for (const landed of landedReceipts.values()) {

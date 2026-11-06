@@ -540,6 +540,93 @@ export function wikiDocsFollowWaiting(facts: WikiDocsFollowFacts): WikiDocsFollo
 }
 
 /**
+ * A fact a follow job carries (contract `docs.follow.triggers`): a chat's press, with the card's sections and the
+ * entries it wrote; or a change that reached main — a session's merge, or a landing line's — with the range of
+ * commits it put there. A job carries every fact that joined it while it was queued (`docs.follow.queue`).
+ */
+export type WikiDocsFollowFact =
+  | {
+    kind: 'press';
+    /** The card pressed (`wiki_chat_draft`) and the chat it was drafted in (its session). */
+    draftId: string;
+    chatId: string;
+    /** The chat's title, as the version a written section keeps names it: `after chat <title>`. */
+    title: string;
+    /** The card's Rewrites, written whatever their fingerprint. */
+    sections: WikiChatSectionRef[];
+    /** The entries the card wrote, handed to each of its sections with their live sources. */
+    entryIds: string[];
+    at: string;
+  }
+  | {
+    kind: 'merge' | 'landing';
+    /** The session_merge_receipt that recorded it. */
+    receiptId: string;
+    /** The session's title for a merge, the task's or project's for a landing: `after <title> merged` / `landed`. */
+    title: string;
+    /** main before it and the commit it put there: the files the range changed are what it touched. */
+    from: string;
+    sha: string;
+    /** The merge was a chat's (`priorities.chatMerge`). */
+    chat: boolean;
+    at: string;
+  };
+
+/** A follow job's input: the facts it carries, in the order they came. */
+export interface WikiDocsFollowInput {
+  facts: WikiDocsFollowFact[];
+}
+
+/** What became of a section a follow job took up (contract `docs.follow.outcomes`). */
+export const WIKI_DOCS_FOLLOW_OUTCOMES = ['written', 'unchanged', 'gone', 'failed'] as const;
+export type WikiDocsFollowOutcome = (typeof WIKI_DOCS_FOLLOW_OUTCOMES)[number];
+
+/** One section of a follow job's report (contract `docs.follow.report`). */
+export interface WikiDocsFollowReportSection {
+  doc: string;
+  key: string;
+  outcome: WikiDocsFollowOutcome;
+  /** Sentences the write changed against the version it replaced (`wikiDocSentenceDiff`); null when none was kept. */
+  changed: number | null;
+  /** The version the write kept of what it replaced (`docs.versions`), or null. */
+  versionId: string | null;
+  /** A press asked for it: written whatever its fingerprint. */
+  forced: boolean;
+  /** The cards whose press asked for it. */
+  draftIds: string[];
+  /** Why a failed section was left unwritten. */
+  why?: string;
+}
+
+/** A follow job's report (contract `docs.follow.report`), on the job's row once it ends. */
+export interface WikiDocsFollowReport {
+  kind: 'docs_follow';
+  /** The origin/main commit it wrote from; '' when it read none. */
+  sha: string;
+  sections: WikiDocsFollowReportSection[];
+  /** The sections merges and landings asked for that the day's budget left for the next maintenance run. */
+  left: number;
+  usage: { inputTokens: number; outputTokens: number; calls: number };
+}
+
+/**
+ * How one of a card's sections came out once its follow job ended (contract `chat.drafts.results`): written with a
+ * sentence changed — or written for the first time, with nothing before it to compare — is updated, written with none
+ * changed is same; a section left as it was reads the same too; gone and failed are themselves.
+ */
+export function wikiDocsFollowSectionResult(section: Pick<WikiDocsFollowReportSection, 'outcome' | 'changed'>): 'updated' | 'same' | 'failed' | 'gone' {
+  if (section.outcome === 'failed' || section.outcome === 'gone') return section.outcome;
+  if (section.outcome === 'written' && section.changed !== 0) return 'updated';
+  return 'same';
+}
+
+/** A card's result over its sections (contract `chat.drafts.results`): the first of failed, same, updated and gone one of them is. */
+export function wikiDocsFollowCardResult(results: ReadonlyArray<'updated' | 'same' | 'failed' | 'gone'>): 'updated' | 'same' | 'failed' | 'gone' {
+  for (const result of ['failed', 'same', 'updated', 'gone'] as const) if (results.includes(result)) return result;
+  return 'gone';
+}
+
+/**
  * Whether two jobs of one space may run at once (contract `jobs.onePerSpace`, design §8.5): only a follow job
  * beside one that writes no document. Every other pair waits, as every pair did before the follow job.
  */
