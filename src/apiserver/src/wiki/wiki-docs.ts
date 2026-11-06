@@ -64,6 +64,7 @@ import { markersOf, splitSentences, wikiRepoPath, withoutMarkers } from './wiki-
 import { parseDiagram } from './wiki-doc-diagram';
 import { docWithdrawReason } from './wiki-doc-withdrawal';
 import { withdrawDocSentencesByPath } from './wiki-docs-affected';
+import { wikiDocsFollowLeftRows } from './wiki-docs-follow';
 import { ownerEnvLiterals } from './wiki-dossier';
 import { requireConfirmedPlan } from './wiki-plan';
 import { WikiRefusalError, WikiService, type WikiPrincipal } from './wiki.service';
@@ -2415,13 +2416,21 @@ export class WikiDocs {
    * Activity's Docs rows (contract `docs.versions.reads.changes`): the space's versions of the sections the confirmed
    * plan has, newest first, at most `changesListed`, each with how many sentences the write that kept it changed.
    * Every version newer than a row listed is listed too, so what replaced a row is the next listed version of its
-   * section, or the section as it stands. A follow job's `left` rows come with the follow job (`docs.follow`), whose
-   * report says them: no job of that kind exists before it.
+   * section, or the section as it stands. Among them, newest first by when each happened, the space's follow jobs that
+   * left sections for the next maintenance run (`docs.follow.daily`), each a `left` row its report says.
    */
   async docChanges(ownerId: string, spaceId: string): Promise<WikiDocChanges> {
     await this.requireSpace(ownerId, spaceId);
     const plan = await this.confirmedPlan(this.prisma, ownerId, spaceId);
     if (!plan) return { spaceId, changes: [] };
+    const left = await wikiDocsFollowLeftRows(this.prisma, { ownerId, spaceId, limit: WIKI_DOC_VERSIONS.changesListed });
+    const withLeft = (changes: WikiDocChangeRow[]): WikiDocChanges => ({
+      spaceId,
+      changes: [...changes, ...left]
+        // Stable: a version and a left row of the same moment keep the order they came in.
+        .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
+        .slice(0, WIKI_DOC_VERSIONS.changesListed),
+    });
     const numbers = numbering(plan);
     const places = new Map<string, { slug: string; key: string; where: string; title: string }>();
     for (const doc of plan.docs) {
@@ -2429,7 +2438,7 @@ export class WikiDocs {
         slug: doc.slug, key: section.key, where: wikiChatWhere(numbers.get(doc.slug)!.number, i + 1), title: section.title,
       }));
     }
-    if (places.size === 0) return { spaceId, changes: [] };
+    if (places.size === 0) return withLeft([]);
     const pairs = [...places.values()].map((place) => Prisma.sql`(${place.slug}, ${place.key})`);
     const rows = await this.prisma.$queryRaw<VersionRow[]>(Prisma.sql`
       SELECT v."id"::text AS "id", v."doc_slug" AS "docSlug", v."section_key" AS "sectionKey", v."sentences" AS "sentences",
@@ -2464,7 +2473,7 @@ export class WikiDocs {
         changed,
       };
     });
-    return { spaceId, changes };
+    return withLeft(changes);
   }
 
   /** The newest version each section of one document kept, for the document read's `change`. */
