@@ -848,9 +848,6 @@ export const wikiDocsWritten = (total: number, written: number): string =>
   `${plural(total, 'document', 'documents')} · ${wikiCount(written)} written`;
 /** The same line while there is nothing to read: no plan confirmed and no topic article. */
 export const WIKI_NO_DOCUMENTS = 'No documents yet';
-/** A new space's one card (mock 31 ⑥): why it has nothing, over Set up maintenance (`WIKI_PLAN_SET_UP`). */
-export const WIKI_NO_DOCUMENTS_NOTE =
-  'This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space.';
 /** A category's documents not written yet, folded into one row under its written ones: `+3 not written yet`. */
 export const wikiNotWrittenYet = (count: number): string => `+${wikiCount(count)} not written yet`;
 /** A category none of whose documents is written yet, as its one row: `3 documents · Not written yet`. */

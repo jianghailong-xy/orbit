@@ -124,24 +124,31 @@ public struct SessionLine: Equatable, Sendable {
         SessionLine(text: "You: \(plainPreview(text))", tone: .preview)
     }
 
-    /// Flatten an assistant reply into a single prose line: drop code blocks and the common
-    /// markdown markers, then collapse all whitespace. (Length is left to the view's truncation.)
+    /// Flatten an assistant reply into a single prose line: drop code blocks and the markdown
+    /// marks, then collapse all whitespace. (Length is left to the view's truncation.)
+    ///
+    /// The same rules as the web `plainPreview`. Only what Markdown would draw as a mark goes, so
+    /// the line says what the bubble says: the `_` and `*` of `tea_user_*_cnch`, the `~` of
+    /// `~/.orbit`, the `--` of `--force` and the `#` of `#123` are words someone wrote.
     ///
     /// A link keeps only its text and an image only its alt, so `[name](orbit-task:…)` reads as
-    /// `name` — the same rules as the web `plainPreview`. Both match a code span first and put it
-    /// back as it was, which leaves the brackets inside `code` alone; the inline-code rule after
-    /// them unwraps it. Images go first so a linked image, `[![alt](src)](url)`, still comes down
-    /// to its alt.
+    /// `name`. Images go first so a linked image, `[![alt](src)](url)`, still comes down to its
+    /// alt. Inline code is held out of every rule and put back at the end, which leaves the
+    /// brackets and marks inside `code` alone.
     static func plainPreview(_ md: String) -> String {
-        var s = md
-        s = s.replacingOccurrences(of: "```[\\s\\S]*?```", with: " ", options: .regularExpression) // fenced code
-        s = s.replacingOccurrences(of: "(`[^`]+`)|!\\[([^\\[\\]]*)\\]\\([^)]*\\)", with: "$1$2",
+        var s = md.replacingOccurrences(of: "```[\\s\\S]*?```", with: " ", options: .regularExpression) // fenced code
+        var code = MarkdownMarks.HeldCode()
+        s = code.hold(MarkdownMarks.inlineCode, in: s)                                              // inline code, held out
+        s = s.replacingOccurrences(of: "!\\[([^\\[\\]]*)\\]\\([^)]*\\)", with: "$1",
                                    options: .regularExpression)                                     // images -> alt
-        s = s.replacingOccurrences(of: "(`[^`]+`)|\\[([^\\[\\]]*)\\]\\([^)]*\\)", with: "$1$2",
+        s = s.replacingOccurrences(of: "\\[([^\\[\\]]*)\\]\\([^)]*\\)", with: "$1",
                                    options: .regularExpression)                                     // links -> link text
-        s = s.replacingOccurrences(of: "`([^`]+)`", with: "$1", options: .regularExpression)        // inline code
-        s = s.replacingOccurrences(of: "(?m)^[#>\\-*\\s]+", with: "", options: .regularExpression)   // line-start markers
-        s = s.replacingOccurrences(of: "[*_~]", with: "", options: .regularExpression)               // emphasis
+        s = s.replacingOccurrences(of: "(?m)^[ \\t]*([-*_])[ \\t]*(?:\\1[ \\t]*){2,}$", with: "",
+                                   options: .regularExpression)                                     // thematic breaks
+        s = s.replacingOccurrences(of: "(?m)^(?:[ \\t]*(?:>|(?:#{1,6}|[-*])(?=[ \\t]|$)))+", with: "",
+                                   options: .regularExpression)                                     // line-start markers
+        s = MarkdownMarks.withoutEmphasis(s)
+        s = code.putBack(s)                                                                         // inline code, back without its ticks
         s = s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }

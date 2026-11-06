@@ -1979,6 +1979,10 @@ export interface CommitCommand {
   leaseOwner: string;
   /** The session's worktree branch, e.g. orbit/<slug>-<hash>. */
   branch: string;
+  /** Throw the checkout's uncommitted work away instead of committing it — the owner's Discard
+   *  on an abandoned checkout. Only sent to a runner that declares `abandoned-checkout-v1`: an
+   *  older one would ignore the field and commit the work instead, which is the opposite. */
+  discard?: boolean;
 }
 
 export interface ArtifactCommand {
@@ -2738,6 +2742,25 @@ export interface WorktreesRemovableResponse {
   resumable?: { id: string; branch: string }[];
 }
 
+/** One finished session's checkout that still holds work no branch has, as the runner's scan
+ *  found it. The control plane keeps only the ones whose session is finished; the rest of what the
+ *  runner reports (a parked session's dirty checkout, say) is dropped. */
+export interface AbandonedCheckoutReport {
+  sessionId: string;
+  /** @orbit/shared ChangedFile[] against the session's fork point. */
+  files: ChangedFile[];
+  /** The same files' unified diffs, when the report had room for them. */
+  patches?: FilePatch[];
+}
+
+/**
+ * Runner → control plane: the WHOLE inventory of checkouts that hold uncommitted work. A row the
+ * control plane holds that is absent from this list is one the runner no longer finds abandoned.
+ */
+export interface AbandonedCheckoutsRequest {
+  checkouts: AbandonedCheckoutReport[];
+}
+
 /**
  * Runner → control plane: the outcome of a {@link MergeCommand}. `merged` advanced main
  * (mergedSha is the new HEAD); `conflict` means the merge was aborted cleanly; `error`
@@ -2787,7 +2810,9 @@ export interface SessionCommitResultRequest {
   /** Absent only for an in-flight command issued by a pre-fence control plane. */
   operationId?: string;
   leaseOwner?: string;
-  status: 'committed' | 'nochange' | 'error' | 'released';
+  /** `discarded` answers a CommitCommand that carried `discard`: the checkout's uncommitted
+   *  work is gone, which leaves it as clean as a commit does. */
+  status: 'committed' | 'nochange' | 'discarded' | 'error' | 'released';
   message?: string;
   /** For `error`: the runner's own plain-language sentence about why the commit failed and what
    *  to do about it, beside git's words in `message`. Absent when it has nothing better to say. */

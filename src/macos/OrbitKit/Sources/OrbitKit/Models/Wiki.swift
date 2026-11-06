@@ -1033,6 +1033,19 @@ public struct WikiMaintenanceUpdate: Encodable, Equatable, Sendable {
     }
 }
 
+/// What makes a wiki (`POST /wiki/spaces`): its name, its repository, and its maintenance from the start.
+public struct WikiSpaceCreate: Encodable, Equatable, Sendable {
+    public let title: String
+    public let repoUrl: String
+    public let maintenance: WikiMaintenanceUpdate
+
+    public init(title: String, repoUrl: String, maintenance: WikiMaintenanceUpdate) {
+        self.title = title
+        self.repoUrl = repoUrl
+        self.maintenance = maintenance
+    }
+}
+
 /// The owner's Reject of an entry a review mode applied (`POST /wiki/entries/:id/reject`).
 public struct WikiEntryRejectRequest: Encodable, Equatable, Sendable {
     public let reason: WikiRejectReason

@@ -1,0 +1,241 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>Android 打开时的默认行为（第二版：对齐 iOS）</title>
+<style>
+/* 2026-11-04 · Android 冷启动落点，第二版。手机都是真截图（frames/），标号在 drawMarks() 里按帧自身的像素坐标画。 */
+:root { --mark: #FF7A00; --ink: #1c1c1e; --muted: #6b6b72; --hair: rgba(60,60,67,.14); --ok: #17693A; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #F3F3F6; font-family: -apple-system, "PingFang SC", sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+.board { padding: 30px 44px 36px; width: max-content; background: #F3F3F6; }
+.b-title { font-size: 25px; font-weight: 750; margin: 0 0 8px; }
+.b-lede { margin: 0 0 24px; width: 1450px; font-size: 15.5px; line-height: 1.72; color: #3a3a40; }
+.b-h2 { display: flex; align-items: center; gap: 12px; margin: 0 0 18px; font-size: 20px; font-weight: 700; }
+.b-h2 .b-no { display: inline-grid; place-items: center; width: 29px; height: 29px; border-radius: 50%; background: var(--ink); color: #fff; font-size: 15px; }
+.b-h2 .b-sub { font-size: 14.5px; font-weight: 500; color: var(--muted); }
+.b-row { display: flex; gap: 30px; align-items: flex-start; }
+figure { margin: 0; width: 340px; }
+.b-tag { display: inline-block; font-size: 13.5px; font-weight: 700; border-radius: 7px; padding: 3px 10px; margin-bottom: 12px; }
+.b-tag.today { background: #FFE3E0; color: #B42318; }
+.b-tag.after { background: #DDE7FF; color: #2447B8; }
+.b-tag.ref { background: #E7E7EC; color: #45454c; }
+.ph { position: relative; overflow: hidden; width: 340px; border-radius: 38px; background: #111; box-shadow: 0 0 0 1.5px rgba(0,0,0,.3), 0 16px 44px rgba(0,0,0,.14); }
+.ph img { display: block; width: 100%; }
+.wrap { position: relative; }
+figcaption { margin-top: 16px; font-size: 14.5px; line-height: 1.64; color: #2c2c31; }
+figcaption ol { margin: 0; padding: 0; list-style: none; }
+figcaption li { margin: 7px 0; position: relative; padding-left: 29px; }
+figcaption li .b-n { position: absolute; left: 0; top: 1px; }
+.b-n { display: inline-grid; place-items: center; width: 21px; height: 21px; border-radius: 50%; background: var(--mark); color: #fff; font: 700 12.5px/1 -apple-system, sans-serif; }
+.b-pin { position: absolute; z-index: 40; box-shadow: 0 0 0 2px #fff; }
+.b-ring { position: absolute; z-index: 39; border: 2px dashed var(--mark); border-radius: 12px; pointer-events: none; }
+i.en { font-style: italic; }
+code { white-space: nowrap; font: 12.5px "JetBrains Mono", monospace; background: rgba(0,0,0,.06); border-radius: 4px; padding: 0 4px; }
+/* 对照表 */
+table.cmp { border-collapse: separate; border-spacing: 0; width: 1450px; background: #fff; border-radius: 16px; box-shadow: 0 0 0 1px var(--hair); overflow: hidden; font-size: 14.5px; line-height: 1.55; }
+table.cmp th, table.cmp td { padding: 10px 14px; vertical-align: top; text-align: left; border-bottom: 1px solid var(--hair); }
+table.cmp tr:last-child td { border-bottom: 0; }
+table.cmp th { font-size: 13px; color: var(--muted); font-weight: 600; background: #FAFAFC; }
+table.cmp tr.group td { background: #F0F0F4; font-weight: 700; font-size: 14px; padding: 8px 14px; }
+table.cmp td.q { width: 210px; font-weight: 650; }
+table.cmp td.ios { width: 400px; }
+table.cmp td.now { width: 420px; background: #FFF7F5; }
+table.cmp td.new { background: #F1FAF4; }
+.same { color: var(--ok); font-weight: 700; }
+.diff { color: #B25E00; font-weight: 700; }
+/* 决定与落地 */
+.card { background: #fff; border-radius: 16px; box-shadow: 0 0 0 1px var(--hair); padding: 20px 24px; font-size: 14.5px; line-height: 1.68; }
+.card h3 { margin: 0 0 10px; font-size: 16.5px; }
+.card h3:not(:first-child) { margin-top: 16px; }
+.card ol, .card ul { margin: 0; padding-left: 21px; }
+.card li { margin: 6px 0; }
+.b-two { display: flex; gap: 22px; margin-top: 22px; width: 1450px; align-items: flex-start; }
+.b-two > .card { flex: 1; }
+.pick { display: flex; gap: 26px; width: 1450px; align-items: flex-start; }
+.pick figure { flex: none; }
+.pick .card { flex: 1; }
+.rec-flag { color: var(--ok); font-weight: 700; }
+</style>
+
+<section class="board" data-png="01-open">
+  <h1 class="b-title">Android 打开时的默认行为 · 第二版：对齐 iOS</h1>
+  <p class="b-lede">第一版有两项推荐和 iOS 不一样：右上角转圈、<i class="en">New session</i> 灰一遍读取。这一版按 iOS 的代码逐项对过：打开时的行为全部跟 iOS，这一页也改成 iOS 的结构。
+  第一张是 iPhone 真机尺寸的探针截图（10-21，数据和右边不同）；后三张是 Android 模拟器（API 36）的真截图，a 是今天的版本，b、c 是原型，代码没有进主线。Android 用的是样例数据（名字都是编的），行数和大小按 11-02 量到的你的账号。</p>
+  <h2 class="b-h2"><span class="b-no">1</span>打开之后看到什么</h2>
+  <div class="b-row">
+    <figure>
+      <span class="b-tag ref">iOS · 现在</span>
+      <div class="wrap"><div class="ph" data-frame="ios-list-dark"></div></div>
+      <figcaption>打开就是上次用的工作区。没有状态字，没有灰按钮，<i class="en">✎</i> 一直能点；每行是标题、时间和一行摘要；搜索在底部。</figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag today">a · Android 今天</span>
+      <div class="wrap"><div class="ph" data-frame="today-first-2-two-lines"></div></div>
+      <figcaption><ol>
+        <li><span class="b-n">1</span>只有工作区名字，还要再点一下。</li>
+        <li><span class="b-n">2</span>两行状态字。iOS 有行时不显示任何状态。</li>
+      </ol></figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag after">b · 建议：第一屏（第二次打开起）</span>
+      <div class="wrap"><div class="ph" data-frame="proto-saved-page"></div></div>
+      <figcaption><ol>
+        <li><span class="b-n">1</span>上次用的工作区；行是手机存的 Open 列表，不用等读取，能点开。</li>
+        <li><span class="b-n">2</span>≡ 收起筛选和设置，✎ 马上能点。没有状态字，也没有灰按钮。</li>
+        <li><span class="b-n">3</span>有事等你时列表顶上有胶囊，和 iOS 同样的东西。</li>
+        <li><span class="b-n">4</span>搜索在底部，往下读时让开。</li>
+      </ol></figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag after">c · 建议：读完之后</span>
+      <div class="wrap"><div class="ph" data-frame="proto-relaunch-2-fresh"></div></div>
+      <figcaption><ol>
+        <li><span class="b-n">1</span>行就地换成最新的，页面其他地方不动，列表不跳。样例里 <i class="en">Upgrade the Postgres client</i> 是新会话，<i class="en">Add CSV export</i> 跑完了。</li>
+      </ol></figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="board" data-png="02-audit">
+  <h2 class="b-h2"><span class="b-no">2</span>逐项对照 iOS<span class="b-sub">iOS 这一列读自 <code>AppModel</code>、<code>AgentsView</code>、<code>CompactShell</code>，不是印象</span></h2>
+  <table class="cmp">
+    <tr><th></th><th>iOS</th><th>Android 今天</th><th>建议</th></tr>
+    <tr class="group"><td colspan="4">打开时的行为：全部跟 iOS，不用你选</td></tr>
+    <tr><td class="q">落到哪</td><td class="ios">上次用的工作区，没有就第一个</td><td class="now">工作区名字页，再点一下</td><td class="new"><span class="same">同 iOS</span></td></tr>
+    <tr><td class="q">第一屏有没有行</td><td class="ios">有：离开前台时存的工作区 + Open 列表</td><td class="now">没有：目录约 21 MB，超过 8 MiB 上限，整份不存</td><td class="new"><span class="same">同 iOS</span>，样例按你的行数存下来 2.65 MB</td></tr>
+    <tr><td class="q">打开时读什么</td><td class="ios">只读 Open；Completed、Trash 切过去才读</td><td class="now">全部读，每次约 21 MB，打开和切回前台都连读两遍</td><td class="new"><span class="same">同 iOS</span>，每次约 2.5 MB。<span class="diff">一处不同：</span>iOS 停在 Completed 时每 4 秒重读；这里切过去和下拉时才读，你的 Completed 有 18 MB</td></tr>
+    <tr><td class="q">有行时显示状态吗</td><td class="ios">不显示</td><td class="now">两行字，读完列表上跳 103 dp</td><td class="new"><span class="same">同 iOS</span></td></tr>
+    <tr><td class="q">还没有行时</td><td class="ios">只转圈</td><td class="now">转圈 + <i class="en">Loading workspaces and sessions…</i></td><td class="new"><span class="same">同 iOS</span></td></tr>
+    <tr><td class="q">新建会话</td><td class="ios">随时能点</td><td class="now">灰到第二遍读完，按 7–10 秒一遍算 14–20 秒</td><td class="new"><span class="same">同 iOS</span></td></tr>
+    <tr><td class="q">行的菜单（改名、完成…）</td><td class="ios">随时能用</td><td class="now">读完前不能用：<i class="en">Refresh the directory before making changes.</i></td><td class="new"><span class="same">同 iOS</span></td></tr>
+    <tr><td class="q">断网打开</td><td class="ios">行留着；抽屉顶上 <i class="en">Can't reach Orbit</i> + <i class="en">Retry</i></td><td class="now">整页一张 <i class="en">Waiting for connection</i>，看不到行</td><td class="new"><span class="same">同 iOS</span>，文案也同</td></tr>
+    <tr><td class="q">读不到又没有行</td><td class="ios"><i class="en">Workspaces couldn't be loaded</i> + <i class="en">Retry</i></td><td class="now"><i class="en">Couldn't load workspaces</i> + <i class="en">Retry</i></td><td class="new"><span class="same">同 iOS</span>，文案也同</td></tr>
+    <tr class="group"><td colspan="4">这一页的样子：待定 1</td></tr>
+    <tr><td class="q">顶栏右边</td><td class="ios">≡ 和 ✎</td><td class="now">设置、刷新</td><td class="new"><span class="same">同 iOS</span></td></tr>
+    <tr><td class="q">Open / Completed / Trash、标签</td><td class="ios">收在 ≡ 里</td><td class="now">两排常驻的按钮</td><td class="new"><span class="same">同 iOS</span></td></tr>
+    <tr><td class="q">搜索</td><td class="ios">底部一条，往下读时让开（你选的）</td><td class="now">顶部常驻输入框</td><td class="new"><span class="same">同 iOS</span></td></tr>
+    <tr><td class="q">新建会话、文件夹、设置</td><td class="ios">✎；≡ 里</td><td class="now">一排文字按钮；顶栏齿轮</td><td class="new"><span class="same">同 iOS</span></td></tr>
+    <tr><td class="q">每一行</td><td class="ios">标题 + 时间或状态点，一行摘要</td><td class="now">标题、状态词、两行摘要、后台任务数、⋮</td><td class="new"><span class="same">同 iOS</span>。样例里一屏从约 4 条变成 8 条</td></tr>
+    <tr><td class="q">行的菜单入口</td><td class="ios">长按；还有左滑</td><td class="now">⋮</td><td class="new">长按<span class="same">同 iOS</span>；<span class="diff">左滑这次不做</span></td></tr>
+    <tr><td class="q">刷新</td><td class="ios">下拉</td><td class="now">顶栏按钮</td><td class="new"><span class="same">同 iOS</span></td></tr>
+    <tr><td class="q">等你处理的胶囊</td><td class="ios">列表顶上</td><td class="now">列表页没有，只在会话页有</td><td class="new"><span class="same">同 iOS</span></td></tr>
+    <tr><td class="q">最上面的 <i class="en">Today</i> 标题；文件夹行</td><td class="ios">不画；图标、名字、数量、箭头</td><td class="now">画；名字、<i class="en">2 sessions · 0 need you · 0 running</i>、⋮</td><td class="new"><span class="same">同 iOS</span></td></tr>
+    <tr class="group"><td colspan="4">还不一样，这次不动</td></tr>
+    <tr><td class="q">抽屉</td><td class="ios">每行一行字 + 右侧状态列；<i class="en">New session</i> 浮在底部</td><td class="now">每行两行字；<i class="en">New session</i> 在滚动到底才看到</td><td class="new"><span class="diff">不动</span>，单开一项</td></tr>
+    <tr><td class="q">读取方式</td><td class="ios">事件只改那一行；每 4 秒增量读 Open</td><td class="now">每个事件重读整份</td><td class="new"><span class="diff">不动</span>：每个事件还是重读，但只读 Open（2.5 MB）；打开时第二遍也还是整份，iOS 是增量。单开一项</td></tr>
+    <tr><td class="q">平台本身的</td><td class="ios">玻璃效果、系统菜单样式</td><td class="now">Material 外观、系统返回</td><td class="new">照 Android，这是项目定的平台差异</td></tr>
+  </table>
+</section>
+
+<section class="board" data-png="03-states">
+  <h2 class="b-h2"><span class="b-no">3</span>建议版的其他状态</h2>
+  <div class="b-row">
+    <figure>
+      <span class="b-tag after">d · ≡ 菜单</span>
+      <div class="wrap"><div class="ph" data-frame="proto-saved-menu"></div></div>
+      <figcaption>内容和顺序同 iOS：范围、<i class="en">Filter by Tag</i>、<i class="en">Group by Tag</i>、<i class="en">New Folder…</i>、<i class="en">Settings</i>。外观是 Material 的。</figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag after">e · 长按一行</span>
+      <div class="wrap"><div class="ph" data-frame="proto-saved-longpress"></div></div>
+      <figcaption>原来 ⋮ 打开的那个菜单，换成长按打开，内容不变。这张是读取还没回来时截的：菜单已经能用。</figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag after">f · 往下读</span>
+      <div class="wrap"><div class="ph" data-frame="proto-relaunch-3-scrolled"></div></div>
+      <figcaption>搜索条让开；往回翻、到顶、到底时回来，规则同 iOS。</figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag after">g · Completed 还没读到</span>
+      <div class="wrap"><div class="ph" data-frame="proto-completed-1-loading"></div></div>
+      <figcaption>切过去才读。空着时写 <i class="en">Loading…</i>，同 iOS。顶上的胶囊还在。</figcaption>
+    </figure>
+  </div>
+  <div class="b-row" style="margin-top:30px">
+    <figure>
+      <span class="b-tag after">h · 还没存过：转圈</span>
+      <div class="wrap"><div class="ph" data-frame="proto-first-1-loading"></div></div>
+      <figcaption>第一次登录、升级后第一次。只转圈，同 iOS。读到就落到工作区。</figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag after">i · 读不到又没有行</span>
+      <div class="wrap"><div class="ph" data-frame="proto-empty-failed"></div></div>
+      <figcaption>文案同 iOS。</figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag after">j · 断网打开</span>
+      <div class="wrap"><div class="ph" data-frame="proto-offline"></div></div>
+      <figcaption>存的行照样在，列表上不说话，同 iOS。今天这时只有一张 <i class="en">Waiting for connection</i>。</figcaption>
+    </figure>
+    <figure>
+      <span class="b-tag after">k · 断网时的抽屉</span>
+      <div class="wrap"><div class="ph" data-frame="proto-offline-drawer"></div></div>
+      <figcaption><i class="en">Can't reach Orbit</i> 和 <i class="en">Retry</i> 在工作区最上面，文案和位置同 iOS。抽屉其他地方这次不动。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="board" data-png="04-decisions">
+  <h2 class="b-h2"><span class="b-no">4</span>待定 · 只剩一项</h2>
+  <div class="pick">
+    <figure>
+      <span class="b-tag today">B 的样子（今天的页面）</span>
+      <div class="wrap"><div class="ph" style="height:610px" data-frame="today-first-4-list"></div></div>
+    </figure>
+    <div class="card">
+      <h3>待定 1：这一页要不要整页跟 iOS</h3>
+      <p style="margin:0 0 10px"><span class="rec-flag">A 整页跟 iOS（推荐）。</span>就是第 1 张的 b、c。打开后第一眼就是这一页，样例里一屏能看到 8 条而不是 4 条；你两台手机看到的是同一个东西。项目目标也写了“业务页面结构尽量与 iOS 一致”，这页当年没做到，同数据双端对照也一直留着缺口。代价是改动大，见下面第 4、5 条。</p>
+      <p style="margin:0 0 4px"><span style="font-weight:700">B 只改打开时的行为。</span>落点、存行、只读 Open、去掉状态字和灰按钮都照做，页面保持左边这样：搜索框、两排按钮、⋮ 不动。改动小很多，以后再对齐也不白做。</p>
+      <h3>第一版的四项，现在都按 iOS 定了</h3>
+      <ul>
+        <li><b>落到哪：</b>上次用的，没有就第一个。每台手机、每个账号各记各的，退出登录就清掉。</li>
+        <li><b>第一屏：</b>手机存一份工作区和 Open 列表，离开前台时写一次。代价：刚打开时行可能是旧的（比如已结束的还写 <i class="en">Running</i>），读完就换掉；iOS 也一样。</li>
+        <li><b>读取中：</b>什么都不显示。第一版推荐的右上角转圈撤掉。</li>
+        <li><b><i class="en">New session</i>：</b>不灰，新建页也不等目录读完。行的菜单同样不等；操作被服务器拒绝时走现有的提示。</li>
+      </ul>
+    </div>
+  </div>
+  <div class="b-two">
+    <div class="card"><h3>落地（按代价排）</h3><ol>
+      <li><b>状态和灰按钮：</b><code>DirectoryStatus</code>、<code>NewSessionComposer</code>、<code>DirectoryActions</code>；抽屉加 <i class="en">Can't reach Orbit</i> 行。</li>
+      <li><b>落点：</b><code>MainActivity</code> 记住上次工作区；名字页删掉，只留“还没有工作区”和转圈。<code>orbit://active</code> 也改到落点。</li>
+      <li><b>只读 Open、存一份：</b><code>RealtimeRest</code>、<code>RealtimeCache</code>，解码挪出主线程，账号主题也存进去（iOS 首帧用对主题靠这个）。<code>SessionProjectPage</code>、<code>DrawerProjects</code> 不能再假设内存里有 Completed。</li>
+      <li><b>页面（只有 A）：</b><code>DirectoryScreen</code> 重写：顶栏、底部搜索、紧凑行、长按、下拉刷新、列表页胶囊。</li>
+      <li><b>测试：</b>23 个测试文件靠点名字页进工作区，12 个靠 ⋮；设备旅程按 API 29–36 重跑，TalkBack 要重走一遍（长按已带读屏动作，没验过）。</li>
+    </ol></div>
+    <div class="card"><h3>还没验证</h3><ul>
+      <li>全部是模拟器上的 debug 包，没上过你的手机。启动到列表画完 2.62–3.33 秒（6 次，主机负载 10–15）；项目的门槛是真机 release 3 秒。</li>
+      <li>只读 Open 之后一次读取要几秒没量过。今天的 7–10 秒是 11-02 在你手机上量的，大头是 Completed（18.3 MB）；要上真机才知道。</li>
+      <li>iOS 那张是 10-21 的探针图（11-01 的探针图结构相同），数据和右边不同，没有做同数据对照。</li>
+    </ul>
+    <h3>另外看到的，这次不改</h3><ul>
+      <li>Android 启动时先有约 0.8 秒白色窗口，深色账号也一样（时间是模拟器上的）。今天就有；要一起修说一声。</li>
+    </ul></div>
+  </div>
+</section>
+
+<script>
+// Pins and rings are in the frame's own pixels; each frame's width comes from its own file.
+const WIDTH = { 'ios-list-dark': 1320 };
+const SPEC = {
+  'today-first-2-two-lines': { pins: [[120, 826, 1], [1030, 345, 2]], rings: [[18, 340, 1044, 210]] },
+  'proto-saved-page': { pins: [[420, 220, 1], [800, 220, 2], [1040, 300, 3], [1040, 2150, 4]] },
+  'proto-relaunch-2-fresh': { pins: [[640, 650, 1]] },
+};
+function mark(ph, spec, width) {
+  const scale = ph.clientWidth / width, wrap = ph.parentElement;
+  for (const [x, y, n] of spec.pins || []) {
+    const p = document.createElement('span'); p.className = 'b-n b-pin'; p.textContent = n;
+    p.style.left = (x * scale - 10.5) + 'px'; p.style.top = (y * scale - 10.5) + 'px'; wrap.appendChild(p);
+  }
+  for (const [x, y, w, h] of spec.rings || []) {
+    const r = document.createElement('div'); r.className = 'b-ring';
+    r.style.left = x * scale + 'px'; r.style.top = y * scale + 'px'; r.style.width = w * scale + 'px'; r.style.height = h * scale + 'px'; wrap.appendChild(r);
+  }
+}
+document.querySelectorAll('[data-frame]').forEach((ph) => {
+  const img = document.createElement('img'); img.src = `frames/${ph.dataset.frame}.png`; ph.appendChild(img);
+});
+window.drawMarks = () => {
+  document.querySelectorAll('.board[data-png="01-open"] [data-frame]').forEach((ph) => mark(ph, SPEC[ph.dataset.frame] || {}, WIDTH[ph.dataset.frame] || 1080));
+};
+</script>
+</html>

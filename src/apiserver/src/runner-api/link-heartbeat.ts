@@ -138,8 +138,10 @@ export const HEARTBEAT_DELIVERIES = {
   },
   commitRequests: {
     how: 'MARKED',
-    writers: ['sessions/sessions.service.ts#commitWorktree'],
-    pending: 'a commit pending on any session of the runner, whichever process holds it',
+    // Both press doors — Commit and the abandoned-checkout Discard — go through the one queued
+    // attempt, and that is where the runner is woken.
+    writers: ['sessions/sessions.service.ts#queueCheckoutAction'],
+    pending: 'a commit or discard pending on any session of the runner, whichever process holds it',
   },
   artifactRequests: {
     how: 'MARKED',

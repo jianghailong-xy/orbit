@@ -867,7 +867,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     attempts: 4,
     replay: 'The duplicate-ack check, park, merge-state clear and billing accrual are all taken from rows read under their locks inside the closure. The command result, request decision, derived task status and raw-output comment — or the mutually exclusive unavailable signal — are written only by the same first ACK; a victim leaves all of them absent, and a retry re-locks the current declaration/request before deriving anything. The bridge finds-or-creates the exact evidence/request fact inside the same transaction and verifies a standing result byte-for-byte before deciding it, so a rollback exposes none and an OPEN+result retry never attempts a second unique result. The acceptance shell turn a message turn owes is queued only by the completion that ANSWERS that turn, and is looked up by its `(session_id, client_turn_id)` key before it is inserted: a turn put back in the queue completes a second time, and a round already standing for it is its round rather than a unique violation that fails the whole ACK. A message the region check refused (`region_refused`) goes back in the queue by the same ACK compare-and-set and its Session to PENDING, predicated on RUNNING, so a re-post matches no turn and writes nothing.',
     effects: 'None inside; attempt-budget accounting, EXECUTABLE_RESULT_RECORDED consumption and realtime publication are after commit, and so is PushService.notifyLoopMissed (signalDrainedWakeups) for each one-shot wakeup the failed turn\'s drain dropped with its FAILED session — returned only by the attempt that committed, so once. The input route is replayed even for a duplicate ACK so an authorization refusal does not burn the immutable result fact. A failed transaction appends CONTROL_PLANE_COMMIT_REJECTED only from a separate best-effort transaction after rollback; a committed ACK appends recovery outside the monitored transaction. Neither observation can turn the callback result into another 5xx, and the independent watchdog derives the same stable obligation if either edge write is absent.',
-    answer: 'Typed 503; the runner re-posts the completion, which the duplicate-ack check absorbs.',
+    answer: 'Typed 503; the runner re-posts the completion, which the duplicate-ack check absorbs. A completion refused for anything but a conflict, the database failing or an answer already decided (a report the database will not store, say) rolls back whole and runs once more on what decides the turn alone (settlingFields), so a report cannot hold the turn: the runner re-posts a 5xx with no ceiling, and a 4xx would have it run the turn again.',
   },
   {
     at: 'runner-api/runner-api.controller.ts#ingestEvents',
@@ -938,13 +938,37 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'runner-api/runner-api.controller.ts#commitResult',
     shape: 'TX_RETRIED',
-    locks: 'Same as mergeResult.',
+    locks:
+      'Same as mergeResult, plus the abandoned_checkout row of the same session deleted under it '
+      + '(rank 60, after the session it hangs off): the checkout entry is the one this outcome settles.',
     identity: 'Same as mergeResult.',
     isolation: '',
     attempts: 4,
     replay: 'Same as mergeResult.',
     effects: 'None inside.',
     answer: 'Typed 503; the runner re-posts.',
+  },
+  {
+    at: 'runner-api/runner-api.controller.ts#abandonedCheckouts',
+    shape: 'TX_RETRIED',
+    locks:
+      'Session rows first (rank 30, by id, one UPDATE that marks the reported checkouts dirty), then '
+      + 'abandoned_checkout (rank 60): the delete of what this runner no longer reports and one upsert '
+      + 'per kept session, whose session foreign key re-checks the row the first statement already '
+      + 'holds. That order is the one commitResult takes — session, then its abandoned_checkout — '
+      + 'because the reverse would be the same two rows taken opposite ways.',
+    identity:
+      'The runner and its owner. A report is the machine\'s whole inventory, so re-running it '
+      + 'converges on the same set: the delete is scoped to this runner and the upserts are keyed by '
+      + 'the unique session_id.',
+    isolation: '',
+    attempts: 4,
+    replay:
+      'Both statements are re-derived from the report alone — the kept set and the session statuses '
+      + 'filtered here are read in the same closure — so a second attempt deletes and upserts the '
+      + 'same rows once.',
+    effects: 'None inside; nothing is published (the runner page polls).',
+    answer: 'Typed 503; the next scan, an hour later, reports the inventory again.',
   },
   {
     at: 'runner-api/runner-api.controller.ts#scheduledWakeup',
@@ -2725,7 +2749,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "sessions/sessions.service.ts#applyEngineTitle", class: "ONE_ROW_CAS", statements: 1, note: "The runner's naming report: the title moves only while the session still reads the one its claim carried and no project owns it, so a rename made since stands and a repeated report matches nothing." },
   { at: "sessions/sessions.service.ts#beautifySessionLater", class: "ONE_ROW_CAS", statements: 1 },
   { at: "sessions/sessions.service.ts#cancelAutoRetry", class: "ONE_ROW_BY_KEY", statements: 1 },
-  { at: "sessions/sessions.service.ts#commitWorktree", class: "ONE_ROW_CAS", statements: 1 },
+  { at: "sessions/sessions.service.ts#queueCheckoutAction", class: "ONE_ROW_CAS", statements: 1, note: "The commit relay's one queued attempt, commit or discard (commitWorktree and discardCheckout both come through here): a single UPDATE of the session by its primary key, guarded on the status, the worktree flag and the commit status the read saw, plus the action so a discard cannot be mistaken for a commit already queued." },
   { at: "sessions/sessions.service.ts#continueMergeRepair", class: "ONE_ROW_BY_KEY", statements: 1, note: "Not a write: after createTurn or resume refused a merge repair's continue message (S2), one autocommit SELECT … FOR SHARE of that repair session's row by id. It waits only for a transaction holding the row FOR UPDATE — another tap's revive or turn — and ends with the statement, so the read after it sees what that transaction committed. It holds no other lock while it waits and takes none after; the message itself is written by createTurn and resume, each its own unit." },
   { at: "sessions/sessions.service.ts#create", class: "INSERT", statements: 2, note: "Two statements: the session INSERT, then the attachment adoption. An attachment left unadopted is orphaned rather than wrongly attached, which is why this has never needed to be atomic. A session created in a folder (0348) takes that folder FOR KEY SHARE through its foreign key, like every other parent the INSERT names; a folder deleted between the check and the INSERT fails that key, and is answered with the same 400 as naming one that was never there. A session that makes its workspace (`newWorkspace`, migration 0457) runs the same INSERT (`insertSession`) inside createInNewWorkspace's transaction instead, and neither statement runs here." },
   { at: "sessions/sessions.service.ts#createAutoTags", class: "INSERT", statements: 1 },

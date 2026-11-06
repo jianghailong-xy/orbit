@@ -43,19 +43,20 @@ fun NewSessionComposer(
     val target = remember(workspaceId, route.folderId) { DraftTarget(workspaceId, route.folderId) }
     val model = remember(handle, target) { app.composer(handle, target.key, target) }
     val state by model.state.collectAsState()
-    var detail by remember { mutableStateOf<JsonObject?>(null) }
+    var detail by remember(target) { mutableStateOf<JsonObject?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var retry by remember { mutableIntStateOf(0) }
-    // Held outside the workspace's read, which a directory refresh briefly clears: the engine list stays open across one.
+    // Held outside the workspace's read: the engine list stays open across one.
     var choosingEngine by remember(target) { mutableStateOf(false) }
     // Where an engine or a credential that can't run here is fixed: the runner's page for that engine.
     val openRunner = { runner: String, engine: String -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) }
+    // The page does not wait for the directory's read (iOS). A read of the directory that lands after a reconnect reads the workspace
+    // again behind it, in place.
     LaunchedEffect(handle, target, data.fresh, retry) {
-        detail = null
-        if (!data.fresh) return@LaunchedEffect
+        if (detail != null && !data.fresh) return@LaunchedEffect
         try { detail = ComposerApi(app.session, handle, target.key, target).detail(); error = null }
         catch (cancel: CancellationException) { throw cancel }
-        catch (e: Exception) { error = directoryError(e) }
+        catch (e: Exception) { if (detail == null) error = directoryError(e) }
     }
     LaunchedEffect(state.draft.createdSessionId, state.acknowledgementPending) {
         state.draft.createdSessionId?.takeUnless { state.acknowledgementPending }?.let { id ->
@@ -85,7 +86,7 @@ fun NewSessionComposer(
             }
             Spacer(Modifier.weight(1f))
             val current = detail
-            val fresh = data.fresh && current != null && current.flag("enabled") != false
+            val fresh = current != null && current.flag("enabled") != false
             val session = current?.let { SessionState(target.key, snapshot = SessionSnapshot(it, emptyList(), emptyList(), emptyList(), emptyMap()), fresh = fresh) }
             Box(Modifier.heightIn(max = composerHeight)) { SessionComposer(app, handle, target.key, session, target, openRunner = openRunner) }
         }
@@ -291,7 +292,7 @@ private fun MachineDraftComposer(
                 SessionState(
                     target.key,
                     snapshot = SessionSnapshot(it, emptyList(), emptyList(), emptyList(), emptyMap()),
-                    fresh = data.fresh,
+                    fresh = true,
                 )
             }
             Box(Modifier.heightIn(max = composerHeight)) {

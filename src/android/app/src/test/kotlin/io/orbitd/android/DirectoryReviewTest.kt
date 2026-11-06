@@ -1,5 +1,8 @@
 package io.orbitd.android
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import io.orbitd.android.wiki.PageBar
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -26,6 +29,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [29], application = TestOrbitApplication::class)
 class DirectoryReviewTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    private fun handle() = ((compose.activity.application as OrbitApplication).session.state.value as AuthState.SignedIn).handle
     private fun api(response: () -> ApiResponse): DirectoryApi {
         val session = (compose.activity.application as OrbitApplication).session
         compose.waitUntil(60_000) { session.state.value is AuthState.SignedOut }
@@ -37,12 +41,17 @@ class DirectoryReviewTest {
 
     @Test fun realUntaggedTagAndUnfiledBucketRenderTogether() {
         val api = api { ApiResponse(200, "[]".encodeToByteArray()) }
-        val rows = listOf(DirectorySession("a", title = "Tagged session", workspaceId = "w", tags = listOf(Tag("t", "Untagged"))),
+        val tag = Tag("t", "Untagged")
+        val rows = listOf(DirectorySession("a", title = "Tagged session", workspaceId = "w", tags = listOf(tag)),
             DirectorySession("b", title = "No tag session", workspaceId = "w"))
+        val route = OrbitRoute(Destination.WORKSPACE, "w")
         compose.activityRule.scenario.onActivity { activity -> activity.setContent { OrbitTheme {
-            DirectoryScreen(OrbitRoute(Destination.WORKSPACE, "w"), DirectoryData(sessions = mapOf("open" to rows), ready = true, fresh = true), api, {}, {})
+            Column {
+                Row { PageBar.Actions(route, this) }
+                DirectoryScreen(route, DirectoryData(sessions = mapOf("open" to rows), tags = listOf(tag), ready = true, fresh = true), api, handle(), {}, {})
+            }
         } } }
-        compose.onNodeWithText("By time").performClick()
+        compose.pickFromSessionOptions("Group by Tag")
         compose.onNodeWithTag("directory-list").performScrollToNode(hasText("No tag session"))
         compose.onNodeWithText("No tag session").assertIsDisplayed()
         compose.onNodeWithTag("directory-list").performScrollToNode(hasText("Tagged session"))
@@ -63,7 +72,7 @@ class DirectoryReviewTest {
         compose.activityRule.scenario.onActivity { activity -> activity.setContent { OrbitTheme {
             CompositionLocalProvider(LocalSessionRecaps provides recaps) {
                 DirectoryScreen(OrbitRoute(Destination.WORKSPACE, "w"),
-                    DirectoryData(sessions = mapOf("open" to rows), ready = true, fresh = true), api, {}, {})
+                    DirectoryData(sessions = mapOf("open" to rows), ready = true, fresh = true), api, handle(), {}, {})
             }
         } } }
         compose.onNodeWithTag("directory-list").performScrollToNode(hasText("Recap on the list row"))

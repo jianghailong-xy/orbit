@@ -64,7 +64,7 @@ fun rememberDrawerProjects(api: DirectoryApi, revision: Long): DrawerProjectsSta
  * sessions page over its coordinator's workspace — or the one [showing], or the first — and its page when there is no workspace to
  * open it over (A05-7). */
 fun projectRoot(id: String, data: DirectoryData, showing: String?, origin: Origin): OrbitRoute {
-    val coordinator = (data.sessions["open"].orEmpty() + data.sessions["completed"].orEmpty()).firstOrNull {
+    val coordinator = data.sessions["open"].orEmpty().firstOrNull {
         it.projectMembership?.isCoordinator == true && ObjectId.same(it.projectMembership?.projectId, id)
     }
     val over = coordinator?.workspace ?: showing ?: orderedWorkspaces(data.workspaces).firstOrNull()?.id

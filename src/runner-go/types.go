@@ -1098,6 +1098,24 @@ type CommitCommand struct {
 	OperationID string `json:"operationId"`
 	LeaseOwner  string `json:"leaseOwner"`
 	Branch      string `json:"branch"`
+	// Discard throws the checkout's uncommitted work away instead of committing it (the owner's
+	// Discard on an abandoned checkout). Only ever sent to a runner that declares
+	// abandoned-checkout-v1: an older one would ignore the field and commit the work instead.
+	Discard bool `json:"discard,omitempty"`
+}
+
+// AbandonedCheckout is one finished session's checkout that still holds work no branch has, as
+// the runner reports it: the changed files and, when the report had room, their patch text.
+type AbandonedCheckout struct {
+	SessionID string        `json:"sessionId"`
+	Files     []ChangedFile `json:"files"`
+	Patches   []FilePatch   `json:"patches,omitempty"`
+}
+
+// AbandonedCheckoutsRequest is the runner's WHOLE inventory: a checkout the control plane holds
+// that is absent from this list is one the runner no longer finds abandoned.
+type AbandonedCheckoutsRequest struct {
+	Checkouts []AbandonedCheckout `json:"checkouts"`
 }
 
 type ArtifactCommand struct {
@@ -1685,8 +1703,14 @@ type RunFinalizeResponse struct {
 
 // WorktreesRemovableResponse lists which of the queried session ids have a removable
 // checkout (Completed / in Trash / no longer a session); any id absent must be kept.
+// Resumable is the other half: the kept sessions that are at rest here, with the branch their
+// next message comes back on. An older control plane omits it, and nothing is resumable then.
 type WorktreesRemovableResponse struct {
 	Removable []string `json:"removable"`
+	Resumable []struct {
+		ID     string `json:"id"`
+		Branch string `json:"branch"`
+	} `json:"resumable,omitempty"`
 }
 
 type Manifest struct {

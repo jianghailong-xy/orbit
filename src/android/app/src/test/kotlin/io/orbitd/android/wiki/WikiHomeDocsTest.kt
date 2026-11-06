@@ -70,30 +70,37 @@ class WikiHomeDocsTest {
     }
 
     /** The documents band: grey bars while the first read is out; the confirmed plan's categories; before a plan, the topic
-     * articles; with neither, a new space's card — or nothing once maintenance is set up. Browse · A–Z ends it only when
-     * something is listed, and the line under the head waits for the same first read. */
+     * articles; with neither, the setup card — which also stands above the categories until the first document is written.
+     * Browse · A–Z ends it only when something is listed, and the line under the head waits for the same first read. */
     @Test fun theHomesDocumentsAreTheReadsItHas() {
         val docs = homeRead(leads = true)
         val unplanned = homeRead(leads = false, planned = false)
+        val nothingWritten = docs.copy(docs = WikiDocsDirectory.Counts(5, 0))
         val articles = wikiArticlesFixture().obj("directory").obj("read").decode(WikiArticleDirectory.serializer())
         val empty = WikiArticleDirectory(categories = emptyList(), uncategorized = emptyList())
-        assertEquals(WikiLogic.HomeDocuments.Loading, WikiLogic.homeDocuments(docs, articles, loading = true, maintenance = false, seen = null))
+        assertEquals(WikiLogic.HomeDocuments.Loading, WikiLogic.homeDocuments(docs, articles, loading = true, seen = null))
         assertNull(WikiLogic.homeLine(docs, articles, loading = true))
-        val byPlan = WikiLogic.homeDocuments(docs, articles, loading = false, maintenance = false, seen = 0.0)
+        val byPlan = WikiLogic.homeDocuments(docs, articles, loading = false, seen = 0.0)
         assertTrue(byPlan is WikiLogic.HomeDocuments.Categories)
         assertEquals("the plan's documents, not the topics", listOf(1, 3, 4), (byPlan as WikiLogic.HomeDocuments.Categories).categories.map { it.number })
         assertEquals("5 documents · 3 written", WikiLogic.homeLine(docs, articles, loading = false))
-        val byTopic = WikiLogic.homeDocuments(unplanned, articles, loading = false, maintenance = false, seen = 0.0)
+        val byTopic = WikiLogic.homeDocuments(unplanned, articles, loading = false, seen = 0.0)
         assertTrue(byTopic is WikiLogic.HomeDocuments.Topics)
         val topics = (byTopic as WikiLogic.HomeDocuments.Topics).groups.sumOf { it.topics.size }
         assertEquals(WikiArticleCopy.articleCount(topics), WikiLogic.homeLine(unplanned, articles, loading = false))
-        assertEquals(WikiLogic.HomeDocuments.NewSpace, WikiLogic.homeDocuments(unplanned, empty, loading = false, maintenance = false, seen = null))
-        assertEquals(WikiLogic.HomeDocuments.NothingListed, WikiLogic.homeDocuments(unplanned, empty, loading = false, maintenance = true, seen = null))
+        assertEquals(WikiLogic.HomeDocuments.Start, WikiLogic.homeDocuments(unplanned, empty, loading = false, seen = null))
+        assertEquals(WikiLogic.HomeDocuments.Start, WikiLogic.homeDocuments(null, null, loading = false, seen = null))
         assertEquals(WikiCopy.noDocuments, WikiLogic.homeLine(unplanned, empty, loading = false))
-        assertEquals(listOf(true, true, false, false, false), listOf(byPlan, byTopic, WikiLogic.HomeDocuments.Loading,
-            WikiLogic.HomeDocuments.NewSpace, WikiLogic.HomeDocuments.NothingListed).map { it.listed })
-        assertEquals("This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space.",
-            WikiDocCopy.noDocumentsNote)
+        // Whether a plan is confirmed or not, the card stands while nothing is written; with a plan it stands over the categories,
+        // and a topic article does not hold it off: the home lists none once it reads by the plan.
+        val toWrite = WikiLogic.homeDocuments(nothingWritten, articles, loading = false, seen = null)
+        assertTrue(toWrite is WikiLogic.HomeDocuments.Categories)
+        assertEquals(listOf(1, 3, 4), (toWrite as WikiLogic.HomeDocuments.Categories).categories.map { it.number })
+        assertEquals(toWrite.categories, (WikiLogic.homeDocuments(nothingWritten, empty, loading = false, seen = null) as WikiLogic.HomeDocuments.Categories).categories)
+        assertEquals("No written document, no count of them: the same", true, WikiLogic.homeDocuments(docs.copy(docs = null), empty, loading = false, seen = null).start)
+        val bands = listOf(byPlan, byTopic, WikiLogic.HomeDocuments.Loading, WikiLogic.HomeDocuments.Start, toWrite)
+        assertEquals("what is listed ends on Browse · A–Z", listOf(true, true, false, false, true), bands.map { it.listed })
+        assertEquals("what has nothing to read draws the card", listOf(false, false, false, true, true), bands.map { it.start })
     }
 
     /** The home's principles, from their own read: every one, of any status, oldest recorded first. */

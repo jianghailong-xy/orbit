@@ -298,6 +298,10 @@ internal object WikiPlanLogic {
         return null
     }
     fun buildJob(state: WikiPlanState): WikiPlanJob? = state.job?.takeIf { it.kind == "build" && it.state in openStates }
+    /** A build of the version in force that ended failed, and nothing asked since: its documents are not all written
+     * (`wikiPlanFailedBuild`). */
+    fun failedBuild(state: WikiPlanState): WikiPlanJob? =
+        state.job?.takeIf { it.kind == "build" && it.state == "failed" && state.confirmed != null && it.version == state.confirmed.version }
     fun buildCounts(build: WikiPlanJob?, docs: Pair<Int, Int>?): Pair<Int, Int>? = build?.progress?.let { it.docs.done to it.docs.total } ?: docs
     fun writingDoc(build: WikiPlanJob?, directory: WikiDocsDirectory?): String? {
         val current = build?.progress?.current ?: return null
@@ -699,4 +703,17 @@ internal object WikiPlanLogic {
             Look.NO_PLAN -> Banner("No plan yet — draft one", false, false)
         }
     }
+    /** What the web's Plan card says of a draft the check turned back (`wikiPlanCard`, `draftFailed`), and the note under one
+     * it passed (`draftReady`): the home's setup card says them too. */
+    fun draftFailedText(job: WikiPlanJob, state: WikiPlanState) =
+        "${if (state.confirmed != null || state.draft != null) WikiPlanCopy.redraftFailed else WikiPlanCopy.jobFailed}. ${failedText(job, state)}"
+    /** What the web's Plan card says of a draft that waits for the owner (`wikiPlanCard`'s `draftReady`), which the home's setup
+     * card says too: how it went, and how many things to look at. */
+    fun draftReadyText(draft: WikiPlanVersion): String {
+        val look = toLook(fromVersion(draft))
+        val how = if (look == 0) "passed the plan check and waits for you" else "is ready for review, with ${WikiArticleCopy.count(look)} to look at"
+        return "Draft v${draft.version} $how. Documents are written once you confirm it."
+    }
+    fun draftReadyNote(draft: WikiPlanVersion) =
+        "${plural(draft.categories.orEmpty().size, "category", "categories")} · ${plural(draft.docs.orEmpty().size, "document", "documents")}"
 }

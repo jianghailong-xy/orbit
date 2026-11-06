@@ -1,5 +1,6 @@
 package io.orbitd.android.cursor
 
+import io.orbitd.android.startNewSession
 import android.app.UiAutomation
 import android.content.Intent
 import android.graphics.Bitmap
@@ -99,12 +100,7 @@ class CursorDeviceTest {
     // iOS 1 · the new session's Engine list and the four ways Cursor CLI can't run on a machine
 
     private fun newSession(pass: String) {
-        compose.waitUntil(15_000) { compose.onAllNodesWithTag("workspace:$workspace").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("workspace:$workspace").performClick()
-        // The page's own New session, not the closed drawer's off to the left.
-        val newSession = hasText("New session") and hasClickAction() and isEnabled()
-        compose.waitUntil(15_000) { compose.onAllNodes(newSession).fetchSemanticsNodes().any { it.boundsInRoot.left >= 0 } }
-        compose.onAllNodes(newSession)[compose.onAllNodes(newSession).fetchSemanticsNodes().indexOfFirst { it.boundsInRoot.left >= 0 }].performClick()
+        compose.startNewSession()
         await("Engine")
         engines()
         capture("ios1-engines-$pass")

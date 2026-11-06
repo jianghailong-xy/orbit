@@ -374,16 +374,20 @@ internal fun WikiPlanJobCardView(card: WikiPlanLogic.JobCard, actions: WikiPlanA
                 }
             }
         }
-        card.progress?.let { progress ->
-            LinearProgressIndicator(progress = { progress.done.toFloat() / maxOf(1, progress.total) },
-                Modifier.fillMaxWidth().testTag("wiki-plan-job-progress"), color = MaterialTheme.colorScheme.primary)
-            progress.now?.let { now ->
-                Text(buildAnnotatedString {
-                    append(WikiPlanCopy.writingNow); append(" ")
-                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(now) }
-                }, style = WikiType.label)
-            }
-        }
+        card.progress?.let { WikiPlanProgress(it, "wiki-plan-job-progress") }
+    }
+}
+
+/** How far the writing has got: the bar, and the document being written now. */
+@Composable
+internal fun WikiPlanProgress(progress: WikiPlanLogic.JobCard.Progress, tag: String) {
+    LinearProgressIndicator(progress = { progress.done.toFloat() / maxOf(1, progress.total) },
+        Modifier.fillMaxWidth().testTag(tag), color = MaterialTheme.colorScheme.primary)
+    progress.now?.let { now ->
+        Text(buildAnnotatedString {
+            append(WikiPlanCopy.writingNow); append(" ")
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(now) }
+        }, style = WikiType.label)
     }
 }
 

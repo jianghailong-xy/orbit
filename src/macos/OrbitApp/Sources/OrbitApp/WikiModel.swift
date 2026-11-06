@@ -810,7 +810,22 @@ final class WikiModel {
         }
     }
 
-    /// Who is in a space and who can be added: Wiki settings' Workspaces section.
+    /// Create wiki: the space, with maintenance on and its plan's first draft asked for, in one request — then that
+    /// space on screen, read into the list so the home finds it. Nil on success, else the sentence to show.
+    func createSpace(_ request: WikiSpaceCreate) async -> String? {
+        busy = true
+        defer { busy = false }
+        do {
+            let space = try await api.createWikiSpace(request)
+            selectedSlug = space.slug
+            await loadSpaces()
+            return nil
+        } catch {
+            return Self.refusal(error)
+        }
+    }
+
+    /// Who is in a space and who can be added: Wiki settings' Workspaces section, and what Set up maintenance offers.
     func loadSpaceWorkspaces(_ space: WikiSpace) async {
         guard let listed = try? await api.wikiSpaceWorkspaces(space.id) else { return }
         spaceWorkspaces[space.id] = listed

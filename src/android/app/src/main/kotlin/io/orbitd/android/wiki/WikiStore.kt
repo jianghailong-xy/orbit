@@ -654,8 +654,20 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
     // MARK: Wiki settings
 
     suspend fun updateSpace(space: WikiSpace, update: JsonObject): String? = owned({ refusal -> notice(refusal, WikiCopy.settingsSaved, space.slug) }) {
-        try { client.updateSpace(space.id, update); outdate(SPACES, HOME, ACTIVITY); reloadAfterWrite(); null }
-        catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { loadSpaces(); wikiRefusal(error) }
+        try {
+            client.updateSpace(space.id, update); outdate(SPACES, HOME, ACTIVITY); reloadAfterWrite()
+            // A held draft goes on once maintenance has a workspace, and the home's setup card says so from this read.
+            if (current.plan != null || current.planState.hasLoaded) loadPlan()
+            null
+        } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { loadSpaces(); wikiRefusal(error) }
+    }
+
+    /** Create wiki: the space, in one request, and then that space on screen — a home that finds it in the spaces list, so it is
+     * read before it is picked. Nothing is left to say of one that landed, whoever is still there to hear it: the home shows it.
+     * Null on success, else the sentence to show. */
+    suspend fun createSpace(title: String, request: JsonObject): String? = owned({ refusal: String? -> refusal?.let { notice(it, "", title) } }) {
+        try { val space = client.createSpace(request); outdate(SPACES); loadSpaces(); select(space.slug); null }
+        catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { wikiRefusal(error) }
     }
 
     /** Bring a workspace into a space or leave it out, written at once. Null on success, else the sentence to show. */

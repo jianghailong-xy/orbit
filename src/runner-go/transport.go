@@ -30,6 +30,9 @@ const (
 	sessionTerminalHandoffV1         = "session-terminal-handoff-v1"
 	sessionWorktreeOpsV1             = "session-worktree-ops-v1"
 	sessionMergeRecoveryV1           = "session-merge-recovery-v1"
+	// The commit relay may also carry `discard`, and this runner reports which finished
+	// sessions' checkouts still hold uncommitted work (abandoned_checkout.go).
+	abandonedCheckoutCapabilityV1 = "abandoned-checkout-v1"
 	// CURRENT_WORK v1 guarantees startup-envelope support and flushes its runtime-authored USER
 	// receipt before any completion/finalization that can terminalize an unacknowledged delivery.
 	sessionCurrentWorkRoutingV1 = "session-current-work-routing-v1"
@@ -77,6 +80,7 @@ func init() {
 		sessionTerminalHandoffV1,
 		sessionWorktreeOpsV1,
 		sessionMergeRecoveryV1,
+		abandonedCheckoutCapabilityV1,
 		sessionCurrentWorkRoutingV1,
 		sessionClaudeSteerWithdrawV1,
 		sessionClaudeCoordinatorContextV1,
@@ -608,15 +612,29 @@ func (t *Transport) finalizeRun(ctx context.Context, sessionID string, b RunFina
 // checkouts) may be garbage-collected. Ids absent from the reply belong to still-resumable
 // sessions and must be kept.
 func (t *Transport) worktreesRemovable(ids []string) ([]string, error) {
-	if len(ids) == 0 {
-		return nil, nil
-	}
-	var r WorktreesRemovableResponse
-	if err := t.do(nil, "POST", "/runner/sessions/worktrees-removable",
-		map[string][]string{"ids": ids}, &r, 15*time.Second); err != nil {
+	r, err := t.worktreesJudgement(ids)
+	if err != nil {
 		return nil, err
 	}
 	return r.Removable, nil
+}
+
+// worktreesJudgement is the whole answer both halves of a sweep and the abandoned-checkout
+// inventory read: which checkouts no longer have a use, and which sessions are at rest here.
+func (t *Transport) worktreesJudgement(ids []string) (WorktreesRemovableResponse, error) {
+	var r WorktreesRemovableResponse
+	if len(ids) == 0 {
+		return r, nil
+	}
+	err := t.do(nil, "POST", "/runner/sessions/worktrees-removable",
+		map[string][]string{"ids": ids}, &r, 15*time.Second)
+	return r, err
+}
+
+// abandonedCheckouts replaces this runner's inventory of finished sessions' checkouts that
+// still hold uncommitted work (abandoned_checkout.go).
+func (t *Transport) abandonedCheckouts(b AbandonedCheckoutsRequest) error {
+	return t.do(nil, "POST", "/runner/abandoned-checkouts", b, nil, 60*time.Second)
 }
 
 // inbox fetches the next user turn of an interactive session; returns nil when there is none

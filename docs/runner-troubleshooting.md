@@ -219,6 +219,21 @@ not at rest, and gets its checkout at once.
 **What does not come back.** Installed dependencies and build output, which the agent has to rebuild. These go by
 name, so a file a session put inside `dist` or `node_modules` goes with them.
 
+**A checkout holding work no branch has is never reclaimed** — `git status --porcelain` is not empty — because
+that work exists nowhere else. Such a checkout used to sit on disk indefinitely: nothing could commit it, and
+nothing said it was there. A runner with `abandoned-checkout-v1` scans its checkouts hourly and reports the ones
+that are dirty and belong to a session the control plane no longer wants a checkout for; the finished sessions
+among them appear on the runner's page under **Uncommitted checkouts**, with their diff and two actions:
+
+- **Commit to branch** puts the work on the session's branch, exactly as the session's own Commit does.
+- **Discard** throws the working-tree changes away. The runner records them first at
+  `refs/orbit-discarded/<session id>` in the repository, so a press by mistake is still recoverable from there,
+  and the checkout then reads clean and can be reclaimed on a later sweep.
+
+A runner older than that capability is offered Commit only, and the control plane hands it no discard (it would
+read one as a commit). Set **Keep Free** at least as high as whatever else guards the disk — a host-level
+reclaimer with a higher floor and a runner with a lower one means neither acts at the level the other expects.
+
 **If the checkout cannot come back**, for example because the disk is still too full or the branch is checked
 out somewhere else, the run ends with an error giving git's reason. It never runs in the shared working directory
 instead. Free the space or the branch and send the message again. `orbit resume` in a terminal needs the checkout

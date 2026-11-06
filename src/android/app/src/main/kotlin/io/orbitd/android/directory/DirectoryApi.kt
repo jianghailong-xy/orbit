@@ -69,7 +69,12 @@ data class DirectoryData(
     val workspaces: List<DirectoryWorkspace> = emptyList(), val runners: List<DirectoryRunner> = emptyList(),
     val sessions: Map<String, List<DirectorySession>> = emptyMap(), val folders: List<Folder> = emptyList(),
     val tags: List<Tag> = emptyList(), val ready: Boolean = false, val fresh: Boolean = false, val refreshing: Boolean = false,
-    val error: String? = null, val waitingForConnection: Boolean = false,
+    val error: String? = null,
+    /** There is no copy on this device and no connection to read over. A launch sees this too for the moment before the phone says
+     * what network it has. */
+    val waitingForConnection: Boolean = false,
+    /** No connection to read over, rows or none. */
+    val offline: Boolean = false,
     /** The rows are the copy this device's cache restored, not yet replaced by a read from the server. */
     val cached: Boolean = false,
     val runnerRows: List<JsonObject> = emptyList(),

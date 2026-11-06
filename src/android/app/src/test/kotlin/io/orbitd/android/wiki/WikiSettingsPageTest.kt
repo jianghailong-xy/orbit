@@ -153,13 +153,17 @@ class WikiSettingsPageTest {
     /** `GET /wiki/system-model`: what every server since P11 answers — the server executes the account's wiki. A control
      * plane before P9 answers 404. */
     private var systemModelAnswer: Pair<Int, String> = 200 to """{"state":"up","model":"qwen3.8-27b-fp8","since":"2026-10-08T06:00:00.000Z","checkedAt":"2026-10-08T06:29:55.000Z","workerSeenAt":"2026-10-08T06:29:55.000Z","executor":{"mode":"server","serverExecutes":true}}"""
+    private var workspacesRead = """[{"id":"w2","name":"docs","runnerId":"r2"},{"id":"w1","name":"orbit","runnerId":"r1"}]"""
+    /** `GET /wiki/spaces/:id/workspaces`; none answers 404, as a server from before the read. */
+    private var membersRead: String? = null
     private val rig = WikiTestRig { request -> answer(request) }
     private fun answer(request: ApiRequest): Pair<Int, String>? = when {
         request.method == HttpMethod.PATCH -> patchAnswer
         request.path == listOf("wiki", "system-model") -> systemModelAnswer
         request.path == listOf("wiki", "spaces") -> 200 to "[$spaceRead]"
-        request.path == listOf("workspaces") -> 200 to """[{"id":"w2","name":"docs","runnerId":"r2"},{"id":"w1","name":"orbit","runnerId":"r1"}]"""
-        request.path == listOf("runners") -> 200 to """[{"id":"r1","name":"host-1","displayName":"Mac mini"},{"id":"r2","name":"wikova","displayName":null}]"""
+        request.path == listOf("workspaces") -> 200 to workspacesRead
+        request.path == listOf("wiki", "spaces", "sp1", "workspaces") -> membersRead?.let { 200 to it }
+        request.path == listOf("runners") -> 200 to """[{"id":"r1","name":"host-1","displayName":"Mac mini","online":true},{"id":"r2","name":"wikova","displayName":null,"online":true}]"""
         else -> null
     }
     private fun screen() {
@@ -174,9 +178,9 @@ class WikiSettingsPageTest {
 
     @Test fun setUpWritesTheLookBackAsZeroTheDaysPickedOrNullForAllHistory() {
         screen()
-        // From now on: 0, on the workspace named as the space is.
+        // From now on: 0, on the first workspace offered.
         compose.onNodeWithTag("wiki-settings-set-up").performClick()
-        compose.onNodeWithTag("wiki-settings-workspace").assertTextContains("orbit · Mac mini", substring = true)
+        compose.onNodeWithTag("wiki-settings-workspace").assertTextContains("docs · wikova", substring = true)
         compose.onNodeWithTag("wiki-settings-lookback").assertTextContains("Last 14 days", substring = true).performClick()
         compose.onNodeWithTag("wiki-settings-lookback:now").performClick()
         compose.onAllNodesWithTag("wiki-settings-lookback-days").assertCountEquals(0)
@@ -185,7 +189,7 @@ class WikiSettingsPageTest {
         // Some days: the days the stepper reads, on another workspace, a run more a day.
         compose.onNodeWithTag("wiki-settings-set-up").performClick()
         compose.onNodeWithTag("wiki-settings-workspace").performClick()
-        compose.onNodeWithTag("wiki-settings-workspace:w2").performClick()
+        compose.onNodeWithTag("wiki-settings-workspace:w1").performClick()
         compose.onNodeWithTag("wiki-settings-daily-plus").performClick()
         compose.onNodeWithTag("wiki-settings-daily-value").assertTextEquals("9 runs a day")
         compose.onNodeWithTag("wiki-settings-lookback-days-plus").performClick()
@@ -199,9 +203,9 @@ class WikiSettingsPageTest {
         compose.onNodeWithTag("wiki-settings-form-submit").performClick()
         compose.waitForIdle()
         assertEquals(listOf(
-            """PATCH /api/wiki/spaces/sp1 {"maintenance":{"enabled":true,"workspaceId":"w1","dailyRunLimit":8,"lookbackDays":0}}""",
-            """PATCH /api/wiki/spaces/sp1 {"maintenance":{"enabled":true,"workspaceId":"w2","dailyRunLimit":9,"lookbackDays":15}}""",
-            """PATCH /api/wiki/spaces/sp1 {"maintenance":{"enabled":true,"workspaceId":"w1","dailyRunLimit":8,"lookbackDays":null}}""",
+            """PATCH /api/wiki/spaces/sp1 {"maintenance":{"enabled":true,"workspaceId":"w2","dailyRunLimit":8,"lookbackDays":0}}""",
+            """PATCH /api/wiki/spaces/sp1 {"maintenance":{"enabled":true,"workspaceId":"w1","dailyRunLimit":9,"lookbackDays":15}}""",
+            """PATCH /api/wiki/spaces/sp1 {"maintenance":{"enabled":true,"workspaceId":"w2","dailyRunLimit":8,"lookbackDays":null}}""",
         ), patches())
         assertEquals(WikiCopy.settingsSaved, OrbitToasts.feed.value.transient?.message)
         compose.onAllNodesWithTag("wiki-settings-form").assertCountEquals(0)
@@ -295,9 +299,6 @@ class WikiSettingsPageTest {
         patchAnswer = 403 to """{"code":"WIKI_OWNER_CHANNEL_ONLY","message":"That workspace is not yours."}"""
         screen()
         compose.onNodeWithTag("wiki-settings-set-up").performClick()
-        // No workspace is named as the space is: Turn on waits for one to be picked.
-        compose.onNodeWithTag("wiki-settings-workspace").assertTextContains(WikiModeCopy.noWorkspace, substring = true)
-        compose.onNodeWithTag("wiki-settings-form-submit").assertIsNotEnabled()
         compose.onNodeWithTag("wiki-settings-workspace").performClick()
         compose.onNodeWithTag("wiki-settings-workspace:w1").performClick()
         compose.onNodeWithTag("wiki-settings-form-submit").assertIsEnabled().performClick()
@@ -309,5 +310,25 @@ class WikiSettingsPageTest {
         compose.onNodeWithTag("wiki-settings-form").assertExists()
         compose.onNodeWithTag("wiki-settings-workspace").assertTextContains("orbit · Mac mini", substring = true)
         assertNull(OrbitToasts.feed.value.transient)
+    }
+
+    /** With no workspace to offer, Turn on waits for one. */
+    @Test fun withNoWorkspaceToOfferTurnOnWaits() {
+        workspacesRead = "[]"
+        screen()
+        compose.onNodeWithTag("wiki-settings-set-up").performClick()
+        compose.onNodeWithTag("wiki-settings-workspace").assertTextContains(WikiModeCopy.noWorkspace, substring = true)
+        compose.onNodeWithTag("wiki-settings-form-submit").assertIsNotEnabled()
+    }
+
+    /** The workspace maintenance reads from stays on offer, whatever the wiki's own list says of it. */
+    @Test fun aWorkspaceInUseIsOfferedWhateverTheWikisListSays() {
+        spaceRead = """{"id":"sp1","slug":"orbit","settings":{"maintenance":{"enabled":true,"workspaceId":"w2"}}}"""
+        membersRead = """{"workspaces":[{"id":"w1","name":"orbit","inWiki":true},{"id":"w2","name":"docs","inWiki":false}],"addable":[]}"""
+        screen()
+        compose.onNodeWithTag("wiki-settings-edit").performClick()
+        compose.onNodeWithTag("wiki-settings-workspace").assertTextContains("docs · wikova", substring = true).performClick()
+        compose.onNodeWithTag("wiki-settings-workspace:w1").assertExists()
+        compose.onNodeWithTag("wiki-settings-workspace:w2").assertIsSelected()
     }
 }

@@ -149,7 +149,7 @@ class OrbitNavigationTest {
         val coordinator = DirectorySession("c1", agentId = "w2",
             projectMembership = SessionProjectMembership(uuid, role = "COORDINATOR"))
         val member = DirectorySession("m1", agentId = "w1", projectMembership = SessionProjectMembership(uuid, role = "TASK"))
-        val data = DirectoryData(workspaces = workspaces, sessions = mapOf("open" to listOf(member), "completed" to listOf(coordinator)))
+        val data = DirectoryData(workspaces = workspaces, sessions = mapOf("open" to listOf(member, coordinator)))
         assertEquals(OrbitRoute(Destination.PROJECT_SESSIONS, publicId, "w2", origin = Origin.EXTERNAL),
             projectRoot(publicId, data, "w1", Origin.EXTERNAL))
         val noCoordinator = data.copy(sessions = mapOf("open" to listOf(member)))
@@ -217,17 +217,77 @@ class OrbitNavigationTest {
         assertEquals(OrbitRoute(Destination.TASK, uuid, origin = Origin.LINK), OrbitLinks.parse("orbit://task/$publicId"))
         assertEquals(OrbitRoute(Destination.WORKSPACES, origin = Origin.LINK), OrbitLinks.parse("orbit://"))
 
-        // Over a workspace the home is pushed, and Back returns to the workspace.
+        // It only opens the app (iOS `route(to: .active)`): a workspace's stack stays as it is, with what is open over it.
         val workspace = OrbitRoute(Destination.WORKSPACE, "w1", "w1")
-        val over = OrbitNavigation().bindAccount("server|user").land("w1", workspace).receive(OrbitLinks.parse("orbit://", origin = Origin.EXTERNAL)!!)
-        assertEquals(home, over.current)
-        assertEquals(workspace, over.back().current)
+        val session = OrbitRoute(Destination.SESSION, uuid, "w1")
+        val inWorkspace = OrbitNavigation().bindAccount("server|user").land("w1", workspace).push(session)
+        assertEquals(inWorkspace, inWorkspace.receive(OrbitLinks.parse("orbit://", origin = Origin.EXTERNAL)!!))
+        // From anywhere else it goes home, to be landed like a launch; it is not a page Back could return to.
+        val inTasks = OrbitNavigation().bindAccount("server|user").land("Tasks", OrbitRoute(Destination.TASKS))
+        val homeward = inTasks.receive(OrbitLinks.parse("orbit://", origin = Origin.EXTERNAL)!!)
+        assertEquals(listOf(home), homeward.frames)
         // Before sign-in it waits, and signing in lands on the home.
         val cold = OrbitNavigation().receive(OrbitLinks.parse("ORBIT://", origin = Origin.EXTERNAL)!!)
         assertEquals(home, cold.pending)
         val signedIn = cold.bindAccount("server|user")
-        assertEquals(Destination.WORKSPACES, signedIn.current.destination)
+        assertEquals(listOf(OrbitRoute(Destination.WORKSPACES)), signedIn.frames)
         assertNull(signedIn.pending)
+    }
+
+    /** iOS `LoadFailureLogic.defaultLanding`: the launch default gives way to the workspace used last, else the first in the drawer's order;
+     * either spelling of an id is the one it remembered, and the landing spells it as the list does. */
+    @Test fun theLaunchLandsOnTheWorkspaceUsedLastElseTheFirst() {
+        val home = OrbitNavigation().bindAccount("server|user")
+        val alpha = OrbitRoute(Destination.WORKSPACE, "w1", "w1")
+        val listed = listOf("w1", uuid)
+        assertEquals(listOf(alpha), home.landHome(listed, null).frames)
+        assertEquals("w1", home.landHome(listed, null).section)
+        assertEquals(listOf(alpha), home.landHome(listed, "deleted").frames)
+        assertEquals(listOf(OrbitRoute(Destination.WORKSPACE, uuid, uuid)), home.landHome(listed, publicId).frames)
+        assertEquals(uuid, home.landHome(listed, publicId).section)
+        // Back from it leaves the app: the launch default is gone, not under it.
+        assertFalse(home.landHome(listed, null).canGoBack)
+        // With nothing to pick from it stays: an account with no workspace lands elsewhere.
+        assertEquals(home, home.landHome(emptyList(), "w1"))
+    }
+
+    /** What has been opened over the launch default keeps its place, and Back from it reaches the list — its own workspace's, if it has one.
+     * A place someone went to isn't taken from them, and a link waiting for the directory is the directory's to land. */
+    @Test fun aLandingKeepsWhatIsOpenOverItAndLeavesAChosenPlace() {
+        val home = OrbitNavigation().bindAccount("server|user")
+        val listed = listOf("w1", "w2")
+        val session = OrbitRoute(Destination.SESSION, uuid, origin = Origin.EXTERNAL)
+        val linked = home.receive(session)
+        val landed = linked.landHome(listed, "w1", opened = "w2")
+        assertEquals(session, landed.current)
+        assertEquals(OrbitRoute(Destination.WORKSPACE, "w2", "w2"), landed.back().current)
+        assertEquals("w2", landed.section)
+        assertEquals(session, linked.landHome(listed, "w1").current)
+        assertEquals(OrbitRoute(Destination.WORKSPACE, "w1", "w1"), linked.landHome(listed, "w1").back().current)
+
+        val tasks = home.land("Tasks", OrbitRoute(Destination.TASKS))
+        assertSame(tasks, tasks.landHome(listed, "w1"))
+        val beta = home.land("w2", OrbitRoute(Destination.WORKSPACE, "w2", "w2"))
+        assertSame(beta, beta.landHome(listed, "w1"))
+        val waiting = home.receive(OrbitRoute(Destination.PROJECT_SESSIONS, uuid, origin = Origin.EXTERNAL))
+        assertSame(waiting, waiting.landHome(listed, "w1"))
+    }
+
+    /** iOS `provisionalLandingAgentID`: a landing made from the saved list is decided again by the first read from the server, so a
+     * workspace deleted since isn't kept, unless something has been opened over it: then it is a place someone chose to be. */
+    @Test fun aLandingFromTheSavedListIsDecidedAgainUntilSomethingIsOpenedOverIt() {
+        val saved = OrbitNavigation().bindAccount("server|user").landHome(listOf("gone", "w1"), "gone")
+        assertEquals("gone", saved.section)
+        val decided = saved.landHome(listOf("w1"), "gone", provisional = "gone")
+        assertEquals(listOf(OrbitRoute(Destination.WORKSPACE, "w1", "w1")), decided.frames)
+        assertEquals("w1", decided.section)
+        // Still there: the same landing, nothing moved.
+        assertSame(saved, saved.landHome(listOf("gone", "w1"), "gone", provisional = "gone"))
+        // Opened over, or left for another: it stays.
+        val opened = saved.push(OrbitRoute(Destination.SESSION, uuid, "gone"))
+        assertSame(opened, opened.landHome(listOf("w1"), "gone", provisional = "gone"))
+        val other = saved.select("w2", OrbitRoute(Destination.WORKSPACE, "w2", "w2"))
+        assertSame(other, other.landHome(listOf("w1", "w2"), "gone", provisional = "gone"))
     }
 
     @Test fun objectLinksConsumeExistingCrossPlatformGoldenTargets() {
