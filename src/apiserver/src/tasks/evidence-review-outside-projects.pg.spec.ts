@@ -65,6 +65,7 @@ import {
 import { readPendingEvidenceJudgments, type PendingEvidenceJudgment } from './pending-evidence-judgments';
 import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
 import { TasksService } from './tasks.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const suite = URL ? test : test.skip;

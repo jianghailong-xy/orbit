@@ -355,8 +355,6 @@ const RUNNER_DRIVERS: Readonly<Record<string, Drive>> = {
     s.api.events({ id: w.runnerId, ownerId: w.ownerId } as never, id, { events: [] } as never),
   'POST /runner/sessions/:id/finalize': (s, w, id) =>
     s.api.finalize({ id: w.runnerId, ownerId: w.ownerId } as never, id, { status: 'CANCELLED' } as never),
-  'POST /runner/sessions/:id/complete': (s, w, id) =>
-    s.api.complete({ id: w.runnerId, ownerId: w.ownerId } as never, id, { status: 'CANCELLED' } as never),
   'POST /runner/sessions/:id/import-result': (s, w, id) =>
     s.api.importResult({ id: w.runnerId, ownerId: w.ownerId } as never, id, { ok: true }),
   'POST /runner/sessions/:id/merge-result': (s, w, id) =>

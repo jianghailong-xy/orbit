@@ -142,7 +142,7 @@ test('T3 provider-engine API on PostgreSQL', { timeout: 600_000 }, async (t) => 
     where: { id }, select: { engine: true, provider: true, providerBuiltin: true },
   });
   /** A runner of every engine asking for work, one that takes over a revived session's handoff too. */
-  const claim = (at: Machine) => queue.claimSessionForRunner({ id: at.id, supportedProviders: ALL }, 0, true);
+  const claim = (at: Machine) => queue.claimSessionForRunner({ id: at.id, supportedProviders: ALL });
   async function claimed(at: Machine, sessionId: string) {
     const job = await claim(at);
     assert.equal(job?.sessionId, sessionId, `the runner was handed ${job?.sessionId ?? 'nothing'}, not ${sessionId}`);

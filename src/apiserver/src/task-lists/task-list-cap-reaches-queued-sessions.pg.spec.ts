@@ -186,7 +186,7 @@ async function gateOpen(db: PrismaClient, sessionId: string): Promise<boolean> {
 }
 
 const claim = (stack: Stack, runnerId: string) =>
-  stack.queue.claimSessionForRunner({ id: runnerId, supportedProviders: [] }, 0);
+  stack.queue.claimSessionForRunner({ id: runnerId, supportedProviders: [] });
 
 const suite = URL ? test : test.skip;
 

@@ -56,6 +56,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskDispatchRefusalProducer } from './task-dispatch-refusal.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * WHILE AN AUTOMATIC PROJECT'S COORDINATOR IS PAUSED, ITS EVIDENCE WAITS FOR IT.

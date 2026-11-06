@@ -30,6 +30,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import '../test-support/daemon-routes-over-http';
 
 const PG_URL = process.env.COORDINATOR_PG_URL;
 const skip = !PG_URL;

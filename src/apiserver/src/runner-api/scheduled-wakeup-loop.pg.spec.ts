@@ -82,6 +82,7 @@ import { RunnerApiController } from './runner-api.controller';
 import { RunnerSessionsController } from './runner-sessions.controller';
 import { lastLoopRun, loopSilenceLimitMs, ScheduledWakeupDto } from './scheduled-wakeup';
 import { ScheduledWakeupWorker } from './scheduled-wakeup.worker';
+import '../test-support/dequeue-under-lease';
 
 const PG_URL = process.env.COORDINATOR_PG_URL;
 const skip = !PG_URL;
@@ -350,7 +351,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
   /** The runner's claim of a session queued for a turn — the queue's own, the one a runner makes — then
    *  the inbox. Each case has a runner of its own, so the claim can take no other case's session. */
   async function claim(m: Machine, sessionId: string) {
-    const claimed = await claims.claimSessionForRunner({ id: m.runnerId, supportedProviders: [AgentProvider.CLAUDE] }, 0, true);
+    const claimed = await claims.claimSessionForRunner({ id: m.runnerId, supportedProviders: [AgentProvider.CLAUDE] });
     assert.equal(claimed?.sessionId, sessionId, 'the runner was offered another session, or none');
     return handedOut(m, sessionId);
   }

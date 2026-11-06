@@ -115,15 +115,6 @@ test('a terminal merge is claimed by the heartbeat owner with an operation CAS',
   ]);
 });
 
-test('old runner heartbeats cannot claim recovery commands', async () => {
-  let where: Record<string, unknown> = {};
-  await service({ session: { findMany: async (args: { where: Record<string, unknown> }) => {
-    where = args.where;
-    return [];
-  } } }).drainMergeRequests(RUNNER_ID, NEW_OWNER, false);
-  assert.equal(where.mergeRecoveryAction, null);
-});
-
 test('recovery redelivery carries the saved candidate, checks, and the same operation identity', async () => {
   const recovery = { code: 'PUSH_FAILED', targetBranch: 'develop', previewId: 'reviewed', candidateSha: 'd'.repeat(40) };
   const [command] = await service({
@@ -138,7 +129,7 @@ test('recovery redelivery carries the saved candidate, checks, and the same oper
     },
     task: { findUnique: async () => ({ project: { codebases: [{ mergeCheckCommand: 'npm test', mergeCheckTimeoutSeconds: 45 }] } }) },
     $queryRaw: async () => [],
-  }).drainMergeRequests(RUNNER_ID, NEW_OWNER, true);
+  }).drainMergeRequests(RUNNER_ID, NEW_OWNER);
   assert.equal(command.operationId, OPERATION_ID);
   assert.equal(command.leaseOwner, NEW_OWNER);
   assert.equal(command.recoveryAction, 'apply');

@@ -72,6 +72,7 @@ import { ProvidersController } from './providers.controller';
 import { CodexLoginService } from './codex-login.service';
 import { DeepSeekBalanceService } from './deepseek-balance.service';
 import { ProvidersService } from './providers.service';
+import '../test-support/dequeue-under-lease';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -345,7 +346,7 @@ suite("an account pool's admission, closed at every door, on real PostgreSQL", {
   const tasks = new TasksService(prisma, sessions, realtime);
   const providers = new ProvidersService(prisma, realtime, usage);
   const runnerApi = new RunnerApiController(
-    db as never, queue as never, realtime as never, {} as never, {} as never, {} as never,
+    db as never, queue as never, realtime as never, {} as never, { issue: async () => 'orchestration-credential' } as never, {} as never,
   );
   doorsOver.providers = providers;
   doorsOver.sessions = sessions;
@@ -387,7 +388,7 @@ suite("an account pool's admission, closed at every door, on real PostgreSQL", {
 
   /** The runner asking for work — which has to be `sessionId`. */
   async function claim(runnerId: string, sessionId: string): Promise<ClaimedSession> {
-    const claimed = await queue.claimSessionForRunner({ id: runnerId }, 0, false, false);
+    const claimed = await queue.claimSessionForRunner({ id: runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     assert.equal(claimed.sessionId, sessionId);
     return claimed;

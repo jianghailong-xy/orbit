@@ -5,7 +5,6 @@ import { RunnerStatus, type AccountRemoveCommand, type LoginCommand, type Runner
 import type { AuthUser } from '../common/current-user.decorator';
 import { engineKeepsAccounts, isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
 import {
-  CODEX_ACCOUNT_LOGIN_V1,
   CURSOR_ACCOUNT_LOGIN_V1,
   CURSOR_ACCOUNT_REMOVE_V1,
   CURSOR_LOGIN_TOO_OLD,
@@ -33,7 +32,7 @@ const SLOT = '1a2b3c4d';
 const ADDED_SLOT = '5e6f7a8b';
 const USER = { userId: OWNER } as AuthUser;
 /** A runner that runs Cursor CLI sessions and keeps Codex accounts, but signs no Cursor CLI account in. */
-const CURSOR_OLD = 'session-worktree-ops-v1,provider:cursor,' + CODEX_ACCOUNT_LOGIN_V1;
+const CURSOR_OLD = 'session-worktree-ops-v1,provider:cursor,codex-account-login/v1';
 const CURSOR_CAPABLE = `${CURSOR_OLD},${CURSOR_ACCOUNT_LOGIN_V1},${CURSOR_ACCOUNT_REMOVE_V1}`;
 const NAMED_TOO_OLD = 'This runner is too old to sign in another Cursor account — update it, then try again.';
 const REMOVE_TOO_OLD = 'This runner is too old to remove a Cursor account — update it, then try again.';
@@ -157,7 +156,7 @@ test('P4a a Cursor CLI account is signed in by name, and Cursor CLI’s own, onl
   assert.deepEqual((await h.beat()).login, { action: 'start', engine: 'cursor', attempt: attemptOf(h.row) });
 });
 
-test('P4a a runner too old for Cursor CLI’s sign-in is refused it at the start and at the heartbeat, in the upgrade words', async () => {
+test('P4a a runner too old for Cursor CLI’s sign-in is refused it at the start, in the upgrade words', async () => {
   // It runs Cursor CLI sessions, and signs Codex accounts in — but no Cursor CLI account, Default's
   // included: it would run `claude auth login` for an engine it does not know.
   const old = harness();
@@ -177,20 +176,6 @@ test('P4a a runner too old for Cursor CLI’s sign-in is refused it at the start
   const silent = harness();
   await assert.rejects(silent.post({ engine: 'cursor' }), refusedWith(CURSOR_LOGIN_TOO_OLD));
 
-  // Declared at the last heartbeat, and not by the process polling now: refused there, never handed over.
-  for (const [body, message] of [
-    [{ engine: 'cursor', accountName: 'Work' }, NAMED_TOO_OLD],
-    [{ engine: 'cursor' }, CURSOR_LOGIN_TOO_OLD],
-  ] as const) {
-    for (const polling of [CURSOR_OLD, null]) {
-      const stale = harness();
-      await stale.beat(CURSOR_CAPABLE);
-      await stale.post(body);
-      assert.equal((await stale.beat(polling)).login, undefined, `${String(polling)} was handed a Cursor CLI sign-in`);
-      const state = await stale.state();
-      assert.deepEqual({ status: state.status, message: state.message }, { status: 'failed', message });
-    }
-  }
 });
 
 test('P4a a Cursor CLI sign-in link’s expiry, and that it expired, reach the page as the runner reported them', async () => {
@@ -289,15 +274,6 @@ test('P4a a Cursor CLI account is removed only by a runner that declares cursor-
   await old.beat(CURSOR_OLD);
   await assert.rejects(old.remove(SLOT), refusedWith(REMOVE_TOO_OLD));
   assert.equal(old.row.codexAccountRemoveStatus, undefined);
-  // Declared at the last heartbeat and not by the process polling now: refused at the heartbeat too.
-  const stale = harness();
-  await stale.beat();
-  await stale.remove(SLOT);
-  assert.equal((await stale.beat(CURSOR_OLD)).remove, undefined);
-  assert.deepEqual(
-    { status: stale.row.codexAccountRemoveStatus, message: stale.row.codexAccountRemoveMessage },
-    { status: 'failed', message: REMOVE_TOO_OLD },
-  );
 });
 
 test('P4a Cursor CLI’s accounts come through the engine report, and its sign-in and account routes take cursor', async () => {

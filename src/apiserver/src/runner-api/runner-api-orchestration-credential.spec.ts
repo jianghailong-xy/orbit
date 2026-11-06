@@ -2,13 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { newTerminalResumeHandoffOwner } from '../common/session-inbox-fence';
-import { SESSION_SOURCE_PIN_V1 } from '@orbit/shared';
-import {
-  RunnerApiController,
-  SESSION_ORCHESTRATION_CREDENTIAL_V1,
-  SESSION_TERMINAL_HANDOFF_V1,
-  runnerSupportsCapability,
-} from './runner-api.controller';
+import { RunnerApiController } from './runner-api.controller';
 
 const RUNNER = { id: 'runner-1', ownerId: 'owner-1' };
 
@@ -76,91 +70,25 @@ function makeController(options: {
   };
 }
 
-test('runner capability parsing accepts lists without accepting partial names', () => {
-  assert.equal(
-    runnerSupportsCapability(
-      `future-capability, ${SESSION_ORCHESTRATION_CREDENTIAL_V1}`,
-      SESSION_ORCHESTRATION_CREDENTIAL_V1,
-    ),
-    true,
-  );
-  assert.equal(
-    runnerSupportsCapability(
-      ['future-capability', SESSION_ORCHESTRATION_CREDENTIAL_V1.toUpperCase()],
-      SESSION_ORCHESTRATION_CREDENTIAL_V1,
-    ),
-    true,
-  );
-  assert.equal(
-    runnerSupportsCapability(
-      `${SESSION_ORCHESTRATION_CREDENTIAL_V1}-extra`,
-      SESSION_ORCHESTRATION_CREDENTIAL_V1,
-    ),
-    false,
-  );
-  assert.equal(
-    runnerSupportsCapability(undefined, SESSION_ORCHESTRATION_CREDENTIAL_V1),
-    false,
-  );
-  assert.equal(
-    runnerSupportsCapability(
-      `${SESSION_ORCHESTRATION_CREDENTIAL_V1},${SESSION_TERMINAL_HANDOFF_V1}`,
-      SESSION_TERMINAL_HANDOFF_V1,
-    ),
-    true,
-  );
-});
-
-test('claim forwards every capability negotiation to the queue', async () => {
-  // Both booleans reach the claim SQL, and both are the RUNNER's answer rather than a default:
-  // each decides whether a row this process cannot drive correctly is offered to it at all.
+test('claim asks the queue with what it read of the runner', async () => {
   const capable = makeController({ claimed: null });
-  await capable.controller.claim(
-    RUNNER,
-    `${SESSION_TERMINAL_HANDOFF_V1},${SESSION_SOURCE_PIN_V1}`,
-    'claude,codex,opencode',
-  );
+  await capable.controller.claim(RUNNER, 'claude,codex,opencode');
   assert.deepEqual(capable.claimCalls, [
-    [{ id: RUNNER.id, supportedProviders: ['claude', 'codex', 'opencode'] }, 25_000, true, true, undefined],
-  ]);
-
-  // One capability without the others negotiates only that one off: a runner that can hand a
-  // terminal session over but cannot pin a SOURCE is still offered every Legacy session.
-  const handoffOnly = makeController({ claimed: null });
-  await handoffOnly.controller.claim(RUNNER, SESSION_TERMINAL_HANDOFF_V1, 'claude,codex,opencode');
-  assert.deepEqual(handoffOnly.claimCalls, [
-    [{ id: RUNNER.id, supportedProviders: ['claude', 'codex', 'opencode'] }, 25_000, true, false, undefined],
-  ]);
-
-  const legacy = makeController({ claimed: null });
-  await legacy.controller.claim(RUNNER);
-  assert.deepEqual(legacy.claimCalls, [
-    [{ id: RUNNER.id, supportedProviders: [] }, 25_000, false, false, undefined],
+    [{ id: RUNNER.id, supportedProviders: ['claude', 'codex', 'opencode'] }, undefined],
   ]);
 });
 
-test('claim enables orchestration only when the runner negotiated credential v1', async () => {
+test('claim issues a credential for a session that allows orchestration', async () => {
   const enabled = makeController({
     claimed: {
       sessionId: 'enabled-session',
       allowOrchestration: true,
     },
   });
-  const enabledJob = await enabled.controller.claim(RUNNER, SESSION_ORCHESTRATION_CREDENTIAL_V1, 'claude,codex,opencode');
+  const enabledJob = await enabled.controller.claim(RUNNER, 'claude,codex,opencode');
   assert.equal(enabledJob?.allowOrchestration, true);
   assert.equal(enabledJob?.orchestrationToken, 'credential-for-enabled-session');
   assert.deepEqual(enabled.issueCalls, [['runner-1', 'enabled-session']]);
-
-  const legacy = makeController({
-    claimed: {
-      sessionId: 'legacy-session',
-      allowOrchestration: true,
-    },
-  });
-  const legacyJob = await legacy.controller.claim(RUNNER);
-  assert.equal(legacyJob?.allowOrchestration, false);
-  assert.equal(legacyJob?.orchestrationToken, undefined);
-  assert.deepEqual(legacy.issueCalls, []);
 
   const disabled = makeController({
     claimed: {
@@ -168,23 +96,16 @@ test('claim enables orchestration only when the runner negotiated credential v1'
       allowOrchestration: false,
     },
   });
-  const disabledJob = await disabled.controller.claim(
-    RUNNER,
-    SESSION_ORCHESTRATION_CREDENTIAL_V1,
-    'claude,codex,opencode',
-  );
+  const disabledJob = await disabled.controller.claim(RUNNER, 'claude,codex,opencode');
   assert.equal(disabledJob?.orchestrationToken, undefined);
   assert.deepEqual(disabled.issueCalls, []);
 
   const idle = makeController({ claimed: null });
-  assert.equal(
-    await idle.controller.claim(RUNNER, SESSION_ORCHESTRATION_CREDENTIAL_V1, 'claude,codex,opencode'),
-    null,
-  );
+  assert.equal(await idle.controller.claim(RUNNER, 'claude,codex,opencode'), null);
   assert.deepEqual(idle.issueCalls, []);
 });
 
-test('reclaim enables orchestration only when capability and every live guard match', async () => {
+test('reclaim enables orchestration only when every live guard matches', async () => {
   const session = (
     id: string,
     orchestrationOn: boolean,
@@ -245,9 +166,7 @@ test('reclaim enables orchestration only when capability and every live guard ma
   });
 
   const result = await controller.reclaim(
-    RUNNER,
-    `${SESSION_ORCHESTRATION_CREDENTIAL_V1},${SESSION_TERMINAL_HANDOFF_V1}`,
-  );
+    RUNNER);
   const enabled = result.sessions.find((item) => item.sessionId === 'enabled-session');
   const disabled = result.sessions.find((item) => item.sessionId === 'disabled-session');
   assert.equal(enabled?.allowOrchestration, true);
@@ -275,22 +194,13 @@ test('reclaim enables orchestration only when capability and every live guard ma
     },
   ]);
 
-  const legacy = makeController({
-    reclaimed: [
-      session('legacy-enabled-session', true),
-      session('handoff-session', true, {
-        inboxLeaseOwner: newTerminalResumeHandoffOwner(),
-      }),
-    ],
+  // A session a terminal resume reserved for its next process goes to the runner like any other.
+  const handoff = makeController({
+    reclaimed: [session('handoff-session', true, { inboxLeaseOwner: newTerminalResumeHandoffOwner() })],
   });
-  const legacyResult = await legacy.controller.reclaim(RUNNER);
-  assert.deepEqual(
-    legacyResult.sessions.map((item) => item.sessionId),
-    ['legacy-enabled-session'],
-  );
-  assert.equal(legacyResult.sessions[0]?.allowOrchestration, false);
-  assert.equal(legacyResult.sessions[0]?.orchestrationToken, undefined);
-  assert.deepEqual(legacy.issueCalls, []);
+  const handoffResult = await handoff.controller.reclaim(RUNNER);
+  assert.deepEqual(handoffResult.sessions.map((item) => item.sessionId), ['handoff-session']);
+  assert.deepEqual(handoff.issueCalls, [['runner-1', 'handoff-session']]);
 });
 
 test('credential refresh delegates to the runner-bound live-session reissuer', async () => {

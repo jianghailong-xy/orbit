@@ -50,6 +50,7 @@ import {
 } from './watch-delivery.service';
 import { WatchEvaluatorOptions, WatchEvaluatorService } from './watch-evaluator.service';
 import { WatchesService } from './watches.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;

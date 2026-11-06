@@ -72,6 +72,8 @@ import {
   type SharedCase,
   type SharedLinkKind,
 } from './tenant-isolation-runner-cases';
+import '../test-support/daemon-routes-over-http';
+import { sessionLease } from '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -214,11 +216,11 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     const leaseGeneration = randomUUID();
     const activateSessionId = await open('activate session', { status: 'RUNNING', inboxLeaseOwner: leaseOwner, inboxLeaseGeneration: leaseGeneration });
     const inboxSessionId = await open('inbox session', { status: 'RUNNING' });
+    const inboxLeaseGeneration = await sessionLease(db, inboxSessionId);
     await turnOf(inboxSessionId, { kind: 'interrupt', status: 'PENDING' });
     const turnSessionId = await open('turn session', { status: 'RUNNING' });
     const shellTurnId = await turnOf(turnSessionId, { kind: 'shell', status: 'IN_FLIGHT', content: 'true', deliveredAt: new Date() });
     const finalizeSessionId = await open('finalize session', { status: 'RUNNING' });
-    const completeSessionId = await open('complete session', { status: 'RUNNING' });
     const sessionAttachmentId = await fileOf({ sessionId: machineSessionId });
     const uploadedFileId = await uploadOf(machineSessionId);
     const { id: evidenceRevisionId } = await db.taskCompletionEvidence.findFirstOrThrow({ where: { taskId: of.evidenceTaskId }, select: { id: true } });
@@ -411,8 +413,8 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     return {
       callingSessionId, coordinatorSessionId, newCoordinatorSessionId, machineSessionId, runtimeSessionId, orphanSessionId,
       landingSessionId,
-      takeoverSessionId, activateSessionId, leaseOwner, leaseGeneration, inboxSessionId, turnSessionId, shellTurnId,
-      finalizeSessionId, completeSessionId, sessionAttachmentId, uploadedFileId, evidenceRevisionId, runningTaskId, runningTaskSessionId, allowedApprovalId,
+      takeoverSessionId, activateSessionId, leaseOwner, leaseGeneration, inboxSessionId, inboxLeaseGeneration, turnSessionId, shellTurnId,
+      finalizeSessionId, sessionAttachmentId, uploadedFileId, evidenceRevisionId, runningTaskId, runningTaskSessionId, allowedApprovalId,
       artifactRequestId, integrationJobId, landingTaskId,
       codexOperationId, wikiRepoOpId, spareServiceTokenId, replyRequestId, interruptSessionId, endSessionId, completedSessionId,
       deletedSessionId, archivedSessionId, coordinatorItemId, handOverItemId, failedTaskId, watchId, verifierTaskId, verifiedTaskId,

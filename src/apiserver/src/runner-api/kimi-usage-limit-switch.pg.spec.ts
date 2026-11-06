@@ -54,6 +54,7 @@ import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { QueueService as RealQueueService } from '../queue/queue.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { KIMI_ACCOUNT_MOVE_V1, RunnerApiController } from './runner-api.controller';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -295,7 +296,7 @@ test('a Kimi session that has said something moves to another Kimi account only 
     ).rows as Array<{ content: string; status: string }>;
   /** What the runner is handed when it claims its one PENDING session: that session's environment. */
   const claimedEnv = async (runnerId: string) => {
-    const claimed = await claims.claimSessionForRunner({ id: runnerId }, 0, false, false);
+    const claimed = await claims.claimSessionForRunner({ id: runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     return claimed.agent.env ?? {};
   };

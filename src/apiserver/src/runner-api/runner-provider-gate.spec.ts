@@ -59,7 +59,7 @@ test('legacy claim explains the pending OpenCode stall without stranding other w
   const realtime = { publishSessionCreated: (id: string) => published.push(id) } as never;
   const controller = new RunnerApiController(prisma, queue, realtime, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never);
 
-  assert.equal(await controller.claim(RUNNER, undefined, 'claude,codex'), null);
+  assert.equal(await controller.claim(RUNNER, 'claude,codex'), null);
   // The OpenCode row is marked so the UI can say why it is stuck...
   assert.equal(storedError, OPENCODE_RUNNER_UPGRADE_ERROR);
   assert.deepEqual(published, ['session-1']);
@@ -99,7 +99,7 @@ test('an OpenCode-capable runner that does not name Antigravity has its Antigrav
   const controller = new RunnerApiController(prisma, queue, realtime, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never);
 
   assert.equal(
-    await controller.claim(RUNNER, SESSION_SOURCE_PIN_V1, 'claude,codex,opencode'),
+    await controller.claim(RUNNER, 'claude,codex,opencode'),
     null,
   );
   // Only the runtimes it did not name are asked about (Antigravity, DeepSeek Harness, Cursor CLI):
@@ -158,7 +158,7 @@ test('a Gemini key borrows Antigravity, so a runner that does not name it has th
   const realtime = { publishSessionCreated: () => undefined } as never;
   const controller = new RunnerApiController(prisma, queue, realtime, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never);
 
-  assert.equal(await controller.claim(RUNNER, SESSION_SOURCE_PIN_V1, 'claude,codex,opencode'), null);
+  assert.equal(await controller.claim(RUNNER, 'claude,codex,opencode'), null);
   // The rows dispatch would resolve: enabled, this owner's or shared, on the Antigravity runtime.
   assert.deepEqual(providerLookups, [
     {
@@ -205,7 +205,7 @@ test('a row already carrying the notice is not written again on every long poll'
   const queue = { claimSessionForRunner: async () => null } as never;
   const controller = new RunnerApiController(prisma, queue, {} as never, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never);
 
-  assert.equal(await controller.claim(RUNNER, SESSION_SOURCE_PIN_V1, 'claude,codex,opencode'), null);
+  assert.equal(await controller.claim(RUNNER, 'claude,codex,opencode'), null);
   assert.equal(writes, 0);
 });
 
@@ -230,7 +230,7 @@ test('current claim advertises OpenCode and Antigravity directly to the atomic q
   // Fully capable: OpenCode and Antigravity advertised AND `source-pin/v1` declared, so no
   // preflight has anything to explain and the claim goes straight to the queue.
   assert.equal(
-    await controller.claim(RUNNER, SESSION_SOURCE_PIN_V1, 'claude,codex,opencode,antigravity,dsh,cursor'),
+    await controller.claim(RUNNER, 'claude,codex,opencode,antigravity,dsh,cursor'),
     null,
   );
   assert.deepEqual(advertised, [
@@ -315,7 +315,7 @@ test('legacy reclaim omits OpenCode rows and keeps every other checkout', async 
   const realtime = { publishSessionCreated: (id: string) => published.push(id) } as never;
   const controller = new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never);
 
-  const res = await controller.reclaim(RUNNER, undefined, 'claude,codex');
+  const res = await controller.reclaim(RUNNER, 'claude,codex');
   // A 426 here is not retryable on the runner and would stop the whole process, so the
   // undrivable row is dropped from the snapshot instead. Its checkout survives because
   // worktree GC re-asks `sessions/worktrees-removable`, which keeps non-terminal sessions.
@@ -333,7 +333,7 @@ test('a capable reclaim keeps the OpenCode row in the snapshot', async () => {
   );
   const controller = new RunnerApiController(prisma, {} as never, {} as never, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never);
 
-  const res = await controller.reclaim(RUNNER, undefined, 'claude,codex,opencode');
+  const res = await controller.reclaim(RUNNER, 'claude,codex,opencode');
   assert.deepEqual(
     res.sessions.map((s) => s.sessionId),
     ['session-1'],
@@ -359,7 +359,7 @@ test('a reclaim that does not name Antigravity omits its rows and explains the p
 
   // OpenCode-capable, as every runner in the field is: its OpenCode checkout comes back, and the
   // Antigravity ones — which it would rebuild as Claude — do not.
-  const res = await controller.reclaim(RUNNER, undefined, 'claude,codex,opencode');
+  const res = await controller.reclaim(RUNNER, 'claude,codex,opencode');
   assert.deepEqual(
     res.sessions.map((s) => s.sessionId),
     ['opencode-1', 'claude-1'],
@@ -391,7 +391,7 @@ test('a reclaim that does not name Antigravity omits a Gemini key\'s rows too', 
   const controller = new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never);
 
   // Rebuilt by this runner, the Gemini session would come back as a Claude one.
-  const res = await controller.reclaim(RUNNER, undefined, 'claude,codex,opencode');
+  const res = await controller.reclaim(RUNNER, 'claude,codex,opencode');
   assert.deepEqual(
     res.sessions.map((s) => s.sessionId),
     ['claude-1'],
@@ -408,7 +408,7 @@ test('a capable reclaim keeps the Antigravity row in the snapshot, on its own ru
   );
   const controller = new RunnerApiController(prisma, {} as never, {} as never, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never);
 
-  const res = await controller.reclaim(RUNNER, undefined, 'claude,codex,opencode,antigravity');
+  const res = await controller.reclaim(RUNNER, 'claude,codex,opencode,antigravity');
   assert.deepEqual(
     res.sessions.map((s) => s.sessionId),
     ['agy-1'],

@@ -167,7 +167,7 @@ test('P6b follow-up a Cursor CLI session’s claim across a workspace edit, on P
    *  revived session goes to a runner that takes over its supervisor, as every runner of this version does. */
   async function nextClaim(m: Machine, id: string) {
     await sessions.resume(m.ownerId, id, { content: 'go on', clientTurnId: randomUUID() } as never);
-    const claimed = await claims.claimSessionForRunner({ id: m.runnerId, supportedProviders: CURRENT }, 0, true);
+    const claimed = await claims.claimSessionForRunner({ id: m.runnerId, supportedProviders: CURRENT });
     assert.ok(claimed, 'the runner was offered no session');
     assert.equal(claimed.sessionId, id);
     return { env: claimed.agent.env ?? {}, runtimeSessionId: claimed.runtimeSessionId ?? null, provider: claimed.agent.provider };

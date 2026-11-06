@@ -63,9 +63,8 @@ import {
 import { APISERVER_PROCESS_QUIET_AFTER_MS, markRunnersChanged, RUNNER_BEATS } from '../runners/runner-presence';
 
 const EVENT_CHANNEL = 'orbit_event';
-const INBOX_CHANNEL = 'orbit_inbox';
-/** How long a wake nobody was parked for stays owed (see notifyRunnerWake). */
-const RUNNER_WAKE_HOLD_MS = 30_000;
+/** For notifyWaiters. Named for what it first carried, turns for the inbox long polls that are gone. */
+const WAITERS_CHANNEL = 'orbit_inbox';
 const MAX_NOTIFY_BYTES = 7000; // Postgres NOTIFY payload limit is 8000 bytes; stay under.
 const CANCEL_MAX_AGE_MS = 60 * 60_000; // stop redelivering a cancel after an hour
 /** How often a runner change that could not be marked is reported (markRunnerChanged): once a minute, never per mark. */
@@ -284,10 +283,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   private readonly hub = new Subject<{ runId: string; event: NormalizedRunEvent }>();
   /** This replica's own publications, never one the NOTIFY bridge carried in (see localPublications). */
   private readonly published = new Subject<{ runId: string; event: NormalizedRunEvent }>();
-  private readonly inbox = new EventEmitter(); // event name = runId
-  private readonly runnerWake = new EventEmitter(); // event name = runnerId
-  /** runnerId → when a wake was asked for that no parked poll has taken yet. */
-  private readonly runnerWakeOwed = new Map<string, number>();
+  private readonly waiters = new EventEmitter(); // event name = the key waitForNotice waits on
   /** sessionId → what reached this replica for the session behind its read-back in flight (readBackInOrder). */
   private readonly heldBehindReadBack = new Map<string, Array<{ event: NormalizedRunEvent } | ReadBack>>();
   /** Runner changes markRunnerChanged could not mark since the last report, and when that report was. */
@@ -334,8 +330,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
      *  build this service by hand, where it is the only apiserver there is. */
     @Optional() private readonly leader?: ControlPlaneLeader,
   ) {
-    this.inbox.setMaxListeners(0);
-    this.runnerWake.setMaxListeners(0);
+    this.waiters.setMaxListeners(0);
   }
 
   async onModuleInit(): Promise<void> {
@@ -366,7 +361,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     try {
       await client.connect();
       await client.query(`LISTEN ${EVENT_CHANNEL}`);
-      await client.query(`LISTEN ${INBOX_CHANNEL}`);
+      await client.query(`LISTEN ${WAITERS_CHANNEL}`);
       await client.query(`LISTEN ${RUNNER_WAKE_CHANNEL}`);
       this.listener = client;
       this.log.log(`LISTEN/NOTIFY active (instance ${this.instanceId.slice(0, 8)})`);
@@ -417,9 +412,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    * Alone, an apiserver hands its streams its own events itself and ignores its own notices, so they missed nothing,
    * and nothing is sent, as before. One line is logged either way: how long, and how many sessions; never an event.
    *
-   * The inbox and wake notices missed meanwhile need nothing here. Over HTTPS an inbox poll looks again within five
-   * seconds, and a wake lost costs the runner what it always could, its next heartbeat; over the runner link the
-   * apiserver that asks hints the runner over NATS itself (notifyInbox, notifyRunnerWake). Over the link, a wake written
+   * The inbox and wake notices missed meanwhile need nothing here: the apiserver that asks hints the runner over NATS
+   * itself (notifyInbox, notifyRunnerWake). A wake written
    * in a transaction (runner-wake.ts) is marked by every apiserver that hears it; one that none heard, every listener
    * down at its commit as on a database restart, reaches the runner with its next full reconcile, as a change count that
    * could not be moved does (markRunnerChanged).
@@ -469,16 +463,15 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     // Our own write — already emitted locally. A committed-transaction wake is the exception: it
     // carries `c` because nothing emitted it locally, so this replica takes its own delivery too.
     if (m.i === this.instanceId && !(channel === RUNNER_WAKE_CHANNEL && m.c)) return;
-    if (channel === INBOX_CHANNEL) {
-      this.inbox.emit(m.r);
+    if (channel === WAITERS_CHANNEL) {
+      this.waiters.emit(m.r);
       return;
     }
     if (channel === RUNNER_WAKE_CHANNEL) {
-      this.wakeRunnerLocally(m.r);
       // A wake written inside a transaction (notifyRunnerWakeOnCommit) arrives here, at its commit, on every
       // replica, and none has marked or hinted it yet, so each one does: the spare marks move the runner's change
-      // count once more, and the spare hints cost one extra heartbeat, as the held wake above does. Any other wake
-      // was marked and hinted by the replica that emitted it.
+      // count once more, and the spare hints cost one extra heartbeat. Any other wake was marked and hinted by the
+      // replica that emitted it.
       if (m.c) this.markRunnerChanged(m.r);
       return;
     }
@@ -614,31 +607,28 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   // ── inbox (interactive turn delivery) ───────────────────────────────────
 
-  /** Wake a runner parked in GET /runner/runs/:id/inbox after a turn is enqueued, and hint the runner the session is
-   *  assigned to over the runner link. */
+  /** Hint the runner a session is assigned to, over the runner link, that a turn was enqueued for it. */
   notifyInbox(runId: string): void {
-    this.inbox.emit(runId); // same replica
-    this.notifyRaw(INBOX_CHANNEL, JSON.stringify({ i: this.instanceId, r: runId })); // others
     this.hints?.inbox(runId);
   }
 
-  /** Wake whatever is parked in waitForInbox(key) on any replica, without hinting a runner: for a key that names no
-   *  run, such as a worktree file request waiting for its runner's answer (worktreeFileAnswerKey). */
+  /** Wake whatever is parked in waitForNotice(key) on any replica: a worktree file request waiting for its runner's
+   *  answer (worktreeFileAnswerKey). */
   notifyWaiters(key: string): void {
-    this.inbox.emit(key); // same replica
-    this.notifyRaw(INBOX_CHANNEL, JSON.stringify({ i: this.instanceId, r: key })); // others
+    this.waiters.emit(key); // same replica
+    this.notifyRaw(WAITERS_CHANNEL, JSON.stringify({ i: this.instanceId, r: key })); // others
   }
 
-  /** Park until a turn is enqueued for this run, or the timeout elapses. */
-  waitForInbox(runId: string, timeoutMs: number): Promise<void> {
+  /** Park until notifyWaiters(key) on any replica, or the timeout elapses. */
+  waitForNotice(key: string, timeoutMs: number): Promise<void> {
     return new Promise((resolve) => {
       const done = (): void => {
         clearTimeout(timer);
-        this.inbox.off(runId, done);
+        this.waiters.off(key, done);
         resolve();
       };
       const timer = setTimeout(done, timeoutMs);
-      this.inbox.once(runId, done);
+      this.waiters.once(key, done);
     });
   }
 
@@ -647,15 +637,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   /**
    * Have this runner heartbeat now instead of at its next 30s tick: something its heartbeat carries
    * — a sign-in to start, a pasted code — is waiting, and the person who asked is watching a
-   * spinner. The runner parks in GET /runner/wake (waitForRunnerWake) and beats when it returns.
+   * spinner. The wake marks the runner changed and hints it (markRunnerChanged), which has the runner
+   * send its heartbeat at once.
    *
    * Only a nudge: the work itself stays in the row and is delivered by the heartbeat, so a wake that
-   * is lost costs the old half-minute and nothing else. Over the runner link the same wake marks the
-   * runner changed and hints it (markRunnerChanged), which has the runner send its heartbeat at once.
+   * is lost costs the old half-minute and nothing else.
    */
   notifyRunnerWake(runnerId: string): void {
-    this.wakeRunnerLocally(runnerId);
-    this.notifyRaw(RUNNER_WAKE_CHANNEL, JSON.stringify({ i: this.instanceId, r: runnerId }));
     this.markRunnerChanged(runnerId);
   }
 
@@ -669,8 +657,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    *
    * Best effort, like the hint, and never awaited. A count that cannot be moved costs the change its prompt delivery:
    * the runner's next full reconcile, at most five minutes away, delivers it. Those are counted and reported once a
-   * minute. Nothing here touches an HTTPS runner's long polls (notifyRunnerWake's wake does that, for the changes it
-   * is called for), and a control plane without the runner link writes nothing.
+   * minute. A control plane without the runner link writes nothing.
    */
   markRunnerChanged(runnerIds: string | readonly string[]): void {
     if (!this.hints?.linkConfigured) return;
@@ -710,38 +697,6 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       `${this.unmarked} runner change(s) were not marked in runner_presence; those runners learn of them at their next full reconcile, at most five minutes away (${(error as { code?: string })?.code ?? (error as Error)?.message ?? error})`,
     );
     this.unmarked = 0;
-  }
-
-  /** A wake with nobody parked is held for the next poll, so one asked for in the moment between
-   *  two polls is not lost. Every replica holds it; the spare ones cost one extra heartbeat. */
-  private wakeRunnerLocally(runnerId: string): void {
-    if (this.runnerWake.listenerCount(runnerId) > 0) {
-      this.runnerWake.emit(runnerId);
-      return;
-    }
-    this.runnerWakeOwed.set(runnerId, Date.now());
-  }
-
-  /** Park until this runner is asked to wake (true), the timeout elapses or the poll hangs up (false). */
-  waitForRunnerWake(runnerId: string, timeoutMs: number, hungUp?: AbortSignal): Promise<boolean> {
-    const owed = this.runnerWakeOwed.get(runnerId);
-    if (owed !== undefined) {
-      this.runnerWakeOwed.delete(runnerId);
-      if (Date.now() - owed <= RUNNER_WAKE_HOLD_MS) return Promise.resolve(true);
-    }
-    return new Promise((resolve) => {
-      const done = (woke: boolean) => (): void => {
-        clearTimeout(timer);
-        this.runnerWake.off(runnerId, onWake);
-        hungUp?.removeEventListener('abort', onHangUp);
-        resolve(woke);
-      };
-      const onWake = done(true);
-      const onHangUp = done(false);
-      const timer = setTimeout(done(false), timeoutMs);
-      this.runnerWake.once(runnerId, onWake);
-      hungUp?.addEventListener('abort', onHangUp, { once: true });
-    });
   }
 
   // ── run events (SSE) ────────────────────────────────────────────────────
@@ -1625,14 +1580,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    * heartbeat until the runner reports an outcome that flips mergeStatus off 'pending'. The
    * workDir comes from the session's workspace; the runner resolves the repo root from it.
    */
-  async drainMergeRequests(runnerId: string, leaseOwner: string, supportsRecovery = true): Promise<MergeCommand[]> {
+  async drainMergeRequests(runnerId: string, leaseOwner: string): Promise<MergeCommand[]> {
     const sessions = await this.prisma.session.findMany({
       where: {
         assignedRunnerId: runnerId,
         // A LANDING row has no branch and no runner, and must never be handed one (§2.9 LS6).
         sessionKind: 'CONVERSATION',
         mergeStatus: 'pending',
-        ...(!supportsRecovery ? { mergeRecoveryAction: null } : {}),
         mergeOperationId: { not: null },
         branch: { not: null },
         AND: [

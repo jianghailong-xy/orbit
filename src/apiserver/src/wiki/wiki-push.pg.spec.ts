@@ -50,6 +50,8 @@ import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
 import { WikiController } from './wiki.controller';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiService } from './wiki.service';
+import '../test-support/dequeue-under-lease';
+import '../test-support/daemon-routes-over-http';
 
 declare global {
   interface BigInt { toJSON(): string; }

@@ -22,10 +22,6 @@ import { relayPeers, type RelayPeers } from '../runners/relay-peers';
  * its write has committed, RealtimeService.publish), for the runner the session is assigned to: the card's reader may
  * be waiting for it, and over the link it asks once a hint says there is an answer.
  *
- * It is a path beside the in-process EventEmitter and the Postgres NOTIFY that the HTTP long polls park on, never in
- * place of them: those stay as they are until the cut-over (D15), and nothing here changes what an HTTP runner is
- * handed or when.
- *
  * At most once, and best effort. Every caller publishes after the commit it announces, the rule the signals already
  * keep, and a lost hint costs the runner at most a heartbeat interval: the heartbeat carries the same news. So
  * nothing here waits on NATS or throws. While NATS is unreachable a hint is dropped and counted, and the count is

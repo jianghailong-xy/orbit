@@ -15,6 +15,7 @@ import { ProvidersService } from './providers.service';
 import { SharedPoolsService } from './shared-pools.service';
 import { encryptSecret } from './provider-crypto';
 import { poolPauseBlocksRequest } from './pool-pause';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const suite = URL ? test : test.skip;

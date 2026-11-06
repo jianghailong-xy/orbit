@@ -257,7 +257,7 @@ suite("a disabled account's pool gateway tokens, end to end on real PostgreSQL",
   /** The runner asking for work — which has to be `sessionId` — leaving it parked, as a turn would. */
   async function claim(who: Person, sessionId: string): Promise<ClaimedSession> {
     await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING, cancelRequestedAt: null } });
-    const claimed = await queue.claimSessionForRunner({ id: who.runnerId }, 0, false, false);
+    const claimed = await queue.claimSessionForRunner({ id: who.runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     assert.equal(claimed.sessionId, sessionId);
     await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });

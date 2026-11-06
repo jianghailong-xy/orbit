@@ -20,6 +20,9 @@
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/runner-link-hints.pg.spec.ts
  *
  * Not destructive: every row belongs to the account this run creates.
+ *
+ * A call "over HTTPS" below is a call to the same route with no link context: production refuses those
+ * (runner-link-required.ts), and test-support/daemon-routes-over-http.ts lifts the refusal for this spec.
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -33,6 +36,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { RunnerApiController } from './runner-api.controller';
 import { readRunnerLinkHints } from './runner-link-hints';
+import '../test-support/daemon-routes-over-http';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 

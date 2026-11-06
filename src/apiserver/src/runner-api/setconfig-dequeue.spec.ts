@@ -18,8 +18,9 @@ import { RunnerApiController } from './runner-api.controller';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
+const GENERATION = '33333333-3333-4333-8333-333333333333';
 
-type Dequeue = (sessionId: string, runnerId: string, leaseGeneration: string | null) => Promise<unknown>;
+type Dequeue = (sessionId: string, runnerId: string, leaseGeneration: string) => Promise<unknown>;
 
 function leaseSQL() {
   const rawCalls: unknown[][] = [];
@@ -29,9 +30,10 @@ function leaseSQL() {
       const sql = renderRawQuery(args).text;
       if (/SELECT id, "inbox_lease_generation"/.test(sql)) {
         return [
-          { id: SESSION_ID, inboxLeaseGeneration: null, inboxLeaseOwner: null, status: RunStatus.RUNNING },
+          { id: SESSION_ID, inboxLeaseGeneration: GENERATION, inboxLeaseOwner: null, status: RunStatus.RUNNING },
         ];
       }
+      if (/FROM "inbox_lease_generation"/.test(sql)) return [{ generation: GENERATION }];
       return [];
     },
   };
@@ -46,7 +48,7 @@ function leaseSQL() {
     { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
   );
   return (controller as unknown as { dequeueTurn: Dequeue }).dequeueTurn
-    .bind(controller)(SESSION_ID, RUNNER_ID, null)
+    .bind(controller)(SESSION_ID, RUNNER_ID, GENERATION)
     .then(() => renderRawQuery(rawCalls.at(-1) ?? []).text);
 }
 

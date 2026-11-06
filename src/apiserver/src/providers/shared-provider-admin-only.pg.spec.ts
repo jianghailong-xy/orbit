@@ -57,6 +57,7 @@ import { sessionEngine } from './session-engine';
 import { ProviderPlanUsageService } from './plan-usage.service';
 import { ProvidersService } from './providers.service';
 import { SharedPoolsService } from './shared-pools.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 // The spec stores keys through the providers' own door and the code under test decrypts them.
@@ -121,7 +122,7 @@ suite('a shared model provider runs an admin\'s sessions only, on real PostgreSQ
   const providers = new ProvidersService(prisma, realtime, usage);
   const pools = new SharedPoolsService(prisma, realtime, providers);
   const runnerApi = new RunnerApiController(
-    db as never, queue as never, realtime as never, {} as never, {} as never, {} as never,
+    db as never, queue as never, realtime as never, {} as never, { issue: async () => 'orchestration-credential' } as never, {} as never,
   );
 
   async function person(label: string, role = 'MEMBER'): Promise<{ id: string; email: string }> {
@@ -190,9 +191,7 @@ suite('a shared model provider runs an admin\'s sessions only, on real PostgreSQ
   /** The runner asking for work, as one that drives every runtime this spec dispatches. */
   async function claimOn(at: Machine, handed: unknown[]): Promise<ClaimedSession | null> {
     const claimed = await queue.claimSessionForRunner(
-      { id: at.runnerId, supportedProviders: [AgentProvider.CLAUDE, AgentProvider.CODEX, AgentProvider.OPENCODE] },
-      0, false, false,
-    );
+      { id: at.runnerId, supportedProviders: [AgentProvider.CLAUDE, AgentProvider.CODEX, AgentProvider.OPENCODE] });
     handed.push(claimed);
     return claimed;
   }

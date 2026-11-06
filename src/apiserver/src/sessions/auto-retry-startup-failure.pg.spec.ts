@@ -46,6 +46,7 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { AutoRetryService, BACKOFF_MS } from './auto-retry.service';
 import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
 import { SessionsService } from './sessions.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 

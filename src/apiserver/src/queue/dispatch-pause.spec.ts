@@ -151,7 +151,7 @@ test('every claim takes the same lock as the switch, and reads the pause where i
     $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
   };
   const queue = new QueueService(prisma as never, { publishSessionUpdated() {} } as never);
-  assert.equal(await queue.claimSessionForRunner({ id: RUNNER }, 0), null);
+  assert.equal(await queue.claimSessionForRunner({ id: RUNNER }), null);
   assert.equal(executed[0], SESSION_CLAIM_LOCK);
   const claim = renderRawQuery(claims[0]).text;
   const candidate = claim.slice(claim.indexOf('SELECT s.id FROM "session" s'), claim.indexOf('ORDER BY'));

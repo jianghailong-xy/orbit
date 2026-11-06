@@ -5,10 +5,7 @@ import { KIMI_LOGIN_REGION_V1, RunnerStatus, type LoginCommand, type RunnerLogin
 import { ANTIGRAVITY_GOOGLE_LOGIN_V1 } from '../common/antigravity-readiness';
 import type { AuthUser } from '../common/current-user.decorator';
 import {
-  CLAUDE_ACCOUNT_LOGIN_V1,
-  CODEX_ACCOUNT_LOGIN_V1,
   CURSOR_ACCOUNT_LOGIN_V1,
-  KIMI_ACCOUNT_LOGIN_V1,
   LOGIN_LINK_REFUSED,
   RunnerApiController,
 } from '../runner-api/runner-api.controller';
@@ -32,11 +29,11 @@ const RUNNER_ID = '11111111-1111-4111-8111-111111111111';
 const SLOT = '1a2b3c4d';
 const ADDED_SLOT = '5e6f7a8b';
 const USER = { userId: OWNER } as AuthUser;
-const ACCOUNT_CAPABLE = `session-worktree-ops-v1,${CODEX_ACCOUNT_LOGIN_V1}`;
-const CLAUDE_ACCOUNT_CAPABLE = `session-worktree-ops-v1,${CLAUDE_ACCOUNT_LOGIN_V1}`;
+const ACCOUNT_CAPABLE = `session-worktree-ops-v1,codex-account-login/v1`;
+const CLAUDE_ACCOUNT_CAPABLE = `session-worktree-ops-v1,claude-account-login/v1`;
 /** A runner that chooses Kimi's site, with and without keeping more than one Kimi account. */
 const KIMI_SITE_CAPABLE = `session-worktree-ops-v1,${KIMI_LOGIN_REGION_V1}`;
-const KIMI_ACCOUNT_CAPABLE = `${KIMI_SITE_CAPABLE},${KIMI_ACCOUNT_LOGIN_V1}`;
+const KIMI_ACCOUNT_CAPABLE = `${KIMI_SITE_CAPABLE},kimi-account-login/v1`;
 
 type Row = Record<string, unknown>;
 
@@ -217,7 +214,7 @@ test('a body that cannot name an account is refused, never read as the runner’
   assert.equal(await h.beat(), undefined);
 });
 
-test('a Claude account is signed in by name, on a runner that declares that', async () => {
+test('a Claude account is signed in by name', async () => {
   const h = harness();
   await h.post({ engine: 'claude', account: SLOT });
   assert.deepEqual(await h.beat(CLAUDE_ACCOUNT_CAPABLE), {
@@ -239,11 +236,6 @@ test('a Claude account is signed in by name, on a runner that declares that', as
     code: 'the-code',
     attempt: attemptOf(h.row),
   });
-  // A runner that has only ever signed in Codex accounts is not handed this one: it would take the
-  // named account for a plain sign-in and put the machine's own login on the line.
-  await h.post({ engine: 'claude', account: SLOT });
-  assert.equal(await h.beat(ACCOUNT_CAPABLE), undefined);
-  assert.match((await h.state()).message ?? '', /too old to sign in another Claude account/);
 });
 
 test('the link a runner reports ends at its first control character', async () => {
@@ -377,7 +369,7 @@ test('a refused link about a start this row has moved past changes nothing', asy
   assert.equal((await h.state()).message, null);
 });
 
-test('a Kimi account is signed in by name on the site it is added on, on a runner that declares that', async () => {
+test('a Kimi account is signed in by name on the site it is added on', async () => {
   const h = harness();
   await h.post({ engine: 'kimi', accountName: ' Work ', region: 'global' });
   assert.deepEqual(await h.beat(KIMI_ACCOUNT_CAPABLE), {
@@ -397,43 +389,9 @@ test('a Kimi account is signed in by name on the site it is added on, on a runne
     region: 'mainland-cn',
   });
 
-  // A runner that keeps one Kimi login — however it chooses the site, and whatever other engines'
-  // accounts it keeps — is not handed a named one: it would sign the new account in over Default's.
-  for (const capabilities of [KIMI_SITE_CAPABLE, `${KIMI_SITE_CAPABLE},${CODEX_ACCOUNT_LOGIN_V1},${CLAUDE_ACCOUNT_LOGIN_V1}`, null]) {
-    await h.post({ engine: 'kimi', accountName: 'Work', region: 'global' });
-    assert.equal(await h.beat(capabilities), undefined, String(capabilities));
-    const state = await h.state();
-    assert.equal(state.status, 'failed');
-    assert.equal(state.message, 'This runner is too old to sign in another Kimi account — update it, then try again.');
-  }
-  await h.post({ engine: 'kimi', account: SLOT });
-  assert.equal(await h.beat(KIMI_SITE_CAPABLE), undefined);
-  assert.match((await h.state()).message ?? '', /too old to sign in another Kimi account/);
   // Its own login, on a site, is handed over as it always was.
   await h.post({ engine: 'kimi', region: 'global' });
   assert.deepEqual(await h.beat(KIMI_SITE_CAPABLE), { action: 'start', engine: 'kimi', attempt: attemptOf(h.row), region: 'global' });
-});
-
-test('a runner that does not declare account sign-in is never handed a start naming another account', async () => {
-  const h = harness();
-  await h.post({ engine: 'codex', account: SLOT });
-  assert.equal(await h.beat('session-worktree-ops-v1'), undefined);
-  const state = await h.state();
-  assert.equal(state.status, 'failed');
-  assert.match(state.message ?? '', /too old to sign in another Codex account/);
-
-  await h.post({ engine: 'codex', accountName: 'Work' });
-  assert.equal(await h.beat(null), undefined);
-  assert.equal((await h.state()).status, 'failed');
-
-  // Default is what such a runner signs in anyway, so asking for it by name is still handed over.
-  await h.post({ engine: 'codex', account: 'default' });
-  assert.deepEqual(await h.beat(null), {
-    action: 'start',
-    engine: 'codex',
-    attempt: attemptOf(h.row),
-    account: 'default',
-  });
 });
 
 test('a report about a start the row has moved past changes nothing', async () => {

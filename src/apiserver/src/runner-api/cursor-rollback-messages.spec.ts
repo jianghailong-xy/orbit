@@ -158,7 +158,7 @@ async function markedOnClaim(request: string, snapshot: unknown): Promise<Map<st
       },
     },
   };
-  await controller(prisma, { claimSessionForRunner: async () => null }).claim(runnerRef, SESSION_SOURCE_PIN_V1, request);
+  await controller(prisma, { claimSessionForRunner: async () => null }).claim(runnerRef, request);
   return marked;
 }
 
@@ -243,7 +243,7 @@ test('Rollback messages: a queued Cursor CLI session waits with the install noti
       modelProvider: { findMany: async () => [] }, user: { findUnique: async () => null },
       $queryRaw: async () => [{ max: 0 }],
     };
-    const response = await controller(prisma, {}).reclaim(runnerRef, SESSION_SOURCE_PIN_V1, `${LEGACY},cursor`);
+    const response = await controller(prisma, {}).reclaim(runnerRef, `${LEGACY},cursor`);
     assert.deepEqual(response.sessions, [], 'a runner without Cursor CLI was handed a Cursor CLI session back');
     assert.deepEqual(marks, [{ ids: ['cursor-queued'], error: message }]);
   }

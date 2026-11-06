@@ -54,6 +54,7 @@ import {
 import { DONE_REQUEST_DEDUPE_KEY, DONE_REQUEST_KIND, DONE_REQUEST_TITLE } from './project-done-request';
 import { OWNER_ANSWER_TURN_PREFIX, ownerAnswerTurnId } from './project-open-item';
 import { ProjectOpenItemService } from './project-open-item.service';
+import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
