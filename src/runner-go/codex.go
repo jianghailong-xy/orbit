@@ -404,10 +404,33 @@ const codexOrbitMCPServer = "orbit"
 // naming openai-curated-remote plugins without this override, and neither with it.
 const codexPluginsOffConfig = "features.plugins=false"
 
+// codexLoginShellPackagePathConfig keeps the tools Codex ships with — ripgrep, which its instructions
+// tell the model to search with — on the PATH of the shell a command runs in. It is a `-c` override, so
+// the machine's own codex TUI is left as it is configured.
+//
+// Codex puts its package's codex-path directory, where its bundled rg is, first on its own PATH, and runs
+// a command in a login shell unless the model asks otherwise. A login profile that assigns PATH outright
+// drops that directory: Debian's /etc/profile does, so `rg` is not found. The shell snapshot hides this
+// for a command in the session's own directory once the snapshot is ready, and only then: a command
+// with another `workdir`, or one that runs before the snapshot exists, gets the plain login shell.
+// This experimental feature (in codex since 0.161.0, off by default) has Codex put the directory back
+// after the login profile has run, so a command keeps both its login environment and the bundled tools.
+//
+// Measured against the installed CLI (0.166.0 and 0.167.0, root on Debian 13, through
+// startCodexAppServer): `command -v rg` failed in every login-shell command — a `workdir` outside the
+// session's directory, or any command once the snapshot was off — and succeeded in all of them with
+// this override. Turning login shells off (`allow_login_shell=false`) also finds rg, but drops what a
+// login profile sets up and refuses a call that asks for `login: true`.
+const codexLoginShellPackagePathConfig = "features." + codexLoginShellPackagePathFeature + "=true"
+
+// codexLoginShellPackagePathFeature is that feature's name, as `codex features list` lists it.
+const codexLoginShellPackagePathFeature = "login_shell_package_path"
+
 // appendCodexSessionToolConfig adds the overrides that keep a session's tools to what Orbit and the
-// agent's own configuration put there. Both spawn paths carry it.
+// agent's own configuration put there, with Codex's bundled tools reachable from its command shell.
+// Both spawn paths carry it.
 func appendCodexSessionToolConfig(args []string) []string {
-	return append(args, "-c", codexPluginsOffConfig)
+	return append(args, "-c", codexPluginsOffConfig, "-c", codexLoginShellPackagePathConfig)
 }
 
 func appendCodexOrbitMCPConfig(args []string, exe string) []string {
