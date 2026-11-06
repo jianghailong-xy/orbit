@@ -110,28 +110,34 @@ func TestCodexSpawnArgsTurnAccountPluginsOff(t *testing.T) {
 
 // Both spawn paths have Codex put its bundled tools back on PATH after a login profile has run, the
 // only setting that keeps `rg` in every command shell while commands stay login shells — see
-// codexLoginShellPackagePathConfig. Neither turns login shells off, which would answer `login: true`
-// with an error and drop what the login profile sets up.
+// codexLoginShellPackagePathConfig — and only for a codex that knows it, since an older one reports the
+// unknown key as errors. Neither turns login shells off, which would answer `login: true` with an error
+// and drop what the login profile sets up.
 func TestCodexSpawnArgsKeepBundledToolsInTheLoginShell(t *testing.T) {
+	previous := codexKeepsToolsInLoginShell
+	t.Cleanup(func() { codexKeepsToolsInLoginShell = previous })
 	job := &ClaimedSession{Agent: AgentExecConfig{Model: "gpt-5.5"}}
-	for name, args := range map[string][]string{
-		"exec":       codexExecCommandArgs(job, "/repo", "/tmp/uploads", nil, "/usr/local/bin/orbit"),
-		"app-server": codexAppServerCommandArgs(job, "/tmp/codex-state", "/usr/local/bin/orbit"),
-	} {
-		if !containsArgs(args, []string{"-c", "features.login_shell_package_path=true"}) {
-			t.Errorf("%s args do not turn login_shell_package_path on: %v", name, args)
-		}
-		for _, arg := range args {
-			if strings.Contains(arg, "allow_login_shell") {
-				t.Errorf("%s args change allow_login_shell (%q): %v", name, arg, args)
+	for _, knows := range []bool{true, false} {
+		codexKeepsToolsInLoginShell = func() bool { return knows }
+		for name, args := range map[string][]string{
+			"exec":       codexExecCommandArgs(job, "/repo", "/tmp/uploads", nil, "/usr/local/bin/orbit"),
+			"app-server": codexAppServerCommandArgs(job, "/tmp/codex-state", "/usr/local/bin/orbit"),
+		} {
+			if got := containsArgs(args, []string{"-c", "features.login_shell_package_path=true"}); got != knows {
+				t.Errorf("codex knows the feature: %v; %s args turn login_shell_package_path on: %v: %v", knows, name, got, args)
+			}
+			for _, arg := range args {
+				if strings.Contains(arg, "allow_login_shell") {
+					t.Errorf("%s args change allow_login_shell (%q): %v", name, arg, args)
+				}
 			}
 		}
 	}
 }
 
-// The installed Codex knows the feature that override names, and has it on with the override. Codex takes an
-// unknown feature key in silence, so a release that renamed or dropped it would put rg out of reach again with
-// nothing else failing.
+// The installed Codex knows the feature that override names, has it on with the override, and its own manifest
+// says so to codexKeepsToolsInLoginShell. Codex takes an unknown feature key with no more than an error line, so a
+// release that renamed or dropped it would put rg out of reach again with nothing else failing.
 func TestTheInstalledCodexKnowsLoginShellPackagePath(t *testing.T) {
 	exe, err := exec.LookPath("codex")
 	if err != nil {
@@ -144,10 +150,14 @@ func TestTheInstalledCodexKnowsLoginShellPackagePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("codex features list: %v", err)
 	}
+	pkg, ok := installedCodexPackage(exe)
 	for _, line := range strings.Split(string(out), "\n") {
 		if fields := strings.Fields(line); len(fields) > 0 && fields[0] == codexLoginShellPackagePathFeature {
 			if fields[len(fields)-1] != "true" {
 				t.Fatalf("with Orbit's override on, codex lists %q", line)
+			}
+			if ok && pkg.pathDir != "" && !pkg.keepsToolsInLoginShell() {
+				t.Fatalf("codex %s knows %s, but its manifest reads as one that does not: %+v", pkg.version, codexLoginShellPackagePathFeature, pkg)
 			}
 			return
 		}

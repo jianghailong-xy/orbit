@@ -16,17 +16,22 @@ func mkdirAll(t *testing.T, dir string) string {
 }
 
 // fakeNpmCodex lays a Codex install out the way npm does: the `codex` on PATH links to the launcher in the
-// package's bin/, and the platform package, with codex-path/rg when bundledRg, sits in its node_modules.
-// features is what its `codex features list` prints. It returns the `codex` on PATH.
-func fakeNpmCodex(t *testing.T, features string, bundledRg bool) string {
+// package's bin/, and the platform package sits in its node_modules with the manifest Codex reads,
+// codex-package.json, saying version and naming codex-path, which holds rg when bundledRg. It returns the
+// `codex` on PATH.
+func fakeNpmCodex(t *testing.T, version string, bundledRg bool) string {
 	t.Helper()
 	root := t.TempDir()
 	pkg := filepath.Join(root, "lib", "node_modules", "@openai", "codex")
-	launcher := writeFakeBin(t, mkdirAll(t, filepath.Join(pkg, "bin")), "codex.js",
-		`if [ "$1 $2" = "features list" ]; then printf '%s\n' '`+features+`'; fi`)
+	launcher := writeFakeBin(t, mkdirAll(t, filepath.Join(pkg, "bin")), "codex.js", "exit 0")
+	native := mkdirAll(t, filepath.Join(pkg, "node_modules", "@openai", "codex-linux-x64", "vendor", "x86_64-unknown-linux-musl"))
+	manifest := `{"layoutVersion": 1, "version": "` + version + `", "entrypoint": "bin/codex", "pathDir": "codex-path"}`
+	if err := os.WriteFile(filepath.Join(native, "codex-package.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pathDir := mkdirAll(t, filepath.Join(native, "codex-path"))
 	if bundledRg {
-		writeFakeBin(t, mkdirAll(t, filepath.Join(pkg, "node_modules", "@openai", "codex-linux-x64", "vendor",
-			"x86_64-unknown-linux-musl", "codex-path")), "rg", "exit 0")
+		writeFakeBin(t, pathDir, "rg", "exit 0")
 	}
 	link := filepath.Join(mkdirAll(t, filepath.Join(root, "bin")), "codex")
 	if err := os.Symlink(launcher, link); err != nil {
@@ -111,7 +116,7 @@ func TestDoctorClaudeCodeBringsItsOwnRg(t *testing.T) {
 func TestDoctorFindsCodexsOwnRg(t *testing.T) {
 	pathResettingLoginShell(t, t.TempDir())
 	t.Setenv("CODEX_HOME", t.TempDir())
-	codex := fakeNpmCodex(t, "login_shell_package_path                 experimental       false", true)
+	codex := fakeNpmCodex(t, "0.167.0", true)
 	h := installedEngine(t, providerCodex, codex)
 	h.rg = checkEngineRg(h, t.TempDir())
 	if !strings.HasSuffix(h.rg.path, filepath.Join("vendor", "x86_64-unknown-linux-musl", "codex-path", "rg")) {
@@ -131,9 +136,9 @@ func TestDoctorAsksALoginShellForCodexWithoutItsOwnRg(t *testing.T) {
 	loginDir := t.TempDir()
 	pathResettingLoginShell(t, loginDir)
 	for name, codex := range map[string]string{
-		"no bundled rg":           fakeNpmCodex(t, "login_shell_package_path                 experimental       false", false),
-		"no login-shell feature":  fakeNpmCodex(t, "shell_snapshot                           stable             true", true),
-		"no features list at all": fakeNpmCodex(t, "", true),
+		"no bundled rg":                   fakeNpmCodex(t, "0.167.0", false),
+		"a version before the feature":    fakeNpmCodex(t, "0.160.0", true),
+		"a version it cannot read at all": fakeNpmCodex(t, "dev", true),
 	} {
 		h := installedEngine(t, providerCodex, codex)
 		h.rg = checkEngineRg(h, servicePath)
@@ -143,7 +148,7 @@ func TestDoctorAsksALoginShellForCodexWithoutItsOwnRg(t *testing.T) {
 	}
 	// The login shell's own PATH is what counts: an rg there is found.
 	loginRg := writeFakeBin(t, loginDir, "rg", "exit 0")
-	h := installedEngine(t, providerCodex, fakeNpmCodex(t, "", false))
+	h := installedEngine(t, providerCodex, fakeNpmCodex(t, "0.167.0", false))
 	if h.rg = checkEngineRg(h, servicePath); h.rg.path != loginRg {
 		t.Fatalf("rg on the login shell's PATH resolved to %q, want %q", h.rg.path, loginRg)
 	}
@@ -160,11 +165,11 @@ func TestDoctorCodexWithoutLoginShells(t *testing.T) {
 	pathResettingLoginShell(t, t.TempDir())
 	servicePath := t.TempDir()
 	rg := writeFakeBin(t, servicePath, "rg", "exit 0")
-	h := installedEngine(t, providerCodex, fakeNpmCodex(t, "", false))
+	h := installedEngine(t, providerCodex, fakeNpmCodex(t, "0.160.0", false))
 	if h.rg = checkEngineRg(h, servicePath); h.rg.path != rg {
 		t.Fatalf("without login shells Codex's rg = %q, want the runner's %q", h.rg.path, rg)
 	}
-	h = installedEngine(t, providerCodex, fakeNpmCodex(t, "", true))
+	h = installedEngine(t, providerCodex, fakeNpmCodex(t, "0.160.0", true))
 	if h.rg = checkEngineRg(h, t.TempDir()); h.rg.source != "Codex's own" {
 		t.Fatalf("without login shells codex-path still comes first: %+v", h.rg)
 	}
@@ -186,22 +191,5 @@ func TestCodexAllowsLoginShellReadsTheTopLevelKey(t *testing.T) {
 		if got := codexAllowsLoginShell(); got != want {
 			t.Errorf("config %q: allows login shells = %v, want %v", config, got, want)
 		}
-	}
-}
-
-// A standalone install keeps the binary in <release>/bin and the rg it ships in <release>/codex-path.
-func TestCodexBundledRgInAStandaloneRelease(t *testing.T) {
-	release := t.TempDir()
-	exe := writeFakeBin(t, mkdirAll(t, filepath.Join(release, "bin")), "codex", "exit 0")
-	rg := writeFakeBin(t, mkdirAll(t, filepath.Join(release, "codex-path")), "rg", "exit 0")
-	link := filepath.Join(t.TempDir(), "codex")
-	if err := os.Symlink(exe, link); err != nil {
-		t.Fatal(err)
-	}
-	if got := codexBundledRg(link); got != rg {
-		t.Fatalf("bundled rg = %q, want %q", got, rg)
-	}
-	if got := codexBundledRg(writeFakeBin(t, t.TempDir(), "codex", "exit 0")); got != "" {
-		t.Fatalf("a codex outside any package has a bundled rg %q", got)
 	}
 }

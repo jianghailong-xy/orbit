@@ -8,7 +8,6 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 // What `orbit doctor` says about ripgrep: whether `rg` resolves in the shell each engine runs a session's
@@ -64,8 +63,9 @@ func checkEngineRg(h engineHealth, servicePath string) engineRg {
 	case rgShellCodex:
 		login := codexAllowsLoginShell()
 		// Without login shells the command inherits Codex's own PATH, codex-path first. A login shell gets it
-		// back only from a Codex that knows the feature Orbit turns on.
-		if rg := codexBundledRg(h.path); rg != "" && (!login || codexKnowsFeature(h.path, codexLoginShellPackagePathFeature)) {
+		// back only from a Codex Orbit turns login_shell_package_path on for (codexKeepsToolsInLoginShell).
+		pkg, _ := installedCodexPackage(h.path)
+		if rg := pkg.bundledRg(); rg != "" && (!login || pkg.keepsToolsInLoginShell()) {
 			return engineRg{checked: true, path: rg, source: "Codex's own"}
 		}
 		if login {
@@ -95,53 +95,6 @@ func loginShellRg(shell, servicePath string) string {
 		return ""
 	}
 	return lastNonEmptyLine(string(out))
-}
-
-// codexBundledRg is the rg a Codex install ships beside its binary: <package>/codex-path/rg, the directory Codex
-// puts on PATH. Codex finds its package from the native binary, which sits in <package>/bin (a standalone
-// install's release directory); the npm package's `codex` is a launcher script that runs the binary of the
-// platform package installed under it. "" when there is none.
-func codexBundledRg(codexPath string) string {
-	exe, err := filepath.EvalSymlinks(codexPath)
-	if err != nil {
-		return ""
-	}
-	var candidates []string
-	if dir := filepath.Dir(exe); filepath.Base(dir) == "bin" {
-		candidates = append(candidates, filepath.Join(filepath.Dir(dir), "codex-path", "rg"))
-		if strings.HasSuffix(exe, ".js") {
-			pkg := filepath.Dir(dir)
-			for _, pattern := range []string{
-				filepath.Join(pkg, "node_modules", "@openai", "codex-*", "vendor", "*", "codex-path", "rg"),
-				filepath.Join(pkg, "vendor", "*", "codex-path", "rg"),
-			} {
-				matches, _ := filepath.Glob(pattern)
-				candidates = append(candidates, matches...)
-			}
-		}
-	}
-	for _, rg := range candidates {
-		if fi, err := os.Stat(rg); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
-			return rg
-		}
-	}
-	return ""
-}
-
-// codexKnowsFeature reports whether the Codex at codexPath lists feature among the ones it knows.
-func codexKnowsFeature(codexPath, feature string) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, codexPath, "features", "list").Output()
-	if err != nil {
-		return false
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if fields := strings.Fields(line); len(fields) > 0 && fields[0] == feature {
-			return true
-		}
-	}
-	return false
 }
 
 // codexAllowsLoginShell reads allow_login_shell from the Codex config the account's Codex reads, true unless

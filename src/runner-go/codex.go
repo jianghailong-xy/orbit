@@ -415,6 +415,8 @@ const codexPluginsOffConfig = "features.plugins=false"
 // with another `workdir`, or one that runs before the snapshot exists, gets the plain login shell.
 // This experimental feature (in codex since 0.161.0, off by default) has Codex put the directory back
 // after the login profile has run, so a command keeps both its login environment and the bundled tools.
+// It goes only to a codex that knows it (codexKeepsToolsInLoginShell): 0.160.0 takes the unknown key
+// too, but reports it in two ERROR lines a transcript shows as errors.
 //
 // Measured against the installed CLI (0.166.0 and 0.167.0, root on Debian 13, through
 // startCodexAppServer): `command -v rg` failed in every login-shell command — a `workdir` outside the
@@ -426,11 +428,27 @@ const codexLoginShellPackagePathConfig = "features." + codexLoginShellPackagePat
 // codexLoginShellPackagePathFeature is that feature's name, as `codex features list` lists it.
 const codexLoginShellPackagePathFeature = "login_shell_package_path"
 
+// codexKeepsToolsInLoginShell reports whether the codex this runner execs — the `codex` on its PATH, as
+// exec.Command finds it — ships codex-path and knows login_shell_package_path, read off its own manifest
+// (codex_package.go). A var so a test can answer it.
+var codexKeepsToolsInLoginShell = func() bool {
+	exe, err := exec.LookPath("codex")
+	if err != nil {
+		return false
+	}
+	pkg, ok := installedCodexPackage(exe)
+	return ok && pkg.keepsToolsInLoginShell()
+}
+
 // appendCodexSessionToolConfig adds the overrides that keep a session's tools to what Orbit and the
 // agent's own configuration put there, with Codex's bundled tools reachable from its command shell.
 // Both spawn paths carry it.
 func appendCodexSessionToolConfig(args []string) []string {
-	return append(args, "-c", codexPluginsOffConfig, "-c", codexLoginShellPackagePathConfig)
+	args = append(args, "-c", codexPluginsOffConfig)
+	if codexKeepsToolsInLoginShell() {
+		args = append(args, "-c", codexLoginShellPackagePathConfig)
+	}
+	return args
 }
 
 func appendCodexOrbitMCPConfig(args []string, exe string) []string {
