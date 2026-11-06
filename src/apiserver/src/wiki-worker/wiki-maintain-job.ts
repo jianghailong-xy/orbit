@@ -11,6 +11,7 @@ import {
   WIKI_REVIEW_RULES,
   wikiMaintenanceRunSessions,
   type WikiDossier,
+  type WikiMaintainRecheckReport,
   type WikiMaintenanceClaimsReport,
   type WikiPlanTopic,
   type WikiRepoOpKind,
@@ -99,6 +100,7 @@ import {
 import { WikiDocsSnapshotRepo } from './wiki-docs-build-job';
 import { wikiDocCleanPath, wikiDocRepoPieces, type WikiDocShown, type WikiDocPiece, type WikiDocsPlanDoc } from './wiki-docs-writer';
 import { verifyWikiOps } from './wiki-verify-job';
+import { runWikiRecheck, type WikiRecheckCarry } from './wiki-recheck-step';
 
 /**
  * The `maintain` job (contracts/wiki.contract.json `jobs.kindRuns.maintain`, `maintenance.job.server`;
@@ -217,6 +219,8 @@ export interface WikiMaintainReport {
    * held at the run's commit (`anchorRules.verify.skip`), which were neither sent nor written.
    */
   anchors?: { entries: number; changed: number; missing: number; skipped: number };
+  /** The claim recheck's step (contract `maintenance.job.server.recheck.report`). */
+  recheck?: WikiMaintainRecheckReport;
   docs?: WikiMaintainDocsReport;
   tokens: { input: number; output: number; calls: number };
   seconds: number;
@@ -275,6 +279,8 @@ interface WikiMaintainCarry {
   /** The verdicts recorded: the run's own ops', and the adopted ones'. */
   verification?: { verified: number; adopted: number };
   docs?: WikiMaintainDocsCarry;
+  /** The claim recheck's report, once its screen and again once its asks are written. */
+  recheck?: WikiRecheckCarry;
 }
 
 /** The carry as the job's row holds it, a copy: a job nothing was carried for reads as one with nothing in it. */
@@ -412,6 +418,8 @@ class WikiMaintainRun {
   private readonly pageOf = new Map<string, number>();
   private breakerRead: { remaining: number | null } | null = null;
   private advanced = false;
+  /** The anchors step's proof: its diffs, which the claim recheck reads before it asks for one of its own. */
+  private proof: WikiAnchorProof | null = null;
   private position = '';
   /** Whether the space's runner reads whole files; a bounded one is asked with the old limits. */
   private wholeFile = false;
@@ -707,6 +715,8 @@ class WikiMaintainRun {
       step = 'anchors';
       await this.anchors();
       if (!this.backfill) {
+        step = 'recheck';
+        await this.recheck();
         step = 'docs';
         await this.docs();
       }
@@ -1384,6 +1394,7 @@ class WikiMaintainRun {
   private async anchors(): Promise<void> {
     const { job } = this.jobContext;
     const proof = await this.anchorProof();
+    this.proof = proof;
     let after: string | null = null;
     let entries = 0;
     let changed = 0;
@@ -1526,6 +1537,35 @@ class WikiMaintainRun {
         ? `, and the ${left.reduce((total, row) => total + row.anchors, 0)} anchor(s) checked at the other ${left.length} are checked again`
         : ''));
     return { sha: head, reaches, changed };
+  }
+
+  /**
+   * Recheck what entries say once main changed their code (`maintenance.job.server.recheck`): the screen and the
+   * asks of `runWikiRecheck`, on the run's snapshot commit. It never fails the run; a backfill does not recheck.
+   */
+  private async recheck(): Promise<void> {
+    const { job } = this.jobContext;
+    const head = this.snapshot?.sha ?? '';
+    if (!/^[0-9a-f]{40}$/u.test(head)) return;
+    this.report.recheck = await runWikiRecheck({
+      prisma: this.deps.prisma,
+      wiki: this.deps.wiki,
+      ownerId: job.ownerId,
+      spaceId: job.spaceId,
+      jobId: job.id,
+      head,
+      reaches: new Set((this.snapshot?.index.commits ?? []).map((commit) => commit.toLowerCase())),
+      operation: (kind, input, what) => this.operation(kind, input, what),
+      knownDiff: (from) => this.proof?.changed.get(from)?.any ?? null,
+      ask: async (unit, system, prompt, maxTokens) => (await this.ask(WIKI_MAINTAIN_JOB.steps.recheck, unit, system, prompt, maxTokens)).text,
+      log: (line) => this.jobContext.log(line),
+      signal: this.jobContext.signal,
+      earlier: this.earlier.recheck ?? null,
+      keep: async (carry) => {
+        this.carry.recheck = carry;
+        await this.keep();
+      },
+    });
   }
 
   // ── The documents ─────────────────────────────────────────────────────────────────────────────

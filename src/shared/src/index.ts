@@ -46,6 +46,7 @@ export * from './wikiPlan';
 export * from './wikiDocs';
 export * from './wikiJobs';
 export * from './wikiRepoOps';
+export * from './wikiRecheck';
 export * from './wikiSystemModel';
 export * from './wikiChat';
 

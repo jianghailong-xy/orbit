@@ -113,6 +113,7 @@ import {
   WIKI_REPO_OP_STATES,
   WIKI_STORED_TEXT_ENCODINGS,
 } from './wikiRepoOps';
+import { WIKI_CLAIM_HIDDEN_STATES, WIKI_CLAIM_STATES, WIKI_RECHECK, WIKI_RECHECK_RANKS, WIKI_RECHECK_VERDICTS } from './wikiRecheck';
 import { WIKI_MAINTENANCE_HEALTH, WIKI_MAINTENANCE_LOOKS, wikiMaintenanceLook } from './wikiHealth';
 import {
   WIKI_DOC_BLOCK_KINDS,
@@ -2032,6 +2033,29 @@ describe('wiki contract', () => {
       'orbit_wiki_model_calls_total',
       'orbit_wiki_model_call_duration_seconds',
     ]);
+  });
+
+  it('holds the claim recheck to the contract: its states, its step, its ranks and its numbers', () => {
+    // What the last ask found of an entry's claim: the closed set migration 0479's CHECK holds (wiki-schema.pg.spec.ts).
+    expect(Object.keys(CONTRACT.claimStates)).toEqual([...WIKI_CLAIM_STATES]);
+    // An answer says one of the states but unchecked, and agents' search leaves out the two that act.
+    expect([...WIKI_RECHECK_VERDICTS]).toEqual(WIKI_CLAIM_STATES.filter((state) => state !== 'unchecked'));
+    expect([...WIKI_CLAIM_HIDDEN_STATES]).toEqual(['fixed', 'obsolete']);
+    const recheck = CONTRACT.maintenance.job.server.recheck;
+    expect(CONTRACT.maintenance.job.server.rules.steps.recheck).toBe(WIKI_RECHECK.step);
+    expect(Object.keys(recheck.screen.ranks)).toEqual(Object.values(WIKI_RECHECK_RANKS).map(String));
+    const { step, ...rules } = WIKI_RECHECK;
+    expect(step).toBe('recheck');
+    expect(recheck.rules).toEqual({ ...rules, kinds: [...rules.kinds] });
+    // The kinds are the contract's own, and the owner's budget is the one asked for (design section 9, D2).
+    for (const kind of WIKI_RECHECK.kinds) expect(Object.keys(CONTRACT.kinds)).toContain(kind);
+    expect(WIKI_RECHECK.asksMax).toBe(20);
+    // The runner's history operation carries no more than the step asks of it in one go.
+    expect(WIKI_RECHECK.screenMax).toBeLessThanOrEqual(WIKI_RECHECK.screenOpMax);
+    expect(WIKI_RECHECK.asksMax).toBeLessThanOrEqual(WIKI_RECHECK.detailOpMax);
+    expect(CONTRACT.repoOps.kinds).toContain('history');
+    expect(CONTRACT.repoOps.kindRuns.history).toMatch(/at most 500 entries and 40 with detail/u);
+    expect(existsSync(path.join(ROOT, 'docs/wiki-claim-recheck-design.md'))).toBe(true);
   });
 
   it('runs the maintenance pipeline on the server: the job, its numbers and its identity (server execution P8)', () => {

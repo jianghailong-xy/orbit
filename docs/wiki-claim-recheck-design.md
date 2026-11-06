@@ -155,8 +155,8 @@ anything else makes it `unsure`, which changes nothing and lets the entry rank a
 | `unsure` | `claim_state` unsure, the head commit | leaves the due queue; ranks again when touched |
 | `fixed` / `obsolete` | the state, the commit that did it with its date and subject, the model's reason, whether it was already so when the entry was recorded | out of agents' search and the push at once; one system challenge in Review |
 
-- **The challenge** is filed as the anchors step files one (`origin` maintenance, author `system`, the run's job), only
-  when none is open. Its reason: "Claim recheck on origin/main at `<head>`: fixed by `<sha>` (`<date>`, `<subject>`).
+- **The challenge** is filed as the anchors step files one (`origin` maintenance, author `system`, its rationale naming
+  the run's job), only when none is open. Its reason: "Claim recheck on origin/main at `<head>`: fixed by `<sha>` (`<date>`, `<subject>`).
   `<the model's reason>`. It was already fixed when this entry was recorded on `<date>`. Proposed answer: Retire."
 - **Search.** The runner door's `wiki_search` leaves out an entry whose `claim_state` is `fixed` or `obsolete`, as it
   leaves out a tainted entry nobody vouched for. `wiki_get` still returns it, with `claimState` and the claim check in
@@ -166,7 +166,7 @@ anything else makes it `unsure`, which changes nothing and lets the entry rank a
   A pitfall is "retired once its fix lands" (`kinds.pitfall.invalidation`) and a decision is "only superseded, never
   rewritten" (`kinds.decision.invalidation`), so Retire is the proposed answer for both labels.
 
-**Storage.** Migration `0479` (free on main, `project/*` and pushed `orbit/*` branches on 11-06; checked again before it
+**Storage.** Migration `0481` (free on main, `project/*` and pushed `orbit/*` branches on 11-06; checked again before it
 lands): on `wiki_entry` `claim_state` (`unchecked`, `holds`, `fixed`, `obsolete`, `unsure`; default `unchecked`, a
 CHECK), `claim_checked_ref`, `claim_checked_at`, `claim_check` (jsonb: verdict, commit, reason, base, both answers),
 `claim_screened_at` (null until its first screen), and the queue's `claim_due_rank` and `claim_due_at`; on `wiki_space`
@@ -252,7 +252,7 @@ report says separately which rank the screen would have given each sampled entry
 
 ## 8. What needs the owner
 
-- Deploying the apiserver with migration `0479`, and releasing a runner with the `history` operation. Either order
+- Deploying the apiserver with migration `0481`, and releasing a runner with the `history` operation. Either order
   works (§3.1).
 - After the deploy, every existing entry with a path is screened once, 400 a run (about three days), and the asks
   start with rank 1. Each `fixed` or `obsolete` verdict is a Review card; if they come too fast, lowering

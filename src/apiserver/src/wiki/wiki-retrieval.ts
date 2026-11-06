@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  WIKI_CLAIM_HIDDEN_STATES,
   WIKI_LIMITS,
   WIKI_VOUCHED_TRUST,
   type WikiAnchorState,
@@ -300,7 +301,9 @@ function matchSql(norm: NormalizedSearchQuery, col: Prisma.Sql): Prisma.Sql {
  * claim back, which is what `readBoundary` allows; another session's proposal is invisible here, and
  * the owner reads those in Review. And a live entry that rests on a web-derived record reaches a
  * session only once a person has vouched for it (`reviewModes.floors.taintedWaits`): tainted, with a
- * trust that is not the owner's or confirmed, it is the owner's to read and never an agent's.
+ * trust that is not the owner's or confirmed, it is the owner's to read and never an agent's. Nor does an
+ * entry two answers of the claim recheck found fixed or obsolete (`maintenance.job.server.recheck.effect.search`):
+ * it waits for the owner's answer to its challenge, and an agent reading it by id still gets it, marked.
  */
 function visibilitySql(request: WikiSearchRequest): Prisma.Sql {
   const sessionId = request.sessionId ?? null;
@@ -308,7 +311,8 @@ function visibilitySql(request: WikiSearchRequest): Prisma.Sql {
   const live = Prisma.sql`e."status" = ANY(${textArray(statuses)})`;
   if (!sessionId) return live;
   const vouched = Prisma.sql`(NOT e."tainted" OR e."trust" = ANY(${textArray(WIKI_VOUCHED_TRUST)}))`;
-  return Prisma.sql`((${live} AND ${vouched}) OR (e."status" = 'proposed' AND EXISTS (
+  const current = Prisma.sql`NOT (e."claim_state" = ANY(${textArray([...WIKI_CLAIM_HIDDEN_STATES])}))`;
+  return Prisma.sql`((${live} AND ${vouched} AND ${current}) OR (e."status" = 'proposed' AND EXISTS (
       SELECT 1
         FROM "wiki_changeset_op" o
         JOIN "wiki_changeset" c ON c."id" = o."changeset_id" AND c."owner_id" = o."owner_id"

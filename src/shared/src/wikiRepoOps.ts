@@ -21,10 +21,10 @@ export const WIKI_REPO_OP_CAPABILITY = 'wiki-repo-op/v1';
 export const WIKI_REPO_OP_READ_CAPABILITY = 'wiki-repo-op-read/v1';
 
 /**
- * What a repository operation asks for (contract `repoOps.kinds`). Four questions, and no fifth: a pipeline
- * that needs more than these changes this list first.
+ * What a repository operation asks for (contract `repoOps.kinds`). Five questions: a pipeline that needs more than
+ * these changes this list first, as the claim recheck did with `history` (git grep, log and diff over an entry's paths).
  */
-export const WIKI_REPO_OP_KINDS = ['snapshot', 'read', 'diff', 'anchors'] as const;
+export const WIKI_REPO_OP_KINDS = ['snapshot', 'read', 'diff', 'anchors', 'history'] as const;
 export type WikiRepoOpKind = (typeof WIKI_REPO_OP_KINDS)[number];
 
 /** Where an operation is (contract `repoOps.states`). A settled row is terminal; the row is the record. */

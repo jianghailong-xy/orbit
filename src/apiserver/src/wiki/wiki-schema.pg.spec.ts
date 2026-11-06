@@ -283,6 +283,11 @@ test('0307 · the Orbit Wiki data model', { skip, concurrency: 1, timeout: 300_0
         write: (state) => insert(client, 'wiki_entry', entryRow({ id: PROBE, anchor_state: state })),
       },
       {
+        table: 'wiki_entry', column: 'claim_state', constraint: 'wiki_entry_claim_state_chk',
+        values: Object.keys(CONTRACT.claimStates),
+        write: (state) => insert(client, 'wiki_entry', entryRow({ id: PROBE, claim_state: state })),
+      },
+      {
         table: 'wiki_entry_revision', column: 'author_kind', constraint: 'wiki_entry_revision_author_kind_chk',
         values: Object.keys(CONTRACT.authorKinds),
         write: (kind) => insert(client, 'wiki_entry_revision', revisionRow({

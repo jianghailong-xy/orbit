@@ -37,10 +37,10 @@ export const WIKI_MAINTAIN_JOB = {
    */
   priority: 0,
   /**
-   * The queue's steps: extraction, the pass that only checks the agent's notes, and the one plan change a run may
-   * propose; `plan_*` is the plan's wait limit.
+   * The queue's steps: extraction, the pass that only checks the agent's notes, the one plan change a run may
+   * propose (`plan_*` is the plan's wait limit), and the claim recheck's asks (`maintenance.job.server.recheck`).
    */
-  steps: { extract: 'extract', claims: 'claims', planProposal: 'plan_proposal' },
+  steps: { extract: 'extract', claims: 'claims', planProposal: 'plan_proposal', recheck: 'recheck' },
   /** One extraction's max_tokens: an 8k-token dossier's at most six entries, the import's own budget. */
   extractMaxTokens: 8192,
   /** One plan proposal's max_tokens: a document's new sections in the plan's line format (the runner's 32,000). */
@@ -73,6 +73,26 @@ export const WIKI_MAINTAIN_JOB = {
   /** The directories under docs/ that hold no design document (`maintenance.job.docs.excluded`). */
   docsExcluded: ['docs/mocks/', 'docs/evidence/'],
 } as const;
+
+/**
+ * What the claim recheck did in one run (contract `maintenance.job.server.recheck.report`): the commits it screened
+ * from and to, how many entries it screened and ranked by rank, how many it asked and with how many model calls, what
+ * those asks found, how many stay due, and — when it did nothing — why.
+ */
+export interface WikiMaintainRecheckReport {
+  head: string;
+  from: string | null;
+  screened: number;
+  ranked: { '0': number; '1': number; '2': number; '3': number };
+  asked: number;
+  calls: number;
+  holds: number;
+  fixed: number;
+  obsolete: number;
+  unsure: number;
+  due: number;
+  skipped: string | null;
+}
 
 /**
  * A backfill (contract `maintenance.job.server.backfill`, docs/wiki-memory-claims-design.md section 5): a `maintain` job
@@ -237,6 +257,8 @@ export interface WikiMaintenanceReport {
    * reported no `skipped`.
    */
   anchors?: { entries: number; changed: number; missing: number; skipped?: number };
+  /** The claim recheck's step (contract `maintenance.job.server.recheck.report`); absent from a run before it. */
+  recheck?: WikiMaintainRecheckReport;
   /** The topic articles a run before criterion 3's revision 3 rewrote; a run now writes the plan's sections (docs). */
   articles?: { written: number; unchanged: number; failed: number };
   docs?: WikiMaintenanceDocsReport;

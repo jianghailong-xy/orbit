@@ -60,6 +60,8 @@ import {
   type WikiVerificationItem,
   type WikiVerificationOutcome,
   type WikiVerificationVerdict,
+  type WikiClaimCheck,
+  type WikiClaimState,
 } from '@orbit/shared';
 import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
 import type { AuthCredential } from '../common/current-user.decorator';
@@ -377,9 +379,11 @@ interface PreparedOp {
  * `anchor_check` is not a wiki op either: it is what a maintenance run's re-verification found
  * (`recordAnchorChecks`), and it can move an entry's trust, which is why it comes here too. `downgrade` is
  * neither: it is the close of a history backfill (`downgradeNoteEntries`), which moves an entry's trust alone.
+ * `claim_check` is what the claim recheck's asks found (`recordClaimChecks`): the entry's claim columns, and
+ * through `recomputeFlags` the sentences a broken entry withdraws, so it comes here like the anchors' check.
  */
 interface WikiApplyInstruction {
-  op: WikiOp | 'promote' | 'confirm' | 'reject' | 'reopen' | 'anchor_check' | 'downgrade';
+  op: WikiOp | 'promote' | 'confirm' | 'reject' | 'reopen' | 'anchor_check' | 'claim_check' | 'downgrade';
   entryId: string | null;
   draft: PreparedDraft | null;
   changes: WikiEntryChanges | null;
@@ -663,6 +667,10 @@ export const ENTRY_SELECT = {
   anchorState: true,
   anchorCheckedRef: true,
   anchorCheckedAt: true,
+  claimState: true,
+  claimCheckedRef: true,
+  claimCheckedAt: true,
+  claimCheck: true,
   tainted: true,
   challenged: true,
   unsupported: true,
@@ -739,6 +747,11 @@ export function entryView(row: EntryRow): Record<string, unknown> {
     anchorState: row.anchorState,
     anchorCheckedRef: row.anchorCheckedRef,
     anchorCheckedAt: row.anchorCheckedAt?.toISOString() ?? null,
+    // What the claim recheck last found (contract `claimStates`): wiki_get shows an entry agents' search leaves out.
+    claimState: row.claimState,
+    claimCheckedRef: row.claimCheckedRef,
+    claimCheckedAt: row.claimCheckedAt?.toISOString() ?? null,
+    claimCheck: row.claimCheck ?? null,
     tainted: row.tainted,
     challenged: row.challenged,
     unsupported: row.unsupported,
@@ -3247,6 +3260,120 @@ export class WikiService {
   }
 
   /**
+   * What the claim recheck's asks found (contract `maintenance.job.server.recheck.effect`): each entry's verdict,
+   * in a transaction of its own, through `applyOp` (instruction `claim_check`) while the entry is live at the
+   * revision the step read — otherwise it is stale and nothing of it is written. A fixed or obsolete verdict files
+   * one system challenge as an anchor check files one, when none is open: the challenge takes the entry out of the
+   * push, and its claim state takes it out of agents' search (wiki-retrieval.ts).
+   */
+  async recordClaimChecks(
+    caller: { ownerId: string; jobId: string },
+    spaceId: string,
+    report: { ref: string; entries: ReadonlyArray<{ entryId: string; revision: number; check: WikiClaimCheck; challengeReason: string | null }> },
+  ): Promise<{ outcomes: Array<{ entryId: string; status: 'recorded' | 'stale'; claimState: WikiClaimState | null; challengeOpId: string | null }> }> {
+    const space = await this.requireSpace(caller.ownerId, spaceId);
+    const literals = await this.envLiterals(this.prisma, caller.ownerId);
+    const at = new Date().toISOString();
+    const outcomes: Array<{ entryId: string; status: 'recorded' | 'stale'; claimState: WikiClaimState | null; challengeOpId: string | null }> = [];
+    for (const item of report.entries) {
+      outcomes.push(await withTransactionRetry(
+        this.prisma,
+        (tx) => this.applyClaimCheck(tx, caller, space, report.ref, at, item, literals),
+        loggedRetry(this.logger, 'wiki.recordClaimChecks', { transaction: CHANGESET_TRANSACTION }),
+      ));
+    }
+    if (outcomes.some((outcome) => outcome.status === 'recorded')) this.realtime?.publishWikiChanged(caller.ownerId, space.id);
+    return { outcomes };
+  }
+
+  /** One entry's verdict, inside its own transaction: see {@link recordClaimChecks}. */
+  private async applyClaimCheck(
+    tx: Tx,
+    caller: { ownerId: string; jobId: string },
+    space: { id: string; settings: unknown },
+    ref: string,
+    at: string,
+    item: { entryId: string; revision: number; check: WikiClaimCheck; challengeReason: string | null },
+    literals: readonly string[],
+  ): Promise<{ entryId: string; status: 'recorded' | 'stale'; claimState: WikiClaimState | null; challengeOpId: string | null }> {
+    const ownerId = caller.ownerId;
+    const written = await this.applyOp(tx, ownerId, space.id, {
+      op: 'claim_check',
+      entryId: item.entryId,
+      draft: null,
+      changes: null,
+      payload: { check: item.check, ref, at, revision: item.revision },
+      sources: [],
+      tainted: false,
+    }, { authorKind: 'system', authorUserId: null, authorSessionId: null, authorToolCallId: null, changesetOpId: null });
+    if (written.revision === null) return { entryId: item.entryId, status: 'stale', claimState: null, challengeOpId: null };
+    let challengeOpId: string | null = null;
+    if ((item.check.verdict === 'fixed' || item.check.verdict === 'obsolete') && item.challengeReason !== null) {
+      // One open challenge is enough, as for a broken anchor: while one waits, the entry is in Review already.
+      const open = await tx.wikiChangesetOp.count({ where: { ownerId, entryId: item.entryId, op: 'challenge', decision: 'pending' } });
+      if (open === 0) {
+        const system: WikiPrincipal = { origin: 'maintenance', ownerId, userId: null, sessionId: null, toolCallId: null, authorKind: 'system' };
+        const ops = [{ op: 'challenge', entryId: item.entryId, reason: item.challengeReason }];
+        const rationale = `Claim recheck on origin/main at ${ref.slice(0, 12)}, by the server's maintenance run (job ${uuidToBase62(caller.jobId)}): `
+          + 'two answers of the System model agreed that what this entry says no longer holds.';
+        const recorded = await this.recordChangeset(tx, system, space, ops, { ops, rationale }, null, literals);
+        const outcome = (recorded.ops as WikiOpOutcome[])[0];
+        if (outcome?.status === 'refused') throw new WikiRefusalError(outcome.reasons[0]);
+        if (outcome?.status === 'applied') challengeOpId = outcome.opId;
+      }
+    }
+    return { entryId: item.entryId, status: 'recorded', claimState: item.check.verdict, challengeOpId };
+  }
+
+  /**
+   * The owner re-confirmed an entry a claim check found fixed or obsolete (`recheck.effect.answers`): it holds at
+   * the commit the verdict was made at, so it is asked again only when its paths change after that.
+   */
+  private async reconfirmClaim(tx: Tx, ownerId: string, entryId: string): Promise<void> {
+    const entry = await tx.wikiEntry.findFirst({ where: { id: entryId, ownerId }, select: { claimState: true, claimCheck: true } });
+    if (!entry || (entry.claimState !== 'fixed' && entry.claimState !== 'obsolete')) return;
+    const check = { ...((entry.claimCheck ?? {}) as Record<string, unknown>), ownerReconfirmed: true };
+    await tx.wikiEntry.updateMany({
+      where: { id: entryId, ownerId, claimState: entry.claimState },
+      data: { claimState: 'holds', claimCheck: check as Prisma.InputJsonValue, claimDueRank: null, claimDueAt: null },
+    });
+  }
+
+  /**
+   * What the claim recheck's screen found (contract `maintenance.job.server.recheck.screen`): the entries it ranked
+   * join the due queue — each keeping the lowest rank it has earned and the time it first became due —, every entry
+   * it screened is marked screened, and the space's screen moves to `ref`. Only the queue columns, in three
+   * statements and one transaction; no revision, no op, and the entries' content, trust and flags are untouched.
+   */
+  async recordClaimScreen(
+    caller: { ownerId: string },
+    spaceId: string,
+    screen: { ref: string; screened: readonly string[]; ranked: ReadonlyArray<{ entryId: string; rank: number }> },
+  ): Promise<void> {
+    if (!/^[0-9a-f]{40}$/u.test(screen.ref)) throw new BadRequestException('a screen is recorded at a 40-character commit sha');
+    const ownerId = caller.ownerId;
+    await withTransactionRetry(this.prisma, async (tx) => {
+      if (screen.ranked.length > 0) {
+        const ids = screen.ranked.map((row) => row.entryId);
+        const ranks = screen.ranked.map((row) => row.rank);
+        await tx.$executeRaw`
+          UPDATE "wiki_entry" e
+             SET "claim_due_rank" = LEAST(COALESCE(e."claim_due_rank", r.rank), r.rank),
+                 "claim_due_at"   = COALESCE(e."claim_due_at", now())
+            FROM unnest(${ids}::uuid[], ${ranks}::smallint[]) AS r(id, rank)
+           WHERE e."id" = r.id AND e."owner_id" = ${ownerId}::uuid AND e."space_id" = ${spaceId}::uuid AND e."status" = 'active'`;
+      }
+      if (screen.screened.length > 0) {
+        await tx.$executeRaw`
+          UPDATE "wiki_entry" SET "claim_screened_at" = now()
+           WHERE "id" = ANY(${[...screen.screened]}::uuid[]) AND "owner_id" = ${ownerId}::uuid AND "space_id" = ${spaceId}::uuid
+             AND "claim_screened_at" IS NULL`;
+      }
+      await tx.wikiSpace.updateMany({ where: { id: spaceId, ownerId }, data: { claimRecheckRef: screen.ref } });
+    }, loggedRetry(this.logger, 'wiki.recordClaimScreen', { transaction: CHANGESET_TRANSACTION }));
+  }
+
+  /**
    * Would Tiered make this pitfall Auto, now that its anchors verified (contract
    * `anchorRules.verify.tiered`)? Only a live, untainted pitfall the space's Tiered mode applied as
    * Unreviewed — its current revision is the one a tiered op wrote, so nothing a person or a revert
@@ -3842,6 +3969,7 @@ export class WikiService {
         op: 'confirm', entryId: entry.id, draft: null, changes: null, payload: {}, sources: [], tainted: false,
       }, owner);
     }
+    if (answer === 'reconfirm') await this.reconfirmClaim(tx, ownerId, entry.id);
     await this.writeOpDecision(tx, ownerId, op.id, {
       decision: answer === 'amend' ? 'edited' : 'accepted',
       decisionNote: decision.note ?? null,
@@ -4030,6 +4158,9 @@ export class WikiService {
         // their checks and the entry its state.
         const reanchored = changedAnchors(instruction.payload);
         const checked = reanchored && storedAnchors(merged.anchors).some((anchor) => anchor.check !== undefined);
+        // A new revision that says something else, or is about other files, is a claim nobody has checked
+        // (`maintenance.job.server.recheck.effect.answers`): its first screen looks back to its own sources.
+        const reclaimed = changedClaim(instruction.payload);
         const applied = await tx.wikiEntry.updateMany({
           where: { id: target.id, ownerId, currentRevision: target.currentRevision },
           data: {
@@ -4047,6 +4178,7 @@ export class WikiService {
                   anchorCheckedAt: checked ? target.anchorCheckedAt : null,
                 }
               : {}),
+            ...(reclaimed ? UNCHECKED_CLAIM : {}),
             ...(instruction.tainted ? { tainted: true } : {}),
             ...(instruction.trustAfter ? { trust: instruction.trustAfter } : {}),
           },
@@ -4153,6 +4285,26 @@ export class WikiService {
             data: { trust: 'auto' },
           });
         }
+        await this.recomputeFlags(tx, ownerId, instruction.entryId!);
+        return { entryId: instruction.entryId!, revision: found.revision };
+      }
+      case 'claim_check': {
+        // What the claim recheck's asks found (contract `maintenance.job.server.recheck.effect`): written only while the
+        // entry is live at the revision the step read, and the entry leaves the due queue with it. A revision is null
+        // when it has moved since.
+        const found = instruction.payload as { check: WikiClaimCheck; ref: string; at: string; revision: number };
+        const written = await tx.wikiEntry.updateMany({
+          where: { id: instruction.entryId!, ownerId, status: 'active', currentRevision: found.revision },
+          data: {
+            claimState: found.check.verdict,
+            claimCheckedRef: found.ref,
+            claimCheckedAt: new Date(found.at),
+            claimCheck: found.check as unknown as Prisma.InputJsonValue,
+            claimDueRank: null,
+            claimDueAt: null,
+          },
+        });
+        if (written.count !== 1) return { entryId: instruction.entryId!, revision: null };
         await this.recomputeFlags(tx, ownerId, instruction.entryId!);
         return { entryId: instruction.entryId!, revision: found.revision };
       }
@@ -5587,6 +5739,23 @@ function mergeChanges(
 }
 
 /** Does an amend give the anchors anew? Its changes read the way `mergeChanges` reads them. */
+/** Whether an amend changes what an entry says or which files it is about: its claim is then unchecked again. */
+function changedClaim(payload: Record<string, unknown>): boolean {
+  const changes = ((payload.changes ?? payload) ?? {}) as WikiEntryChanges;
+  return changes.title !== undefined || changes.summary !== undefined || changes.fields !== undefined || changes.anchors !== undefined;
+}
+
+/** A claim nobody has checked or screened: what migration 0481 gave every entry, and what a new revision starts from. */
+const UNCHECKED_CLAIM = {
+  claimState: 'unchecked',
+  claimCheckedRef: null,
+  claimCheckedAt: null,
+  claimCheck: Prisma.DbNull,
+  claimScreenedAt: null,
+  claimDueRank: null,
+  claimDueAt: null,
+} satisfies Prisma.WikiEntryUpdateManyMutationInput;
+
 function changedAnchors(payload: Record<string, unknown>): boolean {
   const changes = ((payload.changes ?? payload) ?? {}) as WikiEntryChanges;
   return changes.anchors !== undefined;

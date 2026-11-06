@@ -3365,3 +3365,40 @@ See changes 逐句对照（`wikiDocSentenceDiff`）：一版的句子和替换�
   要和撤回变更集放进同一个事务时，从同一个 `store` 接进去，锁序照旧先条目、后文档。
 - **Activity 的 `left` 行随 C4**：跟进作业成为作业种类之前没有这种行，`doc-changes` 现在只列 `section` 行。
 - 迁移 `0475_wiki_doc_section_version`，一节的版本按 `seq` 排先后；pg spec 是 `src/apiserver/src/wiki/wiki-doc-versions.pg.spec.ts`。
+
+## 31. Claim recheck (`maintenance.job.server.recheck`)
+
+JSON: `claimStates` and `maintenance.job.server.recheck`; design `docs/wiki-claim-recheck-design.md` (owner, 2026-11-06:
+D1–D4 as recommended). Code: `src/apiserver/src/wiki-worker/wiki-recheck.ts` (paths, terms, ranks, the question, the
+answer), `wiki-recheck-step.ts` (the step), `WikiService.recordClaimScreen` / `recordClaimChecks` (the writes, through
+`applyOp`'s `claim_check`), `src/runner-go/wiki_repo_ops.go` (the `history` operation). Migration 0481.
+
+### 31.1 Why
+
+An anchor check says an entry's files are still there (`anchorStates.verified`), never that what it says still holds.
+A pitfall whose fix landed, a decision that was reversed and a convention the code stopped following kept reaching
+agents as verified. The recheck asks about the claim itself when main changes the entry's code.
+
+### 31.2 What runs, in each ordinary maintenance run after the anchors step
+
+1. **Scope.** Active pitfalls, decisions and conventions that name a path: their path and symbol anchors' paths and a
+   pitfall's `fields.trigger.paths`, cleaned as anchor paths are. An entry whose claim is `fixed` or `obsolete` waits
+   for the owner and is not screened or asked.
+2. **Screen (no model call).** A `diff` from the space's last screen (`wiki_space.claim_recheck_ref`) to the run's
+   commit; every entry in scope with a path in it is screened from that commit, and up to `rules.screenMax` entries
+   never screened are screened from their earliest source (the UUIDv7 time of the current revision's earliest source,
+   or the recording). The `history` operation counts the lines of the entry's paths that hold each term at both ends.
+   Rank 0: written in the last day with any signal; 1: a term vanished or a path itself was added, deleted or renamed;
+   2: a term's count changed; 3: only the paths changed. Ranked entries join the due queue (`claim_due_rank`,
+   `claim_due_at`); the space's screen then moves to the run's commit.
+3. **Asks.** At most `rules.asksMax` (20) entries a run, lowest rank, most read by agents, longest due first; an entry
+   asked within `rules.askIntervalDays` waits. Each gets the `history` operation's detail (commits, census, lines,
+   diff) from its last check, or from its earliest source, and one question under step `recheck`, unit the entry's
+   id. A `fixed` or `obsolete` answer is asked again under `<id>#second`; only two such answers act.
+4. **Effect.** `holds` and `unsure` change nothing but the claim columns. `fixed` and `obsolete` write the claim check
+   (the commit, the reason, `wrongWhenRecorded`), file one system challenge proposing Retire when none is open, and
+   take the entry out of the runner door's `wiki_search`; `wiki_get` and the owner's doors still show it with its
+   `claimState` and `claimCheck`. Re-confirm makes it `holds` again; an amend of its title, summary, fields or
+   anchors makes it `unchecked`.
+5. **Failure.** The step never fails the run: a runner without `history`, a failed operation or a model that cannot
+   answer ends the step, named in `report.recheck.skipped`, and the next run takes the queue up again.

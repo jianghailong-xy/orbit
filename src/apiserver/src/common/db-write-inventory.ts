@@ -1801,6 +1801,30 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'After the commits and outside every closure: one `wiki.changed` for the space once any entry of the report was recorded. Nothing depends on it.',
     answer: 'Typed 503 from the global boundary; the maintenance run reports again, and what it reports again writes the same checks and files no second challenge.',
   },
+  // The claim recheck (contracts/wiki.contract.json `maintenance.job.server.recheck`, migration 0481): what the maintain
+  // job's screen ranked, and what its asks found. ONE TRANSACTION PER ENTRY for the verdicts, as an anchor check is.
+  {
+    at: 'wiki/wiki.service.ts#recordClaimChecks',
+    shape: 'TX_RETRIED',
+    locks: 'Per entry, wiki rows alone: the wiki_entry (60) by one plain UPDATE (FOR NO KEY UPDATE) whose WHERE is the compare-and-set — still active, still at the revision the step read — writing the claim columns and clearing its place in the due queue; then, only for a fixed or obsolete verdict while no challenge of the entry is open, exactly the locks `wiki.submitChangeset` states for the system challenge it files: that changeset (60) and its op (60), whose foreign key takes the entry KEY SHARE — compatible with the lock this transaction already holds — and the entry again, held, to write the flag. The open-challenge count comes after the entry UPDATE, so a second report racing this one waits on the row and then sees the challenge this one filed.',
+    identity: 'The entry and its revision: the verdict is written by an UPDATE predicated on the entry being active at the revision the step read, so a verdict against a revision that moved matches no row and is answered stale. The system challenge is filed only while no challenge of the entry is pending, read under the row lock, so a verdict sent twice files one; the claim columns it rewrites are the same values again.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Everything is re-read inside the closure: the entry and its revision, the space, and the open challenges. The claim columns are the verdict the step decided, and a rolled-back attempt takes its entry write and its challenge changeset with it, so a re-run cannot file two.',
+    effects: 'After the commits and outside every closure: one `wiki.changed` for the space once any verdict was recorded. Nothing depends on it.',
+    answer: 'Typed 503 from the global boundary; the step stops, names it in report.recheck.skipped, and the next run asks again.',
+  },
+  {
+    at: 'wiki/wiki.service.ts#recordClaimScreen',
+    shape: 'TX_RETRIED',
+    locks: 'The wiki_entry rows (60) the screen ranked, by one UPDATE over an unnest of their ids — each keeping the lowest rank and the earliest due time it has — then the rows it screened for the first time, by one UPDATE, then the wiki_space (10) row whose claim_recheck_ref moves to the run\'s commit. Only the queue columns and claim_screened_at are written: no revision, no op, no status, trust or flag.',
+    identity: 'The space and the commit screened to: the rank is the least of the one held and the one given, the due time and the screened time are kept once set, and the space\'s ref is set to the commit named, so the same screen written twice leaves the same rows.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Nothing is read before the writes: each statement is a pure function of the screen and the row it meets, and a rolled-back attempt takes all three with it.',
+    effects: 'None.',
+    answer: 'Typed 503 from the global boundary; the step stops before its asks, and the next run screens the same range again from the space\'s unmoved ref.',
+  },
   // Criterion 7, revision 4 (contracts/wiki.contract.json `reviewModes.entryConfirm` and
   // `reviewModes.verification.reopen`, migration 0314): the owner's Confirm of what a review mode
   // applied, and the reopening of what a verdict decided without being able to read its evidence.
@@ -2366,9 +2390,10 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // `storage.singleWriter` — which is why they are listed as participants with their caller named
   // rather than left to the scan's own reading.
   { at: 'wiki/wiki.service.ts#createSpaceRow', under: 'wiki.createSpace and wiki.bindOnFirstUse — it is the one statement pair that makes a space, and it does it under the same user-key read both of those units argue for' },
-  { at: 'wiki/wiki.service.ts#recordChangeset', under: 'wiki.submitChangeset and wiki.revertChangeset — one transaction per submission, so the changeset and every op of it are written under the idempotency identity that unit states or not at all; and inside wiki.decide (a Retire answering a challenge is the owner\'s own retire) and wiki.recordAnchorChecks (the system challenge a broken anchor files), in the order those units state' },
+  { at: 'wiki/wiki.service.ts#recordChangeset', under: 'wiki.submitChangeset and wiki.revertChangeset — one transaction per submission, so the changeset and every op of it are written under the idempotency identity that unit states or not at all; and inside wiki.decide (a Retire answering a challenge is the owner\'s own retire), wiki.recordAnchorChecks (the system challenge a broken anchor files) and wiki.recordClaimChecks (the one a fixed or obsolete claim files), in the order those units state' },
+  { at: 'wiki/wiki.service.ts#reconfirmClaim', under: 'wiki.decide — the owner\'s Re-confirm of a challenge, after the answer\'s own writes to the entry: one UPDATE of the same wiki_entry row, already held, predicated on the claim state it moves from, so a claim a later check changed is not taken back' },
   { at: 'wiki/wiki.service.ts#recordOp', under: 'wiki.submitChangeset, wiki.revertChangeset, wiki.decide and wiki.recordAnchorChecks, through recordChangeset — one op\'s row and the effect the contract\'s policy and the space\'s review mode give it, decided against the reads the same closure made' },
-  { at: 'wiki/wiki.service.ts#applyOp', under: 'wiki.submitChangeset, wiki.decide, wiki.revertChangeset, wiki.rejectEntry, wiki.confirmEntry, wiki.recordVerifications, wiki.reopenVerifications and wiki.recordAnchorChecks — THE writer of an entry\'s status, trust, challenged and unsupported (storage.singleWriter), reached identically by an agent\'s proposal that applies at once, what a review mode applies, what a verdict applies, the owner\'s own write, the owner\'s answer to any of them, and what an anchor re-verification found (its anchors\' checks and anchor state, and a Tiered pitfall made auto)' },
+  { at: 'wiki/wiki.service.ts#applyOp', under: 'wiki.submitChangeset, wiki.decide, wiki.revertChangeset, wiki.rejectEntry, wiki.confirmEntry, wiki.recordVerifications, wiki.reopenVerifications wiki.recordAnchorChecks and wiki.recordClaimChecks — THE writer of an entry\'s status, trust, challenged and unsupported (storage.singleWriter), reached identically by an agent\'s proposal that applies at once, what a review mode applies, what a verdict applies, the owner\'s own write, the owner\'s answer to any of them, and what an anchor re-verification found (its anchors\' checks and anchor state, and a Tiered pitfall made auto), and what a claim recheck found (its claim columns)' },
   { at: 'wiki/wiki.service.ts#recomputeFlags', under: 'wiki.submitChangeset, wiki.decide, wiki.revertChangeset, wiki.rejectEntry, wiki.confirmEntry, wiki.recordVerifications, wiki.reopenVerifications and wiki.recordAnchorChecks, through applyOp — the second and last writer of those four columns: it derives them from what is now true of the entry (its live sources, its open challenges) rather than from what the op asked for; and, for an entry rejected, retired, superseded or whose anchor broke, it withdraws the document sentences that came through it (wiki-doc-withdrawal.ts#withdrawDocSentences)' },
   // The documents' withdrawal (contracts/wiki.contract.json `docs.withdrawal`, 0326): reached only from
   // recomputeFlags, after it has updated the entry's row — so the entry is held before any document is.

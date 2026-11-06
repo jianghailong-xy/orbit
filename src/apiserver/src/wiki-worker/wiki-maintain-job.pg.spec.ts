@@ -606,6 +606,18 @@ async function runRepoOps(h: Harness, over: RunnerPlay = {}): Promise<number> {
               ? { sha: String(input.sha ?? ''), items: await readItemsAt(h, row.space_id, input, over.filesAt), chars: 12 }
               : { sha: REPO.sha, items: await readItems(h, row.space_id, input, over.files ?? {}), chars: 12 },
           }
+        : row.kind === 'history'
+          // The claim recheck's screen (contract `maintenance.job.server.recheck`): nothing it names changed, so
+          // nothing ranks and nothing is asked — wiki-recheck-step.pg.spec.ts plays the step itself.
+          ? {
+              history: {
+                sha: head,
+                date: '2026-11-06T00:00:00Z',
+                entries: (Array.isArray(input.entries) ? input.entries : []).map((entry: Record<string, unknown>) => ({
+                  id: entry.id, base: head, baseDate: '2026-11-06T00:00:00Z', census: [], moved: [], changed: false,
+                })),
+              },
+            }
         : row.kind === 'diff'
           ? {
               diff: {

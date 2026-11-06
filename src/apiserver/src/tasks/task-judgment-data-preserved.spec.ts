@@ -2702,7 +2702,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // or `project_acceptance_*` object nor any preserved trigger/function is named, and no function, trigger, type or
       // constraint is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
       // DELETE: every stored mapping reads NULL in it.
-      '0480_managed_runner_volume_measurement'],
+      '0480_managed_runner_volume_measurement',
+      // 0481 is the claim recheck: seven columns on `wiki_entry` (a TEXT with a constant default and its CHECK, the
+      // rest nullable, three CHECKs and a partial index), one nullable column on `wiki_space` with its CHECK, and
+      // `wiki_repo_op_kind_chk` re-made with one more value. None of these is a preserved relation, no `task`,
+      // `session`, `project` or `project_acceptance_*` object nor any of the six preserved triggers/functions is named,
+      // and no function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence.
+      // No INSERT, UPDATE or DELETE: every stored entry reads `unchecked` and NULL.
+      '0481_wiki_entry_claim_check'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

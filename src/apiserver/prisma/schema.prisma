@@ -7379,6 +7379,8 @@ model WikiSpace {
   /// key reads as its default — both switches on, maintenance off — except `reviewMode`, which a
   /// space made before review modes lacks and reads as `manual`; a space made since is written `tiered`.
   settings      Json    @default("{}")
+  /// The commit the space's last claim recheck screened to (0481): the next run's screen starts there.
+  claimRecheckRef String? @map("claim_recheck_ref") @db.Char(40)
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -7550,6 +7552,17 @@ model WikiEntry {
   anchorState      String    @default("unchecked") @map("anchor_state")
   anchorCheckedRef String?   @map("anchor_checked_ref")
   anchorCheckedAt  DateTime? @map("anchor_checked_at") @db.Timestamptz(3)
+  /// What the claim recheck's last ask found (`claimStates`, 0481): `unchecked` until it is first asked; `fixed`
+  /// and `obsolete` keep it out of agents' search. The commit and time of that ask, and what it wrote (WikiClaimCheck).
+  claimState      String    @default("unchecked") @map("claim_state")
+  claimCheckedRef String?   @map("claim_checked_ref")
+  claimCheckedAt  DateTime? @map("claim_checked_at") @db.Timestamptz(3)
+  claimCheck      Json?     @map("claim_check")
+  /// When the screen first looked at it: null until then, which makes the first screen look back to its sources.
+  claimScreenedAt DateTime? @map("claim_screened_at") @db.Timestamptz(3)
+  /// The recheck's due queue: the lowest rank the screen gave it since it was last asked, and since when; both or neither.
+  claimDueRank    Int?      @map("claim_due_rank") @db.SmallInt
+  claimDueAt      DateTime? @map("claim_due_at") @db.Timestamptz(3)
   /// Web-derived content is among its sources.
   tainted     Boolean @default(false)
   /// A challenge is open against it; it is out of the push until the owner answers.
@@ -7584,6 +7597,7 @@ model WikiEntry {
 
   @@unique([id, ownerId], map: "wiki_entry_id_owner_id_key")
   @@index([spaceId, status, kind], map: "wiki_entry_space_status_kind_idx")
+  @@index([spaceId, claimDueRank, claimDueAt], map: "wiki_entry_claim_due_idx")
   @@map("wiki_entry")
 }
 
