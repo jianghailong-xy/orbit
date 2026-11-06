@@ -301,6 +301,17 @@ describe('wiki chat contract', () => {
       expect(wikiJobsMayOverlap(a, b), `${a} beside ${b}`).toBe(may);
       expect(wikiJobsMayOverlap(b, a), `${b} beside ${a}`).toBe(may);
     }
+    // C4 made it a kind (migration 0477): the CHECK takes it, and the two indexes the rule names replace 0401's one.
+    expect(CONTRACT.jobs.kinds).toContain(WIKI_DOCS_FOLLOW.kind);
+    expect(WIKI_JOB_KINDS).toContain(WIKI_DOCS_FOLLOW.kind);
+    expect(keysOf(CONTRACT.jobs.kindRuns)).toContain(WIKI_DOCS_FOLLOW.kind);
+    expect(keysOf(CONTRACT.jobs.carry.kinds)).toContain(WIKI_DOCS_FOLLOW.kind);
+    const sql = read('src/apiserver/prisma/migrations/0477_wiki_docs_follow/migration.sql').replace(/\s+/gu, ' ');
+    expect(sql).toContain(`CHECK ("kind" IN ('${CONTRACT.jobs.kinds.join("', '")}'))`);
+    expect(sql).toContain(`CREATE UNIQUE INDEX IF NOT EXISTS "wiki_job_space_running_other_key" ON "wiki_job" ("space_id") WHERE "state" = 'running' AND "kind" <> 'docs_follow';`);
+    expect(sql).toContain(`CREATE UNIQUE INDEX IF NOT EXISTS "wiki_job_space_running_writer_key" ON "wiki_job" ("space_id") WHERE "state" = 'running' AND "kind" IN (${WIKI_DOCS_FOLLOW.writers.map((k) => `'${k}'`).join(', ')});`);
+    expect(sql).toContain('DROP INDEX IF EXISTS "wiki_job_space_running_key";');
+    expect(rule).toContain('wiki_job_space_running_other_key and wiki_job_space_running_writer_key');
   });
 
   it('follows every press and every change that reaches main, and only those, under one budget a day', () => {

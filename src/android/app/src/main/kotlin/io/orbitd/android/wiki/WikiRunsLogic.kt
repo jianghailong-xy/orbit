@@ -17,7 +17,7 @@ internal object WikiRunsCopy {
     fun kind(kind: String?) = when (kind) {
         "verify" -> "Verification"; "articles" -> "Articles"; "import" -> "Import"
         "plan_draft" -> "Plan draft"; "plan_revise" -> "Plan revision"; "docs_build" -> "Documents"
-        "maintain" -> "Maintenance"; "smoke" -> "Model check"
+        "maintain" -> "Maintenance"; "smoke" -> "Model check"; "docs_follow" -> "Rewrite"
         else -> ""
     }
 

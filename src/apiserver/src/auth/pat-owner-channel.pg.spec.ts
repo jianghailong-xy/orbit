@@ -316,6 +316,8 @@ test('the owner channel refuses a personal access token door by door and field b
     { route: 'POST /wiki/plan-proposals/:id/decide', path: `/wiki/plan-proposals/${nobody()}/decide`, body: { action: 'reject' }, login: 404 },
     // A version that names nothing: the login is answered the door's 404 for another owner's version, or none.
     { route: 'POST /wiki/doc-versions/:id/restore', path: `/wiki/doc-versions/${nobody()}/restore`, login: 404 },
+    // A chat that says nothing is not made: the door answers a login 400, content is the owner's first message.
+    { route: 'POST /wiki/spaces/:id/chats', path: `/wiki/spaces/${spaceId}/chats`, body: {}, login: 400 },
   ];
 
   await t.test('every door in OWNER_INTERACTIVE_ROUTES has a case below, on a path that door answers, and nothing else has one', () => {

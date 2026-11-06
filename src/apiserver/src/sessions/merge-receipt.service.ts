@@ -55,6 +55,7 @@ import {
   queueLandingObservationAfterCommit,
 } from '../projects/landing-observation';
 import { PushService } from '../push/push.service';
+import { followWikiDocsAfterReceipts } from '../wiki/wiki-docs-follow';
 
 /**
  * How the owner's devices are told about an owner item a committed receipt opened (§7.6 V12):
@@ -416,6 +417,9 @@ export class MergeReceiptService {
       result: recorded.receipt.result,
     }).catch((error) => this.logger.warn(
       `landing settlement after receipt ${recorded.receipt.id} failed: ${(error as Error)?.message ?? error}`));
+    // A merge into main is a fact the wiki follows (contract `docs.follow.triggers.merge`), after the commit; a replay is
+    // the same change of main and is carried once. It logs and never raises.
+    await followWikiDocsAfterReceipts(this.prisma, [recorded.receipt.id]);
     return { receipt: recorded.receipt, created: recorded.created };
   }
 

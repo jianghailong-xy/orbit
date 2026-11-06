@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { WIKI_MAINTAIN_JOB, WIKI_PLAN_SERVER_JOB } from '@orbit/shared';
+import { WIKI_DOCS_FOLLOW, WIKI_MAINTAIN_JOB, WIKI_PLAN_SERVER_JOB } from '@orbit/shared';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { WikiArticles } from '../wiki/wiki-articles';
@@ -9,6 +9,7 @@ import { WikiPlans } from '../wiki/wiki-plan';
 import { WikiService } from '../wiki/wiki.service';
 import { wikiArticlesJobRunner } from './wiki-articles-job';
 import { wikiDocsBuildJobRunner } from './wiki-docs-build-job';
+import { wikiDocsFollowJobRunner } from './wiki-docs-follow-job';
 import { wikiImportJobRunner } from './wiki-import-job';
 import { wikiMaintainJobRunner } from './wiki-maintain-job';
 import { wikiPlanDraftJobRunner } from './wiki-plan-draft-job';
@@ -47,7 +48,8 @@ import { wikiVerifyJobRunner } from './wiki-verify-job';
  * one evidence reader and the one writer of a verdict; a plan job reads the plan and stores its draft through
  * WikiPlans and the plan's gate; the `docs_build` job reads what is written and writes a document's sections
  * through WikiDocs, the documents' one writer, and reads the repository at
- * the snapshot's commit through WikiRepoOps. The worker holds no realtime hub and no push
+ * the snapshot's commit through WikiRepoOps, and so does the `docs_follow` job, over the sections a press or a change
+ * that reached main touched. The worker holds no realtime hub and no push
  * service — the services' own defaults are none — so what a job records is not announced to a connected client
  * by this process; realtime is an accelerant and never the truth (contract `realtime.correctness`). What the
  * pipelines' own kinds are is decided here too: the job kind map the executor claims by is built with those
@@ -85,6 +87,8 @@ import { wikiVerifyJobRunner } from './wiki-verify-job';
           [WIKI_PLAN_SERVER_JOB.kinds.draft]: plan,
           [WIKI_PLAN_SERVER_JOB.kinds.revise]: plan,
           docs_build: wikiDocsBuildJobRunner({ prisma, docs, wiki, repoOps, repoWake, model: model.model ?? '' }),
+          // The follow job (contract `docs.follow`): what a chat's press or a change that reached main touched, written again.
+          [WIKI_DOCS_FOLLOW.kind]: wikiDocsFollowJobRunner({ prisma, docs, wiki, repoOps, repoWake, model: model.model ?? '' }),
           [WIKI_MAINTAIN_JOB.kind]: wikiMaintainJobRunner({
             prisma, wiki, maintenance, docs, plans, repoOps, repoWake,
             model: model.model ?? '',

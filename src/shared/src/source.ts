@@ -14,13 +14,18 @@
  */
 export type SourceState = 'UNBOUND' | 'SELECTED' | 'PINNED' | 'REFUSED';
 
-/** §4.1's five selector kinds — which of the priority table's rows produced this selector. */
+/**
+ * §4.1's five selector kinds — which of the priority table's rows produced this selector — and SR54's
+ * sixth, `CHAT_UPSTREAM`: a wiki chat's origin/main, frozen by the chat's create rather than resolved
+ * from the table, and the one kind with no project codebase behind it.
+ */
 export type SourceKind =
   | 'VERIFICATION_SUBJECT'
   | 'PINNED_REVISION'
   | 'TASK_KNOWN_GOOD'
   | 'DEPENDENCY_CLOSURE'
-  | 'PROJECT_UPSTREAM';
+  | 'PROJECT_UPSTREAM'
+  | 'CHAT_UPSTREAM';
 
 /**
  * Where a ref → SHA resolution COUNTS (§2). Not "which machine runs it": authority is what decides
@@ -100,8 +105,11 @@ export const SESSION_SOURCE_PIN_V1 = 'source-pin/v1';
 export interface SessionSourceSnapshot {
   state: SourceState;
   kind: SourceKind;
-  /** The `ProjectCodebase` this resolved against, as it was AT resolution (no foreign key). */
-  codebaseId: string;
+  /**
+   * The `ProjectCodebase` this resolved against, as it was AT resolution (no foreign key). Absent for a
+   * wiki chat (`CHAT_UPSTREAM`, SR54), which resolves against none.
+   */
+  codebaseId?: string;
   /** Repository identity (§7.1), denormalised and frozen: editing the binding cannot reach here. */
   repoUrl: string;
   /** Second half of the identity. Absent when the repository's root commit is not observed yet. */
