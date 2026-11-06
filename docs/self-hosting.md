@@ -794,8 +794,8 @@ order.
   3. After an hour, when every old token has expired, drop the old public key.
 - **Monitoring.** `/metrics` on the metrics port (`docker compose port link-gateway 9464` finds it on a `same-origin`
   link, which takes a free port) counts connections, handshakes by result and their duration,
-  disconnects by reason, ping round trips, token refusals by reason, revocation reads, the shadow comparison, and
-  hints by kind and by what became of them. It also counts forwarded calls by result and
+  disconnects by reason, ping round trips, token refusals by reason, revocation reads, and hints by kind and by what
+  became of them. It also counts forwarded calls by result and
   their latency, retries across apiserver instances, events stored and their acknowledgement latency, the ingest queue
   and the credit it grants, the live stream by what became of it, and frames dropped or connections closed for slow
   reading.
