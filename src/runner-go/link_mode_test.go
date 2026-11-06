@@ -796,8 +796,8 @@ func TestLinkDaemonRoutesAreTheControllersGuardedRoutes(t *testing.T) {
 	// directory probe's answer (docs/first-workspace-contract.md §2.4), and since 2026-11-01 the Claude region check
 	// (docs/claude-region-check-contract.md §3), and since 2026-11-02 the upload of a file an agent keeps
 	// (docs/orbit-files-design.md §2.3).
-	if n := len(guarded) + len(open); n != 55 {
-		t.Errorf("the controller has %d routes; 55 since 2026-11-02", n)
+	if n := len(guarded) + len(open); n != 56 {
+		t.Errorf("the controller has %d routes; 56 since 2026-11-05 (the abandoned-checkout inventory)", n)
 	}
 }
 
@@ -806,6 +806,7 @@ func TestLinkDaemonRouteMatchesAsTheControllerRoutes(t *testing.T) {
 		"GET /runner/sessions/claim":                        "GET /runner/sessions/claim",
 		"GET /runner/sessions/abc/inbox?acceptsSteer=1":     "GET /runner/sessions/:id/inbox",
 		"POST /runner/sessions/worktrees-removable":         "POST /runner/sessions/worktrees-removable",
+		"POST /runner/abandoned-checkouts":                  "POST /runner/abandoned-checkouts",
 		"POST /runner/sessions/abc/turns/t-1/suggestion":    "POST /runner/sessions/:id/turns/:id/suggestion",
 		"GET /runner/sessions/abc/approvals/ap-1":           "GET /runner/sessions/:id/approvals/:id",
 		"GET /runner/sessions/abc/events?after=3&limit=200": "GET /runner/sessions/:id/events",

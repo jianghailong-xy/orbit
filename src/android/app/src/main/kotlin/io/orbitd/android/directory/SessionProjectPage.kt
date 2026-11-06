@@ -5,9 +5,11 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -59,6 +61,8 @@ import io.orbitd.android.taskprojects.canWrite
 import io.orbitd.android.taskprojects.writable
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.wiki.PageBar
+import io.orbitd.android.watch.WatchStore
+import io.orbitd.android.watch.watchKey
 import io.orbitd.android.wiki.WikiDate
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
@@ -72,39 +76,36 @@ import kotlinx.serialization.json.JsonObject
 // A05-6's row and A05-7's page (iOS SessionProjectPage.swift): a project in its coordinator's place in a workspace's list, and the
 // project's own sessions page that row opens.
 
-/** The project in its coordinator's place, with a session row's two lines (iOS `SessionProjectRowView`): its name, what its sessions
- * are doing — waiting on you, running, a background job — and when; then its progress and what the row says. A tap opens the
- * project's sessions; ⋯ the row's menu. */
+/** The project in its coordinator's place, with a session row's two lines and padding (iOS `SessionProjectRowView`): its name, what its
+ * sessions are doing — waiting on you, running, a background job — and when; then its progress and what the row says. A tap opens the
+ * project's sessions; a long press the row's menu. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun SessionProjectRowView(row: SessionProjectRow, onOpen: () -> Unit, onOptions: () -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val words = SessionProjectCopy.statusWords(row)
-    ListItem(
-        headlineContent = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(row.title, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                ProjectIndicator(row.indicator)
-                // An instant this clock cannot read draws no time at all.
-                (row.lastTurnAt ?: row.createdAt)?.let { WikiDate.relative(it, Instant.now()) }?.let {
-                    Text(it, style = MaterialTheme.typography.labelMedium, color = muted, maxLines = 1, softWrap = false)
-                }
+    Column(Modifier.fillMaxWidth().combinedClickable(role = Role.Button, onLongClickLabel = "Options for ${row.title}", onLongClick = onOptions, onClick = onOpen)
+        .semantics { stateDescription = words }.testTag("project-row:${row.projectId}").padding(horizontal = 16.dp, vertical = 11.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(row.title, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
+            ProjectIndicator(row.indicator)
+            // An instant this clock cannot read draws no time at all.
+            (row.lastTurnAt ?: row.createdAt)?.let { WikiDate.relative(it, Instant.now()) }?.let {
+                Text(it, style = MaterialTheme.typography.labelMedium, color = muted, maxLines = 1, softWrap = false)
             }
-        },
-        supportingContent = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                ProjectProgressChip(row.taskCounts, row.runningCount, row.status)
-                // The line, the sentence alone (iOS `SessionProjectRowView`, the web's project row).
-                Text(row.line.text,
-                    Modifier.testTag("project-row-line"), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium, color = lineColor(row.line.tone))
-            }
-        },
-        trailingContent = { IconButton(onOptions) { Icon(painterResource(R.drawable.ic_more), "Options for ${row.title}") } },
-        modifier = Modifier.clickable(role = Role.Button, onClick = onOpen).semantics { stateDescription = words }.testTag("project-row:${row.projectId}"))
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            ProjectProgressChip(row.taskCounts, row.runningCount, row.status)
+            // The line, the sentence alone (iOS `SessionProjectRowView`, the web's project row).
+            Text(row.line.text, Modifier.testTag("project-row-line"), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium, color = lineColor(row.line.tone))
+        }
+    }
 }
 
 @Composable
-private fun lineColor(tone: SessionLine.Tone): Color = when (tone) {
+internal fun lineColor(tone: SessionLine.Tone): Color = when (tone) {
     SessionLine.Tone.APPROVAL, SessionLine.Tone.WARNING -> LocalOrbitColors.current.needsYou
     SessionLine.Tone.RUNNING -> MaterialTheme.colorScheme.primary
     else -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -117,12 +118,16 @@ private fun ProjectIndicator(indicator: SessionProjectRow.Indicator?) {
     when (indicator) {
         SessionProjectRow.Indicator.NEEDS_YOU -> Box(Modifier.size(7.dp).background(LocalOrbitColors.current.needsYou, CircleShape).testTag("project-row-needs-you"))
         SessionProjectRow.Indicator.RUNNING -> CircularProgressIndicator(Modifier.size(12.dp).testTag("project-row-running"), color = muted, strokeWidth = 1.5.dp)
-        SessionProjectRow.Indicator.JOBS -> {
-            val breath by rememberInfiniteTransition(label = "jobs").animateFloat(0.35f, 1f, infiniteRepeatable(tween(1_100), RepeatMode.Reverse), label = "jobs")
-            Icon(painterResource(R.drawable.ic_terminal), null, Modifier.size(14.dp).alpha(breath).testTag("project-row-jobs"), tint = muted)
-        }
+        SessionProjectRow.Indicator.JOBS -> BreathingTerminal(Modifier.testTag("project-row-jobs"))
         null -> Unit
     }
+}
+
+/** iOS `BreathingGlyph`: the one mark that moves without spinning. Work is happening here without the agent generating. */
+@Composable
+internal fun BreathingTerminal(modifier: Modifier = Modifier) {
+    val breath by rememberInfiniteTransition(label = "jobs").animateFloat(0.35f, 1f, infiniteRepeatable(tween(1_100), RepeatMode.Reverse), label = "jobs")
+    Icon(painterResource(R.drawable.ic_terminal), null, modifier.size(14.dp).alpha(breath), tint = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 /** The progress chip at the head of the second line: the mini bar and "done/total", or — for a project the sidebar did not list —
@@ -209,13 +214,12 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     revision: Long, open: (OrbitRoute) -> Unit) {
     val projectId = route.id ?: return
     val projects = remember(handle) { ProjectApi(app.session, handle) { app.canWrite(handle) } }
-    // A new page opens on what the app already holds of the project — every workspace's Open and Completed rows — and its read
-    // replaces them when it answers.
-    val state = remember(handle, projectId) {
-        ProjectSessionsState(SessionProjectMembers.members(projectId, data.sessions["open"].orEmpty() + data.sessions["completed"].orEmpty()))
-    }
+    // A new page opens on what the app already holds of the project — every workspace's Open rows — and its read replaces them when
+    // it answers.
+    val state = remember(handle, projectId) { ProjectSessionsState(SessionProjectMembers.members(projectId, data.sessions["open"].orEmpty())) }
     val trashing = app.trashing
     val hidden by trashing.ids.collectAsState()
+    val watches by remember(handle) { WatchStore.of(app.session, handle, app.processScope).state }.collectAsState()
     val sidebar by rememberProjectSidebar(api, revision)
     val project = sidebar.firstOrNull { it.text("id")?.let(SessionProjectGrouping::key) == SessionProjectGrouping.key(projectId) }
     val currentData by rememberUpdatedState(data)
@@ -358,7 +362,8 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     @Composable
     fun MemberRow(session: DirectorySession) {
         val view = if (session.effectiveLifecycleState == "COMPLETED") SessionView.COMPLETED else SessionView.OPEN
-        SessionRow(session, data.machineName(session.workspace), { open(OrbitRoute(Destination.SESSION, session.id, route.workspaceId, origin = Origin.LIST)) }) {
+        SessionRow(session, data.machineName(session.workspace), { open(OrbitRoute(Destination.SESSION, session.id, route.workspaceId, origin = Origin.LIST)) },
+            watching = watches.summaries[watchKey(session.id)]) {
             action = DirectoryDialog.SessionMenu(session, view)
         }
     }
@@ -450,7 +455,8 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
         }
     }
     action?.let { dialog ->
-        DirectoryActionDialog(dialog, api, data, setDialog = { action = it }) { app.realtime.refreshDirectory(); scope.launch { loadMembers() } }
+        // A row's menu does not wait for a read (iOS), as on the session list.
+        DirectoryActionDialog(dialog, api, data.copy(fresh = true), setDialog = { action = it }) { app.realtime.refreshDirectory(); scope.launch { loadMembers() } }
     }
     // The start card over this page, read afresh as it opens: this page holds none of the criteria, the plan or the line it is set from.
     val live by app.realtime.state.collectAsState()

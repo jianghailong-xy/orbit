@@ -136,20 +136,9 @@ public struct SessionLine: Equatable, Sendable {
     /// alt. Inline code is held out of every rule and put back at the end, which leaves the
     /// brackets and marks inside `code` alone.
     static func plainPreview(_ md: String) -> String {
-        let unfenced = md.replacingOccurrences(of: "```[\\s\\S]*?```", with: " ", options: .regularExpression) // fenced code
-        // Inline code, held out: a span closes on a run of backticks as long as the one that opened
-        // it. One pass over the text, so a span is never read out of what was already held.
-        var code: [String] = []
-        var s = ""
-        var rest = Substring(unfenced)
-        while let span = rest.range(of: "(?<!`)(`+)(?!`)([\\s\\S]*?[^`])\\1(?!`)", options: .regularExpression) {
-            let ticks = rest[span].prefix { $0 == "`" }.count
-            s += rest[..<span.lowerBound]
-            s += "\u{E000}\(code.count)\u{E000}"
-            code.append(String(rest[span].dropFirst(ticks).dropLast(ticks)))
-            rest = rest[span.upperBound...]
-        }
-        s += rest
+        var s = md.replacingOccurrences(of: "```[\\s\\S]*?```", with: " ", options: .regularExpression) // fenced code
+        var code = MarkdownMarks.HeldCode()
+        s = code.hold(MarkdownMarks.inlineCode, in: s)                                              // inline code, held out
         s = s.replacingOccurrences(of: "!\\[([^\\[\\]]*)\\]\\([^)]*\\)", with: "$1",
                                    options: .regularExpression)                                     // images -> alt
         s = s.replacingOccurrences(of: "\\[([^\\[\\]]*)\\]\\([^)]*\\)", with: "$1",
@@ -158,18 +147,8 @@ public struct SessionLine: Equatable, Sendable {
                                    options: .regularExpression)                                     // thematic breaks
         s = s.replacingOccurrences(of: "(?m)^(?:[ \\t]*(?:>|(?:#{1,6}|[-*])(?=[ \\t]|$)))+", with: "",
                                    options: .regularExpression)                                     // line-start markers
-        // Underscores before stars: whether a `_` is a mark depends on what stands beside it as written.
-        s = s.replacingOccurrences(of: "(?<![\\p{L}\\p{N}_])(_{1,3})(?=[^\\s_])(.*?[^\\s_])\\1(?![\\p{L}\\p{N}_])", with: "$2",
-                                   options: .regularExpression)                                     // _em_, never snake_case
-        s = s.replacingOccurrences(of: "(\\*{2,3})(?=[^\\s*])(.*?[^\\s*])\\1", with: "$2",
-                                   options: .regularExpression)                                     // **bold**, ***both***
-        s = s.replacingOccurrences(of: "\\*(?=[^\\s*])(.*?[^\\s*])\\*", with: "$1",
-                                   options: .regularExpression)                                     // *italic*
-        s = s.replacingOccurrences(of: "~~(?=[^\\s~])(.*?[^\\s~])~~", with: "$1",
-                                   options: .regularExpression)                                     // ~~struck~~
-        for (index, span) in code.enumerated() {                                                    // inline code, back without its ticks
-            s = s.replacingOccurrences(of: "\u{E000}\(index)\u{E000}", with: span)
-        }
+        s = MarkdownMarks.withoutEmphasis(s)
+        s = code.putBack(s)                                                                         // inline code, back without its ticks
         s = s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }

@@ -56,7 +56,7 @@ class CardsDeviceTest {
         compose.onNodeWithText("Password").performTextReplacement("a08-fixture-password")
         compose.pressSignIn()
         compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
-        compose.onNodeWithTag("workspace:01a0cca7-8609-70ed-a0e2-d4b55b832b61").performClick()
+        await("Card verification")
         compose.onNodeWithText("Card verification").performClick()
         await(ready)
     }
@@ -522,7 +522,7 @@ class CardsDeviceTest {
         instrument.sendStatus(0, Bundle().apply { putString("a08_pid", Process.myPid().toString()) })
         compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
         // force-stop + launcher is a new navigation task. Re-enter the conversation normally.
-        compose.onNodeWithTag("workspace:01a0cca7-8609-70ed-a0e2-d4b55b832b61").performClick()
+        await("Card verification")
         compose.onNodeWithText("Card verification").performClick()
         compose.waitUntil(15_000) { app.realtime.state.value.session?.fresh == true }
         await("The request may have reached the server")

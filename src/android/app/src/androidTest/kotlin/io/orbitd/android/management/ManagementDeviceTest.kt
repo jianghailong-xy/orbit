@@ -1,5 +1,8 @@
 package io.orbitd.android.management
 
+import io.orbitd.android.pickFromSessionOptions
+import io.orbitd.android.hasRowMenu
+import io.orbitd.android.openRowMenu
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.UiAutomation
 import android.content.Intent
@@ -217,18 +220,17 @@ class ManagementDeviceTest {
             server.dispatcher = dispatcher()
             try {
                 signIn(server)
-                compose.onNodeWithTag("workspace:$workspaceId").performClick()
                 await("Fixture session")
                 // The session's own Share is the one share panel.
-                compose.onNodeWithContentDescription("Options for Fixture session").performClick()
+                compose.onNode(hasRowMenu("Options for Fixture session")).openRowMenu()
                 click(hasText("Share…") and hasClickAction())
                 await("Tool calls and output")
                 capture("session-share")
                 click(hasText("Tool calls and output") and isToggleable())
                 compose.waitUntil(10_000) { shareTools }
                 compose.onNode(hasText("Close") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
-                // The workspace list's gear opens the form; Done writes only what changed.
-                compose.onNodeWithContentDescription("Workspace settings").performClick()
+                // The workspace list's ≡ opens the form; Done writes only what changed.
+                compose.pickFromSessionOptions("Settings")
                 await("Working directory")
                 compose.onNode(hasSetTextAction() and hasText("Name")).performTextReplacement("Configured workspace")
                 capture("workspace-settings")
@@ -579,14 +581,12 @@ class ManagementDeviceTest {
     private fun tour(pass: String) = try { visit(pass) } catch (e: Throwable) { capture("$pass-failed"); throw e }
 
     private fun visit(pass: String) {
-        compose.waitUntil(15_000) { compose.onAllNodesWithTag("workspace:$workspaceId").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("workspace:$workspaceId").performClick()
         await("Fixture session")
-        compose.onNodeWithContentDescription("Options for Fixture session").performClick()
+        compose.onNode(hasRowMenu("Options for Fixture session")).openRowMenu()
         click(hasText("Share…") and hasClickAction())
         await("Tool calls and output"); capture("$pass-session-share")
         compose.onNode(hasText("Close") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
-        compose.onNodeWithContentDescription("Workspace settings").performClick()
+        compose.pickFromSessionOptions("Settings")
         await("Working directory"); capture("$pass-workspace-settings")
         click(hasText("Cancel") and hasClickAction(), scroll = false)
         settings(); capture("$pass-settings-home")
@@ -630,7 +630,9 @@ class ManagementDeviceTest {
                 compose.onNode(hasText("Cancel") and hasAnyAncestor(isDialog())).assertExists()
                 capture("runners-remove-confirm")
                 click(hasText("Remove Runner") and hasClickAction() and hasAnyAncestor(isDialog()), scroll = false)
-                compose.waitUntil(10_000) { calls.contains("DELETE /api/runners/$alpha") && compose.onAllNodesWithText("Alpha box", substring = true).fetchSemanticsNodes().isEmpty() }
+                // On the page: the closed drawer, off screen, keeps its Set up row until the directory is next read (here no event moves it).
+                compose.waitUntil(10_000) { calls.contains("DELETE /api/runners/$alpha") &&
+                    compose.onAllNodesWithText("Alpha box", substring = true).fetchSemanticsNodes().none { it.positionInRoot.x >= 0f } }
                 compose.waitForIdle()
                 capture("runners-removed")
                 compose.onNode(hasText("Add Runner") and hasClickAction()).performScrollTo()
@@ -766,6 +768,21 @@ class ManagementDeviceTest {
                     fun texts(node: AccessibilityNodeInfo): List<String> = words(node) + (0 until node.childCount).mapNotNull(node::getChild).flatMap(::texts)
                     fail("TalkBack's start left ${active?.packageName} over the app: ${active?.let(::texts)}")
                 }
+                // The session list. A row's menu is its long press, which TalkBack offers by name ("Double-tap and hold to Options for …").
+                // The press goes through the node's action, not the gesture: through the emulator console's touchscreen a double tap and
+                // hold reaches the row as a click, whatever its timing, so the gesture itself is not proved here.
+                await("Fixture session")
+                page("session-list", report, problems)
+                val row = appRoot()?.let(::nodes)?.firstOrNull { node -> node.isVisibleToUser && node.isClickable && spoken(node).contains("Fixture session") }
+                assertTrue("TalkBack is offered the row's menu by name: ${row?.actionList}",
+                    row?.actionList?.any { it.id == AccessibilityNodeInfo.ACTION_LONG_CLICK && it.label == "Options for Fixture session" } == true)
+                report.appendLine("the row \"${spoken(row!!)}\" offers \"Options for Fixture session\"")
+                assertTrue(row.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK))
+                await("Share…")
+                capture("talkback-session-list-row-menu")
+                report.appendLine("its long click -> its menu opened")
+                compose.onNode(hasText("Close") and hasClickAction() and hasAnyAncestor(isDialog())).performSemanticsAction(SemanticsActions.OnClick)
+                compose.waitUntil(5_000) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
                 // Between pages: semantics actions and the back key. On each page: TalkBack's gestures only.
                 compose.onAllNodesWithContentDescription("Open navigation").onFirst().performSemanticsAction(SemanticsActions.OnClick)
                 compose.onNode(hasText("Settings") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)

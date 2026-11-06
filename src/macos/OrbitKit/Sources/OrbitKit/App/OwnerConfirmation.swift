@@ -885,9 +885,11 @@ public enum OwnerConfirmations {
     public static func plainText(_ markdown: String?) -> String {
         guard var text = markdown, !text.isEmpty else { return "" }
         text = text.replacingOccurrences(of: "\\r\\n?", with: "\n", options: [.regularExpression])
-        // Fence lines only: the code between them is text a reader still recognises.
-        text = text.replacingOccurrences(of: "(?m)^[ \\t]*(?:`{3,}|~{3,}).*$", with: "",
-                                         options: [.regularExpression])
+        // Fence lines go. The code between them is text a reader still recognises, so it is held,
+        // as inline code is, out of every rule below.
+        var code = MarkdownMarks.HeldCode()
+        text = code.hold(MarkdownMarks.fencedCode, in: text)
+        text = code.hold(MarkdownMarks.inlineCode, in: text)
         // Thematic breaks, before the list rule below would read `- - -` as a bullet.
         text = text.replacingOccurrences(
             of: "(?m)^[ \\t]*(?:(?:\\*[ \\t]*){3,}|(?:-[ \\t]*){3,}|(?:_[ \\t]*){3,})$", with: "",
@@ -915,22 +917,8 @@ public enum OwnerConfirmations {
                                          options: [.regularExpression])
         text = text.replacingOccurrences(of: "<((?:https?|mailto):[^>\\s]+)>", with: "$1",
                                          options: [.regularExpression])
-        // Inline code, where the closing run must be as long as the opening one.
-        text = text.replacingOccurrences(of: "(`+)([^`]*?)\\1", with: "$2",
-                                         options: [.regularExpression])
-        // Asterisk emphasis, longest run first so `***x***` does not leave a stray mark — and only
-        // when the content has no space at either end, which keeps `2 * 3 * 4` a multiplication.
-        text = text.replacingOccurrences(of: "(\\*{1,3})(\\S(?:[^*]*\\S)?)\\1", with: "$2",
-                                         options: [.regularExpression])
-        text = text.replacingOccurrences(of: "~~(\\S(?:[^~]*\\S)?)~~", with: "$1",
-                                         options: [.regularExpression])
-        // Underscore emphasis ONLY where it is not inside a word: `file_path` and `snake_case` are
-        // identifiers. \p{L}\p{N} rather than \w because the boundary has to hold for CJK too.
-        text = text.replacingOccurrences(
-            of: "(^|[^\\p{L}\\p{N}_])(_{1,2})(\\S(?:[^_]*\\S)?)\\2(?![\\p{L}\\p{N}_])",
-            with: "$1$3", options: [.regularExpression])
-        // Whatever backticks are left are an unpaired mark, never punctuation somebody meant.
-        text = text.replacingOccurrences(of: "`", with: "")
+        text = MarkdownMarks.withoutEmphasis(text)
+        text = code.putBack(text)
         // Trailing whitespace goes, and so does a stack of blank lines — most of them the rows a
         // fence or a thematic break used to take up.
         text = text.replacingOccurrences(of: "(?m)[ \\t]+$", with: "", options: [.regularExpression])

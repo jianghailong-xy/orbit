@@ -401,6 +401,12 @@ public enum WikiPlanLogic {
         return job
     }
 
+    /// Whether the plan's job is queued or running: no event says when one starts, so a page that says where it stands
+    /// reads the plan again meanwhile (`wikiPlanQuery`'s `refetchInterval`).
+    public static func jobUnderWay(_ state: WikiPlanState?) -> Bool {
+        state?.job?.state == .queued || state?.job?.state == .running
+    }
+
     /// The number the next version gets (`wikiPlanNextVersion`).
     public static func nextVersion(_ state: WikiPlanState) -> Int {
         max(state.confirmed?.version ?? 0, state.draft?.version ?? 0) + 1
@@ -534,6 +540,14 @@ public enum WikiPlanLogic {
     /// The space's build while it has not ended (`wikiPlanBuildJob`).
     public static func buildJob(_ state: WikiPlanState) -> WikiPlanJob? {
         guard let job = state.job, job.kind == .build, [.queued, .held, .running].contains(job.state) else { return nil }
+        return job
+    }
+
+    /// A build of the version in force that ended failed, and nothing asked since: its documents are not all written
+    /// (`wikiPlanFailedBuild`).
+    public static func failedBuild(_ state: WikiPlanState) -> WikiPlanJob? {
+        guard let job = state.job, job.kind == .build, job.state == .failed, let confirmed = state.confirmed,
+              job.version == confirmed.version else { return nil }
         return job
     }
 
@@ -1183,6 +1197,26 @@ public enum WikiPlanLogic {
         if build != nil && state.confirmed != nil { return .writing }
         if state.confirmed == nil && open == nil { return .noPlan }
         return nil
+    }
+
+    /// What the web's Plan card says of a draft that failed the plan check (`wikiPlanCard`'s `draftFailed`), which the
+    /// home's setup card says too.
+    public static func draftFailedText(_ job: WikiPlanJob, state: WikiPlanState) -> String {
+        "\(state.confirmed != nil || state.draft != nil ? WikiPlanCopy.redraftFailed : WikiPlanCopy.jobFailed). \(failedText(job, state: state))"
+    }
+
+    /// What the web's Plan card says of a draft that waits for the owner (`wikiPlanCard`'s `draftReady`), which the home's
+    /// setup card says too: how it went, and how many things to look at.
+    public static func draftReadyText(_ draft: WikiPlanVersion) -> String {
+        let look = toLook(fromVersion(draft))
+        let how = look == 0 ? "passed the plan check and waits for you" : "is ready for review, with \(WikiArticleCopy.count(look)) to look at"
+        return "Draft v\(draft.version) \(how). Documents are written once you confirm it."
+    }
+
+    /// What the web's Plan card notes of a draft that waits for the owner (`wikiPlanCard`'s `draftReady`), which the home's
+    /// setup card notes too: `8 categories · 34 documents`.
+    public static func draftCounts(_ draft: WikiPlanVersion) -> String {
+        "\(plural(draft.categories?.count ?? 0, "category", "categories")) · \(plural(draft.docs?.count ?? 0, "document", "documents"))"
     }
 
     /// How many things of the plan wait on the owner: the Contents sheet's count beside Plan (`wikiPlanPending`).

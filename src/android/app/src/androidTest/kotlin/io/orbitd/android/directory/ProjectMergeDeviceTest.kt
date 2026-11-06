@@ -68,8 +68,6 @@ class ProjectMergeDeviceTest {
                 scenario = ActivityScenario.launch(MainActivity::class.java)
                 compose.waitUntil(20_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
                 promotion = candidate("READY")
-                await { exists(hasTestTag("workspace:$alpha")) }
-                compose.onNodeWithTag("workspace:$alpha").performClick()
                 await { exists(hasTestTag("project-row:$launch")) }
                 compose.onNodeWithTag("project-row:$launch").performClick()
 

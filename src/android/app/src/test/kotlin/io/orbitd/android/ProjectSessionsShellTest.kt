@@ -46,9 +46,9 @@ class ProjectSessionsShellTest {
     @Test fun theListDrawsTheProjectsSessionsAsOneRowInTheirWords() {
         signIn(); openAlpha()
         // The coordinator and the running member are the project's row; the ordinary session keeps its own.
-        compose.onAllNodesWithContentDescription("Options for Coordinate launch").assertCountEquals(0)
-        compose.onAllNodesWithContentDescription("Options for Wire tests").assertCountEquals(0)
-        await { exists(hasContentDescription("Options for Plain notes")) }
+        compose.onAllNodes(hasRowMenu("Options for Coordinate launch")).assertCountEquals(0)
+        compose.onAllNodes(hasRowMenu("Options for Wire tests")).assertCountEquals(0)
+        await { exists(hasRowMenu("Options for Plain notes")) }
         val row = compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}")
         row.assert(hasText("Launch", substring = true))
         // A member in Beta waits on you: the row says so in its words, and its own dot stays this workspace's — a member runs here.
@@ -232,12 +232,12 @@ class ProjectSessionsShellTest {
     @Test fun aMembersMenuHasNoMoveAndTheCoordinatorsHasIt() {
         signIn(); openAlpha()
         compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
-        await { exists(hasContentDescription("Options for Wire tests")) }
-        compose.onNodeWithContentDescription("Options for Wire tests").performClick()
+        await { exists(hasRowMenu("Options for Wire tests")) }
+        compose.onNode(hasRowMenu("Options for Wire tests")).openRowMenu()
         await { exists(hasText("Rename") and hasAnyAncestor(isDialog())) }
         assertFalse(dialogButtons().contains("Move…"))
         compose.onNode(hasText("Close") and hasAnyAncestor(isDialog())).performClick()
-        compose.onNodeWithContentDescription("Options for Coordinate launch").performClick()
+        compose.onNode(hasRowMenu("Options for Coordinate launch")).openRowMenu()
         await { exists(hasText("Rename") and hasAnyAncestor(isDialog())) }
         assertTrue(dialogButtons().contains("Move…"))
     }
@@ -351,12 +351,12 @@ class ProjectSessionsShellTest {
         signIn(); openAlpha()
         compose.onNodeWithTag("project-row-running", useUnmergedTree = true).assertExists()
         compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
-        await { exists(hasText("Project · 4 sessions")) && exists(hasContentDescription("Options for Wire tests")) }
+        await { exists(hasText("Project · 4 sessions")) && exists(hasRowMenu("Options for Wire tests")) }
         val answer = CompletableDeferred<Unit>()
         ProjectShell.holdDelete = answer
         memberAction("Wire tests", "Move to Trash")
         settled { ProjectShell.calls.any { it == "DELETE sessions/${ProjectShell.WORKER}" } }
-        compose.onAllNodesWithContentDescription("Options for Wire tests").assertCountEquals(0)
+        compose.onAllNodes(hasRowMenu("Options for Wire tests")).assertCountEquals(0)
         await { exists(hasText("Project · 3 sessions")) }
         compose.onNodeWithContentDescription("Back").performClick()
         await { exists(hasTestTag("project-row:${ProjectShell.LAUNCH}")) }
@@ -369,7 +369,7 @@ class ProjectSessionsShellTest {
     }
 
     /** A05-9: a member read that left before a move to Trash settled — here the page's first read, still out when the move was taken
-     * and let go — answers with the row in its Completed list. It is read again rather than written, so the row stays gone. */
+     * and let go — answers with the row in its list. It is read again rather than written, so the row stays gone. */
     @Test fun aMemberReadFromBeforeTheMoveSettledDoesNotPutTheRowBack() {
         signIn(); openAlpha()
         val early = CompletableDeferred<Unit>()
@@ -377,17 +377,17 @@ class ProjectSessionsShellTest {
         compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
         settled { completedReads() == 1 }
         ProjectShell.holdMembers = null
-        // Drawn from the app's own lists while the page's read is out.
-        await { exists(hasContentDescription("Options for Shipped docs")) }
-        memberAction("Shipped docs", "Move to Trash")
+        // Drawn from the app's own Open list while the page's read is out.
+        await { exists(hasRowMenu("Options for Wire tests")) }
+        memberAction("Wire tests", "Move to Trash")
         await { toastShows("Moved to Trash") }
         settled { app().trashing.ids.value.isEmpty() && app().trashing.releases == 1L }
-        compose.onAllNodesWithContentDescription("Options for Shipped docs").assertCountEquals(0)
+        compose.onAllNodes(hasRowMenu("Options for Wire tests")).assertCountEquals(0)
         val before = completedReads()
         early.complete(Unit)
         settled { completedReads() > before }
         compose.waitForIdle()
-        compose.onAllNodesWithContentDescription("Options for Shipped docs").assertCountEquals(0)
+        compose.onAllNodes(hasRowMenu("Options for Wire tests")).assertCountEquals(0)
         await { exists(hasText("Project · 3 sessions")) }
     }
 
@@ -436,7 +436,7 @@ class ProjectSessionsShellTest {
     private fun completedReads() = ProjectShell.calls.count { it == "GET sessions?view=completed&projectId=${ProjectShell.LAUNCH}&includeLanding=1" }
     private fun toastShows(text: String) = exists(hasText(text) and hasAnyAncestor(hasTestTag("toast")))
     private fun memberAction(session: String, action: String) {
-        compose.onNodeWithContentDescription("Options for $session").performScrollTo().performClick()
+        compose.onNode(hasRowMenu("Options for $session")).performScrollTo().openRowMenu()
         await { exists(hasText(action) and hasAnyAncestor(isDialog())) }
         compose.onNode(hasText(action) and hasAnyAncestor(isDialog())).performScrollTo().performClick()
         compose.waitForIdle()
@@ -447,7 +447,7 @@ class ProjectSessionsShellTest {
     private fun dialogButtons(): List<String> = compose.onAllNodes(hasAnyAncestor(isDialog()) and hasClickAction()).fetchSemanticsNodes()
         .mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }
     private fun rowMenu() {
-        compose.onNodeWithContentDescription("Options for Launch").performClick()
+        compose.onNode(hasRowMenu("Options for Launch")).openRowMenu()
         await { exists(hasText("Open Session") and hasAnyAncestor(isDialog())) }
     }
     private fun drawerRow(text: String) = hasText(text) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
@@ -456,8 +456,6 @@ class ProjectSessionsShellTest {
         .mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.map { it.text }?.firstOrNull { it == "Launch" || it == "Quiet" } }
     private fun openDrawer() { compose.onNodeWithContentDescription("Open navigation").performClick(); compose.waitForIdle() }
     private fun openAlpha() {
-        await { exists(hasTestTag("workspace:${ProjectShell.ALPHA}")) }
-        compose.onNodeWithTag("workspace:${ProjectShell.ALPHA}").performClick()
         await { exists(hasTestTag("project-row:${ProjectShell.LAUNCH}")) }
     }
     private fun exists(matcher: SemanticsMatcher) = compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()

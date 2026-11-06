@@ -37,6 +37,7 @@ class RealtimeStoreTest {
         val pageFailures = mutableMapOf<Long, Int>()
         var pending = true
         var title = "original"
+        var workspaces = """[{"id":"w1","name":"Alpha"}]"""
         var directoryError: Int? = null
         var detailError: Int? = null
         var project = false
@@ -70,6 +71,7 @@ class RealtimeStoreTest {
                     directoryError?.let { return@HttpTransport ApiResponse(it, "{}".encodeToByteArray()) }
                     response("""[{"id":"s1","title":"$captured","status":"RUNNING","capabilities":{"canSend":true},"permissionMode":"safe"}]""")
                 }
+                path == listOf("workspaces") -> response(workspaces)
                 path.size == 1 -> response("[]")
                 path.last() == "page" -> {
                     val query = request.api.query.toMap()
@@ -99,6 +101,10 @@ class RealtimeStoreTest {
                 else -> response(if (pending) """{"pending":[{"id":"standing-card-marker"}]}""" else "null")
             }
         }, credentials, instances, data, "test", dispatcher = dispatcher, eventTransport = streams)
+
+        /** The saved list's record, which its text is empty before anything has written. */
+        fun savedKey() = data.values.keys.first { it.third == "directory-v1" }
+        fun saved() = data.values.entries.firstOrNull { it.key.third == "directory-v1" }?.value?.decodeToString().orEmpty()
 
         suspend fun start(witness: RealtimeWitness? = null): Pair<AuthSession, RealtimeStore> {
             credentials.value = StoredSession(serverA.value, tokens())
@@ -320,6 +326,7 @@ class RealtimeStoreTest {
         assertFalse(persisted.contains("uncommitted animation"))
         assertFalse(persisted.contains("pending-card-marker"))
         assertFalse(persisted.contains("standing-card-marker"))
+        store.setForeground(false); runCurrent()
         store.close(); runCurrent()
         rig.rows = rig.rows + listOf("""{"seq":2,"type":"assistant","payload":{"text":"late second"}}""",
             """{"seq":3,"type":"assistant","payload":{"text":"third"}}""")
@@ -350,7 +357,7 @@ class RealtimeStoreTest {
         val (_, store) = rig.start()
         assertTrue(store.state.value.directoryFresh)
         assertFalse(store.state.value.directoryCached)
-        advanceTimeBy(101); runCurrent()
+        store.setForeground(false); runCurrent()
         store.close(); runCurrent()
         val auth = rig.client()
         auth.restore()
@@ -364,6 +371,104 @@ class RealtimeStoreTest {
         assertTrue(restored.state.value.directoryCached)
         rig.heldDirectory!!.complete(Unit); runCurrent()
         assertTrue(restored.state.value.directoryFresh)
+        assertFalse(restored.state.value.directoryCached)
+    }
+
+    /** The next launch's first frame (iOS `persistLaunchSnapshot`): written as the app leaves the foreground, and never by a read, which
+     * on an account with work running comes every few seconds. What a launch reads is the list, not the transcripts beside it. */
+    @Test fun theListIsSavedAsTheAppLeavesTheForegroundAndNotByAnyRead() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        assertTrue(store.state.value.directoryFresh)
+        advanceTimeBy(101); runCurrent()
+        assertFalse("a read wrote the list", rig.saved().contains("original"))
+        assertFalse("the transcripts' record holds no list", rig.data.values.values.any { it.decodeToString().contains("Alpha") })
+        store.setForeground(false); runCurrent()
+        assertTrue(rig.saved().contains("original"))
+        assertTrue(rig.saved().contains("Alpha"))
+        store.close(); runCurrent()
+        val auth = rig.client()
+        auth.restore()
+        val restored = RealtimeStore(auth, backgroundScope)
+        assertFalse("not read yet", restored.state.value.directoryRestored)
+        runCurrent()
+        assertTrue(restored.state.value.directoryRestored)
+        assertEquals("original", restored.state.value.directory!!.sessions["open"]!![0].text("title"))
+        assertEquals(listOf("Alpha"), restored.state.value.directory!!.workspaces.map { it.text("name") })
+    }
+
+    /** Leaving the foreground again with the same rows writes nothing: an unchanged list of thousands of sessions costs no write. */
+    @Test fun aListThatHasNotChangedIsNotWrittenAgain() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        store.setForeground(false); runCurrent()
+        val first = rig.saved()
+        rig.data.values[rig.savedKey()] = "not written again".encodeToByteArray()
+        store.setForeground(true); runCurrent()
+        assertTrue(store.state.value.directoryFresh)
+        store.setForeground(false); runCurrent()
+        assertEquals("not written again", rig.saved())
+        rig.title = "moved"
+        store.setForeground(true); runCurrent()
+        assertTrue(store.state.value.directoryFresh)
+        store.setForeground(false); runCurrent()
+        assertTrue(rig.saved(), rig.saved().contains("moved"))
+        assertNotEquals(first, rig.saved())
+    }
+
+    /** A run that never reached the server has nothing newer than the copy it started from, and leaves it as it was. */
+    @Test fun aRunThatReadNothingLeavesTheSavedListAsItWas() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        store.setForeground(false); runCurrent()
+        store.close(); runCurrent()
+        rig.data.values[rig.savedKey()] = rig.data.values.getValue(rig.savedKey()).decodeToString().replace("original", "still the copy").encodeToByteArray()
+        val auth = rig.client()
+        auth.restore()
+        val offline = RealtimeStore(auth, backgroundScope)
+        runCurrent()
+        offline.setForeground(true); runCurrent()
+        offline.setForeground(false); runCurrent()
+        assertTrue(rig.saved().contains("still the copy"))
+    }
+
+    /** A launch reads Open, and so does an event or a connect. Completed and Trash are the page's to read when it shows them. */
+    @Test fun theStoreReadsTheOpenListAndNoOther() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        store.refreshDirectory(); runCurrent()
+        val views = rig.reads.filter { it.api.path == listOf("sessions") }.map { it.api.query.toMap()["view"] }.toSet()
+        assertEquals(setOf("open"), views)
+        assertEquals(setOf("open"), store.state.value.directory!!.sessions.keys)
+    }
+
+    /** Retry does what it says: it does not wait out the backoff the failure started, which grows to many seconds. */
+    @Test fun aRetryPressedDuringTheBackoffReadsNow() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        rig.directoryError = 500
+        store.refreshDirectory(); runCurrent()
+        assertEquals(500, store.state.value.directoryError?.httpStatus)
+        rig.directoryError = null
+        // No time passes.
+        store.refreshDirectory(); runCurrent()
+        assertNull(store.state.value.directoryError)
+        assertTrue(store.state.value.directoryFresh)
+    }
+
+    /** A saved list naming no workspace is no list to draw from: an empty account's landing is the server's to decide. */
+    @Test fun anEmptyAccountStartsFromNoCopy() = runTest {
+        val rig = Rig(this)
+        rig.workspaces = "[]"
+        val (_, store) = rig.start()
+        store.setForeground(false); runCurrent()
+        store.close(); runCurrent()
+        val auth = rig.client()
+        auth.restore()
+        val restored = RealtimeStore(auth, backgroundScope)
+        runCurrent()
+        assertTrue(restored.state.value.directoryRestored)
+        assertNull(restored.state.value.directory)
         assertFalse(restored.state.value.directoryCached)
     }
 

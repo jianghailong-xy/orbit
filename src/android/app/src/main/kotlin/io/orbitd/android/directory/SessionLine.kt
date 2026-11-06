@@ -43,9 +43,10 @@ data class SessionLine(val text: String, val tone: Tone) {
         /** The line for [s]. [live] is false in Trash. [watching] is the session as an observer, parked with a live watch
          * that will resume it. [recaps] is the account's Session recaps switch (Settings): on unless turned off, and off means
          * the line falls through to the raw reply exactly as it did before the recap existed — it gates that one line and
-         * nothing else. */
+         * nothing else. [machine] is the runner it runs on, by name: a session held for the Claude region says Anthropic is
+         * unavailable there, where it is known. */
         internal fun make(s: DirectorySession, live: Boolean, watching: WatchSessionSummary? = null,
-                          recaps: Boolean = true, now: Instant = Instant.now()): SessionLine {
+                          recaps: Boolean = true, now: Instant = Instant.now(), machine: String? = null): SessionLine {
             // Somebody waiting on YOU outranks everything else the row could say, outside the generating gate: an owner
             // decision is held open by no turn, so it sits on a parked conversation.
             if (live && s.pendingApprovals > 0) return SessionLine(SessionHeader.waitingWord(s), Tone.APPROVAL)
@@ -60,7 +61,7 @@ data class SessionLine(val text: String, val tone: Tone) {
                 s.lastAssistantText?.takeIf { it.isNotEmpty() }?.let { return SessionLine(plainPreview(it), Tone.PREVIEW) }
                 return SessionLine(SessionLineCopy.running, Tone.RUNNING)
             }
-            if (live && s.effectiveRunState == RunState.QUEUED) return SessionLine(SessionLineCopy.queued, Tone.QUEUED)
+            if (live && s.effectiveRunState == RunState.QUEUED) return SessionLine(ClaudeRegion.heldWords(s.regionHeld, machine) ?: SessionLineCopy.queued, Tone.QUEUED)
             // Parked while a sub-agent or workflow it started works on: the workspace itself is still working.
             if (live) s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.subagentRunning(it)), Tone.RUNNING) }
             // Parked on a live watch that will resume it, in the Watching strip's own line.

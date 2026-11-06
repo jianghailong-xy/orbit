@@ -1,0 +1,32 @@
+Numbers on the board and where they come from. Measured 2026-11-02 to 2026-11-04.
+
+The owner's account, 2026-11-02 (production, read-only):
+  Open 858 rows / 2.46 MB; Completed 6,242 rows / 18.3 MB (2.67 MB gzip, about 3.9 s to first byte); Trash 59 rows.
+  One directory read on the owner's phone: 7-10 s, from the gateway log. Not measured again for this board.
+  Reading Open alone has not been timed on a phone.
+
+Emulator (emulator-5554, API 36, 1080x2400 @ 420, debug APKs, MockWebServer in the test process, fixture at the sizes above):
+  Directory reads, today's build (foreground-today-log.txt): launch 2, return to the foreground 2. Every read is all the lists.
+  Open reads, prototype (first-proto-log.txt): 2 on a first launch, the second after the stream opens. iOS also reads twice; its second is a delta.
+  The record the device saves (no_backup/orbit/accounts/<hash>/CACHE):
+    today      2 bytes: the directory is over the 8 MiB cap, so nothing of it is kept
+    prototype  2,647,918 bytes: workspaces, folders, tags, runners and the Open list (savedPage-files.txt)
+  How far today's status lines hold the list down from where it ends up (capture/shift.py, density 2.625):
+    one line           124 px = 47.2 dp
+    today's two lines  271 px = 103.2 dp
+  Sessions fully on one screen, sample data: today's page about 4, the prototype 8, with the capsule and a folder row above them.
+  Launcher cold start to the list drawn, no instrumentation attached, no server up, prototype, six launches
+  (ActivityTaskManager "Displayed" / "Fully drawn"):
+    launch 1  host load 10.26  displayed 664ms  fully drawn 2s624ms
+    launch 2  host load 11.65  displayed 710ms  fully drawn 3s330ms
+    launch 3  host load 12.77  displayed 721ms  fully drawn 2s876ms
+    launch 4  host load 14.04  displayed 735ms  fully drawn 2s999ms
+    launch 5  host load 14.95  displayed 692ms  fully drawn 3s152ms
+    launch 6  host load 14.50  displayed 700ms  fully drawn 2s991ms
+  White window at launch, today's page and first prototype alike: about 0.8 s (strip of screenshots, one every 80 ms or so).
+  The app gives one read 10 s: a read held longer by the fixture fails (OkHttp's default read timeout).
+
+iOS column: read from src/macos/OrbitApp/Sources/OrbitApp (AppModel.swift, AgentsModel.swift, Views/AgentsView.swift, Views/CompactShell.swift) and
+OrbitKit/App (LoadFailureLogic, LaunchSnapshot, OpenListReader) at baa36c689. The iPhone frame is docs/evidence/needs-you-capsule/ios/ios-list-dark.png.
+
+Android's sample text is made up: every workspace and session name.

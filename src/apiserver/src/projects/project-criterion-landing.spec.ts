@@ -15,6 +15,7 @@ import {
   branchName,
   criterionLanding,
   landingBranchesFor,
+  receiptTargetBranches,
   receiptIsLandingEvidence,
   taskLanding,
   type CriterionWithLandingFacts,
@@ -178,6 +179,16 @@ test('a project with a binding reads its own branches; one without reads main or
   assert.equal(receiptIsLandingEvidence({ result: 'MERGED', targetBranch: 'master' }, PROJECT_BRANCH), false,
     'master is where a project that never named an upstream might have landed — a project that '
       + 'named one gets no such fallback, and a merge into master is about somewhere else');
+});
+
+test('receipt target branches accept short and full refs without duplicates', () => {
+  const full = receiptTargetBranches('refs/heads/x');
+  const short = receiptTargetBranches('x');
+
+  assert.deepEqual(full, ['x', 'refs/heads/x']);
+  assert.deepEqual(short, ['x']);
+  assert.equal(new Set(full).size, full.length);
+  assert.equal(new Set(short).size, short.length);
 });
 
 test('work on the project branch has landed, and is not on main', () => {

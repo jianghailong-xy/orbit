@@ -1073,7 +1073,8 @@ Managed runners are switched in `.env`, and only there. An upgrade never writes 
   ```
 
   This prepares managed runners as a fresh install does, their firewall included, writes the three lines into `.env`
-  (replacing an `ORBIT_MANAGED_RUNNERS_ENABLED=false` line and leaving every other line as it was), starts
+  (replacing an `ORBIT_MANAGED_RUNNERS_ENABLED=false` line, adding its profiles to a `COMPOSE_PROFILES` line the
+  deployment already has, and leaving every other line as it was), starts
   `managed-runner-firewall` and `docker-channel`, and recreates the apiserver from the image it already runs. Add
   `--no-managed-runner-firewall` to leave this host's firewall alone.
 - **Their firewall, for a deployment that has managed runners without it:** one installed before the firewall

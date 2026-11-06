@@ -1,5 +1,7 @@
 package io.orbitd.android.directory
 
+import io.orbitd.android.hasRowMenu
+import io.orbitd.android.openRowMenu
 import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.compose.ui.semantics.Role
@@ -73,18 +75,18 @@ class TrashDeviceTest {
                 compose.onNode(drawerRow("Alpha")).performClick(); settle()
 
                 // A05-9 · the list: the row goes on the press, while the server's answer is held back.
-                await { exists(hasContentDescription("Options for Plain notes")) }
+                await { exists(hasRowMenu("Options for Plain notes")) }
                 capture("02-list")
                 rowAction("Plain notes")
                 await { calls.any { it == "DELETE /api/sessions/$plain" } }
-                assertFalse(exists(hasContentDescription("Options for Plain notes")))
+                assertFalse(exists(hasRowMenu("Options for Plain notes")))
                 assertFalse(toastShows("Moved to Trash"))
                 capture("03-pressed-answer-held")
                 answers.put(200)
                 await { toastShows("Moved to Trash") }
                 capture("04-taken-toast")
                 await { app.trashing.ids.value.isEmpty() }
-                assertFalse(exists(hasContentDescription("Options for Plain notes")))
+                assertFalse(exists(hasRowMenu("Options for Plain notes")))
                 // The card goes by itself; nothing the next press aims at is under it then.
                 await { !toastShows("Moved to Trash") }
 
@@ -92,14 +94,14 @@ class TrashDeviceTest {
                 // page's list is scrolled to its rows: on a 360×640 dp phone the ones below the fold are not composed until then.
                 compose.onNodeWithTag("project-row:$launch").performClick(); settle()
                 await { exists(hasTestTag("project-sessions")) }
-                compose.awaitListed(hasContentDescription("Options for Shipped docs"))
+                compose.awaitListed(hasRowMenu("Options for Shipped docs"))
                 rowAction("Shipped docs")
                 await { calls.any { it == "DELETE /api/sessions/$done" } }
-                assertFalse(compose.listed(hasContentDescription("Options for Shipped docs")))
+                assertFalse(compose.listed(hasRowMenu("Options for Shipped docs")))
                 capture("05-member-pressed")
                 answers.put(409)
                 await { toastShows("Couldn't move to Trash") }
-                compose.awaitListed(hasContentDescription("Options for Shipped docs"))
+                compose.awaitListed(hasRowMenu("Options for Shipped docs"))
                 capture("06-refused-back")
                 // A failure stays pinned until it is dealt with: dismiss it.
                 dismissPinned("Couldn't move to Trash")
@@ -115,13 +117,13 @@ class TrashDeviceTest {
                 compose.onNode(trash).performClick()
                 await { calls.any { it == "DELETE /api/sessions/$worker" } }
                 await { exists(hasTestTag("project-sessions")) && !exists(hasTestTag("transcript-list")) }
-                assertFalse(compose.listed(hasContentDescription("Options for Wire tests")))
+                assertFalse(compose.listed(hasRowMenu("Options for Wire tests")))
                 assertFalse(toastShows("Moved to Trash"))
                 capture("08-page-left-on-press")
                 answers.put(200)
                 await { toastShows("Moved to Trash") }
                 await { app.trashing.ids.value.isEmpty() }
-                assertFalse(compose.listed(hasContentDescription("Options for Wire tests")))
+                assertFalse(compose.listed(hasRowMenu("Options for Wire tests")))
                 capture("09-member-taken")
                 File(evidence, "result.txt").writeText("PASS\n")
             } catch (failure: Throwable) {
@@ -212,7 +214,7 @@ class TrashDeviceTest {
         .throttleBody(13, 1, java.util.concurrent.TimeUnit.SECONDS)
 
     private fun rowAction(session: String) {
-        compose.onNodeWithContentDescription("Options for $session").performScrollTo().performClick(); settle()
+        compose.onNode(hasRowMenu("Options for $session")).performScrollTo().openRowMenu(); settle()
         await { exists(hasText("Move to Trash") and hasAnyAncestor(isDialog())) }
         compose.onNode(hasText("Move to Trash") and hasAnyAncestor(isDialog())).performScrollTo().performClick()
     }

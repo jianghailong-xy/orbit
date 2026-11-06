@@ -782,22 +782,28 @@ func heartbeatCommit(
 	advertised heartbeatSupervisorSnapshot,
 	commit func(CommitCommand) commitOutcome,
 ) commitOutcome {
+	// What the person pressed, so every message about it reads as that: a discard's refusal or
+	// receipt must not say "commit" (abandoned_checkout.go).
+	operation := "commit"
+	if req.Discard {
+		operation = "discard"
+	}
 	release, receipt, admitted := pool.beginManualWorktreeOperation(
 		req.SessionID,
 		advertised.supervisor,
 		advertised.permitGeneration,
 		false,
-		"commit",
+		operation,
 	)
 	if !admitted {
-		logln("not committing", req.SessionID+":", receipt)
+		logln("not "+operation+"ing", req.SessionID+":", receipt)
 		return commitOutcome{Status: "error", Message: receipt}
 	}
 	if receipt != "" {
-		logln("committing", req.SessionID+":", receipt)
+		logln(operation+"ing", req.SessionID+":", receipt)
 	}
 	res := commit(req)
-	syncManagedVolume("a commit")
+	syncManagedVolume("a " + operation)
 	release()
 	res.Message = appendWorktreeReceipt(res.Message, receipt)
 	return res
@@ -981,6 +987,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 
 	loopCtx, stopLoop := context.WithCancelCause(context.Background())
 	loopCancel := func() { stopLoop(nil) }
+	// The other half of what a finished session's checkout can hold: one that still has
+	// uncommitted work is never reclaimed, so the control plane is told which ones those are
+	// (abandoned_checkout.go). Its own goroutine and its own clock — it reads every checkout,
+	// and the claim loop is not where a minute of `git status` belongs.
+	go runAbandonedCheckoutScans(loopCtx, t, pool)
 	// Once the runner stops, a runner link with no connection is not waited for: the sessions' last events go over
 	// HTTPS while the control plane still takes it (linkMode.stopping).
 	if t.link != nil {
@@ -1657,7 +1668,13 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					res, cached := commitOutcomes[key]
 					mergeMu.Unlock()
 					if !cached {
-						res = heartbeatCommit(pool, req, advertised, commitWorktree)
+						work := commitWorktree
+						if req.Discard {
+							// The same relay, the same fence and the same result: only what it does
+							// to the checkout differs (abandoned_checkout.go).
+							work = discardWorktree
+						}
+						res = heartbeatCommit(pool, req, advertised, work)
 						if req.OperationID != "" {
 							mergeMu.Lock()
 							for old := range commitOutcomes {

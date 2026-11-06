@@ -778,6 +778,14 @@ export class SessionsController {
     return this.sessions.commitWorktree(user.userId, id);
   }
 
+  /** Throw away a finished session's uncommitted checkout work, so its checkout can be
+   *  reclaimed (the Discard beside the runner page's abandoned-checkout list). */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/checkout/discard')
+  discardCheckout(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.discardCheckout(user.userId, id);
+  }
+
   /** Adopt the worktree's actual HEAD branch (after an in-worktree `git checkout -b`) as the
    *  session's tracked branch, so Merge/diff act on the real work instead of a stale "In main". */
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })

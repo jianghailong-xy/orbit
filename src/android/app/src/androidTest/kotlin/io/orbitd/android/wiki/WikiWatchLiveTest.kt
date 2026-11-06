@@ -551,7 +551,7 @@ class WikiWatchLiveTest {
             val principles = (read("the space's principles, by kind", owner, "wiki/spaces/$space/entries?kind=principle&limit=200").body as JsonArray).map { it.jsonObject }
             ok("server: the space has principles to list", principles.isNotEmpty())
             val line = WikiLogic.homeLine(docs, topics, loading = false)!!
-            val documents = WikiLogic.homeDocuments(docs, topics, loading = false, maintenance = row.settings?.maintenance?.enabled == true, seen = null)
+            val documents = WikiLogic.homeDocuments(docs, topics, loading = false, seen = null)
             note("the server's reads make the line \"$line\" and the documents band ${documents::class.simpleName}")
             awaitTag("wiki-home-line")
             compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag("wiki-home-line") and hasText(line)).fetchSemanticsNodes().isNotEmpty() }
@@ -563,14 +563,16 @@ class WikiWatchLiveTest {
                 ok("the principle \"${principle.displayTitle}\" is on the home", reads(tagFor("wiki-home-principle:", principle.id) and hasText(principle.displayTitle, substring = true)))
             }
             when (documents) {
-                WikiLogic.HomeDocuments.NewSpace -> {
-                    pressIn("wiki-home-list", hasTestTag("wiki-home-new-space"), pressIt = false)
-                    ok("a new space's card says how documents come", showsText(WikiDocCopy.noDocumentsNote))
+                WikiLogic.HomeDocuments.Start -> {
+                    pressIn("wiki-home-list", hasTestTag("wiki-home-start"), pressIt = false)
+                    ok("the setup card says how documents come", showsText(WikiStartCopy.title))
                     capture("j9a-home")
-                    press("wiki-home-set-up")
-                    awaitTag("wiki-settings-page")
-                    ok("Set up maintenance opens the space's Wiki settings", true)
-                    capture("j9a-set-up")
+                    if (shows(hasTestTag("wiki-home-start-set-up"))) {
+                        press("wiki-home-start-set-up")
+                        awaitTag("wiki-settings-form")
+                        ok("Set up… opens Set up maintenance where the reader is", true)
+                        capture("j9a-set-up")
+                    }
                 }
                 is WikiLogic.HomeDocuments.Categories -> {
                     documents.categories.flatMap { it.written }.forEach { doc ->

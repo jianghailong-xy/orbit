@@ -1,5 +1,7 @@
 package io.orbitd.android.directory
 
+import io.orbitd.android.hasRowMenu
+import io.orbitd.android.openRowMenu
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Bitmap
@@ -74,7 +76,7 @@ class NavigationIncrementDeviceTest {
                 capture("04-current-row-only-closes")
                 // Another destination lands on its root; back to Tasks is the list, not the task left there.
                 openDrawer(); compose.onNode(row("Alpha")).performClick(); settle()
-                await { exists(hasContentDescription("Options for Review navigation")) }
+                await { exists(hasRowMenu("Options for Review navigation")) }
                 compose.onNodeWithContentDescription("Back").assertDoesNotExist()
                 capture("05-workspace-root")
                 openDrawer(); compose.onNode(row("Tasks")).performClick(); settle()
@@ -163,9 +165,9 @@ class NavigationIncrementDeviceTest {
 
                 // A05-4 · a failure is a tinted card pinned with the server's words, then folds into a pill.
                 refuseComplete = true
-                await { exists(hasContentDescription("Options for Plain notes")) }
+                await { exists(hasRowMenu("Options for Plain notes")) }
                 awaitWritable()
-                compose.onNodeWithContentDescription("Options for Plain notes").performScrollTo().performClick()
+                compose.onNode(hasRowMenu("Options for Plain notes")).performScrollTo().openRowMenu()
                 press(hasText("Complete") and hasAnyAncestor(isDialog()))
                 await { exists(hasText("Couldn't complete the session") and hasAnyAncestor(hasTestTag("toast"))) }
                 assertTrue(exists(hasText("The session is busy.") and hasAnyAncestor(hasTestTag("toast"))))

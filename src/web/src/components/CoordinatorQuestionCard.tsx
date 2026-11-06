@@ -7,7 +7,7 @@ import {
   RightOutlined,
   RollbackOutlined,
 } from '@ant-design/icons';
-import Markdown from 'react-markdown';
+import Markdown from './Markdown';
 import remarkGfm from 'remark-gfm';
 import type {
   CoordinatorQuestion,

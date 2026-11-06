@@ -21,6 +21,7 @@ import { WikiRunDrawer } from '../components/WikiRunPage';
 import { WikiSettingsButton } from '../components/WikiSettingsButton';
 import { WikiShareButton } from '../components/WikiShareButton';
 import { WikiSettingsPage } from '../components/WikiSettingsPage';
+import { WikiFirstStartCard } from '../components/WikiStartCard';
 import { openSessionSearch } from '../components/SessionSearch';
 import { wikiLinkHost } from '../components/WikiSources';
 import { wikiEntriesQuery, wikiEntryQuery, wikiHealthQuery, wikiSpacesQuery } from '../lib/queries';
@@ -110,9 +111,13 @@ export function WikiPage({ route }: { route: WikiRoute }) {
   if (spaces.isSuccess && !resolved) {
     return (
       <WikiFrame space={null}>
-        <WikiCard title={WIKI_TITLE}>
-          <WikiEmpty>{asked ? WIKI_NO_SUCH_SPACE : WIKI_NO_SPACES}</WikiEmpty>
-        </WikiCard>
+        {asked ? (
+          <WikiCard title={WIKI_TITLE}>
+            <WikiEmpty>{WIKI_NO_SUCH_SPACE}</WikiEmpty>
+          </WikiCard>
+        ) : (
+          <WikiFirstStartCard />
+        )}
       </WikiFrame>
     );
   }

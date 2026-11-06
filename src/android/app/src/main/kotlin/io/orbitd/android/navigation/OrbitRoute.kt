@@ -74,10 +74,29 @@ data class OrbitNavigation(
         return copy(section = key, stacks = mapOf(key to listOf(root)), foldersLeftOpen = left)
     }
     /** A link opens over the page showing. One that [waitsForDirectory] stays [pending], signed in or not, and a later link
-     * replaces it. */
+     * replaces it. A link to the app itself (`orbit://active`) only opens it (iOS `route(to: .active)`): a workspace's stack stays as
+     * it is, and from anywhere else it goes home. */
     fun receive(route: OrbitRoute): OrbitNavigation {
         val arrived = route.arrived()
-        return if (account == null || arrived.waitsForDirectory) copy(pending = arrived) else copy(pending = null).push(arrived)
+        return when {
+            account == null || arrived.waitsForDirectory -> copy(pending = arrived)
+            arrived.destination != Destination.WORKSPACES -> copy(pending = null).push(arrived)
+            frames.first().destination.let { it == Destination.WORKSPACE || it == Destination.WORKSPACES } -> copy(pending = null)
+            else -> copy(pending = null).land("workspaces", arrived)
+        }
+    }
+    /** Where the launch default gives way to a workspace's list (iOS `resolveDefaultLanding`): [opened] if the page on top belongs to a
+     * workspace, else [last] if it is still there, else the first of [workspaces], in the drawer's order. Whatever has been opened
+     * over the default keeps its place, with Back now reaching that list. A landing the saved list made is [provisional]: until
+     * something is opened over it the first read from the server decides afresh, and a workspace deleted since isn't kept. */
+    fun landHome(workspaces: List<String>, last: String?, opened: String? = null, provisional: String? = null): OrbitNavigation {
+        val root = frames.first()
+        val undecided = root.destination == Destination.WORKSPACES ||
+            (provisional != null && !canGoBack && root.destination == Destination.WORKSPACE && ObjectId.same(root.id, provisional))
+        if (!undecided || pending != null) return this
+        val target = workspaces.firstOrNull { ObjectId.same(it, opened) } ?: workspaces.firstOrNull { ObjectId.same(it, last) } ?: workspaces.firstOrNull() ?: return this
+        if (root.destination == Destination.WORKSPACE && ObjectId.same(root.id, target)) return this
+        return copy(section = target, stacks = mapOf(target to (listOf(OrbitRoute(Destination.WORKSPACE, target, target, origin = root.origin)) + frames.drop(1))))
     }
     /** The [pending] project's sessions page lands at [root], the shell's pick once the directory is read: its project's own
      * destination, whatever was showing, as the drawer's row lands it. */
@@ -87,7 +106,12 @@ data class OrbitNavigation(
     fun bindAccount(key: String?): OrbitNavigation {
         if (key == account) return this
         val next = OrbitNavigation(account = key, pending = if (account == null) pending else null)
-        return if (key != null && next.pending != null && !next.pending.waitsForDirectory) next.copy(pending = null).push(next.pending) else next
+        return when {
+            key == null || next.pending == null || next.pending.waitsForDirectory -> next
+            // A link to the app itself has nothing to open over the home it starts on.
+            next.pending.destination == Destination.WORKSPACES -> next.copy(pending = null)
+            else -> next.copy(pending = null).push(next.pending)
+        }
     }
 }
 

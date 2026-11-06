@@ -124,6 +124,7 @@ import {
   RunnerRegisterRequest,
   RunnerRegisterResponse,
   RunnerRepoCleanupResult,
+  AbandonedCheckoutsRequest,
   SessionCommitResultRequest,
   RunFinalizeRequest,
   RunFinalizeResponse,
@@ -1001,6 +1002,10 @@ const RUNNER_PROVIDERS_HEADER = 'x-orbit-supported-providers';
 export const SESSION_ORCHESTRATION_CREDENTIAL_V1 = 'session-orchestration-credential-v1';
 export const SESSION_TERMINAL_HANDOFF_V1 = 'session-terminal-handoff-v1';
 export const SESSION_WORKTREE_OPS_V1 = 'session-worktree-ops-v1';
+/** The commit relay can also carry `discard`, and the runner scans its checkouts for work no
+ *  branch has. A runner that does not declare it is never handed a discard: it would read the
+ *  command as a plain commit and put the work on the branch instead of throwing it away. */
+export const ABANDONED_CHECKOUT_V1 = 'abandoned-checkout-v1';
 /** Runner signs in the Codex account a login `start` names (`account`, `accountName`). One that
  *  does not would ignore the account and sign in its machine's Default instead. */
 export const CODEX_ACCOUNT_LOGIN_V1 = 'codex-account-login/v1';
@@ -1278,6 +1283,29 @@ export function parseRunnerCapabilities(
     .filter((value) => value.length > 0 && value.length <= 120))]
     .sort()
     .slice(0, 128);
+}
+
+/**
+ * A turn completion without what it merely reports: what decides the turn's outcome and how its
+ * session resumes. An older runner sends no more than this, so the rest is optional everywhere it
+ * is read, and the next turn reports it all again. `branchSha` stays because a confirmation request
+ * is held to it and `storableBranchSha` already refuses what its column could not store.
+ */
+function settlingFields(dto: TurnCompleteRequest): TurnCompleteRequest {
+  const { turnId, leaseOwner, status, result, error, shellExitCode, shellOutput, subtype, runtimeSessionId, branchSha } = dto;
+  return {
+    turnId, leaseOwner, status, result, error, shellExitCode, shellOutput, subtype, runtimeSessionId, branchSha,
+    // Zero says no engine turn ran, which decides whether its message is still owed its delivery.
+    // Any other count books as the one turn a completion is when it reports none.
+    ...(dto.numTurns === 0 ? { numTurns: 0 } : {}),
+  };
+}
+
+/** A fault on one log line: its code, and the last line of a message Prisma opens with a code frame. */
+function faultLine(fault: unknown): string {
+  if (!(fault instanceof Error)) return String(fault);
+  const { code } = fault as Error & { code?: string };
+  return `${code ?? fault.name}: ${fault.message.trim().split('\n').at(-1)}`;
 }
 
 export function parseLeaseGeneration(value?: string, field = 'leaseGeneration'): string | null {
@@ -2401,7 +2429,11 @@ export class RunnerApiController {
         // clean up minutes later — the successor process claims these instead.
         if (!draining) {
           mergeRequests = await this.realtime.drainMergeRequests(runner.id, heartbeatLeaseOwner, runnerSupportsCapability(capabilities, SESSION_MERGE_RECOVERY_V1));
-          commitRequests = await this.realtime.drainCommitRequests(runner.id, heartbeatLeaseOwner);
+          commitRequests = await this.realtime.drainCommitRequests(
+            runner.id,
+            heartbeatLeaseOwner,
+            runnerSupportsCapability(capabilities, ABANDONED_CHECKOUT_V1),
+          );
         }
       }
       artifactRequests = await this.realtime.drainArtifactRequests(runner.id);
@@ -6152,16 +6184,16 @@ export class RunnerApiController {
       );
     }
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
-    // Go's legacy `omitempty` encoding can omit an empty changedFiles slice. A new runner's
-    // baseSha still proves that it computed a worktree snapshot, so normalize that shape to the
-    // empty snapshot instead of advancing the base while retaining the previous file list.
-    const changedFilesSnapshot =
-      dto.changedFiles ?? (dto.baseSha !== undefined ? [] : undefined);
     // Retried whole. Every decision — the duplicate-ack check, the park, the merge-state clear, the
     // billing accrual — is taken from the Session row read under its own lock inside the closure,
     // so a re-run cannot accrue against a turn the winner already closed. `dto` is outside, so a
     // retry books the same numbers and not a second set.
-    const finalized = await withTransactionRetry(this.prisma, async (tx) => {
+    const settle = (dto: TurnCompleteRequest) => withTransactionRetry(this.prisma, async (tx) => {
+      // Go's legacy `omitempty` encoding can omit an empty changedFiles slice. A new runner's
+      // baseSha still proves that it computed a worktree snapshot, so normalize that shape to the
+      // empty snapshot instead of advancing the base while retaining the previous file list.
+      const changedFilesSnapshot =
+        dto.changedFiles ?? (dto.baseSha !== undefined ? [] : undefined);
       // Serialize completion with createTurn's enqueue transition. Whichever locks the
       // Session first determines whether a follow-up is already queued; this prevents the
       // lost-wakeup state AWAITING_INPUT + PENDING conversation turn. The same lock also
@@ -7380,6 +7412,20 @@ export class RunnerApiController {
         maxWait: TURN_COMPLETE_TRANSACTION_TIMEOUT_MS,
       },
     }));
+    // What a turn reports must not hold the turn. The runner re-posts a 5xx with no ceiling and the
+    // session takes nothing else until this answers, so a report the database refuses (a count past
+    // its column, twice now: 0347, 0473) is a queue standing still behind a finished turn. A 4xx
+    // would not end that: the runner would drop the completion and, when the turn's lease ran out, be
+    // handed the turn and run it again, at the model's cost, every time. So it settles once more on
+    // what decides the turn alone. A fault that says nothing about the request (a conflict its
+    // retries did not absorb, the database failing, an answer some layer already gave) goes on as it
+    // always did: the re-post carries the whole report.
+    const finalized = await settle(dto).catch((error: unknown) => {
+      const { family } = classifyTransactionFault(error);
+      if (family === 'TRANSIENT' || family === 'RESOURCE' || family === 'ANSWERED') throw error;
+      this.logger.warn(`turn ${dto.turnId} of session ${sessionId} settles without its reports: ${faultLine(error)}`);
+      return settle(settlingFields(dto));
+    });
     // A message refused for the region went back in the queue with its session (§10): no turn ended, so nothing a
     // turn's end hands over is owed. The row and its queue changed, and the runner's slot is free for another session.
     if ('regionHeld' in finalized) {
@@ -9387,6 +9433,90 @@ export class RunnerApiController {
     };
   }
 
+  /** The runner's whole inventory of finished sessions' checkouts that still hold work no
+   *  branch has (docs: the abandoned-checkout half of worktree GC). `checkouts` REPLACES this
+   *  runner's set: one absent here is one the runner no longer finds abandoned. The runner does
+   *  not know a session's status — it reports what `git status` says and which sessions the
+   *  control plane no longer wants a checkout for — so the finished-session test is made here.
+   *
+   *  Only a TERMINAL session is kept. A parked one at rest can be dirty between turns and is not
+   *  abandoned; committing or discarding it would be acting on somebody's live work. The diff
+   *  arrives with the entry (the scan computed it); a body past the runner's patch budget lacks
+   *  `patches`, which the view reports as hasPatches:false rather than as an empty diff. */
+  @UseGuards(RunnerAuthGuard)
+  @Post('abandoned-checkouts')
+  async abandonedCheckouts(
+    @CurrentRunner() runner: { id: string; ownerId?: string },
+    @Body() dto: AbandonedCheckoutsRequest,
+  ): Promise<{ ok: true; kept: number }> {
+    const ownerId = runner.ownerId;
+    if (!ownerId) return { ok: true, kept: 0 };
+    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const reported = (Array.isArray(dto?.checkouts) ? dto.checkouts : [])
+      .slice(0, 2000)
+      .filter((entry) => entry && UUID.test(String(entry.sessionId)));
+    const ids = [...new Set(reported.map((entry) => entry.sessionId))];
+    const finished = ids.length
+      ? new Set(
+          (
+            await this.prisma.session.findMany({
+              where: {
+                id: { in: ids },
+                ownerId,
+                assignedRunnerId: runner.id,
+                status: { in: TERMINAL },
+              },
+              select: { id: true },
+            })
+          ).map((row) => row.id),
+        )
+      : new Set<string>();
+    const kept = reported.filter((entry) => finished.has(entry.sessionId));
+    const observedAt = new Date();
+    await withTransactionRetry(this.prisma, async (tx) => {
+      // Session rows FIRST, then the checkout rows. commitResult locks a session and then deletes
+      // its abandoned_checkout; a sweep that took them the other way round would be the same two
+      // rows in opposite orders, which is the one deadlock shape this repo has actually taken.
+      if (kept.length > 0) {
+        // What the runner SAW is the same fact this column means (its own `git status
+        // --porcelain`), and the commit door admits a finished session on it alone. Recorded
+        // here so an entry can be committed without waiting for another heartbeat.
+        await tx.session.updateMany({
+          where: { id: { in: kept.map((entry) => entry.sessionId) }, worktreeDirty: { not: true } },
+          data: { worktreeDirty: true },
+        });
+      }
+      await tx.abandonedCheckout.deleteMany({
+        where: { runnerId: runner.id, sessionId: { notIn: kept.map((entry) => entry.sessionId) } },
+      });
+      for (const entry of kept) {
+        const files = (Array.isArray(entry.files) ? entry.files : []).slice(0, 2000);
+        const patches = Array.isArray(entry.patches) && entry.patches.length > 0 ? entry.patches : null;
+        await tx.abandonedCheckout.upsert({
+          where: { sessionId: entry.sessionId },
+          create: {
+            ownerId,
+            runnerId: runner.id,
+            sessionId: entry.sessionId,
+            files: files as unknown as Prisma.InputJsonValue,
+            patches: patches === null ? Prisma.DbNull : (patches as unknown as Prisma.InputJsonValue),
+            hasPatches: patches !== null,
+            observedAt,
+          },
+          update: {
+            ownerId,
+            runnerId: runner.id,
+            files: files as unknown as Prisma.InputJsonValue,
+            patches: patches === null ? Prisma.DbNull : (patches as unknown as Prisma.InputJsonValue),
+            hasPatches: patches !== null,
+            observedAt,
+          },
+        });
+      }
+    }, loggedRetry(this.logger, 'runnerApi.abandonedCheckouts'));
+    return { ok: true, kept: kept.length };
+  }
+
   /** Outcome of a heartbeat-delivered MergeCommand — persist it so the worktree status bar
    *  can show merged ✓ / conflict / error. mergedAt + cleared error on success; the message
    *  (git stderr / failed precondition) is kept for conflict/error. `released` is not an
@@ -9710,6 +9840,7 @@ export class RunnerApiController {
       dto?.status !== 'committed' &&
       dto?.status !== 'nochange' &&
       dto?.status !== 'error' &&
+      dto?.status !== 'discarded' &&
       dto?.status !== 'released'
     ) {
       throw new BadRequestException('invalid commit result status');
@@ -9723,7 +9854,10 @@ export class RunnerApiController {
     if (released && !operationId) {
       throw new BadRequestException('released requires the claimed operation');
     }
-    const clean = dto.status === 'committed' || dto.status === 'nochange';
+    // A discarded checkout is as clean as a committed one: nothing uncommitted is left in it, so
+    // the entry that listed it is done and gcWorktrees may now reclaim it.
+    const clean =
+      dto.status === 'committed' || dto.status === 'nochange' || dto.status === 'discarded';
     // Retried whole, on the same claim fence as the merge result above.
     await withTransactionRetry(this.prisma, async (tx) => {
       const locked = await tx.$queryRaw<
@@ -9790,8 +9924,14 @@ export class RunnerApiController {
               ? dto.summary?.trim().slice(0, 1000) || null
               : null,
           ...(clean ? { worktreeDirty: false } : {}),
+          // The work is on the branch (or gone): this checkout is no longer abandoned. The next
+          // scan will say the same; dropping it here is what makes the page answer at once.
+          ...(clean ? { commitAction: null } : {}),
         },
       });
+      if (clean) {
+        await tx.abandonedCheckout.deleteMany({ where: { sessionId } });
+      }
     }, loggedRetry(this.logger, 'runnerApi.commitResult'));
     // Mirror mergeResult: release a message queued behind this commit now that the
     // checkout is free, rather than waiting for the queue's periodic poll.

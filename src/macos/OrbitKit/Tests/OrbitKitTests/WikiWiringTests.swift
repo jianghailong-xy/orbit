@@ -276,9 +276,10 @@ final class WikiWiringTests: XCTestCase {
                                  "Text(WikiCopy.principles)", "WikiBadge(text: WikiCopy.trustLabel(.owner), tone: .owner)",
                                  "WikiCopy.allPrinciples(principles.count)"], "the principles")
         let documents = try slice(page, from: "private var documentsBand: some View {", to: "private func category(")
-        assertOrder(documents, ["case .loading:", "if failed { failure } else { skeleton }", "case .categories(let categories):",
-                                "case .topics(let groups):", "case .newSpace:", "Text(WikiDocCopy.noDocumentsNote)",
-                                "Button(WikiPlanCopy.setUp, action: actions.openSettings)", "case .nothing:"], "the documents band")
+        assertOrder(documents, ["case .loading:", "if failed { failure } else { skeleton }",
+                                "case .categories(let categories, let nothingWritten):", "if nothingWritten { startCard }",
+                                "ForEach(categories) { category in self.category(category) }", "case .topics(let groups):",
+                                "case .start:\n            startCard"], "the documents band")
         let style = try slice(code(try source("Views/WikiView.swift")), from: "@ViewBuilder func wikiHomeListStyle() -> some View {", to: "#else")
         XCTAssertTrue(style.contains("self.listStyle(.insetGrouped)"), "grouped cards on iOS (mock 30 ③)")
         // The plan page draws its documents in the same row.

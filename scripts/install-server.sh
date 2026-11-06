@@ -32,9 +32,10 @@
 #
 # --enable-managed-runners is an administrator's explicit choice for the deployment already in this
 # checkout, one installed without managed runners: it prepares them the same way, firewall included,
-# writes those lines into its .env (and only those), and starts the channel, the firewall and the
-# apiserver. --enable-managed-runner-firewall is the same choice for a deployment that has managed
-# runners without their firewall: it adds the firewall alone. Nothing else runs either.
+# writes those lines into its .env (adding its Compose profiles to the ones that .env already lists),
+# and starts the channel, the firewall and the apiserver. --enable-managed-runner-firewall is the same
+# choice for a deployment that has managed runners without their firewall: it adds the firewall alone.
+# Nothing else runs either.
 set -euo pipefail
 
 usage() {
@@ -102,17 +103,54 @@ FW_IMAGE=orbit-managed-runner-firewall:local
 FW_PROFILE=managed-runner-firewall
 FW_SERVICE=managed-runner-firewall
 FW_LOCK_LINE=""
+# Set for --enable-managed-runners where the deployment's .env already has a COMPOSE_PROFILES line: the managed
+# runners' profiles are merged into that line where it is, so mr_lines writes no second one.
+MERGE_PROFILES=0
 # What .env carries for managed runners: the switch, their directory and the Compose profiles of the Docker
 # backend and, unless --no-managed-runner-firewall, of the firewall.
 mr_lines() {
   echo "ORBIT_MANAGED_RUNNERS_ENABLED=true"
   echo "ORBIT_MANAGED_RUNNERS_DIR=./$MR_DIR"
+  if [ "$MERGE_PROFILES" -eq 1 ]; then
+    [ -z "$FW_LOCK_LINE" ] || echo "$FW_LOCK_LINE"
+    return 0
+  fi
   if [ "$FIREWALL" -eq 1 ]; then
     echo "COMPOSE_PROFILES=managed-runners-docker,$FW_PROFILE"
     [ -z "$FW_LOCK_LINE" ] || echo "$FW_LOCK_LINE"
   else
     echo "COMPOSE_PROFILES=managed-runners-docker"
   fi
+}
+
+# The Compose profiles .env lists under COMPOSE_PROFILES, comma-separated, without blank entries, surrounding
+# quotes or duplicates, in the order they first appear. A deployment may run profiles of its own (runner-link,
+# say), and enabling managed runners adds to that line instead of replacing it.
+existing_profiles() {
+  sed -nE 's/^[[:space:]]*COMPOSE_PROFILES=(.*)$/\1/p' .env |
+    tr ',' '\n' |
+    sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//" \
+        -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' |
+    awk 'NF && !seen[$0]++' |
+    paste -sd, -
+}
+
+# The COMPOSE_PROFILES line the deployment gets: what it lists now, then the managed runners' profiles it does
+# not list yet (the Docker backend's, and the firewall's unless --no-managed-runner-firewall).
+managed_profiles_line() {
+  local joined
+  joined="$(existing_profiles)"
+  case ",$joined," in
+    *",managed-runners-docker,"*) ;;
+    *) joined="${joined:+$joined,}managed-runners-docker" ;;
+  esac
+  if [ "$FIREWALL" -eq 1 ]; then
+    case ",$joined," in
+      *",$FW_PROFILE,"*) ;;
+      *) joined="${joined:+$joined,}$FW_PROFILE" ;;
+    esac
+  fi
+  printf 'COMPOSE_PROFILES=%s\n' "$joined"
 }
 FIREWALL_OFF_WARNING="the managed runners' host firewall is off (--no-managed-runner-firewall): every account's runner
          can reach every service this host listens to and the private networks behind it. Firewall their network
@@ -141,9 +179,9 @@ elif [ "$ENABLE_EXISTING" -eq 1 ]; then
   [ "$MANAGED" -eq 1 ] && [ -z "$PUBLIC_ORIGIN" ] \
     || die "--enable-managed-runners takes neither --no-managed-runners nor --public-origin"
   [ -e .env ] || die "no .env here: there is no deployment to switch managed runners on for. Run without --enable-managed-runners to install one."
-  if grep -Eq '^[[:space:]]*(ORBIT_MANAGED_RUNNERS_DIR|COMPOSE_PROFILES)=' .env; then
-    die "managed runners were prepared for this deployment already, or .env sets COMPOSE_PROFILES: switch them
-       with ORBIT_MANAGED_RUNNERS_ENABLED in .env (docs/self-hosting.md, \"Managed runners\")."
+  if grep -Eq '^[[:space:]]*ORBIT_MANAGED_RUNNERS_DIR=' .env; then
+    die "managed runners were prepared for this deployment already: switch them with
+       ORBIT_MANAGED_RUNNERS_ENABLED in .env (docs/self-hosting.md, \"Managed runners\")."
   fi
 else
   if [ -e .env ]; then
@@ -457,10 +495,21 @@ fi
 
 echo "==> Writing .env"
 NEW_ENV="$(mktemp .env.install.XXXXXX)"
-trap 'rm -f "$NEW_ENV"' EXIT
+trap 'rm -f "$NEW_ENV" "$NEW_ENV.merged"' EXIT
 if [ "$ENABLE_EXISTING" -eq 1 ]; then
   # The deployment's own .env, every line kept but an earlier switch, which the new one replaces.
   grep -Ev '^[[:space:]]*ORBIT_MANAGED_RUNNERS_ENABLED=' .env >"$NEW_ENV" || true
+  if grep -Eq '^[[:space:]]*COMPOSE_PROFILES=' "$NEW_ENV"; then
+    # Profiles of its own (runner-link, say): the managed runners' are added to that line where it is, and a
+    # second COMPOSE_PROFILES line is never written.
+    MERGE_PROFILES=1
+    MERGED_PROFILES="$(managed_profiles_line)"
+    awk -v line="$MERGED_PROFILES" '
+      /^[[:space:]]*COMPOSE_PROFILES=/ { if (!written) print line; written = 1; next }
+      { print }
+    ' "$NEW_ENV" >"$NEW_ENV.merged"
+    mv "$NEW_ENV.merged" "$NEW_ENV"
+  fi
 else
   JWT_SECRET="$(openssl rand -base64 32)"
   PROVIDER_SECRET_KEY="$(openssl rand -base64 32)"

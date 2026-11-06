@@ -1,5 +1,5 @@
 import { useRef, useState, type JSX } from 'react';
-import Markdown from 'react-markdown';
+import Markdown from './Markdown';
 import remarkGfm from 'remark-gfm';
 import type { ApprovalInfo, PermissionRule } from '../api';
 import { BatchGraph } from './BatchGraph';

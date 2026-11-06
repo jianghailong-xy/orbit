@@ -7649,15 +7649,46 @@ export class SessionsService {
    * is refused exactly as before.
    */
   async commitWorktree(ownerId: string, id: string) {
+    return this.queueCheckoutAction(ownerId, id, 'commit');
+  }
+
+  /**
+   * Throw away a finished session's uncommitted checkout, so the checkout can be reclaimed
+   * instead of carried past every cap forever (commitWorktree's doc applies here, read the other
+   * way round).
+   *
+   * It rides the commit relay on purpose: the same operation fence, the same heartbeat delivery,
+   * the same result door. What differs is one flag on the command the runner runs. Only a
+   * finished session may be discarded — a live one is being worked in, and "discard" there would
+   * race its turn — and only a runner that declares abandoned-checkout-v1 may be asked: an older
+   * one would ignore the flag and commit the work instead.
+   */
+  async discardCheckout(ownerId: string, id: string) {
+    return this.queueCheckoutAction(ownerId, id, 'discard');
+  }
+
+  private async queueCheckoutAction(ownerId: string, id: string, action: 'commit' | 'discard') {
+    const discard = action === 'discard';
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
     assertEngineSessionRow(session);
     if (session.isolationStatus !== 'worktree' || !session.branch) {
-      throw new BadRequestException('session has no worktree to commit');
+      throw new BadRequestException(
+        discard ? 'session has no worktree checkout to discard' : 'session has no worktree to commit',
+      );
     }
     const ended = !SessionsService.LIVE.includes(session.status);
+    if (discard && !ended) {
+      throw new ConflictException(
+        'the session is still running — end it before discarding its checkout',
+      );
+    }
     if (ended && session.worktreeDirty !== true) {
-      throw new ConflictException('the session has ended — its work is already committed');
+      throw new ConflictException(
+        discard
+          ? 'the checkout has no uncommitted work to discard'
+          : 'the session has ended — its work is already committed',
+      );
     }
     if (!ended && session.cancelRequestedAt) {
       throw new ConflictException('the session has ended — its work is already committed');
@@ -7671,7 +7702,16 @@ export class SessionsService {
     if (!session.assignedRunnerId) {
       throw new ConflictException('no runner is associated with this session');
     }
-    if (session.commitStatus === 'pending') return { ok: true };
+    if (discard && !(await this.runnerCanDiscard(session.assignedRunnerId))) {
+      throw new ConflictException(
+        'this runner does not support discarding a checkout yet — update it first',
+      );
+    }
+    if (session.commitStatus === 'pending') {
+      // The same press twice is the same answer; a different one has to wait for the first.
+      if ((session.commitAction === 'discard') === discard) return { ok: true };
+      throw new ConflictException('wait for the pending checkout operation to finish');
+    }
     if (session.mergeStatus === 'pending') {
       throw new ConflictException('wait for the pending branch merge to finish');
     }
@@ -7697,9 +7737,11 @@ export class SessionsService {
         ...idle,
         commitStatus: session.commitStatus,
         mergeStatus: session.mergeStatus,
+        commitAction: session.commitAction,
       },
       data: {
         commitStatus: 'pending',
+        commitAction: discard ? 'discard' : null,
         commitRequestedAt: new Date(),
         commitOperationId: randomUUID(),
         commitOperationOwner: null,
@@ -7718,7 +7760,11 @@ export class SessionsService {
             !current.cancelRequestedAt &&
             current.runningSubagents.length === 0
           : current.worktreeDirty === true);
-      if (current?.commitStatus === 'pending' && stillCommittable) {
+      if (
+        current?.commitStatus === 'pending' &&
+        stillCommittable &&
+        (current.commitAction === 'discard') === discard
+      ) {
         return { ok: true };
       }
       if (current?.mergeStatus === 'pending') {
@@ -7731,6 +7777,17 @@ export class SessionsService {
     // As for a merge: have the runner heartbeat now rather than at its next 30s tick.
     this.realtime.notifyRunnerWake(session.assignedRunnerId);
     return { ok: true };
+  }
+
+  /** Whether this runner declared that its commit relay also carries `discard` (the runner-api
+   *  controller's ABANDONED_CHECKOUT_V1). Read fresh: a machine updates itself while the page
+   *  that shows the button stays open. */
+  private async runnerCanDiscard(runnerId: string): Promise<boolean> {
+    const runner = await this.prisma.runner.findUnique({
+      where: { id: runnerId },
+      select: { capabilities: true, capabilitiesReportedAt: true },
+    });
+    return !!runner?.capabilitiesReportedAt && runner.capabilities.includes('abandoned-checkout-v1');
   }
 
   /**

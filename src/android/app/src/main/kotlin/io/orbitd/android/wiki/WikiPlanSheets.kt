@@ -282,7 +282,7 @@ private fun PlanNumberField(text: String, tag: String, change: (String) -> Unit)
 
 /** What the server said when it refused a save: the gate's errors (the first eight), or why not. */
 @Composable
-private fun PlanRefusedLines(lines: List<String>, tag: String) {
+internal fun PlanRefusedLines(lines: List<String>, tag: String) {
     WikiCard(Modifier.padding(top = 8.dp).testTag(tag)) {
         lines.take(8).forEach { Text(it, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), style = WikiType.label, color = MaterialTheme.colorScheme.error) }
     }
