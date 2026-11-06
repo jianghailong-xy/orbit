@@ -457,6 +457,20 @@ export function wikiCallWritesNote(toolName: string | null | undefined, command:
   return WIKI_NOTE_TOOL.test(toolName ?? '') || WIKI_NOTE_COMMAND.test(command ?? '');
 }
 
+/** `wiki_propose` and `wiki_draft` as each engine files them, and the same calls through the CLI. */
+const WIKI_DRAFT_TOOL = /(?:^|_)wiki_(?:propose|draft)$/u;
+const WIKI_DRAFT_COMMAND = /(?:^|[\s;&|(`'"/])orbit['"]?\s+wiki\s+(?:propose|draft)(?![\w-])/u;
+
+/**
+ * Is this call, made in a wiki chat, one that drafts (contract `chat.dossier`)? In a chat every `wiki_propose` op and
+ * every `wiki_draft` is a draft the owner may discard, so a dossier leaves the call out: a discarded card must not come
+ * back through the next maintenance run. A `wiki_note` — with `corrects` or without — is out of every dossier already
+ * (`wikiCallWritesNote`). Asked only of a chat's calls: anywhere else a proposal is what it always was.
+ */
+export function wikiCallDraftsInChat(toolName: string | null | undefined, command: string | null | undefined): boolean {
+  return WIKI_DRAFT_TOOL.test(toolName ?? '') || WIKI_DRAFT_COMMAND.test(command ?? '');
+}
+
 /**
  * The tools whose input is what the agent typed: a record of calling one shows what it said, not what happened. The list
  * fixed before the second claims replay read anything (docs/wiki-memory-claims-design.md section 6.2), by the name a
@@ -1081,9 +1095,10 @@ export interface WikiProposeResult {
 }
 
 /** `wiki_search` returns entries, and nothing else (contract `agentSurface.toolSpecs.wiki_search`
- *  `returns`: id, kind, title, summary, trust, anchorState, match, score). A session is bound to one
- *  space, so a hit there needs nothing about where it lives — and a search that quietly grew the
- *  whole entry back onto every hit is the RAG collapse `wiki-retrieval.ts` refuses on purpose. */
+ *  `hit`: id, kind, title, summary, trust, anchorState, match, score, and how old the entry is). A
+ *  session is bound to one space, so a hit there needs nothing about where it lives — and a search
+ *  that quietly grew the whole entry back onto every hit is the RAG collapse `wiki-retrieval.ts`
+ *  refuses on purpose. */
 export interface WikiSearchHit {
   id: string;
   kind: WikiEntryKind;
@@ -1093,6 +1108,15 @@ export interface WikiSearchHit {
   anchorState: WikiAnchorState;
   match: WikiSearchMatch[];
   score: number;
+  // How old what the entry says is, so the reader can judge it (contract `age`): a verified anchor
+  // was found as recorded, which says nothing about whether the entry still holds.
+  /** When the lineage was recorded, which no amend moves (`WikiEntry.recordedAt`). */
+  recordedAt: string;
+  /** When its current revision was written. Null only for an entry deleted while the search read it. */
+  changedAt: string | null;
+  /** The commit its anchors were last checked at, and when; both null until a check. */
+  anchorCheckedRef: string | null;
+  anchorCheckedAt: string | null;
 }
 
 /**
@@ -1101,16 +1125,15 @@ export interface WikiSearchHit {
  *
  * For the one caller that OPENS what it finds: the owner's ⌘K. An entry's page is
  * `/wiki/<space>/e/<id>` — a space AND an id, while the id alone names no page — and the row under
- * the title says which topic it is filed under and what the last anchor check found. None of them
- * is part of a hit's answer, which is why they arrive only when named.
+ * the title says which topic it is filed under. Neither is part of a hit's answer, which is why they
+ * arrive only when named. (The last anchor check, `anchorCheckedRef`, was a third until every hit
+ * carried it.)
  */
 export interface WikiSearchRowAdditions {
   /** The space the entry is filed in, whose slug its page is reached under. */
   spaceSlug?: string;
   /** The entry's topic slugs, as the Wiki's own pages spell them. */
   topics?: string[];
-  /** The ref the entry's anchors were last checked at, for the `✓ <ref>` mark. */
-  anchorCheckedRef?: string | null;
 }
 
 export type WikiSearchRow = WikiSearchHit & WikiSearchRowAdditions;
@@ -1144,6 +1167,12 @@ export interface WikiSpaceSettings {
   reviewModeChangedBy?: 'owner' | 'spot_checks' | 'verification';
   /** The space's Wiki maintenance run (contract `space.settings.maintenance`): off by default. */
   maintenance: WikiMaintenanceSettings;
+  /**
+   * Where the space's wiki chats run (contract `space.settings.chat`): the workspace the owner chose at the first
+   * chat, remembered, or null until they choose. Only an eligible one is stored; one that stops being eligible is
+   * kept and not used, and the panel asks again.
+   */
+  chat: { workspaceId: string | null };
 }
 
 /**
@@ -1218,6 +1247,7 @@ export const WIKI_DEFAULT_SPACE_SETTINGS: Readonly<WikiSpaceSettings> = {
   reviewMode: 'tiered',
   automaticSpotChecks: false,
   maintenance: WIKI_DEFAULT_MAINTENANCE_SETTINGS,
+  chat: { workspaceId: null },
 };
 
 /** A stored space's settings as they read: every absent key its default, and an absent or unknown
@@ -1225,7 +1255,14 @@ export const WIKI_DEFAULT_SPACE_SETTINGS: Readonly<WikiSpaceSettings> = {
 export function wikiSpaceSettings(stored: unknown): WikiSpaceSettings {
   const raw = (stored !== null && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}) as Partial<WikiSpaceSettings>;
   const reviewMode = (WIKI_REVIEW_MODES as readonly unknown[]).includes(raw.reviewMode) ? raw.reviewMode! : WIKI_UNSET_REVIEW_MODE;
-  return { ...WIKI_DEFAULT_SPACE_SETTINGS, ...raw, reviewMode, maintenance: wikiMaintenanceSettings(raw.maintenance) };
+  const chatWorkspace = (raw.chat as { workspaceId?: unknown } | undefined)?.workspaceId;
+  return {
+    ...WIKI_DEFAULT_SPACE_SETTINGS,
+    ...raw,
+    reviewMode,
+    maintenance: wikiMaintenanceSettings(raw.maintenance),
+    chat: { workspaceId: typeof chatWorkspace === 'string' && chatWorkspace !== '' ? chatWorkspace : null },
+  };
 }
 
 // ── Wiki maintenance: the dossier and the cursor (contract `maintenance`, criterion 2) ──────────
@@ -1525,6 +1562,11 @@ export interface WikiSpace {
   // server older than them.
   /** The things of its plan that wait on the owner, counted as the plan's own amber count beside Plan counts them. */
   planWaiting?: number;
+  /**
+   * Its applied chat cards whose rewrite waits on the owner, one each (contract `space.list.chatWaiting`,
+   * `wikiChatWaiting`): with pendingOps and planWaiting it is the Wiki's waiting count on web and iOS.
+   */
+  chatWaiting?: number;
   /** The workspaces bound to it, in the order they were bound. */
   workspaceIds?: string[];
   /** Its confirmed plan's documents, written of how many: null while it has no confirmed plan. */

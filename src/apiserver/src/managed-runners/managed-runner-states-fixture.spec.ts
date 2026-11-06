@@ -80,6 +80,7 @@ function row(input: NonNullable<ServerInput['mapping']>): ManagedRunner {
     nodeName: null,
     nodeUid: null,
     reservation: null,
+    volumeMeasurement: null,
     demandRevision: 0,
     lastDemandAt: null,
     capacityRevision: null,

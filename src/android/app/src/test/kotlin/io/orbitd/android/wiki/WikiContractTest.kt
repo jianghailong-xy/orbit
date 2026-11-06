@@ -73,6 +73,51 @@ class WikiContractTest {
         assertEquals("a look-back left out is the default, not all of history", 14, WikiMaintenanceSettings.read(JsonObject(emptyMap()))!!.lookbackDays)
     }
 
+    /** OrbitKit `testASearchHitIsTheContractsAndSaysHowOldItIs`: what this model reads is what the contract's hit lists
+     * (`agentSurface.toolSpecs.wiki_search.hit`) — `topics` aside, which the client asks for by name — and how old the entry
+     * is (`age`) decodes as the server writes it, and as nothing where a server sent none. */
+    @Test fun aSearchHitIsTheContractsAndSaysHowOldItIs() {
+        val search = at("agentSurface", "toolSpecs", "wiki_search").jsonObject
+        val fields = search.getValue("hit").jsonArray.map { it.jsonPrimitive.content }
+        val age = search.getValue("age").jsonObject.keys - "why"
+        assertEquals(setOf("recordedAt", "changedAt", "anchorCheckedRef", "anchorCheckedAt"), age)
+        assertTrue("every age field is a field of the hit: $fields", fields.containsAll(age))
+
+        // A hit carrying every field the contract lists; one it adds later is sent too, as a word.
+        val sample = mapOf<String, JsonElement>(
+            "id" to JsonPrimitive("34ZU0nYtV7HX2KXcUhZX0"), "kind" to JsonPrimitive("pitfall"), "title" to JsonPrimitive("A pitfall"),
+            "summary" to JsonPrimitive("What bites."), "trust" to JsonPrimitive("auto"), "anchorState" to JsonPrimitive("verified"),
+            "match" to JsonArray(listOf(JsonPrimitive("keyword"), JsonPrimitive("path"))), "score" to JsonPrimitive(0.026944),
+            "recordedAt" to JsonPrimitive("2026-10-03T11:39:54.768Z"), "changedAt" to JsonPrimitive("2026-10-05T08:00:12.001Z"),
+            "anchorCheckedRef" to JsonPrimitive("7de4f86bcf1c01d2fcff6d154a039e5c54961df8"),
+            "anchorCheckedAt" to JsonPrimitive("2026-10-10T06:46:16.532Z"),
+        )
+        val hit = Wire.json.decodeFromJsonElement(WikiSearchHit.serializer(), JsonObject(fields.associateWith { sample[it] ?: JsonPrimitive("$it as a word") }))
+        assertEquals("2026-10-03T11:39:54.768Z", hit.recordedAt)
+        assertEquals("2026-10-05T08:00:12.001Z", hit.changedAt)
+        assertEquals("7de4f86bcf1c01d2fcff6d154a039e5c54961df8", hit.anchorCheckedRef)
+        assertEquals("2026-10-10T06:46:16.532Z", hit.anchorCheckedAt)
+        assertEquals("verified", hit.anchorState)
+        val read = WikiSearchHit::class.java.declaredFields
+            .filter { !java.lang.reflect.Modifier.isStatic(it.modifiers) && !it.isSynthetic }.map { it.name }.toSet()
+        assertTrue("the model reads ${read.sorted()}, and the contract's hit is $fields", fields.toSet().containsAll(read - "topics"))
+        assertTrue("the model reads how old the entry is: ${read.sorted()}", read.containsAll(age))
+
+        // A check not made yet, and a server that predates the fields: nothing fails to decode, nothing is made up.
+        val unchecked = Wire.json.decodeFromString(WikiSearchHit.serializer(),
+            """{"id":"e1","anchorState":"unchecked","recordedAt":"2026-11-05T00:51:02.000Z","changedAt":"2026-11-05T07:14:40.250Z","anchorCheckedRef":null,"anchorCheckedAt":null}""")
+        assertEquals("2026-11-05T00:51:02.000Z", unchecked.recordedAt)
+        assertNull(unchecked.anchorCheckedRef)
+        assertNull(unchecked.anchorCheckedAt)
+        val older = Wire.json.decodeFromString(WikiSearchHit.serializer(),
+            """{"id":"e1","kind":"pitfall","title":"t","summary":"s","trust":"auto","anchorState":"verified","match":["keyword"],"score":0.016393}""")
+        assertEquals("pitfall", older.kind)
+        assertNull(older.recordedAt)
+        assertNull(older.changedAt)
+        assertNull(older.anchorCheckedRef)
+        assertNull(older.anchorCheckedAt)
+    }
+
     /** Every request the Wiki client makes, from every method it has, matched against `agentSurface.doors.user.routes`. */
     @Test fun everyWikiRouteTheClientCallsIsOnTheUserDoor() = runBlocking {
         val routes = at("agentSurface", "doors", "user", "routes").jsonArray.map { it.jsonPrimitive.content }

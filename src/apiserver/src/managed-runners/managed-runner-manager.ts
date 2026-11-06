@@ -44,6 +44,7 @@ import { ownerAccountDisabled } from './managed-runner-eligibility';
 import { stopProofFor, type ManagedRunnerPredecessor, type ManagedRunnerStopProof } from './managed-runner-fencing';
 import type { ManagedRunnerProfile } from './managed-runner-profile';
 import { readStoredWorkload, workloadIdle, type StoredManagedWorkload } from './managed-runner-sleep';
+import { readVolumeMeasurement, type VolumeMeasurement } from './managed-runner-storage';
 import { managedKeySupply, managedRuntimeSupply, type ManagedSupplyRunner } from './managed-runner-supply';
 import {
   MANAGED_RUNNER_VOLUME_SWITCHED_ACTIVITY,
@@ -1675,7 +1676,10 @@ export class ManagedRunnerManager {
     return { mapping: current, volume };
   }
 
-  /** The recorded volume and its storage, unchanged: checked on every pass once the instance is being started. */
+  /**
+   * The recorded volume and its storage, unchanged: checked on every pass once the instance is being started, and
+   * what the backend measured of the volume kept for the runner's heartbeat (`recordVolumeMeasurement`).
+   */
   private async verifyStorage(mapping: ManagedRunner): Promise<VerifiedVolume> {
     const { terms } = this.backend;
     const volume = await this.backend.readVolume(mapping);
@@ -1687,7 +1691,28 @@ export class ManagedRunnerManager {
     if (!backing) throw new ManagedRunnerConflict('PV_CONFLICT', `${terms.backing} ${volume.boundTo} is gone`);
     const backingProblem = this.backend.backingProblem(backing, mapping);
     if (backingProblem) throw new ManagedRunnerConflict('PV_CONFLICT', backingProblem);
+    await this.recordVolumeMeasurement(mapping, volume);
     return { volume, backing };
+  }
+
+  /**
+   * What the backend measured of the recorded volume (Docker: the channel's view, read just now), kept on the
+   * mapping for the runner's heartbeat to relay as its storage budget (managed-runner-storage.ts). Written only
+   * when the figures differ from the ones kept, under this replica's lease, as a predicate write of its own column
+   * that leaves `revision` alone. `measuredAt` is the time this pass read them, after the backend answered, so it
+   * is never before the backend took them; the same figures read again keep the time they were first read, so
+   * the runner goes on counting the checkouts it has removed since (its lag compensation).
+   */
+  private async recordVolumeMeasurement(mapping: ManagedRunner, volume: ManagedVolume): Promise<void> {
+    const figures = this.backend.volumeMeasurement?.(volume);
+    if (!figures) return;
+    const kept = readVolumeMeasurement(mapping.volumeMeasurement);
+    if (kept && kept.limitBytes === figures.limitBytes && kept.usageBytes === figures.usageBytes) return;
+    const measurement: VolumeMeasurement = { ...figures, measuredAt: this.now().toISOString() };
+    await this.prisma.managedRunner.updateMany({
+      where: { id: mapping.id, leaseHolder: this.holder },
+      data: { volumeMeasurement: measurement as unknown as Prisma.InputJsonValue },
+    });
   }
 
   /**

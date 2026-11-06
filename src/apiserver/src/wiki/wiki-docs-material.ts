@@ -400,9 +400,61 @@ export async function gatherDocMaterial(
   const keywords = conditionKeywords(condition);
 
   const picked = await pickEntries(db, ownerId, spaceId, condition);
+  const found = await entrySources(db, ownerId, picked);
+  found.push(...(await searchRecords(db, ownerId, condition)));
+  const { records, unresolved } = await placeRecords(db, wiki, { ownerId, keywords, literals, found });
+  const entries: WikiDocMaterialEntry[] = picked.map((entry) => ({
+    id: entry.id,
+    kind: entry.kind as WikiEntryKind,
+    title: entry.title,
+    summary: entry.summary,
+    score: entry.score,
+    recordedAt: entry.recordedAt.toISOString(),
+  }));
+  return { entries, records, unresolved };
+}
+
+/**
+ * The records a press hands each section it rewrites besides its own material (contract `docs.follow.material`,
+ * design §8.2), so that `entriesPerSection` cannot squeeze out the entry the owner just applied: the entries the card
+ * wrote, as they stand — the active ones — each with its live sources, at most `sourcesPerEntry`, the entry their via
+ * entry; and the owner's own words in the chat up to the press, the newest `ownerTurnsPerSection`, each a turn the
+ * writer may cite (a turn is first-hand, a document never is). Read, redacted, cut and placed as a section's own
+ * records are (`placeRecords`).
+ */
+export async function gatherPressMaterial(
+  db: Reader,
+  wiki: Pick<WikiService, 'sourceText'>,
+  input: { ownerId: string; spaceId: string; entryIds: readonly string[]; chatId: string | null; until: Date; literals: readonly string[] },
+): Promise<{ records: WikiDocMaterialRecord[]; unresolved: Array<{ kind: string; ref: string; entryId: string }> }> {
+  const { ownerId, spaceId } = input;
+  const entries = input.entryIds.length === 0 ? [] : await db.$queryRaw<CandidateEntry[]>(Prisma.sql`
+    SELECT e."id"::text AS "id", e."kind" AS "kind", e."title" AS "title", e."summary" AS "summary", '' AS "blob",
+           e."topics" AS "topics", e."anchors" AS "anchors", e."current_revision" AS "currentRevision", e."recorded_at" AS "recordedAt"
+      FROM "wiki_entry" e
+     WHERE e."owner_id" = ${ownerId}::uuid AND e."space_id" = ${spaceId}::uuid AND e."status" = 'active'
+       AND e."id" = ANY(${[...new Set(input.entryIds)]}::uuid[])
+     ORDER BY e."recorded_at", e."id"`);
+  const found = await entrySources(db, ownerId, entries);
+  if (input.chatId) {
+    const turns = await db.$queryRaw<Array<{ id: string; kind: string; sendIntent: string | null; clientTurnId: string; content: string; createdAt: Date }>>(Prisma.sql`
+      SELECT t."id"::text AS "id", t."kind" AS "kind", t."send_intent"::text AS "sendIntent", t."client_turn_id" AS "clientTurnId",
+             t."content" AS "content", t."created_at" AS "createdAt"
+        FROM "conversation_turn" t JOIN "session" s ON s."id" = t."session_id"
+       WHERE t."session_id" = ${input.chatId}::uuid AND s."owner_id" = ${ownerId}::uuid
+         AND t."kind" IN ('message', 'steer') AND t."created_at" <= ${input.until}
+       ORDER BY t."created_at" DESC, t."id" DESC
+       LIMIT 200`);
+    const owners = turns.filter((turn) => isOwnerTurn(turn)).slice(0, WIKI_DOC_MATERIAL_RULES.ownerTurnsPerSection).reverse();
+    found.push(...owners.map((turn): Found => ({ kind: 'turn', ref: turn.id, found: 'search', via: null, quote: null })));
+  }
+  return placeRecords(db, wiki, { ownerId, keywords: [], literals: input.literals, found });
+}
+
+/** The live sources of each entry that are records, at most `sourcesPerEntry` an entry, each found through its entry. */
+async function entrySources(db: Reader, ownerId: string, entries: ReadonlyArray<Pick<CandidateEntry, 'id' | 'kind' | 'title' | 'currentRevision'>>): Promise<Found[]> {
   const found: Found[] = [];
-  const unresolved: Array<{ kind: string; ref: string; entryId: string }> = [];
-  for (const entry of picked) {
+  for (const entry of entries) {
     const sources = await db.wikiSource.findMany({
       where: { ownerId, state: 'live', revision: { entryId: entry.id, revision: entry.currentRevision } },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -425,8 +477,21 @@ export async function gatherDocMaterial(
       });
     }
   }
-  found.push(...(await searchRecords(db, ownerId, condition)));
+  return found;
+}
 
+/**
+ * Records found, read through the one reader a record has, redacted as a footnote's check reads them, cut around what
+ * found them and placed in their session, task and project: a record met twice, once. A record of an entry's that no
+ * longer answers is `unresolved`.
+ */
+async function placeRecords(
+  db: Reader,
+  wiki: Pick<WikiService, 'sourceText'>,
+  input: { ownerId: string; keywords: readonly string[]; literals: readonly string[]; found: readonly Found[] },
+): Promise<{ records: WikiDocMaterialRecord[]; unresolved: Array<{ kind: string; ref: string; entryId: string }> }> {
+  const { ownerId, keywords, literals, found } = input;
+  const unresolved: Array<{ kind: string; ref: string; entryId: string }> = [];
   // Every record read through the one reader, redacted as a footnote's check reads it; a record met twice, once.
   const reader: WikiPrincipal = { origin: 'maintenance', ownerId, userId: null, sessionId: null, toolCallId: null };
   const seen = new Set<string>();
@@ -536,13 +601,5 @@ export async function gatherDocMaterial(
       length: points.length,
     };
   });
-  const entries: WikiDocMaterialEntry[] = picked.map((entry) => ({
-    id: entry.id,
-    kind: entry.kind as WikiEntryKind,
-    title: entry.title,
-    summary: entry.summary,
-    score: entry.score,
-    recordedAt: entry.recordedAt.toISOString(),
-  }));
-  return { entries, records, unresolved };
+  return { records, unresolved };
 }

@@ -1,6 +1,6 @@
 import { IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
-import type { NewWorkspaceRequest, SessionKind, SessionLandingView, SessionTurnIntent } from '@orbit/shared';
+import type { NewWorkspaceRequest, SessionKind, SessionLandingView, SessionTurnIntent, WikiChatContext } from '@orbit/shared';
 import { MERGE_RECEIPT_RESULTS, type MergeReceiptResult } from './merge-receipt';
 
 const MERGE_RECEIPT_RESULT_VALUES = [...MERGE_RECEIPT_RESULTS];
@@ -122,6 +122,10 @@ export interface SessionTurnDto {
    *  turn. Only ids travel here — the bytes already live in the control plane. Each id
    *  must be the caller's and scoped to this session. Omitted/empty keeps it text-only. */
   attachmentIds?: string[];
+  /** A wiki chat's page and selection (wiki contract `chat.turns`, `chat.notes.wikiContext`): ids that
+   *  delivery reads and appends as the control plane's note, so `content` stays the words alone. Taken
+   *  only by a chat; a message to any other session that carries one is a 400. */
+  wikiContext?: WikiChatContext | null;
 }
 
 /** Stop the running turn, and — when a follow-up rides along — queue what to do instead,

@@ -79,9 +79,10 @@ export interface WikiJobContext {
    * the job, so a replayed job reuses the answer the queue already holds for it or waits for the call still
    * in flight — a restart re-issues no call that answered. Resolves with the row of a succeeded call;
    * throws WikiJobInfraError for a failure that is the platform's to retry and WikiJobContentError for the
-   * rest, so the runner never has to decide which the job is.
+   * rest, so the runner never has to decide which the job is. `material` is what the call was made from, kept
+   * with a row this call makes, for a replay to ask the same again (contract `modelQueue.material`).
    */
-  ask(step: string, unit: string, call: WikiModelRequestCall): Promise<WikiModelRequestRead>;
+  ask(step: string, unit: string, call: WikiModelRequestCall, material?: Record<string, unknown>): Promise<WikiModelRequestRead>;
   log(message: string): void;
 }
 
@@ -318,7 +319,8 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
       job,
       signal: controller.signal,
       log: (message: string) => this.log.log(`job ${job.id}: ${message}`),
-      ask: (step: string, unit: string, call: WikiModelRequestCall) => this.ask(job, step, unit, call, controller.signal),
+      ask: (step: string, unit: string, call: WikiModelRequestCall, material?: Record<string, unknown>) =>
+        this.ask(job, step, unit, call, controller.signal, material),
     };
   }
 
@@ -333,6 +335,7 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
     unit: string,
     call: WikiModelRequestCall,
     signal: AbortSignal,
+    material?: Record<string, unknown>,
   ): Promise<WikiModelRequestRead> {
     // A stopping worker asks the model nothing new (design §5.4): the call is the replay's to make, in the next process.
     if (signal.aborted) throw new WikiModelWaitCancelled();
@@ -346,6 +349,7 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
       attempt: await wikiModelRequestAttempt(this.prisma, { jobId: job.id, step, unit }),
       priority: job.priority,
       request: call,
+      ...(material !== undefined ? { material } : {}),
     });
     const row = await this.queue.whenSettled(enqueued.id, { signal });
     if (!enqueued.inserted && row.requestSha256 !== wikiModelRequestSha256(call)) {

@@ -2957,7 +2957,17 @@ export class ProjectOpenItemService {
                    WHERE s."task_id" = t."id"
                      AND s."starts_task_work"
                      AND s."status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
-                     AND s."id" IS DISTINCT FROM i."session_id"))`);
+                     AND (s."id" IS DISTINCT FROM i."session_id"
+                          -- The failing attempt itself is not "in flight" merely because the turn
+                          -- that wrote FAILED is still running; a message written to it afterwards
+                          -- is. That turn resumes the same session (auto-retry, a coordinator
+                          -- continuing the work, the failure card's Retry), and without this the
+                          -- item never closes and escalates to the owner instead.
+                          OR EXISTS (
+                            SELECT 1 FROM "conversation_turn" resumed_turn
+                             WHERE resumed_turn."session_id" = s."id"
+                               AND resumed_turn."kind" = 'message'
+                               AND resumed_turn."created_at" > (i."waiting_since" AT TIME ZONE 'UTC')))))`);
       await this.prisma.$executeRaw(Prisma.sql`
         UPDATE "project_open_item" i
            SET "state" = 'RESOLVED',

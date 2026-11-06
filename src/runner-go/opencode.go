@@ -877,7 +877,7 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 		delete(orbitAgent, "prompt")
 	}
 	appendPrompt := strings.TrimSpace(strings.Join(nonEmptyStrings(
-		job.Agent.AppendSystemPrompt,
+		job.appendSystemPrompt(),
 		openCodeOrbitCLIInstructions(executable, job.insideRecordedWork(), job.watchesOn()),
 	), "\n\n"))
 	if appendPrompt != "" {

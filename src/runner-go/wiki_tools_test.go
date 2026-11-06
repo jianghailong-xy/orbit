@@ -37,6 +37,16 @@ func wikiSurface(t *testing.T) map[string]interface{} {
 	return wikiContract(t)["agentSurface"].(map[string]interface{})
 }
 
+// wikiJSONNames is the names a struct's fields are serialized under, in the order they are declared.
+func wikiJSONNames(typ reflect.Type) []string {
+	var names []string
+	for i := 0; i < typ.NumField(); i++ {
+		name, _, _ := strings.Cut(typ.Field(i).Tag.Get("json"), ",")
+		names = append(names, name)
+	}
+	return names
+}
+
 func wikiDescriptor(t *testing.T, name string) map[string]interface{} {
 	t.Helper()
 	for _, tool := range toolDescriptors(false, false) {
@@ -94,13 +104,16 @@ const wikiNoteReply = `{"noted":true,"noteId":"n1","created":true,"readBy":"the 
 
 const wikiSearchReply = `{"q":"trgm index","semantic":false,"hits":[` +
 	`{"id":"34UuAT2stjMI2hEFUKr9X","kind":"decision","title":"pg_trgm over ILIKE","summary":"The keyword leg uses the trigram index.",` +
-	`"trust":"confirmed","anchorState":"verified","match":["keyword"],"score":0.032787}]}`
+	`"trust":"confirmed","anchorState":"verified","match":["keyword"],"score":0.032787,` +
+	`"recordedAt":"2026-10-03T11:39:54.768Z","changedAt":"2026-10-05T08:00:12.001Z",` +
+	`"anchorCheckedRef":"7de4f86bcf1c01d2fcff6d154a039e5c54961df8","anchorCheckedAt":"2026-10-10T06:46:16.532Z"}]}`
 
 // ── The surface ─────────────────────────────────────────────────────────────────────────────────
 
-// Four tools, and no more: the contract names them, the CLI has a command per tool (the parity test
+// Five tools, and no more: the contract names them, the CLI has a command per tool (the parity test
 // walks that), and the two halves of this file — tool descriptors and capability specs — are here.
-// A fifth tool added on one side is caught by whichever table the other side did not grow.
+// A sixth tool added on one side is caught by whichever table the other side did not grow. The
+// fifth, wiki_draft, joined with the binary that serves it (contract `agentSurface.chat.draft.arrival`).
 func TestWikiAgentSurfaceIsTheContracts(t *testing.T) {
 	surface := wikiSurface(t)
 	tools := surface["tools"].([]interface{})
@@ -121,11 +134,11 @@ func TestWikiAgentSurfaceIsTheContracts(t *testing.T) {
 		}
 	}
 
-	// The risk split, which is the whole reason there are four tools: the contract says which are
+	// The risk split, which is the whole reason there are five tools: the contract says which are
 	// read-only and whether the ones that write destroy anything, and the annotations say it to the
 	// engine that decides whether to ask a human first.
 	specs := surface["toolSpecs"].(map[string]interface{})
-	for _, name := range []string{"wiki_search", "wiki_get", "wiki_propose", "wiki_note"} {
+	for _, name := range []string{"wiki_search", "wiki_get", "wiki_propose", "wiki_note", "wiki_draft"} {
 		spec := specs[name].(map[string]interface{})
 		annotations, _ := wikiDescriptor(t, name)["annotations"].(map[string]interface{})
 		if annotations == nil {
@@ -150,10 +163,18 @@ func TestWikiAgentSurfaceIsTheContracts(t *testing.T) {
 	params := map[string][]string{
 		"wiki_search":  {"query", "kinds", "topic", "paths", "limit"},
 		"wiki_get":     {"ids", "include"},
-		"wiki_propose": {"ops", "rationale", "idempotencyKey", "dryRun"},
-		"wiki_note":    {"text", "paths", "corrects"},
+		"wiki_propose": {"ops", "rationale", "idempotencyKey", "dryRun", "replaces"},
+		"wiki_note":    {"text", "paths", "corrects", "replaces"},
+		"wiki_draft":   {"kind", "sections", "change", "reason", "replaces", "idempotencyKey"},
 	}
 	for name, want := range params {
+		// And the contract's own list for the tool, name for name: a parameter in one and not the other is caught here.
+		contractParams := sortedParamNames(specs[name].(map[string]interface{})["params"].(map[string]interface{}))
+		sortedWant := append([]string(nil), want...)
+		sort.Strings(sortedWant)
+		if !reflect.DeepEqual(contractParams, sortedWant) {
+			t.Errorf("the contract gives %s the params %v, this binary %v", name, contractParams, sortedWant)
+		}
 		schema := wikiDescriptor(t, name)["inputSchema"].(map[string]interface{})
 		props, _ := schema["properties"].(map[string]interface{})
 		for _, param := range want {
@@ -215,6 +236,30 @@ func TestWikiAgentSurfaceIsTheContracts(t *testing.T) {
 	hitTrust := hits.(map[string]interface{})["items"].(map[string]interface{})["properties"].(map[string]interface{})["trust"]
 	if got := hitTrust.(map[string]interface{})["enum"]; !reflect.DeepEqual(got, wikiTrustLevels) {
 		t.Errorf("wiki_search's hits say trust is one of %v, the contract %v", got, wikiTrustLevels)
+	}
+
+	// A hit is the contract's `hit`, field for field and in its order. The struct is all that reaches the
+	// engine — structuredContent and `orbit wiki search --json` are it serialized — so a field the server
+	// sends and the struct does not name never reaches the agent; and the outputSchema is what an engine
+	// holds structuredContent to. This is where a new hit field is first missed (age, 2026-11-06).
+	searchSpec := specs["wiki_search"].(map[string]interface{})
+	var hitFields []string
+	for _, field := range searchSpec["hit"].([]interface{}) {
+		hitFields = append(hitFields, field.(string))
+	}
+	if got := wikiJSONNames(reflect.TypeOf(wikiSearchHit{})); !reflect.DeepEqual(got, hitFields) {
+		t.Errorf("wikiSearchHit serializes %v, the contract's hit is %v", got, hitFields)
+	}
+	declared := sortedParamNames(hits.(map[string]interface{})["items"].(map[string]interface{})["properties"].(map[string]interface{}))
+	sortedHit := append([]string(nil), hitFields...)
+	sort.Strings(sortedHit)
+	if !reflect.DeepEqual(declared, sortedHit) {
+		t.Errorf("wiki_search's outputSchema declares %v, the contract's hit is %v", declared, hitFields)
+	}
+	for field := range searchSpec["age"].(map[string]interface{}) {
+		if field != "why" && !contains(hitFields, field) {
+			t.Errorf("the contract's age describes %s, which its hit does not carry", field)
+		}
 	}
 
 	// The limits a schema states are the contract's, or the tool promises a request the server
@@ -437,6 +482,50 @@ func TestWikiToolsSendWhatWasAskedToTheirRoutes(t *testing.T) {
 			body:  map[string]interface{}{"text": "release.sh next tags at once."},
 			reply: wikiNoteReply,
 		},
+		{
+			name: "wiki_note: in a wiki chat, the card a corrects replaces",
+			args: map[string]interface{}{"text": "The lease is two minutes now.", "corrects": "e1", "replaces": " d1 "},
+			uri:  "/api/runner/wiki/notes",
+			body: map[string]interface{}{"text": "The lease is two minutes now.", "corrects": "e1", "replaces": "d1"},
+			reply: `{"noted":true,"noteId":"n1","created":true,"readBy":"the next maintenance run",` +
+				`"challenged":{"status":"draft","draftId":"d2","entryId":"e1"}}`,
+		},
+		{
+			name: "wiki_propose: in a wiki chat, the card it replaces",
+			args: map[string]interface{}{
+				"ops":            []interface{}{map[string]interface{}{"op": "retire", "entryId": "e1", "baseRevision": float64(2), "reason": "gone"}},
+				"rationale":      "the owner says it is gone",
+				"idempotencyKey": "chat-2",
+				"replaces":       "d1",
+			},
+			uri: "/api/runner/wiki/changesets",
+			body: map[string]interface{}{
+				"ops":            []interface{}{map[string]interface{}{"op": "retire", "entryId": "e1", "baseRevision": float64(2), "reason": "gone"}},
+				"rationale":      "the owner says it is gone",
+				"idempotencyKey": "chat-2",
+				"replaces":       "d1",
+			},
+			reply: `{"status":"draft","draftId":"d2","replayed":false,"ops":[{"seq":0,"status":"draft","entryId":"e1"}],"similar":[],"rewrites":[]}`,
+		},
+		{
+			name: "wiki_draft",
+			args: map[string]interface{}{
+				"kind":           " Rewrite ",
+				"sections":       []interface{}{map[string]interface{}{"doc": " sessions-runtime ", "section": "leases"}},
+				"reason":         " The lease moved to two minutes on main. ",
+				"idempotencyKey": " draft-1 ",
+				"replaces":       "d1",
+			},
+			uri: "/api/runner/wiki/drafts",
+			body: map[string]interface{}{
+				"kind":           "rewrite",
+				"sections":       []interface{}{map[string]interface{}{"doc": "sessions-runtime", "section": "leases"}},
+				"reason":         "The lease moved to two minutes on main.",
+				"idempotencyKey": "draft-1",
+				"replaces":       "d1",
+			},
+			reply: `{"status":"draft","draftId":"d2","kind":"rewrite","replayed":false,"rewrites":[{"doc":"sessions-runtime","key":"leases","where":"1.1 §3","title":"Leases"}]}`,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -454,7 +543,7 @@ func TestWikiToolsSendWhatWasAskedToTheirRoutes(t *testing.T) {
 				t.Fatalf("request = %s %s (session %q), want %s from caller-session", got.method, got.uri, got.session, tc.uri)
 			}
 			wantMethod := http.MethodGet
-			if name == "wiki_propose" || name == "wiki_note" {
+			if name == "wiki_propose" || name == "wiki_note" || name == "wiki_draft" {
 				wantMethod = http.MethodPost
 			}
 			if got.method != wantMethod {
@@ -795,6 +884,7 @@ func TestWikiSearchAnswersWithEntriesAndTheirMatch(t *testing.T) {
 		"confirmed",
 		"anchor verified",
 		"matched: keyword",
+		"recorded 2026-10-03 11:39Z",
 		"wiki_get",
 		"orbit-wiki:<id>",
 	} {
@@ -850,6 +940,76 @@ func TestWikiSearchStructuredContentMatchesItsSchema(t *testing.T) {
 	}
 	if len(structured.Hits) != 1 || structured.Hits[0].Kind != "decision" || structured.Hits[0].Match[0] != "keyword" {
 		t.Errorf("structuredContent lost the answer: %#v", structured)
+	}
+}
+
+// How old each entry is reaches the agent both ways (contract `agentSurface.toolSpecs.wiki_search.age`):
+// in structuredContent as the server wrote it, and in the text on the line under its hit. A check not
+// made yet, and a server that predates the fields, leave them out rather than claim an empty time.
+func TestWikiSearchSaysHowOldEachEntryIs(t *testing.T) {
+	search := func(reply string) (wikiSearchHit, map[string]interface{}, string) {
+		t.Helper()
+		srv, _ := wikiDoor(t, http.StatusOK, reply)
+		result := wikiMCP(t, srv.URL).callTool("wiki_search", map[string]interface{}{"query": "x"})
+		structured, ok := result["structuredContent"].(wikiSearchAnswer)
+		if !ok || len(structured.Hits) != 1 {
+			t.Fatalf("structuredContent = %#v, want one hit", result["structuredContent"])
+		}
+		// What the engine is sent: the struct serialized.
+		raw, _ := json.Marshal(structured.Hits[0])
+		var sent map[string]interface{}
+		if err := json.Unmarshal(raw, &sent); err != nil {
+			t.Fatal(err)
+		}
+		return structured.Hits[0], sent, wikiToolText(t, result)
+	}
+
+	hit, sent, text := search(wikiSearchReply)
+	for field, want := range map[string]string{
+		"recordedAt":       "2026-10-03T11:39:54.768Z",
+		"changedAt":        "2026-10-05T08:00:12.001Z",
+		"anchorCheckedRef": "7de4f86bcf1c01d2fcff6d154a039e5c54961df8",
+		"anchorCheckedAt":  "2026-10-10T06:46:16.532Z",
+	} {
+		if sent[field] != want {
+			t.Errorf("structuredContent says %s is %v, the server said %q: %#v", field, sent[field], want, hit)
+		}
+	}
+	line := "    recorded 2026-10-03 11:39Z · current revision 2026-10-05 08:00Z · " +
+		"anchors last checked at 7de4f86bcf1c on 2026-10-10 06:46Z\n"
+	if !strings.Contains(text, "matched: keyword\n"+line) {
+		t.Errorf("the text does not say how old the entry is, under its hit:\n%s", text)
+	}
+
+	// No check yet: the server's nulls are left out, and the text says nothing of a check — the hit's own
+	// "anchor unchecked" already does.
+	_, sent, text = search(`{"q":"x","semantic":false,"hits":[{"id":"e1","kind":"pitfall","title":"t","summary":"s",` +
+		`"trust":"auto","anchorState":"unchecked","match":["path"],"score":0.016393,"recordedAt":"2026-11-05T00:51:02.000Z",` +
+		`"changedAt":"2026-11-05T07:14:40.250Z","anchorCheckedRef":null,"anchorCheckedAt":null}]}`)
+	for _, field := range []string{"anchorCheckedRef", "anchorCheckedAt"} {
+		if value, present := sent[field]; present {
+			t.Errorf("a check not made yet is sent as %s=%#v rather than left out", field, value)
+		}
+	}
+	if !strings.Contains(text, "anchor unchecked") || !strings.Contains(text, "    recorded 2026-11-05 00:51Z · current revision 2026-11-05 07:14Z\n") {
+		t.Errorf("an unchecked entry's age is not what the server said:\n%s", text)
+	}
+
+	// A server that predates the fields: nothing is made up, in either half.
+	_, sent, text = search(`{"q":"x","semantic":false,"hits":[{"id":"e1","kind":"pitfall","title":"t","summary":"s",` +
+		`"trust":"auto","anchorState":"verified","match":["keyword"],"score":0.016393}]}`)
+	for _, field := range []string{"recordedAt", "changedAt", "anchorCheckedRef", "anchorCheckedAt"} {
+		if value, present := sent[field]; present {
+			t.Errorf("an older server's hit is sent with %s=%#v it never had", field, value)
+		}
+	}
+	if strings.Contains(text, "recorded") || strings.Contains(text, "checked at") {
+		t.Errorf("an older server's hit is given an age it never had:\n%s", text)
+	}
+
+	// A time or a ref that is not one is shown as it came.
+	if got := describeWikiHitAge(wikiSearchHit{RecordedAt: "yesterday", AnchorCheckedRef: "origin/main"}); got != "recorded yesterday · anchors last checked at origin/main" {
+		t.Errorf("describeWikiHitAge = %q", got)
 	}
 }
 
@@ -1048,6 +1208,23 @@ func TestWikiCLIRunsTheSameToolAsMCP(t *testing.T) {
 	}
 	if len(decoded.Hits) != 1 || decoded.Hits[0].ID == "" {
 		t.Errorf("the structured answer lost its hits: %#v", decoded)
+	}
+	// With how old each entry is, under the contract's names: --json is the MCP door's struct serialized.
+	var printed struct {
+		Hits []map[string]interface{} `json:"hits"`
+	}
+	if err := json.Unmarshal([]byte(jsonOut.String()), &printed); err != nil || len(printed.Hits) != 1 {
+		t.Fatalf("--json printed %q (%v)", jsonOut.String(), err)
+	}
+	for field, want := range map[string]string{
+		"recordedAt":       "2026-10-03T11:39:54.768Z",
+		"changedAt":        "2026-10-05T08:00:12.001Z",
+		"anchorCheckedRef": "7de4f86bcf1c01d2fcff6d154a039e5c54961df8",
+		"anchorCheckedAt":  "2026-10-10T06:46:16.532Z",
+	} {
+		if printed.Hits[0][field] != want {
+			t.Errorf("orbit wiki search --json prints %s as %v, the server said %q", field, printed.Hits[0][field], want)
+		}
 	}
 
 	// And a proposal goes the same way, with the answer the batch came back with.
@@ -1513,6 +1690,7 @@ func writtenFlagIsParsed(action, name string) bool {
 		fs.String("text-file", "", "")
 		fs.Var(&list, "path", "")
 		fs.String("corrects", "", "")
+		fs.String("replaces", "", "")
 	case "propose":
 		fs.String("ops", "", "")
 		fs.String("ops-file", "", "")
@@ -1520,6 +1698,14 @@ func writtenFlagIsParsed(action, name string) bool {
 		fs.String("rationale-file", "", "")
 		fs.String("idempotency-key", "", "")
 		fs.Bool("dry-run", false, "")
+		fs.String("replaces", "", "")
+	case "draft":
+		fs.String("kind", "", "")
+		fs.Var(&list, "section", "")
+		fs.String("reason", "", "")
+		fs.String("idempotency-key", "", "")
+		fs.String("replaces", "", "")
+		fs.String("change", "", "")
 	case "verify":
 		fs.String("space", "", "")
 	default:

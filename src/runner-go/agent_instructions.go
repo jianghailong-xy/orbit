@@ -213,6 +213,29 @@ func (s *ClaimedSession) insideRecordedWork() bool {
 	return s != nil && s.TaskID != ""
 }
 
+// appendSystemPrompt is what a session's engine is given after its system prompt, ahead of Orbit's own
+// instructions (withOrbitCLIInstructions): the agent's appended prompt, then what the runner has to say about the
+// checkout the session runs in (checkoutInstructions). It is read from the checkout each time an engine's
+// instructions are built, so a checkout made or brought back since the last spawn is described as it now is.
+func (s *ClaimedSession) appendSystemPrompt() string {
+	note := checkoutInstructions(s.WT)
+	if note == "" {
+		return s.Agent.AppendSystemPrompt
+	}
+	if strings.TrimSpace(s.Agent.AppendSystemPrompt) == "" {
+		return note
+	}
+	return strings.TrimRight(s.Agent.AppendSystemPrompt, "\r\n") + "\n\n" + note
+}
+
+// instructionAgent is the session's agent as an engine's instructions are built from it: its appended prompt is
+// the session's (appendSystemPrompt).
+func (s *ClaimedSession) instructionAgent() AgentExecConfig {
+	agent := s.Agent
+	agent.AppendSystemPrompt = s.appendSystemPrompt()
+	return agent
+}
+
 func withOrbitCLIInstructions(configured, executable string, insideRecordedWork, watches bool) string {
 	orbit := orbitCLIInstructions(executable, insideRecordedWork, watches)
 	if orbit == "" {
@@ -289,7 +312,9 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		// one. The commands themselves need ORBIT_SESSION_ID, which a session has.
 		// verify asks the server to verify the session's own proposals and waits for its verdicts, and note
 		// leaves a claim for maintenance to check against the session's own records: no more of a power.
-		for _, action := range []string{"search", "get", "propose", "verify", "note"} {
+		// draft makes a card in the session's own wiki chat, which only the owner can press (the server refuses it
+		// to any other session): less of a power than propose.
+		for _, action := range []string{"search", "get", "propose", "verify", "note", "draft"} {
 			rules = append(rules, "Bash("+command+" wiki "+action+" *)")
 		}
 		// Every file verb: keeping and reading back your own files is no power over anybody else's session, and the
@@ -318,11 +343,9 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 			rules = append(rules, "Bash("+command+" session "+action+" *)")
 		}
 		if allowOrchestration {
-			// The session family as advertised, minus `import`: it is the one session verb that
-			// refuses to run in a session at all (cliSessionImport), and the capability document
-			// withholds it from a running agent for the same reason (HeadlessOnly), so there is no
-			// reader here to pre-approve it for.
-			for _, action := range []string{"create", "list", "search", "get", "await", "send", "reply", "interrupt", "merge", "end", "complete", "delete"} {
+			// The session family as advertised, `import` included: it brings a conversation on this
+			// machine's disk into Orbit as a new session, behind the same gate as create.
+			for _, action := range []string{"create", "import", "list", "search", "get", "await", "send", "reply", "interrupt", "merge", "end", "complete", "delete"} {
 				rules = append(rules, "Bash("+command+" session "+action+" *)")
 			}
 			// The agent verbs ride the same gate and have no headless form: no service-token scope

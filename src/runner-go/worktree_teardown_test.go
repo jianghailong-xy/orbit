@@ -155,7 +155,7 @@ func TestWorktreeTeardownKillsProcessesRootedInTheRemovedWorktree(t *testing.T) 
 	// The observed orphans all sat in <worktree>/src/runner-go, not at the checkout root.
 	leftover := parkProcess(t, filepath.Join(wt.Path, "src", "runner-go"), false)
 
-	removeWorktree(wt)
+	removeWorktree(wt, nil)
 
 	leftover.requireGone(t, 10*time.Second)
 	if _, err := os.Stat(wt.Path); !os.IsNotExist(err) {
@@ -181,7 +181,7 @@ func TestWorktreeTeardownSparesEverythingOutsideTheWorktree(t *testing.T) {
 		"the runner's own process group":      parkProcess(t, filepath.Join(wt.Path, "runner"), true),
 	}
 
-	removeWorktree(wt)
+	removeWorktree(wt, nil)
 
 	leftover.requireGone(t, 10*time.Second)
 	// A signal sent by mistake still needs a moment to land before survival can be claimed.
@@ -239,7 +239,7 @@ func TestWorktreeTeardownMatchesADeletedWorktreeCwd(t *testing.T) {
 		t.Fatalf("expected pid %d to report a deleted cwd, got %q (err %v)", leftover.childPID, cwd, err)
 	}
 
-	removeWorktree(wt)
+	removeWorktree(wt, nil)
 
 	leftover.requireGone(t, 10*time.Second)
 	// A signal sent by mistake still needs a moment to land before survival can be claimed.

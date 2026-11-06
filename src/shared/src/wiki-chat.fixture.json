@@ -149,6 +149,30 @@
       "needsYou": false
     },
     {
+      "name": "applied, its challenge still waiting in Review: not confirmed",
+      "facts": { "decision": "applied", "undone": false, "replaced": false, "chatOpen": true, "baseMoved": false },
+      "kind": "entry",
+      "ops": [{ "op": "challenge", "decision": "pending" }],
+      "undoable": false,
+      "state": "applied",
+      "label": "Challenge entry",
+      "title": "Applied · In Review",
+      "actions": ["open_entry"],
+      "needsYou": false
+    },
+    {
+      "name": "applied, its challenge answered in Review since",
+      "facts": { "decision": "applied", "undone": false, "replaced": false, "chatOpen": true, "baseMoved": false },
+      "kind": "entry",
+      "ops": [{ "op": "challenge", "decision": "accepted" }],
+      "undoable": false,
+      "state": "applied",
+      "label": "Challenge entry",
+      "title": "Applied · Confirmed by you",
+      "actions": ["open_entry"],
+      "needsYou": false
+    },
+    {
       "name": "edited and applied in one press reads the same as applied",
       "facts": { "decision": "edited", "undone": false, "replaced": false, "chatOpen": true, "baseMoved": false },
       "kind": "entry",

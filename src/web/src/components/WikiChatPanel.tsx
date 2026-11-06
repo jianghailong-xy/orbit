@@ -15,15 +15,18 @@ import { decideApproval, interruptSession, listApprovals, type PermissionRule } 
 import { ApprovalPanel } from './ApprovalPanel';
 import { SessionConversation } from './SessionConversation';
 import { orbitLinkStateWord } from './WorkspaceView';
+import { wikiChatReviewPath, type WikiDraftCardHost } from './WikiDraftCard';
 import { approvalRememberOffered } from '../lib/dshRuntime';
 import { encodeId, routeId } from '../lib/idCodec';
 import { machineName } from '../lib/machineSetup';
 import { meQuery, providersQuery, runnersQuery, sessionQuery, wikiChatsQuery, workspacesQuery } from '../lib/queries';
-import { isSessionLive, isSessionTerminal, sessionRunStatusOf } from '../lib/sessionState';
+import { isSessionLive, isSessionTerminal, sessionRetryPending, sessionRunStatusOf } from '../lib/sessionState';
 import { useSessionStream } from '../lib/useSessionStream';
 import {
   WIKI_CHAT_CHOOSE_WORKSPACE,
   WIKI_CHAT_CLOSE,
+  WIKI_CHAT_ENDED,
+  WIKI_CHAT_FOCUS_NEEDS_YOU,
   WIKI_CHAT_EMPTY_HINT,
   WIKI_CHAT_EMPTY_NOTE,
   WIKI_CHAT_HISTORY,
@@ -35,26 +38,30 @@ import {
   WIKI_CHAT_NO_WORKTREE,
   WIKI_CHAT_OPEN_SESSION,
   WIKI_CHAT_PLACEHOLDER,
+  WIKI_CHAT_PLACEHOLDER_DRAFT,
   WIKI_CHAT_RESIZE,
   WIKI_CHAT_RUNS_IN,
   WIKI_CHAT_SEND,
-  WIKI_CHAT_SEND_FAILED,
   WIKI_CHAT_STOP,
+  WIKI_CHAT_TRASHED,
   WIKI_CHAT_WORKSPACE,
   WIKI_CHAT_WIDTH,
   createWikiChat,
   sendWikiChatTurn,
   wikiChatCapped,
+  wikiChatCardOf,
   wikiChatContext,
   wikiChatOffline,
   wikiChatQuoteCounts,
   wikiChatRemove,
   wikiChatRunLine,
   wikiChatRunsIn,
+  wikiChatSendError,
   wikiChatShown,
   wikiChatWorkspaceName,
   type WikiChatAttachAction,
   type WikiChatAttachments,
+  type WikiChatDraftView,
   type WikiChatLayout,
   type WikiChatList,
   type WikiChatWorkspace,
@@ -70,7 +77,11 @@ import {
   supportsAuto,
   type ConfiguredProvider,
 } from '../lib/workspaceDefaults';
-import type { WikiSpaceRow } from '../lib/wiki';
+import { wikiChatCardNeedsYou } from '@orbit/shared';
+import { wikiEntryPath, type WikiSpaceRow } from '../lib/wiki';
+import { wikiDocSectionPath } from '../lib/wikiDocs';
+import { wikiPlanPath } from '../lib/wikiPlan';
+import { wikiSettingsPath } from '../lib/wikiReviewMode';
 
 /**
  * The panel the round button opens (design §4.1, board 42 ①): docked on the right of the page, or over it, or a
@@ -89,6 +100,8 @@ export function WikiChatPanel({
   top,
   attachments,
   dispatch,
+  cards = null,
+  focus = null,
   onChat,
   onClose,
   onResize,
@@ -104,6 +117,10 @@ export function WikiChatPanel({
   top: number;
   attachments: WikiChatAttachments;
   dispatch: Dispatch<WikiChatAttachAction>;
+  /** The shown chat's cards, oldest first (`GET /api/wiki/chats/:id/drafts`); null for a new chat or while read. */
+  cards?: readonly WikiChatDraftView[] | null;
+  /** The card to bring into view: a card's id, or `WIKI_CHAT_FOCUS_NEEDS_YOU` for the first that needs the owner. */
+  focus?: string | null;
   onChat: (chat: string) => void;
   onClose: () => void;
   onResize: (width: number, done: boolean) => void;
@@ -188,10 +205,14 @@ export function WikiChatPanel({
           key={sessionId!}
           sessionId={sessionId!}
           session={session.data ?? null}
+          space={space}
           list={list}
+          cards={cards}
+          focus={focus}
           attachments={attachments}
           dispatch={dispatch}
           opening={opening?.sessionId === sessionId ? opening.text : null}
+          onNewChat={() => onChat(WIKI_CHAT_NEW_PARAM)}
         />
       )}
     </aside>
@@ -443,18 +464,27 @@ interface ChatSession {
 function WikiChatSession({
   sessionId,
   session,
+  space,
   list,
+  cards,
+  focus,
   attachments,
   dispatch,
   opening,
+  onNewChat,
 }: {
   sessionId: string;
   session: (ChatSession & Parameters<typeof isSessionLive>[0]) | null;
+  space: WikiSpaceRow;
   list: WikiChatList | null | undefined;
+  cards: readonly WikiChatDraftView[] | null;
+  focus: string | null;
   attachments: WikiChatAttachments;
   dispatch: Dispatch<WikiChatAttachAction>;
   opening: string | null;
+  onNewChat: () => void;
 }) {
+  const navigate = useNavigate();
   const runners = useQuery(runnersQuery());
   const providers = useQuery(providersQuery());
   const runner = (runners.data ?? []).find((row) => row.id === session?.assignedRunnerId) as
@@ -506,9 +536,9 @@ function WikiChatSession({
     }
   };
 
-  const send = async (text: string) => {
-    const sent = await sendWikiChatTurn(sessionId, text, wikiChatContext(attachments));
-    dispatch({ type: 'sent' });
+  /** One message of the owner's: what the composer sends with its attachments, and Redo's sentence with none. */
+  const post = async (text: string, context: ReturnType<typeof wikiChatContext>) => {
+    const sent = await sendWikiChatTurn(sessionId, text, context);
     if (sent.placement !== 'queued') {
       setIdle(false);
       setAcceptedUserTurns((current) => [
@@ -517,16 +547,57 @@ function WikiChatSession({
       ]);
     }
   };
+  const send = async (text: string) => {
+    await post(text, wikiChatContext(attachments));
+    dispatch({ type: 'sent' });
+  };
 
-  // The newest card nearest the composer, as the session page keeps it.
+  // The card the chat was opened at: one named, or the first that needs the owner (design §3).
+  const focusCard = useMemo(() => {
+    if (focus !== WIKI_CHAT_FOCUS_NEEDS_YOU) return focus;
+    return (cards ?? []).find((card) => wikiChatCardNeedsYou(wikiChatCardOf(card)))?.id ?? null;
+  }, [focus, cards]);
+
+  // What the chat's cards open, they open beside it: a section on its document, an entry in its drawer, Review.
+  const wikiCards = useMemo<WikiDraftCardHost>(
+    () => ({
+      spaceId: space.id,
+      openSection: (doc, key) => navigate(wikiDocSectionPath(space.slug, doc, key)),
+      openEntry: (entryId) => navigate(wikiEntryPath(space.slug, entryId)),
+      openReview: (changesetId, seq) => navigate(wikiChatReviewPath(space.slug, changesetId, seq)),
+      openSettings: () => navigate(wikiSettingsPath(space.slug)),
+      openPlan: () => navigate(wikiPlanPath(space.slug)),
+      send: (text) => post(text, undefined),
+      focus: focusCard,
+    }),
+    // `post` reads this chat's stream setters, which keep their identity for the chat's life.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [navigate, space.id, space.slug, focusCard, sessionId],
+  );
+
+  // The newest card nearest the composer, as the session page keeps it — unless the chat was opened at a card, which is
+  // brought into view once it is drawn, and once only: what arrives after it goes to the foot as ever.
   const bodyRef = useRef<HTMLDivElement>(null);
   const shown = stream.transcriptEvents.length;
+  const focusedOnce = useRef<string | null>(null);
   useEffect(() => {
     const body = bodyRef.current;
-    if (body) body.scrollTop = body.scrollHeight;
-  }, [shown, approvals.length]);
+    if (!body) return;
+    if (focusCard && focusedOnce.current !== focusCard) {
+      const card = body.querySelector<HTMLElement>(`[data-draft="${focusCard}"]`);
+      if (card) {
+        focusedOnce.current = focusCard;
+        card.scrollIntoView?.({ block: 'center' });
+      }
+      return;
+    }
+    body.scrollTop = body.scrollHeight;
+  }, [shown, approvals.length, focusCard]);
 
   const busy = live && !idle;
+  // A chat that takes no more messages says so, and offers a new one (C8 review); one the server retries by itself does not.
+  const ended = !!session && (!!session.deletedAt || (!live && !sessionRetryPending(session)));
+  const draftOpen = (cards ?? []).some((card) => card.state === 'draft' || card.state === 'changed');
   return (
     <>
       <div className="wk-chat-run line">{line}</div>
@@ -545,6 +616,7 @@ function WikiChatSession({
           linkStateWord={orbitLinkStateWord}
           linkRefreshKey={0}
           answeredQuestions={null}
+          wikiChat={wikiCards}
         />
         {!session?.deletedAt &&
           approvals.map((approval) => (
@@ -556,12 +628,21 @@ function WikiChatSession({
             />
           ))}
       </div>
-      {!session?.deletedAt && (
+      {ended ? (
+        <div className="wk-chat-ended" role="status">
+          <span className="t">{session?.deletedAt ? WIKI_CHAT_TRASHED : WIKI_CHAT_ENDED}</span>
+          <button type="button" className="wk-chat-ended-new" onClick={onNewChat}>
+            <PlusOutlined className="ic" />
+            {WIKI_CHAT_NEW}
+          </button>
+        </div>
+      ) : (
         <WikiChatComposer
           attachments={attachments}
           dispatch={dispatch}
           ready={live || !session}
           busy={busy}
+          placeholder={draftOpen ? WIKI_CHAT_PLACEHOLDER_DRAFT : WIKI_CHAT_PLACEHOLDER}
           onSend={send}
           onStop={() => void interruptSession(sessionId).catch(() => undefined)}
         />
@@ -585,6 +666,7 @@ function WikiChatComposer({
   dispatch,
   ready,
   busy,
+  placeholder = WIKI_CHAT_PLACEHOLDER,
   onSend,
   onStop,
 }: {
@@ -593,12 +675,15 @@ function WikiChatComposer({
   /** Whether a message can go now: a workspace is chosen, the session takes turns. */
   ready: boolean;
   busy: boolean;
+  /** `Reply, or say what to change in the draft` while a card of the chat is open (board 42 ②). */
+  placeholder?: string;
   onSend: (text: string) => Promise<void>;
   onStop?: () => void;
 }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
-  const [failed, setFailed] = useState(false);
+  // Why the last message did not go, in the server's words or as a lost connection (wikiChatSendError).
+  const [failed, setFailed] = useState<string | null>(null);
   const { page, quote } = wikiChatShown(attachments);
   const canSend = ready && !sending && text.trim().length > 0;
 
@@ -606,13 +691,13 @@ function WikiChatComposer({
     event?.preventDefault();
     if (!canSend) return;
     setSending(true);
-    setFailed(false);
+    setFailed(null);
     try {
       // The owner's words go as they were typed: they are the message, and a source (contract `chat.create`).
       await onSend(text);
       setText('');
-    } catch {
-      setFailed(true);
+    } catch (error) {
+      setFailed(wikiChatSendError(error));
     } finally {
       setSending(false);
     }
@@ -656,12 +741,16 @@ function WikiChatComposer({
         className="wk-chat-input"
         value={text}
         rows={2}
-        placeholder={WIKI_CHAT_PLACEHOLDER}
-        aria-label={WIKI_CHAT_PLACEHOLDER}
+        placeholder={placeholder}
+        aria-label={placeholder}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={onKeyDown}
       />
-      {failed && <div className="wk-chat-failed">{WIKI_CHAT_SEND_FAILED}</div>}
+      {failed && (
+        <div className="wk-chat-failed" role="alert">
+          {failed}
+        </div>
+      )}
       <div className="wk-chat-cfoot">
         {busy && onStop && (
           <button type="button" className="wk-chat-stop" aria-label={WIKI_CHAT_STOP} title={WIKI_CHAT_STOP} onClick={onStop}>

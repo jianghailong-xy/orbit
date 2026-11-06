@@ -110,11 +110,15 @@ export function writeWikiFromWorkspace(workspaceId: string | null): void {
 
 // ── What waits on the owner ─────────────────────────────────────────────────────────────────────
 
-type Counted = Pick<WikiSpaceRow, 'pendingOps' | 'planWaiting'>;
+type Counted = Pick<WikiSpaceRow, 'pendingOps' | 'planWaiting' | 'chatWaiting'>;
 
-/** What waits on the owner in one space: its proposals in Review and the things its plan waits on them for. */
+/**
+ * What waits on the owner in one space (contract `space.list`): its proposals in Review, the things its plan waits on
+ * them for, and its applied chat cards whose rewrite waits (`chatWaiting`: held up, or read the same or failed and not
+ * seen). Open cards and approvals are not in it (contract `chat.waiting.notCounted`).
+ */
 export function wikiWaitingIn(space: Counted): number {
-  return (space.pendingOps ?? 0) + (space.planWaiting ?? 0);
+  return (space.pendingOps ?? 0) + (space.planWaiting ?? 0) + (space.chatWaiting ?? 0);
 }
 
 /**

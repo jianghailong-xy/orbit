@@ -195,8 +195,9 @@ func discardWorktree(req CommitCommand) commitOutcome {
 		return commitOutcome{Status: "error", Message: "could not read this checkout's HEAD: " + err.Error()}
 	}
 	// Record it before removing it. `add -A` honours .gitignore, so what this keeps is exactly
-	// what `git status --porcelain` counts as work.
-	if _, err := git(wtPath, "add", "-A"); err != nil {
+	// what `git status --porcelain` counts as work; in a sparse checkout that includes what was
+	// written under a path it leaves out (addAllArgs).
+	if _, err := git(wtPath, addAllArgs(wtPath)...); err != nil {
 		return commitOutcome{Status: "error", Message: "could not stage the work before discarding it: " + err.Error()}
 	}
 	discardedRef := "refs/orbit-discarded/" + decodeSessionID(req.SessionID)

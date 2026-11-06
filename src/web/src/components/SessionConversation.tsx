@@ -4,6 +4,7 @@ import { encodeId } from '../lib/idCodec';
 import type { SessionStream } from '../lib/useSessionStream';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import { AnsweredQuestionsCtx } from './OwnerAnswerLine';
+import { WikiDraftCardCtx, type WikiDraftCardHost } from './WikiDraftCard';
 import {
   AuthErrorCtx,
   AutoRetryCtx,
@@ -25,6 +26,10 @@ import {
  * auth error or an auto-retry offers, putting an undelivered message back, withdrawing a steer,
  * live shell output and task progress, and the drafts being generated. The shared page and the
  * export draw `Transcript` with none of them.
+ *
+ * A WIKI CHAT'S CARDS (contract `chat.drafts.toolResult`): given `wikiChat`, a drafting call is drawn as the card its
+ * answer names — in the panel beside the wiki and on the full session page alike — with the ways the card opens a
+ * section, an entry or Review from where it is drawn. Without it the same call is drawn as any tool call.
  */
 export function SessionConversation({
   sessionId,
@@ -39,6 +44,7 @@ export function SessionConversation({
   linkStateWord,
   linkRefreshKey,
   answeredQuestions,
+  wikiChat = null,
 }: {
   sessionId: string;
   stream: SessionStream;
@@ -57,6 +63,8 @@ export function SessionConversation({
   /** Moves when the conversation's own data is re-read. */
   linkRefreshKey: number;
   answeredQuestions: ContextType<typeof AnsweredQuestionsCtx>;
+  /** The card host of a wiki chat (`WikiDraftCard`); null for any other session. */
+  wikiChat?: WikiDraftCardHost | null;
 }) {
   const navigate = useNavigate();
   return (
@@ -75,14 +83,16 @@ export function SessionConversation({
                           only clock the console has. */}
                       <OrbitLinkCardsProvider stateWord={linkStateWord} refreshKey={linkRefreshKey}>
                         <AnsweredQuestionsCtx.Provider value={answeredQuestions}>
-                          <Transcript
-                            events={stream.transcriptEvents}
-                            live={live}
-                            turnImages={turnImages}
-                            artifactSessionId={sessionId}
-                            streamingAfterSeq={stream.streamingAfterSeq}
-                            inserts={inserts}
-                          />
+                          <WikiDraftCardCtx.Provider value={wikiChat}>
+                            <Transcript
+                              events={stream.transcriptEvents}
+                              live={live}
+                              turnImages={turnImages}
+                              artifactSessionId={sessionId}
+                              streamingAfterSeq={stream.streamingAfterSeq}
+                              inserts={inserts}
+                            />
+                          </WikiDraftCardCtx.Provider>
                         </AnsweredQuestionsCtx.Provider>
                       </OrbitLinkCardsProvider>
                     </StreamingDraftsCtx.Provider>

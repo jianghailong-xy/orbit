@@ -19,9 +19,11 @@ import { WIKI_DOC_SECTION_EVENT } from './WikiDirectory';
 import { WikiChatFab } from './WikiChatFab';
 import { WikiChatPanel } from './WikiChatPanel';
 import { routeId } from '../lib/idCodec';
-import { wikiChatsQuery, wikiDocQuery, wikiDocsQuery, wikiEntryQuery } from '../lib/queries';
+import { wikiChatDraftsQuery, wikiChatsQuery, wikiDocQuery, wikiDocsQuery, wikiEntryQuery } from '../lib/queries';
 import {
   WIKI_CHAT_ASK,
+  WIKI_CHAT_FOCUS_NEEDS_YOU,
+  WIKI_CHAT_NEW_PARAM,
   WIKI_CHAT_NO_ATTACHMENTS,
   WIKI_CHAT_PARAM,
   readWikiChatOpen,
@@ -49,12 +51,20 @@ import type { WikiDocView } from '../lib/wikiDocs';
 
 /**
  * What a page of the Wiki asks of the chat: to put a selection in the composer, and which sentences the
- * composer's quote names, so the page can light them. Null outside a chat's host (a share link, Settings).
+ * composer's quote names, so the page can light them; which sections an open card of the chat in the panel would
+ * rewrite, so the page can mark them before the press (board 42 ②); and to open a chat at one of its cards (Activity's
+ * banner). Null outside a chat's host (a share link, Settings).
  */
 interface WikiChatApi {
   ask: (quote: WikiChatQuote) => void;
   quoted: ReadonlySet<string>;
+  /** `<doc>#<key>` of every section an open card of the shown chat would rewrite. */
+  wouldRewrite: ReadonlySet<string>;
+  open: (chat: string, card?: string | null) => void;
 }
+
+/** A section as `wouldRewrite` names it. */
+export const wikiChatSectionId = (doc: string, key: string): string => `${doc}#${key}`;
 
 const WikiChatCtx = createContext<WikiChatApi | null>(null);
 
@@ -135,6 +145,23 @@ export function WikiChatHost({ space, route, children }: { space: WikiSpaceRow; 
   useEffect(() => dispatch({ type: 'follow', page }), [page]);
 
   const chats = list.data?.chats;
+  // The card the panel brings into view when it opens a chat (the button: the first that needs the owner; Activity: one
+  // card), kept with that chat: closing or turning to another needs no write of its own, which would render once more
+  // with the address before the navigation and put the old chat back.
+  const [focused, setFocused] = useState<{ chat: string; card: string } | null>(null);
+  const focus = focused && focused.chat === chat ? focused.card : null;
+  // The shown chat's cards: the sections its open ones would rewrite are marked on the page beside it (board 42 ②).
+  const shownChat = chat && chat !== WIKI_CHAT_NEW_PARAM ? (routeId(chat) ?? chat) : null;
+  const cards = useQuery(wikiChatDraftsQuery(shownChat));
+  const wouldRewrite = useMemo(
+    () =>
+      new Set(
+        (cards.data ?? [])
+          .filter((card) => card.state === 'draft')
+          .flatMap((card) => card.rewrites.map((section) => wikiChatSectionId(section.doc, section.key))),
+      ),
+    [cards.data],
+  );
   const api = useMemo<WikiChatApi>(
     () => ({
       ask: (quote) => {
@@ -142,8 +169,13 @@ export function WikiChatHost({ space, route, children }: { space: WikiSpaceRow; 
         if (!open) go(wikiChatToOpen(chats));
       },
       quoted: new Set(attachments.quote?.sentenceIds ?? []),
+      wouldRewrite,
+      open: (next, card = null) => {
+        setFocused(card ? { chat: next, card } : null);
+        go(next);
+      },
     }),
-    [attachments.quote, open, go, chats],
+    [attachments.quote, open, go, chats, wouldRewrite],
   );
 
   const fab = wikiChatFab(list.data?.fab);
@@ -164,7 +196,19 @@ export function WikiChatHost({ space, route, children }: { space: WikiSpaceRow; 
       <div ref={hostRef} className={className} style={style}>
         {children}
       </div>
-      {fabShown && !open && <WikiChatFab state={fab.state} label={fab.label} count={fab.count} onOpen={() => go(wikiChatToOpen(chats))} />}
+      {fabShown && !open && (
+        <WikiChatFab
+          state={fab.state}
+          label={fab.label}
+          count={fab.count}
+          onOpen={() => {
+            // Straight to the card that needs the owner, when one does (design §3).
+            const next = wikiChatToOpen(chats);
+            setFocused(fab.state === 'needs_you' ? { chat: next, card: WIKI_CHAT_FOCUS_NEEDS_YOU } : null);
+            go(next);
+          }}
+        />
+      )}
       {open && (
         <WikiChatPanel
           space={space}
@@ -175,6 +219,8 @@ export function WikiChatHost({ space, route, children }: { space: WikiSpaceRow; 
           top={top}
           attachments={attachments}
           dispatch={dispatch}
+          cards={shownChat ? (cards.data ?? null) : null}
+          focus={focus}
           onChat={go}
           onClose={() => go(null)}
           onResize={(next, done) => {
@@ -327,10 +373,15 @@ export function useWikiChatAsk(doc: WikiDocView, articleRef: RefObject<HTMLEleme
         setSnap(null);
         return;
       }
-      // Above the selection's end, in the article's own coordinates (a browser without layout has no box).
-      const box = typeof range.getBoundingClientRect === 'function' ? range.getBoundingClientRect() : null;
+      // Above the first line of what is lit, never on it (board 42 ①, C8 review): the snap can begin a line above
+      // the selection itself, so the place is the first snapped sentence's first line, centred over it, in the
+      // article's own coordinates, and kept inside the article. A browser without layout has no box.
+      const first = article.querySelector(`[data-wk-sid="${quote.sentenceIds[0]!.replace(/["\\]/gu, '\\$&')}"]`);
+      const line = firstLine(first) ?? firstLine(range);
       const frame = article.getBoundingClientRect();
-      setSnap({ quote, at: { top: (box?.top ?? frame.top) - frame.top, left: (box?.right ?? frame.left) - frame.left } });
+      const centre = line ? line.left + line.width / 2 - frame.left : 0;
+      const left = frame.width > 2 * ASK_MARGIN ? Math.min(Math.max(centre, ASK_MARGIN), frame.width - ASK_MARGIN) : centre;
+      setSnap({ quote, at: { top: (line?.top ?? frame.top) - frame.top, left } });
     };
     const settle = () => window.setTimeout(read, 0);
     const onChange = () => {
@@ -375,6 +426,15 @@ export function useWikiChatAsk(doc: WikiDocView, articleRef: RefObject<HTMLEleme
   ) : null;
 
   return { lit, ask };
+}
+
+/** How far the Ask's middle keeps from the article's sides, so the button never hangs over them. */
+const ASK_MARGIN = 48;
+
+/** The first line a range or an element is laid out on: its first box with a size. */
+function firstLine(target: Element | Range | null): DOMRect | null {
+  if (!target || typeof target.getClientRects !== 'function') return null;
+  return [...target.getClientRects()].find((rect) => rect.width > 0 && rect.height > 0) ?? null;
 }
 
 /** The sentences lit on a document page: the selection snapped, and the composer's quote. */

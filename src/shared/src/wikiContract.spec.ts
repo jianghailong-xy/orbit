@@ -1646,9 +1646,10 @@ describe('wiki contract', () => {
     expect(status('WIKI_OWNER_CHANNEL_ONLY')).toBe(403);
   });
 
-  it('gives agents four tools and two doors, and no way to decide', () => {
+  it('gives agents five tools and two doors, and no way to decide', () => {
     const surface = CONTRACT.agentSurface;
-    expect(surface.tools).toEqual(['wiki_search', 'wiki_get', 'wiki_propose', 'wiki_note']);
+    // The fifth, wiki_draft, is a wiki chat's alone (agentSurface.chat.draft): every other session is refused it.
+    expect(surface.tools).toEqual(['wiki_search', 'wiki_get', 'wiki_propose', 'wiki_note', 'wiki_draft']);
     expect(keysOf(surface.toolSpecs)).toEqual(surface.tools);
     expect(keysOf(surface.cli)).toEqual(surface.tools);
     expect(surface.toolSpecs.wiki_search.readOnly).toBe(true);
@@ -1657,6 +1658,8 @@ describe('wiki contract', () => {
     expect(surface.toolSpecs.wiki_propose.destructive).toBe(false);
     expect(surface.toolSpecs.wiki_note.readOnly).toBe(false);
     expect(surface.toolSpecs.wiki_note.destructive).toBe(false);
+    expect(surface.toolSpecs.wiki_draft.readOnly).toBe(false);
+    expect(surface.toolSpecs.wiki_draft.destructive).toBe(false);
     for (const tool of surface.tools) expect(tool).not.toMatch(/accept|confirm|decide|delete/u);
 
     expect(keysOf(surface.doors)).toEqual(['user', 'runner']);
@@ -1678,12 +1681,38 @@ describe('wiki contract', () => {
     expect(surface.proposeDescription).not.toMatch(/waits for the owner's review/u);
   });
 
+  it('answers a search with entries that say how old they are (the wiki_search review, 2026-11-06)', () => {
+    const search = CONTRACT.agentSurface.toolSpecs.wiki_search;
+    // A hit's fields, in the order the server writes them. Each end holds its own reading to this list: the
+    // server's answer (wiki-search.pg.spec.ts), runner-go's wikiSearchHit and its outputSchema
+    // (TestWikiAgentSurfaceIsTheContracts), OrbitKit's and Android's models (WikiContractTests, WikiContractTest).
+    expect(search.hit).toEqual([
+      'id', 'kind', 'title', 'summary', 'trust', 'anchorState', 'match', 'score',
+      'recordedAt', 'changedAt', 'anchorCheckedRef', 'anchorCheckedAt',
+    ]);
+    const age = keysOf(search.age).filter((key) => key !== 'why');
+    expect(age).toEqual(['recordedAt', 'changedAt', 'anchorCheckedRef', 'anchorCheckedAt']);
+    expect(search.hit.slice(-age.length)).toEqual(age);
+    expect(search.returns).toMatch(/how old each one is \(age\)$/u);
+    // What each one is read from, and why it is there: a check finds anchors, it does not re-read the claim.
+    expect(search.age.why).toMatch(/never that what the entry says still holds/u);
+    expect(search.age.why).toMatch(/on the runner door and on the owner's GET \/api\/wiki\/search alike/u);
+    expect(CONTRACT.anchorStates.verified).toBe('the last check found it as recorded');
+    expect(search.age.recordedAt).toMatch(/wiki_entry\.recorded_at/u);
+    expect(search.age.changedAt).toMatch(/An anchor check writes no revision/u);
+    expect(search.age.anchorCheckedRef).toMatch(/wiki_entry\.anchor_checked_ref/u);
+    expect(search.age.anchorCheckedRef).toMatch(/anchorRules\.verify\.aggregate/u);
+    expect(CONTRACT.anchorRules.verify.aggregate).toMatch(/anchor_checked_ref and anchor_checked_at are the ref and the time of the last check/u);
+    expect(search.age.anchorCheckedAt).toMatch(/wiki_entry\.anchor_checked_at/u);
+  });
+
   it('gives a session a note: a claim for maintenance to check, not a write to the wiki (design section 4)', () => {
     const surface = CONTRACT.agentSurface;
     expect(surface.note.rules).toEqual({ ...WIKI_NOTE_RULES });
     expect(surface.note.route).toBe('POST /api/runner/wiki/notes');
     expect(surface.doors.runner.routes).toContain(surface.note.route);
-    expect(keysOf(surface.toolSpecs.wiki_note.params)).toEqual(['text', 'paths', 'corrects']);
+    expect(keysOf(surface.toolSpecs.wiki_note.params)).toEqual(['text', 'paths', 'corrects', 'replaces']);
+    expect(surface.toolSpecs.wiki_note.params.replaces).toMatch(/in a wiki chat alone/u);
     expect(surface.noteDescription).toMatch(/so it is not in the wiki yet and may never be/u);
     expect(surface.noteDescription).toMatch(/pass corrects with its id: the entry is flagged at once/u);
     expect(surface.note.review).toMatch(/no op/u);
@@ -2183,6 +2212,17 @@ describe('wiki contract', () => {
     expect(CONTRACT.jobs.serverWrites).toMatch(/src\/apiserver\/src\/runner-api\/strip-nul\.ts/u);
     expect(existsSync(path.join(ROOT, 'src/apiserver/src/runner-api/strip-nul.ts'))).toBe(true);
     expect(sql).toContain('CONSTRAINT "wiki_model_request_unit_key" UNIQUE ("job_id", "step", "unit", "attempt")');
+    // What a call was made from, kept beside it for a replay to ask the same again (2026-11-06): a column of its own, an
+    // object or nothing, written by the maintain job's first question about a session, and read out by no read.
+    const material = readFileSync(path.join(ROOT, queue.material.migration), 'utf8').replace(/\s+/gu, ' ');
+    expect(material).toContain('ALTER TABLE "wiki_model_request" ADD COLUMN IF NOT EXISTS "material" JSONB');
+    expect(material).toContain('CHECK ("material" IS NULL OR jsonb_typeof("material") = \'object\')');
+    expect(queue.material.rule).toMatch(/maintenance\.job\.server\.replay/u);
+    expect(CONTRACT.jobs.read.never).toMatch(/the material it was made from \(modelQueue\.material\)/u);
+    const replay = CONTRACT.maintenance.job.server.replay;
+    expect(replay).toMatch(/under step extract and under step claims/u);
+    expect(replay).toMatch(/meets its own idempotency key, so nothing is written twice/u);
+    expect(replay).toMatch(/WikiMaintenance\.recordAsked/u);
     // The claim's order and its lock are the statement's, in the worker; the queue's sets and numbers are here.
     expect(queue.states).toEqual([...WIKI_MODEL_REQUEST_STATES]);
     expect(queue.concurrency.env).toBe(WIKI_SYSTEM_MODEL_ENV.concurrency);

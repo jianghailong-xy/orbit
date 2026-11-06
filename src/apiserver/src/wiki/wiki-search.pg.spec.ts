@@ -23,6 +23,8 @@
  */
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { after, test } from 'node:test';
 
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
@@ -41,11 +43,26 @@ import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
 import { WikiController } from './wiki.controller';
 import { broaden, normalizeSearchQuery } from '../sessions/search-query';
-import { anyWordPatterns, compareRanked, looksLikePath, pathQueries, rrfFuse, usageOf, WikiRetrieval } from './wiki-retrieval';
+import {
+  anyWordPatterns,
+  compareRanked,
+  looksLikePath,
+  pathQueries,
+  pathSpecificity,
+  pathWeight,
+  rrfFuse,
+  usageOf,
+  WikiRetrieval,
+} from './wiki-retrieval';
 import { WikiService } from './wiki.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
+
+/** A hit's fields, as the contract lists them (`agentSurface.toolSpecs.wiki_search.hit`). */
+const HIT_FIELDS: string[] = JSON.parse(
+  readFileSync(path.join(path.resolve(__dirname, '../../../..'), 'contracts/wiki.contract.json'), 'utf8'),
+).agentSurface.toolSpecs.wiki_search.hit;
 
 interface Harness {
   base: string;
@@ -178,10 +195,14 @@ interface Hit {
   anchorState: string;
   match: string[];
   score: number;
-  /** Present only when the caller asked (`?include=space,topics,anchor`). */
+  /** How old the entry is (contract `age`), on every hit. */
+  recordedAt: string;
+  changedAt: string | null;
+  anchorCheckedRef: string | null;
+  anchorCheckedAt: string | null;
+  /** Present only when the caller asked (`?include=space,topics`). */
   spaceSlug?: string;
   topics?: string[];
-  anchorCheckedRef?: string | null;
 }
 
 const hitsOf = (answer: Answer): Hit[] => answer.body.hits as Hit[];
@@ -420,6 +441,41 @@ test('the last keyword pass asks about the words that take part, and session sea
   assert.deepEqual(broaden(session)?.patterns, [['%go%'], ['%to%'], ['%the%'], ['%runner%']]);
 });
 
+test('a path match counts by how specific it is, and an exact one for more than a prefix one', () => {
+  // A file only one entry names is as specific as a path gets; sharing it, or naming many, says less.
+  assert.equal(pathSpecificity(1, 1, 1_000), 1);
+  assert.ok(pathSpecificity(3, 1, 1_000) < 1);
+  assert.ok(pathSpecificity(30, 1, 1_000) < pathSpecificity(3, 1, 1_000));
+  assert.equal(pathSpecificity(3, 2, 1_000), pathSpecificity(6, 1, 1_000), 'an entry naming two paths reads as a path twice as shared');
+  assert.equal(pathSpecificity(5_000, 1, 1_000), 0, 'never below nothing');
+  assert.equal(pathSpecificity(1, 1, 0), 1, 'an empty corpus divides by nothing');
+
+  // The two bands meet at 3/4, so an exact match never counts for less than a prefix one.
+  assert.equal(pathWeight(true, 1), 1);
+  assert.equal(pathWeight(true, 0), 0.75);
+  assert.equal(pathWeight(false, 1), 0.75);
+  assert.equal(pathWeight(false, 0), 0.5);
+
+  // A weight scales its hit's term; a leg without weights is the plain RRF it always was.
+  const fused = rrfFuse([
+    { match: 'keyword', ids: ['words', 'both'] },
+    { match: 'path', ids: ['both', 'shared-file'], weights: [0.5, 0.75] },
+  ]);
+  assert.deepEqual(
+    fused.map((hit) => [hit.id, hit.score]),
+    [
+      ['words', 1 / 61],
+      ['both', 1 / 62 + 0.5 / 61],
+      ['shared-file', 0.75 / 62],
+    ],
+  );
+  assert.deepEqual(
+    rrfFuse([{ match: 'keyword', ids: ['a', 'b'] }]).map((hit) => hit.score),
+    [1 / 61, 1 / 62],
+    'one leg and no weights: the scores a search without paths always had',
+  );
+});
+
 // ── the two-legged search ───────────────────────────────────────────────────────────────────────
 
 test('0307 · the wiki search path', { skip, concurrency: 1, timeout: 300_000 }, async (t) => {
@@ -640,12 +696,17 @@ test('0307 · the wiki search path', { skip, concurrency: 1, timeout: 300_000 },
     const answer = await ownerSearch(h, owner, { q: '闭集', space: here });
     assert.equal(answer.body.semantic, false, 'the semantic leg did not run');
     assert.equal(answer.body.q, '闭集', 'the query as it was understood comes back');
+    assert.deepEqual(
+      HIT_FIELDS,
+      ['id', 'kind', 'title', 'summary', 'trust', 'anchorState', 'match', 'score', 'recordedAt', 'changedAt', 'anchorCheckedRef', 'anchorCheckedAt'],
+      "the contract's hit, read where every end reads it",
+    );
     for (const hit of hitsOf(answer)) {
       assert.deepEqual(
-        Object.keys(hit).sort(),
+        Object.keys(hit),
         // `publicId` is the interceptor's twin of `id`, the API's convention for every address.
-        ['anchorState', 'id', 'kind', 'match', 'publicId', 'score', 'summary', 'title', 'trust'],
-        "a hit carries the contract's fields and no others: no fields, no sources, no history",
+        [...HIT_FIELDS, 'publicId'],
+        "a hit carries the contract's fields, in its order, and no others: no fields, no sources, no history",
       );
       assert.ok(hit.score > 0 && hit.score <= 2 / 61, `a fused score is a sum of two RRF terms: ${hit.score}`);
     }
@@ -658,20 +719,17 @@ test('0307 · the wiki search path', { skip, concurrency: 1, timeout: 300_000 },
     assert.deepEqual(declined.body, answer.body, 'declining it answers identically too');
   });
 
-  await t.test('a hit asked for its space, topics and anchor carries them — and nothing more', async () => {
+  await t.test('a hit asked for its space and topics carries them — and nothing more', async () => {
     // The owner's ⌘K OPENS what it finds: an entry's page is `/wiki/<space>/e/<id>`, and the row
-    // under the title names the topic and the last anchor check. None of it is part of a hit's
-    // answer, which is why it arrives only when named (`include`).
+    // under the title names the topic. Neither is part of a hit's answer, which is why they arrive
+    // only when named (`include`). The last anchor check was a third until every hit carried it.
     const asked = await ownerSearch(h, owner, { q: '闭集', space: here, include: 'space,topics,anchor' });
     assert.equal(asked.status, 200, asked.body);
     const hit = hitFor(asked, closedSets, 'the convention, asked about in full');
     assert.deepEqual(
-      Object.keys(hit).sort(),
-      [
-        'anchorCheckedRef', 'anchorState', 'id', 'kind', 'match', 'publicId', 'score', 'spaceSlug',
-        'summary', 'title', 'topics', 'trust',
-      ],
-      'asking adds exactly the three named fields',
+      Object.keys(hit),
+      [...HIT_FIELDS, 'spaceSlug', 'topics', 'publicId'],
+      'asking adds exactly the two named fields, and anchor is no name any more',
     );
     // The slug is the space's own spelling — the one `/wiki/<space>/e/<id>` takes — read back off
     // the space document rather than restated here.
@@ -688,16 +746,15 @@ test('0307 · the wiki search path', { skip, concurrency: 1, timeout: 300_000 },
     // One name at a time, and a name that is not a field: neither adds anything.
     const one = await ownerSearch(h, owner, { q: '闭集', space: here, include: 'space' });
     assert.deepEqual(
-      Object.keys(hitFor(one, closedSets, 'the convention, asked about its space')).sort(),
-      ['anchorState', 'id', 'kind', 'match', 'publicId', 'score', 'spaceSlug', 'summary', 'title', 'trust'],
+      Object.keys(hitFor(one, closedSets, 'the convention, asked about its space')),
+      [...HIT_FIELDS, 'spaceSlug', 'publicId'],
       'only what was asked for',
     );
-    const none = await ownerSearch(h, owner, { q: '闭集', space: here, include: 'nonsense' });
-    assert.deepEqual(
-      none.body.hits,
-      (await ownerSearch(h, owner, { q: '闭集', space: here })).body.hits,
-      'a name that is not a field is not an answer',
-    );
+    const plain = (await ownerSearch(h, owner, { q: '闭集', space: here })).body.hits;
+    for (const name of ['nonsense', 'anchor']) {
+      const none = await ownerSearch(h, owner, { q: '闭集', space: here, include: name });
+      assert.deepEqual(none.body.hits, plain, `${name} is not a field to ask for, so it is not an answer`);
+    }
   });
 
   await t.test("the filters narrow within the reader's own boundary and cannot widen it", async () => {
@@ -928,6 +985,88 @@ test('0307 · the wiki search path', { skip, concurrency: 1, timeout: 300_000 },
     assert.ok((await h.prisma.wikiExposure.count({ where: { sessionId: reader, channel: 'search' } })) > 0);
   });
 
+  await t.test('a hit says how old it is: when it was recorded and revised, and where its anchors were checked', async () => {
+    // An entry of this case's own, and the last case in the file: what it does to the entry moves no other.
+    const dated = await ownerEntry(h, owner, here, {
+      kind: 'recipe',
+      title: 'Regenerate the Prisma client after a schema edit',
+      summary: 'npx prisma generate rewrites the client the apiserver imports.',
+      fields: { steps: ['npx prisma generate'], verify: { command: 'npx prisma validate', expectedExit: 0 } },
+      anchors: [{ type: 'path', path: 'src/apiserver/prisma/schema.prisma' }],
+    });
+    const id = toUuid(dated);
+    // What a hit for it has to say, read off the rows the doors wrote (contract `age`).
+    const stored = async () => {
+      const entry = await h.prisma.wikiEntry.findUniqueOrThrow({
+        where: { id },
+        select: { recordedAt: true, currentRevision: true, anchorCheckedRef: true, anchorCheckedAt: true },
+      });
+      const revision = await h.prisma.wikiEntryRevision.findFirstOrThrow({
+        where: { entryId: id, revision: entry.currentRevision },
+        select: { createdAt: true },
+      });
+      return {
+        recordedAt: entry.recordedAt.toISOString(),
+        changedAt: revision.createdAt.toISOString(),
+        anchorCheckedRef: entry.anchorCheckedRef,
+        anchorCheckedAt: entry.anchorCheckedAt?.toISOString() ?? null,
+      };
+    };
+    const ageOf = ({ recordedAt, changedAt, anchorCheckedRef, anchorCheckedAt }: Hit) =>
+      ({ recordedAt, changedAt, anchorCheckedRef, anchorCheckedAt });
+    // Both doors answer with the same hit: the agent's wiki_search, and the owner's ⌘K.
+    const hits = async (): Promise<Hit[]> => [
+      hitFor(await sessionSearch(h, machine, mine, { q: 'prisma generate' }), dated, 'the runner door'),
+      hitFor(await ownerSearch(h, owner, { q: 'prisma generate', space: here }), dated, 'the owner door'),
+    ];
+
+    // Written, and never checked.
+    const born = await stored();
+    assert.equal(born.anchorCheckedRef, null, 'the fixture: nothing has checked the anchor yet');
+    for (const hit of await hits()) {
+      assert.deepEqual(ageOf(hit), born, 'recorded, its first revision, and no check');
+      assert.equal(hit.anchorState, 'unchecked');
+    }
+
+    // The maintenance run checks the anchor on a commit, through the one writer a check has.
+    const job = randomUUID();
+    await h.sql.query(`INSERT INTO "wiki_job"("id","owner_id","space_id","kind","state") VALUES ($1,$2,$3,'maintain','queued')`, [
+      job,
+      owner.id,
+      toUuid(here),
+    ]);
+    const commit = '7de4f86bcf1c01d2fcff6d154a039e5c54961df8';
+    const report = await new WikiService(h.prisma as unknown as PrismaService).recordAnchorChecks(
+      { ownerId: owner.id, jobId: job },
+      toUuid(here),
+      { ref: commit, entries: [{ entryId: id, revision: 1, checks: [{ index: 0, type: 'path', state: 'verified' }] }] },
+    );
+    assert.equal(report.outcomes[0]?.status, 'recorded', `the check is recorded: ${JSON.stringify(report)}`);
+    const checked = await stored();
+    assert.equal(checked.anchorCheckedRef, commit, 'the fixture: the check is on the entry');
+    assert.equal(checked.changedAt, born.changedAt, 'a check writes no revision');
+    for (const hit of await hits()) {
+      assert.deepEqual(ageOf(hit), checked, 'the commit the anchors were checked at, and when; nothing else moved');
+      assert.equal(hit.anchorState, 'verified');
+    }
+
+    // The owner amends what it says and leaves the anchor alone: a new revision of the same lineage, and a
+    // check older than what the entry now says — which a reader of `verified` has to be able to see.
+    const amended = await call(h, { bearer: owner.bearer }, 'POST', `/wiki/spaces/${here}/changesets`, {
+      rationale: 'the owner corrects it',
+      ops: [{ op: 'amend', entryId: dated, baseRevision: 1, changes: { summary: 'npx prisma generate rewrites the client every build imports.' } }],
+    });
+    expectStatus(amended, 200, 'the owner amends the recipe');
+    const revised = await stored();
+    assert.notEqual(revised.changedAt, born.changedAt, 'the fixture: a second revision');
+    for (const hit of await hits()) {
+      assert.deepEqual(ageOf(hit), revised, 'the second revision, under the same lineage and the same check');
+      assert.equal(hit.recordedAt, born.recordedAt, 'no amend moves when the entry was recorded');
+      assert.equal(hit.anchorCheckedRef, commit, 'an amend that leaves the anchors alone keeps their check');
+      assert.ok(hit.anchorCheckedAt! < hit.changedAt!, `the check is older than the revision: ${JSON.stringify(hit)}`);
+    }
+  });
+
   // The fixture, read back through the database once at the end: an assertion that a search found
   // nothing is only worth something if the row it should have found is really there.
   assert.equal(
@@ -940,4 +1079,102 @@ test('0307 · the wiki search path', { skip, concurrency: 1, timeout: 300_000 },
     1,
     'the other space of this owner holds its entry',
   );
+});
+
+// ── the path leg's order ────────────────────────────────────────────────────────────────────────
+
+/**
+ * What the review of 2026-11-06 found the path leg's noise to be, each one a case against real rows:
+ * ranked by the length of the entry's own path, an entry anchored on a whole directory, or on a file
+ * many entries share, came back above the one that names the very file asked about, and one file's
+ * entries filled the answer to a search that named several. Its own space, so the counts the weights
+ * read are this case's alone.
+ */
+test('the path leg puts the asked file first, takes the asked paths in turn, and weighs a shared path down', { skip, concurrency: 1, timeout: 300_000 }, async (t) => {
+  const h = await boot();
+  const owner = await account(h, 'the owner of the path order');
+  const here = await space(h, owner, 'git@github.com:orbit/path-order.git');
+  const anchored = (title: string, path: string): Promise<string> =>
+    ownerEntry(h, owner, here, {
+      kind: 'concept',
+      title,
+      summary: `${title}, anchored on ${path}.`,
+      fields: { definition: `${title}.`, boundaries: 'Only itself.' },
+      anchors: [{ type: 'path', path }],
+    });
+  const worded = (title: string): Promise<string> =>
+    ownerEntry(h, owner, here, {
+      kind: 'concept',
+      title,
+      summary: `${title}, which no path reaches.`,
+      fields: { definition: `${title}.`, boundaries: 'Only itself.' },
+    });
+
+  // Two files three entries name each, a directory one entry is about, a file only a pitfall's
+  // trigger names, an entry the words and its own file both reach, and two only the words reach.
+  const main = [await anchored('Hub one', 'apps/hub/Main.kt'), await anchored('Hub two', 'apps/hub/Main.kt'), await anchored('Hub three', 'apps/hub/Main.kt')];
+  const other = [await anchored('Other one', 'apps/hub/Other.kt'), await anchored('Other two', 'apps/hub/Other.kt'), await anchored('Other three', 'apps/hub/Other.kt')];
+  const directory = await anchored('The hub directory', 'apps/hub');
+  const rare = await ownerEntry(h, owner, here, {
+    kind: 'pitfall',
+    title: 'The rare file bites',
+    summary: 'Only this pitfall names the rare file, as where it bites.',
+    fields: {
+      trigger: { paths: ['apps/hub/Rare.kt'], commands: ['gradle build'] },
+      symptom: 'It bites.',
+      cause: 'The rare file.',
+      fix: 'Read it first.',
+    },
+  });
+  const lamp = await anchored('A lantern on its own file', 'apps/hub/Lamp.kt');
+  const words = [await worded('Lantern one'), await worded('Lantern two')];
+  const on = (query: Record<string, string>) => ownerSearch(h, owner, { space: here, ...query });
+  const ids = (answer: Answer) => hitsOf(answer).map((hit) => hit.id);
+
+  await t.test("a directory's own entry comes before what lies under it", async () => {
+    const answer = await on({ paths: 'apps/hub' });
+    assert.equal(ids(answer)[0], directory, `ranked by path length it came last: ${JSON.stringify(answer.body.hits)}`);
+    assert.equal(hitsOf(answer).every((hit) => hit.match.join() === 'path'), true);
+  });
+
+  await t.test('a file one entry names comes before a file three share, and the directory holding both after them', async () => {
+    const answer = await on({ paths: 'apps/hub/Main.kt,apps/hub/Rare.kt' });
+    assert.equal(ids(answer)[0], rare, `the rare file's pitfall leads: ${JSON.stringify(answer.body.hits)}`);
+    assert.deepEqual(new Set(ids(answer).slice(1, 4)), new Set(main), 'then the shared file, exact matches all three');
+    assert.equal(ids(answer).at(-1), directory, 'and the directory, a prefix match, last');
+    assert.equal(ids(answer).length, 5);
+  });
+
+  await t.test('two asked files share the answer, rather than the longer path filling it', async () => {
+    const answer = await on({ paths: 'apps/hub/Main.kt,apps/hub/Other.kt', limit: '2' });
+    const file = (id: string) => (main.includes(id) ? 'Main.kt' : other.includes(id) ? 'Other.kt' : id);
+    assert.deepEqual(ids(answer).map(file).sort(), ['Main.kt', 'Other.kt'], `one of each: ${JSON.stringify(answer.body.hits)}`);
+  });
+
+  await t.test('a shared file counts for less than the words, a file one entry names as much, and no paths changes nothing', async () => {
+    // Without paths there is one leg, fused as it always was.
+    const plain = await on({ q: 'lantern' });
+    assert.deepEqual(new Set(ids(plain)), new Set([...words, lamp]), `the words find three: ${JSON.stringify(plain.body.hits)}`);
+    assert.deepEqual(
+      hitsOf(plain).map((hit) => hit.score),
+      hitsOf(plain).map((_, index) => Number((1 / (61 + index)).toFixed(6))),
+      'scores of 1/61, 1/62 and 1/63, as before any weight',
+    );
+
+    // Every entry the words found before every entry only the shared file did, and the directory last.
+    const shared = ids(await on({ q: 'lantern', paths: 'apps/hub/Main.kt' }));
+    const lastWord = Math.max(...ids(plain).map((id) => shared.indexOf(id)));
+    const firstFile = Math.min(...main.map((id) => shared.indexOf(id)));
+    assert.ok(lastWord >= 0 && lastWord < firstFile, `the words lead: ${JSON.stringify(shared)}`);
+    assert.equal(shared.at(-1), directory);
+
+    // A file only one entry names counts as much as the words' first hit.
+    const single = await on({ q: 'lantern', paths: 'apps/hub/Rare.kt' });
+    assert.equal(hitFor(single, rare, 'the rare pitfall').score, hitsOf(single)[0].score, `tied for first: ${JSON.stringify(single.body.hits)}`);
+
+    // And an entry both legs found leads the answer.
+    const both = await on({ q: 'lantern', paths: 'apps/hub/Lamp.kt' });
+    assert.equal(ids(both)[0], lamp);
+    assert.deepEqual(hitsOf(both)[0].match, ['keyword', 'path']);
+  });
 });

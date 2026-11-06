@@ -30,6 +30,7 @@ import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
 import { deriveSessionCapabilities, type SessionCapabilityFields } from '../sessions/session-state';
 import { readWorktreeArtifactRequest, worktreeFileAnswerKey } from '../sessions/worktree-artifact';
+import { importForkSessionId } from '../sessions/import-fork';
 import { branchName } from '../projects/project-criterion-landing';
 import { TasksService } from '../tasks/tasks.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
@@ -226,7 +227,9 @@ import {
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
+import { followWikiDocsAfterReceipts, followWikiDocsAfterSessionMerge } from '../wiki/wiki-docs-follow';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
+import { appendWikiChatNotes } from '../wiki/wiki-chat-notes';
 import {
   type TaskFailure,
   recordTaskFailure,
@@ -495,6 +498,7 @@ import {
   storedWorkloadFor,
   type ManagedHeartbeatAnswer,
 } from '../managed-runners/managed-runner-sleep';
+import { readManagedRunnerStorage, type ManagedRunnerStorage } from '../managed-runners/managed-runner-storage';
 import {
   RUNNER_OFFLINE_AFTER_MS,
   RunnerPresenceService,
@@ -899,6 +903,8 @@ interface HandedTurn {
   targetTurnId: string | null;
   coordinatorContextKey: string | null;
   senderSessionId: string | null;
+  /** A wiki chat's page and selection, as ids (migration 0476): what `appendWikiChatNotes` reads. */
+  wikiContext: unknown;
 }
 // How many times one message may be handed to an engine with nothing under it answering before the
 // control plane stops putting it back on the queue at once. A message that deserves another delivery
@@ -2104,6 +2110,19 @@ export class RunnerApiController {
         this.logger.warn(`runner ${runner.id}: managed sleep state not read this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
       }
     }
+    // What a managed instance is told of its storage (managed-runners/managed-runner-storage.ts): on Docker the
+    // volume's budget as the channel last measured it, and the floor, which defaults to a quarter of the volume when
+    // the owner set none. Like idle sleep, only while the switch is on: off, management is frozen, and a measurement
+    // nothing renews would hide everything written since. A read that fails answers as for any other runner, and
+    // the next beat says it again.
+    let managedStorage: ManagedRunnerStorage | null = null;
+    if (managedSleepOn) {
+      try {
+        managedStorage = await readManagedRunnerStorage(this.prisma, managedInstance!, updated.minFreeDiskMb);
+      } catch (error) {
+        this.logger.warn(`runner ${runner.id}: managed storage not read this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+      }
+    }
     // A process draining by itself, or a managed instance its manager is draining to sleep, is handed
     // no new heartbeat work: it stays queued for the next instance, or for this one once the drain is
     // called off.
@@ -2475,12 +2494,13 @@ export class RunnerApiController {
     // Hand back the authoritative max-concurrent (the editable DB value) so the runner
     // syncs its self-gate to a UI/API change without needing a restart. The free-space floor
     // rides along for the same reason: the runner reclaims its own session checkouts under disk
-    // pressure, and that has to be the floor the owner set here, not a second number.
+    // pressure, and that has to be the floor the owner set here, not a second number. A managed
+    // runner's floor is the owner's too when set; otherwise its storage answer's default.
     const answer: RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints } = {
       cancelSessionIds,
       leaseLostSessionIds: ownershipLostSessionIds,
       maxConcurrent: updated.maxConcurrent,
-      minFreeDiskMb: updated.minFreeDiskMb,
+      minFreeDiskMb: managedStorage ? managedStorage.minFreeDiskMb : updated.minFreeDiskMb,
       mergeRequests,
       commitRequests,
       artifactRequests,
@@ -2505,6 +2525,8 @@ export class RunnerApiController {
       ...(wikiRepoOps ? { wikiRepoOps } : {}),
       // Only to the instance being drained to sleep: every other runner's response keeps its shape.
       ...(managedBeat.sleep ? { managedSleep: managedBeat.sleep } : {}),
+      // Only to a managed instance whose volume the channel has measured: every other runner's response keeps its shape.
+      ...(managedStorage?.storageBudget ? { storageBudget: managedStorage.storageBudget } : {}),
       // Present only when this beat hands a key over, for the same reason.
       ...(cursorKeyChecks.length > 0 ? { cursorKeyChecks } : {}),
       // Only while the owner's Check again waits, and only to a process that declared claude-region/v1.
@@ -2689,6 +2711,9 @@ export class RunnerApiController {
           ownerItemIds: after.ownerItemIds,
         })
         .catch((error) => this.logger.warn(`integration landing facts not delivered: ${(error as Error)?.message}`));
+      // A landing into main — a task's on a MAIN line, or a project's promotion — is a fact the wiki follows (contract
+      // `docs.follow.triggers.landing`): the receipts the result wrote, after the commit, logged and never raised.
+      if ((after.receiptIds?.length ?? 0) > 0) await followWikiDocsAfterReceipts(this.prisma, after.receiptIds ?? []);
       if (after.openItemIds.length > 0) {
         await this.openItems?.deliverForItems(after.openItemIds)
           .catch((error) => this.logger.warn(`integration exception item not delivered: ${(error as Error)?.message}`));
@@ -4783,7 +4808,8 @@ export class RunnerApiController {
                    "send_intent" AS "sendIntent",
                    "target_turn_id" AS "targetTurnId",
                    "coordinator_context_key" AS "coordinatorContextKey",
-                   "sender_session_id" AS "senderSessionId"
+                   "sender_session_id" AS "senderSessionId",
+                   "wiki_context" AS "wikiContext"
             FROM "conversation_turn" turn
             WHERE turn.id = ${owned[0].inboxRequestTurnId}::uuid
               AND turn."session_id" = ${sessionId}::uuid
@@ -5039,7 +5065,8 @@ export class RunnerApiController {
                   "send_intent" AS "sendIntent",
                   "target_turn_id" AS "targetTurnId",
                   "coordinator_context_key" AS "coordinatorContextKey",
-                  "sender_session_id" AS "senderSessionId"
+                  "sender_session_id" AS "senderSessionId",
+                  "wiki_context" AS "wikiContext"
       `;
       if (rows.length === 0) return null;
       const t = rows[0];
@@ -5065,6 +5092,8 @@ export class RunnerApiController {
             coordinatorForProject: {
               select: { id: true, coordinatorEnabled: true, owner: { select: { preferences: true } } },
             },
+            // A wiki chat's messages carry its notes (appendWikiChatNotes, below).
+            wikiChatSpaceId: true,
           },
         });
         // A message turn that already produced runtime output is a lease re-delivery.
@@ -5114,6 +5143,20 @@ export class RunnerApiController {
           // nothing rather than leaking another tenant's list into a prompt.
           if (sessionContext) {
             content = (await this.references.expand(sessionContext.ownerId, content)) ?? content;
+          }
+          // A wiki chat's message (wiki contract `chat.notes`): its first carries the chat's standing
+          // rules, and any carries the page and the selection it was sent with, read now from the ids
+          // its door kept — the sentences and footnotes as the document holds them at this delivery.
+          // After the words, so the echo is recorded with them as the control plane's note. Not
+          // best-effort: the page and the selection are part of what the owner said, and a failed read
+          // rolls the claim back, leaving the turn queued for the next poll.
+          if (sessionContext?.wikiChatSpaceId) {
+            content = await appendWikiChatNotes(tx, {
+              ownerId: sessionContext.ownerId,
+              spaceId: sessionContext.wikiChatSpaceId,
+              sessionId,
+              turn: { seq: t.seq, kind: t.kind, wikiContext: t.wikiContext },
+            }, content);
           }
           // Another Orbit session's message says so, in a block after its words (session-message.ts,
           // contract §2.2): without it the recipient reads another agent as the account owner. After
@@ -9083,7 +9126,8 @@ export class RunnerApiController {
    * Settle a session's pending transcript import — the runner's import step, which is the whole
    * of the claim that carries it and spawns no engine after it. `ok` clears the
    * `importSourceCwd` marker (CAS, so a retried ok after a lost reply is a no-op), may carry the
-   * real title read out of the transcript, and parks the session: AWAITING_INPUT, or PENDING when
+   * real title read out of the transcript, moves the session to the fork the runner placed when it
+   * says it forked (sessions/import-fork.ts), and parks the session: AWAITING_INPUT, or PENDING when
    * a message is already queued, so the claim it was holding is released and the engine starts
    * with the first message instead. A failure moves the session to Trash (FAILED + deletedAt)
    * with the reason, and the runner reports that run end via /finalize as usual, whose LIVE
@@ -9094,7 +9138,7 @@ export class RunnerApiController {
   async importResult(
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
-    @Body() body: { leaseOwner?: string; ok?: boolean; error?: string; title?: string },
+    @Body() body: { leaseOwner?: string; ok?: boolean; error?: string; title?: string; forked?: boolean },
   ) {
     await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     // See turnComplete: the title is read out of the transcript file being imported, so it is
@@ -9123,6 +9167,15 @@ export class RunnerApiController {
         const pendingExecutable = await tx.conversationTurn.count({
           where: { sessionId, kind: { in: ['message', 'shell'] }, status: 'PENDING' },
         });
+        // A fork: resuming the transcript where it lay would have shared the file with the
+        // conversation it came from, so the runner placed a copy under importForkSessionId of
+        // this session's Claude id, and the session resumes that from now on. Derived, never
+        // taken from the request: the fork is the one id a runner may move a session to.
+        const resumed = dto.forked === true
+          ? (await tx.session.findUnique({ where: { id: sessionId }, select: { runtimeSessionId: true } }))
+            ?.runtimeSessionId ?? null
+          : null;
+        const fork = resumed ? importForkSessionId(resumed) : undefined;
         // CAS on the pending marker: a replayed ok (the runner crashed between this POST and its
         // reply) matches nothing and reports applied:false instead of applying twice. Same for a
         // row some other writer already finalized — the status guard keeps this from resurrecting
@@ -9133,11 +9186,20 @@ export class RunnerApiController {
             importSourceCwd: null,
             // The runner read a real title out of the transcript; it wins over the placeholder.
             ...(dto.title ? { title: dto.title } : {}),
+            ...(fork ? { runtimeSessionId: fork } : {}),
             status: pendingExecutable > 0 ? RunStatus.PENDING : RunStatus.AWAITING_INPUT,
           },
         });
         // Applied is what clients have to reconcile — the row's status moved, not just its title.
-        return { applied: res.count > 0, failed: false, announced: res.count > 0 };
+        // A fork is answered with the id the session resumes, so the runner keeps its copy only
+        // when it is the one read: the fork once written, or on a replay the id the first attempt
+        // wrote. A control plane that predates forks answers without it.
+        return {
+          applied: res.count > 0,
+          failed: false,
+          announced: res.count > 0,
+          ...(dto.forked === true ? { runtimeSessionId: res.count > 0 && fork ? fork : resumed } : {}),
+        };
       }
       // The transcript could not be read, verified or replayed. Unconditional: an import that
       // failed has no other state to write, and no second attempt is expected to succeed.
@@ -9352,6 +9414,9 @@ export class RunnerApiController {
     // The owner items the receipt opened (§10.6 O-R3), pushed once after the commit (§7.6 V12). Keyed by
     // project, so a retried closure overwrites rather than accumulates.
     const openedOwnerItems = new Map<string, string[]>();
+    // The landed merge this request recorded, which the wiki follows after the commit (contract
+    // `docs.follow.triggers.merge`). Keyed by session, so a retried closure overwrites rather than accumulates.
+    const landedMerges = new Map<string, { sessionId: string; sourceSha: string; targetBranch: string }>();
     // Retried whole. The worktree-op claim is re-read under its row lock inside the closure, so a
     // re-run either still owns the operation it is reporting on or finds it reclaimed — the same
     // two outcomes a first attempt has.
@@ -9566,6 +9631,9 @@ export class RunnerApiController {
             })),
         });
         if (task?.projectId) openedOwnerItems.set(task.projectId, written.ownerItemIds);
+        if (receiptResult === 'MERGED' || receiptResult === 'ALREADY_MERGED') {
+          landedMerges.set(sessionId, { sessionId, sourceSha, targetBranch });
+        }
         if (task?.projectId && current.taskId
             && (receiptResult === 'MERGED' || receiptResult === 'ALREADY_MERGED')) {
           landedReceipts.set(`${task.projectId}:${current.taskId}`, {
@@ -9588,6 +9656,9 @@ export class RunnerApiController {
         ownerItemIds: openedOwnerItems.get(projectId),
       });
     }
+    // A merge into main is a fact the wiki follows (contract `docs.follow.triggers.merge`): after the commit, logged
+    // and never raised.
+    for (const landed of landedMerges.values()) await followWikiDocsAfterSessionMerge(this.prisma, landed);
     // §2.9 LS3 / errata E5: the merge also landed a task segment whose candidate this request
     // retired (M-T13). Its own transaction, after the receipt committed.
     for (const landed of landedReceipts.values()) {

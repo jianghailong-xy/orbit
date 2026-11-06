@@ -103,7 +103,8 @@ export interface WikiDocsWriteRequest {
 /** The write's answer, as far as a run reports it. */
 export interface WikiDocsWriteAnswer {
   status: string;
-  sections: Array<{ key: string; outcome: string; stats: WikiDocSectionStats | null }>;
+  /** `versionId` and `changed`: the version a write over a standing section kept, and the sentences it changed (docs.versions). */
+  sections: Array<{ key: string; outcome: string; stats: WikiDocSectionStats | null; versionId?: string | null; changed?: number | null }>;
   counts: WikiDocSentenceCounts | Record<string, number>;
 }
 
@@ -126,6 +127,26 @@ export interface WikiDocsBuildDeps {
   log(message: string): void;
   /** Aborted when the worker is stopping: no section is started after it. */
   signal?: AbortSignal;
+  /**
+   * What a follow job hands a section besides its own material (contract `docs.follow.material`), asked once the
+   * section is to be written — its fingerprint, which is its own material's alone, decided that. Absent for a build
+   * and a maintenance run.
+   */
+  extra?(doc: WikiDocsPlanDoc, key: string): Promise<WikiDocsExtraMaterial | null>;
+}
+
+/**
+ * A section's material besides its own (contract `docs.follow.material`): not part of its fingerprint, so a later run
+ * that finds the section's own material unchanged leaves what was written with it.
+ */
+export interface WikiDocsExtraMaterial {
+  /**
+   * A press's records — the entries the card wrote, through their live sources, and the owner's words in the chat —
+   * handed before everything else, so the cap can no more leave them out than `entriesPerSection` can.
+   */
+  first: WikiDocMaterialRecord[];
+  /** The files a merge changed, cut as a section's sources are (`docs.build.repository`), after the section's own. */
+  repo: WikiDocPiece[];
 }
 
 export interface WikiDocsBuildOptions {
@@ -310,7 +331,7 @@ class DocsBuildRun {
       return { run, section: null, answer: null };
     };
     const gathered = await this.gather(doc, index);
-    const pieces = gathered.pieces;
+    let pieces = gathered.pieces;
     run.pieces = pieces.length;
     if (gathered.missing.length > 0) run.missing = gathered.missing;
     wikiDocFilter(pieces);
@@ -321,6 +342,11 @@ class DocsBuildRun {
       run.seconds = (Date.now() - started) / 1000;
       this.deps.log(`${label}: its material is the one it was written from (${run.materialSha256.slice(0, 12)}), so it is left as it is.`);
       return { run, section: null, answer: null };
+    }
+    const extra = this.deps.extra ? await this.deps.extra(doc, planSection.key) : null;
+    if (extra && (extra.first.length > 0 || extra.repo.length > 0)) {
+      pieces = withExtraMaterial(planSection.kind, pieces, extra);
+      run.pieces = pieces.length;
     }
     const handed = wikiDocHanded(pieces);
     let state: string[] = [];
@@ -563,6 +589,50 @@ export function mergeWikiDocsBuild(summary: WikiDocsBuildSummary, carry: WikiDoc
   const count = (outcome: WikiDocsBuildSectionRun['outcome']): number =>
     docs.reduce((total, doc) => total + doc.sections.filter((section) => section.outcome === outcome).length, 0);
   return { ...summary, docs, written: count('written'), unchanged: count('unchanged'), failed: count('failed') };
+}
+
+/**
+ * A section's own material with what a follow job hands it besides (`WikiDocsExtraMaterial`), filtered and capped
+ * again over all of it: the press's records first in the list and in the cap — a record the section found on its own
+ * as well is taken there, once — then the section's own, then the changed files'. Each extra piece is numbered after
+ * the section's own of its kind, so no id is given twice.
+ */
+function withExtraMaterial(kind: string, own: WikiDocPiece[], extra: WikiDocsExtraMaterial): WikiDocPiece[] {
+  const last = new Map<string, number>();
+  for (const piece of own) {
+    const prefix = piece.id.slice(0, 1);
+    last.set(prefix, Math.max(last.get(prefix) ?? 0, Number(piece.id.slice(1)) || 0));
+  }
+  const nextId = (prefix: string): string => {
+    const n = (last.get(prefix) ?? 0) + 1;
+    last.set(prefix, n);
+    return `${prefix}${n}`;
+  };
+  const found = new Map(own.filter((piece) => piece.record !== null).map((piece) => [`${piece.kind}:${piece.ref}`, piece]));
+  const pressed: WikiDocPiece[] = [];
+  const first = new Set<WikiDocPiece>();
+  for (const record of extra.first) {
+    const mine = found.get(`${record.kind}:${record.ref}`);
+    if (mine) {
+      first.add(mine);
+      continue;
+    }
+    const piece = wikiDocPiece({ id: nextId('S'), kind: record.kind, ref: record.ref, chars: { ...record.chars }, text: record.text, record });
+    found.set(`${record.kind}:${record.ref}`, piece);
+    pressed.push(piece);
+    first.add(piece);
+  }
+  const changed = extra.repo.map((piece) => ({ ...piece, id: nextId(piece.kind === 'design_doc' ? 'D' : piece.kind === 'contract' ? 'K' : 'C') }));
+  const pieces = [...pressed, ...own, ...changed];
+  for (const piece of pieces) {
+    piece.action = '';
+    piece.into = '';
+    piece.reason = '';
+    piece.handed = false;
+  }
+  wikiDocFilter(pieces);
+  wikiDocSelect(kind, pieces, first);
+  return pieces;
 }
 
 /** An overview's footnotes as its run counts them: a repository one is found unless its check said it was not. */
