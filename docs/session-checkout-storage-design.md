@@ -130,7 +130,30 @@ The runner judges pressure against the storage it may use:
   120 s measurement lag at the rate checkouts are created.
 - **Lag compensation.** Between two channel measurements, the runner subtracts the bytes of checkouts it has removed
   since `measuredAt` (it measures each checkout before removing it). That way one sweep does not reclaim more than it
-  needs to while the next measurement is pending.
+  needs to while the next measurement is pending. The other way round, it adds the bytes of every session checkout it
+  finished making after `measuredAt` (it measures each one once made, `checkoutStorage.made`), so that a new checkout
+  counts from the moment it exists rather than from the channel's next measurement. A measurement finished after the
+  checkout was made counts it, and the runner drops it from its own count then. One finished while the checkout was
+  still being written counts some of it at most, so the runner goes on counting all of it until a later one.
+- **Before a new checkout** (owner decision, 2026-11-06). Under a budget with a floor, `addSessionCheckout` estimates
+  what the new checkout will take before making it: the apparent size of the files its base commit tracks
+  (`git ls-tree -r -l`), of the paths its sparse set keeps. git sorts the paths with the checkout's own patterns
+  (`git sparse-checkout check-rules --no-cone`, git 2.42); an older git counts every path. If the free space as judged,
+  less that estimate, would fall below the floor, the run loop's one sweeper runs first (`worktreeSweeper.makeRoom`),
+  both halves as its schedule runs them, on a reading that counts the checkout as made already. So it takes every
+  eligible checkout of an ended session, then resting sessions' checkouts by the rule below until the new one fits. The
+  checkout is never refused for want of room: when nothing more can go, it is made all the same, and the log says how
+  far short of the floor that leaves the budget. Every door that makes a session checkout (a new session, a pinned run,
+  `restoreAbsentCheckout`) runs on the claim loop, as the sweep does. The room is made only once the sweeper is armed,
+  and its look at resting checkouts keeps the sweeper's hour of waiting after a look that found nothing
+  (`resumableSweepWait`). Without a budget, a checkout is made as before.
+- **Resting checkouts under a budget** (owner decision, 2026-11-06). Below a budget's floor, `gcResumableCheckouts`
+  may take a resting session's checkout however recently it was written (`resumableIdle`), oldest last write first.
+  The rest of its rule stands. The control plane must answer that the session is resumable, nothing of the session may
+  be at work on the runner, and no process or mount may be in the checkout. The checkout must have nothing to lose
+  (`checkoutHasNothingToLose`), and all of this is asked again just before it goes. Its branch and base ref stay, and
+  the sweep's 60-second budget holds. The checkout comes back on the session's next claim (`restoreAbsentCheckout`).
+  Without a budget, two weeks unwritten (`resumableCheckoutIdle`) stands.
 - **Self-registered runners:** unchanged. The owner's Keep free setting is the floor.
 
 The channel's stop at the limit stays as the backstop. The runner should rarely reach it, because reclamation starts at
