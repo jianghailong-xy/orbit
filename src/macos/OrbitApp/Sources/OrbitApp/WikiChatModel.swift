@@ -288,9 +288,10 @@ final class WikiChatModel {
 
     // MARK: the attachments
 
-    /// The reader moved: the page chip follows them until the message goes (design §4.2).
+    /// The reader moved: the page chip follows them until the message goes (design §4.2) — into another space too,
+    /// whose chats the panel then shows, since a chat belongs to one space (design §4.1).
     func follow(spaceID: String, page: WikiChatLogic.Page?) {
-        guard self.spaceID == nil || self.spaceID == spaceID else { return }
+        enter(spaceID: spaceID)
         attachments = WikiChatLogic.attach(attachments, .follow(page))
     }
 

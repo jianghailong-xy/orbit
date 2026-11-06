@@ -62,8 +62,6 @@ struct WikiDocPage: View {
     var seen: Double = 0
     /// Each section's sentences its latest rewrite added, by section key: the green line under them (board 42 ⑤).
     var added: [String: Set<String>] = [:]
-    /// The room the wiki chat's round button keeps clear at the page's foot (design §3: 88).
-    var footClearance: CGFloat = 0
     /// The sentences the chat's composer quotes, by id: lit on the page while the quote is there (board 42 ⑤).
     var quoted: Set<String> = []
 
@@ -73,8 +71,8 @@ struct WikiDocPage: View {
     @State private var allFootnotes = false
     @State private var expanded: Set<String> = []
     @State private var nextMark = 0
-    /// The section headings on screen, and the one the page counts the reader in.
-    @State private var headingsInView: Set<String> = []
+    /// Where the section headings on screen stand, and the section the page counts the reader in.
+    @State private var headingTops = WikiDocHeadingTops()
     @State private var sectionShown: String?
 
     private var notes: [Int: WikiDocFootnote] {
@@ -96,14 +94,10 @@ struct WikiDocPage: View {
                 ForEach(WikiDocLogic.Section.allCases, id: \.self) { section in
                     self.section(section, proxy: proxy)
                 }
-                if footClearance > 0 {
-                    Color.clear
-                        .frame(height: footClearance)
-                        .listRowSeparator(.hidden)
-                        .accessibilityHidden(true)
-                }
             }
             .listStyle(.plain)
+            // Back on the page from one pushed over it: the chat's page chip is this document's section again.
+            .onAppear { if let shown = sectionShown { actions.sectionInView(shown) } }
             .task(id: section) {
                 guard let section else { return }
                 try? await Task.sleep(nanoseconds: 300_000_000)
@@ -168,13 +162,19 @@ struct WikiDocPage: View {
         }
     }
 
-    /// The section the reader is in: the first heading on screen, in the text's order — else the last one seen.
-    private func headingMoved(_ key: String, inView: Bool) {
-        if inView { headingsInView.insert(key) } else { headingsInView.remove(key) }
-        guard let first = (doc.sections ?? []).first(where: { headingsInView.contains($0.key) })?.key,
-              first != sectionShown else { return }
-        sectionShown = first
-        actions.sectionInView(first)
+    /// The section the reader is in (design §4.2: the nearest section heading by scroll position): the lowest heading
+    /// above the reading line near the top; with none above it, the one already counted — or, at the document's top,
+    /// its first section.
+    private func headingMoved(_ key: String, top: CGFloat?) {
+        headingTops.tops[key] = top
+        let line: CGFloat = 220
+        let above = headingTops.tops.filter { $0.value <= line }.max { $0.value < $1.value }?.key
+        let first = (doc.sections ?? []).first?.key
+        let below = headingTops.tops.min { $0.value < $1.value }?.key
+        guard let current = above ?? (sectionShown == nil || below == first ? below : sectionShown),
+              current != sectionShown else { return }
+        sectionShown = current
+        actions.sectionInView(current)
     }
 
     @ViewBuilder
@@ -214,8 +214,10 @@ struct WikiDocPage: View {
             ForEach(doc.sections ?? [], id: \.key) { section in
                 sectionHeading(section)
                     .id("sec-\(section.key)")
-                    .onAppear { headingMoved(section.key, inView: true) }
-                    .onDisappear { headingMoved(section.key, inView: false) }
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { top in
+                        headingMoved(section.key, top: top)
+                    }
+                    .onDisappear { headingMoved(section.key, top: nil) }
                 if section.written == false {
                     Text(WikiDocCopy.sectionNotWritten)
                         .font(.orbitSubtext)
@@ -676,6 +678,12 @@ struct WikiDocPage: View {
         }
         .buttonStyle(.plain)
     }
+}
+
+/// Where a document's section headings stand on screen, kept out of the page's state so a scroll redraws nothing: only
+/// the section it counts the reader in is state.
+private final class WikiDocHeadingTops {
+    var tops: [String: CGFloat] = [:]
 }
 
 /// Ask on a paragraph (wiki chat design §9, board 42 ⑤): a long press — a right click on a Mac — offers Ask, which

@@ -1463,8 +1463,9 @@ final class AppModel {
     /// by depending on a view unmounting.
     func syncConsoleFocus() {
         // The console on top of the stack, else the wiki chat a panel beside a wiki page shows: it streams
-        // while the panel is open, as a console on top would (`WikiChatHost` re-syncs as the panel moves).
-        let id = focusedConsoleSessionID ?? wikiChat?.focusedSessionID
+        // while the panel is open on the Wiki, as a console on top would (`WikiChatHost` re-syncs as the
+        // panel moves, and as the Wiki comes and goes).
+        let id = focusedConsoleSessionID ?? (selectedSection == .wiki ? wikiChat?.focusedSessionID : nil)
         // Every focused console needs an exact-detail fallback, not only cold deep links. If an
         // Open row is filed or purged on another client, the next list refresh removes it; retaining
         // this last loaded snapshot makes `needsExactRefresh` detect that absence and GET the new

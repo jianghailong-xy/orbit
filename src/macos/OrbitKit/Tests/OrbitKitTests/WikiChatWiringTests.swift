@@ -102,9 +102,11 @@ final class WikiChatWiringTests: XCTestCase {
                           "case .updated:", "Image(systemName: \"checkmark\")", ".background(Color.green, in: Circle())"],
                     "the button's four looks")
         XCTAssertTrue(fab.contains(".accessibilityLabel(look.label)"), "its words are the web's hover")
-        // The document's foot keeps 88 clear for it.
-        let screens = code(try source("Views/WikiDocScreens.swift"))
-        XCTAssertTrue(screens.contains("footClearance: model.wikiChat == nil ? 0 : CGFloat(WikiChatLogic.Fab.footClearance)"))
+        // Every page's foot keeps 88 clear for it, the pages inset rather than the button moved.
+        assertOrder(host, ["let clear = content.safeAreaInset(edge: .bottom, spacing: 0) {",
+                           "Color.clear.frame(height: shown ? CGFloat(WikiChatLogic.Fab.footClearance) : 0)",
+                           "return presented(clear, chat: chat, space: space)", ".overlay(alignment: .bottomTrailing) {"],
+                    "the foot kept clear")
     }
 
     // MARK: the conversation
@@ -127,7 +129,7 @@ final class WikiChatWiringTests: XCTestCase {
         }
         // The panel's chat streams while it shows: the console focus falls back to it.
         let model = code(try source("AppModel.swift"))
-        XCTAssertTrue(model.contains("let id = focusedConsoleSessionID ?? wikiChat?.focusedSessionID"))
+        XCTAssertTrue(model.contains("let id = focusedConsoleSessionID ?? (selectedSection == .wiki ? wikiChat?.focusedSessionID : nil)"))
         XCTAssertTrue(model.contains("wikiChat = WikiChatModel(baseURL: url, tokenStore: tokenStore)"))
         let arm = try slice(model, from: "case .wikiChanged:", to: "case .providerChanged:")
         XCTAssertTrue(arm.contains("wikiChat?.nudge()"), "a card made, replaced or pressed is read again")

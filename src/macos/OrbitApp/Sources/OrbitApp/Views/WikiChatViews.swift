@@ -143,7 +143,12 @@ struct WikiChatHost: ViewModifier {
     private func hosted(_ content: Content, chat: WikiChatModel, space: WikiSpace) -> some View {
         let shown = WikiChatLogic.fabShown(settingsOnTop: model.nav.wikiSettingsOnTop, hasSpace: true)
         let inset = CGFloat(compact ? WikiChatLogic.Fab.phoneInset : WikiChatLogic.Fab.wideInset)
-        return presented(content, chat: chat, space: space)
+        // Every page's foot keeps 88 clear for the button (design §3, the web's `.wk-page` padding), so its last line
+        // scrolls above it. A safe-area inset on the pages inside, not on the button's own overlay, which stays where it is.
+        let clear = content.safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear.frame(height: shown ? CGFloat(WikiChatLogic.Fab.footClearance) : 0)
+        }
+        return presented(clear, chat: chat, space: space)
             .overlay(alignment: .bottomTrailing) {
                 if shown && !chat.presented {
                     WikiChatFab(look: chat.fab(space.id),
@@ -167,8 +172,10 @@ struct WikiChatHost: ViewModifier {
             }
             .animation(.snappy(duration: 0.25), value: chat.presented)
             .task(id: space.id) { await chat.load(spaceID: space.id) }
-            // The panel's chat streams while it is open (`AppModel.syncConsoleFocus`).
+            // The panel's chat streams while it is open on the Wiki (`AppModel.syncConsoleFocus`).
             .onChange(of: chat.focusedSessionID) { _, _ in model.syncConsoleFocus() }
+            .onAppear { model.syncConsoleFocus() }
+            .onDisappear { model.syncConsoleFocus() }
             .onChange(of: compact, initial: true) { _, sheet in chat.asSheet = sheet }
             // The page chip follows the reader (design §4.2): an entry, a plan's document — a document's page
             // follows its own sections — and nothing on the Wiki's other pages.
@@ -206,7 +213,7 @@ struct WikiChatHost: ViewModifier {
     /// The panel: a sheet whose half height leaves the page behind it scrollable on a phone (`presentationDetents`,
     /// `presentationBackgroundInteraction`, design §9), the trailing column beside the page elsewhere.
     @ViewBuilder
-    private func presented(_ content: Content, chat: WikiChatModel, space: WikiSpace) -> some View {
+    private func presented<Page: View>(_ content: Page, chat: WikiChatModel, space: WikiSpace) -> some View {
         let panel = WikiChatPanel(chat: chat, space: space, compact: compact)
         #if os(iOS)
         if compact {
