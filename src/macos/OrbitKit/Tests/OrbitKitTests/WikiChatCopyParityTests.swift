@@ -9,10 +9,12 @@ import XCTest
 /// - every sentence of the contract's `chat.copy` (the shared `WIKI_CHAT_COPY`, which `wikiChatContract.spec.ts`
 ///   holds to the contract and the web lib takes its words from) is in `WikiChatCopy.contract` under its key, word
 ///   for word, and every key there is one of the contract's;
-/// - every `WIKI_CHAT_*` string the web lib exports — its own, and the ones it takes from the shared copy — is in
-///   `WikiChatCopy.web` under its name, word for word, and every name there is one the web lib still exports;
-/// - the web lib's sentence-making functions (`wikiChatRemove`, `wikiChatCapped`, `wikiChatOffline`) say what
-///   `WikiChatCopy`'s do.
+/// - every `WIKI_*` string the web lib exports — its own, and the ones it takes from the shared copy — is in
+///   `WikiChatCopy.web` under its name, word for word, and every name there is one the web lib still exports; an
+///   export in a form this test cannot read is a failure too, never passed over;
+/// - the web lib's sentence-making functions (`wikiChatRemove`, `wikiChatCapped`, `wikiChatOffline`,
+///   `wikiChatPressError`, `wikiSeeChangesTitle`, `wikiSeeChangesCause`, `wikiEarlierChanges`) and the card face's
+///   row labels say what `WikiChatCopy`'s do.
 final class WikiChatCopyParityTests: XCTestCase {
 
     private static let lib = "src/web/src/lib/wikiChat.ts"
@@ -81,14 +83,15 @@ final class WikiChatCopyParityTests: XCTestCase {
         return out
     }
 
-    /// Every `export const WIKI_CHAT_<NAME> = …;` of the web lib whose value is a sentence: a string literal, or one
-    /// of the shared copy's (`fab.idle`, `panel.newChat` …), resolved through the contract.
+    /// Every `export const WIKI_<NAME> = …;` of the web lib whose value is a sentence: a string literal, or one of the
+    /// shared copy's (`fab.idle`, `panel.newChat`, `WIKI_CHAT_COPY.card.sources` …), resolved through the contract.
     private func webSentences() throws -> [String: String] {
         let source = try webLib()
         let contract = try contractCopy()
         var found: [String: String] = [:]
-        let literal = try NSRegularExpression(pattern: #"export const (WIKI_CHAT_[A-Z_]+) = '((?:[^'\\]|\\.)*)';"#)
-        let alias = try NSRegularExpression(pattern: #"export const (WIKI_CHAT_[A-Z_]+) = (fab|panel|card|actions|result|notes)\.(\w+);"#)
+        let literal = try NSRegularExpression(pattern: #"export const (WIKI_[A-Z_]+) = '((?:[^'\\]|\\.)*)';"#)
+        let alias = try NSRegularExpression(
+            pattern: #"export const (WIKI_[A-Z_]+) = (?:WIKI_CHAT_COPY\.)?(fab|panel|card|actions|result|notes)\.(\w+);"#)
         let range = NSRange(source.startIndex..., in: source)
         for match in literal.matches(in: source, range: range) {
             let name = String(source[Range(match.range(at: 1), in: source)!])
@@ -103,8 +106,12 @@ final class WikiChatCopyParityTests: XCTestCase {
         return found
     }
 
-    /// The web lib's names that are not sentences: the address keys (`?chat=`, `?chat=new`).
-    private static let notSentences: Set<String> = ["WIKI_CHAT_PARAM", "WIKI_CHAT_NEW_PARAM"]
+    /// The web lib's names that are not sentences: the address keys (`?chat=`, `?chat=new`), and the mark the panel
+    /// opens on for the first card that needs the owner.
+    private static let notSentences: Set<String> = ["WIKI_CHAT_PARAM", "WIKI_CHAT_NEW_PARAM", "WIKI_CHAT_FOCUS_NEEDS_YOU"]
+
+    /// The web lib's `WIKI_*` exports that are no string at all: a typed table or an object of numbers.
+    private static let notStrings: Set<String> = ["WIKI_CHAT_WIDTH", "WIKI_CHAT_NO_ATTACHMENTS", "WIKI_CHAT_ACTION_PRESS"]
 
     // MARK: the contract's copy
 
@@ -140,6 +147,24 @@ final class WikiChatCopyParityTests: XCTestCase {
         }
     }
 
+    /// Every `WIKI_*` the web lib exports is read above — a literal or an alias of the shared copy — or is named here as
+    /// no string: a sentence exported in another form (a template, a call) fails rather than slipping past the mirror.
+    func testEveryWebLibExportIsRead() throws {
+        let source = try webLib()
+        let web = try webSentences()
+        let export = try NSRegularExpression(pattern: #"export const (WIKI_[A-Z_]+)\b"#)
+        let names = export.matches(in: source, range: NSRange(source.startIndex..., in: source)).map {
+            String(source[Range($0.range(at: 1), in: source)!])
+        }
+        XCTAssertGreaterThanOrEqual(names.count, 40, "\(Self.lib) lost its exports")
+        for name in names where !Self.notStrings.contains(name) {
+            XCTAssertNotNil(web[name], "\(name) (\(Self.lib)) is exported in a form this test does not read: mirror it in WikiChatCopy.web and read it here")
+        }
+        for name in Self.notStrings {
+            XCTAssertTrue(names.contains(name), "\(name) is no longer exported by \(Self.lib): take it off notStrings")
+        }
+    }
+
     /// The address keys are the web's too: a chat not started yet is `new`.
     func testTheNewChatIsTheWebsNew() throws {
         let web = try webSentences()
@@ -159,6 +184,32 @@ final class WikiChatCopyParityTests: XCTestCase {
         XCTAssertTrue(source.contains("export const wikiChatOffline = (machine: string): string => fill(panel.offline, { machine });"),
                       "\(Self.lib) no longer fills panel.offline with the machine")
         XCTAssertEqual(WikiChatCopy.offline("HPC"), "HPC is offline. The chat waits for it to come back.")
+        // A press refused, failed at the server, or lost (`wikiChatPressError`).
+        XCTAssertTrue(source.contains("if (error.status >= 500) return `The server couldn’t take the press (${error.status}). Try again in a moment.`;"),
+                      "\(Self.lib) no longer says a server's failed press this way")
+        XCTAssertEqual(WikiChatCopy.pressServerFailed(502), "The server couldn’t take the press (502). Try again in a moment.")
+        XCTAssertTrue(source.contains("return `${WIKI_CHAT_PRESS_FAILED}: ${error.message.trim()}`;"),
+                      "\(Self.lib) no longer puts the server's reason after The card couldn’t be pressed")
+        XCTAssertEqual(WikiChatCopy.pressRefused("It changed since"), "The card couldn’t be pressed: It changed since")
+        XCTAssertTrue(source.contains("return 'The press didn’t reach the server. Check the connection, then try again.';"),
+                      "\(Self.lib) no longer says a lost press this way")
+        XCTAssertEqual(WikiChatCopy.pressUnsent, "The press didn’t reach the server. Check the connection, then try again.")
+        // See changes' title, its fold and the line over a write.
+        XCTAssertTrue(source.contains("export const wikiSeeChangesTitle = (where: string): string => `${WIKI_CHAT_COPY.actions.see_changes} · ${where}`;"),
+                      "\(Self.lib) no longer titles See changes with the section")
+        XCTAssertEqual(WikiChatCopy.seeChangesTitle("3.1 §3"), "See changes · 3.1 §3")
+        XCTAssertTrue(source.contains("export const wikiEarlierChanges = (n: number): string => `Earlier changes (${n})`;"),
+                      "\(Self.lib) no longer folds the earlier versions this way")
+        XCTAssertEqual(WikiChatCopy.earlierChanges(2), "Earlier changes (2)")
+        XCTAssertTrue(source.contains("`${wikiDocVersionHeading(version.reason)} · ${wikiDocChanged(version.changed)}`"),
+                      "\(Self.lib) no longer heads a write with its reason and its count")
+        // The card face's own row labels, beside its kind's first field.
+        XCTAssertTrue(source.contains("rows.push({ label: 'Why', value: view.rationale.trim() });"),
+                      "\(Self.lib) no longer labels the agent's why")
+        XCTAssertEqual(WikiChatCopy.faceWhy, "Why")
+        XCTAssertTrue(source.contains("rows.push({ label: 'Summary', value: textOf(draft.summary)! });"),
+                      "\(Self.lib) no longer labels a draft's summary")
+        XCTAssertEqual(WikiChatCopy.faceSummary, "Summary")
     }
 
     /// The words the web lib's own test pins (`lib/wikiChat.test.ts`, "the words"), said here.

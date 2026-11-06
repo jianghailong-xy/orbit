@@ -143,10 +143,13 @@ public struct WikiChatDraftOp: Codable, Equatable, Sendable {
     public var op: WikiChatOpKind
     /// The new entry's kind, for an add.
     public var kind: String?
+    /// Once pressed: its decision in the changeset the press recorded (`pending` for a challenge Review answers).
+    public var decision: String?
 
-    public init(op: WikiChatOpKind, kind: String? = nil) {
+    public init(op: WikiChatOpKind, kind: String? = nil, decision: String? = nil) {
         self.op = op
         self.kind = kind
+        self.decision = decision
     }
 }
 

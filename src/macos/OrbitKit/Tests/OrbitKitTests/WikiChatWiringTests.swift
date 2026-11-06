@@ -181,50 +181,106 @@ final class WikiChatWiringTests: XCTestCase {
     }
 
     /// A drafting call's card is drawn wherever the transcript shows the call — the panel, the session page — read
-    /// off its answer (contract `chat.drafts.toolResult`), and its result fetched whole like `session_create`'s.
+    /// off its answer (contract `chat.drafts.toolResult`), a shell's `orbit wiki draft …` too, and its result fetched
+    /// whole like `session_create`'s.
     func testACardIsDrawnFromTheDraftingCallsAnswer() throws {
         let cards = code(try source("Views/Console/ToolCards.swift"))
-        XCTAssertTrue(cards.contains("return WikiChatLogic.draftID(toolName: card.name, result: result)"))
-        XCTAssertTrue(cards.contains("card.name == \"mcp__orbit__session_create\" || WikiChatLogic.isDraftTool(card.name)"))
+        XCTAssertTrue(cards.contains("return WikiChatLogic.draftID(toolName: card.name, command: card.input[\"command\"]?.stringValue, result: result)"))
+        XCTAssertTrue(cards.contains("|| WikiChatLogic.isDraftingCall(card.name, command: card.input[\"command\"]?.stringValue)"))
         let body = try slice(cards, from: "if let payload = sessionCreate {", to: "} else if showsHeader {")
         assertOrder(body, ["SessionCreateCardView(payload: payload)", "} else if let draft = wikiDraftID {", "WikiDraftCardSlot(draftID: draft)"],
                     "the card's place in a tool call's row")
+    }
+
+    /// The card is the web's (`WikiDraftCard`, C9): its look and face are `WikiChatLogic.cardLook` and `cardFace` —
+    /// the status line and its note, an In Review card's note opening Review, what it is about, while open the amend's
+    /// lines, the rows, Sources, Rewrites and Similar — then a draft's own press full width over the rest, what a press
+    /// that did not go said, and the line under an applied card with its own buttons.
+    func testTheCardIsTheWebsCard() throws {
         let views = code(try source("Views/WikiChatViews.swift"))
         let card = try slice(views, from: "struct WikiDraftCardView: View {", to: "struct WikiDraftEditForm: View {")
-        // Its body: the state's line, what it is about, its fields, its buttons, then the line its rewrite reads.
-        assertOrder(card, ["stateLine", "Text(WikiChatLogic.cardHeadline(card))", "fields", "buttons", "resultLine(rewrite)"],
-                    "the card's parts, board 42 ⑤")
-        assertOrder(card, ["Text(WikiChatLogic.cardTitle(card.state, label: card.label).uppercased())",
-                           "WikiChatCopy.cardSources", "WikiChatCopy.cardRewrites",
-                           "let presses: [WikiChatAction] = [.apply, .rewrite, .applyRebuild, .redo]",
+        assertOrder(card, ["let look = WikiChatLogic.cardLook(card)", "let face = WikiChatLogic.cardFace(card)",
+                           "stateLine(look)", "if let note = look.note {", "if look.inReview {", "Button(note) { open(.review) }",
+                           "if card.tainted {", "if let heading = face.heading {", "if isOpen {", "fields(face)",
+                           "buttons(look)", "if let failed {", "if let result = WikiChatLogic.resultLook(card) {",
+                           "resultLine(result, actions: look.rewriteActions)"], "the card's parts, board 42 ⑤")
+        assertOrder(card, ["Text(look.title.uppercased())", "ForEach(Array(face.diff.enumerated()), id: \\.offset)",
+                           "let similar = card.state == .draft ? Array(card.similar.prefix(3)) : []",
+                           "ForEach(Array(face.rows.enumerated()), id: \\.offset)", "Text(WikiChatCopy.cardSources)",
+                           "Text(WikiChatCopy.cardRewrites)", "WikiDraftCardTarget.section(doc: $0.doc, key: $0.key)",
+                           "Text(WikiChatCopy.similar)", "WikiDraftCardTarget.entry($0.id)",
+                           "let primary: WikiChatAction? = card.state == .draft ? look.actions.first : nil",
                            ".buttonStyle(.borderedProminent)", "HStack(spacing: 8) {", ".buttonStyle(.bordered)\n",
-                           "Text(WikiChatLogic.resultLine(rewrite.card))"], "the card's words and buttons, board 42 ⑤")
-        XCTAssertTrue(card.contains("private var actions: [WikiChatAction] { WikiChatLogic.cardActions(card.card) }"))
-        let slot = try slice(views, from: "struct WikiDraftCardSlot: View {", to: "struct WikiDraftCardView: View {")
+                           "Text(result.line)", "if action == .seeChanges {"], "the card's words and buttons, board 42 ⑤")
+        let slot = try slice(views, from: "struct WikiDraftCardSlot: View {", to: "enum WikiDraftCardTarget: Equatable {")
+        assertOrder(slot, ["failed: chat.pressFailed(card)", "} else if model.wikiChat?.isUnread(draftID) == true {",
+                           "Text(WikiChatCopy.cardUnread)"], "the card, or why it cannot be drawn")
         assertOrder(slot, ["case .apply, .rewrite, .applyRebuild:", "await chat.press(card, .apply)",
                            "case .discard:", "await chat.press(card, .discard)", "case .undo:", "await chat.press(card, .undo)",
                            "case .tryAgain:", "await chat.press(card, .retry)", "case .redo:",
                            "console.send(overrideText: WikiChatCopy.cardRedoMessage, queueForNextTurn: true)",
-                           "case .seeChanges:"], "a card's presses")
+                           "case .seeChanges:", "WikiChatSeeChanges.of(card, spaceID: space)",
+                           "chat.seeChanges = target\n            chat.markSeen(card)"],
+                    "a card's presses")
+        assertOrder(slot, ["case .section(let doc, let key): leave { go(.wikiDoc(slug: doc, section: key)) }",
+                           "case .entry(let id):             leave { go(.wikiEntry(entryID: id)) }",
+                           "case .review:                    leave { go(.wikiReview) }"], "what a card's links open")
+        // A press that did not go is said in its card, in the web's words.
+        let model = code(try source("WikiChatModel.swift"))
+        XCTAssertTrue(model.contains("if press != .seen { pressFailures[key] = WikiChatLogic.pressError(error) }"))
+        XCTAssertTrue(model.contains("return WikiChatLogic.pressError(error)"), "Edit's refusal")
+        XCTAssertTrue(model.contains("guard WikiChatLogic.needsSeen(card) else { return }"))
+        // Edit sends only what changed, under the web's words.
+        let edit = try slice(views, from: "struct WikiDraftEditForm: View {", to: "struct WikiSeeChangesSheet: View {")
+        assertOrder(edit, ["Text(WikiChatCopy.editNote)", "TextField(WikiChatCopy.editTitleField,", "TextField(WikiChatCopy.editLine,",
+                           ".navigationTitle(WikiChatCopy.editTitle)", "Button(WikiChatCopy.cancel) { dismiss() }",
+                           "Button(WikiChatCopy.actionApply) {", ".disabled(saving || edits.isEmpty || blank)"], "Edit")
+        XCTAssertTrue(edit.contains("private var edits: [WikiChatEditRequest.Op] { WikiChatLogic.editOps(card, words: words) }"))
     }
 
     /// A section written since the reader last looked wears Updated beside its title, its new sentences a green
-    /// line (board 42 ⑤, third phone); See changes compares them sentence by sentence.
+    /// line (board 42 ⑤, third phone), and Updated opens See changes, as the web's does; See changes is the web's.
     func testUpdatedIsBesideTheSectionAndSeeChangesComparesItsSentences() throws {
         let page = code(try source("Views/WikiDocView.swift"))
         let heading = try slice(page, from: "private func sectionHeading(_ section: WikiDocSection) -> some View {", to: "private func blockView(")
         assertOrder(heading, ["Text(section.title)", "if WikiChatLogic.sectionUpdated(section.change, seen: seen) {",
+                              "if let seeChanges = actions.seeChanges { present { seeChanges(section) } }",
                               "Text(WikiChatCopy.sectionUpdated)", "if section.stale == true {"], "a section's heading")
         XCTAssertTrue(page.contains("if added[section.key]?.contains(WikiDocPage.sentenceKey(sentence.text)) == true {"))
+        // The sections an open card would rewrite are marked before the press (board 42 ②).
+        assertOrder(page, ["sectionHeading(section)", "if would.contains(WikiChatLogic.sectionID(doc: doc.slug, key: section.key)) {",
+                           "Label(WikiChatCopy.cardWouldRewrite, systemImage: \"pencil.line\")"], "a section an open card would rewrite")
         let screens = code(try source("Views/WikiDocScreens.swift"))
         assertOrder(screens, ["let key = WikiChatLogic.seenKey(space: slug, doc: address.slug)",
                               "seen = stored > 0 ? stored : now", "UserDefaults.standard.set(now, forKey: key)"],
                     "the document's stamp: the look before this one, else this visit's start")
+        XCTAssertTrue(screens.contains(".onDisappear { leaveSeen(wiki) }"), "leaving moves the stamp, as the web's page does")
+        XCTAssertTrue(screens.contains("would: model.wikiChat?.wouldRewrite ?? [])"))
+        XCTAssertTrue(screens.contains("docSlug: doc.slug, sectionKey: section.key, place: place, versionID: section.change?.versionId)], draftID: nil)"),
+                      "Updated opens the write it names")
         let views = code(try source("Views/WikiChatViews.swift"))
-        let changes = try slice(views, from: "struct WikiSeeChangesSheet: View {", to: "private func sentence(")
-        assertOrder(changes, ["read?.versions.first { $0.id == target.versionID } ?? read?.versions.first",
-                              "version.reason.map(WikiChatLogic.versionHeading)", "WikiChatLogic.changed(version.changed)",
-                              "await chat.loadVersions(", "chat.markSeen(card)"], "See changes")
+        let changes = try slice(views, from: "private struct WikiSeeChangesSection: View {", to: "private func sentence(")
+        assertOrder(changes, ["WikiChatLogic.seeChanges(", "case .same:", "nothing(WikiChatCopy.seeChangesSame)",
+                              "case .failed:", "nothing(WikiChatCopy.seeChangesFailed)", "case .none:",
+                              "nothing(WikiChatCopy.seeChangesNone)", "case .shown(let current, let earlier):",
+                              "WikiChatCopy.earlierChanges(earlier.count)", "await chat.loadVersions(",
+                              "Text(WikiChatLogic.seeChangesCause(version))", "let rows = WikiChatLogic.changedRows(version.rows)",
+                              "Text(WikiChatCopy.seeChangesSame)"], "See changes")
+        let sheet = try slice(views, from: "struct WikiSeeChangesSheet: View {", to: "private struct WikiSeeChangesSection: View {")
+        assertOrder(sheet, ["WikiChatCopy.seeChangesTitle(target.sections[0].place)", "chat.markSeen(card)"], "See changes' sheet")
+        let model = code(try source("WikiChatModel.swift"))
+        XCTAssertTrue(model.contains("let sections = WikiChatLogic.seeChangesSections(rewrite).compactMap { section -> Section? in"))
+    }
+
+    /// A chat in Trash, or ended and not about to be retried, takes no more messages: the composer's place says so and
+    /// offers a new chat (C8 review, the web's `WIKI_CHAT_ENDED` and `WIKI_CHAT_TRASHED`).
+    func testAnEndedChatSaysSoInsteadOfTheComposer() throws {
+        let views = code(try source("Views/WikiChatViews.swift"))
+        let running = try slice(views, from: "private struct WikiChatRunningBody: View {", to: "private struct WikiChatEndedLine: View {")
+        assertOrder(running, ["if let ended = endedLine(console) {", "WikiChatEndedLine(text: ended) { chat.newChat() }",
+                              "WikiChatComposer(chat: chat, space: space, console: console)",
+                              "WikiChatLogic.endedLine(trashed: trashed, status: session.effectiveRunStatus, retryPending: session.retryPending())"],
+                    "the composer, or the line once the chat ended")
     }
 
     /// W's chat part is one amber line on Activity, after the proposals', opening the chat that holds the rewrite.

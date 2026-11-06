@@ -23,6 +23,8 @@ struct WikiDocActions {
     var openSource: (WikiDocLogic.OpenTarget) -> Void = { _ in }
     /// Ask on a paragraph (wiki chat design §9): its sentences, for the chat's Ask sheet. Nil where there is no chat.
     var ask: ((WikiChatAskRequest) -> Void)? = nil
+    /// Updated beside a section: See changes for its last write (board 42 ③). Nil where there is no chat.
+    var seeChanges: ((WikiDocSection) -> Void)? = nil
     /// The section nearest the top as the reader scrolls: the chat's page chip follows it (design §4.2).
     var sectionInView: (String) -> Void = { _ in }
     /// Fold the wiki chat's sheet away before another sheet opens over the page — a phone shows one sheet at a
@@ -64,6 +66,8 @@ struct WikiDocPage: View {
     var added: [String: Set<String>] = [:]
     /// The sentences the chat's composer quotes, by id: lit on the page while the quote is there (board 42 ⑤).
     var quoted: Set<String> = []
+    /// `<doc>#<key>` of each section an open card of the chat beside the page would rewrite (board 42 ②).
+    var would: Set<String> = []
 
     @State private var openNote: WikiDocOpenNote?
     @State private var openMark: WikiDocOpenMark?
@@ -220,6 +224,14 @@ struct WikiDocPage: View {
                         headingMoved(section.key, top: top)
                     }
                     .onDisappear { headingMoved(section.key, top: nil) }
+                if would.contains(WikiChatLogic.sectionID(doc: doc.slug, key: section.key)) {
+                    // An open card of the chat beside the page would rewrite it: marked before the press (board 42 ②).
+                    Label(WikiChatCopy.cardWouldRewrite, systemImage: "pencil.line")
+                        .font(.orbitMeta.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                        .listRowSeparator(.hidden)
+                        .accessibilityIdentifier("wiki-section-would-rewrite")
+                }
                 if section.written == false {
                     Text(WikiDocCopy.sectionNotWritten)
                         .font(.orbitSubtext)
@@ -387,14 +399,20 @@ struct WikiDocPage: View {
                 .foregroundStyle(.secondary)
             Text(section.title)
             if WikiChatLogic.sectionUpdated(section.change, seen: seen) {
-                // Written since the reader last looked (contract `docs.versions.reads.doc`, board 42 ⑤).
-                Text(WikiChatCopy.sectionUpdated)
-                    .font(.orbitMeta.weight(.semibold))
-                    .foregroundStyle(Color.accentColor)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(Color.accentColor.opacity(0.12), in: Capsule())
-                    .accessibilityIdentifier("wiki-section-updated")
+                // Written since the reader last looked (contract `docs.versions.reads.doc`, board 42 ⑤); See changes
+                // behind it, as the web's Updated opens.
+                Button {
+                    if let seeChanges = actions.seeChanges { present { seeChanges(section) } }
+                } label: {
+                    Text(WikiChatCopy.sectionUpdated)
+                        .font(.orbitMeta.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor.opacity(0.12), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("wiki-section-updated")
             }
             if section.stale == true {
                 Label(WikiDocCopy.rewritePending, systemImage: "arrow.triangle.2.circlepath")

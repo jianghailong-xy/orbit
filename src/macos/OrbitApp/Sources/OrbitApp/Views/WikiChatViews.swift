@@ -187,11 +187,9 @@ struct WikiChatHost: ViewModifier {
             .sheet(item: Binding(get: { chat.presented ? nil : chat.seeChanges }, set: { chat.seeChanges = $0 })) { target in
                 WikiSeeChangesSheet(target: target, chat: chat)
             }
-            .alert(WikiCopy.decideFailed, isPresented: Binding(get: { chat.refusal != nil && !chat.presented },
-                                                               set: { if !$0 { chat.refusal = nil } })) {
+            .alert(chat.refusal ?? "", isPresented: Binding(get: { chat.refusal != nil && !chat.presented },
+                                                            set: { if !$0 { chat.refusal = nil } })) {
                 Button("OK", role: .cancel) { chat.refusal = nil }
-            } message: {
-                Text(chat.refusal ?? "")
             }
     }
 
@@ -270,10 +268,9 @@ struct WikiChatUpdatedPill: View {
                     }
                 }
                 .buttonStyle(.plain)
-                if let section = rewrite.sections.first(where: { $0.result == .updated }), let doc = section.doc, let key = section.key {
+                if let target = WikiChatSeeChanges.of(card, spaceID: space.id) {
                     Button(WikiChatCopy.actionSeeChanges) {
-                        chat.seeChanges = WikiChatSeeChanges(spaceID: space.id, docSlug: doc, sectionKey: key, place: section.place,
-                                                             versionID: section.versionId, draftID: card.id)
+                        chat.seeChanges = target
                     }
                     .buttonStyle(.plain)
                     .font(.orbitSubtext.weight(.semibold))
@@ -321,11 +318,9 @@ struct WikiChatPanel: View {
         .sheet(item: Binding(get: { chat.presented ? chat.seeChanges : nil }, set: { chat.seeChanges = $0 })) { target in
             WikiSeeChangesSheet(target: target, chat: chat)
         }
-        .alert(WikiCopy.decideFailed, isPresented: Binding(get: { chat.refusal != nil && chat.presented },
-                                                           set: { if !$0 { chat.refusal = nil } })) {
+        .alert(chat.refusal ?? "", isPresented: Binding(get: { chat.refusal != nil && chat.presented },
+                                                        set: { if !$0 { chat.refusal = nil } })) {
             Button("OK", role: .cancel) { chat.refusal = nil }
-        } message: {
-            Text(chat.refusal ?? "")
         }
     }
 
@@ -555,7 +550,11 @@ private struct WikiChatRunningBody: View {
             }
             if let console {
                 WikiChatConversation(console: console, registry: model.consoleRegistry)
-                WikiChatComposer(chat: chat, space: space, console: console)
+                if let ended = endedLine(console) {
+                    WikiChatEndedLine(text: ended) { chat.newChat() }
+                } else {
+                    WikiChatComposer(chat: chat, space: space, console: console)
+                }
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -568,6 +567,14 @@ private struct WikiChatRunningBody: View {
     }
 
     private var session: Session? { model.session(id: sessionID) }
+
+    /// Why the chat takes no more messages, once it does not (C8 review): in Trash, or ended and not about to be
+    /// retried. Nil until its record is read.
+    private func endedLine(_ console: ConsoleModel) -> String? {
+        let trashed = session?.deletedAt != nil || console.worktree.detail?.lifecycleState == .trash
+        guard let session else { return trashed ? WikiChatCopy.trashed : nil }
+        return WikiChatLogic.endedLine(trashed: trashed, status: session.effectiveRunStatus, retryPending: session.retryPending())
+    }
 
     /// A runner's entry in one of the workspaces' runner maps, whichever spelling of its id the map keeps.
     private func runner<T>(_ map: [String: T]?, _ id: String?) -> T? {
@@ -587,6 +594,32 @@ private struct WikiChatRunningBody: View {
     private var offlineMachine: String? {
         guard runner(model.agents?.runnerOnline, session?.assignedRunnerId) == false else { return nil }
         return runner(model.agents?.runnerNames, session?.assignedRunnerId)
+    }
+}
+
+/// The composer's place once its chat takes no more messages: why, and a new chat.
+private struct WikiChatEndedLine: View {
+    let text: String
+    let newChat: () -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(text)
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button(action: newChat) {
+                Label(WikiChatCopy.newChat, systemImage: "plus")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .fixedSize()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("wiki-chat-ended")
     }
 }
 
@@ -873,18 +906,25 @@ struct WikiDraftCardSlot: View {
         Group {
             if let chat = model.wikiChat, let card = chat.card(draftID) {
                 WikiDraftCardView(card: card, busy: chat.pressing.contains(PublicID.storageKey(card.id)),
-                                  focused: chat.focusCard == PublicID.storageKey(card.id)) { action in
-                    act(action, card: card, chat: chat)
-                }
+                                  focused: chat.focusCard == PublicID.storageKey(card.id), failed: chat.pressFailed(card),
+                                  act: { action in act(action, card: card, chat: chat) },
+                                  open: { target in open(target) })
                 .onAppear { if inPanel && chat.presented { chat.markSeen(card) } }
                 .onChange(of: card.rewrite?.result) { _, _ in if inPanel && chat.presented { chat.markSeen(card) } }
+            } else if model.wikiChat?.isUnread(draftID) == true {
+                // The call stands; its card cannot be read now.
+                Text(WikiChatCopy.cardUnread)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .accessibilityIdentifier("wiki-chat-card-unread")
             } else {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text(WikiChatCopy.cardDraft.replacingOccurrences(of: " · {label}", with: ""))
-                        .font(.orbitLabel)
-                        .foregroundStyle(.secondary)
-                }
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .task(id: draftID) {
@@ -917,18 +957,37 @@ struct WikiDraftCardSlot: View {
                 Task { await console.send(overrideText: WikiChatCopy.cardRedoMessage, queueForNextTurn: true) }
             }
         case .seeChanges:
-            guard let rewrite = card.rewrite,
-                  let section = rewrite.sections.first(where: { $0.result == .updated }) ?? rewrite.sections.first,
-                  let doc = section.doc, let key = section.key, let space = model.wiki?.currentSpace else { return }
-            chat.seeChanges = WikiChatSeeChanges(spaceID: space.id, docSlug: doc, sectionKey: key, place: section.place,
-                                                 versionID: section.versionId, draftID: card.id)
+            // Each section the rewrite wrote or read the same; opening it marks the rewrite seen.
+            guard let space = chat.spaceID ?? model.wiki?.currentSpace?.id,
+                  let target = WikiChatSeeChanges.of(card, spaceID: space) else { return }
+            chat.seeChanges = target
+            chat.markSeen(card)
         case .openEntry:
             guard let entry = card.ops.compactMap({ $0.entryId ?? $0.entry?["id"]?.stringValue }).first else { return }
-            leave { model.openWikiEntry(entry) }
+            leave { go(.wikiEntry(entryID: entry)) }
         case .openInPlan:
-            leave { model.selectedSection = .wiki; model.nav.path = [.wikiPlan(version: nil)] }
+            leave { go(.wikiPlan(version: nil)) }
         case .settings:
-            leave { model.selectedSection = .wiki; model.nav.path = [.wikiSettings] }
+            leave { go(.wikiSettings) }
+        }
+    }
+
+    /// A section the press rewrites, an entry it may duplicate, or Review for an In Review card.
+    private func open(_ target: WikiDraftCardTarget) {
+        switch target {
+        case .section(let doc, let key): leave { go(.wikiDoc(slug: doc, section: key)) }
+        case .entry(let id):             leave { go(.wikiEntry(entryID: id)) }
+        case .review:                    leave { go(.wikiReview) }
+        }
+    }
+
+    /// Beside the chat in the panel — the page under it moves on; from a session page, the Wiki at that page.
+    private func go(_ node: NavNode) {
+        if inPanel {
+            model.push(node)
+        } else {
+            model.selectedSection = .wiki
+            model.nav.path = [node]
         }
     }
 
@@ -945,135 +1004,192 @@ struct WikiDraftCardSlot: View {
     }
 }
 
-/// One card (board 42 ⑤, second phone): its state's line, what it is about, its fields, its sources and the sections it
-/// rewrites — then its buttons, full width with the first on top — and, once applied, the line its rewrite reads.
+/// Where a card's links go: a section its press rewrites, an entry it may duplicate, or Review for an In Review card.
+enum WikiDraftCardTarget: Equatable {
+    case section(doc: String, key: String)
+    case entry(String)
+    case review
+}
+
+/// One card (board 42 ⑤, second phone; the web's `WikiDraftCard`): its state's line and note, what it is about, and —
+/// while it is open — an amend's red and green lines, the entry's first field and the why, its sources, the sections
+/// it rewrites and the entries it may duplicate; then its buttons, a draft's own press full width on top; what a press
+/// that did not go said; and, once applied, the line its rewrite reads with Settings, Try again or See changes.
 struct WikiDraftCardView: View {
     let card: WikiChatDraftView
     var busy = false
     var focused = false
+    /// What its last press that did not go said (`wikiChatPressError`).
+    var failed: String?
     let act: (WikiChatAction) -> Void
+    var open: (WikiDraftCardTarget) -> Void = { _ in }
 
-    private var actions: [WikiChatAction] { WikiChatLogic.cardActions(card.card) }
-    private var quiet: Bool { card.state != .draft && card.state != .applied && card.state != .changed }
+    private var isOpen: Bool { card.state == .draft || card.state == .changed }
 
     var body: some View {
+        let look = WikiChatLogic.cardLook(card)
+        let face = WikiChatLogic.cardFace(card)
         VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 8) {
-                stateLine
+                stateLine(look)
+                if let note = look.note {
+                    if look.inReview {
+                        // Its press raised a flag the owner answers in Review: the note opens it there.
+                        Button(note) { open(.review) }
+                            .buttonStyle(.plain)
+                            .font(.orbitLabel)
+                            .foregroundStyle(Color.accentColor)
+                            .accessibilityIdentifier("wiki-chat-card-in-review")
+                    } else {
+                        Text(note)
+                            .font(.orbitLabel)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 if card.tainted {
                     (Text(WikiChatCopy.cardWeb).bold() + Text(" · " + WikiChatCopy.cardWebNote))
                         .font(.orbitLabel)
                         .foregroundStyle(Color.orange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Text(WikiChatLogic.cardHeadline(card))
-                    .font(.orbitProse.weight(.semibold))
-                    .foregroundStyle(quiet ? Color.secondary : Color.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if card.state == .replaced {
-                    Text(WikiChatCopy.cardReplacedNote)
+                if let heading = face.heading {
+                    Text(heading)
+                        .font(.orbitProse.weight(.semibold))
+                        .foregroundStyle(isOpen ? Color.primary : Color.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if isOpen {
+                    fields(face)
+                }
+                if !look.actions.isEmpty {
+                    buttons(look)
+                }
+                if let failed {
+                    Text(failed)
                         .font(.orbitLabel)
-                        .foregroundStyle(.secondary)
-                }
-                if card.state == .draft || card.state == .changed {
-                    fields
-                }
-                if !actions.isEmpty {
-                    buttons
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("wiki-chat-card-failed")
                 }
             }
             .padding(12)
-            .background(Color.primary.opacity(quiet ? 0.03 : 0.0), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(Color.primary.opacity(look.quiet ? 0.03 : 0.0), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(focused ? Color.accentColor : Color.secondary.opacity(0.28), lineWidth: focused ? 1.5 : 1)
             }
-            if card.state == .applied, let rewrite = card.rewrite {
-                resultLine(rewrite)
+            if let result = WikiChatLogic.resultLook(card) {
+                resultLine(result, actions: look.rewriteActions)
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("wiki-chat-card")
     }
 
-    private var stateLine: some View {
-        let tone = WikiChatLogic.tone(card.state)
-        let color: Color = tone == .accent ? .accentColor : tone == .amber ? .orange : tone == .green ? .green : .secondary
+    private func stateLine(_ look: WikiChatLogic.CardLook) -> some View {
+        let color: Color = look.tone == .accent ? .accentColor : look.tone == .amber ? .orange : look.tone == .green ? .green : .secondary
         return HStack(spacing: 4) {
-            if card.state == .applied {
+            if card.state == .applied && !look.inReview {
                 Image(systemName: "checkmark")
                     .font(.orbitMeta.weight(.bold))
             }
-            Text(WikiChatLogic.cardTitle(card.state, label: card.label).uppercased())
+            Text(look.title.uppercased())
                 .font(.orbitSectionLabel.weight(.semibold))
                 .tracking(0.4)
         }
         .foregroundStyle(color)
     }
 
-    /// Board 42 ②: the entry's fields as it would be written, then Sources and Rewrites.
-    private var fields: some View {
-        let op = card.ops.first
-        let draft = op?.payload?["entry"] ?? op?.payload?["changes"]
-        let kind = draft?["kind"]?.stringValue.flatMap(WikiEntryKind.init(rawValue:)) ?? op?.entry?["kind"]?.stringValue.flatMap(WikiEntryKind.init(rawValue:))
-        let rows = WikiLogic.fieldRows(kind: kind, fields: draft?["fields"])
-        let sources = WikiChatLogic.sourceLines(card)
-        let rewrites = card.kind == .rewrite && !card.sections.isEmpty ? card.sections : card.rewrites
-        return Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 6) {
-            if card.kind != .entry, let rationale = card.rationale, !rationale.isEmpty {
-                GridRow {
-                    Text(rationale)
-                        .gridCellColumns(2)
+    /// Board 42 ②: an amend's lines, then the face's rows, Sources, Rewrites and — while a draft — Similar.
+    @ViewBuilder
+    private func fields(_ face: WikiChatLogic.CardFace) -> some View {
+        if !face.diff.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(Array(face.diff.enumerated()), id: \.offset) { _, line in
+                    Text(line.text)
+                        .strikethrough(!line.added, color: .red)
+                        .foregroundStyle(line.added ? Color.primary : Color.red.opacity(0.85))
                         .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(line.added ? Color.green.opacity(0.12) : Color.red.opacity(0.08),
+                                    in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
             }
-            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                GridRow {
-                    Text(row.label).foregroundStyle(.secondary)
-                    Text(row.lines.joined(separator: "\n"))
-                        .fixedSize(horizontal: false, vertical: true)
+            .font(.orbitLabel)
+        }
+        let similar = card.state == .draft ? Array(card.similar.prefix(3)) : []
+        if !face.rows.isEmpty || !face.sources.isEmpty || !card.rewrites.isEmpty || !similar.isEmpty {
+            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 6) {
+                ForEach(Array(face.rows.enumerated()), id: \.offset) { _, row in
+                    GridRow {
+                        Text(row.label).foregroundStyle(.secondary)
+                        Text(row.value)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
-            }
-            if !sources.isEmpty {
-                GridRow {
-                    Text(WikiChatCopy.cardSources).foregroundStyle(.secondary)
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(sources, id: \.self) { line in
-                            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                                Image(systemName: "checkmark")
-                                    .font(.orbitMeta.weight(.bold))
-                                    .foregroundStyle(.green)
-                                Text(line)
-                                    .fixedSize(horizontal: false, vertical: true)
+                if !face.sources.isEmpty {
+                    GridRow {
+                        Text(WikiChatCopy.cardSources).foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(face.sources, id: \.self) { line in
+                                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                    Image(systemName: "checkmark")
+                                        .font(.orbitMeta.weight(.bold))
+                                        .foregroundStyle(.green)
+                                    Text(line)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                             }
                         }
                     }
                 }
-            }
-            if !rewrites.isEmpty {
-                GridRow {
-                    Text(WikiChatCopy.cardRewrites).foregroundStyle(.secondary)
-                    Text(rewrites.map(\.place).joined(separator: " · "))
-                        .foregroundStyle(Color.accentColor)
+                if !card.rewrites.isEmpty {
+                    GridRow {
+                        Text(WikiChatCopy.cardRewrites).foregroundStyle(.secondary)
+                        links(card.rewrites.map { ($0.place, WikiDraftCardTarget.section(doc: $0.doc, key: $0.key)) })
+                    }
+                }
+                if !similar.isEmpty {
+                    GridRow {
+                        Text(WikiChatCopy.similar).foregroundStyle(.secondary)
+                        links(similar.map { ($0.title ?? $0.id, WikiDraftCardTarget.entry($0.id)) })
+                    }
                 }
             }
-            if !card.similar.isEmpty {
-                GridRow {
-                    Text(WikiCopy.similarEntries).foregroundStyle(.secondary)
-                    Text(card.similar.map { $0.title ?? $0.id }.joined(separator: " · "))
-                        .fixedSize(horizontal: false, vertical: true)
+            .font(.orbitLabel)
+        }
+    }
+
+    /// Sections or entries, each opening where it is: on one line when they fit, else one under another.
+    private func links(_ items: [(String, WikiDraftCardTarget)]) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 0) {
+                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                    if index > 0 { Text(" · ").foregroundStyle(.secondary) }
+                    link(item.0, item.1).lineLimit(1)
+                }
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    link(item.0, item.1).fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
-        .font(.orbitLabel)
     }
 
-    /// The first button is the card's own press — full width, on top; the rest share the row under it (board ⑤).
+    private func link(_ title: String, _ target: WikiDraftCardTarget) -> some View {
+        Button(title) { open(target) }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.accentColor)
+    }
+
+    /// A draft's own press is full width, on top; the rest share the row under it (board ⑤).
     @ViewBuilder
-    private var buttons: some View {
-        let presses: [WikiChatAction] = [.apply, .rewrite, .applyRebuild, .redo]
-        let primary: WikiChatAction? = actions.first.flatMap { presses.contains($0) ? $0 : nil }
-        let rest: [WikiChatAction] = primary == nil ? actions : Array(actions.dropFirst())
+    private func buttons(_ look: WikiChatLogic.CardLook) -> some View {
+        let primary: WikiChatAction? = card.state == .draft ? look.actions.first : nil
+        let rest: [WikiChatAction] = primary == nil ? look.actions : Array(look.actions.dropFirst())
         VStack(spacing: 8) {
             if let primary {
                 Button { act(primary) } label: {
@@ -1101,52 +1217,78 @@ struct WikiDraftCardView: View {
         .disabled(busy)
     }
 
-    private func resultLine(_ rewrite: WikiChatDraftRewrite) -> some View {
-        let tone: Color = rewrite.result == .updated ? .green
-            : rewrite.result == .rewriting ? .secondary
-            : rewrite.result == .failed ? .red : .orange
-        return HStack(alignment: .firstTextBaseline, spacing: 6) {
-            if rewrite.result == .rewriting {
-                ProgressView().controlSize(.mini)
-            } else {
-                Image(systemName: rewrite.result == .updated ? "checkmark.circle.fill" : "exclamationmark.circle")
-                    .foregroundStyle(tone)
-            }
-            Text(WikiChatLogic.resultLine(rewrite.card))
-                .foregroundStyle(rewrite.result == .rewriting ? Color.secondary : Color.primary)
+    /// The line an applied card's rewrite reads (design §8.3), with its own buttons: See changes as a link.
+    private func resultLine(_ result: WikiChatLogic.ResultLook, actions: [WikiChatAction]) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            resultMark(result.tone)
+            Text(result.line)
+                .foregroundStyle(result.tone == .run ? Color.secondary : Color.primary)
                 .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            ForEach(actions, id: \.self) { action in
+                if action == .seeChanges {
+                    Button(WikiChatCopy.action(action)) { act(action) }
+                        .buttonStyle(.plain)
+                        .font(.orbitLabel.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                        .fixedSize()
+                        .accessibilityIdentifier("wiki-chat-card-\(action.rawValue)")
+                } else {
+                    Button(WikiChatCopy.action(action)) { act(action) }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .fixedSize()
+                        .accessibilityIdentifier("wiki-chat-card-\(action.rawValue)")
+                }
+            }
         }
         .font(.orbitLabel)
         .padding(.horizontal, 4)
+        .disabled(busy)
         .accessibilityIdentifier("wiki-chat-result")
+    }
+
+    @ViewBuilder
+    private func resultMark(_ tone: WikiChatLogic.ResultTone) -> some View {
+        switch tone {
+        case .run:   ProgressView().controlSize(.mini)
+        case .ok:    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+        case .amber: Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange)
+        case .error: Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+        case .grey:  Image(systemName: "clock").foregroundStyle(.secondary)
+        }
     }
 }
 
-/// Edit (contract `chat.presses.edit`): the owner's title and one line for each op that writes an entry, applied as
-/// Review's Edit — the revisions are the owner's.
+/// Edit (contract `chat.presses.edit`, the web's `WikiDraftEditor`): the owner's title and one line for each add,
+/// supersede and amend the card holds, applied as Review's Edit in one press. Only what changed is sent; with nothing
+/// changed Apply waits, since that would be Apply. A refusal stays here, with the text it is about.
 struct WikiDraftEditForm: View {
     let card: WikiChatDraftView
     /// The answer: nil once it landed and the form can close, else the refusal, which stays here.
     let submit: ([WikiChatEditRequest.Op]) async -> String?
 
     @Environment(\.dismiss) private var dismiss
-    @State private var titles: [Int: String] = [:]
-    @State private var summaries: [Int: String] = [:]
+    @State private var words: [Int: WikiChatLogic.EditWords] = [:]
     @State private var saving = false
     @State private var refusal: String?
 
-    private var editable: [WikiChatDraftOpView] {
-        card.ops.filter { [.add, .amend, .supersede].contains($0.op) }
-    }
+    private var editable: [WikiChatDraftOpView] { WikiChatLogic.editable(card) }
+    private var edits: [WikiChatEditRequest.Op] { WikiChatLogic.editOps(card, words: words) }
+    private var blank: Bool { words.values.contains { $0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } }
 
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    Text(WikiChatCopy.editNote)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                }
                 ForEach(editable) { op in
                     Section {
-                        TextField(WikiCopy.titlePlaceholder, text: Binding(get: { titles[op.seq] ?? "" }, set: { titles[op.seq] = $0 }))
-                        TextField(WikiCopy.summaryPlaceholder, text: Binding(get: { summaries[op.seq] ?? "" }, set: { summaries[op.seq] = $0 }),
-                                  axis: .vertical)
+                        TextField(WikiChatCopy.editTitleField, text: binding(op.seq, \.title))
+                        TextField(WikiChatCopy.editLine, text: binding(op.seq, \.summary), axis: .vertical)
                             .lineLimit(2...5)
                     }
                 }
@@ -1154,80 +1296,65 @@ struct WikiDraftEditForm: View {
                     Section { Text(refusal).foregroundStyle(.red) }
                 }
             }
-            .navigationTitle(WikiChatCopy.actionEdit)
+            .navigationTitle(WikiChatCopy.editTitle)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(WikiChatCopy.cancel) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(WikiChatCopy.actionApply) {
                         saving = true
-                        let ops = editable.map { op in
-                            WikiChatEditRequest.Op(seq: op.seq, changes: WikiEntryChanges(
-                                title: (titles[op.seq] ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
-                                summary: (summaries[op.seq] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)))
-                        }
+                        let ops = edits
                         Task {
                             refusal = await submit(ops)
                             saving = false
                             if refusal == nil { dismiss() }
                         }
                     }
-                    .disabled(saving || editable.contains { (titles[$0.seq] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+                    .disabled(saving || edits.isEmpty || blank)
                 }
             }
         }
         .onAppear {
-            for op in editable {
-                let draft = op.payload?["entry"] ?? op.payload?["changes"]
-                titles[op.seq] = draft?["title"]?.stringValue ?? op.entry?["title"]?.stringValue ?? ""
-                summaries[op.seq] = draft?["summary"]?.stringValue ?? op.entry?["summary"]?.stringValue ?? ""
-            }
+            guard words.isEmpty else { return }
+            for op in editable { words[op.seq] = WikiChatLogic.editWords(op) }
         }
+    }
+
+    private func binding(_ seq: Int, _ field: WritableKeyPath<WikiChatLogic.EditWords, String>) -> Binding<String> {
+        Binding(get: { words[seq]?[keyPath: field] ?? "" }, set: { words[seq]?[keyPath: field] = $0 })
     }
 }
 
-// MARK: - See changes (contract `docs.versions.compare`)
+// MARK: - See changes (contract `docs.versions.compare`, the web's `WikiSeeChanges`)
 
-/// A section's sentences before and after the rewrite, sentence by sentence: what it said, struck through in red, and
-/// what it says now, in green — headed by why it was written again. Opening it marks the card's rewrite seen.
+/// Each section's write, sentence by sentence: a sentence it removed struck through, one it added shaded, the ones it
+/// kept left out — under the line that says why the section was written, how many sentences that changed and when —
+/// with up to four versions before it folded under Earlier changes. The comparison is the server's. Opening it marks
+/// the card's rewrite seen.
 struct WikiSeeChangesSheet: View {
     let target: WikiChatSeeChanges
     let chat: WikiChatModel
 
     @Environment(\.dismiss) private var dismiss
 
-    private var version: WikiDocSectionVersion? {
-        let read = chat.versions(spaceID: target.spaceID, slug: target.docSlug, key: target.sectionKey)
-        return read?.versions.first { $0.id == target.versionID } ?? read?.versions.first
-    }
-
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    if let version {
-                        HStack(spacing: 6) {
-                            Text(version.reason.map(WikiChatLogic.versionHeading) ?? target.place)
-                                .font(.orbitSubtext.weight(.semibold))
-                            Text("· " + WikiChatLogic.changed(version.changed))
-                                .font(.orbitLabel)
-                                .foregroundStyle(.secondary)
-                        }
-                        ForEach(Array(version.rows.enumerated()), id: \.offset) { _, row in
-                            sentence(row)
-                        }
-                    } else {
-                        ProgressView().frame(maxWidth: .infinity)
+                VStack(alignment: .leading, spacing: 22) {
+                    ForEach(Array(target.sections.enumerated()), id: \.offset) { _, section in
+                        WikiSeeChangesSection(spaceID: target.spaceID, section: section, chat: chat,
+                                              titled: target.sections.count > 1)
                     }
                 }
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .navigationTitle("\(WikiChatCopy.actionSeeChanges) · \(target.place)")
+            .navigationTitle(target.sections.count == 1
+                             ? WikiChatCopy.seeChangesTitle(target.sections[0].place) : WikiChatCopy.actionSeeChanges)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -1239,31 +1366,113 @@ struct WikiSeeChangesSheet: View {
         }
         .presentationDetents([.medium, .large])
         .task(id: target.id) {
-            await chat.loadVersions(spaceID: target.spaceID, slug: target.docSlug, key: target.sectionKey)
             if let id = target.draftID, let card = chat.card(id) { chat.markSeen(card) }
+        }
+    }
+}
+
+/// One section of See changes: the write it opens on, or why there is nothing to read.
+private struct WikiSeeChangesSection: View {
+    let spaceID: String
+    let section: WikiChatSeeChanges.Section
+    let chat: WikiChatModel
+    /// `See changes · 3.1 §3` over it, when the sheet shows more than one section.
+    let titled: Bool
+
+    @State private var older = false
+
+    private var read: WikiChatLogic.SeeChangesRead {
+        WikiChatLogic.seeChanges(
+            versions: chat.versions(spaceID: spaceID, slug: section.docSlug, key: section.sectionKey)?.versions,
+            failed: chat.versionsFailed(spaceID: spaceID, slug: section.docSlug, key: section.sectionKey),
+            versionID: section.versionID, unchanged: section.unchanged)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if titled {
+                Text(WikiChatCopy.seeChangesTitle(section.place))
+                    .font(.orbitSubtext.weight(.semibold))
+            }
+            switch read {
+            case .same:
+                nothing(WikiChatCopy.seeChangesSame)
+            case .failed:
+                nothing(WikiChatCopy.seeChangesFailed)
+            case .loading:
+                ProgressView().frame(maxWidth: .infinity)
+            case .none:
+                nothing(WikiChatCopy.seeChangesNone)
+            case .shown(let current, let earlier):
+                WikiSeeChangesVersion(version: current)
+                if !earlier.isEmpty {
+                    Button { older.toggle() } label: {
+                        Label(WikiChatCopy.earlierChanges(earlier.count), systemImage: older ? "chevron.down" : "chevron.right")
+                    }
+                    .buttonStyle(.plain)
+                    .font(.orbitLabel)
+                    .foregroundStyle(Color.accentColor)
+                    if older {
+                        ForEach(earlier) { version in WikiSeeChangesVersion(version: version, earlier: true) }
+                    }
+                }
+            }
+        }
+        .task(id: "\(section.docSlug)#\(section.sectionKey)") {
+            guard !(section.unchanged && section.versionID == nil) else { return }
+            await chat.loadVersions(spaceID: spaceID, slug: section.docSlug, key: section.sectionKey)
+        }
+    }
+
+    private func nothing(_ text: String) -> some View {
+        Text(text)
+            .font(.orbitLabel)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// One kept write: why, how many sentences and when, then the rows it changed.
+private struct WikiSeeChangesVersion: View {
+    let version: WikiDocSectionVersion
+    var earlier = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(WikiChatLogic.seeChangesCause(version))
+                .font(.orbitLabel.weight(.semibold))
+                .foregroundStyle(earlier ? Color.secondary : Color.primary)
+                .fixedSize(horizontal: false, vertical: true)
+            let rows = WikiChatLogic.changedRows(version.rows)
+            if rows.isEmpty {
+                Text(WikiChatCopy.seeChangesSame)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    sentence(row)
+                }
+            }
         }
     }
 
     @ViewBuilder
     private func sentence(_ row: WikiDocSentenceRow) -> some View {
-        switch row.op {
-        case .removed:
+        if row.op == .removed {
             Text(row.text)
                 .strikethrough(true, color: .red)
                 .foregroundStyle(Color.red.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        case .added:
+        } else {
             Text(row.text)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay(alignment: .leading) { Rectangle().fill(Color.green).frame(width: 3) }
-        default:
-            Text(row.text)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
         }
     }
 }

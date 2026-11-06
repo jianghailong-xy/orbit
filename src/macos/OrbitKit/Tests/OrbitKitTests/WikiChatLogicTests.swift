@@ -216,18 +216,19 @@ final class WikiChatLogicTests: XCTestCase {
         let answer = #"{"status":"draft","draftId":"34dRaFt0000000000001","replayed":false,"ops":[],"similar":[],"rewrites":[]}"#
         XCTAssertEqual(WikiChatLogic.draftID(toolName: "mcp__orbit__wiki_propose", result: answer), "34dRaFt0000000000001")
         XCTAssertEqual(WikiChatLogic.draftID(toolName: "mcp__orbit__wiki_draft", result: answer), "34dRaFt0000000000001")
-        XCTAssertEqual(WikiChatLogic.draftID(toolName: "orbit.wiki_draft", result: answer), "34dRaFt0000000000001")
+        XCTAssertNil(WikiChatLogic.draftID(toolName: "orbit.wiki_draft", result: answer), "an Orbit tool is named mcp__<server>__<tool>")
         // An MCP answer as its content blocks.
         let blocks = #"[{"type":"text","text":"{\"status\":\"draft\",\"draftId\":\"D2\"}"}]"#
         XCTAssertEqual(WikiChatLogic.draftID(toolName: "mcp__orbit__wiki_propose", result: blocks), "D2")
-        // A dry run makes nothing, a refusal is not a draft, another tool is not a card, the words are never read.
+        // A dry run makes nothing, a refusal is not a draft, another tool is not a card, and words read only as the
+        // runner's own sentence with a whole id in it.
         XCTAssertNil(WikiChatLogic.draftID(toolName: "mcp__orbit__wiki_propose", result: #"{"status":"draft","draftId":null,"dryRun":true}"#))
         XCTAssertNil(WikiChatLogic.draftID(toolName: "mcp__orbit__wiki_propose", result: #"{"status":"refused","reasons":[]}"#))
         XCTAssertNil(WikiChatLogic.draftID(toolName: "mcp__orbit__wiki_get", result: answer))
         XCTAssertNil(WikiChatLogic.draftID(toolName: "mcp__orbit__wiki_propose", result: "Drafted card D3 for you"))
         XCTAssertNil(WikiChatLogic.draftID(toolName: "mcp__orbit__wiki_propose", result: nil))
-        XCTAssertTrue(WikiChatLogic.isDraftTool("mcp__orbit__wiki_propose"))
-        XCTAssertFalse(WikiChatLogic.isDraftTool("Bash"))
+        XCTAssertTrue(WikiChatLogic.isDraftingCall("mcp__orbit__wiki_propose"))
+        XCTAssertFalse(WikiChatLogic.isDraftingCall("Bash"))
     }
 
     // MARK: what a card draws (board 42 ② ⑤)
@@ -249,17 +250,20 @@ final class WikiChatLogicTests: XCTestCase {
 
     func testACardReadDrawsWhatTheBoardShows() throws {
         let card = try JSONDecoder().decode(WikiChatDraftView.self, from: Data(addDecision.utf8))
-        XCTAssertEqual(WikiChatLogic.cardTitle(card.state, label: card.label), "Draft · Add decision")
-        XCTAssertEqual(WikiChatLogic.cardHeadline(card), "Runner 离线判定留三次心跳的余量")
-        XCTAssertEqual(WikiChatLogic.sourceLines(card), ["Your message in this chat", "Commit · src/apiserver/src/runner-presence.ts"])
+        let look = WikiChatLogic.cardLook(card)
+        XCTAssertEqual(look.title, "Draft · Add decision")
+        XCTAssertEqual(look.actions, [.apply, .edit, .discard])
+        XCTAssertEqual(look.tone, .accent)
+        let face = WikiChatLogic.cardFace(card)
+        XCTAssertEqual(face.heading, "Runner 离线判定留三次心跳的余量")
+        // The kind's first field, then the agent's why (the web's `wikiChatCardFace`).
+        XCTAssertEqual(face.rows.map(\.label), ["Decision", "Why"])
+        XCTAssertEqual(face.rows.first?.value, "连续丢三次心跳才判离线。")
+        XCTAssertEqual(face.sources, ["Your message in this chat", "src/apiserver/src/runner-presence.ts · 99cd3c4e1f"])
         XCTAssertEqual(card.rewrites.map(\.place), ["3.1 §3", "7.1 §2"])
-        XCTAssertEqual(WikiChatLogic.cardActions(card.card), [.apply, .edit, .discard])
-        XCTAssertEqual(WikiChatLogic.tone(card.state), .accent)
         XCTAssertEqual(WikiChatLogic.tone(.applied), .green)
         XCTAssertEqual(WikiChatLogic.tone(.changed), .amber)
         XCTAssertEqual(WikiChatLogic.tone(.replaced), .grey)
-        let rows = WikiLogic.fieldRows(kind: .decision, fields: card.ops.first?.payload?["entry"]?["fields"])
-        XCTAssertEqual(rows.map(\.label), ["Context", "Decision"])
     }
 
     /// An applied card with its rewrite: the line under it, the floating line once the chat is folded, See changes.

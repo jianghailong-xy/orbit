@@ -80,18 +80,36 @@ public enum WikiChatLogic {
         }
     }
 
-    /// The card's status line: `Draft · <label>` while it is open, its state after (`wikiChatCardTitle`).
-    public static func cardTitle(_ state: WikiChatDraftState, label: String) -> String {
+    /// The card's status line: `Draft · <label>` while it is open, its state after (`wikiChatCardTitle`) — an applied
+    /// card still waiting in Review (`appliedInReview`) says so rather than that it is confirmed.
+    public static func cardTitle(_ state: WikiChatDraftState, label: String, inReview: Bool = false) -> String {
         switch state {
         case .draft:      return fill(WikiChatCopy.cardDraft, ["label": label])
         case .replaced:   return WikiChatCopy.cardReplaced
         case .changed:    return WikiChatCopy.cardChanged
-        case .applied:    return WikiChatCopy.cardApplied
+        case .applied:    return inReview ? WikiChatCopy.cardAppliedInReview : WikiChatCopy.cardApplied
         case .discarded:  return WikiChatCopy.cardDiscarded
         case .notApplied: return WikiChatCopy.cardNotApplied
         case .undone:     return WikiChatCopy.cardUndone
         case .unknown:    return label
         }
+    }
+
+    /// Whether an applied card still waits in Review (contract `chat.drafts.states.applied`, `wikiChatAppliedInReview`):
+    /// it holds a challenge whose decision is pending. Its press raised the flag on the entry, which the owner answers
+    /// in Review — re-confirms, amends or retires the entry — so nothing of it is confirmed yet.
+    public static func appliedInReview(_ state: WikiChatDraftState, ops: [WikiChatDraftOp]) -> Bool {
+        state == .applied && ops.contains { $0.op == .challenge && $0.decision == "pending" }
+    }
+
+    public static func appliedInReview(_ card: WikiChatDraftView) -> Bool {
+        appliedInReview(card.state, ops: card.ops.map { WikiChatDraftOp(op: $0.op, decision: $0.decision) })
+    }
+
+    /// The challenge an In Review card's note opens in Review (`wikiChatInReviewOp`).
+    public static func inReviewOp(_ card: WikiChatDraftView) -> WikiChatDraftOpView? {
+        guard appliedInReview(card) else { return nil }
+        return card.ops.first { $0.op == .challenge && $0.decision == "pending" }
     }
 
     /// The waiting reasons the owner fixes in Wiki settings, beside which a card offers Settings.
@@ -615,7 +633,7 @@ public enum WikiChatLogic {
         WikiSeenLog.key(space: slug, scope: "doc.\(doc)")
     }
 
-    // MARK: what a card draws (board 42 ② ⑤)
+    // MARK: what a card draws (board 42 ② ③ ④ ⑤, `wikiChatCardLook`, `wikiChatCardFace`)
 
     /// A card's status-line tone: blue while it is open, amber once its base moved, green once applied, grey after.
     public enum Tone: String, Equatable, Sendable {
@@ -631,76 +649,379 @@ public enum WikiChatLogic {
         }
     }
 
-    /// What a card is about: an op's new title, else the entry it names as it stands; a rewrite card's sections; the
-    /// card's own label when nothing more is known.
-    public static func cardHeadline(_ card: WikiChatDraftView) -> String {
-        for op in card.ops {
-            if let title = op.payload?["entry"]?["title"]?.stringValue, !title.isEmpty { return title }
-            if let title = op.payload?["changes"]?["title"]?.stringValue, !title.isEmpty { return title }
-            if let title = op.entry?["title"]?.stringValue, !title.isEmpty { return title }
-        }
-        if card.kind == .rewrite, !card.sections.isEmpty { return listed(card.sections.map(\.place)) }
-        return card.label
+    /// How a card looks (design §7.3, `wikiChatCardLook`): its status line, its tone, its note and its buttons.
+    public struct CardLook: Equatable, Sendable {
+        /// `Draft · Add decision`, `Applied · Confirmed by you`, `Applied · In Review` …
+        public let title: String
+        public let tone: Tone
+        /// A settled card is drawn flat (board 42 ③ ④'s quiet cards).
+        public let quiet: Bool
+        /// The line under the title a state carries: `A newer draft took over.`, or the In Review note.
+        public let note: String?
+        /// Applied with a challenge still waiting in Review: its note opens that item.
+        public let inReview: Bool
+        /// The card's own buttons, in the contract's order.
+        public let actions: [WikiChatAction]
+        /// The buttons of the line under an applied card: Settings, Try again, See changes.
+        public let rewriteActions: [WikiChatAction]
     }
 
-    /// One source line of a card (board 42 ②: `✓ Your message in this chat`): the chat's own turn is the owner's
-    /// words in it; any other source is its kind and where it points.
-    public static func sourceLines(_ card: WikiChatDraftView) -> [String] {
-        var lines: [String] = []
-        for op in card.ops {
-            guard case .array(let sources)? = op.payload?["sources"] else { continue }
-            for source in sources {
-                let line = sourceLine(source, chat: card.sessionId)
-                if !line.isEmpty && !lines.contains(line) { lines.append(line) }
+    /// The buttons the line under an applied card carries (board 42 ④'s lower row); the card carries the rest.
+    static let rewriteLineActions: Set<WikiChatAction> = [.settings, .tryAgain, .seeChanges]
+
+    public static func cardLook(_ card: WikiChatDraftView) -> CardLook {
+        let inReview = appliedInReview(card)
+        let all = cardActions(card.card)
+        return CardLook(
+            title: cardTitle(card.state, label: card.label, inReview: inReview),
+            tone: inReview ? .amber : tone(card.state),
+            quiet: card.state != .draft && card.state != .changed,
+            note: inReview ? WikiChatCopy.cardAppliedInReviewNote
+                : card.state == .replaced ? WikiChatCopy.cardReplacedNote : nil,
+            inReview: inReview,
+            actions: all.filter { !rewriteLineActions.contains($0) },
+            rewriteActions: all.filter { rewriteLineActions.contains($0) })
+    }
+
+    /// The tone of the line under an applied card (`wikiChatResultLook`).
+    public enum ResultTone: String, Equatable, Sendable {
+        case run, ok, amber, error, grey
+    }
+
+    /// The line under an applied card (design §8.3), its tone, and whether it counts in the Wiki's waiting count.
+    public struct ResultLook: Equatable, Sendable {
+        public let line: String
+        public let tone: ResultTone
+        /// It waits on the owner (`rewriteWaits`): held up, or read the same or failed and not seen.
+        public let waits: Bool
+    }
+
+    public static func resultLook(_ card: WikiChatDraftView) -> ResultLook? {
+        guard card.state == .applied, let rewrite = card.rewrite else { return nil }
+        let tone: ResultTone
+        switch rewrite.result {
+        case .rewriting:       tone = .run
+        case .waiting, .same:  tone = .amber
+        case .updated:         tone = .ok
+        case .failed:          tone = .error
+        case .gone, .unknown:  tone = .grey
+        }
+        return ResultLook(line: resultLine(rewrite.card), tone: tone, waits: rewriteWaits(card.card))
+    }
+
+    /// The press a settled rewrite the owner has opened makes, once (contract `chat.presses.seen`, `wikiChatNeedsSeen`).
+    public static func needsSeen(_ card: WikiChatDraftView) -> Bool {
+        guard card.state == .applied, let rewrite = card.rewrite, !rewrite.seen else { return false }
+        return rewrite.result == .updated || rewrite.result == .same || rewrite.result == .failed
+    }
+
+    /// A card's sentences on its face (board 42 ②, `wikiChatCardFace`): what its op says, and the agent's why.
+    public struct CardFace: Equatable, Sendable {
+        public struct Row: Equatable, Sendable {
+            public let label: String
+            public let value: String
+        }
+
+        /// One of an amend's lines: what the entry said, struck red, and what it will say, green (board 42 ④ ①).
+        public struct DiffLine: Equatable, Sendable {
+            public let added: Bool
+            public let text: String
+        }
+
+        /// The entry's title, or the sections a rewrite card names.
+        public let heading: String?
+        public let rows: [Row]
+        public let diff: [DiffLine]
+        public let sources: [String]
+    }
+
+    /// The field a kind's card shows first (board 42 ②: a decision's Decision).
+    static let faceField: [String: String] = [
+        "principle": "statement", "convention": "rule", "decision": "decision",
+        "pitfall": "symptom", "recipe": "steps", "concept": "definition",
+    ]
+
+    /// A value's words: a string trimmed, or a list's strings joined with ` · `; nil when there are none.
+    static func faceText(_ value: JSONValue?) -> String? {
+        switch value {
+        case .string(let text)?:
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        case .array(let items)?:
+            let words = items.compactMap { item -> String? in
+                guard case .string(let text) = item, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+                return text
             }
-        }
-        return lines
-    }
-
-    static func sourceLine(_ source: JSONValue, chat: String) -> String {
-        let kind = source["kind"]?.stringValue
-        let session = source["session"]?.stringValue ?? source["sessionId"]?.stringValue
-        if kind == "turn", session == "self" || (session.map { PublicID.storageKey($0) == PublicID.storageKey(chat) } ?? false) {
-            return WikiChatCopy.cardYourMessage
-        }
-        let word = WikiLogic.sourceWord(kind.flatMap(WikiSourceKind.init(rawValue:)))
-        let locator = source["locator"]?["path"]?.stringValue ?? source["locator"]?["url"]?.stringValue
-            ?? source["path"]?.stringValue ?? source["ref"]?.stringValue.map { String($0.prefix(12)) }
-        return [word.isEmpty ? nil : word, locator].compactMap { $0 }.joined(separator: " · ")
-    }
-
-    /// A transcript's tool call that drafted a card (contract `chat.drafts.toolResult`): `wiki_propose` or `wiki_draft`,
-    /// whichever engine's name for the orbit tool it carries.
-    public static func isDraftTool(_ name: String) -> Bool {
-        let base = name.split(whereSeparator: { $0 == "." || $0 == "/" }).last.map(String.init) ?? name
-        let tool = base.components(separatedBy: "__").last ?? base
-        return tool == "wiki_propose" || tool == "wiki_draft"
-    }
-
-    /// The card a drafting call's answer names: `{ status: "draft", draftId }` — read off the answer, never off the
-    /// conversation's words. Nil for any other answer, a dry run (no id) and a refused call, which draw as any call.
-    public static func draftID(toolName: String, result: String?) -> String? {
-        guard isDraftTool(toolName), let result else { return nil }
-        return draftID(fromJSON: result)
-    }
-
-    private static func draftID(fromJSON text: String) -> String? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let data = trimmed.data(using: .utf8), let value = try? JSONDecoder().decode(JSONValue.self, from: data) else {
+            return words.isEmpty ? nil : words.joined(separator: " · ")
+        default:
             return nil
         }
+    }
+
+    /// A field's key as its row's label: `statement` → `Statement`, `whyNot` → `Why not`.
+    static func faceLabel(_ key: String) -> String {
+        guard let first = key.first else { return key }
+        var rest = ""
+        for character in key.dropFirst() {
+            if character.isASCII && character.isUppercase { rest += " " }
+            rest.append(character)
+        }
+        return first.uppercased() + rest.lowercased()
+    }
+
+    public static func cardFace(_ card: WikiChatDraftView) -> CardFace {
+        var rows: [CardFace.Row] = []
+        var diff: [CardFace.DiffLine] = []
+        var sources: [String] = []
+        var heading: String?
+        func titleOf(_ op: WikiChatDraftOpView) -> String? {
+            faceText(op.payload?["entry"]?["title"]) ?? faceText(op.payload?["changes"]?["title"]) ?? faceText(op.entry?["title"])
+        }
+        if card.kind == .rewrite {
+            let named = card.rewrites.map { section in section.title.map { "\(section.place) \($0)" } ?? section.place }
+            heading = named.isEmpty ? nil : named.joined(separator: " · ")
+        } else if card.ops.count == 1, let op = card.ops.first {
+            heading = titleOf(op)
+            let draft = op.payload?["entry"]
+            let face = draft?["kind"]?.stringValue.flatMap { faceField[$0] }
+            let first = face.flatMap { faceText(draft?["fields"]?[$0]) }
+            if op.op == .add || op.op == .supersede {
+                if let face, let first {
+                    rows.append(.init(label: faceLabel(face), value: first))
+                } else if let summary = faceText(draft?["summary"]) {
+                    rows.append(.init(label: WikiChatCopy.faceSummary, value: summary))
+                }
+            }
+            if op.op == .amend {
+                for key in ["title", "summary"] {
+                    guard let after = faceText(op.payload?["changes"]?[key]) else { continue }
+                    if let was = faceText(op.entry?[key]), was != after { diff.append(.init(added: false, text: was)) }
+                    diff.append(.init(added: true, text: after))
+                }
+            }
+        } else {
+            for op in card.ops { rows.append(.init(label: faceLabel(op.op.rawValue), value: titleOf(op) ?? "—")) }
+        }
+        if let why = card.rationale?.trimmingCharacters(in: .whitespacesAndNewlines), !why.isEmpty {
+            rows.append(.init(label: WikiChatCopy.faceWhy, value: why))
+        }
+        for op in card.ops {
+            guard case .array(let list)? = op.payload?["sources"] else { continue }
+            for source in list {
+                guard case .object = source else { continue }
+                let line = sourceLine(source, chat: card.sessionId)
+                if !sources.contains(line) { sources.append(line) }
+            }
+        }
+        return CardFace(heading: heading, rows: rows, diff: diff, sources: sources)
+    }
+
+    /// A source as the card's Sources row names it: the chat's own words first-hand, else its kind and where it points
+    /// (`src/apiserver/src/runners/runner-presence.ts L30-31 · 99cd3c4`).
+    static func sourceLine(_ source: JSONValue, chat: String) -> String {
+        let kind = source["kind"]?.stringValue ?? "source"
+        if kind == "turn" {
+            let session = source["session"]
+            let named = session?.stringValue
+            if session == nil || named == "self" || named.map({ PublicID.storageKey($0) == PublicID.storageKey(chat) }) == true {
+                return WikiChatCopy.cardYourMessage
+            }
+        }
+        let locator = source["locator"]
+        let path = locator?["path"]?.stringValue
+        var lines = ""
+        if let range = locator?["lines"]?.stringValue {
+            lines = " L\(range)"
+        } else if case .int(let line)? = locator?["line"] {
+            lines = " L\(line)"
+        } else if case .double(let line)? = locator?["line"] {
+            lines = line == line.rounded() ? " L\(Int(line))" : " L\(line)"
+        }
+        let ref = source["ref"]?.stringValue
+        let commit = { (ref: String) in ref.utf8.count == 40 && ref.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) } }
+        let shortRef = ref.map { commit($0) ? String($0.prefix(7)) : $0 }
+        if let path { return "\(path)\(lines)\(shortRef.map { " · \($0)" } ?? "")" }
+        return shortRef.map { "\(kind) \($0)" } ?? kind
+    }
+
+    /// `<doc>#<key>` of every section an open card would rewrite, marked on the page beside the chat before the press
+    /// (board 42 ②, the web's `wouldRewrite`).
+    public static func wouldRewrite(_ cards: [WikiChatDraftView]) -> Set<String> {
+        Set(cards.filter { $0.state == .draft }.flatMap { card in card.rewrites.map { sectionID(doc: $0.doc, key: $0.key) } })
+    }
+
+    public static func sectionID(doc: String, key: String) -> String { "\(doc)#\(key)" }
+
+    // MARK: a press that did not go (`wikiChatPressError`)
+
+    /// A press refused or lost, said truthfully: the server's reason, a failure of the server, or no connection.
+    public static func pressError(_ error: Error) -> String {
+        switch error {
+        case APIError.http(let status, let body):
+            if status >= 500 { return WikiChatCopy.pressServerFailed(status) }
+            let reason = ComposerLogic.serverMessage(body)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return WikiChatCopy.pressRefused(reason.flatMap { $0.isEmpty ? nil : $0 } ?? "HTTP \(status)")
+        case APIError.unauthorized:
+            return WikiChatCopy.pressRefused("HTTP 401")
+        default:
+            return WikiChatCopy.pressUnsent
+        }
+    }
+
+    // MARK: Edit (design §7.2, the web's `WikiDraftEditor`)
+
+    /// The two lines an op leaves its entry with, as Edit opens on them: an add's own draft, or an amend's over its entry.
+    public struct EditWords: Equatable, Sendable {
+        public var title: String
+        public var summary: String
+
+        public init(title: String, summary: String) {
+            self.title = title
+            self.summary = summary
+        }
+    }
+
+    /// The ops Edit offers: each add, supersede and amend the card holds.
+    public static func editable(_ card: WikiChatDraftView) -> [WikiChatDraftOpView] {
+        card.ops.filter { $0.op == .add || $0.op == .supersede || $0.op == .amend }
+    }
+
+    public static func editWords(_ op: WikiChatDraftOpView) -> EditWords {
+        let over = op.payload?["entry"].flatMap { $0 == .null ? nil : $0 } ?? op.payload?["changes"]
+        func pick(_ key: String) -> String { over?[key]?.stringValue ?? op.entry?[key]?.stringValue ?? "" }
+        return EditWords(title: pick("title"), summary: pick("summary"))
+    }
+
+    /// Edit's body: for each op, only what the owner changed, trimmed; an op left as it opened is not sent. Empty
+    /// while nothing changed — that would be Apply.
+    public static func editOps(_ card: WikiChatDraftView, words: [Int: EditWords]) -> [WikiChatEditRequest.Op] {
+        editable(card).compactMap { op in
+            let was = editWords(op)
+            guard let now = words[op.seq] else { return nil }
+            let trim = { (text: String) in text.trimmingCharacters(in: .whitespacesAndNewlines) }
+            let title = trim(now.title) != trim(was.title) ? trim(now.title) : nil
+            let summary = trim(now.summary) != trim(was.summary) ? trim(now.summary) : nil
+            guard title != nil || summary != nil else { return nil }
+            return WikiChatEditRequest.Op(seq: op.seq, changes: WikiEntryChanges(title: title, summary: summary))
+        }
+    }
+
+    // MARK: See changes (design §8.4, board 42 ③, the web's `WikiSeeChanges`)
+
+    /// The versions See changes shows after the one it opens on (comment design §12.2: at most four more).
+    public static let earlierShown = 4
+
+    /// What See changes shows for one section.
+    public enum SeeChangesRead: Equatable, Sendable {
+        /// A write that left the section as it was and kept no version (a card's `same` section): nothing to read.
+        case same
+        case failed
+        case loading
+        /// No version of the section is kept, or not the one asked for.
+        case none
+        case shown(current: WikiDocSectionVersion, earlier: [WikiDocSectionVersion])
+    }
+
+    /// `versionID` opens on the write a card's rewrite kept; without one it opens on the newest.
+    public static func seeChanges(versions: [WikiDocSectionVersion]?, failed: Bool, versionID: String?,
+                                  unchanged: Bool) -> SeeChangesRead {
+        if unchanged && versionID == nil { return .same }
+        if failed { return .failed }
+        guard let versions else { return .loading }
+        let at: Int?
+        if let versionID { at = versions.firstIndex { $0.id == versionID } } else { at = versions.isEmpty ? nil : 0 }
+        guard let at else { return .none }
+        return .shown(current: versions[at], earlier: Array(versions[(at + 1)...].prefix(earlierShown)))
+    }
+
+    /// The line over one write: why, how many sentences it changed, and when (`After chat … · 1 sentence changed · Nov 6, 10:47`).
+    public static func seeChangesCause(_ version: WikiDocSectionVersion, timeZone: TimeZone = .current) -> String {
+        [version.reason.map(versionHeading), changed(version.changed), WikiDocCopy.monthDayTime(version.at, timeZone: timeZone)]
+            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    /// The sections See changes opens for a card's rewrite: each it wrote, or read the same.
+    public static func seeChangesSections(_ rewrite: WikiChatDraftRewrite) -> [WikiChatDraftRewrite.Section] {
+        rewrite.sections.filter { $0.result == .updated || $0.result == .same }
+    }
+
+    /// The rows a write changed — removed, then added, in the comparison's order — the ones it kept left out.
+    public static func changedRows(_ rows: [WikiDocSentenceRow]) -> [WikiDocSentenceRow] {
+        rows.filter { $0.op != .same }
+    }
+
+    // MARK: a chat that takes no more messages (C8 review)
+
+    /// The composer's line once its chat takes no more messages, nil while it takes them: in Trash, or no longer live
+    /// (queued, running, waiting for input or interrupted) and not about to be retried by the server.
+    public static func endedLine(trashed: Bool, status: RunStatus, retryPending: Bool) -> String? {
+        if trashed { return WikiChatCopy.trashed }
+        let live = status.isLive || status == .pending
+        return live || retryPending ? nil : WikiChatCopy.ended
+    }
+
+    // MARK: the card a drafting call names (contract `chat.drafts.toolResult`, `wikiChatDraftIdOf`)
+
+    /// The tools a chat drafts with (contract `agentSurface.chat`): each answers with the card it made.
+    static let draftingTools: Set<String> = ["wiki_propose", "wiki_draft", "wiki_note"]
+
+    /// Whether a tool call is one of a chat's drafting calls (`wikiChatDraftingCall`): by the name any engine reports an
+    /// Orbit MCP tool under (`mcp__orbit__wiki_draft`), or the CLI door the same tools have (`orbit wiki draft …` in a
+    /// shell, read off the call's command).
+    public static func isDraftingCall(_ name: String, command: String? = nil) -> Bool {
+        if let tool = firstMatch(#"^mcp__[^_].*?__(wiki_\w+)$"#, in: name) { return draftingTools.contains(tool) }
+        guard let command else { return false }
+        return firstMatch(#"(?:^|[\s;&|(])orbit\s+wiki\s+(propose|draft|note)\b"#, in: command) != nil
+    }
+
+    /// The card a drafting call made: its answer's `draftId` — the structured answer an engine passes through, or the
+    /// JSON text Claude Code records it as — else the id the runner's own sentence names ("Drafted card <id>", which
+    /// Orbit writes for an engine that hands the agent text alone). A dry run, a refused request and any other answer
+    /// name none, and the call draws as any call. Either spelling of the id names the card: the public one comes back.
+    public static func draftID(toolName: String, command: String? = nil, result: String?) -> String? {
+        guard isDraftingCall(toolName, command: command), let result else { return nil }
+        let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The answer as the transcript holds it: JSON text (an object, or an MCP answer's content blocks), else words.
+        if trimmed.hasPrefix("{") || trimmed.hasPrefix("["),
+           let value = try? JSONDecoder().decode(JSONValue.self, from: Data(trimmed.utf8)),
+           let id = draftID(in: value, depth: 0) {
+            return PublicID.toPublic(id)
+        }
+        let said = #"\b(?:Drafted card|already made card|the flag is card)\s+([0-9A-Za-z]{10,40}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b"#
+        return firstMatch(said, in: result).map(PublicID.toPublic)
+    }
+
+    /// The id a drafting call's answer names, read from the answer's own fields wherever an engine put them.
+    private static func draftID(in value: JSONValue, depth: Int) -> String? {
+        guard depth <= 5 else { return nil }
         switch value {
+        case .string(let text):
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.hasPrefix("{"), let parsed = try? JSONDecoder().decode(JSONValue.self, from: Data(trimmed.utf8)) else {
+                return nil
+            }
+            return draftID(in: parsed, depth: depth + 1)
+        case .array(let items):
+            for item in items {
+                if let id = draftID(in: item, depth: depth + 1) { return id }
+            }
+            return nil
         case .object:
-            guard value["status"]?.stringValue == "draft", let id = value["draftId"]?.stringValue, !id.isEmpty else { return nil }
-            return id
-        case .array(let blocks):
-            // An MCP answer as its content blocks: the text block holds the JSON.
-            for block in blocks {
-                if let text = block["text"]?.stringValue, let id = draftID(fromJSON: text) { return id }
+            if value["status"]?.stringValue == "draft", let id = value["draftId"]?.stringValue, !id.isEmpty { return id }
+            for key in ["structuredContent", "challenged", "result", "output", "content", "text"] {
+                if let inner = value[key], let id = draftID(in: inner, depth: depth + 1) { return id }
             }
             return nil
         default:
             return nil
         }
+    }
+
+    /// The first capture group of a pattern's first match, or nil.
+    private static func firstMatch(_ pattern: String, in text: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              match.numberOfRanges > 1, let range = Range(match.range(at: 1), in: text) else { return nil }
+        return String(text[range])
     }
 }

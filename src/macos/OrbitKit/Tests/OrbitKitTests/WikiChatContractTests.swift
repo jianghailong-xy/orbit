@@ -200,13 +200,17 @@ final class WikiChatContractTests: XCTestCase {
         XCTAssertEqual(Set(cases.fab.map(\.state)), Set(WikiChatFabState.allCases))
     }
 
-    /// A card in each state: its state from its facts, its label, its status line, its buttons, and whether the
-    /// round button counts it.
+    /// A card in each state: its state from its facts, its label, its status line — an applied card whose challenge
+    /// still waits in Review is not confirmed — its buttons, and whether the round button counts it.
     func testEveryCardIsTheFixtures() throws {
-        for test in try fixture().cards {
+        let cards = try fixture().cards
+        XCTAssertTrue(cards.contains { WikiChatLogic.appliedInReview($0.state, ops: $0.ops) },
+                      "the fixture lost its applied card whose challenge waits in Review")
+        for test in cards {
             XCTAssertEqual(WikiChatLogic.draftState(test.facts), test.state, test.name)
             XCTAssertEqual(WikiChatLogic.draftLabel(test.kind, ops: test.ops), test.label, test.name)
-            XCTAssertEqual(WikiChatLogic.cardTitle(test.state, label: test.label), test.title, test.name)
+            let inReview = WikiChatLogic.appliedInReview(test.state, ops: test.ops)
+            XCTAssertEqual(WikiChatLogic.cardTitle(test.state, label: test.label, inReview: inReview), test.title, test.name)
             let card = WikiChatCard(kind: test.kind, state: test.state, undoable: test.undoable)
             XCTAssertEqual(WikiChatLogic.cardActions(card), test.actions, test.name)
             XCTAssertEqual(WikiChatLogic.cardNeedsYou(card), test.needsYou, test.name)

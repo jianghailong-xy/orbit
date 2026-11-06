@@ -6,7 +6,7 @@ import Foundation
 ///
 /// `WikiChatCopyParityTests` holds both halves, each a failure when its counterpart goes missing: every key of the
 /// contract's `chat.copy` has its sentence in `contract` and every key there is one of the contract's; every
-/// `WIKI_CHAT_*` constant the web lib exports has its sentence in `web`. A `{name}` in a template is filled by
+/// `WIKI_*` constant the web lib exports has its sentence in `web`. A `{name}` in a template is filled by
 /// `WikiChatLogic`, as the shared functions fill it.
 public enum WikiChatCopy {
     // MARK: the round button (contract `chat.copy.fab`)
@@ -56,6 +56,9 @@ public enum WikiChatCopy {
     public static let cardWeb = "Based on web content"
     public static let cardWebNote = "Read before you apply."
     public static let cardApplied = "Applied · Confirmed by you"
+    /// An applied card whose challenge still waits in Review (`wikiChatAppliedInReview`): not confirmed yet.
+    public static let cardAppliedInReview = "Applied · In Review"
+    public static let cardAppliedInReviewNote = "Re-confirm, amend or retire the entry in Review."
     public static let cardDiscarded = "Discarded"
     public static let cardNotApplied = "Not applied"
     public static let cardUndone = "Undone"
@@ -181,6 +184,46 @@ public enum WikiChatCopy {
     public static let sendFailed = "The message couldn’t be sent. Check the connection, then try again."
     /// The phone's Ask sheet, over the paragraph's sentences (docs/wiki-comment-to-session-design.md §5).
     public static let pickSentences = "Tap the sentences you mean"
+    /// The composer's line once its chat takes no more messages (C8 review): why, and the way on.
+    public static let ended = "This chat has ended, so it takes no more messages. Start a new chat to keep going."
+    public static let trashed = "This chat is in Trash, so it takes no more messages. Start a new chat to keep going."
+
+    // MARK: the card's own words (src/web/src/lib/wikiChat.ts, C9)
+
+    /// The label of the entries a draft may duplicate (board 42 ②).
+    public static let similar = "Similar"
+    /// The rows of a card's face beside its kind's first field (`wikiChatCardFace`).
+    public static let faceSummary = "Summary"
+    public static let faceWhy = "Why"
+    /// Said when a press is refused, with the server's reason after it.
+    public static let pressFailed = "The card couldn’t be pressed"
+    /// The card's read failing: the call stands, its card cannot be read now.
+    public static let cardUnread = "This card couldn’t be read. It is still there: open the chat again to retry."
+    /// Edit's sheet (design §7.2: as Review's Edit, the owner's own version of the ops).
+    public static let editTitle = "Edit, then apply"
+    public static let editNote = "What you change here is applied as your own version of the draft."
+    public static let editTitleField = "Title"
+    public static let editLine = "One line"
+    public static let cancel = "Cancel"
+
+    /// A press refused, lost, or failed at the server (`wikiChatPressError`).
+    public static func pressRefused(_ reason: String) -> String { "\(pressFailed): \(reason)" }
+    public static func pressServerFailed(_ status: Int) -> String {
+        "The server couldn’t take the press (\(status)). Try again in a moment."
+    }
+    public static let pressUnsent = "The press didn’t reach the server. Check the connection, then try again."
+
+    // MARK: See changes and Activity's Docs rows (src/web/src/lib/wikiChat.ts, C9)
+
+    public static let seeChangesSame = "Every sentence reads as it did."
+    public static let seeChangesNone = "No earlier version of this section is kept."
+    public static let seeChangesFailed = "The versions couldn’t be loaded. Check the connection, then try again."
+    public static let activityDocs = "Docs"
+
+    /// See changes' title for one section: `See changes · 3.1 §3` (`wikiSeeChangesTitle`).
+    public static func seeChangesTitle(_ place: String) -> String { "\(actionSeeChanges) · \(place)" }
+    /// The fold for the versions before the one it opens on (`wikiEarlierChanges`).
+    public static func earlierChanges(_ n: Int) -> String { "Earlier changes (\(n))" }
 
     /// The cross on an attachment chip: `Remove 3.1 §3`.
     public static func remove(_ what: String) -> String { "Remove \(what)" }
@@ -212,7 +255,8 @@ public enum WikiChatCopy {
             "card.sources": cardSources, "card.yourMessage": cardYourMessage, "card.footnote": cardFootnote,
             "card.wouldRewrite": cardWouldRewrite, "card.sectionUpdated": sectionUpdated, "card.replaced": cardReplaced,
             "card.replacedNote": cardReplacedNote, "card.changed": cardChanged, "card.web": cardWeb,
-            "card.webNote": cardWebNote, "card.applied": cardApplied, "card.discarded": cardDiscarded,
+            "card.webNote": cardWebNote, "card.applied": cardApplied, "card.appliedInReview": cardAppliedInReview,
+            "card.appliedInReviewNote": cardAppliedInReviewNote, "card.discarded": cardDiscarded,
             "card.notApplied": cardNotApplied, "card.undone": cardUndone, "card.redoMessage": cardRedoMessage,
             "result.rewriting": resultRewriting, "result.rewritingFrom": resultRewritingFrom,
             "result.waiting": resultWaiting, "result.failed": resultFailed, "result.updatedLead": resultUpdatedLead,
@@ -237,7 +281,7 @@ public enum WikiChatCopy {
         return table
     }()
 
-    /// Every `WIKI_CHAT_*` string the web lib exports, by its name: the contract's it takes and its own.
+    /// Every `WIKI_*` string the web lib exports, by its name: the contract's it takes and its own.
     public static let web: [String: String] = [
         "WIKI_CHAT_LABEL": fabIdle,
         "WIKI_CHAT_NEW": newChat,
@@ -246,6 +290,7 @@ public enum WikiChatCopy {
         "WIKI_CHAT_EMPTY_HINT": emptyHint,
         "WIKI_CHAT_EMPTY_NOTE": emptyNote,
         "WIKI_CHAT_PLACEHOLDER": placeholder,
+        "WIKI_CHAT_PLACEHOLDER_DRAFT": placeholderDraft,
         "WIKI_CHAT_NO_WORKTREE": noWorktree,
         "WIKI_CHAT_CHOOSE_WORKSPACE": chooseWorkspace,
         "WIKI_CHAT_HISTORY": history,
@@ -260,5 +305,26 @@ public enum WikiChatCopy {
         "WIKI_CHAT_MODE": mode,
         "WIKI_CHAT_SEND_FAILED": sendFailed,
         "WIKI_CHAT_PICK_SENTENCES": pickSentences,
+        "WIKI_CHAT_ENDED": ended,
+        "WIKI_CHAT_TRASHED": trashed,
+        "WIKI_CHAT_SOURCES": cardSources,
+        "WIKI_CHAT_REWRITES": cardRewrites,
+        "WIKI_CHAT_SIMILAR": similar,
+        "WIKI_CHAT_WEB": cardWeb,
+        "WIKI_CHAT_WEB_NOTE": cardWebNote,
+        "WIKI_CHAT_WOULD_REWRITE": cardWouldRewrite,
+        "WIKI_CHAT_SECTION_UPDATED": sectionUpdated,
+        "WIKI_CHAT_REDO_MESSAGE": cardRedoMessage,
+        "WIKI_CHAT_PRESS_FAILED": pressFailed,
+        "WIKI_CHAT_CARD_UNREAD": cardUnread,
+        "WIKI_CHAT_EDIT_TITLE": editTitle,
+        "WIKI_CHAT_EDIT_NOTE": editNote,
+        "WIKI_CHAT_EDIT_TITLE_FIELD": editTitleField,
+        "WIKI_CHAT_EDIT_LINE": editLine,
+        "WIKI_CHAT_CANCEL": cancel,
+        "WIKI_SEE_CHANGES_SAME": seeChangesSame,
+        "WIKI_SEE_CHANGES_NONE": seeChangesNone,
+        "WIKI_SEE_CHANGES_FAILED": seeChangesFailed,
+        "WIKI_ACTIVITY_DOCS": activityDocs,
     ]
 }

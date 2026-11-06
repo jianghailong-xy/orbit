@@ -65,7 +65,8 @@ struct WikiDocScreen: View {
                 if let doc = wiki.docs[address.slug] {
                     WikiDocPage(doc: doc, github: WikiDocLogic.githubRepo(wiki.currentSpace?.repoUrlNorm), written: written(wiki),
                                 summaries: summaries(wiki), section: address.section, actions: actions(doc),
-                                seen: seen, added: added(doc), quoted: quoted(doc))
+                                seen: seen, added: added(doc), quoted: quoted(doc),
+                                would: model.wikiChat?.wouldRewrite ?? [])
                         // The sections written since the reader looked: their versions, for the new sentences' line.
                         .task(id: updatedSections(doc)) { await loadVersions(doc) }
                 } else if wiki.missingDocs.contains(address.slug) {
@@ -83,6 +84,8 @@ struct WikiDocScreen: View {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
+            // Leaving moves the stamp too, so what was seen here is not news next time (the web's `writeWikiSeen`).
+            .onDisappear { leaveSeen(wiki) }
             .task {
                 moveSeen(wiki)
                 await wiki.loadDoc(address.slug)
@@ -115,8 +118,15 @@ struct WikiDocScreen: View {
         let chat = model.wikiChat
         let space = model.wiki?.currentSpace
         var ask: ((WikiChatAskRequest) -> Void)?
+        var seeChanges: ((WikiDocSection) -> Void)?
         if let chat, let space {
             ask = { request in chat.ask(request, spaceID: space.id) }
+            // Updated beside a section opens See changes on the write it names.
+            seeChanges = { section in
+                let place = WikiChatLogic.place(doc: doc.number ?? doc.slug, section: "\(section.number ?? 0)")
+                chat.seeChanges = WikiChatSeeChanges(spaceID: space.id, sections: [.init(
+                    docSlug: doc.slug, sectionKey: section.key, place: place, versionID: section.change?.versionId)], draftID: nil)
+            }
         }
         return WikiDocActions(
             openEntry: { id in model.push(.wikiEntry(entryID: id)) },
@@ -131,6 +141,7 @@ struct WikiDocScreen: View {
             },
             openSource: { target in open(target) },
             ask: ask,
+            seeChanges: seeChanges,
             sectionInView: { key in
                 guard let chat, let space, let section = doc.sections?.first(where: { $0.key == key }) else { return }
                 let place = WikiChatLogic.place(doc: doc.number ?? doc.slug, section: "\(section.number ?? 0)")
@@ -154,6 +165,11 @@ struct WikiDocScreen: View {
         let stored = UserDefaults.standard.double(forKey: key)
         seen = stored > 0 ? stored : now
         UserDefaults.standard.set(now, forKey: key)
+    }
+
+    private func leaveSeen(_ wiki: WikiModel) {
+        guard let slug = wiki.currentSpace?.slug else { return }
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: WikiChatLogic.seenKey(space: slug, doc: address.slug))
     }
 
     /// The sentences of this document the chat's composer quotes.

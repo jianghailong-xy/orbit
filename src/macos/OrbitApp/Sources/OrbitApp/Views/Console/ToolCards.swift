@@ -319,15 +319,18 @@ struct ToolCardView: View {
               !p.id.isEmpty else { return nil }
         return p
     }
-    /// A wiki chat's drafting call — `wiki_propose` or `wiki_draft` — whose answer names its card (wiki
-    /// contract `chat.drafts.toolResult`): drawn as that card, read off the answer and never off the
-    /// conversation's words, here as on the web and in the wiki chat's panel. An answer naming none (a
-    /// dry run, a refusal) draws as any call.
+    /// A wiki chat's drafting call — `wiki_propose`, `wiki_draft` or `wiki_note`, or the CLI door to them in
+    /// a shell — whose answer names its card (wiki contract `chat.drafts.toolResult`): drawn as that card,
+    /// read off the answer and never off the conversation's words, here as on the web and in the wiki
+    /// chat's panel. An answer naming none (a dry run, a refusal) draws as any call.
     private var wikiDraftID: String? {
         guard card.status == .ok else { return nil }
-        return WikiChatLogic.draftID(toolName: card.name, result: result)
+        return WikiChatLogic.draftID(toolName: card.name, command: card.input["command"]?.stringValue, result: result)
     }
-    private var needsWholeResult: Bool { card.name == "mcp__orbit__session_create" || WikiChatLogic.isDraftTool(card.name) }
+    private var needsWholeResult: Bool {
+        card.name == "mcp__orbit__session_create"
+            || WikiChatLogic.isDraftingCall(card.name, command: card.input["command"]?.stringValue)
+    }
     private var resolutionKey: ToolPayloadResolutionKey {
         ToolPayloadResolutionKey(card: card, expanded: expanded, needsWholeInput: readsWholeQuestion,
                                  needsWholeResult: needsWholeResult || readsWholeQuestion)

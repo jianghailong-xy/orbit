@@ -12,19 +12,38 @@ struct WikiChatAskRequest: Identifiable, Equatable {
     var id: String { "\(docSlug):\(sentences.first?.id ?? place)" }
 }
 
-/// See changes, open on one section of one card's rewrite: the version that rewrite kept, compared with the text
-/// that replaced it (contract `docs.versions.compare`).
+/// See changes (contract `docs.versions.compare`, the web's `WikiSeeChanges`): each section a card's rewrite wrote, or
+/// the one section a page's Updated names — the version the write kept, compared with the text that replaced it.
 struct WikiChatSeeChanges: Identifiable, Equatable {
+    struct Section: Equatable {
+        let docSlug: String
+        let sectionKey: String
+        /// "3.1 §3".
+        let place: String
+        /// The version the write kept; nil opens the newest.
+        let versionID: String?
+        /// A write that left the section as it was and kept no version (a card's `same` section): nothing to read.
+        var unchanged = false
+    }
+
     let spaceID: String
-    let docSlug: String
-    let sectionKey: String
-    /// "3.1 §3".
-    let place: String
-    /// The version the rewrite kept; nil opens the newest.
-    let versionID: String?
+    let sections: [Section]
     /// The card it was opened from, which the opening marks seen.
     let draftID: String?
-    var id: String { "\(docSlug):\(sectionKey):\(versionID ?? "-")" }
+    var id: String { sections.map { "\($0.docSlug):\($0.sectionKey):\($0.versionID ?? "-")" }.joined(separator: "|") }
+}
+
+extension WikiChatSeeChanges {
+    /// See changes for a card's rewrite: each section it wrote, or read the same (the web's card opens these).
+    static func of(_ card: WikiChatDraftView, spaceID: String) -> WikiChatSeeChanges? {
+        guard let rewrite = card.rewrite else { return nil }
+        let sections = WikiChatLogic.seeChangesSections(rewrite).compactMap { section -> Section? in
+            guard let doc = section.doc, let key = section.key else { return nil }
+            return Section(docSlug: doc, sectionKey: key, place: section.place, versionID: section.versionId,
+                           unchanged: section.result == .same)
+        }
+        return sections.isEmpty ? nil : WikiChatSeeChanges(spaceID: spaceID, sections: sections, draftID: card.id)
+    }
 }
 
 /// The wiki chat on iOS and macOS (docs/wiki-chat-design.md §9, board 42 ⑤): the space's chats and the round button's
@@ -69,7 +88,13 @@ final class WikiChatModel {
     var pickedWorkspace: String?
     /// The cards a press is on now, so their buttons don't take a second press.
     private(set) var pressing: Set<String> = []
-    /// What a refused press or send said, shown once.
+    /// What a card's last press that did not go said, by the card's storage key: drawn in the card (`wikiChatPressError`).
+    private(set) var pressFailures: [String: String] = [:]
+    /// The cards whose read failed, by storage key: the call stands, its card cannot be read now.
+    private(set) var unreadCards: Set<String> = []
+    /// The sections whose versions could not be read, by `versionsKey`.
+    private(set) var failedVersions: Set<String> = []
+    /// What a refused send said, shown once.
     var refusal: String?
     /// A new chat being made.
     private(set) var creating = false
@@ -122,6 +147,12 @@ final class WikiChatModel {
             .max { ($0.rewrite?.settledAt ?? "") < ($1.rewrite?.settledAt ?? "") }
     }
 
+    /// `<doc>#<key>` of each section an open card of the panel's chat would rewrite, marked on the page beside it
+    /// (board 42 ②).
+    var wouldRewrite: Set<String> {
+        presented ? WikiChatLogic.wouldRewrite(openChatCards) : []
+    }
+
     /// The composer's placeholder: a chat with an open card is asked what to change in it (board 42 ②).
     var placeholder: String {
         openChatCards.contains { $0.state == .draft || $0.state == .changed }
@@ -160,8 +191,18 @@ final class WikiChatModel {
 
     /// One card, read on its own: the transcript of the full session page draws it too.
     func loadCard(_ id: String) async {
-        guard let read = try? await api.wikiChatDraft(id) else { return }
+        let key = PublicID.storageKey(id)
+        guard let read = try? await api.wikiChatDraft(id) else {
+            if cards[key] == nil { unreadCards.insert(key) }
+            return
+        }
+        unreadCards.remove(key)
         store(read)
+    }
+
+    /// The card's read failed and nothing of it is held: the slot says so.
+    func isUnread(_ id: String) -> Bool {
+        unreadCards.contains(PublicID.storageKey(id))
     }
 
     /// A card the transcript shows came on screen, or left it: what a nudge re-reads.
@@ -181,9 +222,17 @@ final class WikiChatModel {
 
     /// A section's versions: See changes, and the new sentences of a section marked Updated.
     func loadVersions(spaceID: String, slug: String, key: String) async {
-        guard let read = try? await api.wikiDocSectionVersions(spaceID: spaceID, slug: slug, key: key) else { return }
         let cacheKey = Self.versionsKey(spaceID: spaceID, slug: slug, key: key)
+        guard let read = try? await api.wikiDocSectionVersions(spaceID: spaceID, slug: slug, key: key) else {
+            failedVersions.insert(cacheKey)
+            return
+        }
+        failedVersions.remove(cacheKey)
         if versions[cacheKey] != read { versions[cacheKey] = read }
+    }
+
+    func versionsFailed(spaceID: String, slug: String, key: String) -> Bool {
+        failedVersions.contains(Self.versionsKey(spaceID: spaceID, slug: slug, key: key))
     }
 
     func versions(spaceID: String, slug: String, key: String) -> WikiDocSectionVersions? {
@@ -358,19 +407,25 @@ final class WikiChatModel {
 
     // MARK: the presses (contract `chat.presses`)
 
-    /// Apply, Discard, Undo, Try again or seen. A refusal is said once; the card is read again either way.
+    /// Apply, Discard, Undo, Try again or seen. What a press that did not go says stays in its card, until the next
+    /// press; the card is read again either way.
     func press(_ card: WikiChatDraftView, _ press: WikiChatPress) async {
         let key = PublicID.storageKey(card.id)
         guard !pressing.contains(key) else { return }
         pressing.insert(key)
         defer { pressing.remove(key) }
+        if press != .seen { pressFailures[key] = nil }
         do {
             store(try await api.pressWikiChatDraft(card.id, press).draft)
         } catch {
-            if press != .seen { refusal = Self.refusalText(error) }
+            if press != .seen { pressFailures[key] = WikiChatLogic.pressError(error) }
             await loadCard(card.id)
         }
         if let space = spaceID { await load(spaceID: space) }
+    }
+
+    func pressFailed(_ card: WikiChatDraftView) -> String? {
+        pressFailures[PublicID.storageKey(card.id)]
     }
 
     /// Edit: the owner's version of each op, applied as Review's Edit.
@@ -383,24 +438,14 @@ final class WikiChatModel {
             if let space = spaceID { await load(spaceID: space) }
             return nil
         } catch {
-            return Self.refusalText(error)
+            return WikiChatLogic.pressError(error)
         }
     }
 
-    /// The opened result of a settled rewrite is seen (contract `chat.presses.seen`): once.
+    /// The opened result of a settled rewrite is seen (contract `chat.presses.seen`): once — the card on screen in the
+    /// panel, or See changes.
     func markSeen(_ card: WikiChatDraftView) {
-        guard let rewrite = card.rewrite, !rewrite.seen,
-              [.updated, .same, .failed].contains(rewrite.result) else { return }
+        guard WikiChatLogic.needsSeen(card) else { return }
         Task { await press(card, .seen) }
-    }
-
-    /// The server's own words for a refused press, else the plain sentence.
-    static func refusalText(_ error: Error) -> String {
-        if case APIError.http(_, let body?) = error, let data = body.data(using: .utf8),
-           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let message = object["message"] as? String, !message.isEmpty {
-            return message
-        }
-        return WikiCopy.decideFailed
     }
 }
