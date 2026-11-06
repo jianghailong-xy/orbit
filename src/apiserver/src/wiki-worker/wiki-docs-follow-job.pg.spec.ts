@@ -58,7 +58,7 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { withdrawDocSentences } from '../wiki/wiki-doc-withdrawal';
 import { WikiDocs } from '../wiki/wiki-docs';
-import { followWikiDocsPress, readWikiDocsFollowRewrites } from '../wiki/wiki-docs-follow';
+import { followWikiDocsPress, readWikiDocsFollowRewrites, wikiDocsFollowSectionsToday } from '../wiki/wiki-docs-follow';
 import { WikiDocsController } from '../wiki/wiki-docs.controller';
 import { countBacklog, spaceScope } from '../wiki/wiki-maintenance';
 import { wikiMaintenanceCatchUpOf } from '../wiki/wiki-maintenance-run';
@@ -869,6 +869,12 @@ test('past the day\'s 40 sections for merges, the rest are left for maintenance 
   assert.equal(wikiDocChangeLine(left), '1 section left for the next maintenance run');
   const rewritten = (changes.body.changes as WikiDocChangeRow[]).filter((row) => row.kind === 'section' && row.key === keys.flow);
   assert.equal(rewritten.length, 1, 'the flow section\'s rewrite is a Docs row too');
+  // The day's count reads the follow jobs' reports as well as the versions: with every version gone — a section keeps
+  // five — the job's own report still counts what it wrote for the merge, and never the press's section.
+  await h.sql.query(`DELETE FROM "wiki_doc_section_version" WHERE "space_id" = $1`, [s.spaceId]);
+  const forMerges = report.sections.filter((section) => section.outcome === 'written' && !section.forced).length;
+  assert.ok(forMerges >= 1, JSON.stringify(report.sections));
+  assert.equal(await wikiDocsFollowSectionsToday(h.prisma as unknown as PrismaService, { ownerId: s.owner.id, spaceId: s.spaceId, now: new Date() }), forMerges);
 });
 
 // ── 5. who runs beside whom ─────────────────────────────────────────────────────────────────────────
@@ -949,10 +955,12 @@ test('a verdict\'s withdrawal and a follow job\'s write of the same section, in 
   const said: string[] = [];
   const keep = (message: unknown) => said.push(String(message));
   Logger.overrideLogger({ log: () => undefined, warn: keep, error: keep, debug: () => undefined, verbose: () => undefined });
-  const deadlocks = async (): Promise<number> => (await h.sql.query(`SELECT "deadlocks"::int AS "n" FROM pg_stat_database WHERE "datname" = current_database()`)).rows[0].n;
+  // Read through the pool, not the harness's one client, which the follow job's progress reads share meanwhile.
+  const deadlocks = async (): Promise<number> => (await h.prisma.$queryRaw<Array<{ n: number }>>`
+    SELECT "deadlocks"::int AS "n" FROM pg_stat_database WHERE "datname" = current_database()`)[0].n;
   const deadlocksBefore = await deadlocks();
-  const waiting = async (): Promise<number> => (await h.sql.query(
-    `SELECT count(*)::int AS "n" FROM pg_stat_activity WHERE "datname" = current_database() AND "wait_event_type" = 'Lock'`)).rows[0].n;
+  const waiting = async (): Promise<number> => (await h.prisma.$queryRaw<Array<{ n: number }>>`
+    SELECT count(*)::int AS "n" FROM pg_stat_activity WHERE "datname" = current_database() AND "wait_event_type" = 'Lock'`)[0].n;
   const until = async (n: number, what: string): Promise<void> => {
     const deadline = Date.now() + 30_000;
     while ((await waiting()) < n) {
@@ -984,7 +992,8 @@ test('a verdict\'s withdrawal and a follow job\'s write of the same section, in 
     holders.splice(holders.indexOf(holder), 1);
   };
   let halted = false;
-  const ended = async (jobId: string) => halted || ['succeeded', 'failed', 'cancelled'].includes((await job(h, jobId)).state);
+  const ended = async (jobId: string) => halted
+    || ['succeeded', 'failed', 'cancelled'].includes((await h.prisma.wikiJob.findUniqueOrThrow({ where: { id: jobId }, select: { state: true } })).state);
   const follow = (jobId: string) => passes(w, () => ended(jobId), 'the follow job to end', 120);
   // What runs in the background is awaited where the case needs it; a case that fails first leaves nothing behind.
   const quietly = <T>(promise: Promise<T>): Promise<T> => {

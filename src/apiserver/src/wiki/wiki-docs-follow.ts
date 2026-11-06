@@ -94,9 +94,16 @@ function carries(facts: readonly WikiDocsFollowFact[], fact: WikiDocsFollowFact)
 }
 
 /**
+ * How far back a change of main is looked for among the space's follow jobs before it is carried again: a receipt is
+ * delivered again by a retry or a replay soon after the first, and the receipts of one promotion all at once. Bounded,
+ * so the look reads a few days of one space's jobs (`wiki_job_space_created_idx`) however many the space ever had.
+ */
+const CARRIED_WITHIN_DAYS = 7;
+
+/**
  * Join a fact to the space's queued follow job, or make one, under the space's row lock (`docs.follow.queue`). A change
- * of main a follow job of the space already carries — queued, running or ended — is not carried again: a receipt
- * delivered twice is one fact. Answers the job, or null when there was nothing to carry.
+ * of main a follow job of the space made in the last `CARRIED_WITHIN_DAYS` already carries — queued, running or ended —
+ * is not carried again: a receipt delivered twice is one fact. Answers the job, or null when there was nothing to carry.
  */
 async function joinFact(
   tx: Prisma.TransactionClient,
@@ -110,6 +117,7 @@ async function joinFact(
     const seen = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT j."id" FROM "wiki_job" j
        WHERE j."space_id" = ${spaceId}::uuid AND j."owner_id" = ${ownerId}::uuid AND j."kind" = ${WIKI_DOCS_FOLLOW.kind}
+         AND j."created_at" > now() - ${CARRIED_WITHIN_DAYS}::int * interval '1 day'
          AND j."input" -> 'facts' @> ${JSON.stringify([{ from: fact.from, sha: fact.sha }])}::jsonb
        ORDER BY j."created_at" DESC, j."id" DESC
        LIMIT 1`);
@@ -275,11 +283,17 @@ async function receiptFact(prisma: PrismaService, receipt: ReceiptRow): Promise<
   let title: string | null;
   if (landing) {
     const job = typeof detail.integrationJobId === 'string'
-      ? await prisma.projectIntegrationJob.findUnique({ where: { id: detail.integrationJobId }, select: { kind: true } }).catch(() => null)
+      ? await prisma.projectIntegrationJob.findUnique({ where: { id: detail.integrationJobId }, select: { kind: true, promotionId: true } }).catch(() => null)
+      : null;
+    const promotion = job?.promotionId
+      ? await prisma.projectPromotion.findUnique({ where: { id: job.promotionId }, select: { sourceKind: true } }).catch(() => null)
       : null;
     const project = receipt.projectId ? await prisma.project.findFirst({ where: { id: receipt.projectId, ownerId }, select: { title: true } }) : null;
     const task = receipt.taskId ? await prisma.task.findFirst({ where: { id: receipt.taskId, ownerId }, select: { title: true } }) : null;
-    title = job?.kind === 'LAND_PROMOTION' ? titleOf(project?.title, task?.title, session.title) : titleOf(task?.title, project?.title, session.title);
+    // A project's promotion puts its line on main: the project's title. A MAIN line has no landing of its own — a task's
+    // branch is offered to main as a TASK_BRANCH promotion (project-integration-job.ts) — so that landing is the task's.
+    const projects = job?.kind === 'LAND_PROMOTION' && promotion?.sourceKind === 'PROJECT_BRANCH';
+    title = projects ? titleOf(project?.title, task?.title, session.title) : titleOf(task?.title, project?.title, session.title);
   } else {
     title = titleOf(session.title);
   }
@@ -393,19 +407,36 @@ export function wikiDocsFollowDayStart(now: Date): Date {
 }
 
 /**
- * The sections a space's follow jobs wrote for merges and landings since midnight UTC (contract `docs.follow.daily`):
- * the versions those writes kept, each written for a merge or a landing — a press's are not counted, and a section left
- * unchanged was not written and kept nothing.
+ * The sections a space's follow jobs wrote for merges and landings since midnight UTC (contract `docs.follow.daily`): a
+ * press's are not counted, and a section left unchanged was not written. Read two ways, each blind where the other sees,
+ * and the larger taken:
+ *
+ *   - the jobs' reports — the ended jobs' sections, and the carry of one that has not ended — each section the job
+ *     wrote that no press asked for. A job ended at its retry limit keeps no report (`jobs.retry.limit`), so what it
+ *     wrote is not here;
+ *   - the versions those writes kept, each with a merge's or a landing's reason. A section keeps five versions
+ *     (`docs.versions.rules.perSection`), so one written more than five times in a day is counted five times here.
  */
 export async function wikiDocsFollowSectionsToday(
   db: Pick<PrismaService, '$queryRaw'>,
   input: { ownerId: string; spaceId: string; now: Date },
 ): Promise<number> {
-  const [row] = await db.$queryRaw<Array<{ n: number }>>(Prisma.sql`
+  const since = wikiDocsFollowDayStart(input.now);
+  const [reported] = await db.$queryRaw<Array<{ n: number }>>(Prisma.sql`
+    SELECT count(*)::int AS "n"
+      FROM "wiki_job" j
+      CROSS JOIN LATERAL jsonb_array_elements(CASE
+        WHEN jsonb_typeof(j."report" -> 'sections') = 'array' THEN j."report" -> 'sections'
+        WHEN jsonb_typeof(j."report" -> 'carry' -> 'sections') = 'array' THEN j."report" -> 'carry' -> 'sections'
+        ELSE '[]'::jsonb END) s
+     WHERE j."owner_id" = ${input.ownerId}::uuid AND j."space_id" = ${input.spaceId}::uuid AND j."kind" = ${WIKI_DOCS_FOLLOW.kind}
+       AND (j."ended_at" >= ${since} OR (j."ended_at" IS NULL AND j."updated_at" >= ${since}))
+       AND s ->> 'outcome' = 'written' AND COALESCE(s ->> 'forced', 'false') <> 'true'`);
+  const [kept] = await db.$queryRaw<Array<{ n: number }>>(Prisma.sql`
     SELECT count(*)::int AS "n" FROM "wiki_doc_section_version" v
      WHERE v."owner_id" = ${input.ownerId}::uuid AND v."space_id" = ${input.spaceId}::uuid
-       AND v."reason" IN ('merge', 'landing') AND v."replaced_at" >= ${wikiDocsFollowDayStart(input.now)}`);
-  return row?.n ?? 0;
+       AND v."reason" IN ('merge', 'landing') AND v."replaced_at" >= ${since}`);
+  return Math.max(reported?.n ?? 0, kept?.n ?? 0);
 }
 
 // ── What a card and Activity read ───────────────────────────────────────────────────────────────
