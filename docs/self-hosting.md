@@ -1313,15 +1313,30 @@ and the stop proof are as for any sleep. A container of the previous image that 
 channel removes it and makes a new one from the current image.
 
 The exception is a runner from before the runner link's client, in a container made before about 2026-10-25, on a
-server that takes the runner daemon's calls over the [runner link](#runner-link) alone. That server answers every
-call of such a runner 426, so the runner never reports in again: its owner sees it offline, and it can neither take
-work nor go to sleep. The manager replaces it. Once a `READY` runner whose container runs a previous image has been
-silent for 10 minutes 45 seconds, the manager asks the channel to stop that container and waits for Docker's report
-that it exited. It then removes the container and starts the next generation from the current image, on the same
-volume and with the same runner, which works over the link and picks its sessions up again. The wait is as long as
-the reaper holds the silence of runners that lose contact together, so an outage that silences every runner at once,
-such as the apiserver or the link gateway restarting, stops none of them for its image. The apiserver logs both
-steps:
+server that takes the runner daemon's calls over the [runner link](#runner-link) alone. That server answers each of its
+calls 426, and what happens next depends on whether it is busy:
+
+- **Idle**, or with a slot free, it asks for work, takes the 426 as final and exits. The manager starts it again from the
+  current image, on the same volume and with the same runner, as after any stop: in the drill of 2026-11-06 it was
+  `READY` on the link 40 seconds after the new apiserver started, and its session answered the next message at once.
+- **Busy**, every slot taken by a turn, it asks for no work and keeps going, unheard. The server sees nothing more of
+  those turns, and its owner sees the runner offline. The reaper fails their sessions (`runner offline`): after 10
+  minutes 45 seconds where every runner fell silent at once, as in the drill, and sooner where others are still heard.
+  Once the runner has been silent for those 10 minutes 45 seconds, the manager asks the channel to stop the container,
+  waits for Docker's report that it exited, and starts the next generation from the current image, which works over
+  the link. The wait is as long as the reaper holds the silence of runners that lose contact together, so an outage
+  that silences every runner at once, such as the apiserver or the link gateway restarting, stops none of them.
+
+What a busy runner does after the upgrade is lost to its sessions. In the drill, each of two agent turns ran 46 tool
+steps; the server holds the first 10, and the other 36, 12 commits among them, ran unseen for 11 minutes before the
+container was stopped. Both sessions ended `FAILED`, so a new message to either is refused, and those commits were made
+only in each session's worktree on the runner's volume. So before you take such a version, let every managed runner from
+before the link client finish its turns. On a deployment already at a version from after 2026-10-25, you can also stop
+each such container once it is idle (`docker stop mr-<runner id>`), and the manager makes its next one from the current
+image, which has the link client. The `docker ps` command a few paragraphs below lists the containers and their images.
+
+The apiserver logs the first line below at each pass, every few seconds, until Docker reports the exit, then the
+second:
 
 ```text
 WARN [ManagedRunnerManager] managed runner <mapping id>: READY, its container <instance uid> of generation 1 made from a previous image (sha256:…) and silent since <time>, on a server that takes runners over the link alone; asking it to stop, so that the next generation starts from the current image
@@ -1332,8 +1347,8 @@ Until the new container is ready, its owner reads "The runner instance stopped, 
 same data volume." A container that ends without Docker's report of its exit, or disappears, is not replaced: the
 runner waits in `FENCING`, as for any [container that vanished](managed-runner-docker-operations.md#a-runners-container-vanished-without-dockers-report).
 A runner that still reports in is never stopped for its image, and a silent one on the current image is left as it
-is. To replace one sooner, stop its container yourself with `docker stop mr-<runner id>`. The manager takes Docker's
-report of that stop as it takes any other, and starts the next generation from the current image.
+is. The manager takes Docker's report of a `docker stop` you ran as it takes any other, and starts the next generation
+from the current image.
 
 `/upgrade` deletes no image, and Docker keeps whatever a container still runs. What happens to the previous image
 then depends on Docker's image store:
