@@ -424,8 +424,8 @@ func TestResumableSweepKeeps(t *testing.T) {
 		prepare func(t *testing.T, f *resumableFixture, path, session string)
 		// atTheSecondLook marks the one reason only the second look asks about, for what it costs.
 		atTheSecondLook bool
-		// onlyWithoutABudget marks a reason that is the two weeks themselves, which a storage budget's floor does
-		// not wait out (resumableIdle).
+		// onlyWithoutABudget marks a reason a storage budget's floor sets aside (underBudgetFloor): the two weeks
+		// themselves, and a commit only the session's own branch has.
 		onlyWithoutABudget bool
 	}{
 		{name: "a modified tracked file", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
@@ -446,7 +446,7 @@ func TestResumableSweepKeeps(t *testing.T) {
 			writeUnder(t, path, "scratch/untracked.txt", "only here\n")
 			ageCheckout(t, path, 20)
 		}},
-		{name: "a commit no remote has", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a commit no remote has", onlyWithoutABudget: true, prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			commitFile(t, path, "unpushed.txt", "local\n", "unpushed")
 			ageCheckout(t, path, 20)
 		}},
@@ -1560,9 +1560,10 @@ func TestARestartGoesOnAsItDidWhereAnythingElseIsTheCase(t *testing.T) {
 			mustGit(t, f.repo, "update-ref", absentRefName(job.SessionID), job.Branch)
 		}},
 		{name: "its branch is new", want: outcome{true, true, isoWorktree}, prepare: func(t *testing.T, f *resumableFixture, job *ClaimedSession) {}},
-		{name: "its branch has gone, its base ref and mark have not", want: outcome{true, true, isoWorktree}, prepare: func(t *testing.T, f *resumableFixture, job *ClaimedSession) {
+		// With a mark saying its checkout is away, the branch comes back from the mark first, and the restart leaves
+		// the checkout away as any other (TestABranchDeletedWhileItsCheckoutIsAwayComesBackWithIt).
+		{name: "its branch has gone, its base ref has not, and nothing marks its checkout away", want: outcome{true, true, isoWorktree}, prepare: func(t *testing.T, f *resumableFixture, job *ClaimedSession) {
 			mustGit(t, f.repo, "update-ref", baseRefName(job.SessionID), "HEAD")
-			mustGit(t, f.repo, "update-ref", absentRefName(job.SessionID), "HEAD")
 		}},
 		{name: "an empty directory stands at its path", want: outcome{true, true, isoWorktree}, prepare: func(t *testing.T, f *resumableFixture, job *ClaimedSession) {
 			mustGit(t, f.repo, "branch", job.Branch)
@@ -2318,7 +2319,7 @@ func (s *resumableSchedule) sweepAfter(d time.Duration, pressure worktreeGCPress
 	s.t.Helper()
 	s.clock.Advance(d)
 	asked := s.queryCount()
-	logs := captureLogs(s.t, func() { s.sweeper.sweepResumable(s.transport, s.pool, pressure) })
+	logs := captureLogs(s.t, func() { s.sweeper.sweepResumable(s.transport, s.pool, pressure, false) })
 	return logs, s.queryCount() != asked
 }
 
@@ -3086,14 +3087,21 @@ func TestTheRunLoopCallsEverySideOfTheResumableSweep(t *testing.T) {
 	}
 	body := string(source)
 	// The first half first and on nothing but the sweeper's schedule, and the second behind it, both times.
-	if !strings.Contains(body, "if worktreeGC.due(time.Now()) {\n\t\tliveSet := pool.ids()\n\t\tpressure := measureWorktreePressure(diskFloorMb.Load(), &storage)\n\t\tgcWorktrees(t, liveSet, pressure)\n\t\tworktreeGC.sweepResumable(t, pool, pressure)\n") {
+	if !strings.Contains(body, "if worktreeGC.due(time.Now()) {\n\t\tliveSet := pool.ids()\n\t\tpressure := measureWorktreePressure(diskFloorMb.Load(), &storage)\n\t\tgcWorktrees(t, liveSet, pressure)\n\t\tworktreeGC.sweepResumable(t, pool, pressure, false)\n") {
 		t.Error("the startup sweep must run the first half, then the second, whenever a sweep is due")
 	}
-	if !strings.Contains(body, "if worktreeGC.due(time.Now()) {\n\t\t\tpressure := measureWorktreePressure(diskFloorMb.Load(), &storage)\n\t\t\tgcWorktrees(t, pool.ids(), pressure)\n\t\t\tworktreeGC.sweepResumable(t, pool, pressure)\n") {
+	if !strings.Contains(body, "if worktreeGC.due(time.Now()) {\n\t\t\tpressure := measureWorktreePressure(diskFloorMb.Load(), &storage)\n\t\t\tgcWorktrees(t, pool.ids(), pressure)\n\t\t\tworktreeGC.sweepResumable(t, pool, pressure, false)\n") {
 		t.Error("the claim loop's sweep must run the first half, then the second, whenever a sweep is due")
 	}
 	if got := strings.Count(body, "gcResumableCheckouts(t, pool, pressure)"); got != 1 {
 		t.Errorf("sweepResumable must be the one door to the second half, or it runs past a wait: found %d calls", got)
+	}
+	// Only the room made for a new checkout under a storage budget goes past the wait, through that same door.
+	room := strings.Index(body, "func (s *worktreeSweeper) makeRoom(")
+	pastTheWait := strings.Index(body, "sweepResumable(t, pool, pressure, true)")
+	if strings.Count(body, "sweepResumable(t, pool, pressure, true)") != 1 || room < 0 || pastTheWait < room ||
+		pastTheWait > room+strings.Index(body[room:], "\n}\n") {
+		t.Error("makeRoom, and nothing else, must take the second half past the wait")
 	}
 	// One sweeper, for as long as the process runs, which starts it with no wait: that is what a restart forgetting
 	// the wait comes to, and nothing but sweepResumable may touch it.

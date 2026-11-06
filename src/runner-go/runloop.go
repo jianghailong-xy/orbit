@@ -504,8 +504,12 @@ func (s *worktreeSweeper) due(now time.Time) bool {
 // sweepResumable runs the second half of a sweep, unless a look that found nothing is still waiting out its
 // resumableSweepWait, which only a disk back above its floor ends early. A reading that failed says nothing about
 // the disk, so it leaves the wait as it is. This decides when anybody looks and never what may go.
-func (s *worktreeSweeper) sweepResumable(t *Transport, pool *sessionPool, pressure worktreeGCPressure) {
-	if pool.clock.Now().Before(s.resumableWaitUntil) {
+//
+// forCheckout is a sweep making room for a session checkout about to be made under a storage budget (makeRoom). It
+// does not wait: that checkout is the change the wait assumes has not happened, and the look stays within the sweep's
+// own budget (resumableSweepBudget). A look of its that finds nothing starts a wait as any other does.
+func (s *worktreeSweeper) sweepResumable(t *Transport, pool *sessionPool, pressure worktreeGCPressure, forCheckout bool) {
+	if !forCheckout && pool.clock.Now().Before(s.resumableWaitUntil) {
 		pressure = pressure.again()
 		if !pressure.measured || pressure.belowFloor() {
 			return
@@ -522,14 +526,15 @@ func (s *worktreeSweeper) sweepResumable(t *Transport, pool *sessionPool, pressu
 
 // makeRoom runs a sweep off the schedule for a session checkout about to be made under a storage budget
 // (checkoutRoom): both halves as the schedule runs them, on a reading that counts that checkout as made already, so
-// that it stops once the checkout fits above the floor. The schedule does not move. Not armed, it runs nothing, as
-// the schedule does not: until a reclaim has answered, a checkout about to be re-attached reads as an orphan.
+// that it stops once the checkout fits above the floor, and without waiting out a look that found nothing
+// (sweepResumable). The schedule does not move. Not armed, it runs nothing, as the schedule does not: until a reclaim
+// has answered, a checkout about to be re-attached reads as an orphan.
 func (s *worktreeSweeper) makeRoom(t *Transport, pool *sessionPool, pressure worktreeGCPressure) {
 	if !s.armed {
 		return
 	}
 	gcWorktrees(t, pool.ids(), pressure)
-	s.sweepResumable(t, pool, pressure)
+	s.sweepResumable(t, pool, pressure, true)
 }
 
 // reclaimMissingSessions repairs both startup state and an ambiguous claim
@@ -2110,7 +2115,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		liveSet := pool.ids()
 		pressure := measureWorktreePressure(diskFloorMb.Load(), &storage)
 		gcWorktrees(t, liveSet, pressure)
-		worktreeGC.sweepResumable(t, pool, pressure)
+		worktreeGC.sweepResumable(t, pool, pressure, false)
 		gcUploads(liveSet)
 	}
 
@@ -2190,7 +2195,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		if worktreeGC.due(time.Now()) {
 			pressure := measureWorktreePressure(diskFloorMb.Load(), &storage)
 			gcWorktrees(t, pool.ids(), pressure)
-			worktreeGC.sweepResumable(t, pool, pressure)
+			worktreeGC.sweepResumable(t, pool, pressure, false)
 		}
 		// Saturation, counted against everything this machine is doing rather than
 		// against turn permits alone: a parked session whose runner-hosted build is

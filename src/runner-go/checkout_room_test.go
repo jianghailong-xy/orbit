@@ -22,7 +22,10 @@ import (
 //   - what a checkout is estimated to take is what it holds on disk (TestACheckoutEstimate*);
 //   - under a budget's floor a resting checkout younger than two weeks goes, oldest first, and comes back on its next
 //     claim; without one it stays (TestUnderAStorageBudgetsFloorARestingCheckout*, TestWithoutABudgetsFloor*).
-//     What it has to lose keeps it either way (TestResumableSweepKeeps).
+//     What it has to lose keeps it either way (TestResumableSweepKeeps), but commits on its own branch are not that
+//     under a budget's floor (TestUnderAStorageBudgetsFloorACheckoutWhoseWorkIsOnlyOnItsBranch*);
+//   - the room made for a checkout does not wait out a look that found nothing (*DuringTheWait);
+//   - a branch deleted while its checkout is away comes back with the checkout (TestABranchDeleted*).
 
 // withPayload commits a tracked file of a MiB to main and pushes it, so that a checkout made from then on is a size a
 // budget counted in MiB notices.
@@ -333,8 +336,8 @@ func TestUnderAStorageBudgetsFloorARestingCheckoutGoesWithoutTheTwoWeeks(t *test
 	requireCheckoutReclaimed(t, oldest, "six days unwritten, the oldest, goes first under the budget's floor")
 	requireCheckoutReclaimed(t, middle, "three days unwritten, it goes while the budget is still short")
 	requireCheckoutOnDisk(t, newest, "the budget is back over its floor, so the newest stays")
-	first := strings.Index(logs, "gc: reclaimed checkout sess-oldest — resumable session, clean and pushed, last written 6 days ago, no process or job in it; under the storage budget's floor")
-	second := strings.Index(logs, "gc: reclaimed checkout sess-middle — resumable session, clean and pushed, last written 3 days ago")
+	first := strings.Index(logs, "gc: reclaimed checkout sess-oldest — resumable session, clean, its work on its branch, last written 6 days ago, no process or job in it; under the storage budget's floor")
+	second := strings.Index(logs, "gc: reclaimed checkout sess-middle — resumable session, clean, its work on its branch, last written 3 days ago")
 	if first < 0 || second < first {
 		t.Fatalf("each goes in one line saying why, the oldest first, got:\n%s", logs)
 	}
@@ -398,6 +401,201 @@ func TestWithoutABudgetsFloorARestingCheckoutWaitsOutTheTwoWeeks(t *testing.T) {
 				requireCheckoutReclaimed(t, old, "two weeks unwritten, it goes, so the sweep did run")
 			} else {
 				requireCheckoutOnDisk(t, old, "a budget over its floor takes nothing")
+			}
+		})
+	}
+}
+
+// A resting session whose work is on its own branch and nowhere else, as every session that did work has it: a commit
+// of its own, and the park checkpoint its last turn ended on. Under a storage budget's floor its checkout goes, both
+// commits staying on the branch, and on its next claim the checkout comes back on that branch with the checkpoint
+// undone, its work uncommitted again as on any resume. Without a budget the checkout stays: a commit no remote has
+// keeps it, however long it has been idle.
+func TestUnderAStorageBudgetsFloorACheckoutWhoseWorkIsOnlyOnItsBranchGoesAndComesBack(t *testing.T) {
+	for _, underABudget := range []bool{true, false} {
+		name := "under a storage budget's floor"
+		if !underABudget {
+			name = "no budget, under the machine's floor"
+		}
+		t.Run(name, func(t *testing.T) {
+			f := newResumableFixture(t)
+			const session = "sess-parked"
+			branch := "orbit/" + session
+			path := f.checkout(t, session)
+			base := mustGit(t, f.repo, "rev-parse", baseRefName(session))
+			commitFile(t, path, "own.txt", "a commit of its own\n", "a commit of its own")
+			own := mustGit(t, path, "rev-parse", "HEAD")
+			writeUnder(t, path, "wip.txt", "the last turn's work in progress\n")
+			if _, _, err := finalizeWorktree(&Worktree{Path: path, Branch: branch, RepoDir: f.repo, Session: session, BaseSha: base}, true); err != nil {
+				t.Fatal(err)
+			}
+			checkpoint := mustGit(t, path, "rev-parse", "HEAD")
+			if checkpoint == own || !strings.Contains(mustGit(t, path, "log", "-1", "--format=%B"), parkCheckpointTrailer+": "+session) {
+				t.Fatal("the last turn must end on a park checkpoint")
+			}
+			if only := mustGit(t, path, "rev-list", "--count", "HEAD", "--not", "--remotes"); only != "2" {
+				t.Fatalf("two commits only its branch has, got %s", only)
+			}
+			// Under a budget, younger than two weeks; without one, older, so that only the commits can keep it.
+			days := 3
+			pressure := measureWorktreePressure(0, smallBudgetUnderItsFloor())
+			if !underABudget {
+				days, pressure = 20, diskUnderTheFloor()
+			}
+			ageCheckout(t, path, days)
+			neighbour := f.checkout(t, "sess-neighbour")
+			job := &ClaimedSession{SessionID: session, Branch: branch,
+				WT: &Worktree{Path: path, Branch: branch, RepoDir: f.repo, Session: session, BaseSha: base}}
+			if _, added := f.pool.register(job, func() {}, false); !added {
+				t.Fatal("register a cold supervisor")
+			}
+
+			gcResumableCheckouts(f.transport, f.pool, pressure)
+
+			requireCheckoutReclaimed(t, neighbour, "a pushed fortnight-idle neighbour goes, so the sweep did run")
+			if !underABudget {
+				requireCheckoutOnDisk(t, path, "without a budget, a commit no remote has keeps the checkout")
+				return
+			}
+			requireCheckoutReclaimed(t, path, "its work is on its branch, which stays")
+			if got := mustGit(t, f.repo, "rev-parse", branch); got != checkpoint {
+				t.Fatalf("the branch keeps both commits, its tip at the checkpoint %s, got %s", checkpoint, got)
+			}
+			if got := mustGit(t, f.repo, "rev-parse", branch+"~1"); got != own {
+				t.Fatalf("the commit of its own is under the checkpoint, want %s, got %s", own, got)
+			}
+
+			claim := &ClaimedSession{SessionID: session, Branch: branch}
+			restoreAbsentCheckout(f.pool, claim)
+
+			if claim.SourceRefusal != nil {
+				t.Fatalf("the claim was refused: %+v", claim.SourceRefusal)
+			}
+			requireCheckoutOnDisk(t, path, "its next claim brings it back")
+			if got := mustGit(t, path, "symbolic-ref", "--short", "HEAD"); got != branch {
+				t.Fatalf("it comes back on its branch, got %q", got)
+			}
+			if got := mustGit(t, path, "rev-parse", "HEAD"); got != own {
+				t.Fatalf("the checkpoint is undone and the commit of its own stays: HEAD = %s, want %s", got, own)
+			}
+			if status := mustGit(t, path, "status", "--porcelain"); status != "A  wip.txt" {
+				t.Fatalf("the checkpoint's work is back, uncommitted, got %q", status)
+			}
+			for file, want := range map[string]string{"own.txt": "a commit of its own\n", "wip.txt": "the last turn's work in progress\n"} {
+				if content, err := os.ReadFile(filepath.Join(path, file)); err != nil || string(content) != want {
+					t.Fatalf("%s: %q, %v", file, content, err)
+				}
+			}
+		})
+	}
+}
+
+// Within the hour after a look at resting checkouts that found nothing, the schedule's sweeps do not look again, but a
+// checkout that would take the budget under its floor still makes room from them: it is the change that wait assumes
+// has not happened.
+func TestUnderAStorageBudgetACheckoutMakesRoomFromRestingCheckoutsDuringTheWait(t *testing.T) {
+	s := newResumableSchedule(t)
+	s.sweeper.armed = true
+	resting := withIgnoredBytes(t, s.checkout(t, "sess-resting"), 6*oneMiB, 2)
+	// On its way to an engine when the first look asks, so that look finds nothing.
+	s.set(func() { s.answers["sess-resting"] = "kept" })
+	storage := smallBudgetUnderItsFloor()
+
+	logs, looked := s.sweepAfter(0, measureWorktreePressure(0, storage))
+	if !looked || !strings.Contains(logs, resumableWaitLine) {
+		t.Fatalf("the first look finds nothing and starts the wait (looked %v):\n%s", looked, logs)
+	}
+	requireCheckoutOnDisk(t, resting, "the control plane kept it")
+
+	// Its turn is over, and it rests again.
+	s.set(func() { s.answers["sess-resting"] = "resumable" })
+	if _, looked := s.sweepAfter(worktreeGCInterval, measureWorktreePressure(0, storage)); looked {
+		t.Fatal("five minutes into the hour, the schedule's sweep must not look")
+	}
+	requireCheckoutOnDisk(t, resting, "nothing looked")
+
+	sessionCheckoutRoom.Store(&checkoutRoom{storage: storage,
+		measure: func() worktreeGCPressure { return measureWorktreePressure(0, storage) },
+		sweep:   func(pressure worktreeGCPressure) { s.sweeper.makeRoom(s.transport, s.pool, pressure) }})
+	t.Cleanup(func() { sessionCheckoutRoom.Store(nil) })
+	logs = captureLogs(t, func() { startNewSession(t, s.resumableFixture, "sess-new") })
+
+	requireCheckoutReclaimed(t, resting, "a checkout that would take the budget under its floor makes room from it, wait or no wait")
+	requireCheckoutOnDisk(t, filepath.Join(worktreesDir(), "sess-new"), "and is made")
+	if strings.Contains(logs, "nothing more can be reclaimed") {
+		t.Fatalf("the room was made, so there is no shortfall to report:\n%s", logs)
+	}
+}
+
+// Nothing in the runner deletes a session's branch, but with its checkout away git no longer stops anyone working in
+// the repository from doing so. Every door that brings the checkout back puts the branch back first, where it stood
+// when the checkout went, so that the session comes back on its own work instead of being refused, or starting over
+// on a new branch. A restart puts it back too, and then leaves the checkout away as for any resting session.
+func TestABranchDeletedWhileItsCheckoutIsAwayComesBackWithIt(t *testing.T) {
+	for _, door := range []string{"a claim waking its supervisor", "a claim", "a pinned claim", "a restart, then a claim"} {
+		t.Run(door, func(t *testing.T) {
+			f := newResumableFixture(t)
+			const session = "sess-parked"
+			branch := "orbit/" + session
+			path := f.checkout(t, session)
+			commitFile(t, path, "own.txt", "only on its branch\n", "only on its branch")
+			ageCheckout(t, path, 3)
+			tip := mustGit(t, path, "rev-parse", "HEAD")
+			base := mustGit(t, f.repo, "rev-parse", baseRefName(session))
+			if _, err := git(f.repo, "branch", "-D", branch); err == nil {
+				t.Fatal("git deleted a branch checked out in a worktree; this test means to show what changes once it is not")
+			}
+			if door == "a claim waking its supervisor" {
+				job := &ClaimedSession{SessionID: session, Branch: branch,
+					WT: &Worktree{Path: path, Branch: branch, RepoDir: f.repo, Session: session, BaseSha: base}}
+				if _, added := f.pool.register(job, func() {}, false); !added {
+					t.Fatal("register a cold supervisor")
+				}
+			}
+			gcResumableCheckouts(f.transport, f.pool, measureWorktreePressure(0, smallBudgetUnderItsFloor()))
+			requireCheckoutReclaimed(t, path, "its work is on its branch, under a budget's floor")
+			mustGit(t, f.repo, "branch", "-D", branch)
+
+			claim := &ClaimedSession{SessionID: session, Branch: branch}
+			logs := captureLogs(t, func() {
+				switch door {
+				case "a claim waking its supervisor":
+					restoreAbsentCheckout(f.pool, claim)
+				case "a pinned claim":
+					claim.Source = &SessionSource{State: sourceStatePinned, BaseSha: base}
+					setupWorktree(claim, f.repo)
+				case "a restart, then a claim":
+					restarted := &ClaimedSession{SessionID: session, Branch: branch}
+					if execDir := f.pool.setupSupervisorCheckout(restarted, f.repo, false); execDir != path || !checkoutAbsent(path) || restarted.SourceRefusal != nil {
+						t.Fatalf("a restart leaves a resting session's checkout away: execDir %q, absent %v, refusal %+v", execDir, checkoutAbsent(path), restarted.SourceRefusal)
+					}
+					if got, err := git(f.repo, "rev-parse", "--verify", branch); err != nil || got != tip {
+						t.Fatalf("the restart put the branch back at %s, got %q (%v)", tip, got, err)
+					}
+					if _, added := f.pool.register(restarted, func() {}, false); !added {
+						t.Fatal("register the restart's cold supervisor")
+					}
+					restoreAbsentCheckout(f.pool, claim)
+				default:
+					setupWorktree(claim, f.repo)
+				}
+			})
+
+			if claim.SourceRefusal != nil {
+				t.Fatalf("the claim was refused: %+v", claim.SourceRefusal)
+			}
+			requireCheckoutOnDisk(t, path, "it comes back")
+			if got := mustGit(t, path, "symbolic-ref", "--short", "HEAD"); got != branch {
+				t.Fatalf("it comes back on its branch, got %q", got)
+			}
+			if got := mustGit(t, path, "rev-parse", "HEAD"); got != tip {
+				t.Fatalf("on the branch's tip as it stood, %s, got %s", tip, got)
+			}
+			if _, err := os.Stat(filepath.Join(path, "own.txt")); err != nil {
+				t.Fatalf("its work is there: %v", err)
+			}
+			if want := "session " + session + " — its branch " + branch + " was gone while its checkout was away; put it back at " + shortSha(tip); !strings.Contains(logs, want) {
+				t.Fatalf("the log must say so (%q), got:\n%s", want, logs)
 			}
 		})
 	}
