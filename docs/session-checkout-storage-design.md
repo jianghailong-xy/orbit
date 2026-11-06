@@ -219,11 +219,13 @@ the worktrees root, or the clone fails with `EXDEV`.
 3. `git reset -q --hard <base>`. This rehashes the clones once, rewrites any file whose content differs (template edits
    in progress, a base other than the template's `HEAD`), and checks out anything missing. Correctness therefore never
    depends on the template being clean.
-4. On any error, remove the partial checkout and fall back to `git worktree add` with a normal checkout. Report which
-   path was taken in the runner log and in the session's isolation status.
+4. On any error, remove the partial checkout and fall back to `git worktree add` with a normal checkout. Log which
+   path was taken and why, `checkout cloned` or `checkout plain: <reason>`, and keep it with the session in the runner
+   (`ClaimedSession.CheckoutCreation`). The isolation status the runner reports stays `worktree` either way: that is
+   the one value the control plane takes for a session with a checkout of its own.
 
 **As implemented** (`src/runner-go/clone_checkout.go`; `addSessionCheckout` in `sparse_checkout.go`, which every door
-above goes through). Two of the steps changed. Both changes were measured with git 2.47.3.
+above goes through). Steps 1 to 3 changed; the changes to steps 1 and 3 were measured with git 2.47.3.
 
 - **Step 1 builds the index instead of copying it.** A copy of the template's index carries the template's marks into
   the checkout: a file marked assume-unchanged keeps the mark, so the session's edits to it never show in status or
@@ -242,9 +244,19 @@ above goes through). Two of the steps changed. Both changes were measured with g
   attempt made with `-b` is used as it stands. A failure of `git worktree add` itself is returned unchanged, since a
   plain checkout would fail the same way.
 - **The probe** runs at start and before each checkout, once per device. A template on another device is not tried.
-- **The log** names the path taken and why. The isolation status the runner reports stays `worktree`, the one value the
-  control plane takes for a session with a checkout of its own. How the checkout was made is kept beside it, in the
-  runner (`ClaimedSession.CheckoutCreation`).
+- **The log** has one line per checkout, in a form that stays the same so that operators can search for it:
+  `session <id> — checkout cloned: <n> files from <workspace>`, or `session <id> — checkout plain: <reason>: <detail>`.
+  The reason is one of these:
+  - `probe failed (<errno>)`
+  - `another filesystem (EXDEV)`
+  - `unreadable workspace (<errno>)`
+  - `clone failed (<errno>)`, for the first file
+  - `clone failed midway (<errno>)`, after others were cloned
+  - `clone failed (git)`
+
+  An errno goes by its name: `EOPNOTSUPP` on a Linux filesystem that cannot clone, `ENOTSUP` from macOS. When the
+  worktrees root is probed, it gets a line of its own: `checkouts: cloned: ...` or
+  `checkouts: plain: probe failed (<errno>): ...`.
 - **On darwin** the clone is `unix.Clonefile` from `golang.org/x/sys` v0.30.0 (`docs/dependency-security.md`).
 
 **Cost.** Step 3 rehashes the checked-out bytes: 15–17 s for the full Orbit tree in the experiments, and about 1 s with
@@ -288,6 +300,9 @@ P1 does not depend on P2 or P3. P3 benefits from P2 (smaller rehash) but does no
   hash. The 32 retained checkouts are kept for these directories already.
 - Physical accounting in the channel (D3 B), and `xfs` PVCs (D4 B).
 - Default floors for self-registered runners.
+- Show in the apps how a session's checkout was made: cloned, or plain and why. The runner keeps this
+  (`ClaimedSession.CheckoutCreation`) but reports only `worktree`, which the control plane compares exactly, so showing
+  it needs an apiserver change and a client change.
 
 ## 11. Test plan
 
