@@ -5,6 +5,7 @@
 // the contract JSON.
 
 import type { WikiAnchorState, WikiEntryKind, WikiEntryStatus, WikiTrust } from './wiki';
+import type { WikiDocSentenceRow, WikiDocVersionReason } from './wikiChat';
 import type { WikiPlanSectionKind, WikiPlanSessionCondition, WikiPlanTopic } from './wikiPlan';
 
 /** `needs_review`: more than `rules.needsReviewAbove` of its sentences are unsourced or unverified. */
@@ -294,8 +295,18 @@ export interface WikiDocWriteResult {
   docId: string;
   planVersion: number;
   status: WikiDocStatus;
-  /** `unchanged`: its material's fingerprint was the stored one, and nothing of it was withdrawn. */
-  sections: Array<{ key: string; outcome: 'written' | 'unchanged'; stats: WikiDocSectionStats | null }>;
+  /**
+   * `unchanged`: its material's fingerprint was the stored one, and nothing of it was withdrawn. A section written
+   * over one that stood carries the version the write kept of that one (contract `docs.versions.kept`) and how many
+   * of its sentences changed (`wikiDocSentenceDiff`); a section written for the first time, or left unchanged, null.
+   */
+  sections: Array<{
+    key: string;
+    outcome: 'written' | 'unchanged';
+    stats: WikiDocSectionStats | null;
+    versionId: string | null;
+    changed: number | null;
+  }>;
   counts: WikiDocSentenceCounts;
 }
 
@@ -401,6 +412,83 @@ export interface WikiDocSectionView {
   /** What became of each piece of its material when it was written (none for a section not written yet). */
   dispositions: WikiDocDisposition[];
   blocks: WikiDocBlockView[];
+  /** Its latest change (contract `docs.versions.reads.doc`); null while no write has replaced it. */
+  change: WikiDocSectionChange | null;
+}
+
+/**
+ * A section's latest change, as the document read gives it (contract `docs.versions.reads.doc`): the version its
+ * last rewrite kept of what it replaced, why, when, and how many sentences that rewrite changed
+ * (`wikiDocSentenceDiff`). The page marks `Updated` beside a section changed since the reader last looked.
+ */
+export interface WikiDocSectionChange {
+  versionId: string;
+  reason: WikiDocVersionReason;
+  at: string;
+  changed: number;
+}
+
+/** What replaced a version (contract `docs.versions.row`): the job whose write it was, or the owner's restore of another version. */
+export type WikiDocVersionReplacedBy = { kind: 'job'; jobId: string } | { kind: 'restore'; versionId: string };
+
+/** One version a section kept, compared sentence by sentence with the text that replaced it (`docs.versions.compare`). */
+export interface WikiDocSectionVersionView {
+  id: string;
+  reason: WikiDocVersionReason;
+  /** When it was replaced. */
+  at: string;
+  replacedBy: WikiDocVersionReplacedBy;
+  changed: number;
+  rows: WikiDocSentenceRow[];
+}
+
+/** `GET /api/wiki/spaces/:id/docs/:slug/sections/:key/versions`: newest first, at most `WIKI_DOC_VERSIONS.perSection`. */
+export interface WikiDocSectionVersions {
+  spaceId: string;
+  slug: string;
+  key: string;
+  versions: WikiDocSectionVersionView[];
+}
+
+/**
+ * One Docs row of Activity's Recently changed (contract `docs.versions.reads.changes`), said by `wikiDocChangeLine`: a
+ * version kept — `where` is `3.1 §3`, `title` the section's — or a follow job that left sections for maintenance.
+ */
+export type WikiDocChangeRow =
+  | {
+    kind: 'section';
+    doc: string;
+    key: string;
+    where: string;
+    title: string;
+    versionId: string;
+    reason: WikiDocVersionReason;
+    at: string;
+    changed: number;
+  }
+  | { kind: 'left'; jobId: string; at: string; left: number };
+
+/** `GET /api/wiki/spaces/:id/doc-changes`: newest first, at most `WIKI_DOC_VERSIONS.changesListed`. */
+export interface WikiDocChanges {
+  spaceId: string;
+  changes: WikiDocChangeRow[];
+}
+
+/** `POST /api/wiki/doc-versions/:id/restore` (contract `docs.versions.restore`). */
+export interface WikiDocRestoreResult {
+  spaceId: string;
+  slug: string;
+  key: string;
+  /** The version put back. */
+  versionId: string;
+  /** `unchanged`: the section already stood as that version kept it, so nothing was written and nothing kept. */
+  outcome: 'restored' | 'unchanged';
+  /** The version the restore kept of the text it replaced (reason restore): restoring it takes the restore back. */
+  keptVersionId: string | null;
+  /** Sentences changed between the text replaced and the text put back. */
+  changed: number | null;
+  status: WikiDocStatus;
+  counts: WikiDocSentenceCounts;
 }
 
 /** One footnote of the document, numbered by first appearance and resolved for the page. */

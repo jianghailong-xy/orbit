@@ -46,7 +46,7 @@ import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
-import { WikiDocs, wikiDocsBuildJobPrincipal } from './wiki-docs';
+import { WikiDocs, wikiDocsBuildJobPrincipal, type WikiDocWriteCause } from './wiki-docs';
 import { gatherDocMaterial, storedSessionCondition } from './wiki-docs-material';
 import { WikiDocsController } from './wiki-docs.controller';
 import { ownerEnvLiterals } from './wiki-dossier';
@@ -57,6 +57,9 @@ import { WikiController } from './wiki.controller';
 import { WikiService, type WikiPrincipal } from './wiki.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
+
+/** Why these writes replace what they replace, as the server's build says it (docs.versions). */
+const AS_BUILD: WikiDocWriteCause = { reason: 'build', jobId: randomUUID(), planVersion: 1 };
 const skip = !URL;
 
 interface Harness {
@@ -549,7 +552,7 @@ test('every record handed out is redacted and placed where a footnote\'s check r
       markdown: '整包测试在 runner 宿主上跑[1]。',
       footnotes: [{ kind: 'tool_call', ref: long.ref, chars: long.chars, quote, viaEntryId: long.via!.entryId }],
     }],
-  }));
+  }, AS_BUILD));
   expectStatus(written, 200, 'a section written from the material');
   const footnote = await h.prisma.wikiDocFootnote.findFirst({ where: { ownerId: s.owner.id, ref: s.r.long } });
   assert.equal(footnote?.verdict, 'verified', `the quote verifies: ${JSON.stringify(footnote)}`);
@@ -602,7 +605,7 @@ test('what became of each piece of material is written with its section, refused
       dispositions,
     }],
   });
-  const write = (body: Record<string, unknown>) => served(() => h.docs.write(s.writer, s.spaceId, SLUG, body));
+  const write = (body: Record<string, unknown>) => served(() => h.docs.write(s.writer, s.spaceId, SLUG, body, AS_BUILD));
   const ledger = [
     { material: 'C1', kind: 'code', ref: 'src/runner-go/runloop.go#L10-40', action: 'adopt', into: null, reason: '讲 runLoop 怎么领取' },
     { material: 'S1', kind: 'turn', ref: s.r.owner, action: 'merge', into: 'S2', reason: `与 S2 说的是同一件事，S2 更新；密钥 ${LITERAL}` },
