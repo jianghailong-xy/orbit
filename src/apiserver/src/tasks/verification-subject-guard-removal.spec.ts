@@ -376,6 +376,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
       'session_dsh_runner_acquisition_guard',
       'session_engine_from_task_pin', 'session_engine_immutable',
       'session_request_asker_stopped', 'session_request_recipient_ended', 'session_source_freeze_guard',
+      'session_wiki_chat_space_guard',
       'task_list_task_count_delete', 'task_list_task_count_insert', 'task_list_task_count_relist',
       'task_owner_confirmation_review_reviewer_ended', 'task_progress_epoch_advance'],
     'the only triggers here newer than 0207 are the ones a later migration installed and kept — '
@@ -386,7 +387,8 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '0370\'s `task_owner_confirmation_review_reviewer_ended` and '
     + '0377\'s `session_dsh_runner_acquisition_guard` and 0414\'s `session_acquisition_engine_guard`, '
     + '`session_engine_from_task_pin` and `session_engine_immutable` and 0426\'s '
-    + '`session_cursor_runner_acquisition_guard` and 0441\'s two `project_rollup_candidate_task_*`. '
+    + '`session_cursor_runner_acquisition_guard` and 0441\'s two `project_rollup_candidate_task_*` '
+    + 'and 0476\'s `session_wiki_chat_space_guard`. '
     + '0212\'s `failure_successor_task_binding_immutable` was another, and 0226 removed it',
   );
   assert.ok(

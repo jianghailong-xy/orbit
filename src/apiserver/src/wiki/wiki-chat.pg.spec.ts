@@ -552,11 +552,16 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
 
   let firstTurn = '';
   await t.test("5–6. the first delivery appends the chat's rules, the page and the selection after the words, read now", async () => {
-    const claim = await api('GET', `/api/runner/sessions/reclaim`, delivery.token, undefined, { 'x-orbit-runner-capabilities': CAPABILITIES });
-    const leaseOwner = (claim.json.sessions as Array<{ sessionId: string; leaseOwner?: string }>).find((s) => toUuid(s.sessionId) === deliveryChat)?.leaseOwner;
-    assert.ok(leaseOwner, `the claim's lease owner: ${claim.text.slice(0, 300)}`);
+    // What a runner does with the session it claimed: take the inbox over, then activate a generation of its own.
+    const { rows: [current] } = await sql.query<{ owner: string | null }>(
+      `SELECT "inbox_lease_owner"::text AS "owner" FROM "session" WHERE "id" = $1::uuid`, [deliveryChat]);
+    const leaseOwner = randomUUID();
+    const taken = await api('POST', `/api/runner/sessions/${pub(deliveryChat)}/takeover-leases`, delivery.token,
+      { leaseOwner, expectedLeaseOwner: current.owner }, { 'x-orbit-runner-capabilities': CAPABILITIES });
+    assert.equal(taken.status, 200, taken.text);
     leaseGeneration = randomUUID();
-    const activated = await api('POST', `/api/runner/sessions/${pub(deliveryChat)}/activate-leases`, delivery.token, { leaseOwner, leaseGeneration });
+    const activated = await api('POST', `/api/runner/sessions/${pub(deliveryChat)}/activate-leases`, delivery.token,
+      { leaseOwner, leaseGeneration }, { 'x-orbit-runner-capabilities': CAPABILITIES });
     assert.equal(activated.status, 200, activated.text);
 
     const handed = await inbox();
