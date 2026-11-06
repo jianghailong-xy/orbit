@@ -520,6 +520,18 @@ func (s *worktreeSweeper) sweepResumable(t *Transport, pool *sessionPool, pressu
 		s.resumableWaitUntil.UTC().Format(time.RFC3339)))
 }
 
+// makeRoom runs a sweep off the schedule for a session checkout about to be made under a storage budget
+// (checkoutRoom): both halves as the schedule runs them, on a reading that counts that checkout as made already, so
+// that it stops once the checkout fits above the floor. The schedule does not move. Not armed, it runs nothing, as
+// the schedule does not: until a reclaim has answered, a checkout about to be re-attached reads as an orphan.
+func (s *worktreeSweeper) makeRoom(t *Transport, pool *sessionPool, pressure worktreeGCPressure) {
+	if !s.armed {
+		return
+	}
+	gcWorktrees(t, pool.ids(), pressure)
+	s.sweepResumable(t, pool, pressure)
+}
+
 // reclaimMissingSessions repairs both startup state and an ambiguous claim
 // response (the server may have committed PENDING -> RUNNING before the HTTP
 // response was lost). Every process takes rows over in stable session-id order,
@@ -2084,6 +2096,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// This is now the FIRST sweep rather than the only one: the claim loop below repeats it on
 	// worktreeGCInterval, sharing this same gate through the sweeper's `armed` flag.
 	worktreeGC := worktreeSweeper{interval: worktreeGCInterval, armed: reclaimed && !reclaimSkipped}
+	// From here on, a session checkout made under a storage budget is counted on it until the channel measures it, and
+	// makes room for itself first, with this sweeper, when it would take the budget under its floor (checkoutRoom).
+	sessionCheckoutRoom.Store(&checkoutRoom{storage: &storage,
+		measure: func() worktreeGCPressure { return measureWorktreePressure(diskFloorMb.Load(), &storage) },
+		sweep:   func(pressure worktreeGCPressure) { worktreeGC.makeRoom(t, pool, pressure) }})
+	defer sessionCheckoutRoom.Store(nil)
 	// The same answer says which sessions' adopted jobs no supervisor is coming for.
 	if worktreeGC.armed {
 		pool.endUnclaimedHostlessJobs()

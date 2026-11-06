@@ -424,6 +424,9 @@ func TestResumableSweepKeeps(t *testing.T) {
 		prepare func(t *testing.T, f *resumableFixture, path, session string)
 		// atTheSecondLook marks the one reason only the second look asks about, for what it costs.
 		atTheSecondLook bool
+		// onlyWithoutABudget marks a reason that is the two weeks themselves, which a storage budget's floor does
+		// not wait out (resumableIdle).
+		onlyWithoutABudget bool
 	}{
 		{name: "a modified tracked file", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			writeUnder(t, path, "base.txt", "changed and not committed\n")
@@ -447,14 +450,14 @@ func TestResumableSweepKeeps(t *testing.T) {
 			commitFile(t, path, "unpushed.txt", "local\n", "unpushed")
 			ageCheckout(t, path, 20)
 		}},
-		{name: "a file written within two weeks, content unchanged", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a file written within two weeks, content unchanged", onlyWithoutABudget: true, prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			ageCheckout(t, path, 20)
 			now := time.Now().Add(-13 * 24 * time.Hour)
 			if err := os.Chtimes(filepath.Join(path, session+".txt"), now, now); err != nil {
 				t.Fatal(err)
 			}
 		}},
-		{name: "build output written within two weeks", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "build output written within two weeks", onlyWithoutABudget: true, prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			ignoring(t, path, "dist/")
 			ageCheckout(t, path, 20)
 			writeUnder(t, path, "dist/deep/app.js", "a recent build is a recent use\n")
@@ -464,7 +467,7 @@ func TestResumableSweepKeeps(t *testing.T) {
 				_ = os.Chtimes(dir, ago, ago)
 			}
 		}},
-		{name: "a file deleted within two weeks", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a file deleted within two weeks", onlyWithoutABudget: true, prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			ignoring(t, path, "dist/")
 			writeUnder(t, path, "dist/deep/app.js", "a build\n")
 			ageCheckout(t, path, 20)
@@ -674,34 +677,51 @@ func TestResumableSweepKeeps(t *testing.T) {
 		}},
 	}
 	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			f := newResumableFixture(t)
-			const session = "sess-kept"
-			path := f.checkout(t, session)
-			neighbour := f.checkout(t, "sess-neighbour")
-			c.prepare(t, f, path, session)
-			// The first look is a judgement of its own, not a draft of the second.
-			secondLook := make(chan struct{}, 1)
-			f.set(func() {
-				f.atSecondLook[session] = func() {
-					secondLook <- struct{}{}
-					if !c.atTheSecondLook {
-						t.Errorf("%s got past the first look", c.name)
+		// Under a storage budget's floor the same reasons keep a checkout however recently it was written.
+		for _, underABudget := range []bool{false, true} {
+			if underABudget && c.onlyWithoutABudget {
+				continue
+			}
+			name := c.name
+			if underABudget {
+				name = "under a storage budget's floor, " + name
+			}
+			t.Run(name, func(t *testing.T) {
+				f := newResumableFixture(t)
+				const session = "sess-kept"
+				path := f.checkout(t, session)
+				neighbour := f.checkout(t, "sess-neighbour")
+				c.prepare(t, f, path, session)
+				pressure := diskUnderTheFloor()
+				if underABudget {
+					// Both two days old, well inside the two weeks: what keeps this one is what it holds.
+					ageCheckout(t, path, 2)
+					ageCheckout(t, neighbour, 2)
+					pressure = measureWorktreePressure(0, smallBudgetUnderItsFloor())
+				}
+				// The first look is a judgement of its own, not a draft of the second.
+				secondLook := make(chan struct{}, 1)
+				f.set(func() {
+					f.atSecondLook[session] = func() {
+						secondLook <- struct{}{}
+						if !c.atTheSecondLook {
+							t.Errorf("%s got past the first look", c.name)
+						}
 					}
+				})
+
+				gcResumableCheckouts(f.transport, f.pool, pressure)
+
+				if c.atTheSecondLook && len(secondLook) == 0 {
+					t.Errorf("%s is the second look's to find: the first look does not pay for it", c.name)
+				}
+				requireCheckoutOnDisk(t, path, c.name)
+				requireCheckoutReclaimed(t, neighbour, "its neighbour goes, so the sweep did run")
+				if _, err := git(path, "rev-parse", "--verify", "HEAD"); err != nil {
+					t.Fatalf("the kept checkout must still be a checkout: %v", err)
 				}
 			})
-
-			sweepOnFullDisk(f)
-
-			if c.atTheSecondLook && len(secondLook) == 0 {
-				t.Errorf("%s is the second look's to find: the first look does not pay for it", c.name)
-			}
-			requireCheckoutOnDisk(t, path, c.name)
-			requireCheckoutReclaimed(t, neighbour, "its neighbour goes, so the sweep did run")
-			if _, err := git(path, "rev-parse", "--verify", "HEAD"); err != nil {
-				t.Fatalf("the kept checkout must still be a checkout: %v", err)
-			}
-		})
+		}
 	}
 }
 

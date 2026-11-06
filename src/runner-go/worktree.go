@@ -3053,6 +3053,17 @@ func isScratchCheckoutName(name string) bool {
 // repair checkout gets (recoveryCheckoutRetention).
 const resumableCheckoutIdle = 14 * 24 * time.Hour
 
+// resumableIdle is how long nothing may have been written in a resting session's checkout before a sweep on this
+// reading may take it: resumableCheckoutIdle, or no time at all under a storage budget's floor. A volume that open
+// sessions fill would otherwise not be reclaimed in time, and its channel would stop the runner first
+// (docs/session-checkout-storage-design.md §5). Without a budget the two weeks stand.
+func (p worktreeGCPressure) resumableIdle() time.Duration {
+	if p.budget != nil && p.belowFloor() {
+		return 0
+	}
+	return resumableCheckoutIdle
+}
+
 // checkoutProbeTimeout bounds the git probes on one checkout. The sweep runs on the claim loop, so a git
 // that hangs must cost it a checkout it could not judge, never the loop.
 const checkoutProbeTimeout = 30 * time.Second
@@ -3061,6 +3072,8 @@ const checkoutProbeTimeout = 30 * time.Second
 // take (worktreeSweeper.sweepResumable). A look runs on the claim loop, about 28 seconds over 149 checkouts at a
 // load of about 21, and on a host that stays under its floor with nothing to take, every five minutes would be
 // one message in eleven waiting behind it. What it finds changes slowly: a checkout has to go two weeks unwritten.
+// The wait stands under a storage budget's floor too, where a checkout need not (resumableIdle), and for a sweep run
+// to make room for a new checkout (worktreeSweeper.makeRoom).
 const resumableSweepWait = time.Hour
 
 // resumableSweepBudget is how long one gcResumableCheckouts may go on taking checkouts, on the claim loop. It is
@@ -3109,8 +3122,8 @@ var checkoutBuildOutput = map[string]bool{
 // errKeepCheckout ends a walk of a checkout that has already said it stays.
 var errKeepCheckout = errors.New("the checkout stays")
 
-// checkoutIdleSince is when a linked worktree that has been left alone for resumableCheckoutIdle was
-// last written, and false for anything else. What counts is the newest modification time of the
+// checkoutIdleSince is when a linked worktree that has been left alone for idle was last written, and
+// false for anything else. What counts is the newest modification time of the
 // directories and files under it, itself included and checkoutDependencyDirs left out: modification times
 // are what a write leaves and a `git status` does not, and a directory's covers a file deleted from it.
 //
@@ -3123,12 +3136,14 @@ var errKeepCheckout = errors.New("the checkout stays")
 //
 // The walk stops at the first recent write. It runs on the claim loop, and most of its time would go on
 // checkouts in recent use, where the first file it reads will do: on a host with 157 checkouts at a
-// load of about 20, reading all of them took 49 to 101 seconds, and stopping there 17 to 25.
-func checkoutIdleSince(path string) (time.Time, bool) {
+// load of about 20, reading all of them took 49 to 101 seconds, and stopping there 17 to 25. With no
+// idle time to wait out (resumableIdle) only a write since the walk began is recent, so it reads the
+// whole checkout.
+func checkoutIdleSince(path string, idle time.Duration) (time.Time, bool) {
 	if info, err := os.Lstat(filepath.Join(path, ".git")); err != nil || !info.Mode().IsRegular() {
 		return time.Time{}, false
 	}
-	cutoff := time.Now().Add(-resumableCheckoutIdle)
+	cutoff := time.Now().Add(-idle)
 	var newest time.Time
 	err := filepath.WalkDir(path, func(entry string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -3369,8 +3384,8 @@ func (t *Transport) worktreesResumable(ids []string) (map[string]string, error) 
 // A checkout goes only if all of these hold: the control plane answers that its session is resumable
 // (worktreesResumable; that half is the only thing asked of it), nothing of the session is at work here
 // (checkoutDriven), no process or mount is in it (occupiedCheckouts), nothing was written in it for two
-// weeks (checkoutIdleSince) and it has nothing to lose (checkoutHasNothingToLose). All of that is asked
-// again immediately before it goes.
+// weeks, or for any time at all under a storage budget's floor (checkoutIdleSince, resumableIdle), and it
+// has nothing to lose (checkoutHasNothingToLose). All of that is asked again immediately before it goes.
 //
 // Its budget (resumableSweepBudget) starts with the first checkout that goes, or that could not be judged or
 // taken, and once it is spent the sweep stops between two checkouts. The next sweep judges what is left afresh,
@@ -3418,7 +3433,7 @@ func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPr
 			continue
 		}
 		path := filepath.Join(root, name)
-		if lastWrite, idle := checkoutIdleSince(path); idle && checkoutHasNothingToLose(path, branch, false) {
+		if lastWrite, idle := checkoutIdleSince(path, pressure.resumableIdle()); idle && checkoutHasNothingToLose(path, branch, false) {
 			candidates = append(candidates, candidate{name: name, lastWrite: lastWrite})
 		}
 	}
@@ -3433,7 +3448,7 @@ func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPr
 				now.Sub(spending).Round(time.Second), resumableSweepBudget, len(candidates)-i))
 			return false
 		}
-		taken, err := reclaimResumableCheckout(t, pool, root, c.name, pressure.storage)
+		taken, err := reclaimResumableCheckout(t, pool, root, c.name, pressure.storage, pressure.resumableIdle())
 		if (taken || err != nil) && spending.IsZero() {
 			spending = now
 		}
@@ -3459,8 +3474,8 @@ func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPr
 // which is no answer about it and starts no wait: on a disk too full to write the mark, the next sweep may be able to.
 //
 // Under a storage budget, storage counts the checkout's bytes once it is gone (checkoutStorage.removing); nil counts
-// nothing.
-func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string, storage *checkoutStorage) (bool, error) {
+// nothing. idle is how long nothing may have been written in it (resumableIdle).
+func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string, storage *checkoutStorage, idle time.Duration) (bool, error) {
 	if pool.checkoutDriven(name) {
 		return false, nil
 	}
@@ -3486,8 +3501,8 @@ func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string
 		return false, nil
 	}
 	path := filepath.Join(root, name)
-	lastWrite, idle := checkoutIdleSince(path)
-	if !idle || !checkoutHasNothingToLose(path, branch, true) {
+	lastWrite, unwritten := checkoutIdleSince(path, idle)
+	if !unwritten || !checkoutHasNothingToLose(path, branch, true) {
 		return false, nil
 	}
 	if _, err := git(path, "update-ref", absentRefName(name), "refs/heads/"+branch); err != nil {
@@ -3510,8 +3525,13 @@ func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string
 	if repo != "" {
 		_, _ = git(repo, "worktree", "prune")
 	}
-	logln("gc: reclaimed checkout", name, "—", fmt.Sprintf("resumable session, clean and pushed, nothing written for %d days, no process or job in it; under the free-space floor; its branch and base ref are kept",
-		int(time.Since(lastWrite).Hours()/24)))
+	written := fmt.Sprintf("nothing written for %d days", int(time.Since(lastWrite).Hours()/24))
+	floor := "under the free-space floor"
+	if idle < resumableCheckoutIdle {
+		written = "last written " + humanDuration(time.Since(lastWrite)) + " ago"
+		floor = "under the storage budget's floor, where a resting checkout need not wait two weeks"
+	}
+	logln("gc: reclaimed checkout", name, "—", fmt.Sprintf("resumable session, clean and pushed, %s, no process or job in it; %s; its branch and base ref are kept", written, floor))
 	return true, nil
 }
 
