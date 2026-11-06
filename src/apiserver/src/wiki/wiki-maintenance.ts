@@ -767,6 +767,24 @@ export class WikiMaintenance {
   }
 
   /**
+   * A replay of a maintenance run asked about a session from the case file an earlier attempt of its job read (contract
+   * `maintenance.job.server.replay`), and its own page read recorded a newer one: the session's record says what the
+   * extraction read — the hash `unchanged` holds the next read to, its sources and size — and the page it was handed out on
+   * stays. A session with no record (a page the replay did not read) is left without one.
+   */
+  async recordAsked(ownerId: string, spaceId: string, dossier: Pick<WikiDossier, 'sessionId' | 'hash' | 'sources' | 'tokens' | 'truncated'>): Promise<void> {
+    await this.prisma.wikiDossier.updateMany({
+      where: { ownerId, spaceId, sessionId: dossier.sessionId },
+      data: {
+        hash: dossier.hash,
+        sourceIds: storedDossierSources(dossier.sources) as unknown as Prisma.InputJsonValue,
+        tokens: dossier.tokens,
+        truncated: dossier.truncated,
+      },
+    });
+  }
+
+  /**
    * The page's sessions that belong to a batch project, and the batches' counts (contract
    * `maintenance.dossier.batchProjects`). A batch is a title template shared by
    * `rules.batchTemplateMinTasks` or more tasks of one project — or of one list, for a task in no
