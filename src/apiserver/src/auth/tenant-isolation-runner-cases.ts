@@ -1259,6 +1259,31 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     () => ({ params: {}, body: { text: 'The census notes this.' } }),
     (of) => of.runner.wikiSessionId,
   ),
+  // A wiki chat's rewrite card (contract `agentSurface.chat.draft`): drafted as another account's chat, refused as a
+  // session this runner does not host; drafted in the caller's own chat, a card of its own.
+  'POST /runner/wiki/drafts header x-orbit-session-id': fromTheirSession(
+    RUNNER,
+    () => ({
+      params: {},
+      body: { kind: 'rewrite', sections: [{ doc: 'census', section: 'census' }], reason: 'The census section lags behind main.', idempotencyKey: 'census-draft' },
+    }),
+    (of) => of.wikiChatId,
+  ),
+  // Another account's card is no card of this chat to replace: answered WIKI_SCHEMA at replaces, as one that names nothing.
+  'POST /runner/wiki/drafts body replaces': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: {},
+      headers: calling(mine.wikiChatId),
+      body: {
+        kind: 'rewrite',
+        sections: [{ doc: 'census', section: 'census' }],
+        reason: 'The census section lags behind main.',
+        replaces: of.wikiChatDraftId,
+        idempotencyKey: 'census-draft-replaces',
+      },
+    }),
+  },
   ...Object.fromEntries(Object.entries(wikiRequests()).map(([route, own]) => [
     `${route} header x-orbit-session-id`,
     fromTheirSession(RUNNER, own, (of) => of.runner.wikiSessionId),
@@ -1478,6 +1503,12 @@ export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly str
   'POST /runner/sessions/:id/turns body replyWithinSeconds': {
     reads: [],
     reading: 'a number of seconds (sessions/session-request.ts:144)',
+  },
+  'POST /runner/wiki/drafts body (the body)': {
+    reads: ['body replaces'],
+    reading: 'read field by field (WikiChatDrafts.draftInChat, wiki/wiki-chat-drafts.ts:247): kind, sections (slugs and keys of '
+      + 'the calling chat\'s own space), reason and idempotencyKey name no row; the one id is replaces, the card of the '
+      + 'calling chat the new one replaces, read by (id, the caller\'s owner) and refused unless the calling chat drafted it',
   },
   'POST /runner/workspaces body (the body)': {
     reads: ['body runnerId'],

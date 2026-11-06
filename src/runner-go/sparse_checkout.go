@@ -92,12 +92,20 @@ func gitTooOldForSparse() string {
 // says why. Where the filesystem can clone files, the checkout's files are cloned from repoRoot, the workspace's own
 // checkout (clone_checkout.go), and it reports true; where it cannot, or the clone fails, git writes them, and the
 // log says which and why. An error leaves no checkout behind, as a failed `git worktree add` does, so that what a
-// caller does when the checkout cannot be made goes on as before.
-func addSessionCheckout(sessionID, repoRoot, wtPath, rev string, args ...string) (bool, error) {
+// caller does when the checkout cannot be made goes on as before. Under a storage budget, room is made for the
+// checkout before it is made, and it is counted once it is (checkoutRoom).
+func addSessionCheckout(sessionID, repoRoot, wtPath, rev string, args ...string) (cloned bool, err error) {
 	declared, full := sessionCheckoutExclusions(repoRoot, rev)
 	if full != "" {
 		logln(fmt.Sprintf("session %s — full checkout: %s", sessionID, full))
 	}
+	room := sessionCheckoutRoom.Load()
+	room.makeRoomFor(sessionID, repoRoot, rev, declared)
+	defer func() {
+		if err == nil {
+			room.made(wtPath)
+		}
+	}()
 	if why := whyNotCloned(repoRoot); why != "" {
 		logln(fmt.Sprintf("session %s — plain checkout: %s", sessionID, why))
 	} else {
@@ -114,7 +122,7 @@ func addSessionCheckout(sessionID, repoRoot, wtPath, rev string, args ...string)
 		logln(fmt.Sprintf("session %s — plain checkout: cloning it from %s failed, so git writes it instead: %v", sessionID, repoRoot, err))
 		args = plainAfterFailedClone(args)
 	}
-	_, _, err := makeSessionCheckout(sessionID, repoRoot, wtPath, rev, declared, false, args)
+	_, _, err = makeSessionCheckout(sessionID, repoRoot, wtPath, rev, declared, false, args)
 	return false, err
 }
 

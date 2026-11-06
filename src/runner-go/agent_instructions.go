@@ -312,7 +312,9 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		// one. The commands themselves need ORBIT_SESSION_ID, which a session has.
 		// verify asks the server to verify the session's own proposals and waits for its verdicts, and note
 		// leaves a claim for maintenance to check against the session's own records: no more of a power.
-		for _, action := range []string{"search", "get", "propose", "verify", "note"} {
+		// draft makes a card in the session's own wiki chat, which only the owner can press (the server refuses it
+		// to any other session): less of a power than propose.
+		for _, action := range []string{"search", "get", "propose", "verify", "note", "draft"} {
 			rules = append(rules, "Bash("+command+" wiki "+action+" *)")
 		}
 		// Every file verb: keeping and reading back your own files is no power over anybody else's session, and the

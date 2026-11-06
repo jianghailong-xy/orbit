@@ -2724,8 +2724,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // DELETE: every stored mapping reads NULL in it.
       '0480_managed_runner_volume_measurement',
       // A nullable column for what a wiki model call was made from, and a CHECK of its shape: nothing to preserve, no row
-      // written.
-      '0482_wiki_model_request_material'],
+      // written. One DO statement takes wiki_model_request's lock in short tries and adds both, the CHECK NOT VALID;
+      // after a COMMIT, a VALIDATE reads the stored rows under SHARE UPDATE EXCLUSIVE.
+      '0482_wiki_model_request_material',
+      // 0483 is one new table, `wiki_chat_draft` (a wiki chat's cards and the owner's presses, contract `chat.drafts`),
+      // with its own primary key, CHECKs, a foreign key to `wiki_space` and five indexes, all created IF NOT EXISTS, and no
+      // DO block. It is not a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of
+      // the six preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so
+      // it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: the table starts empty.
+      '0483_wiki_chat_draft'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

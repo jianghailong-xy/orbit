@@ -110,9 +110,10 @@ const wikiSearchReply = `{"q":"trgm index","semantic":false,"hits":[` +
 
 // ── The surface ─────────────────────────────────────────────────────────────────────────────────
 
-// Four tools, and no more: the contract names them, the CLI has a command per tool (the parity test
+// Five tools, and no more: the contract names them, the CLI has a command per tool (the parity test
 // walks that), and the two halves of this file — tool descriptors and capability specs — are here.
-// A fifth tool added on one side is caught by whichever table the other side did not grow.
+// A sixth tool added on one side is caught by whichever table the other side did not grow. The
+// fifth, wiki_draft, joined with the binary that serves it (contract `agentSurface.chat.draft.arrival`).
 func TestWikiAgentSurfaceIsTheContracts(t *testing.T) {
 	surface := wikiSurface(t)
 	tools := surface["tools"].([]interface{})
@@ -133,11 +134,11 @@ func TestWikiAgentSurfaceIsTheContracts(t *testing.T) {
 		}
 	}
 
-	// The risk split, which is the whole reason there are four tools: the contract says which are
+	// The risk split, which is the whole reason there are five tools: the contract says which are
 	// read-only and whether the ones that write destroy anything, and the annotations say it to the
 	// engine that decides whether to ask a human first.
 	specs := surface["toolSpecs"].(map[string]interface{})
-	for _, name := range []string{"wiki_search", "wiki_get", "wiki_propose", "wiki_note"} {
+	for _, name := range []string{"wiki_search", "wiki_get", "wiki_propose", "wiki_note", "wiki_draft"} {
 		spec := specs[name].(map[string]interface{})
 		annotations, _ := wikiDescriptor(t, name)["annotations"].(map[string]interface{})
 		if annotations == nil {
@@ -162,10 +163,18 @@ func TestWikiAgentSurfaceIsTheContracts(t *testing.T) {
 	params := map[string][]string{
 		"wiki_search":  {"query", "kinds", "topic", "paths", "limit"},
 		"wiki_get":     {"ids", "include"},
-		"wiki_propose": {"ops", "rationale", "idempotencyKey", "dryRun"},
-		"wiki_note":    {"text", "paths", "corrects"},
+		"wiki_propose": {"ops", "rationale", "idempotencyKey", "dryRun", "replaces"},
+		"wiki_note":    {"text", "paths", "corrects", "replaces"},
+		"wiki_draft":   {"kind", "sections", "change", "reason", "replaces", "idempotencyKey"},
 	}
 	for name, want := range params {
+		// And the contract's own list for the tool, name for name: a parameter in one and not the other is caught here.
+		contractParams := sortedParamNames(specs[name].(map[string]interface{})["params"].(map[string]interface{}))
+		sortedWant := append([]string(nil), want...)
+		sort.Strings(sortedWant)
+		if !reflect.DeepEqual(contractParams, sortedWant) {
+			t.Errorf("the contract gives %s the params %v, this binary %v", name, contractParams, sortedWant)
+		}
 		schema := wikiDescriptor(t, name)["inputSchema"].(map[string]interface{})
 		props, _ := schema["properties"].(map[string]interface{})
 		for _, param := range want {
@@ -473,6 +482,50 @@ func TestWikiToolsSendWhatWasAskedToTheirRoutes(t *testing.T) {
 			body:  map[string]interface{}{"text": "release.sh next tags at once."},
 			reply: wikiNoteReply,
 		},
+		{
+			name: "wiki_note: in a wiki chat, the card a corrects replaces",
+			args: map[string]interface{}{"text": "The lease is two minutes now.", "corrects": "e1", "replaces": " d1 "},
+			uri:  "/api/runner/wiki/notes",
+			body: map[string]interface{}{"text": "The lease is two minutes now.", "corrects": "e1", "replaces": "d1"},
+			reply: `{"noted":true,"noteId":"n1","created":true,"readBy":"the next maintenance run",` +
+				`"challenged":{"status":"draft","draftId":"d2","entryId":"e1"}}`,
+		},
+		{
+			name: "wiki_propose: in a wiki chat, the card it replaces",
+			args: map[string]interface{}{
+				"ops":            []interface{}{map[string]interface{}{"op": "retire", "entryId": "e1", "baseRevision": float64(2), "reason": "gone"}},
+				"rationale":      "the owner says it is gone",
+				"idempotencyKey": "chat-2",
+				"replaces":       "d1",
+			},
+			uri: "/api/runner/wiki/changesets",
+			body: map[string]interface{}{
+				"ops":            []interface{}{map[string]interface{}{"op": "retire", "entryId": "e1", "baseRevision": float64(2), "reason": "gone"}},
+				"rationale":      "the owner says it is gone",
+				"idempotencyKey": "chat-2",
+				"replaces":       "d1",
+			},
+			reply: `{"status":"draft","draftId":"d2","replayed":false,"ops":[{"seq":0,"status":"draft","entryId":"e1"}],"similar":[],"rewrites":[]}`,
+		},
+		{
+			name: "wiki_draft",
+			args: map[string]interface{}{
+				"kind":           " Rewrite ",
+				"sections":       []interface{}{map[string]interface{}{"doc": " sessions-runtime ", "section": "leases"}},
+				"reason":         " The lease moved to two minutes on main. ",
+				"idempotencyKey": " draft-1 ",
+				"replaces":       "d1",
+			},
+			uri: "/api/runner/wiki/drafts",
+			body: map[string]interface{}{
+				"kind":           "rewrite",
+				"sections":       []interface{}{map[string]interface{}{"doc": "sessions-runtime", "section": "leases"}},
+				"reason":         "The lease moved to two minutes on main.",
+				"idempotencyKey": "draft-1",
+				"replaces":       "d1",
+			},
+			reply: `{"status":"draft","draftId":"d2","kind":"rewrite","replayed":false,"rewrites":[{"doc":"sessions-runtime","key":"leases","where":"1.1 §3","title":"Leases"}]}`,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -490,7 +543,7 @@ func TestWikiToolsSendWhatWasAskedToTheirRoutes(t *testing.T) {
 				t.Fatalf("request = %s %s (session %q), want %s from caller-session", got.method, got.uri, got.session, tc.uri)
 			}
 			wantMethod := http.MethodGet
-			if name == "wiki_propose" || name == "wiki_note" {
+			if name == "wiki_propose" || name == "wiki_note" || name == "wiki_draft" {
 				wantMethod = http.MethodPost
 			}
 			if got.method != wantMethod {
@@ -1637,6 +1690,7 @@ func writtenFlagIsParsed(action, name string) bool {
 		fs.String("text-file", "", "")
 		fs.Var(&list, "path", "")
 		fs.String("corrects", "", "")
+		fs.String("replaces", "", "")
 	case "propose":
 		fs.String("ops", "", "")
 		fs.String("ops-file", "", "")
@@ -1644,6 +1698,14 @@ func writtenFlagIsParsed(action, name string) bool {
 		fs.String("rationale-file", "", "")
 		fs.String("idempotency-key", "", "")
 		fs.Bool("dry-run", false, "")
+		fs.String("replaces", "", "")
+	case "draft":
+		fs.String("kind", "", "")
+		fs.Var(&list, "section", "")
+		fs.String("reason", "", "")
+		fs.String("idempotency-key", "", "")
+		fs.String("replaces", "", "")
+		fs.String("change", "", "")
 	case "verify":
 		fs.String("space", "", "")
 	default:

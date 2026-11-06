@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Optional, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
@@ -11,6 +11,7 @@ import {
   WikiEntryRejectDto,
   WikiProposeDto,
 } from './dto';
+import { WikiChatDrafts } from './wiki-chat-drafts';
 import { flagParam, listParam, WikiRetrieval } from './wiki-retrieval';
 import { WikiRolloutGuard } from './wiki-rollout';
 import { answerFor, WikiService, type WikiPrincipal } from './wiki.service';
@@ -40,6 +41,9 @@ export class WikiController {
   constructor(
     private readonly wiki: WikiService,
     private readonly retrieval: WikiRetrieval,
+    // The wiki chat's cards (contract `chat.drafts`): the spaces list's `chatWaiting`, and the revert route's one path to
+    // a chat Apply's Undo. Optional, so the specs that stand this controller up with the wiki's two services still do.
+    @Optional() private readonly drafts?: WikiChatDrafts,
   ) {}
 
   /**
@@ -89,8 +93,12 @@ export class WikiController {
   /** The owner's spaces, each with the pending count the sidebar shows. */
   @PatScope('wiki:read', { workspaceConfinable: false })
   @Get('spaces')
-  listSpaces(@CurrentUser() user: AuthUser) {
-    return this.wiki.listSpaces(user.userId);
+  async listSpaces(@CurrentUser() user: AuthUser) {
+    const spaces = await this.wiki.listSpaces(user.userId);
+    if (!this.drafts) return spaces;
+    // What the chats add to the Wiki's waiting count (contract `space.list.chatWaiting`): applied cards whose rewrite waits.
+    const waiting = await this.drafts.chatWaitingOf(user.userId, spaces.map((space) => String(space.id)));
+    return spaces.map((space) => ({ ...space, chatWaiting: waiting.get(String(space.id)) ?? 0 }));
   }
 
   /** A space the owner creates outright: a codebase, or a wiki with no repository behind it. */
@@ -329,12 +337,19 @@ export class WikiController {
   @PatForbidden('OWNER_INTERACTIVE')
   @Post('changesets/:id/revert')
   @HttpCode(HttpStatus.OK)
-  revert(
+  async revert(
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Req() request: { headers: Record<string, string | string[] | undefined> },
   ) {
-    return this.wiki.revertChangeset(user.userId, user.userId, id, actingSession(request.headers));
+    // A chat Apply's changeset is taken back by the card's Undo, which restores its sections too (contract
+    // `reviewModes.chat.revert`: one path). Every other changeset is reverted as ever.
+    const acting = actingSession(request.headers);
+    if (!acting && this.drafts) {
+      const undone = await this.drafts.undoForChangeset(user.userId, user.userId, id, acting);
+      if (undone) return undone;
+    }
+    return this.wiki.revertChangeset(user.userId, user.userId, id, acting);
   }
 
   /**

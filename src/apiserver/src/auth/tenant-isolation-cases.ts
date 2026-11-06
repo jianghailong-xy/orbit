@@ -116,6 +116,9 @@ export interface Tenant {
   /** The census document's one section, and the version a rewrite of it kept (`docs.versions`). */
   wikiDocSectionKey: string;
   wikiDocVersionId: string;
+  /** A wiki chat of the space (a session with `wiki_chat_space_id`), and a rewrite card its agent drafted. */
+  wikiChatId: string;
+  wikiChatDraftId: string;
   wikiTopicSlug: string;
   /** For /admin/*: a user an administrator acts on (with a profile photo), one of its tokens, a global provider. */
   adminSubjectId: string;
@@ -734,6 +737,19 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /wiki/spaces/:id/doc-changes': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   // The owner puts the census section back as its version kept it: written, never a 404.
   'POST /wiki/doc-versions/:id/restore': { request: (of) => ({ params: { id: of.wikiDocVersionId } }) },
+  // A chat's cards and the owner's presses (contract `chat.drafts.read`, `chat.presses`): another account's chat or card is
+  // the plain 404 before anything is read. The owner's own presses, in this order, apply the census card, find it applied
+  // (edit and discard: 409), undo it, find it undone (retry: 409) and leave it seen — none a 401, 403 or 404.
+  'GET /wiki/chats/:id/drafts': { request: (of) => ({ params: { id: of.wikiChatId } }) },
+  'GET /wiki/chat-drafts/:id': { request: (of) => ({ params: { id: of.wikiChatDraftId } }) },
+  'POST /wiki/chat-drafts/:id/apply': { request: (of) => ({ params: { id: of.wikiChatDraftId } }) },
+  'POST /wiki/chat-drafts/:id/edit': {
+    request: (of) => ({ params: { id: of.wikiChatDraftId }, body: { ops: [{ seq: 0, changes: { title: 'From the census' } }] } }),
+  },
+  'POST /wiki/chat-drafts/:id/discard': { request: (of) => ({ params: { id: of.wikiChatDraftId } }) },
+  'POST /wiki/chat-drafts/:id/undo': { request: (of) => ({ params: { id: of.wikiChatDraftId } }) },
+  'POST /wiki/chat-drafts/:id/retry': { request: (of) => ({ params: { id: of.wikiChatDraftId } }) },
+  'POST /wiki/chat-drafts/:id/seen': { request: (of) => ({ params: { id: of.wikiChatDraftId } }) },
   'GET /wiki/spaces/:id/share': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'PUT /wiki/spaces/:id/share': { request: (of) => ({ params: { id: of.wikiSpaceId }, body: {} }) },
   'DELETE /wiki/spaces/:id/share': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
