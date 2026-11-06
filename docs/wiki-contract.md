@@ -85,6 +85,17 @@ P1b。见新增的 §23，迁移 `0400_wiki_model_status`，JSON 里是 `systemM
 关掉 wiki（§24.5）。runner 上留下的是仓库操作（`wiki-repo-op/v1`）、四个 MCP 工具和 `orbit wiki search|get|propose|note|import|verify`；`import` 与
 `verify` 只交给服务端、等它做完（§5.1、§11）。下面各节写 runner 路径的地方已改成现状，或注明 P11 删除；前面各期的增补原样留作历史。
 
+**Wiki 聊天（项目「Wiki 聊天窗口：边聊边改」，契约任务 C2，2026-11-06）**：设计 `docs/wiki-chat-design.md`（main `850ec365b`）§3–§8 与 §12，
+效果图 `docs/mocks/wiki/42-wiki-chat`。wiki 各页右下角的圆按钮打开一场停靠在页面里的聊天：一场普通会话，跑在 owner 为这个 space 选定的
+workspace 上，独立 worktree，起点是 `origin/main`；agent 只起草，owner 在 owner 门上按 Apply 才写，按下即 confirmed、不走核实，受影响的节定向重写，
+每次重写都留一版。新增三节：`chat`（§28：聊天会话的绑定、workspace 的选择与记住、SOURCE、附注、草稿与它的状态、按压门、圆按钮与「等你」、英文文案）、
+`docs.follow`（§29：跟进作业 `docs_follow`，沿用 10-09 设计 §12.1、去掉 runner 路径）、`docs.versions`（§30：节的留版、对照与恢复）；
+改了 `agentSurface`（`agentSurface.chat`：聊天里 `wiki_propose` 的所有 op 与 `wiki_note` 的 `corrects` 成草稿，新工具 `wiki_draft` 只对聊天会话，§11）、
+`jobs.onePerSpace`（`docs_follow` 只与写文档的作业互斥，§24.2）、`reviewModes`（`reviewModes.chat`：按压的效果，§7.7）、`trust.onApply.chatApplied`、
+`space.settings.chat` 与 `space.list.chatWaiting`（§2）、`docs.who.write`（§22.2）以及 `realtime`。`docs/project-source-contract.md` 新增 SR54：聊天会话的 SOURCE。
+这一版只写契约和钉回测试，实现由 C3–C12 各自照写；`docs_follow` 进 `jobs.kinds`、`wiki_draft` 进 `agentSurface.tools`，各随做它的任务与迁移（§28.10）。
+共享常量、推导函数与英文文案在 `src/shared/src/wikiChat.ts`，向量在 `src/shared/src/wiki-chat.fixture.json`（OrbitKit 读同一份），钉回测试是 `src/shared/src/wikiChatContract.spec.ts`。
+
 **权威来源**
 
 | 来源 | 位置 |
@@ -103,6 +114,8 @@ P1b。见新增的 §23，迁移 `0400_wiki_model_status`，JSON 里是 `systemM
 | plan 的行为测试 | `src/apiserver/src/wiki/wiki-plan.pg.spec.ts`（服务端：检查闸、版本、确认、修改建议、跨租户），`WikiPlanContractTests.swift`（OrbitKit）；runner 的 `wiki_plan_test.go`（runner 门的 plan 路由与 runner 自己的检查闸）在 P11 删除 |
 | System model 的行为测试 | `src/apiserver/src/wiki-worker/wiki-model-status.pg.spec.ts`（状态行、读接口、心跳与 worker 启停），`wiki-model-client.spec.ts`（本地 http 服务模拟 SSE），`test/compose-topology.test.mjs`（compose 里的 `wiki-worker`） |
 | 服务端核实的行为测试 | `src/apiserver/src/wiki-worker/wiki-verify.spec.ts`（提示词、编号、结论解析，照 `wiki_verify_test.go` 改写），`wiki-verify-job.pg.spec.ts`（建作业、跑作业、结论落库，对 fake System model）|
+| wiki 聊天、跟进与留版的共享常量、推导与文案 | `src/shared/src/wikiChat.ts`（卡的状态、重写结果、圆按钮、「等你」、跟进作业等待的原因、作业能否并行、Rewrites、逐句对照、附注标签、`wikiContext` 的校验、Activity 的 Docs 行）|
+| wiki 聊天的向量与钉回测试 | `src/shared/src/wiki-chat.fixture.json`（TS 与 OrbitKit 读同一份），`src/shared/src/wikiChatContract.spec.ts`（契约 ↔ TS、设计与效果图的原文、每条向量）|
 
 **本任务不做**：服务、控制器、MCP 工具、推送、实时事件的实现，以及任何 UI。它们各自的任务照本契约写。
 
@@ -201,6 +214,12 @@ pg spec 用执行计划钉住了这一点。它声明为 IMMUTABLE（里面的 `
   - 这两个写入都只属于 owner：带会话头回 `WIKI_OWNER_CHANNEL_ONLY`，个人访问令牌回 `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，因为谁在 space 里就是谁能读它的条目。两者都不动游标：加入的 workspace 从 space 当前的水位往后读。
   - 会话所在 workspace 不在任何 space 时返回 `WIKI_SPACE_UNBOUND`，并用一句话说明怎么绑；被留在外面的 workspace 返回同一个码，并说明这一点。项目通过其 codebase 的仓库地址找到 space，没有单独的表。
   - Wiki 设置的 Workspaces 卡（web、macOS/iOS、Android，在 Review mode 和 Maintenance 之间，效果图 38）读 `GET /api/wiki/spaces/:id/workspaces`：`{ workspaces, addable }`，每行 `{ id, name, runner, inWiki }`。`workspaces` 是这个仓库上、或这个 space 的行点名的活 workspace，按名字排（不分大小写），切开关时行不跳，被留在外面的留在列表里，`inWiki` 为 false。`addable` 是 `Add workspace…` 能加的：没有仓库、也不在任何 wiki 里（被别的 space 留在外面的算不在）。
+- **删除**（`space.delete`）：`DELETE /api/wiki/spaces/:id` 永久删除一个 wiki，回 `{ spaceId }`；别人的或已经没有的回普通 404。
+  - 只属于 owner：带会话头回 `WIKI_OWNER_CHANNEL_ONLY`，个人访问令牌回 `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，没有 agent 工具和 CLI 命令。
+  - 一个事务里按外键删掉 space 下的全部内容，包括公开链接；不能撤销，失败时什么都不少。Workspace、会话、任务和项目不动；文字里的 `orbit-wiki:` 链接从此指向不存在的内容。
+  - 不等、也不拒绝在跑的作业：作业行随 space 一起没了，它按租约写的都匹配不到行，下一次需要 space 的写入失败，这次尝试就结束，也没有行可以重排。仓库操作的结果回 404，runner 当作操作已不存在。
+  - 有仓库的 wiki 会被这个仓库下一个调 wiki 工具的会话重新建出来，是空的，和任何新 space 一样请求 plan 的初稿；它的 workspace 行随旧 space 没了，留在外面的标记也一样。没有仓库的不会回来，绑在它上面的会话回 `WIKI_SPACE_UNBOUND`。
+  - 入口：web 在侧栏的 wiki 行和 Wiki 设置页底部，macOS/iOS 和 Android 在 Wiki 设置页底部；都先确认，写明 wiki 的名字和要删的条目数、文档数（效果图 `docs/mocks/wiki-delete`）。
 - **设置**（`settings` jsonb，缺省的键按默认值读）：
   - `push`，默认开（owner 2026-09-25 拍板：推送默认开，每个 space 可以关）；
   - `autoAcceptReinforce`，默认开：非 owner 的 reinforce 立即生效；关掉后进 Review；
@@ -212,9 +231,12 @@ pg spec 用执行计划钉住了这一点。它声明为 IMMUTABLE（里面的 `
     一样只能经 owner 门修改，带会话头一律 `WIKI_OWNER_CHANNEL_ONLY`；Tiered 的抽检不看它；
   - `reviewModeChangedAt` / `reviewModeChangedBy`（`owner`、`spot_checks` 或 `verification`）：服务端写，记录模式最近一次
     在何时、被谁改——`verification` 是核实拒绝率超阈值把 Automatic 退回 Tiered；
+  - `chat`（wiki 聊天，2026-11-06，§28.2）：`{ workspaceId }`，默认 `null`。这个 space 的聊天跑在哪个 workspace：第一次聊天时 owner
+    选一次，之后记住，`Runs in` 里可以换。只存合格的（在这个 space 里、没删、开了 worktree）；存着的那个后来不合格了不清掉也不用，
+    面板让 owner 重选。只能经 owner 门的 `PATCH /api/wiki/spaces/:id`（带会话头 `WIKI_OWNER_CHANNEL_ONLY`）或建聊天时带的 `workspaceId` 写；
   - `maintenance`、`embedding` 留给阶段 2。
-- **列表**（`space.list`）：`GET /api/wiki/spaces` 按 slug 列出 owner 的全部 space，每行是单个 space 的读，外加四个字段（单个
-  space 的读不带它们；老服务器没有后三个，客户端读作没有）：
+- **列表**（`space.list`）：`GET /api/wiki/spaces` 按 slug 列出 owner 的全部 space，每行是单个 space 的读，外加五个字段（单个
+  space 的读不带它们；老服务器没有后四个，客户端读作没有）：
   - `pendingOps`：这个 space 变更集里等 owner 决定的 op 数（Review 的数）。plan 的修改建议不是 op，不算在里面。所有 space
     的 `pendingOps` 之和，就是 Activity 页第一条横幅和 Review 页头的数；
   - `planWaiting`：这个 space 的 plan 里等 owner 的件数，各算一件：在途的起草、修订或生成作业（plan 读给出的那个作业）被挡住——
@@ -225,6 +247,9 @@ pg spec 用执行计划钉住了这一点。它声明为 IMMUTABLE（里面的 `
     `src/shared/src/wiki-docs.fixture.json` 的 `plan.states`（每个用例的 `pending`）上，服务端是 `wiki-plan-waiting.spec.ts`。
     所有 space 的 `pendingOps + planWaiting` 之和，就是抽屉、web 侧栏和 Wiki 页头 Activity 角标的那个「等你」数，等于
     Activity 页琥珀横幅之和；
+  - `chatWaiting`（wiki 聊天，§28.7）：这个 space 已 Apply 的聊天卡里，重写在等 owner 的张数，一张算一件：被挡住的，或读起来一样、
+    失败而 owner 还没看过的（`wikiChatWaiting`）。web 与 iOS 上「等你」数是 `pendingOps + planWaiting + chatWaiting`，Activity 多一条琥珀横幅；
+    还没打开的草稿和审批不算（草稿不催，审批会话那边已经算了）。这一期没有聊天的 Android 不读它，它的「等你」数仍是前两项，每一件都点得开；
   - `workspaceIds`：在这个 space 里、没被删的 workspace：先是行留在这里的（按绑定的先后），再是靠仓库加入的，和 user 门上所有 id 一样是 public id；
   - `docs`：`{ written, total }`，已确认 plan 的篇数与已写篇数，算法同目录（§22.7）；没有已确认的 plan 时为 null。
 
@@ -669,6 +694,21 @@ Review 只列还有 op 等 owner 的变更集，时间线列的是 op、不说�
   （owner 的 Confirm 自己写一版、没有 op）。条目说明条的第二行「Checked by <model>: <verdict>」读的就是它。runner 门的条目读不带这三项：
   给 agent 的是条目，不是它怎么被判的。
 
+### 7.7 聊天的卡与按压（`reviewModes.chat`，wiki 聊天 2026-11-06）
+
+- **卡不是审阅模式的 op**（§28.5）：Manual、Tiered、Automatic 三种模式下一样，不按就什么都不生效，不进 Review，不等核实。
+- **按压就是 owner 的接受**（设计 §7.2）：`Apply` 在一个事务里把卡上的 op 记成一个变更集（origin `agent`，会话是这场聊天），并由 owner
+  当场逐条接受（op 决定 `accepted`，`Edit` 是 `edited`）：条目 trust = `confirmed`（`trust.onApply.chatApplied`），原则类是 owner 自己的写入，
+  trust = `owner`。审阅模式不碰它：Automatic 下也不走核实（否则核实可能当着 owner 的面驳回 owner 自己的话），不抽检，熔断不计它，
+  不占 `pendingOpsPerSpace`、`opsPerTurn`、`opsPerSession`——它从来不等。
+- **底线照旧成立**：`principleOwnerOnly`——聊天里的原则 op 起草时不拒 `WIKI_KIND_OWNER_ONLY`，只有 owner 的按压能写它；`taintedWaits`——
+  按压就是有人担保（`push.eligible.taintedOnlyWithTrust`），按之前卡上写着 `Based on web content`；`ownerVouchedWaits`——做决定的就是 owner；
+  `opsPerChangeset` 仍然限制一张卡。
+- **撤回**：卡的 `Undo`（§28.6）经 `reviewModes.revert` 自己的写法和幂等键撤回 Apply 记下的变更集——尽管这些 op 已被那次按压接受——再把这张卡
+  重写过的节恢复成旧版；revert 路由拿到这个变更集也做同样的事，只有一条路。这个变更集不是一次「运行」（`run.read.appliedByMode` 为 null）：
+  Activity 不把它折成一行，也不提供 `Revert run…`。
+- 不是聊天的会话照旧按 space 的模式提议，这一节对它没有任何改变。
+
 ---
 
 ## 8. op 的形状
@@ -758,12 +798,23 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
 
   | 工具 | 注解 | 参数 | 返回 |
   | --- | --- | --- | --- |
-  | `wiki_search` | readOnly | query, kinds?, topic?, paths?, limit ≤10 | 只返回条目：id, kind, title, summary, trust, anchorState, match（keyword / semantic / path）, score |
+  | `wiki_search` | readOnly | query, kinds?, topic?, paths?, limit ≤10 | 只返回条目：id, kind, title, summary, trust, anchorState, match（keyword / semantic / path）, score，以及新旧：recordedAt, changedAt, anchorCheckedRef, anchorCheckedAt（见下） |
   | `wiki_get` | readOnly | ids ≤10, include?（sources, anchors, history） | 完整条目；锚点带最近复验（ref 与时间）；出处带 `orbit-*` 链接 |
   | `wiki_propose` | 不带 destructive | ops, rationale, idempotencyKey, dryRun? | 逐 op：pending（Automatic 等核实的带 `waitsFor: "verification"`）/ applied / conflict（当前版与 diff）/ refused（理由），add 与 supersede 旁附 `similar[]` |
   | `wiki_note` | 不带 destructive | text ≤2000, paths? ≤10（每条 ≤200）, corrects? | `{ noted, noteId, created, readBy, challenged? }`，见下面的 `wiki_note` |
 
   CLI 同名同参：`orbit wiki search | get | propose | note`。**没有**接受、确认、决定、硬删、整页覆盖的工具；确认只存在于 owner 通道。
+- **`wiki_search` 的每条结果都说明条目新旧**（JSON 的 `toolSpecs.wiki_search.hit` 与 `age`，2026-11-06 的 wiki_search 评审）：
+  `anchorState: verified` 只说明上次核对时锚点照原样还在，不说明条目内容仍然成立，所以把时间交给读的人自己判断。
+  runner 门和 owner 的 `GET /api/wiki/search` 给的是同一形状；时间是 UTC 的 ISO 8601。
+  - `recordedAt`：条目写入的时间，即这条 lineage 诞生的时间（`wiki_entry.recorded_at`），amend 不改它；supersede 是新的 lineage。
+  - `changedAt`：当前修订写入的时间（当前 revision 的 `created_at`），即内容最后一次改动。锚点核对不写修订，也不改它。
+  - `anchorCheckedRef` / `anchorCheckedAt`：锚点最后一次核对的提交和时间（`wiki_entry.anchor_checked_ref` / `anchor_checked_at`）。
+    从没核对过时两者都是 null；amend 重给锚点时清空，只改别的字段时保留，所以核对可能早于 `changedAt`。
+  - 字段的顺序和集合由 `hit` 列出，各端各自钉住：服务端的回答（`wiki-search.pg.spec.ts`）、runner 的 `wikiSearchHit` 结构体与 outputSchema
+    （`TestWikiAgentSurfaceIsTheContracts`；MCP 的 structuredContent 和 `orbit wiki search --json` 都是这个结构体序列化出来的，不在结构体里的字段到不了 agent，
+    服务端给的 null 在这里省掉，不写成空串），OrbitKit 与 Android 的 `WikiSearchHit` 模型（OrbitKit `WikiContractTests`、Android `WikiContractTest`）。
+    给结果加字段就走这条路。
 - **`orbit wiki verify --space ID [--json]`**（JSON 的 `agentSurface.verify`）：和 `orbit wiki import`（§5.1）一样没有 MCP 工具对应——它把会话
   的活交给服务端、等它做完，是命令的等待，不是一次工具调用。它请服务端核实本会话提议到这个 Automatic space、还在等核实的 op
   （`reviewModes.verification.routes.request`），再读列表的 `waiting`（`routes.list`）直到归零，打印服务端核实了几个。列表不说
@@ -796,18 +847,38 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
 - **`wiki_propose` 的描述**把「是否生效取决于 space 的审阅模式，已生效的内容其他会话能搜到，按每个 op 的状态告诉用户，pending 不算已保存」写成前置条件
   （JSON 的 `agentSurface.proposeDescription`），T5 做逐词测试。之前写的是「要等 owner 审」，只有 Manual 是这样：Tiered 下 add 和 amend 多数当场生效，
   Automatic 下由核实结论决定。
+- **聊天会话里**（JSON 的 `agentSurface.chat`，wiki 聊天 2026-11-06，设计 §7.1）：带 `session.wiki_chat_space_id` 的会话里，
+  - `wiki_propose` 的**所有 op 都成草稿**，包括别处当场生效的 `reinforce` 和 `challenge`：照常校验（schema、出处、引文、脱敏、CAS、污染标记；
+    不查名额、待审队列和熔断，草稿不占这些），通过的 op 合成一张卡（`wiki_chat_draft`，§28.5），别处什么都不写：没有变更集、没有条目、不进 Review、
+    不走核实。回答 `{ status: "draft", draftId, ops, similar[] }`；一条都没通过就不建卡，照原样回答；dryRun 只查不建。聊天里的原则 op 不拒
+    `WIKI_KIND_OWNER_ONLY`：它等 owner 按，按下就是 owner 自己的写入（§7.7）。三种审阅模式下完全一样。
+  - `wiki_note` 的 `corrects` 成草稿：note 照常记下，challenge 成一张卡而不是 op，`challenged` 回 `{ status: "draft", draftId }`；
+    不带 `corrects` 的 `wiki_note` 不变。
+  - 两个工具在聊天里多一个参数 `replaces`：这张新卡替换的、同一场聊天里还开着的卡。
+  - **新工具 `wiki_draft`**（`agentSurface.chat.draft`）：只对聊天会话开放，别的会话拒 `WIKI_SESSION_EXCLUDED`（消息写明它只在 wiki 聊天里用）。
+    参数 `kind`（`rewrite` / `plan`）、`sections`（rewrite：1–5 个 `{ doc, section }`，都得是已确认 plan 里写过的节）、`change`（plan：形状同 plan 修改建议）、
+    `reason`、`replaces?`、`idempotencyKey`；回 `{ status: "draft", draftId, kind, rewrites }`。CLI `orbit wiki draft`，runner 门 `POST /api/runner/wiki/drafts`。
+    `plan` 种类随 plan 卡（设计 §14 第二步）开放，在那之前拒 `WIKI_SCHEMA`（kind，写明还没开放）。它不接受、不确认、不决定、不覆写页面，
+    `notTools` 一字不改。工具说明一字不差写在 `agentSurface.chat.draft.description`。
+  - **`agentSurface.tools` 仍是四个**：runner-go 的 `TestWikiAgentSurfaceIsTheContracts` 要求它与 binary 实际提供的工具相等，`wiki_draft` 在 runner
+    提供它的那次发版（C6）才进 `tools`、`toolSpecs`、`cli`，同时登记 cli/mcp 对照、help 覆盖与 agent_instructions 三张 family 表；
+    `replaces` 同理随之进 `toolSpecs.wiki_propose.params`。在那之前 `agentSurface.chat` 就是它们的契约。
+  - 不是聊天的会话：`wiki_propose`、`wiki_note`、它们的说明和回答一点不变。
 - **用户门** `/api/wiki`（JwtAuthGuard，owner 本人）：spaces 列表（待审数、plan 等你数、绑定的 workspace、文档数，§2）、建 space、改设置（含审阅模式）、读 / 加入 / 留在外面 workspace、首页、条目列表、主题、
   时间线、owner 的变更集（立即生效，带 CAS）、条目详情、pin / unpin、逐条 Reject 与 Confirm、`GET /api/wiki/search`（⌘K 的独立端点）、Review、
-  按 id 读一次运行（`GET /api/wiki/changesets/:id`，§7.6）、decide、整次撤回、重开核实（§7.5）。
+  按 id 读一次运行（`GET /api/wiki/changesets/:id`，§7.6）、decide、整次撤回、重开核实（§7.5）；wiki 聊天的建聊天、列聊天、读卡与六个按压
+  （§28.3、§28.6），节的版本列表、恢复旧版与 Activity 的 Docs 行（§30）。
 - **runner 门** `/api/runner/wiki`（RunnerAuthGuard，外加照 `runner-watches.controller.ts` 校验调用会话）：search（只返回 active 条目，
-  外加本会话自己的待审提议；tainted 且没人担保——trust 不是 owner / confirmed——的 active 条目不返回，get 同样 404）、条目、提议、`wiki_note`、推送块预览；
+  外加本会话自己的待审提议；tainted 且没人担保——trust 不是 owner / confirmed——的 active 条目不返回，get 同样 404）、条目、提议、`wiki_note`、推送块预览、
+  聊天会话的 `wiki_draft`（`POST /api/runner/wiki/drafts`，C6 实现）；
   核实的两条路由 `GET /api/runner/wiki/spaces/:id/verifications` 与 `POST …/verifications/request`（§7.4，只对提交这批 op 的会话）；
   导入的 `POST …/notes`、`GET …/import`、`POST …/import-jobs` 与 `GET …/import-jobs/:jobId`（§5.1）。阶段 2 的维护专用路由（dossiers、anchors、
   anchor-checks、cursor，以及 `…/maintenance/*`、plan、文档与文章的那些）和维护运行接手核实的 `…/maintenance/verifications` 都在 P11 删除；
   仓库操作的回写路由见 §26.3。
 - **decide 只在用户门**：任何带会话头的请求都拒 `WIKI_OWNER_CHANNEL_ONLY`（先例：`coordinator-authority.ts` 的
   `refuseSessionAuthoredConfirmation`）。runner 里弹的确认卡不是闸门：服务端不校验它，headless 调用直接放行。
-  整次撤回、逐条 Reject 与 Confirm、重开核实、切换审阅模式、读一次运行同样只在用户门、同样拒绝带会话头的请求。
+  整次撤回、逐条 Reject 与 Confirm、重开核实、切换审阅模式、读一次运行同样只在用户门、同样拒绝带会话头的请求；wiki 聊天的建聊天、读卡、
+  六个按压和节的恢复旧版也一样（§28.3、§30.5）。
 - **读的边界**：只有在 space 里的 workspace（§2 绑定）的会话能读这个 space 的条目；在 space 里就是 owner 同意在这些
   workspace 之间共享**已确认**的条目，把某个 workspace 留在外面就是收回。待审提议只有提出它的会话看得见。
 - **读取记录**（`exposureRules.reads`）：runner 门的 search 和读条目拿到答案之后写 `wiki_exposure`，channel 分别是 `search`、`get`，返回一条写一行，记条目当时的版本和调用会话。
@@ -843,7 +914,8 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
 
 - owner 级，走用户级控制面流（`GET /api/events`），信封不带会话。载荷只有 `id`：内容、Review 队列、绑定或设置发生变化的那个 **space** 的 id。
   不带条目、标题、状态、op 或计数；客户端据此重读，读的结果决定它能看到什么。
-- 何时发：记录了东西的变更集、owner 的决定、space 建立 / 改设置 / 加入或留在外面 workspace、记下了核实结论、待审过期或撤回，都在事务提交之后发。
+- 何时发：记录了东西的变更集、owner 的决定、space 建立 / 改设置 / 加入或留在外面 workspace、记下了核实结论、待审过期或撤回，
+  聊天的卡建出、被替换或被按，卡的重写作业排队、被挡住、开跑或结束（§28），一节被恢复成旧版（§30），都在事务提交之后发。
   幂等重放、dryRun、什么都没记录的请求不发。
 - 正确性不依赖它：丢掉所有事件只让客户端多等一会儿（聚焦、重连时都会重读）。web 把它映射到 wiki 查询组，不能落到 `groupsFor`
   默认的 sessions 组；Swift 解码为 `ControlEvent.wikiChanged`。
@@ -872,6 +944,13 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   验证没有已确认的 plan 拒写、会话引文逐字核对（伪造、翻译、拼接、省略号、条目标题当原话都核对不过）、仓库引文缺 sha 拒收、过渡句与
   5% 线、材料不变不重写、Reject / 退役 / 锚点失效撤句并标待重写、不进推送也不能当出处、跨租户 404；Swift 的 `WikiDocsContractTests` 钉住闭集、
   读取形状，以及会话记录脚注拼出 `SessionRecordLink` 深链。Go 的 `TestWikiDoc*`（钉住 runner 门写入请求的字段与路由）随 runner 的文档代码在 P11 删除。
+- **wiki 聊天、跟进与留版**（§28–§30）：`wikiChatContract.spec.ts` 钉住 `chat`、`docs.follow`、`docs.versions` 的闭集、限额（20 句、5 节、
+  每天 40 节、每节 5 版，并从设计原文里读出这几个数）、全部英文文案（与 `WIKI_CHAT_COPY` 相等，设计表格与效果图 42 里的句子逐字在场，没有一个中文字）、
+  `<orbit_wiki_chat>` 的原文、路由都在用户门（`wiki_draft` 的在 runner 门）、`tools` 仍是四个而 `wiki_draft` 的规格齐全、`notTools` 一字不改、
+  `jobs.onePerSpace` 的两条部分唯一索引与任意两种作业能否并行，并把 `wiki-chat.fixture.json` 的每条向量跑过 `wikiChat.ts` 的函数：
+  卡的状态与按钮、卡下那一行、圆按钮的三个数与四种样子、「等你」、跟进作业等待的原因、Rewrites、逐句对照、附注标签、`wikiContext` 的校验、
+  Activity 的 Docs 行。OrbitKit 的镜像（C11）读同一份向量；服务端的行为（建聊天、按压、跟进、留版）由 C3–C6 的 pg spec 逐条断言。
+  `wikiContract.spec.ts` 原有的文档一条随 §30.5 改为：用户门对文档唯一的写是恢复旧版。
 
 ---
 
@@ -898,6 +977,45 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
 10. **用量读数是 `GET /api/wiki/spaces/:id?include=usage`**（T8）：首页右栏「Agents used the wiki」要的是
    `wiki_exposure` 上的四个聚合，属于按需付钱的那一类，所以不新开路由，按 `entries/:id` 已有的 `include` 写法挂在
    space 文档上；窗口是滚动的 7 天，否则「this week」名不副实。
+
+**wiki 聊天（契约 C2，2026-11-06）补的决定**。设计 `docs/wiki-chat-design.md` 没写死、而下游任务（C3–C12）必须有答案的地方，都已写进 JSON；
+下面每一条都可以在实现开工前推翻，推翻就先改这里和 JSON：
+
+11. **两个闭集随做它的任务一起扩**：`wiki_draft` 不先进 `agentSurface.tools`（runner-go 的 `TestWikiAgentSurfaceIsTheContracts` 要求它等于 binary 提供的工具，
+    先写进去每次 runner 构建都红），`docs_follow` 不先进 `jobs.kinds`（`wiki_job_kind_chk` 与 OrbitKit 的 `WikiJobKind` 都钉着它）。两者的规格写在
+    `agentSurface.chat.draft` 与 `docs.follow`，C6、C4 落地时搬进去。用户门的新路由现在就列进 `doors.user.routes`：没有测试要求它等于控制器，
+    客户端只要求自己调的路由在列表里。
+12. **聊天的 SOURCE**：`sourceKind` 新增 `CHAT_UPSTREAM`（project-source 契约 SR54），ref `refs/heads/main`、权威 `REMOTE`、没有 codebase；拒绝只记在会话上。
+13. **卡的状态多一个 `undone`**（设计 §7.2 写了 Undone，§7.3 的表里没有）；**`changed` 的卡除了 Redo 还能 Discard**，否则一张过时的草稿会一直算在圆按钮上；
+    Redo 发的那句话是 `chat.copy.card.redoMessage`。
+14. **Undo 的范围**：卡上每个 op 都是 add 或 amend（revert 能撤回的两种）才给 Undo，rewrite 卡按下后也给；supersede、retire 结束了一条 lineage，
+    reinforce、challenge 照常在 Review 里回答，这几种卡按下后没有 Undo。amend 撤回后条目回到 Apply 之前那一版和它当时的 trust（不是 `unreviewed`：
+    按与撤都是 owner 自己）。`reviewModes.revert` 扩到聊天 Apply 记下的变更集，卡的 Undo 与 revert 路由是同一条路。重写还没开始就把卡的节拿掉，
+    已在跑就不再写卡上还没写的节、已写的恢复。
+15. **`seen` 按压**：owner 打开一张卡已经出了结果的重写（面板显示了它、圆按钮滚到它、See changes 打开它）就记一次 `seen_at`。设计里「写完」是「打开看过就消失」，
+    「读起来一样」「失败」算进「等你」，却没说它们什么时候不算；这里定为：看过就不算，卡上照旧写着，失败的那节仍是 stale，下一次维护会写它。
+16. **「等你」的口径**：`chatWaiting` 只数已 Apply 的卡里在等 owner 的重写（被挡住的；读起来一样、失败且没看过的），一张算一件。还没处理的草稿和审批
+    只算在圆按钮上，不进 W：草稿不催，审批会话那边已经算过。Android 不读 `chatWaiting`。
+17. **圆按钮的优先级**：等你 > 在忙 > 写完 > 平时；悬停文案 `1 needs you`，多于一件是 `N need you`（设计写的是 `N needs you` 这个模板）。
+18. **重写等待的原因**分写文档的作业（维护、生成、plan、另一个跟进，各说各的），以及 System model 与 runner 的状态（用 Wiki 首页状态行现有的说法）；
+    `Settings` 只配在 owner 能在 Wiki 设置里修好的 `no_workspace`、`runner_missing` 旁边。
+19. **一张卡的重写结果**取它各节结果里依次第一个出现的 failed、same、updated、gone；`gone` 是设计 §10 的「这一节不在 plan 里了」；卡下那一行按节逐个写，
+    有一节改了才以 `Wiki updated` 开头。
+20. **Rewrites 的次序**：附件里的节（新的在前）→ 句子经由这条条目的节（按 plan 顺序）→ 新条目合得上的节（`docs.affected.fit` 的分数高的在前，同分按 plan 顺序），
+    去重，只取已确认 plan 里写过的节，至多 5 节。
+21. **逐句对照的算法**：最长公共子序列，句子去首尾空白、中间连续空白读成一个；两种排法一样长时先删后加；改动句数按每一段连续增删取多的一边，
+    改写一句算一句。
+22. **`followSectionsPerDay` = 40 是契约常量**：10-09 的设计说可以在 Wiki 设置里改，聊天设计只给了这个数，这里不加设置。
+23. **恢复旧版是用户门对文档唯一的写**（`POST /api/wiki/doc-versions/:id/restore`）：它只放回某个作业写过的字，自己不写字；恢复本身也留一版
+    （原因 `restore`），所以恢复也能撤回。`docs.who.write` 随之改写。
+24. **Activity 的 Docs 行**另开一个读（`GET /api/wiki/spaces/:id/doc-changes`），不往时间线里塞新种类的行：时间线照旧只有 op，任何客户端都不会读到不认识的行。
+25. **`wikiContext` 的形状**：`page`（文档的节、条目或 plan 的篇）与 `selection`（`{ docSlug, sectionKey, sentenceIds }`）两部分，都能叉掉；选区可以跨进同一篇
+    后面的节（`sectionKey` 是起点，附注写 `3.1 §3–§4`）。
+26. **不新增拒绝码**：带会话头一律 `WIKI_OWNER_CHANNEL_ONLY`，非聊天会话调 `wiki_draft` 是 `WIKI_SESSION_EXCLUDED`，形状不对是 `WIKI_SCHEMA`，
+    卡的底版变了是 `WIKI_REVISION_CONFLICT`，按一张已经不开着的卡是不带码的 409。新码要同时改服务端的状态表，`wiki-api.pg.spec.ts` 钉着两边。
+27. **orbit 这个 space 默认 `orbit-develop`** 是 owner 第一次选的值，不写进代码；代码里不算任何默认（设计 §5.1 不用「最近开过会话的」）。
+28. **设计与效果图之外新写的英文句子**：离线与重选 workspace 的提示、维护以外的等待原因、留版的原因与 Activity 的 Docs 行、Activity 的「等你」横幅、
+    选区以外的附注标签、Redo 发的那句话、`wiki_draft` 的工具说明。其余逐字取自设计与效果图 42，测试逐句核对。
 
 尚待后续任务确认的一点：没有对应 space 的 workspace 第一次使用时，是自动为它的仓库建一个 space，还是回 `WIKI_SPACE_UNBOUND`
 等 owner 手动建，设计只写了「自动绑到对应 space」。本契约只规定了绑定到已有 space 的情形，建与不建由 T3 与 owner 定。
@@ -1891,6 +2009,9 @@ P11（2026-10-19）起这条 runner 门路由没有了：写入是 `WikiDocs.wri
 - **谁能写**（`docs.who.write`）：服务端的 `docs_build` 与 `maintain` 作业（`origin: 'maintenance'`、无会话、无用户，22.13），以及 API 服务器进程里的
   导入（`origin: 'import'`、无会话、无用户）。哪道门都不写文档，user 门也没有写文档的路由：别的调用方是服务端自己代码的错误
   （`WikiDocs.assertWriter`）。P11 之前本 space 的维护会话经这条路由写。
+  wiki 聊天（2026-11-06）起多两个：跟进作业 `docs_follow`（§29，成为作业种类之后，身份同维护作业），以及 user 门上 owner 的**恢复旧版**
+  （`POST /api/wiki/doc-versions/:id/restore`，§30.5）——它只把某个作业写过的字放回去，自己不写字，是 user 门对文档唯一的写。
+  每一次整节替换都在同一个事务里留下被替换的那一版（§30）。
 - **次序**：写入者 → `requireConfirmedPlan`（没有已确认的 plan 就 `WIKI_PLAN_UNCONFIRMED`，只有草稿也算没有）→ 这一篇在已确认的
   plan 里（否则 404）→ 请求的 `planVersion` 就是已确认的版本（否则 `WIKI_PLAN_STALE`）→ 形状 → 核对 → 一个事务写入。
 - **请求**：`{ planVersion, repoSha, model?, sections: [{ key, materialSha256, markdown, footnotes, dispositions? }] }`。一次最多 20 节（整篇）。
@@ -1973,7 +2094,7 @@ P11（2026-10-19）起这条 runner 门路由没有了：写入是 `WikiDocs.wri
     的头两句，照原样连起来（英文句号后空一格，全角句号后不空），超过 200 字（code point）就截断、末尾加「…」；句子是文档页上的
     原文，行内标记照留。没写的篇为 null；写了但第一节没写、或第一节的句子都撤下了，也为 null。
   - `GET /api/wiki/spaces/:id/docs/:slug`：文档页。编号、标题、读者的问题、写给谁、含与不含（不含的篇给出编号和标题）、大类、篇幅、
-    状态、依据的 plan 版本与当前版本、`repoSha`、更新时间；各节按 plan 的顺序，带 `repoSha`、块和句子（状态、脚注号、新事实记号、
+    状态、依据的 plan 版本与当前版本、`repoSha`、更新时间；各节按 plan 的顺序，带 `repoSha`、块和句子（句子的 public id——聊天的选区按它点名，§28.4——、状态、脚注号、新事实记号、
     撤下的原因与条目）；脚注按首次出现编号（同一原文、同一位置、同一引文只编一个号），每个带种类、结论、谁核对的、引文、位置字符串
     和链接数据；以及 via entry 现在的样子（种类、标题、状态、trust、锚点状态）和它带进来的脚注号。plan 里有、还没写的篇：`written: false`，
     各节空着；plan 里没有的：404。
@@ -2277,6 +2398,7 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
 - CHECK：租约三列与 `running` 互为条件；只有结束态有 `ended_at`；`succeeded` 没有 `error`；`report` / `progress` 是对象。
 - `kind` 闭集：`verify` / `articles` / `import` / `plan_draft` / `plan_revise` / `docs_build` / `maintain`，加上本期的 `smoke`——
   只调一次模型、把答案和用量写进 `report`，是队列最短的一条端到端路径（`wiki-jobs.pg.spec.ts` 对 fake 端点跑通它）；`verify` 自 P3 起有实现（§24.7）。
+  wiki 聊天（迁移 0477，C4）起多一个 `docs_follow`：跟进作业（§29）。
   还没落地的种类留在队列里：领取只取本 build 认识的种类，不会被交给一个只能失败的 worker。
 - `import`（P5，§5.1 的服务端执行、契约 `jobs.kindRuns.import`）：由 runner 门的 `POST .../import-jobs` 建，输入是命令交来的 note
   和调用会话，报告就是命令打印并记下的那份（`wiki-import-job.ts`）。执行中写 `progress`（`snapshot` / `reading` / `proposing` 和计数）。
@@ -2321,8 +2443,17 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
 - 过期回收：`running` 且租约过期的行回到 `queued`，`attempts + 1`，`next_attempt_at = now + 退避`（§24.4），`failure_kind = 'infra'`，
   `error` 是 `LEASE_EXPIRED: the worker holding this job stopped before settling it`；接管者从头跑这个作业，已经发出过的请求由请求行本身
   回答重放（§25.3）。回收碰到的都是没人交还的租约——worker 崩溃、被杀，或者没来得及交还就退出；停机交还的作业不经过回收（§24.3）。
-- 同一空间同时只跑一个作业：领取的谓词跳过一个在跑作业的空间，`wiki_job_space_running_key`（`space_id` 上的部分唯一索引）是数据库里
-  同一条规则；两个调度器同时读表时，输的一方拿到的是空领取，不是错误。
+- 同一空间同时只跑一个作业（下一条是唯一的例外）：领取的谓词跳过一个在跑作业的空间，`space_id` 上的部分唯一索引是数据库里同一条规则
+  （0401 是 `wiki_job_space_running_key`，0477 起换成下一条的两条）；两个调度器同时读表时，输的一方拿到的是空领取，不是错误。
+- **唯一的例外：跟进作业只绕开不写文档的作业**（owner 2026-11-06 定，设计 `docs/wiki-chat-design.md` §8.5，`jobs.onePerSpace`）：`docs_follow`（§29）
+  可以和同一空间正在跑的 `articles`、`verify`、`import`、`smoke` 同时跑——这些作业不写 `wiki_doc_*`——遇到 `maintain`、`docs_build`、`plan_draft`、
+  `plan_revise` 和另一个 `docs_follow` 照等，卡上写 `Rewrite waiting · Maintenance is running` 之类（§29.6）。所以一个空间里同时跑两个作业，只可能是
+  一个 `docs_follow` 加一个不写文档的作业；别的任意两种照旧互斥，`articles` 与 `verify` 也一样（`wikiJobsMayOverlap`）。领取时取空间自己顺序里
+  第一个不被在跑作业排斥的到期作业；数据库里换成两条部分唯一索引：`WHERE state = 'running' AND kind <> 'docs_follow'`（除跟进作业外至多一个）
+  和 `WHERE state = 'running' AND kind IN ('maintain', 'docs_build', 'plan_draft', 'plan_revise', 'docs_follow')`（写文档的至多一个），替掉
+  `wiki_job_space_running_key`（迁移 0477：`wiki_job_space_running_other_key` 与 `wiki_job_space_running_writer_key`）。`verify` 的结论在条目自己的事务里
+  撤句、给节写 `stale_at`，锁序和文档写入一致（先条目、后文档），并行不会死锁成环，`src/apiserver/src/wiki-worker/wiki-docs-follow-job.pg.spec.ts` 证明了这一点。
+  留下的代价：维护正在写文档时按下的仍要等它写完，等多久是设计 §14 第 2 项要量的数。
 - 一个 worker 同时执行 `maxConcurrentPerWorker` = 4 个作业。
 
 ### 24.3 开机与停机
@@ -2517,6 +2648,8 @@ P11（2026-10-19）删除：没有执行器开关（24.5），也就没有「不
     这些）；每一条记下的结论（运行自己的和收养的）；文档步写成的节、拿起的节和原因、撤回的路径和句子、存下的 plan 提议、在文档步
     花的时间。锚点不进 `carry`：重放在同一提交上把之前检查过的条目算作 skipped，报告从条目本身读回——检查时间晚于运行第一次开始的，
     就是这次运行查的（同一空间同时只有一次运行，服务端执行的账号没有别人记锚点检查），算作检查过、不算 skipped。
+  - `docs_follow`：写成的节，照报告的样子（§29.7）。重放不再给按压的节写 `stale_at`，所以不会写第二遍；合并的节已经写在当前提交上，重放不再拿起；
+    报告每节一次，结果是写下它的那次尝试的。
   - `import`、`plan_draft` / `plan_revise`、`smoke` 不带：导入的输入固定，重放把每条 note 再读一遍（请求复用），提议同一批 op、用
     同一个幂等键，报告本来就是整个作业的；plan 作业的材料第一次就存在 plan 作业上，重放问同样的问题、从第一轮重走一遍（请求复用），
     tokens 本来就按作业的全部请求算，seconds 从 plan 作业开始算；smoke 只调一次。
@@ -2901,3 +3034,339 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
   游标按规则不动，`consecutive_failures` 加一，连续三次通知 owner；作业以 `failure_kind = content` 结束。
 - **worker 停机**：模型请求与仓库等待被中止（`WikiModelWaitCancelled` / `WikiRepoOpWaitCancelled`），运行不结算，
   作业交还（§24.3）：立即回 `queued`，不计次、不退避（owner 2026-10-09 定），下一个进程重放；已经答过的请求直接复用。
+
+---
+
+## 28. Wiki 聊天：边聊边改（`chat`）
+
+JSON 里是 `chat`；设计 `docs/wiki-chat-design.md` §3–§7 与 §12（main `850ec365b`），效果图 `docs/mocks/wiki/42-wiki-chat`。共享常量、推导函数与英文文案在
+`src/shared/src/wikiChat.ts`，向量在 `src/shared/src/wiki-chat.fixture.json`（TS 与 OrbitKit 读同一份），钉回测试是 `wikiChatContract.spec.ts`。实现：C5（聊天会话）、
+C6（草稿与按压）、C8 与 C9（web）、C11（iOS）、C12（plan 卡）。本节和 §29、§30 只是契约：没有一行实现。
+
+### 28.1 聊天就是一场普通会话
+
+- 一场聊天是带 `session.wiki_chat_space_id` 的会话。它是可空的 UUID，只由建聊天在 session 行的同一条 INSERT 里写，之后再不改：一场会话要么一辈子是聊天，
+  要么从来不是。只写这个会话自己 owner 的 space（按 owner 读出来的）。不挂外键（历史引用，§1.3）：删掉 space，它的聊天仍是会话，这一列成了墓碑，卡随 space 删掉。
+  按 `(wiki_chat_space_id, created_at)` 建索引，供列聊天。
+- 有了这一列：`wiki_propose` 与 `wiki_note` 的 `corrects` 成草稿（§11），`wiki_draft` 对它开放，第一条消息带 `<orbit_wiki_chat>`、每条消息可带 `wikiContext`，
+  SOURCE 是 origin/main，强制独立 worktree，案卷跳过它的起草调用，出现在列聊天里。这一列为空的会话什么都不变。
+- 会话读 `GET /api/sessions/:id` 多一个 `wikiChatSpaceId`（space 的 public id，或 null）：会话页头据此写来处 `From Wiki`，并能在这个 space 的 wiki 旁打开它。
+  聊天也在 workspace 的会话列表里（设计 §4.1）。工具、审批、权限模式、费用、会话列表、手机端都沿用；Merge 仍由 owner 按，不自动合并。
+
+### 28.2 跑在哪个 workspace、用什么代码
+
+- **合格的 workspace**：在这个 space 里（§2 绑定：同仓库或有行，没被留在外面）、没删、没停用（停用的 workspace 开不了会话）、`enableWorktree` 开着。只列这些、只存这些：聊天从不在共享目录里跑。
+- **选一次，记住**：每个 space 第一次聊天时从 `choices` 里选，存进 `space.settings.chat.workspaceId`；`Runs in` 里可以换（建聊天时带另一个 `workspaceId`，或 PATCH 设置）。
+  代码里不算任何默认：图 36 的「最近开过会话的」可能把聊天带到生产机上（设计 §5.1）。orbit 这个 space 用 `orbit-develop`（HPC）是 owner 11-06 的选择：
+  是 owner 第一次选的值，不是写在代码里的名字。
+- **没有、不合格、离线**：一个合格的都没有，面板写 `Turn on worktrees for a workspace in this repository to chat here`，不给输入框，圆按钮照常在。记住的那个被删、
+  被留在外面或关了 worktree：不用也不换，面板让 owner 重选（`Choose where this space's chats run`）。机器离线：照样建、照样像任何会话那样等它的 runner，面板写
+  `<machine> is offline. The chat waits for it to come back.`，wiki 照常读，不自动换机器。
+- **SOURCE 是 origin/main**（`docs/project-source-contract.md` SR54）：建会话时在 session 行的 INSERT 里冻结选择器——`SELECTED`、kind `CHAT_UPSTREAM`、ref `refs/heads/main`、
+  权威 `REMOTE`（向 origin 问）、仓库身份取所选 workspace 的、没有 codebase、没有 `configRevision`、包含集为空——首次领取时经三步握手钉住提交；之后的 resume、reclaim、
+  takeover 只读。所以聊天从首次领取时的 main 起跑，不受 workDir 当前 HEAD 影响（设计 §5.2 实测：开会话时的提交比 main 落后 5 个）；runner 照 `needsSourcePin`
+  按会话判断，和项目任务同一条路。被拒只记在会话的 SOURCE 列上，面板照 SOURCE 契约 §10.1 显示码与 `fixAction`，恢复是开一场新聊天；不记在任务或项目上。
+  聊久了 main 会走：每条页面与选区附注带这一节的 `repoSha`，agent 自己比，需要时读 origin/main。
+- **不留空分支**：聊完没有自己的提交，会话结束时 runner 删掉 worktree 里没有越过钉住提交的分支（要 runner 发版）。有提交的照普通会话：worktree 条，owner 按的 Merge，
+  进 main 后 §29 跟上。
+
+### 28.3 路由与门
+
+| 路由 | 做什么 |
+| --- | --- |
+| `POST /api/wiki/spaces/:id/chats` | 建聊天 |
+| `GET /api/wiki/spaces/:id/chats` | 列这个 space 的聊天、记住的 workspace、可选的 workspace、圆按钮的三个数 |
+| `GET /api/wiki/chats/:id/drafts` | 一场聊天的全部卡（`:id` 是聊天的会话） |
+| `GET /api/wiki/chat-drafts/:id` | 读一张卡 |
+| `POST /api/wiki/chat-drafts/:id/apply`、`/edit`、`/discard`、`/undo`、`/retry`、`/seen` | 六个按压（28.6） |
+
+- 全在用户门（JwtAuthGuard + WikiRolloutGuard），id 都是 public id；别的 owner 的 space、聊天、卡一律普通 404。带会话头（`X-Orbit-Session-Id`）的请求一律
+  `WIKI_OWNER_CHANNEL_ONLY`，不论是什么会话：agent 建不了聊天、经这道门读不了卡、按不了任何东西。写只认 owner 的交互凭证（个人访问令牌回
+  `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，同 §2 绑定的写），读收带 `wiki:read` 的令牌。
+- **建聊天**：`{ workspaceId?, content, clientTurnId, wikiContext?, engine?, model?, permissionMode? }`。`workspaceId` 给了就得合格，和记住的不同就替换它（Runs in）；
+  没给就用记住的，都没有回 400，写明要先选。`content` 是 owner 的第一条话，一字不差；`clientTurnId` 是 UUID：turn 照会话消息门记 owner 原话的办法记（显式的路由意图、
+  客户端的 UUID），所以这句话是一手出处（`tiered.auto.ownerWords`），节可以引它（§29.3）。`wikiContext` 照 28.4 校验。引擎、模型、模式同 New session，缺省照这个
+  workspace 的会话。经 `SessionsService.create` 在一个事务里建：这个 workspace 的普通会话、`wiki_chat_space_id`、强制独立 worktree（这期间关了 worktree 的回 409，
+  什么都不建）、SOURCE 选择器、第一个 turn；第一次投递在原话后面接上 `<orbit_wiki_chat>` 和这个 turn 的页面、选区附注。回 `{ sessionId, chat }`。
+- **列聊天**：`{ spaceId, workspace, choices, fab, chats }`。`workspace` 是记住的那个现在的样子 `{ id, name, runner, online, eligible }`，没记住是 null（name、runner 同
+  §2 的 Workspaces 卡，online 用 runners 列表的同一条规则 `isRunnerOnline`）；`choices` 是全部合格的 `{ id, name, runner, online }`；`fab` 是 `{ needsYou, working, updated }`，
+  按这个 space 不在 Trash 里的全部聊天算（28.7），客户端只凭这三个数画圆按钮；`chats` 新的在前，至多 50 场（`chat.rules.chatsListed`），每场
+  `{ sessionId, title, status, open, createdAt, updatedAt, drafts, needsYou }`。点圆按钮：打开有卡等 owner 的那一场，否则最近还开着的一场，否则新开。
+- **之后的消息**走会话自己的消息门 `POST /api/sessions/:id/turns`（owner 的、显式路由意图、UUID 的 `clientTurnId`），聊天会话多收一个可选字段 `wikiContext`；
+  别的会话的消息带它回 400。turn 的 content 只有 owner 的原话，不论带了什么附件，所以聊天里 owner 的每个 turn 都是一手的。
+
+### 28.4 附注
+
+下面的块都在投递时接在 owner 原话后面，走所有控制面附注的同一套机制（`src/apiserver/src/runner-api/control-plane-note.ts`，记在回显旁边的
+`controlPlaneNote`）：`conversation_turn.content` 仍只有原话；客户端把每一块画成 Orbit 附件，那一行字是 `wikiChatNoteLabel(块头的属性)`，点开看全文。
+不认识的块按任何不认识的块那样通用地画（Orbit attached），所以 Android 和旧客户端照样画、不崩，也不从中数任何东西（设计 §9）。
+
+| 块 | 何时 | 内容 | 那一行 |
+| --- | --- | --- | --- |
+| `<orbit_wiki_chat>` | 只有第一条消息 | 给 agent 的规则，原文一字不差写在 JSON 的 `chat.notes.chat.text`：你在 wiki 页旁边聊天，页面和选中的句子作为附件送到；文档由服务端从代码和记录写，不要改文档的字，也不要拿文档或其中的句子当出处；先判断该落在哪一层——知识用 `wiki_propose` 写条目，落后于 main 的节和文档的组织、写法用 `wiki_draft`，系统本身改代码或它引用的设计文档；在这里提议和起草的都只是草稿，owner 按下才变，别说成已生效，改稿时带上旧卡的 `replaces` | `Wiki chat` |
+| `<orbit_wiki_page>` | `wikiContext` 带了当前页 | 文档的节：标题、现在的句子与脚注、这一节的 `repoSha`；条目：同 `wiki_get` 的回答；plan 的篇：plan 读里这一篇的定义（会话读不了 plan，页面替它带过去，`plan.who`） | `Wiki page · 3.1 §3` / `Wiki entry · <标题>` / `Wiki plan · 3.1` |
+| `<orbit_wiki_selection>` | `wikiContext` 带了选区 | 选中的句子按阅读顺序、在各自的节标题下，每句带脚注：仓库原文 `path@sha#L起-止`、记录 `<种类> <记录 id> in session <会话 id>`、经由的条目 `via entry <id>`。服务端投递时按 id 读（句子、文档读给的脚注、同样脱敏），从不收客户端的文字 | `Wiki selection · 3.1 §3 · 1 sentence · 2 sources`（跨节写 `3.1 §3–§4`） |
+| `<orbit_wiki_drafts>` | owner 按过之后的下一条消息 | 自 agent 上一轮以来按过的每张卡一行：id、标签、结果（applied / edited / discarded / undone），已 Apply 的写了哪些条目、什么 trust，以及重写此刻怎样 | `Wiki drafts · 1 applied, 1 discarded` |
+
+- **`wikiContext`**：`{ page?, selection? }`。`page` 是 `{ kind: "doc", docSlug, sectionKey }`、`{ kind: "entry", entryId }`、`{ kind: "plan", docSlug }` 之一；
+  `selection` 是 `{ docSlug, sectionKey, sentenceIds }`：`sectionKey` 是选区起点所在的节，`sentenceIds` 是这一篇的 1 到 20 个句子 id（`chat.rules.selectionSentencesMax`）、
+  不重复，可以跨进同一篇后面的节。没有别的键。两部分都显示在输入框里、都能叉掉，没显示的不发（设计 §4.2）；当前页跟着人走、发送时定格：文档页取篇和按滚动位置
+  最近的节，条目抽屉取条目，plan 页取篇。`wikiChatContextErrors` 按路径报出每个错（同 `validateWikiSources` 的写法），门拒 `WIKI_SCHEMA` 带这些路径，什么都不记。
+  投递时文档里已经没有的句子 id 从附注里拿掉，并在附注里写明，不猜。
+
+### 28.5 草稿（卡）
+
+- **一张卡是自己表里的一行**（`wiki_chat_draft`），不是变更集（设计 §7.1）：不占 `pendingOpsPerSpace`，不留 `proposed` 的条目，不进 Review、不走核实，
+  不算 `opsPerTurn` / `opsPerSession`（它不等审阅），至多 `opsPerChangeset` 个 op。存 id、owner、space、聊天会话、种类、agent 的理由；entry 卡的 op（照请求、
+  逐条校验过）与 add / supersede 旁的 `similar[]`；rewrite 卡的节与理由；plan 卡的改动；Rewrites；`tainted`（起草时这场聊天读过网页）；`replaces`；
+  按压（决定、时间、记下的变更集）；`undone_at`；`seen_at`。
+- **三种**：`entry`（`wiki_propose` 的 op，或 `wiki_note` 的 `corrects` 起草的 challenge；标签 `Add <kind>`、`Amend entry`、`Supersede entry`、`Retire entry`、
+  `Reinforce entry`、`Challenge entry`，多个 op 写 `N changes`）；`rewrite`（`wiki_draft`：这几节从 main 重写，设计 §6 第二行；按下只排重写，不写条目；标签
+  `Rewrite from main`，按钮 `Rewrite`）；`plan`（`wiki_draft`：形状同 plan 修改建议，设计 §6 第三行；按下一次完成编辑、确认、重建；标签 `Plan change`，按钮
+  `Apply & rebuild`、`Open in Plan`；随 plan 卡开放，C12）。
+- **建出**：起草的那次工具调用在自己的事务里建卡，回 `draftId`；一条 op 都没通过就不建。卡从 `draftId` 画，不解析对话文字，状态读服务端，所以任何引擎、
+  完整会话页、手机上画的都是同一张卡；不认识这个回答的客户端按普通工具调用画（设计 §9）。
+- **替换**：新卡用 `replaces` 指同一场聊天里还开着的卡，被指的卡从此读 `Replaced`，只有一串里最新的能按。指的卡不开着或不是这场聊天的：拒 `WIKI_SCHEMA`
+  （`replaces`），什么都不建。
+- **状态**读时推导，不另存（设计 §3，同落地会话「活性读时推导」）：`wikiChatDraftState` 依次取第一个成立的。
+
+| 状态 | 显示 | 条件 | 动作 |
+| --- | --- | --- | --- |
+| `applied` | `Applied · Confirmed by you` | 按过 Apply 或 Edit | Undo（可撤时）· Open entry（entry 卡）；重写的动作见 28.8 |
+| `undone` | `Undone` | 按过 Apply，又按了 Undo | — |
+| `discarded` | `Discarded` | 按过 Discard | — |
+| `replaced` | `Replaced` · `A newer draft took over.` | 这场聊天里有新卡替换了它 | — |
+| `not_applied` | `Not applied` | 聊天结束（不在 `OPEN_SESSION_STATUSES` 里）或进了 Trash，卡没处理 | — |
+| `changed` | `Changed since this draft` | 它改的条目离开了 `baseRevision`（或不再 active），或它要重写的节在起草之后被写过 | Redo（替 owner 发一句话，agent 重起草）· Discard |
+| `draft` | `Draft · <标签>` | 刚起草 | entry：Apply · Edit · Discard；rewrite：Rewrite · Discard；plan：Apply & rebuild · Open in Plan · Discard |
+
+- `tainted` 是标签不是状态：任何状态上都写 `Based on web content` · `Read before you apply.`（污染标记照旧）。恢复出来或 resume 的聊天，没按过的卡读回原来的样子
+  （状态跟着会话走，同 10-09 设计 §6）。
+- **Rewrites**（设计 §8.2，起草时算好，按之前显示在卡上；左边每节标 `Draft would rewrite this section`，节号点了在左边打开，不离开聊天）：`wikiChatRewrites`——
+  附件里的节（新的在前）→ 有句子的脚注经由这张卡所改条目（`via_entry_id`）的节，按 plan 顺序 → 新条目按 `docs.affected.fit` 合得上的节，分数高的在前、同分按
+  plan 顺序；去重，只取已确认 plan 里写过的节，至多 5 节（`chat.rules.rewritesMax`）。rewrite 卡的就是 `wiki_draft` 给的节。一节都没有的卡，Apply 只写条目。
+- **读**：`GET /api/wiki/chat-drafts/:id` 与 `GET /api/wiki/chats/:id/drafts`（一场聊天的全部卡，旧的在前）回
+  `{ id, sessionId, kind, state, label, rationale, ops, sections, rewrites, similar, tainted, replaces, replacedBy, decision, decidedAt, undoneAt, undoable, changesetId, rewrite, createdAt }`；
+  `ops` 带各自条目现在的样子，`rewrites` 带篇号、节号和标题，`rewrite` 是 `{ jobId, result, reason, sha, sections: [{ doc, key, where, result, changed, versionId }], seen, settledAt }` 或 null。
+  读不写任何东西。
+
+### 28.6 按压
+
+- **一张卡按一次**，几个 op 一起生效（设计 §7.2）。按一张不开着的卡（replaced、discarded、not applied、undone；apply、edit、discard 时已经 applied 的）回不带码的
+  409，写明它的状态，什么都不写；同一个按压按两次回第一次的结果，标 replayed。
+
+| 按压 | 结果 |
+| --- | --- |
+| `apply` | entry 卡：一个事务里重新校验（出处；CAS：底版变了拒 `WIKI_REVISION_CONFLICT`，什么都不写，卡读 changed），记成 origin `agent`、会话是这场聊天的变更集，并由 owner 当场接受（op `pending → accepted`，效果见 §7.7）：trust `confirmed`，原则类 `owner`，不走核实；同一事务里把卡的 Rewrites 作为强制节排进 `docs_follow`（§29）。rewrite 卡：只排这几节，什么都不写。plan 卡：经 plan 自己的门编辑、确认、重建，全有或全无，过不了检查闸就什么都不写并写在卡上（C12） |
+| `edit` | 同 Review 的 Edit（`effectPolicy.decide.edit`）：`{ ops: [{ seq, changes }] }` 把 owner 的版本按 amend 的 changes 叠在卡的 op 上，记 `edited`，修订作者是 owner（`trust.edited`），其余同 apply。只对 entry 卡 |
+| `discard` | 只标记这张卡，别的什么都不写：不记 Not true，不写原因，不留反例——它从来不是条目 |
+| `undo` | 一个事务里：entry 卡经 `reviewModes.revert` 自己的写法和幂等键（`revert:<变更集 id>`）撤回 Apply 记下的变更集（add 的条目退役，amend 的条目回到 Apply 之前那一版和它当时的 trust），尽管 owner 接受过这些 op；再把卡的重写写过的每一节恢复成那次重写留下的版本（§30.5），之后又被写过的节不动、在回答里点名（同 revert 点名之后变过的条目）。重写还没开始就把卡的节从排队的作业里拿掉（作业空了就取消）；正在跑的不再写卡上还没写的节，已写的恢复。卡上每个 op 都是 add 或 amend 才可撤——revert 能撤的就这两种：supersede、retire 结束了一条 lineage，什么都带不回来，reinforce、challenge 照常回答（challenge 在 Review 里 Re-confirm）——rewrite 卡按下后可撤。卡读 `Undone` |
+| `retry` | `Try again`：已 Apply、重写失败的卡，把它的节再作为强制节排一次，同 apply 的排法。别的卡回 409 |
+| `seen` | owner 打开了这张卡已经出了结果的重写（面板显示了它、圆按钮滚到它、或 See changes 打开它）：记一次 `seen_at`；读起来一样或失败的重写从此不再等 owner（28.7）。别的都不写；还没结果的卡不写 |
+
+- Applied、Edited、Discarded、Undone 随 owner 的下一条消息作为 `<orbit_wiki_drafts>` 送达，不单独开回合。
+- 安全底线不动：`decide` 仍只在 owner 门上，agent 没有接受、确认的工具（`agentSurface.notTools`）；一张卡本身从来不是确认（设计 §11）。
+
+### 28.7 圆按钮与「等你」
+
+- **位置**：wiki 各页（Settings 与分享链接除外）窗口右下角，只有图标；桌面 52、距边 24，手机 56、距边 16 加安全区；品牌蓝，固定在窗口上，不随正文滚动；面板或
+  sheet 打开时藏起来，关掉回到原处；正文底部多留 88，按钮浮在条目抽屉上面；页头不放 Chat，其余按钮不动（设计 §3）。
+- **三个数**（列聊天的 `fab`，`wikiChatFabCounts`，按这个 space 不在 Trash 里的全部聊天）：`needsYou` = 开着的聊天里会话在等 owner 的审批与提问（同会话列表的数）
+  + 每场聊天里需要 owner 的卡（开着的卡 `draft`、`changed`，和在等 owner 的重写）；`working` = 有开着的聊天有回合在排队或在跑，或有卡的重写在 `rewriting`；
+  `updated` = 重写结果是 `updated` 而还没看过的卡数。
+- **四种样子**（`wikiChatFabState`，依次）：`needsYou` 大于 0 → 等你，琥珀数字，悬停 `1 needs you` / `N need you`；否则 `working` → 在忙，外面转一圈，`Working…`；
+  否则 `updated` 大于 0 → 写完，绿色对勾，`Wiki updated`，打开看过就消失；否则平时，`Chat`。每次列聊天时推导，不存（设计 §3）。
+- **「等你」数 W**（`docs/wiki-design.md` §12.3.3：等你的每一件都算进 W，W 里的每一件点进去都找得到）：每个 space 加 `chatWaiting`——已 Apply 的卡里在等 owner 的重写，
+  一张算一件（`wikiChatWaiting`）：被挡住的一直算到不再被挡；读起来一样或失败的算到 owner 看过、Try again 或 Undo。还没处理的卡不算（草稿不催、不过期，设计 §11），
+  审批不算（会话那边已经算了，W 不重复数）。Activity 为它画一条琥珀横幅 `1 rewrite needs you` / `N rewrites need you`，点开到第一张这样的卡；W 仍等于琥珀横幅之和。
+  Android 这一期没有聊天，不读 `chatWaiting`，它的 W 仍是前两项，每一件都点得开。
+
+### 28.8 卡下的重写
+
+- 已 Apply 的卡的重写，是带着它这次按压的最新一个 `docs_follow` 作业（§29）：排队且没被挡、或在跑 → `rewriting`；被挡 → `waiting` 加原因（§29.6）；作业结束后各节按
+  §29.7 读：`updated`（句子变了）、`same`（写了、读起来一样）、`failed`（没写成）、`gone`（已确认 plan 里没有这一节了），卡的结果取依次第一个出现的 failed、same、
+  updated、gone。没有 Rewrites 的卡没有重写。
+- 那一行是 `wikiChatResultLine`：`Rewriting 3.1 §3 and 7.1 §2…`（作业拿到提交后写 `… from main@7f3e2a1…`）、`Rewrite waiting · Maintenance is running`、`Rewrite failed`，
+  或逐节写结果、有一节变了就以 `Wiki updated` 开头（图 42 ③：`Wiki updated · 3.1 §3 — 1 sentence · 7.1 §2 — reads the same`；一节读起来一样写 `3.1 §3 — reads the same`，
+  不在 plan 里了写 `3.1 §3 — no longer in the plan`）。
+- 动作：被挡的原因归 owner 在 Wiki 设置里修时给 `Settings`；失败给 `Try again`；变了或读起来一样给 `See changes`（§30.4）。没有一种是静默的：都写在卡上，
+  等 owner 的都算进「等你」（设计 §11：Nothing blocks in silence）。
+
+### 28.9 案卷、实时事件与边界
+
+- 维护运行的案卷跳过聊天里的起草调用（`wiki_propose`、`wiki_draft`、带 `corrects` 的 `wiki_note`），同 `wiki-dossier.ts` 跳过读 wiki 的调用：被 Discard 的卡不会被
+  下一次维护读回来。owner 的原话照常进案卷。
+- 卡建出、被替换、被按，卡的重写作业排队、被挡、开跑、结束，都在事务提交后发一次 `wiki.changed`（只带 space id），面板、圆按钮和 Activity 重读（§13）。
+- 分享链接的访客没有按钮，也看不到聊天；开了 Footnotes 的分享链接读得到被引成脚注的 owner 原话，卡的 Sources 上写明（设计 §10）。聊天进 Trash：从历史里消失，
+  已 Apply 的不受影响，没处理的卡读 `Not applied`。配额、槽位同普通会话（`Waiting for slot`）。重复条目：语义检索没开，按压前卡上显示 `similar[]`。
+  发出去的选区，所在的节后来被维护（或别的）重写了：附件标 `Outdated`，句子照发出时的样子留着；在它上面起草的卡照 28.5 的推导读（changed）。
+
+### 28.10 落地次序
+
+- 迁移：`session.wiki_chat_space_id` 随 C5（0476，同一次迁移还加了 `conversation_turn.wiki_context`：消息的页面与选区附注在投递时按它记下的 id 读；0479 校验 0476 的三条 SOURCE CHECK，并 CONCURRENTLY 建 `session_wiki_chat_space_idx`），`wiki_chat_draft` 随 C6，`wiki_doc_section_version` 随 C3，`docs_follow` 进 `wiki_job_kind_chk` 与 §24.2 的两条部分唯一索引随 C4；
+  取号前扫 main、所有 `origin/project/*` 与已推的 `orbit/*` 分支，登记 db-write-inventory、public-id-coverage 的 CONTROLLERS、`PUBLIC_ID_FIELDS`、迁移账本与 PAT 装饰器。
+- 闭集随做它的任务扩：`wiki_draft` 进 `agentSurface.tools`、`toolSpecs`、`cli`（C6，runner 发版）；`docs_follow` 进 `jobs.kinds`、`kindRuns`、`carry.kinds`（C4）与 OrbitKit 的
+  `WikiJobKind`；SOURCE 的 `CHAT_UPSTREAM` 进共享的 `SourceKind` 与三条 CHECK（C5）。
+- 新句子 web 先在 `src/web/src/lib/wikiChat.ts` 定义（取自 `WIKI_CHAT_COPY`），Swift 的 `WikiCopy` 镜像，parity 测试缺项必须红、不许 skip；OrbitKit 的状态逻辑读
+  `wiki-chat.fixture.json` 的向量。
+
+### 28.11 面板（客户端，`chat.panel`）
+
+- **头**：标题（点开是这个 space 的聊天历史，即列聊天）、`+` 新开、`↗` 换成完整会话页（`#` 引用、模型切换、斜杠命令都在那边）、`✕` 收起（聊天不结束）。
+  标题下一行字一直写在哪跑：`workspace · 机器 · 引擎 · 模式`（图 42：`orbit-develop · HPC · Claude Opus 5.5 · Default`）。
+- **地址**带 `?chat=<session>`：翻页不关，刷新还在。**输入框**是精简版：文字、附件（28.4）、发送、Stop，别的交给 `↗`。
+- **归属**：一场聊天属于一个 space，换 space 看到的是那个 space 的聊天；它也在 workspace 的会话列表里，页头有来处标签 `From Wiki`。
+- **宽度**（设计 §4.1，做面板时按真页面校准）：
+
+| 窗口宽 | 面板 | 目录栏 |
+| --- | --- | --- |
+| ≥ 1440 | 右侧停靠，默认 400，可拖 320–560 | 照旧 |
+| 1200–1439 | 右侧停靠 | 收进现有的 Contents 抽屉 |
+| 640–1199 | 从右滑出，盖住正文右侧，不加遮罩 | Contents 抽屉 |
+| < 640 | 底部 sheet，半屏与全屏两档 | Contents 抽屉 |
+
+- 条目抽屉开在面板左边。web 由 C8、C9 画；iOS 是两档 sheet，半屏时正文还能滚（C11，设计 §9）；Android 这一期没有。
+
+---
+
+## 29. 跟进作业 `docs_follow`（`docs.follow`）
+
+JSON 里是 `docs.follow`；设计 `docs/wiki-chat-design.md` §8.1–§8.3、§8.5，沿用 `docs/wiki-comment-to-session-design.md` §12.1，去掉它的 runner 路径：那份的 §11.7 随 P11 作废，
+没有 `orbit wiki docs follow`，跟进只由 wiki-worker 跑。实现 C4。
+
+### 29.1 一个作业，两种触发
+
+任何改动进 main、任何一次聊天按压，wiki 马上跟上：受影响的节由 wiki-worker 重写，不等维护到期（20 个会话或 24 小时），追赶期也不跳过。
+
+| 触发 | 事实 | 优先级 |
+| --- | --- | --- |
+| 聊天按压 | 有 Rewrites 的卡被 Apply 或 Edit，以及它的 Try again：卡上列的节，强制 | 1，在按压自己的事务里建 |
+| 会话合并 | 会话合并到 main 的回执（`session_merge_receipt`：落地的结果，目标是仓库的 main） | 这场会话是聊天时 1，否则 0；回执提交后建 |
+| 落地线进 main | MAIN 线任务的落地、项目晋升记为 MERGED 的回执（`docs/project-integration-line-contract.md`） | 0；回执提交后建 |
+
+- 别的都不排：没有时钟、没有定时、没有扫（硬约束 5），没有事实就没有作业。Orbit 之外直接推到 main 的提交没有事实，下一次跟进或维护比到当时的 main 时一并带上；
+  合进别的分支的，等落地线把它带进 main 才算。
+- 哪些 space：回执所属 owner、仓库与回执相同的 space（会话的 workspace、或项目 codebase 的仓库，按 `repo_url_norm` 规范化）；没有已确认 plan 的 space 不写文档，不排。
+- **每个 space 最多排一个**：排队中再来的事实在一次写里并进去——强制节和它们的按压、合并都追加，优先级取所带最高——运行中再来的等它结束后再排一个。
+  并入在 space 行锁（`wiki_space FOR NO KEY UPDATE`，space 的 plan 与维护写入方取的同一把锁）下做，同时来的两个事实只建一个作业；同一次 main 的改动
+  ——重复送达的回执，或一次晋升为它的每个任务各写的回执，都是同一段提交——只带一次。
+- `docs_follow` 是 wiki-worker 的 `wiki_job` 种类，迁移 0477（C4）起在 `jobs.kinds`、`kindRuns`、`carry.kinds` 与 `wiki_job_kind_chk` 里。作业在
+  `src/apiserver/src/wiki-worker/wiki-docs-follow-job.ts`，事实的并入在 `src/apiserver/src/wiki/wiki-docs-follow.ts`。
+
+### 29.2 写哪几节
+
+- **强制的节**（按压）：不看指纹一定写——按压在自己的事务里给每节写 `stale_at`（撤句用的同一个标记，§22.6），所以 §22.5 的规则会重写它。
+- **合并的节**：已确认 plan 里写过的节，它的 `repoSha` 被作业的 origin/main 快照越过，而越过的那些提交改到了它引用的文件——维护运行的比较（§27、
+  `maintenance.job.docs.byRepo`）缩到这几个提交改到的文件；被删或改名走的引用文件先撤句（§22.6 仓库文件那一条）。指纹没变的节不调模型，什么都不写。
+- 一篇里有节被写，它的概述照生成的办法交给写作者，写不写由指纹决定。
+
+### 29.3 多给的材料
+
+- 每节的材料同生成（§22.10、§22.13）。强制的节多给两样（设计 §8.2），否则 `entriesPerSection` 可能挤掉 owner 刚 Apply 的条目、写回原样：这张卡写下的条目
+  （Apply 之后的样子，各带 live 出处，至多 `sourcesPerEntry` 条），和这场聊天里 owner 的原话——作为写作者可以引的记录：turn 是一手出处，文档和其中的句子从来不是（§22.8）。
+- 合并的节另给这些提交改到的文件，按 §22.13 切一节来源的办法切，在作业的快照上读。
+- 句子照旧逐句引一手原文、逐字核对。
+
+### 29.4 追赶与每日上限
+
+- space 在追赶时，维护运行的文档步骤照旧跳过；跟进作业照跑，它只写受影响的几节。
+- 合并与落地要写的节（按压的不算）每个 space 每天（UTC）至多 40 节（`docs.follow.rules.sectionsPerDay`，设计里的 `followSectionsPerDay`），按这个 space 的跟进作业
+  自零点起为合并与落地写下的节数（指纹没变、没写的不算）。会超过时按 plan 顺序写到剩余为止，其余原样留着——它们仍落后于 main，下一次维护运行会写（§27）——报告记下留了
+  几节（`left`），Activity 写 `N sections left for the next maintenance run`（§30.4）。按压的节不计数，也从不留下。
+- 这个上限是契约常量，不是设置：10-09 的设计说可以在 Wiki 设置里改，聊天设计只给了这个数。
+
+### 29.5 怎么跑、和谁互斥
+
+- 照 §22.13 生成的跑法，只跑这几节（`runWikiDocsBuild` 的 `only`）：经这个 space **维护 workspace** 的 runner 拿 origin/main 的快照（可以和聊天不是同一台，设计 §5），
+  读文件，模型请求按作业的优先级进队列（步骤同生成，单元自成一套，重放复用每个答案），每节写完立刻经 `WikiDocs.write` 写入。
+- 只和写文档的作业互斥（§24.2）：可以和同一 space 正在跑的 `articles`、`verify`、`import`、`smoke` 同时跑，遇到 `maintain`、`docs_build`、`plan_draft`、`plan_revise`
+  和另一个 `docs_follow` 照等。
+- 优先级取所带最高：按压 1、聊天的合并 1、别的合并与落地 0（`docs.follow.priorities`）。1 是 owner 的事，排在后台维护前面，模型请求也带着它进队列（§25.2）。
+
+### 29.6 等待的原因
+
+- 不在跑的跟进作业为什么等（`wikiDocsFollowWaiting`，依次）：排队中的先看同一 space 有没有写文档的作业在跑——维护 `Maintenance is running`、生成
+  `The documents are being built`、plan 的起草或修订 `The plan is being drafted`、另一个跟进 `Another rewrite is running`——再看 System model（读状态不是 up：
+  `wiki worker not running`、`System model not configured`、`System model refused the key`、`System model unreachable`），再看读仓库的 runner（`repoOps.looks` 不是 ready：
+  `Maintenance has no workspace`、`The maintenance workspace has no runner`、`Waiting for the runner to come online`、`Upgrade the runner to read the repository`）；
+  停在某处的（`waiting_for`）看它停在什么上。什么都没挡住、只是在排队的不算等待，是 `rewriting`。
+- 卡上和 Activity 用同一句话（`chat.copy.waiting`，后两组沿用 Wiki 首页状态行现有的说法）；原因归 owner 在 Wiki 设置里修的（`no_workspace`、`runner_missing`）旁边给 `Settings`。
+
+### 29.7 结果、报告与 Activity
+
+- 每节四种结果：写了（句子整节替换）；没变（指纹相同、没撤过句：只有合并的节会这样）；不在了（已确认 plan 里没有这一节：设计 §10 的 `Section no longer in the plan`，不写）；
+  失败（没写成：模型失败或引文核对不过）。强制的节写了以后和它被替换的那一版逐句对照（§30.3）：有句子变了是 `updated`，一句没变是 `same`——读起来一样，卡上照实写，
+  不假装改好了（设计 §8.3）。
+- 作业没有一节失败就成功，否则以 content 失败、其余照写，同生成（§22.13）；infra 失败照重试规则重试（§24.4）。
+- 报告 `{ sections: [{ doc, key, outcome, changed, versionId, forced, draftIds }], left, usage }` 写在作业上（`jobs.progress`、`jobs.carry`）：卡的读和 Activity 的 Docs 行读它，
+  Activity 的作业读不读（`jobs.read.never`）。
+- 作业是 Activity 的 Runs 卡里普通的一行（§24.8）；写了什么在 Recently changed 里作为 Docs 行出现，带原因（§30.4）；留下了节的作业多一行写留了几节。
+- 写的每一节都留下被替换的那一版（§30），原因是触发它的事实：按压记 `chat`，回执记 `merge` 或 `landing`。
+
+---
+
+## 30. 节的留版（`docs.versions`）
+
+JSON 里是 `docs.versions`；设计 `docs/wiki-chat-design.md` §8.4，沿用 `docs/wiki-comment-to-session-design.md` §12.2。实现 C3。
+
+### 30.1 什么时候留
+
+- 任何一次整节替换——一次写入点名、结果不是 unchanged 的节（§22.5）——都在 `WikiDocs.write` 自己的事务里把被替换的那一节留成一版，不论是谁写的：维护运行、生成、
+  跟进作业、恢复旧版。第一次写的节没有替换任何东西，不留；指纹没变、没重写的节不留（10-09 §12.2 原样）。
+- 表 `wiki_doc_section_version`：owner、space、篇的 slug、节的 key；那一节当时的块、句子（正文、状态、脚注号、新事实记号、撤下的原因）与脚注；当时的 `repoSha`、
+  `materialSha256`、生成时刻；被替换的原因；时间；替换它的是哪个作业，或 owner 的恢复。
+- 每节至多 5 版（`docs.versions.rules.perSection`）：再留一版就在同一个事务里删掉最老的。
+
+### 30.2 原因
+
+| 原因 | 何时 | 一行里怎么说 | See changes 的标题 |
+| --- | --- | --- | --- |
+| `maintenance` | 维护运行 | `after maintenance` | `After maintenance` |
+| `build` | 生成某个 plan 版本 | `after the build of plan version 27` | `After the build of plan version 27` |
+| `merge` | 跟进作业，为会话合并到 main | `after <会话标题> merged` | `After <标题> merged · 7f3e2a1` |
+| `landing` | 跟进作业，为落地线进 main | `after <任务或项目标题> landed` | `After <标题> landed · a1b2c3d` |
+| `chat` | 跟进作业，为聊天按压 | `after chat <聊天标题>` | `After chat <标题>` |
+| `restore` | owner 恢复了一版 | `restored by you` | `Restored by you` |
+
+`wikiDocVersionReason` 给一行里的说法，`wikiDocVersionHeading` 给 See changes 的标题（有提交就带短 sha）；客户端自己接上时间。
+
+### 30.3 逐句对照
+
+See changes 逐句对照（`wikiDocSentenceDiff`）：一版的句子和替换它的文字（下一版的；最新一版就和这一节现在的比）取最长公共子序列；句子去首尾空白、中间连续空白读成
+一个再比；两种排法一样长时先删后加。每句是 same、removed（划线）或 added（加底色）；改动句数按每一段连续增删取多的一边，所以改写一句算一句。标题、代码块、图不是句子，不比。
+
+### 30.4 读
+
+- 文档读（§22.7）给每节加最近一次改动 `change: { versionId, reason, at, changed }` 或 null：页面据此在上次来过之后被重写的节旁标蓝点 `Updated`（沿用客户端的 `wikiSeenKey`），
+  点开看版本。
+- `GET /api/wiki/spaces/:id/docs/:slug/sections/:key/versions`：`{ spaceId, slug, key, versions }`，新的在前、至多 5 版，每版 `{ id, reason, at, replacedBy, changed, rows }`——
+  `rows` 与 `changed` 是它和替换它的文字的对照。已确认 plan 里没有的节回 404。
+- `GET /api/wiki/spaces/:id/doc-changes`：Activity 的 Recently changed 的 Docs 行，新的在前、至多 50 行：留下的一版是 `{ kind: "section", doc, key, where, title, versionId, reason, at, changed }`，
+  写作 `3.1 §3 rewritten · after <标题> merged · 1 sentence changed`（恢复写 `3.1 §3 restored · 1 sentence changed`，一句没变写 `… · reads the same`）；留下了节的跟进作业是
+  `{ kind: "left", jobId, at, left }`，写作 `N sections left for the next maintenance run`（`wikiDocChangeLine`）。时间线（`GET /api/wiki/spaces/:id/timeline`）照旧只有 op，
+  任何客户端都不会读到不认识的行。
+
+### 30.5 恢复旧版
+
+- `POST /api/wiki/doc-versions/:id/restore`：owner 对文档唯一的写（§22.2）。把这一节放回那一版留下的样子——块、句子、脚注、`repoSha` 和 `materialSha256`——所以这节按原指纹算，
+  下一次维护不会无故重写它（设计 §8.4）；被它替换的文字也留一版（原因 `restore`），恢复本身也能撤回。照 `WikiDocs.write` 的规矩写（先 `FOR SHARE` 锁住 via entry；经由已撤条目的
+  句子存为 withdrawn、那一节 stale），先问 `requireConfirmedPlan`；已确认 plan 里没有这一节、或版本不是这一节的，回 409。
+- 只认 JWT：带会话头 `WIKI_OWNER_CHANNEL_ONLY`，个人访问令牌 `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，别的 owner 的版本一律 404。聊天的 Undo 经同一个写入方恢复（§28.6）。
+- 没有工具读写版本（`docs.tool` 不变）；恢复在事务提交后发一次 `wiki.changed`。
+
+### 30.6 落地（C3）
+
+- **写入方说原因**：`WikiDocs.write(principal, spaceId, slug, body, cause)`，`cause` 由写的作业给出：维护 `{ reason: 'maintenance', jobId }`、生成
+  `{ reason: 'build', jobId, planVersion }`、跟进 `{ reason: 'merge' | 'landing', jobId, title, sha }` 或 `{ reason: 'chat', jobId, title }`；`restore` 只属于恢复，
+  调用方写不出来。写的回答每节多两项：`versionId`（这次替换留下的版本）和 `changed`（逐句对照改了几句），第一次写、没重写的节都是 null；跟进作业的报告
+  （§29.7 的 `versionId`、`changed`）从这里取。
+- **读的形状**（类型在 `src/shared/src/wikiDocs.ts`）：`reason` 是 `wikiDocVersionReason` 收的对象 `{ kind, title?, sha?, planVersion? }`，只带这个原因有的项；
+  `replacedBy` 是 `{ kind: 'job', jobId }` 或 `{ kind: 'restore', versionId }`；Docs 行的 `title` 是节的标题。恢复回
+  `{ spaceId, slug, key, versionId, outcome, keptVersionId, changed, status, counts }`：`outcome` 是 `restored`，或这一节已经是那一版的样子时的 `unchanged`
+  ——块、每句的块、正文和脚注、`materialSha256` 与 `repoSha` 都和那一版一样——什么都不写、不留版、句子 id 不变，所以重复按不会挤掉旧版。状态、新事实记号和
+  撤句不比：它们由写入按当时的文档和条目推出，照那一版再写一次也是按当时的推；stale 也不比，标记照旧留着。`keptVersionId` 是被替换的文字留成的版本，
+  恢复它就撤回这次恢复。恢复不改文档行的 plan 版本和提交。
+- **聊天的 Undo**（C6）走同一个写入方：`WikiDocs.restore(ownerId, versionId, null, { slug, key })`，给了节就核对，版本不是这一节的回 409。它自己开事务；
+  要和撤回变更集放进同一个事务时，从同一个 `store` 接进去，锁序照旧先条目、后文档。
+- **Activity 的 `left` 行随 C4**：`doc-changes` 把留下了节的跟进作业（报告的 `left` 大于 0）作为 `left` 行，按结束时刻和 `section` 行一起新的在前排。
+- 迁移 `0475_wiki_doc_section_version`，一节的版本按 `seq` 排先后；pg spec 是 `src/apiserver/src/wiki/wiki-doc-versions.pg.spec.ts`。

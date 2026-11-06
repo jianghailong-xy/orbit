@@ -71,6 +71,7 @@ import type {
   WikiTopicView,
 } from './wiki';
 import { isWikiDisabled } from './wiki';
+import { getWikiChats } from './wikiChat';
 import {
   activeTasksPath,
   labelSummaryPath,
@@ -1336,15 +1337,16 @@ export const wikiEntryQuery = (entryId: string | null) =>
  * `SessionSearchHit` would fail on the whole answer), and every session hit's click goes to
  * `/sessions/:id`, which is not where an entry lives.
  *
- * `include=space,topics,anchor` because this caller OPENS what it finds: an entry's page is
- * `/wiki/<space>/e/<id>`, a space AND an id (`WikiSearchRowAdditions`).
+ * `include=space,topics` because this caller OPENS what it finds: an entry's page is
+ * `/wiki/<space>/e/<id>`, a space AND an id (`WikiSearchRowAdditions`). The last anchor check its row
+ * marks comes on every hit.
  */
 export const wikiSearchQuery = (q: string) =>
   queryOptions({
     queryKey: ['wiki', 'search', q] as const,
     queryFn: () =>
       api<{ q: string; semantic: boolean; hits: WikiSearchRow[] }>(
-        `/wiki/search?q=${encodeURIComponent(q)}&include=space,topics,anchor`,
+        `/wiki/search?q=${encodeURIComponent(q)}&include=space,topics`,
       ),
     // The same minute the session search keeps: a result set is a snapshot of a corpus that moves
     // when somebody writes, and one palette session is not a reason to re-read it per keystroke.
@@ -1396,6 +1398,21 @@ export const wikiDocQuery = (spaceId: string | null, slug: string | null) =>
       }
     },
     enabled: spaceId !== null && slug !== null,
+  });
+
+/**
+ * A space's chats (contract `chat.list`): the round button's three counts, the workspace they run in, the ones
+ * that qualify, and the panel's history. `null` from a server with no chats yet, which leaves the button at rest.
+ * A wiki write re-reads it (`wiki.changed`); while something is working it is read again besides, because a
+ * chat's turn ending is a session's event, which says nothing to this key.
+ */
+export const wikiChatsQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'chats', spaceId] as const,
+    queryFn: () => getWikiChats(spaceId!),
+    enabled: spaceId !== null,
+    staleTime: 15_000,
+    refetchInterval: (query) => (query.state.data?.fab.working ? 10_000 : false),
   });
 
 /** Every document of the plan and every section title no other document shares, A to Z (contract `docs.reads.index`). */

@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>42 wiki chat: talk beside the page, change the wiki as you go</title>
+<link rel="stylesheet" href="comment-session.css">
+<style>
+/* Board 41 only. c- is the chat panel; everything else is comment-session.css (boards 36-37). */
+.o-doc.c-doc { width: auto; flex: 1; min-width: 0; padding: 18px 22px 22px 26px; }
+.c-panel { width: 392px; flex: none; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: #fff; border-radius: 0 0 12px 0; font-size: 13.5px; line-height: 1.6; }
+.c-head { display: flex; align-items: center; gap: 4px; padding: 9px 10px 9px 14px; border-bottom: 1px solid var(--border-subtle); }
+.c-head .t { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.c-head .caret { color: var(--text-3); font-size: 10px; margin: 0 auto 0 4px; flex: none; }
+.c-ib { width: 26px; height: 26px; flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--text-2); font-size: 14px; }
+.c-run { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; padding: 7px 14px; font-size: 12px; color: var(--text-3); border-bottom: 1px solid var(--border-subtle); }
+.c-body { flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; }
+.c-empty { margin: 34px 16px; text-align: center; color: var(--text-2); font-size: 13.5px; line-height: 1.7; }
+.c-user { align-self: flex-end; max-width: 330px; background: #eef1f6; border-radius: 12px; padding: 8px 12px; line-height: 1.6; }
+.c-att { align-self: flex-end; max-width: 330px; font-size: 12px; color: var(--text-2); border: 1px solid var(--border-subtle); background: var(--bg-subtle); border-radius: 8px; padding: 2px 9px; }
+.c-att b { color: var(--text-1); font-weight: 600; }
+.c-agent p { margin: 0 0 6px; line-height: 1.68; }
+.c-agent code, .c-card code { font: 12px var(--mono); background: var(--fill-muted); padding: 1px 4px; border-radius: 4px; }
+.c-tools { display: flex; flex-wrap: wrap; gap: 5px; }
+.c-compose { margin: 2px 12px 12px; border: 1px solid var(--border); border-radius: 12px; padding: 8px 9px 8px 10px; background: #fff; }
+.c-compose.focus { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(51,112,255,.14); }
+.c-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+.c-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; font-size: 12px; line-height: 1.5; border-radius: 6px; padding: 1px 7px; background: var(--fill-muted); color: var(--text-1); }
+.c-chip .x { color: var(--text-3); font-size: 10px; flex: none; }
+.c-chip.q { background: #fffaeb; box-shadow: inset 2px 0 0 #f2c14e; padding-left: 9px; }
+.c-chip .sub { color: var(--text-3); white-space: nowrap; }
+.c-chip .q1 { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.c-input { font-size: 13.5px; line-height: 1.6; min-height: 42px; color: var(--text-1); }
+.c-input .ph { color: var(--text-4); }
+.c-input .car { display: inline-block; width: 1px; height: 15px; background: var(--text-1); vertical-align: -2px; }
+.c-cfoot { display: flex; align-items: center; gap: 6px; margin-top: 4px; color: var(--text-3); font-size: 12px; }
+.c-send { margin-left: auto; width: 28px; height: 28px; border-radius: 50%; background: var(--brand); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; flex: none; }
+.c-card { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px 11px; background: #fff; box-shadow: 0 2px 8px rgba(31,35,41,.06); font-size: 13px; line-height: 1.6; }
+.c-card.quiet { box-shadow: none; }
+.c-k { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--brand); display: flex; align-items: center; gap: 6px; }
+.c-k.amb { color: var(--warning); } .c-k.grey { color: var(--text-3); } .c-k.ok { color: var(--success); } .c-k.err { color: var(--error); }
+.c-ti { font-weight: 600; font-size: 13.5px; margin: 3px 0 5px; }
+.c-kv { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 2px 8px; font-size: 12.5px; }
+.c-kv > .l { color: var(--text-3); }
+.c-kv > .v { color: var(--text-1); min-width: 0; overflow-wrap: anywhere; }
+.c-kv .okm { color: var(--success); }
+.c-kv a, .c-link { color: var(--brand); text-decoration: none; }
+.c-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.c-line { font-size: 12.5px; color: var(--text-2); margin-top: 6px; }
+.c-affected { position: relative; margin: 0 0 14px -12px; padding-left: 10px; border-left: 2px dashed #f2c14e; }
+.c-affected .o-p { margin-bottom: 0; }
+.c-aff-tag { display: inline-flex; align-items: center; gap: 5px; font: 600 11.5px/1 var(--ui); color: #8f5200; background: var(--warning-bg); border: 1px solid var(--warning-border); border-radius: 999px; padding: 3px 8px; margin: 0 0 6px; }
+.c-cap { font-size: 12.5px; line-height: 1.6; color: #4a4a52; margin-top: 8px; }
+.c-cap b { color: #16161a; }
+.c-cap .q { display: block; color: #16161a; font-weight: 600; margin-bottom: 2px; }
+.c-grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.c-grid6 { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; align-items: start; margin-top: 20px; }
+.c-grid6 .c-card { padding: 8px 10px 9px; font-size: 12.5px; }
+.c-grid6 .c-cap { font-size: 12px; margin-top: 6px; }
+.c-head4 { font-size: 13px; font-weight: 700; color: #16161a; margin-bottom: 8px; display: flex; gap: 6px; align-items: baseline; }
+.c-head4 span { font-weight: 500; color: #77777f; font-size: 12.5px; }
+.c-wt { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; margin-top: 8px; }
+.c-wt .add { color: var(--success); } .c-wt .del { color: var(--error); } .c-wt .grow { flex: 1; }
+
+/* the floating round button */
+.o-win.c-has-fab { position: relative; }
+.c-fab { position: absolute; right: 24px; bottom: 24px; width: 52px; height: 52px; border-radius: 50%; background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 23px; box-shadow: 0 6px 18px rgba(51,112,255,.35), 0 2px 6px rgba(31,35,41,.16); z-index: 3; }
+.c-fab.inline { position: relative; right: auto; bottom: auto; flex: none; }
+.c-fab .badge { position: absolute; top: -3px; right: -3px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; border: 2px solid #fff; font: 700 11px/16px var(--ui); text-align: center; color: #fff; }
+.c-fab .badge.amb { background: var(--warning-solid); }
+.c-fab .badge.ok { background: var(--success-solid); }
+.c-fab .ring { position: absolute; inset: -5px; border-radius: 50%; border: 3px solid rgba(51,112,255,.18); border-top-color: var(--brand); }
+.c-fabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 18px; width: 1180px; }
+.c-fabcell { display: flex; gap: 16px; align-items: center; background: #fff; border: 1px solid #d5d6db; border-radius: 12px; padding: 16px 14px 16px 18px; }
+.c-fabcell .tx { font-size: 12.5px; line-height: 1.55; color: #4a4a52; min-width: 0; }
+.c-fabcell .tx b { display: block; color: #16161a; font-size: 13px; margin-bottom: 2px; }
+.ios .c-fab { right: 16px; bottom: 34px; width: 56px; height: 56px; font-size: 25px; background: #007aff; box-shadow: 0 6px 18px rgba(0,122,255,.35), 0 2px 6px rgba(0,0,0,.16); }
+
+/* phones */
+.c-phones { display: flex; gap: 22px; align-items: flex-start; flex: none; }
+.c-phone-wrap { width: 340px; flex: none; }
+.c-phone-wrap .ios { zoom: .8; }
+.c-phone-cap { font-size: 13px; font-weight: 600; color: #16161a; margin: 0 0 8px; }
+.ios .c-sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 26px 26px 0 0; box-shadow: 0 -4px 22px rgba(0,0,0,.16); display: flex; flex-direction: column; padding-top: 7px; }
+.ios .c-sheet .grab { margin: 0 auto 4px; }
+.ios .c-shead { display: flex; align-items: center; padding: 2px 10px 8px 20px; gap: 8px; border-bottom: .5px solid rgba(60,60,67,.2); }
+.ios .c-shead .t { font-weight: 600; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.ios .c-shead .g { width: 34px; height: 34px; border-radius: 50%; background: #f2f2f7; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; color: #3c3c43; flex: none; }
+.ios .c-sbody { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; font-size: 15.5px; line-height: 1.5; }
+.ios .c-user { max-width: 300px; font-size: 15.5px; background: #e9f0ff; border-radius: 18px; padding: 9px 14px; }
+.ios .c-att { font-size: 12.5px; max-width: 300px; }
+.ios .c-agent { font-size: 15.5px; line-height: 1.5; }
+.ios .c-card { font-size: 14.5px; border-radius: 14px; padding: 12px 14px 13px; }
+.ios .c-ti { font-size: 15.5px; }
+.ios .c-kv { font-size: 13.5px; grid-template-columns: 64px minmax(0, 1fr); }
+.ios .c-iacts { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.ios .c-iacts .bb { height: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 16px; background: #e9e9ee; color: #007aff; }
+.ios .c-iacts .bb.pri { background: #007aff; color: #fff; }
+.ios .c-iacts .row2 { display: flex; gap: 8px; }
+.ios .c-iacts .row2 .bb { flex: 1; }
+.ios .c-icomp { margin: 0 12px 26px; border: 1px solid #d1d1d6; border-radius: 22px; padding: 8px 8px 8px 14px; font-size: 16px; background: #fff; }
+.ios .c-icomp .c-chips { margin-bottom: 4px; }
+.ios .c-icomp .c-chip { font-size: 13px; }
+.ios .c-icomp .rw { display: flex; align-items: center; gap: 8px; color: #8e8e93; min-height: 30px; }
+.ios .c-icomp .c-send { background: #007aff; margin-left: auto; }
+.ios .c-pill { position: absolute; left: 16px; right: 84px; bottom: 36px; display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 14px; border-radius: 26px; background: #fff; box-shadow: 0 6px 22px rgba(0,0,0,.18), inset 0 0 0 .5px rgba(0,0,0,.08); font-size: 15px; }
+.ios .c-pill .ok { color: #1f8f3a; font-size: 17px; flex: none; }
+.ios .c-pill .tx { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ios .c-pill .see { color: #007aff; font-weight: 600; flex: none; }
+
+/* foot */
+.c-foot { display: grid; grid-template-columns: 500px 340px minmax(0, 1fr); gap: 22px; align-items: start; }
+.c-foot .askbox { padding-bottom: 14px; height: 100%; }
+.c-foot h3 { margin: 0 0 10px; font-size: 14.5px; }
+.c-tb { width: 100%; border-collapse: collapse; font-size: 12.5px; line-height: 1.55; }
+.c-tb th { text-align: left; font-weight: 600; color: #4a4a52; padding: 4px 8px 4px 0; border-bottom: 1px solid #dcdce2; }
+.c-tb td { padding: 5px 8px 5px 0; border-bottom: 1px solid #ececf0; vertical-align: top; }
+.c-tb td:first-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.askbox ul { margin: 0; padding-left: 18px; font-size: 13px; }
+.askbox ul li { margin-bottom: 7px; line-height: 1.55; }
+.askbox .rec { color: #0a5ca8; font-weight: 600; }
+</style>
+</head>
+<body>
+<script src="wiki-desktop-icons.js"></script>
+<script src="wiki-p2-icons.js"></script>
+<script src="wiki-p3-icons.js"></script>
+<svg width="0" height="0" style="position:absolute"><symbol id="x-back" viewBox="0 0 24 24"><path d="M15 4l-8 8 8 8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol><symbol id="x-list" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="4" cy="6" r="1.6"/><circle cx="4" cy="12" r="1.6"/><circle cx="4" cy="18" r="1.6"/></g><path d="M9 6h12M9 12h12M9 18h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol></svg>
+<div class="board">
+<h1 class="b-h1">42 · Wiki 页面上的聊天窗口：边聊边改，改的是字的来源，按 Apply 才写</h1>
+<p class="b-sub">方案文字见 <code>docs/wiki-chat-design.md</code>，还没有任何实现。沿用图 36 那篇《3.1 会话运行模型与长连接》§3 的真句子演一遍：<code>RUNNER_OFFLINE_AFTER_MS = 90_000</code>（<code>runner-presence.ts:31</code>，注释写着丢三次判离线）是 main 上的原样；
+<b>你说的话、agent 的回答、条目、合并 <code>7f3e2a1</code> 和重写后的句子都是示意。</b>界面英文，正文与对话按原文。左侧 app 侧栏略。</p>
+<div class="b-legend"><span><span class="tag new">新</span>新加的界面</span><span><span class="tag keep">沿用</span>现成的东西照用</span><span><span class="tag word">新词</span>新的英文文案</span><span><span class="tag done">已定</span>owner 11-06 定了（见 ⑥）</span><span><span class="tag demo">示意</span>演示用的内容</span></div>
+
+<!-- 0 -->
+<div class="band"><span class="bn">0</span>入口：右下角的圆形悬浮按钮 <small>· 这是聊天收起时的样子</small></div>
+<div class="row">
+  <div>
+    <div class="o-win c-has-fab">
+      <div class="o-wtop"><span class="t">Wiki</span><span class="o-space"><svg class="ic"><use href="#i-branches"/></svg>orbit <span>· github.com/jianghailong-xy/orbit</span></span><span class="grow"></span>
+        <span class="o-btn"><svg class="ic"><use href="#i-history"/></svg>Activity</span><span class="o-btn"><svg class="ic"><use href="#i-setting"/></svg>Settings</span><span class="o-btn pri"><svg class="ic"><use href="#i-plus"/></svg>New entry</span></div>
+      <div class="o-wbody">
+        <nav class="o-dir">
+          <div class="it"><svg class="ic"><use href="#i-home"/></svg>Home</div>
+          <div class="it"><svg class="ic"><use href="#i-appstore"/></svg>Browse by category</div>
+          <div class="it"><svg class="ic"><use href="#i-sort-ascending"/></svg>A–Z index</div>
+          <div class="cat">会话</div>
+          <div class="it on"><span class="no">3.1</span>会话运行模型与长连接</div>
+          <div class="it sub on2"><span class="no">3</span>turn 投递与 inbox 领取</div>
+          <div class="it"><span class="no">3.2</span>会话状态生命周期</div>
+          <div class="it"><span class="no">3.3</span>会话消息路由</div>
+        </nav>
+        <main class="o-doc c-doc" style="padding-right:70px">
+          <div class="o-crumb">Wiki<span>›</span>会话<span>›</span>3.1 会话运行模型与长连接</div>
+          <h2 class="o-sech"><span class="num">3</span>turn 投递与 inbox 领取：long-poll 与心跳</h2>
+          <p class="o-p">Runner 通过出站 HTTP 轮询领取工作，不依赖入站连接，因此无需开放入站端口。<span class="fn">[5][2]</span><span class="cut">…</span></p>
+          <p class="o-p">心跳机制用于控制面探测失联的 runner。Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。<span class="fn">[5][12]</span>该机制确保控制面能及时感知 runner 状态变化。</p>
+          <p class="o-p" style="margin-bottom:64px">选择 long-poll 而非 WebSocket 的原因包括：runner 仅支持出站 HTTP、网关 nginx 配置限制 WebSocket 握手。<span class="fn">[2]</span></p>
+        </main>
+      </div>
+      <span class="c-fab mk" data-n="1"><svg class="ic"><use href="#i-comment"/></svg></span>
+    </div>
+    <div class="c-fabs mk" data-n="2">
+      <div class="c-fabcell"><span class="c-fab inline"><svg class="ic"><use href="#i-comment"/></svg></span><div class="tx"><b>Chat</b>没有进行中的事。</div></div>
+      <div class="c-fabcell"><span class="c-fab inline"><i class="ring"></i><svg class="ic"><use href="#i-comment"/></svg></span><div class="tx"><b>Working…</b>agent 在跑，或文档在重写。</div></div>
+      <div class="c-fabcell"><span class="c-fab inline"><svg class="ic"><use href="#i-comment"/></svg><span class="badge amb">1</span></span><div class="tx"><b>1 needs you</b>草稿等 Apply、有审批，或重写被挡住、失败。</div></div>
+      <div class="c-fabcell"><span class="c-fab inline"><svg class="ic"><use href="#i-comment"/></svg><span class="badge ok">✓</span></span><div class="tx"><b>Wiki updated</b>重写完了，打开看过就消失。</div></div>
+    </div>
+  </div>
+  <div class="notes"><ol>
+    <li><span class="n">1</span><span class="tag done">已定</span>入口是窗口右下角的<b>圆形悬浮按钮</b>，只有图标，悬停写 <code>Chat</code>。页头不放 Chat，其余按钮不动。</li>
+    <li><span class="n">2</span><span class="tag new">新</span>聊天收起后不结束，所以<b>圆按钮带状态</b>。上排是它的四种样子，粗体是悬停文案。点开直接到要看的那张卡。</li>
+    <li><b>打开时</b>：继续这个 space 最近还开着的一场，没有就新开。面板打开时圆按钮藏起来，关掉回到原处。</li>
+    <li><b>哪些页有</b>：Wiki 各页都有，Settings 和分享链接没有。它固定在窗口上，不随正文滚动。</li>
+    <li><b>和谁会撞</b>：右下角现在是空的（Toast 在右上角，手机 web 没有底部导航，wiki 页没有底部操作条）。只有两处要让：正文底部多留 88 的空白，最后一行才不会被盖住；条目抽屉也贴右边，圆按钮浮在抽屉上面，看条目时也能聊。</li>
+    <li><b>尺寸是我选的</b>：桌面 52、距边 24；手机 56、距边 16 加安全区。颜色用品牌蓝。</li>
+  </ol></div>
+</div>
+
+<!-- 1 -->
+<div class="band"><span class="bn">1</span>打开聊天，选中一句，直接说 <small>· 选区、页面都作为可见的附件带上</small></div>
+<div class="row">
+  <div class="o-win">
+    <div class="o-wtop"><span class="t">Wiki</span><span class="o-space"><svg class="ic"><use href="#i-branches"/></svg>orbit <span>· github.com/jianghailong-xy/orbit</span></span><span class="grow"></span>
+      <span class="o-btn"><svg class="ic"><use href="#i-history"/></svg>Activity</span><span class="o-btn"><svg class="ic"><use href="#i-setting"/></svg>Settings</span><span class="o-btn pri"><svg class="ic"><use href="#i-plus"/></svg>New entry</span></div>
+    <div class="o-wbody">
+      <nav class="o-dir">
+        <div class="it"><svg class="ic"><use href="#i-home"/></svg>Home</div>
+        <div class="it"><svg class="ic"><use href="#i-appstore"/></svg>Browse by category</div>
+        <div class="it"><svg class="ic"><use href="#i-sort-ascending"/></svg>A–Z index</div>
+        <div class="cat">会话</div>
+        <div class="it on"><span class="no">3.1</span>会话运行模型与长连接</div>
+        <div class="it sub"><span class="no">1</span>总览</div>
+        <div class="it sub"><span class="no">2</span>一个 session 是什么</div>
+        <div class="it sub on2"><span class="no">3</span>turn 投递与 inbox 领取</div>
+        <div class="it sub"><span class="no">4</span>seq 单调与重连</div>
+        <div class="it sub"><span class="no">5</span>进程生命周期</div>
+        <div class="it"><span class="no">3.2</span>会话状态生命周期</div>
+        <div class="it"><span class="no">3.3</span>会话消息路由</div>
+      </nav>
+      <main class="o-doc c-doc">
+        <div class="o-crumb">Wiki<span>›</span>会话<span>›</span>3.1 会话运行模型与长连接</div>
+        <h2 class="o-sech"><span class="num">3</span>turn 投递与 inbox 领取：long-poll 与心跳</h2>
+        <p class="o-p">Runner 通过出站 HTTP 轮询领取工作，不依赖入站连接，因此无需开放入站端口。<span class="fn">[5][2]</span><span class="cut">…</span></p>
+        <p class="o-p" style="margin-top:44px">心跳机制用于控制面探测失联的 runner。<span class="snap" id="snap1">Runner 每 30 秒发送一次心跳，<span class="sel" id="sel1">控制面连续 90 秒未收到心跳即判定 runner 离线</span>，此时 resume 功能不可用。</span><span class="fn">[5][12]</span>该机制确保控制面能及时感知 runner 状态变化。</p>
+        <p class="o-p">选择 long-poll 而非 WebSocket 的原因包括：runner 仅支持出站 HTTP、网关 nginx 配置限制 WebSocket 握手。<span class="fn">[2]</span></p>
+        <span class="o-float mko" data-above="sel1"><svg class="ic"><use href="#i-comment"/></svg>Ask<i class="pin">2</i></span>
+      </main>
+      <aside class="c-panel">
+        <div class="c-head mk" data-n="1"><span class="t">New chat</span><svg class="ic caret"><use href="#i-caret-down"/></svg><span class="c-ib"><svg class="ic"><use href="#i-plus"/></svg></span><span class="c-ib"><svg class="ic"><use href="#i-arrow-right"/></svg></span><span class="c-ib"><svg class="ic"><use href="#i-close"/></svg></span></div>
+        <div class="c-run mk" data-n="4"><span>Runs in</span><span class="o-pick">orbit-develop · HPC<svg class="ic"><use href="#i-caret-down"/></svg></span><span class="o-pick">Claude Opus 5.5<svg class="ic"><use href="#i-caret-down"/></svg></span><span class="o-pick">Default<svg class="ic"><use href="#i-caret-down"/></svg></span></div>
+        <div class="c-body"><div class="c-empty">Ask about this page, or say what should change.<br>Nothing in the wiki changes until you apply it.</div></div>
+        <div class="c-compose focus">
+          <div class="c-chips mk" data-n="3"><span class="c-chip"><svg class="ic"><use href="#i-read"/></svg>3.1 §3<svg class="ic x"><use href="#i-close"/></svg></span><span class="c-chip q"><span class="q1">Runner 每 30 秒发送一次心跳…</span><span class="sub">1 sentence · 2 sources</span><svg class="ic x"><use href="#i-close"/></svg></span></div>
+          <div class="c-input mk" data-n="5">这句少了原因：留三次心跳的余量，是为了扛住一次网关重启，不是随便定的。把这个写进去。<span class="car"></span></div>
+          <div class="c-cfoot"><span class="c-send"><svg class="ic"><use href="#i-up-small"/></svg></span></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <div class="notes"><ol>
+    <li><span class="n">1</span><span class="tag new">新</span>点圆按钮后，面板停靠在右边，<b>挤开正文、不盖正文</b>，翻页时不关（地址带 <code>?chat=</code>，刷新还在）。条目抽屉开在面板左边。</li>
+    <li><span class="n">2</span><span class="tag new">新</span>选中后浮出 <b>Ask</b>。选区按句吸附，规则照 10-09 定的那版（<code>wiki_doc_sentence</code>）。按了就把这几句放进输入框，不弹窗。</li>
+    <li><span class="n">3</span><span class="tag new">新</span>两种附件都看得见、都能叉掉：<b>当前页</b>自动跟着你走，发送时定格；<b>引用</b>带原文和脚注位置。<b>没显示的上下文不发。</b></li>
+    <li><span class="n">4</span><span class="tag keep">沿用</span><b>Runs in</b> 和 New session 同一套选择器，这个 space 第一次聊天时让你选 workspace，之后记住；机器离线就写明，不自动换机器。发出第一句后变成一行字，一直看得见在哪跑、什么模式。</li>
+    <li><span class="n">5</span><span class="tag keep">沿用</span>你的话原样成为消息，附件单独存。所以这句话本身能当<b>一手出处</b>：契约里 owner 原话本来就是最硬的证据（<code>tiered.auto.ownerWords</code>）。</li>
+  </ol></div>
+</div>
+
+<!-- 2 -->
+<div class="band"><span class="bn">2</span>agent 查完，起草一张改动卡：不写，等你按 <small>· 这里判断为「少一条决定」，不是这句写错</small></div>
+<div class="row">
+  <div class="o-win">
+    <div class="o-wtop"><span class="t">Wiki</span><span class="o-space"><svg class="ic"><use href="#i-branches"/></svg>orbit <span>· github.com/jianghailong-xy/orbit</span></span><span class="grow"></span>
+      <span class="o-btn"><svg class="ic"><use href="#i-history"/></svg>Activity</span><span class="o-btn"><svg class="ic"><use href="#i-setting"/></svg>Settings</span><span class="o-btn pri"><svg class="ic"><use href="#i-plus"/></svg>New entry</span></div>
+    <div class="o-wbody">
+      <nav class="o-dir">
+        <div class="it"><svg class="ic"><use href="#i-home"/></svg>Home</div>
+        <div class="it"><svg class="ic"><use href="#i-appstore"/></svg>Browse by category</div>
+        <div class="it"><svg class="ic"><use href="#i-sort-ascending"/></svg>A–Z index</div>
+        <div class="cat">会话</div>
+        <div class="it on"><span class="no">3.1</span>会话运行模型与长连接</div>
+        <div class="it sub on2"><span class="no">3</span>turn 投递与 inbox 领取</div>
+        <div class="it"><span class="no">3.2</span>会话状态生命周期</div>
+        <div class="cat">Runner</div>
+        <div class="it"><span class="no">7.1</span>Runner 架构与注册</div>
+      </nav>
+      <main class="o-doc c-doc">
+        <div class="o-crumb">Wiki<span>›</span>会话<span>›</span>3.1 会话运行模型与长连接</div>
+        <h2 class="o-sech"><span class="num">3</span>turn 投递与 inbox 领取：long-poll 与心跳</h2>
+        <p class="o-p">Runner 通过出站 HTTP 轮询领取工作，不依赖入站连接，因此无需开放入站端口。<span class="fn">[5][2]</span><span class="cut">…</span></p>
+        <div class="c-affected mk l" data-n="4">
+          <span class="c-aff-tag">Draft would rewrite this section</span>
+          <p class="o-p">心跳机制用于控制面探测失联的 runner。<span class="hl">Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。</span><span class="fn">[5][12]</span>该机制确保控制面能及时感知 runner 状态变化。</p>
+        </div>
+        <p class="o-p">选择 long-poll 而非 WebSocket 的原因包括：runner 仅支持出站 HTTP、网关 nginx 配置限制 WebSocket 握手。<span class="fn">[2]</span></p>
+      </main>
+      <aside class="c-panel">
+        <div class="c-head"><span class="t">Runner 离线判定的原因</span><svg class="ic caret"><use href="#i-caret-down"/></svg><span class="c-ib"><svg class="ic"><use href="#i-plus"/></svg></span><span class="c-ib mk" data-n="1"><svg class="ic"><use href="#i-arrow-right"/></svg></span><span class="c-ib"><svg class="ic"><use href="#i-close"/></svg></span></div>
+        <div class="c-run"><span>orbit-develop · HPC · Claude Opus 5.5 · Default</span></div>
+        <div class="c-body">
+          <div class="c-user">这句少了原因：留三次心跳的余量，是为了扛住一次网关重启，不是随便定的。把这个写进去。</div>
+          <div class="c-att">⊕ Orbit attached: <b>Wiki selection</b> · 3.1 §3 · 1 sentence · 2 sources</div>
+          <div class="c-tools"><span class="o-tool">Read <b>runner-presence.ts</b></span><span class="o-tool">wiki_search <b>心跳 离线</b></span><span class="o-tool">wiki_get <b>2</b></span></div>
+          <div class="c-agent mk" data-n="2"><p>代码里确实是丢三次才判离线（<code>runner-presence.ts:30</code>），但「为什么是三次」库里没有。所以不是这句写错，是<b>少一条决定</b>。原因用的是你刚才的原话：</p></div>
+          <div class="c-card mk" data-n="3">
+            <div class="c-k">Draft · Add decision</div>
+            <div class="c-ti">Runner 离线判定留三次心跳的余量</div>
+            <div class="c-kv">
+              <span class="l">Decision</span><span class="v">连续丢三次心跳才判离线。</span>
+              <span class="l">Why</span><span class="v">要扛住一次网关重启，一次抖动不该让 Resume 失效。</span>
+              <span class="l">Sources</span><span class="v"><span class="okm">✓</span> Your message in this chat<br><span class="okm">✓</span> runner-presence.ts L30–31 · 99cd3c4</span>
+              <span class="l">Rewrites</span><span class="v"><a>3.1 §3</a> · <a>7.1 §2</a></span>
+            </div>
+            <div class="c-acts mk" data-n="5"><span class="o-btn pri sm">Apply</span><span class="o-btn sm">Edit</span><span class="o-btn sm">Discard</span></div>
+          </div>
+        </div>
+        <div class="c-compose">
+          <div class="c-chips"><span class="c-chip"><svg class="ic"><use href="#i-read"/></svg>3.1 §3<svg class="ic x"><use href="#i-close"/></svg></span></div>
+          <div class="c-input"><span class="ph">Reply, or say what to change in the draft</span></div>
+          <div class="c-cfoot"><span class="c-send"><svg class="ic"><use href="#i-up-small"/></svg></span></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <div class="notes"><ol>
+    <li><span class="n">1</span><span class="tag keep">沿用</span><b>聊天就是一场普通会话</b>：工具、审批卡、Stop、权限模式、费用都照旧，会话列表里也有。<code>↗</code> 换成完整会话页接着聊。<span class="tag done">已定</span></li>
+    <li><span class="n">2</span><b>agent 先判断这话该落在哪一层</b>（见 ④），再动手。它手里有选中的句子、脚注的代码位置和经由的条目，不用猜。</li>
+    <li><span class="n">3</span><span class="tag new">新</span><b>改动卡</b>：agent 只起草，服务端先照常校验（schema、出处、引文）。草稿不进 Review，不占 30 个待审名额；聊天里 <code>challenge</code> 和 <code>wiki_note</code> 的打标也先算草稿，「不按就不变」才是真话。说一句「再短点」，新卡替换旧卡，旧卡标 <code>Replaced</code>。</li>
+    <li><span class="n">4</span><span class="tag new">新</span>按之前，左边就标出这张卡会牵动的节。卡上 <b>Rewrites</b> 的节号能点，点了在左边打开，不离开聊天。</li>
+    <li><span class="n">5</span><span class="tag done">已定</span><b>Apply 是 owner 门上的一次按压</b>，等于 Review 的 Accept：trust = confirmed，不再走核实。不然 Automatic 的核实可能当着你的面驳回你自己的话。<b>Discard</b> 不记 Not true，也不留反例。</li>
+  </ol></div>
+</div>
+
+<!-- 3 -->
+<div class="band"><span class="bn">3</span>按了 Apply：条目立刻生效，这几节定向重写，看得到改了什么 <small>· 不等维护的 20 个会话或 24 小时</small></div>
+<div class="row">
+  <div class="o-win">
+    <div class="o-wtop"><span class="t">Wiki</span><span class="o-space"><svg class="ic"><use href="#i-branches"/></svg>orbit <span>· github.com/jianghailong-xy/orbit</span></span><span class="grow"></span>
+      <span class="o-btn"><svg class="ic"><use href="#i-history"/></svg>Activity</span><span class="o-btn"><svg class="ic"><use href="#i-setting"/></svg>Settings</span><span class="o-btn pri"><svg class="ic"><use href="#i-plus"/></svg>New entry</span></div>
+    <div class="o-wbody">
+      <nav class="o-dir">
+        <div class="it"><svg class="ic"><use href="#i-home"/></svg>Home</div>
+        <div class="it"><svg class="ic"><use href="#i-appstore"/></svg>Browse by category</div>
+        <div class="it"><svg class="ic"><use href="#i-sort-ascending"/></svg>A–Z index</div>
+        <div class="cat">会话</div>
+        <div class="it on"><span class="no">3.1</span>会话运行模型与长连接</div>
+        <div class="it sub on2"><span class="no">3</span>turn 投递与 inbox 领取</div>
+        <div class="it"><span class="no">3.2</span>会话状态生命周期</div>
+      </nav>
+      <main class="o-doc c-doc">
+        <div class="o-crumb">Wiki<span>›</span>会话<span>›</span>3.1 会话运行模型与长连接</div>
+        <h2 class="o-sech"><span class="num">3</span>turn 投递与 inbox 领取：long-poll 与心跳<span class="o-upd mk" data-n="4"><span class="bd"></span>Updated</span></h2>
+        <p class="o-p">Runner 通过出站 HTTP 轮询领取工作，不依赖入站连接，因此无需开放入站端口。<span class="fn">[5][2]</span><span class="cut">…</span></p>
+        <p class="o-p">心跳机制用于控制面探测失联的 runner。Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。<span class="fn">[5][12]</span><span class="newline">留三次余量是为了扛住一次网关重启，一次抖动不会让 Resume 失效。<span class="fn">[13]</span></span>该机制确保控制面能及时感知 runner 状态变化。</p>
+        <p class="o-p">选择 long-poll 而非 WebSocket 的原因包括：runner 仅支持出站 HTTP、网关 nginx 配置限制 WebSocket 握手。<span class="fn">[2]</span></p>
+      </main>
+      <aside class="c-panel">
+        <div class="c-head"><span class="t">Runner 离线判定的原因</span><svg class="ic caret"><use href="#i-caret-down"/></svg><span class="c-ib"><svg class="ic"><use href="#i-plus"/></svg></span><span class="c-ib"><svg class="ic"><use href="#i-arrow-right"/></svg></span><span class="c-ib"><svg class="ic"><use href="#i-close"/></svg></span></div>
+        <div class="c-run"><span>orbit-develop · HPC · Claude Opus 5.5 · Default</span></div>
+        <div class="c-body">
+          <div class="c-card quiet mk" data-n="1">
+            <div class="c-k ok">✓ Applied · Confirmed by you</div>
+            <div class="c-ti" style="margin-bottom:0">Runner 离线判定留三次心跳的余量</div>
+            <div class="c-acts" style="margin-top:6px"><span class="o-btn sm"><svg class="ic"><use href="#i-undo"/></svg>Undo</span><span class="o-btn sm">Open entry</span></div>
+          </div>
+          <div class="mk" data-n="2" style="padding:6px 8px 0">
+            <div class="o-sys run" style="margin:0 0 6px"><svg class="ic"><use href="#i-sync"/></svg><span>Rewriting 3.1 §3 and 7.1 §2 from main@<code>7f3e2a1</code>…</span></div>
+            <div class="o-sys ok" style="margin:0 0 6px"><svg class="ic"><use href="#i-check-circle-f"/></svg><span>Wiki updated · 3.1 §3 — 1 sentence · 7.1 §2 — reads the same</span></div>
+          </div>
+          <div class="c-card quiet mk" data-n="3">
+            <div class="c-k grey">See changes · 3.1 §3</div>
+            <div class="o-diff" style="border-top:0;margin-top:4px;padding-top:0">
+              <div class="o-ins" style="margin-bottom:4px">留三次余量是为了扛住一次网关重启，一次抖动不会让 Resume 失效。<span class="fn">[13]</span></div>
+              <div class="o-newfn"><span>[13]</span><span class="p">Your message</span><span>· this chat</span><span class="v">✓</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="c-compose">
+          <div class="c-chips"><span class="c-chip"><svg class="ic"><use href="#i-read"/></svg>3.1 §3<svg class="ic x"><use href="#i-close"/></svg></span></div>
+          <div class="c-input"><span class="ph">Ask about this page, or say what should change</span></div>
+          <div class="c-cfoot"><span class="c-send"><svg class="ic"><use href="#i-up-small"/></svg></span></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <div class="notes"><ol>
+    <li><span class="n">1</span>卡变成 <b>✓ Applied</b>。<b>Undo</b> 是现有的整次撤回（<code>changesets/:id/revert</code>）。<span class="tag new">新</span>再把重写过的节恢复成旧版，靠下面第 3 条的留版。</li>
+    <li><span class="n">2</span><span class="tag new">新</span><b>定向重写</b>：写作者还是服务端的 <code>docs_build</code>（<code>only</code> 传这几节），会话碰不到文档表。优先级同生成作业。写的时候你可以接着读、接着聊，不挡人。同一 space 正在跑的 articles、verify、import 不挡它；有写文档的作业在跑时要等它结束，卡上写明。<span class="tag done">已定</span></li>
+    <li><span class="n">3</span><span class="tag keep">沿用</span><b>See changes</b> 是图 36 ⑥ 的逐句对照。留版（W3）还没做，这是前置。</li>
+    <li><span class="n">4</span>左边：新句绿线，节旁 <b>Updated</b>。新脚注指向你在聊天里的那句话。开了 Footnotes 的分享链接，访客也读得到这句引文。</li>
+    <li><b>没写成的</b>照实说（见 ④ 下排）：等着、读起来一样、失败。一节一节改完，Activity 记一行，来处是这场聊天。</li>
+  </ol></div>
+</div>
+
+<!-- 4 -->
+<div class="band"><span class="bn">4</span>一句话落到哪：四种去处，四种卡 <small>· 文档是生成的，手改的字下次重写就没了，所以每句要求都要落到重写后还在的地方</small></div>
+<div class="c-grid4">
+  <div>
+    <div class="c-head4">① 知识 <span>条目</span></div>
+    <div class="c-card">
+      <div class="c-k">Draft · Amend entry</div>
+      <div class="c-ti">为什么用 long-poll 不用 WebSocket</div>
+      <div class="o-diff" style="border-top:0;margin-top:2px;padding-top:0"><div class="o-del"><mark>网关不支持</mark> WebSocket。</div><div class="o-ins" style="margin-bottom:0"><mark>当时的 nginx 配置限制握手</mark>，可以改，只是没必要。</div></div>
+      <div class="c-kv" style="margin-top:6px"><span class="l">Rewrites</span><span class="v"><a>3.1 §3</a></span></div>
+      <div class="c-acts"><span class="o-btn pri sm">Apply</span><span class="o-btn sm">Edit</span><span class="o-btn sm">Discard</span></div>
+    </div>
+    <div class="c-cap"><span class="q">「这句的原因写错了」「这个坑修好了，退役吧」</span>add / amend / supersede / retire。现有的写入口，原则类 agent 写不了，你按才算。</div>
+  </div>
+  <div>
+    <div class="c-head4">② 落后于 main <span>重写</span></div>
+    <div class="c-card">
+      <div class="c-k">Draft · Rewrite from main</div>
+      <div class="c-ti">3.1 §3 读的是旧代码</div>
+      <div class="c-kv"><span class="l">Written</span><span class="v">from <code>99cd3c4</code></span><span class="l">main</span><span class="v"><code>7f3e2a1</code>：<code>runloop.go</code> 变了，这节引了它</span><span class="l">Rewrites</span><span class="v"><a>3.1 §3</a></span></div>
+      <div class="c-acts"><span class="o-btn pri sm">Rewrite</span><span class="o-btn sm">Discard</span></div>
+    </div>
+    <div class="c-cap"><span class="q">「这个数早就变了」</span>知识没错，只是这节还没跟上。不写条目，只排重写。<span class="tag new">新</span>要一个「重写这一节」的 user 门入口（门只排作业，不写文档）。</div>
+  </div>
+  <div>
+    <div class="c-head4">③ 结构与写法 <span>plan</span></div>
+    <div class="c-card">
+      <div class="c-k">Draft · Plan change</div>
+      <div class="c-ti">3.1 拆成两篇</div>
+      <div class="c-kv"><span class="l">Move</span><span class="v">§3 投递与心跳 → 新篇 3.5</span><span class="l">Covers</span><span class="v">3.1 改写给第一次读的人，先讲模型，不讲参数</span><span class="l">Rewrites</span><span class="v"><a>3.1</a> · <a>3.5</a></span></div>
+      <div class="c-acts"><span class="o-btn pri sm">Apply &amp; rebuild</span><span class="o-btn sm">Open in Plan</span><span class="o-btn sm">Discard</span></div>
+    </div>
+    <div class="c-cap"><span class="q">「这篇太长，拆开」「写给新人看，别堆参数」</span>写法要求落在节的 <code>covers</code> 上，<b>下次重写还在</b>。一按就是编辑、确认、重建三步。session 现在读不了 plan，页面把它随附件带过去。</div>
+  </div>
+  <div>
+    <div class="c-head4">④ 系统本身 <span>main</span></div>
+    <div class="c-card">
+      <div class="c-k grey">Session · code changed</div>
+      <div class="c-ti">判离线从 90 秒缩到 45 秒</div>
+      <div class="c-wt"><svg class="ic"><use href="#i-branches"/></svg>3 files <span class="add">+14</span> <span class="del">−6</span><span class="grow"></span><span class="o-btn sm pri"><svg class="ic"><use href="#i-merge"/></svg>Merge</span></div>
+      <div class="c-line">Once this reaches main, Orbit rewrites what it touches.</div>
+    </div>
+    <div class="c-cap"><span class="q">「这里应该改成 45 秒」</span>文档没错，是系统要改。会话改代码或它引用的设计文档，审批照拨盘走，<b>Merge 还是你按</b>；进 main 后文档跟上（设计 §12，未实现）。</div>
+  </div>
+</div>
+<div class="c-grid6">
+  <div><div class="c-card quiet"><div class="c-k grey">Replaced</div>A newer draft took over.</div><div class="c-cap">你接着说、agent 换了一版。</div></div>
+  <div><div class="c-card quiet"><div class="c-k amb">Changed since this draft</div><div class="c-acts" style="margin-top:5px"><span class="o-btn sm">Redo</span></div></div><div class="c-cap">维护先改了这条（<code>baseRevision</code> 对不上）。</div></div>
+  <div><div class="c-card quiet"><div class="c-k amb">Based on web content</div>Read before you apply.</div><div class="c-cap">这场聊天读过网页：污染标记照旧，卡上明说。</div></div>
+  <div><div class="c-card quiet"><div class="c-k amb">Rewrite waiting</div>Maintenance is running<div class="c-acts" style="margin-top:5px"><span class="o-btn sm">Settings</span></div></div><div class="c-cap">条目已生效，文档还没写。也可能是 runner 离线。</div></div>
+  <div><div class="c-card quiet"><div class="c-k amb">§3 reads the same</div><div class="c-acts" style="margin-top:5px"><span class="o-btn sm">See changes</span></div></div><div class="c-cap">写完一句没变，不假装改好了。</div></div>
+  <div><div class="c-card quiet"><div class="c-k err">Rewrite failed</div><div class="c-acts" style="margin-top:5px"><span class="o-btn sm">Try again</span></div></div><div class="c-cap">模型失败或核对不过。</div></div>
+</div>
+
+<!-- 5 -->
+<div class="band"><span class="bn">5</span>iPhone：半屏时正文还能滚，全屏看卡 <small>· web 手机同样的两档；iPad 与 macOS 是第三栏（设计 §12.3.5 的三栏）</small></div>
+<div class="row">
+  <div class="c-phones">
+    <div class="c-phone-wrap"><p class="c-phone-cap">半屏：边读边说</p>
+      <div class="ios">
+        <div class="island"></div>
+        <div class="sb"><span>9:41</span><span class="r"><span class="bat"></span></span></div>
+        <div class="nav"><span class="glass"><svg class="ic"><use href="#x-back"/></svg></span><span class="glass"><svg class="ic"><use href="#x-list"/></svg></span></div>
+        <div class="body">
+          <div class="crumb">Wiki<span>·</span>会话</div>
+          <div class="h3"><span class="num">3</span>turn 投递与 inbox 领取</div>
+          <p class="pp">心跳机制用于控制面探测失联的 runner。<span class="hl">Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。</span><span class="fn">[5][12]</span></p>
+        </div>
+        <div class="c-sheet" style="height:52%">
+          <div class="grab"></div>
+          <div class="c-shead"><span class="t">New chat</span><span class="g"><svg class="ic"><use href="#i-arrow-right"/></svg></span><span class="g"><svg class="ic"><use href="#i-close"/></svg></span></div>
+          <div class="c-sbody"><div class="c-empty" style="margin:14px 4px;font-size:15px">Ask about this page, or say what should change. Nothing in the wiki changes until you apply it.</div></div>
+          <div class="c-icomp">
+            <div class="c-chips"><span class="c-chip"><svg class="ic"><use href="#i-read"/></svg>3.1 §3<svg class="ic x"><use href="#i-close"/></svg></span><span class="c-chip q"><span class="q1">Runner 每 30 秒…</span><span class="sub">1 sentence</span><svg class="ic x"><use href="#i-close"/></svg></span></div>
+            <div class="rw"><span>Message</span><span class="c-send"><svg class="ic"><use href="#i-up-small"/></svg></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="c-phone-wrap"><p class="c-phone-cap">全屏：看卡、按 Apply</p>
+      <div class="ios">
+        <div class="island"></div>
+        <div class="sb"><span>9:41</span><span class="r"><span class="bat"></span></span></div>
+        <div class="c-sheet" style="top:62px">
+          <div class="grab"></div>
+          <div class="c-shead"><span class="t">Runner 离线判定的原因</span><span class="g"><svg class="ic"><use href="#i-arrow-right"/></svg></span><span class="g"><svg class="ic"><use href="#i-close"/></svg></span></div>
+          <div class="c-sbody">
+            <div class="c-user">这句少了原因：留三次心跳的余量，是为了扛住一次网关重启。</div>
+            <div class="c-agent">代码里确实是丢三次，但「为什么」库里没有，是少一条决定：</div>
+            <div class="c-card">
+              <div class="c-k">Draft · Add decision</div>
+              <div class="c-ti">Runner 离线判定留三次心跳的余量</div>
+              <div class="c-kv"><span class="l">Why</span><span class="v">要扛住一次网关重启，一次抖动不该让 Resume 失效。</span><span class="l">Sources</span><span class="v"><span class="okm">✓</span> Your message<br><span class="okm">✓</span> runner-presence.ts L30–31</span><span class="l">Rewrites</span><span class="v"><a>3.1 §3</a> · <a>7.1 §2</a></span></div>
+              <div class="c-iacts"><span class="bb pri">Apply</span><div class="row2"><span class="bb">Edit</span><span class="bb">Discard</span></div></div>
+            </div>
+          </div>
+          <div class="c-icomp"><div class="rw"><span>Message</span><span class="c-send"><svg class="ic"><use href="#i-up-small"/></svg></span></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="c-phone-wrap"><p class="c-phone-cap">收起：回到正文，圆按钮还在</p>
+      <div class="ios">
+        <div class="island"></div>
+        <div class="sb"><span>9:41</span><span class="r"><span class="bat"></span></span></div>
+        <div class="nav"><span class="glass"><svg class="ic"><use href="#x-back"/></svg></span><span class="glass"><svg class="ic"><use href="#x-list"/></svg></span></div>
+        <div class="body">
+          <div class="crumb">Wiki<span>·</span>会话</div>
+          <div class="h3"><span class="num">3</span>turn 投递与 inbox 领取<span class="ibadge">Updated</span></div>
+          <p class="pp">心跳机制用于控制面探测失联的 runner。Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。<span class="fn">[5][12]</span><span class="newline">留三次余量是为了扛住一次网关重启，一次抖动不会让 Resume 失效。<span class="fn">[13]</span></span></p>
+          <p class="pp">选择 long-poll 而非 WebSocket 的原因包括：runner 仅支持出站 HTTP、网关 nginx 配置限制 WebSocket 握手。<span class="fn">[2]</span></p>
+        </div>
+        <div class="c-pill"><svg class="ic ok"><use href="#i-check-circle-f"/></svg><span class="tx">Wiki updated · 3.1 §3</span><span class="see">See changes</span></div>
+        <span class="c-fab"><svg class="ic"><use href="#i-comment"/></svg><span class="badge ok">✓</span></span>
+      </div>
+    </div>
+  </div>
+  <div class="notes" style="padding-top:28px"><ol>
+    <li><span class="n">1</span><b>入口</b>：右下角圆按钮，sheet 打开时藏起来；长按段落多一项 <b>Ask</b>，点选句子照图 37 的 sheet，选完进输入框。</li>
+    <li><span class="n">2</span><b>半屏档</b>：sheet 下面的正文不变灰、还能滚，这才算「边读边说」。系统 sheet 有这个能力。</li>
+    <li><span class="n">3</span><b>全屏档</b>：卡的按钮竖排，Apply 在上，同图 37。</li>
+    <li><span class="n">4</span><b>收起</b>后聊天不结束：圆按钮带状态（见 ⓪），重写完左边浮一条结果，点开回到聊天。</li>
+    <li>iOS 的会话页是原生视图，预计放进 sheet 比 web 省事，还没细看；web 的难处见 ⑥。</li>
+  </ol></div>
+</div>
+
+<!-- 6 -->
+<div class="band"><span class="bn">6</span>宽度规则、不做的事、已定</div>
+<div class="c-foot">
+  <div class="askbox">
+    <h3>窗口宽度（待实现时按真页面校准）</h3>
+    <table class="c-tb">
+      <tr><th>宽度</th><th>面板</th><th>目录栏</th></tr>
+      <tr><td>≥ 1440</td><td>右侧停靠，默认 400，可拖 320–560</td><td>照旧</td></tr>
+      <tr><td>1200–1439</td><td>右侧停靠</td><td>收进现有的 Contents 抽屉</td></tr>
+      <tr><td>640–1199</td><td>从右滑出，盖住正文右侧，不加遮罩</td><td>Contents 抽屉</td></tr>
+      <tr><td>&lt; 640</td><td>底部 sheet，半屏与全屏两档</td><td>Contents 抽屉</td></tr>
+    </table>
+    <h3 style="margin-top:16px">工程上最大的一块</h3>
+    <ul>
+      <li><b>web 的会话不是一个能搬走的组件。</b><code>Transcript</code> 能单独用（分享页就是），但实时流（<code>EventSource</code>）和输入框都写在 12,646 行的 <code>WorkspaceView.tsx</code> 里。推荐抽流、另写精简输入框，其余交给 <code>↗</code>。</li>
+    </ul>
+  </div>
+  <div class="askbox">
+    <h3>不做</h3>
+    <ul>
+      <li><b>不另造聊天。</b>不在服务端写新的模型循环和对话存储。</li>
+      <li><b>不分 Ask / Edit 两种模式。</b>会话本来能问能改（10-09 §8）。</li>
+      <li><b>不自动合并。</b>Merge 不可委托。</li>
+      <li><b>agent 不写文档表。</b>只有服务端作业写（契约 <code>docs.who</code>）。</li>
+      <li><b>分享链接的访客没有聊天。</b></li>
+      <li><b>第一版不做「自动应用」开关。</b>先看真实的按压和 Discard 比例。</li>
+    </ul>
+  </div>
+  <div class="askbox">
+    <h3>已定（owner 11-06）</h3>
+    <ol>
+      <li>入口是右下角的圆形悬浮按钮。</li>
+      <li><b>聊天不直接改文档的字</b>，要求落在重写后还在的地方。</li>
+      <li><b>普通会话</b>，跑在 workspace 所在的 runner 上，用独立 worktree，从 <code>origin/main</code> 开。orbit 默认 <code>orbit-develop</code>（HPC）。</li>
+      <li><b>每张卡都按 Apply</b>，按下即 confirmed，跳过核实。</li>
+      <li><b>评论项目并进来</b>：留版和跟进留用，Go 那份和评论卡不做。</li>
+      <li><b>第一版</b> web 桌面先通 ①②④，iOS 紧跟，plan 卡（③）放第二步。</li>
+    </ol>
+    <ol start="7" style="margin-top:8px">
+      <li><b>定向重写只绕开不写文档的作业</b>：能和 <code>articles</code>、<code>verify</code>、<code>import</code> 同时跑，遇到 <code>maintain</code>、<code>docs_build</code> 照等，卡上写明。</li>
+      <li>新项目开工后，关掉旧的评论项目。</li>
+    </ol>
+  </div>
+</div>
+</div>
+<script>
+window.drawMarks = function () {
+  for (const el of document.querySelectorAll('[data-above]')) {
+    const t = document.getElementById(el.dataset.above), host = el.offsetParent;
+    const r = t.getClientRects()[0], h = host.getBoundingClientRect();
+    el.style.left = (r.left - h.left + r.width / 2 - el.offsetWidth / 2) + 'px';
+    el.style.top = (r.top - h.top - el.offsetHeight - 12) + 'px';
+  }
+};
+</script>
+</body>
+</html>

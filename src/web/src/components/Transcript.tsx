@@ -134,7 +134,7 @@ export const ArtifactResolverContext =
 // Where the transcript's links to tasks, projects and sessions go on a public page, which is read
 // signed out: the page's resolver answers for every AppLink and SameOriginLink in the tree.
 export { PublicLinkResolverCtx, type PublicLinkResolver } from '../lib/publicLinks';
-import Markdown from 'react-markdown';
+import Markdown from './Markdown';
 import { orbitLinkRemarkPlugin } from '../lib/orbitLink';
 import { OrbitLinkCardsCtx, orbitLinkCardComponents } from './OrbitLinkCard';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';

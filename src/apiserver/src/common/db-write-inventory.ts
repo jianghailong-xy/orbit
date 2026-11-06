@@ -867,7 +867,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     attempts: 4,
     replay: 'The duplicate-ack check, park, merge-state clear and billing accrual are all taken from rows read under their locks inside the closure. The command result, request decision, derived task status and raw-output comment — or the mutually exclusive unavailable signal — are written only by the same first ACK; a victim leaves all of them absent, and a retry re-locks the current declaration/request before deriving anything. The bridge finds-or-creates the exact evidence/request fact inside the same transaction and verifies a standing result byte-for-byte before deciding it, so a rollback exposes none and an OPEN+result retry never attempts a second unique result. The acceptance shell turn a message turn owes is queued only by the completion that ANSWERS that turn, and is looked up by its `(session_id, client_turn_id)` key before it is inserted: a turn put back in the queue completes a second time, and a round already standing for it is its round rather than a unique violation that fails the whole ACK. A message the region check refused (`region_refused`) goes back in the queue by the same ACK compare-and-set and its Session to PENDING, predicated on RUNNING, so a re-post matches no turn and writes nothing.',
     effects: 'None inside; attempt-budget accounting, EXECUTABLE_RESULT_RECORDED consumption and realtime publication are after commit, and so is PushService.notifyLoopMissed (signalDrainedWakeups) for each one-shot wakeup the failed turn\'s drain dropped with its FAILED session — returned only by the attempt that committed, so once. The input route is replayed even for a duplicate ACK so an authorization refusal does not burn the immutable result fact. A failed transaction appends CONTROL_PLANE_COMMIT_REJECTED only from a separate best-effort transaction after rollback; a committed ACK appends recovery outside the monitored transaction. Neither observation can turn the callback result into another 5xx, and the independent watchdog derives the same stable obligation if either edge write is absent.',
-    answer: 'Typed 503; the runner re-posts the completion, which the duplicate-ack check absorbs.',
+    answer: 'Typed 503; the runner re-posts the completion, which the duplicate-ack check absorbs. A completion refused for anything but a conflict, the database failing or an answer already decided (a report the database will not store, say) rolls back whole and runs once more on what decides the turn alone (settlingFields), so a report cannot hold the turn: the runner re-posts a 5xx with no ceiling, and a 4xx would have it run the turn again.',
   },
   {
     at: 'runner-api/runner-api.controller.ts#ingestEvents',
@@ -938,13 +938,37 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'runner-api/runner-api.controller.ts#commitResult',
     shape: 'TX_RETRIED',
-    locks: 'Same as mergeResult.',
+    locks:
+      'Same as mergeResult, plus the abandoned_checkout row of the same session deleted under it '
+      + '(rank 60, after the session it hangs off): the checkout entry is the one this outcome settles.',
     identity: 'Same as mergeResult.',
     isolation: '',
     attempts: 4,
     replay: 'Same as mergeResult.',
     effects: 'None inside.',
     answer: 'Typed 503; the runner re-posts.',
+  },
+  {
+    at: 'runner-api/runner-api.controller.ts#abandonedCheckouts',
+    shape: 'TX_RETRIED',
+    locks:
+      'Session rows first (rank 30, by id, one UPDATE that marks the reported checkouts dirty), then '
+      + 'abandoned_checkout (rank 60): the delete of what this runner no longer reports and one upsert '
+      + 'per kept session, whose session foreign key re-checks the row the first statement already '
+      + 'holds. That order is the one commitResult takes — session, then its abandoned_checkout — '
+      + 'because the reverse would be the same two rows taken opposite ways.',
+    identity:
+      'The runner and its owner. A report is the machine\'s whole inventory, so re-running it '
+      + 'converges on the same set: the delete is scoped to this runner and the upserts are keyed by '
+      + 'the unique session_id.',
+    isolation: '',
+    attempts: 4,
+    replay:
+      'Both statements are re-derived from the report alone — the kept set and the session statuses '
+      + 'filtered here are read in the same closure — so a second attempt deletes and upserts the '
+      + 'same rows once.',
+    effects: 'None inside; nothing is published (the runner page polls).',
+    answer: 'Typed 503; the next scan, an hour later, reports the inventory again.',
   },
   {
     at: 'runner-api/runner-api.controller.ts#scheduledWakeup',
@@ -1077,6 +1101,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     replay: 'The seq is allocated from a row read under the Session lock inside the closure, so a re-run allocates from the sequence the winner left rather than reusing a number a discarded snapshot suggested.',
     effects: 'None inside.',
     answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'sessions/sessions.service.ts#writeChat',
+    shape: 'TX_RETRIED',
+    locks: 'workspace FOR SHARE (rank 15), re-read there: one deleted or no longer running its sessions in worktrees since the chat door looked refuses the chat and nothing is written. Then the session INSERT (rank 30, its foreign keys up the chain at KEY SHARE) and its first conversation_turn (rank 60, insertTurnLocked).',
+    identity: "None of its own: a chat is made per request, as every session is. The first turn's key is the client's UUID, which no other row of the new session can hold.",
+    isolation: '',
+    attempts: 4,
+    replay: 'A victim wrote neither row, so a re-run makes one session and one turn. Whether the workspace still runs worktrees is read under its row lock inside the closure.',
+    effects: "None inside. `create` wakes the claim queue and publishes the session after this commits; the chat door then remembers the workspace (wiki/wiki-chat.ts#create).",
+    answer: 'Typed 503 from the global boundary; no session was made.',
   },
   {
     at: 'sessions/sessions.service.ts#seedOpeningTurn',
@@ -1703,6 +1738,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary; the owner is told the space already exists when it does.',
   },
   {
+    at: 'wiki/wiki.service.ts#deleteSpace',
+    shape: 'TX_RETRIED',
+    locks: 'wiki_space FOR UPDATE (rank 60), then the DELETE and its cascades over the wiki\'s own rows (rank 60) and its share_link. A writer holding a row of this wiki and waiting for the space is the one cycle this can have, and it loses to the deadlock detector whole.',
+    identity: 'The space id and its owner.',
+    isolation: '',
+    attempts: 2,
+    replay: 'The row is re-read under its lock; a space already gone is the same 404 on any attempt.',
+    effects: 'None inside. After the commit and outside the closure: one `wiki.changed` for the space.',
+    answer: 'Typed 503, the owner presses again. Capped at 2 attempts with a 60s per-attempt deadline, as a cascade this size should absorb one collision, not spend four deadlines on the same one.',
+  },
+  {
     at: 'wiki/wiki.service.ts#bindOnFirstUse',
     shape: 'TX_RETRIED',
     locks: 'wiki_space and wiki_space_workspace, the space under the user foreign key FOR KEY SHARE (rank 10) and the binding under both of its own; the workspace row is read unlocked first and is not written.',
@@ -1943,17 +1989,31 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary; the owner answers again.',
   },
   // The documents (contracts/wiki.contract.json `docs`, migration 0326): sections of one document written
-  // by a maintenance run of the space, or the server's own import, and the whole document classified again.
+  // by a maintenance run of the space, or the server's own import, and the whole document classified again —
+  // and every section it replaces kept as a version (`docs.versions`, migration 0475).
   {
     at: 'wiki/wiki-docs.ts#write',
     shape: 'TX_RETRIED',
-    locks: 'The via entries the write\'s footnotes name, wiki_entry (rank 60) by one SELECT … FOR SHARE in id order — so a rejection, retirement or broken anchor of one waits for this to commit and then withdraws what it wrote (wiki-doc-withdrawal.ts#withdrawDocSentences, which takes the entry before the document too); then the wiki_doc row (60): one INSERT … ON CONFLICT DO NOTHING (its foreign key takes KEY SHARE on the wiki_space row, which no wiki write takes more than FOR NO KEY UPDATE on) and a SELECT … FOR NO KEY UPDATE of it — the one writer of a document at a time; then its wiki_doc_section rows (60): one DELETE of the sections replaced and of those the plan no longer has, whose cascade takes their wiki_doc_sentence and wiki_doc_footnote rows (60), one INSERT per section written and one each of its sentences and footnotes (KEY SHARE on the rows just written), one UPDATE per sentence that stayed and reads differently now, and one UPDATE of the document row it holds. The plan (requireConfirmedPlan) is read again inside, unlocked; the records a footnote names were read and checked before the closure, unlocked.',
-    identity: 'The document and the fingerprints of the sections it names. Under the document lock the stored fingerprints are read again: a section already written from the same material, and not withdrawn from since, is left as it is, so a re-run of a committed write writes nothing and answers unchanged.',
+    locks: 'The via entries the write\'s footnotes name, wiki_entry (rank 60) by one SELECT … FOR SHARE in id order — so a rejection, retirement or broken anchor of one waits for this to commit and then withdraws what it wrote (wiki-doc-withdrawal.ts#withdrawDocSentences, which takes the entry before the document too); then the wiki_doc row (60): one INSERT … ON CONFLICT DO NOTHING (its foreign key takes KEY SHARE on the wiki_space row, which no wiki write takes more than FOR NO KEY UPDATE on) and a SELECT … FOR NO KEY UPDATE of it — the one writer of a document at a time; then the sections it replaces, as they stand, kept: one INSERT of their wiki_doc_section_version rows (60; their foreign key takes KEY SHARE on the same wiki_space row) and one DELETE of those sections\' versions past the newest five, both under the document lock, which every writer of the document\'s versions holds; then its wiki_doc_section rows (60): one DELETE of the sections replaced and of those the plan no longer has, whose cascade takes their wiki_doc_sentence and wiki_doc_footnote rows (60), one INSERT per section written and one each of its sentences and footnotes (KEY SHARE on the rows just written), one UPDATE per sentence that stayed and reads differently now, and one UPDATE of the document row it holds. The plan (requireConfirmedPlan) is read again inside, unlocked; the records a footnote names were read and checked before the closure, unlocked.',
+    identity: 'The document and the fingerprints of the sections it names. Under the document lock the stored fingerprints are read again: a section already written from the same material, and not withdrawn from since, is left as it is and keeps no version, so a re-run of a committed write writes nothing and answers unchanged.',
     isolation: '',
     attempts: 4,
-    replay: 'Everything a section is — its blocks, sentences, footnotes and their verdicts — is computed before the closure from the request and the records; inside it the via entries\' standing, the confirmed plan, the stored sections and the sentences that stay are re-read under the locks, so a re-run replaces the same sections with the same rows or finds them written.',
+    replay: 'Everything a section is — its blocks, sentences, footnotes and their verdicts — is computed before the closure from the request and the records; inside it the via entries\' standing, the confirmed plan, the stored sections (and what each replaced one held, for its version) and the sentences that stay are re-read under the locks, so a re-run replaces the same sections with the same rows, keeping the same versions, or finds them written.',
     effects: 'None inside. After the commit and outside the closure: one `wiki.changed` for the space when a section was written (nothing depends on it).',
     answer: 'Typed 503 from the global boundary; the maintenance run writes the document again, and a section still changed is written then.',
+  },
+  // The owner's restore of a version a section kept (contracts/wiki.contract.json `docs.versions.restore`,
+  // migration 0475): the user door's one write to a document, through the documents' own transaction.
+  {
+    at: 'wiki/wiki-docs.ts#restore',
+    shape: 'TX_RETRIED',
+    locks: 'The transaction wiki.writeDoc is (wiki/wiki-docs.ts#store), in its order: the via entries the version\'s footnotes name, wiki_entry (rank 60) FOR SHARE in id order; the wiki_doc row (60) FOR NO KEY UPDATE; the section it replaces kept as a wiki_doc_section_version row (60) and that section\'s versions past the newest five deleted; the section (60) deleted and written again from the version, with its wiki_doc_sentence and wiki_doc_footnote rows (60); the sentences that stayed classified again, and the document row updated. The version itself was read before the closure, unlocked: a version is only ever inserted, and deleted by the retention of a later write.',
+    identity: 'The section and the version. Under the document lock the stored section is read again: one that already stands as the version kept it — the same blocks, each sentence\'s block, text and footnotes, the same fingerprint and commit — is left as it is, its stale mark too, and keeps no version, so a second restore of the same version, or a re-run of a committed one, writes nothing and answers unchanged. What a write derives from the document and the entries around the section (statuses, new tokens, withdrawals, staleness) is not compared: writing the version again would derive it from them as they are now.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The section put back is the version\'s, read before the closure; inside it the via entries\' standing, the confirmed plan, the stored section and what it holds are re-read under the locks, so a re-run writes the same rows, or finds the section already standing as the version kept it.',
+    effects: 'None inside. After the commit and outside the closure: one `wiki.changed` for the space when the section was written (nothing depends on it).',
+    answer: 'Typed 503 from the global boundary; the owner asks for the restore again, and it writes then or finds it written.',
   },
   // What cites a repository file gone from origin/main (contracts/wiki.contract.json `docs.withdrawal.paths`,
   // migration 0340): a maintenance run names the paths, and every sentence citing one is withdrawn.
@@ -1967,6 +2027,31 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     replay: 'The documents and sentences are read again inside the closure, and the UPDATE matches only sentences not withdrawn, so a re-run of a committed withdrawal writes nothing.',
     effects: 'None inside. After the commit and outside the closure: one `wiki.changed` for the space when a sentence was withdrawn (nothing depends on it).',
     answer: 'Typed 503 from the global boundary; the maintenance run fails, and the next one names the paths again.',
+  },
+  // The follow job's facts (contracts/wiki.contract.json `docs.follow.queue`, migration 0477): a merge receipt into main,
+  // once its own transaction has committed, joins each of its spaces' queued follow job or makes one.
+  {
+    at: 'wiki/wiki-docs-follow.ts#followWikiDocsAfterReceipts',
+    shape: 'TX_RETRIED',
+    locks: 'One transaction a space (wiki.followDocs): the wiki_space row (rank 60) FOR NO KEY UPDATE — the lock the space\'s plan and maintenance writers take — then a read of the space\'s follow jobs that carry the same range of commits, then the space\'s newest queued docs_follow wiki_job (60) FOR UPDATE and one UPDATE of its input and priority, or one INSERT of a new queued job (its foreign key re-check takes the space row this transaction already holds). Nothing else is locked: the receipt, its session, task, project and the space\'s plans were read before it, unlocked.',
+    identity: 'A change of main is its range of commits (main before, the commit after): a job of the space that already carries it — queued, running or ended — is answered and nothing is written, so a receipt delivered twice, or the receipts a promotion writes for each of its tasks, are carried once.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every row it decides on is read again under the space\'s lock inside the closure, so a re-run finds the fact carried or the queued job where it was and writes what a first attempt would.',
+    effects: 'None inside. Called after the receipt\'s transaction committed, and never raised: a fact it could not join is taken in by the next follow job or maintenance run, which compare with main as it then stands.',
+    answer: 'Logged and swallowed by the caller (the merge is recorded either way); the wiki follows the change at the next fact or maintenance run.',
+  },
+  // A follow job marks again the sections a press asked for that a writer cleared since (contract `docs.follow.sections.forced`).
+  {
+    at: 'wiki-worker/wiki-docs-follow-job.ts#runWikiDocsFollowJob',
+    shape: 'TX_RETRIED',
+    locks: 'wiki.followDocsMarkStale: the press\'s sections\' documents, wiki_doc (rank 60) FOR NO KEY UPDATE in id order — the lock wiki.writeDoc and the entry withdrawal take a document by — then their wiki_doc_section rows (60) by one UPDATE of stale_at where it is NULL. No entry, space or job row is locked.',
+    identity: 'The sections not marked yet: a re-run finds them marked and writes nothing. A section an earlier attempt of the job wrote is not asked for again, so a replay does not mark it twice.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The UPDATE matches only sections whose stale_at is NULL, read under the documents\' locks, so a re-run of a committed mark writes nothing.',
+    effects: 'None inside; the job goes on to write the sections through WikiDocs.write, each its own unit (wiki.writeDoc).',
+    answer: 'The job\'s attempt ends as the platform\'s failure and is tried again (jobs.retry).',
   },
   // The model request queue's claim (migration 0401, contracts/wiki.contract.json `modelQueue.concurrency`,
   // docs/wiki-server-execution-design.md §5.2): the one place a call is taken out of the queue.
@@ -2159,7 +2244,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'runners/codex-rate-limit-reset.repository.ts#insertIfAbsent', under: 'codexRateLimitReset.create — one INSERT ... ON CONFLICT DO NOTHING of the operation that transaction just decided to create. Losing to a concurrent confirmation writes nothing and aborts nothing, and the caller reads what won in the same transaction.' },
   { at: 'sessions/merge-receipt.service.ts#fromRunnerMergeResult', under: 'runnerApi.mergeResult' },
   { at: 'sessions/sessions.service.ts#ensurePromptSeeded', under: 'sessions.resume, .seedOpeningTurn, .createInNewWorkspace, queue.buildSession' },
-  { at: 'sessions/sessions.service.ts#insertTurnLocked', under: 'sessions.insertTurn, .createTurn, .resume, .createInNewWorkspace' },
+  { at: 'sessions/sessions.service.ts#insertTurnLocked', under: 'sessions.insertTurn, .createTurn, .resume, .createInNewWorkspace, .writeChat' },
   { at: 'sessions/sessions.service.ts#linkAttachments', under: 'sessions.createTurn, .resume' },
   { at: 'sessions/sessions.service.ts#queueMerge', under: "sessions.mergeToMain, .checkAfterRepairTurn — mergeToMain's queueing half: the session FOR UPDATE (rank 30), which checkAfterRepairTurn already holds, plain reads of the session, its runner and the §7 gate's facts, then one UPDATE of that session row that queues the operation, carrying the caller's own column change in the same statement (I3) — or, for the owner's Done (`confirm-landed`), no queued operation at all: confirmLanded's write instead" },
   { at: 'sessions/sessions.service.ts#confirmLanded', under: "sessions.mergeToMain through queueMerge — the owner's Done on an ALREADY_LANDED merge recovery (S3 of the merge-recovery repair loop), under the session FOR UPDATE (rank 30) that unit already holds and after every refusal it makes. One UPDATE of that session row (I3) recording it merged at the recovery's source and clearing the recovery, a plain read of its task's project, then one session_merge_receipt INSERT (rank 60, MATCHED_BY_CONTENT) whose foreign keys take user, task and project FOR KEY SHARE, and a read of that row back by (session, idempotency key). The key is derived from the session, source sha and target, so a re-run writes the same row: createMany with skipDuplicates, and a second Done of the same source answers with the first receipt. Nothing is sent to a runner" },
@@ -2341,9 +2426,12 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // per-op transaction and in the order it states.
   { at: 'wiki/wiki.service.ts#reopenRejectedOp', under: 'wiki.reopenVerifications — an add\'s lineage proposed again through applyOp, then the op\'s verdict moved into its history by one UPDATE predicated on the rejection still standing, then its changeset opened again' },
   { at: 'wiki/wiki.service.ts#verifyTaintedOp', under: 'wiki.reopenVerifications — the op by one UPDATE predicated on it still waiting for the owner, after the unlocked reads of the space and an amend\'s entry that decide whether Automatic takes it' },
+  // The follow job's facts (migration 0477): joined under the space's lock, and a press's sections marked stale.
+  { at: 'wiki/wiki-docs-follow.ts#joinFact', under: 'wiki.followDocs, and a chat\'s press (C6, contract `docs.follow.triggers.press`) after the documents it marked — the wiki_space row (rank 60) FOR NO KEY UPDATE, then the space\'s newest queued docs_follow wiki_job (60) FOR UPDATE and one UPDATE of it, or one INSERT of a new one; it takes no lock above rank 60 and none its caller did not state' },
+  { at: 'wiki/wiki-docs-follow.ts#markWikiDocSectionsStale', under: 'wiki.followDocsMarkStale, and a chat\'s press after the entries it wrote (entries first, documents after) — the sections\' wiki_doc rows (rank 60) FOR NO KEY UPDATE in id order, then their wiki_doc_section rows (60) by one UPDATE of stale_at where it is NULL, the order wiki.writeDoc and the entry withdrawal take them in; it takes no lock above rank 60 and none its caller did not state' },
   // The documents' write (0326): the one transaction `wiki.writeDoc` states, in its order.
   { at: 'wiki/wiki-docs-affected.ts#withdrawDocSentencesByPath', under: 'wiki.withdrawDocPaths — the documents citing the paths locked in id order, then their sentences withdrawn and their sections marked stale, in the order that unit states; it takes no lock above rank 60 and none its caller did not state' },
-  { at: 'wiki/wiki-docs.ts#store', under: 'wiki.writeDoc — the via entries FOR SHARE, the document row made and locked, its sections replaced, its sentences classified again, all in the order that unit states; it takes no lock above rank 60 and none its caller did not state' },
+  { at: 'wiki/wiki-docs.ts#store', under: 'wiki.writeDoc and wiki.restoreDocVersion — the via entries FOR SHARE, the document row made and locked, the sections it replaces kept as versions and the oldest past five deleted, its sections replaced, its sentences classified again, all in the order wiki.writeDoc states; it takes no lock above rank 60 and none its caller did not state' },
   // The wiki's opening context (design §7.1). `dequeueTurn` no longer appends it (the owner,
   // 2026-10-06); the pushability specs still call it inside a transaction of their own. It reads unlocked: the session's
   // workspace binding, its space's settings, the space's eligible entries, and the task or first
@@ -2489,7 +2577,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "runner-api/runner-wiki.controller.ts#recordExposure", class: "INSERT", statements: 1, note: "What a session's wiki_search or wiki_get was given (contract `exposureRules`): one INSERT of at most searchLimitMax wiki_exposure rows, after the read has its answer. Its foreign key takes the entries FOR KEY SHARE and nothing else (`storage.locks`: nothing holds an entry FOR UPDATE). Not retried, and not even the global boundary's 503: a failure is logged and the answer goes out, because a record of a read is worth less than the read." },
   { at: "wiki/wiki-import-jobs.ts#createWikiImportJob", class: "INSERT", statements: 1, note: "One import job of a space (server execution P5, contract `import.server.create`): one INSERT of the notes the command handed over, under the id the command named, ON CONFLICT (id) DO NOTHING — the same request sent again after a lost answer is the job already made, and it is read back by (id, owner, space, kind), so an id another account's job holds writes nothing and reads nothing of it (409). Its foreign key takes the space row FOR KEY SHARE. Deliberately no transaction: one row, and the notes it names were read before it." },
   { at: "wiki/wiki-import.ts#registerWikiNote", class: "INSERT", statements: 1, note: "One imported file, or a session's `wiki_note` (migrations 0316 and 0472, contract `import.note`, `agentSurface.note`), as a wiki note: one INSERT of the redacted text and its sha256 into one of the owner's spaces, whose foreign key takes that space row FOR KEY SHARE and nothing else — a wiki write that locks wiki rows only. The note is read first by (space, content hash); two imports of the same text racing to write it meet the unique index, and the loser's P2002 is answered by reading the winner's row, so it is the same note either way. Deliberately no transaction: nothing else is written with it, and a registration that does not arrive is made again by the next run of the import." },
-  { at: "wiki-worker/wiki-jobs.ts#claimWikiJobs", class: "MANY_ROWS", statements: 1, note: "The job claim (migration 0401, contract `jobs.lease.claim`): a batch of due queued jobs moved to running, each under a new lease generation, at most one per space — the candidate excludes a space whose job is running, and is its space's next job in the space's own order (priority, first come, and an articles job never claimed waiting for its space's next maintenance round: the owner's decision of 2026-10-10, contract `jobs.priority`), so two schedulers pick the same row of a space and one skips it rather than each taking a different one and meeting `wiki_job_space_running_key`; the spaces are taken by the places their first jobs give them, so no space's order moves another's. The order is read in the same statement (a WITH over the queued rows), and only the claimed rows are written. The candidates are read once, in a MATERIALIZED WITH, so the worker's room is a bound on any plan: as a subquery of the FROM they could be read once per row of the table, each read locking past the rows the statement had already written (wiki-claim-reads-once.pg.spec.ts). `FOR UPDATE SKIP LOCKED` passes over what another claim holds, so the statement has no wait edge; a job it skips is still due on the next pass. A claim that meets that partial unique index anyway (a space's job committed between the predicate and the write) is answered with an empty claim, not an error: this pass simply took nothing. A job whose attempts reached the retry limit (contract `jobs.retry.limit`) is never a candidate: the pass ends it instead." },
+  { at: "wiki-worker/wiki-jobs.ts#claimWikiJobs", class: "MANY_ROWS", statements: 1, note: "The job claim (migration 0401, contract `jobs.lease.claim`): a batch of due queued jobs moved to running, each under a new lease generation, at most one per space — the candidate is its space's next job in the space's own order (priority, first come, and an articles job never claimed waiting for its space's next maintenance round: the owner's decision of 2026-10-10, contract `jobs.priority`) that no running job of the space excludes (contract `jobs.onePerSpace`: a `docs_follow` job runs beside one that writes no document, every other pair waits), so two schedulers pick the same row of a space and one skips it rather than each taking a different one and meeting `wiki_job_space_running_other_key` or `wiki_job_space_running_writer_key` (0477); the spaces are taken by the places their first jobs give them, so no space's order moves another's. The order is read in the same statement (a WITH over the queued rows), and only the claimed rows are written. The candidates are read once, in a MATERIALIZED WITH, so the worker's room is a bound on any plan: as a subquery of the FROM they could be read once per row of the table, each read locking past the rows the statement had already written (wiki-claim-reads-once.pg.spec.ts). `FOR UPDATE SKIP LOCKED` passes over what another claim holds, so the statement has no wait edge; a job it skips is still due on the next pass. A claim that meets one of those partial unique indexes anyway (a space's job committed between the predicate and the write) is answered with an empty claim, not an error: this pass simply took nothing. A job whose attempts reached the retry limit (contract `jobs.retry.limit`) is never a candidate: the pass ends it instead." },
   { at: "wiki-worker/wiki-jobs.ts#reclaimExpiredWikiJobs", class: "MANY_ROWS", statements: 1, note: "The job lease-expiry sweep: running jobs whose lease deadline passed go back to queued with the lost attempt counted and the next attempt on the retry backoff, their lease columns cleared. `FOR UPDATE SKIP LOCKED`, so a worker still settling a job is left to its compare-and-set; the sweep counts the attempt, which is what makes a job taken over this way one retry further along. Its LIMIT is a batch size and nothing relies on it: a plan that reads the subquery again takes more, each row once, and every one of them is a lease that had run out and that the next pass would have taken. These are the leases nobody handed back — the worker died — since a stopped worker hands its jobs back itself (#releaseWikiJobLease) and none reaches the sweep." },
   { at: "wiki-worker/wiki-jobs.ts#renewWikiJobLease", class: "ONE_ROW_CAS", statements: 1, note: "A running job's lease extended, only while the row is still the claim's generation and still running. A miss means a takeover holds the job, which the executor logs and stops renewing for." },
   { at: "wiki-worker/wiki-jobs.ts#succeedWikiJob", class: "ONE_ROW_CAS", statements: 1, note: "A job that ran to its end: succeeded, its report written, its error and failure kind cleared, its lease columns cleared. Only while the claim's generation is still the row's, so a job taken over while its last step ran is not settled by the process that lost it." },
@@ -2517,7 +2605,6 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "wiki-worker/wiki-repo-ops.ts#requeueJobAfterRepoOpFailure", class: "ONE_ROW_CAS", statements: 1, note: "A job whose WAIT for the repository ended badly — the operation did not settle within the job's limit, or the wait could not go on: back to queued with the lost attempt counted, failure_kind infra and the reason on its row, which is what keeps a runner that is away or too old from reading as the work's own failure. The operation itself is not touched: it stays queued for the attempt that follows. Matches only the parked state. A wait the worker's stop cut short is not this write's: #handBackParkedJob counts nothing." },
   { at: "wiki-worker/wiki-repo-ops.ts#handBackParkedJob", class: "ONE_ROW_CAS", statements: 1, note: "A parked job whose wait the worker's stop cut short (design §5.4, the owner's decision of 2026-10-09, contract `jobs.lease.handBack`): handed back as wiki-jobs.ts#releaseWikiJobLease hands back a running one — queued, waiting_for and next_attempt_at cleared, its attempts as they were, failure_kind cleared and the WORKER_STOPPED reason on its row — so the next claim takes it at once. The operation itself is not touched: it stays for the replay to meet. Matches only the parked state." },
   { at: "wiki-worker/wiki-repo-ops.ts#waitForWikiRepoOpAsJob", class: "ONE_ROW_CAS", statements: 1, note: "The park: a running job goes to `waiting` with `waiting_for = 'repo'` and its lease columns cleared, under the claim's generation — the one write the job table sees between the claim and the resume, and what makes a job that is waiting for a repository hold no lease while it waits. A park that matches no row means the claim moved on, and the caller is told so rather than waiting on an operation nobody is running for it." },
-  { at: "runner-api/runner-link-required.ts#set", class: "ONE_ROW_BY_KEY", statements: 1, note: "RUNNER_LINK_REQUIRED switched by an administrator (migration 0446): one INSERT ... SELECT ... ON CONFLICT (id) DO UPDATE of the table's only row, id 1. The SELECT inserts only when switching on or when the row is there (no row already reads as off), and the DO UPDATE's WHERE rewrites the row only when `required` changes, so a request for the state it is already in writes nothing. The table has no foreign key and no trigger, so the statement locks that one row and waits on nothing else. Deliberately no transaction: nothing else is written with it, and the answer is read after it. Two administrators switching at once race on the row lock and the later one wins." },
   { at: "wiki-worker/wiki-model-status.ts#recordWikiModelStatus", class: "ONE_ROW_BY_KEY", statements: 1, note: "The System model's state and the wiki-worker's heartbeat (migration 0400, contract `systemModel.status`): one INSERT ... ON CONFLICT (id) DO UPDATE of the table's only row, id 1, every probeIntervalSeconds. The table has no foreign key and no trigger, so the statement locks that one row and waits on nothing else. Deliberately no transaction: it writes one row and holds nothing, and a write that does not arrive is the next probe's to make — a heartbeat missed once is what workerStaleSeconds leaves room for. Two workers writing it race on the row lock and the later one wins, which is the newer look at the same model." },
   { at: "attachments/attachments.service.ts#removeTaskInput", class: "MANY_ROWS", statements: 1, note: "Deletes at most one row — the id is a primary key — but written as a filtered deleteMany because the tenancy and scope predicates (`owner_id`, `task_id IS NOT NULL`) are what make a foreign id and a transcript's image indistinguishable 404s. The selection can overlap no other writer: a task input is deleted by its owner or by its task's CASCADE, and both remove the same row." },
   { at: "auth/auth.service.ts#bootstrap", class: "INSERT", statements: 1 },
@@ -2665,7 +2752,6 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "runner-api/runner-api.controller.ts#installResult", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "runner-api/runner-api.controller.ts#loginResult", class: "ONE_ROW_CAS", statements: 1, note: "One step of the sign-in relay, as the runner reports it. The predicate is the start the report names (`login_at`), not just the runner id: a report about a sign-in the row has moved past — cancelled, or replaced by another account's — matches no row and is dropped. A runner too old to name its start is applied by the runner id alone, as before. The same statement writes how long the relayed link lasts and why a failed sign-in failed (`login_expires_at`, `login_reason`, migration 0427), which startLogin and cancelLogin clear with the rest of the slot." },
   { at: "runner-api/runner-api.controller.ts#markProviderUpgradeRequired", class: "MANY_ROWS", statements: 1, note: "The upgrade notice on the PENDING rows of one runtime the claim SQL withholds from a runner that has not advertised it (OpenCode, Antigravity: ADVERTISED_RUNTIMES), called once per such runtime. Display only — it sets `error`, which the claim that finally takes the row clears." },
-  { at: "runner-api/runner-api.controller.ts#markSourceProtocolUnsupported", class: "MANY_ROWS", statements: 1, note: "SR35's explanation, written onto the PENDING rows the claim SQL is withholding from a runner without `source-pin/v1`. Display only — it sets `error`, never `source_state`, so the session stays dispatchable to a newer runner." },
   { at: "runner-api/runner-api.controller.ts#reclaim", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "runner-api/runner-api.controller.ts#reconcileReportedBranchMerged", class: "ONE_ROW_CAS", statements: 1 },
   { at: "runner-api/runner-api.controller.ts#register", class: "INSERT", statements: 3, note: "Three statements: the runner upsert and the enrollment-token burn. Re-registering is idempotent on the runner row." },
@@ -2725,7 +2811,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "sessions/sessions.service.ts#applyEngineTitle", class: "ONE_ROW_CAS", statements: 1, note: "The runner's naming report: the title moves only while the session still reads the one its claim carried and no project owns it, so a rename made since stands and a repeated report matches nothing." },
   { at: "sessions/sessions.service.ts#beautifySessionLater", class: "ONE_ROW_CAS", statements: 1 },
   { at: "sessions/sessions.service.ts#cancelAutoRetry", class: "ONE_ROW_BY_KEY", statements: 1 },
-  { at: "sessions/sessions.service.ts#commitWorktree", class: "ONE_ROW_CAS", statements: 1 },
+  { at: "sessions/sessions.service.ts#queueCheckoutAction", class: "ONE_ROW_CAS", statements: 1, note: "The commit relay's one queued attempt, commit or discard (commitWorktree and discardCheckout both come through here): a single UPDATE of the session by its primary key, guarded on the status, the worktree flag and the commit status the read saw, plus the action so a discard cannot be mistaken for a commit already queued." },
   { at: "sessions/sessions.service.ts#continueMergeRepair", class: "ONE_ROW_BY_KEY", statements: 1, note: "Not a write: after createTurn or resume refused a merge repair's continue message (S2), one autocommit SELECT … FOR SHARE of that repair session's row by id. It waits only for a transaction holding the row FOR UPDATE — another tap's revive or turn — and ends with the statement, so the read after it sees what that transaction committed. It holds no other lock while it waits and takes none after; the message itself is written by createTurn and resume, each its own unit." },
   { at: "sessions/sessions.service.ts#create", class: "INSERT", statements: 2, note: "Two statements: the session INSERT, then the attachment adoption. An attachment left unadopted is orphaned rather than wrongly attached, which is why this has never needed to be atomic. A session created in a folder (0348) takes that folder FOR KEY SHARE through its foreign key, like every other parent the INSERT names; a folder deleted between the check and the INSERT fails that key, and is answered with the same 400 as naming one that was never there. A session that makes its workspace (`newWorkspace`, migration 0457) runs the same INSERT (`insertSession`) inside createInNewWorkspace's transaction instead, and neither statement runs here." },
   { at: "sessions/sessions.service.ts#createAutoTags", class: "INSERT", statements: 1 },
@@ -2790,7 +2876,8 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   // touches one row of one of the owner's own spaces, neither is part of anybody else's fact, and a
   // settings write that does not arrive changes nothing a reader decides from — the space's entries
   // and its review queue are untouched by either.
-  { at: "wiki/wiki.service.ts#updateSpace", class: "ONE_ROW_BY_KEY", statements: 1, note: "The space's settings (push, autoAcceptReinforce, automaticSpotChecks, and the review mode with when and by whom it last changed) and its title. One UPDATE predicated on the space and its owner, which is what makes another account's id write nothing; the keys it writes are merged into the stored settings in SQL (`settings || $patch`) and never include `maintenance`, so a concurrent write of the maintenance key — `wiki.setWikiMaintenance`, the unit this method calls first when a request names maintenance — survives it." },
+  { at: "wiki/wiki.service.ts#updateSpace", class: "ONE_ROW_BY_KEY", statements: 1, note: "The space's settings (push, autoAcceptReinforce, automaticSpotChecks, the review mode with when and by whom it last changed, and where its chats run) and its title. One UPDATE predicated on the space and its owner, which is what makes another account's id write nothing; the keys it writes are merged into the stored settings in SQL (`settings || $patch`) and never include `maintenance`, nor `chat` unless the request names it, so a concurrent write of the maintenance key — `wiki.setWikiMaintenance`, the unit this method calls first when a request names maintenance — survives it, as does the workspace a chat's create remembers (`wiki/wiki-chat.ts#create`)." },
+  { at: 'wiki/wiki-chat.ts#create', class: 'ONE_ROW_BY_KEY', statements: 1, note: "The workspace a space's chats run in, remembered once a chat was made in another (contract `chat.create.rules`): one UPDATE predicated on the space and its owner that merges the `chat` key over the settings in SQL (`settings || $patch`), so a concurrent write of any other key survives it. After the session's own transaction (sessions.writeChat) committed, so a refused chat remembers nothing; a crash between the two leaves a chat whose workspace the next create names again." },
   { at: "wiki/wiki.service.ts#bindWorkspace", class: "ONE_ROW_CAS", statements: 1, note: "The manual half of the binding (§2.1): one upsert keyed by the workspace, whose unique index is what makes a workspace belong to at most one space. The workspace and the space are read first, each owner-scoped, so another account's workspace or space is a 404 rather than a row written; the upsert's `update` half is what re-binds a workspace the owner moved to another space, and what clears `left_out_at` when the owner turns one back on." },
   { at: "wiki/wiki.service.ts#leaveWorkspaceOut", class: "ONE_ROW_CAS", statements: 1, note: "The owner leaving a workspace out of a space (0463): one upsert keyed by the workspace, whose unique index keeps it one row whether the workspace had one or was in the space by its repository alone. The space and the list are read first, owner-scoped, so another account's space or workspace is a 404 rather than a row written; a second press finds the row out already and writes nothing, so `left_out_at` keeps the first moment." },
   { at: 'wiki/wiki-maintenance.ts#cursorRow', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'The space\'s cursor row, made the first time anything reads it: one upsert keyed by (space_id, source), whose unique index makes it one row per space; the empty update writes nothing to a row that exists.' },
@@ -2824,6 +2911,8 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: 'managed-runners/managed-runner-work.ts#recordManagedDemand', class: 'ONE_ROW_CAS', statements: 1, note: 'Demand: the mapping by its unique runner id, unless deleted or its owner\'s account is disabled (a key read of the owner row in the same statement) — the demand counter and time, and RUNNING desired. A runner without a mapping matches no row. It does not move the revision: the manager\'s sleep decisions compare the demand revision itself.' },
   { at: 'managed-runners/managed-runner.service.ts#sleep', class: 'ONE_ROW_CAS', statements: 1, note: 'An owner\'s explicit sleep: the mapping by id and owner, only while READY and wanted running at the revision the owner read, to SLEEPING desired with the request\'s idempotency key.' },
   { at: 'managed-runners/managed-runner.service.ts#wake', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'An owner\'s explicit wake records demand (recordManagedDemand) and then the request\'s idempotency key on the mapping by id and owner.' },
+  // A managed runner's volume as its backend measured it (migration 0480).
+  { at: 'managed-runners/managed-runner-manager.ts#recordVolumeMeasurement', class: 'ONE_ROW_CAS', statements: 1, note: 'What the backend measured of the recorded volume, kept for the runner\'s heartbeat: `volume_measurement` on the mapping by id, only while this replica holds its lease, and only when the figures differ from the ones the pass read. A predicate write of its own column: it leaves `revision` alone, so no step\'s compare-and-set misses for it. A lease lost meanwhile matches nothing, and the next pass reads the volume again.' },
 ];
 
 export interface TriggerWriteSource {
@@ -2928,6 +3017,7 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   {"table":"session","trigger":"session_source_freeze_guard","event":"BEFORE UPDATE OF \"source_state\", \"source_kind\", \"source_codebase_id\", \"source_repo_url\", \"source_root_commit_sha\", \"source_ref\", \"source_revision_sha\", \"source_config_revision\", \"source_ref_authority\", \"source_required_contains\", \"source_base_sha\", \"source_resolved_at\", \"source_resolved_by_runner_id\"","kind":"ROW/STATEMENT","since":"0231_project_codebase_session_source","takes":[]},
   {"table":"session","trigger":"session_superseded_task_guard","event":"BEFORE INSERT","kind":"ROW/STATEMENT","since":"0130_task_supersession_dispatch_guard","takes":["task LOCK"]},
   {"table":"session","trigger":"session_superseded_task_revive_guard","event":"BEFORE UPDATE OF \"status\", \"task_id\", \"dispatch_origin\", \"deleted_at\", \"starts_task_work\"","kind":"ROW/STATEMENT","since":"0130_task_supersession_dispatch_guard","takes":["task LOCK"]},
+  {"table":"session","trigger":"session_wiki_chat_space_guard","event":"BEFORE UPDATE OF \"wiki_chat_space_id\"","kind":"ROW/STATEMENT","since":"0476_wiki_chat_session","takes":[]},
   {"table":"session","trigger":"task_owner_confirmation_review_reviewer_ended","event":"AFTER UPDATE OF \"status\", \"end_reason\", \"retry_at\", \"retry_attempts\", \"completed_at\", \"archived_at\", \"deleted_at\"","kind":"ROW/STATEMENT","since":"0370_owner_confirmation_review","takes":["task_owner_confirmation_review WRITE"]},
   {"table":"session_merge_receipt","trigger":"session_merge_receipt_checkpoint_accepted_trg","event":"BEFORE INSERT OR UPDATE","kind":"ROW/STATEMENT","since":"0152_task_checkpoint","takes":[]},
   {"table":"session_merge_receipt","trigger":"session_merge_receipt_immutable_guard","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0128_task_supersession_merge_receipt","takes":[]},
@@ -3022,6 +3112,10 @@ export const EXCLUDED_SOURCES: readonly ExcludedSource[] = [
   {
     path: 'projects/project-contract-test-helper.ts',
     why: 'A PostgreSQL-spec fixture helper. It seeds a goal and one acceptance criterion so a fixture has a real completion contract, and is not reachable from an application module or HTTP route.',
+  },
+  {
+    path: 'test-support/dequeue-under-lease.ts',
+    why: 'A PostgreSQL-spec fixture helper for the specs that drive the inbox without a supervisor in front of it. It writes the session\'s lease generation a takeover and an activation would have written, in a transaction that declares what the database asks of a lease write. It is not reachable from an application path.',
   },
   {
     path: 'test-support/managed-runner-world.ts',

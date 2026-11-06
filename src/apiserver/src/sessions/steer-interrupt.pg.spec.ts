@@ -48,6 +48,7 @@ import {
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { CURRENT_WORK_INTERRUPTED } from './current-work-delivery';
 import { SessionsService } from './sessions.service';
+import '../test-support/dequeue-under-lease';
 
 declare global {
   interface BigInt { toJSON(): string; }

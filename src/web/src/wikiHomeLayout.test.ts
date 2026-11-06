@@ -64,7 +64,7 @@ describe('the home on a desktop', () => {
     expect(block).toMatch(/\.wk-home > \.wk-pl-cat \{ margin: 0; padding: [^;]+; border: 1px solid var\(--border-subtle\); border-radius: 10px;/);
     const two = container('wk-home (min-width: 1100px)');
     expect(two).toContain('.wk-home { grid-template-columns: repeat(2, minmax(0, 1fr)); }');
-    expect(two).toContain('.wk-home > .wk-home-pr, .wk-home > .wk-home-new { grid-column: 1 / -1; }');
+    expect(two).toContain('.wk-home > .wk-home-pr, .wk-home > .wk-start { grid-column: 1 / -1; }');
   });
 
   it('has no right rail and no Browse · A–Z line, which the directory has atop it', () => {

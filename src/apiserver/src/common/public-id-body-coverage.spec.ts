@@ -182,6 +182,8 @@ const BLANK_GUARDED: Record<string, readonly string[]> = {
   // runners/codex-rate-limit-reset.pg.spec.ts: 'a malformed body is a 400 and writes nothing', whose
   // cases include a blank workspaceId.
   'codex-rate-limit-reset.controller.ts': ['workspaceId'],
+  // wiki/wiki-chat.pg.spec.ts: '2. the workspace is chosen once and remembered…', whose cases include a blank workspaceId.
+  'wiki-chat.controller.ts': ['workspaceId'],
 };
 
 test('a blank body id is not decoded — the pipe hands it straight through', () => {

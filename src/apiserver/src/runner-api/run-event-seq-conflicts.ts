@@ -9,7 +9,7 @@ import { TOMBSTONE_EVENT_TYPE } from '../common/system-noise';
  * The runner numbers a session's events, and the server stores each seq once: over HTTPS `createMany` skips a row
  * whose (session, seq) is taken, and over the runner link the ingest leaves out every seq already stored (ingestEvents).
  * That is what makes a batch sent again harmless. It is also what made a lost event invisible: on 2026-10-27 a runner
- * restarted with ORBIT_LINK_MODE=off numbered its events from the server's last seq while the events an earlier process
+ * restarted with its link mode turned off numbered its events from the server's last seq while the events an earlier process
  * left in its spool were still unsent, and when they were sent, the 12 whose seqs it had taken were acknowledged as
  * stored without a word. Ticks 6 to 17 of the session were gone, and nothing on either side said so.
  *

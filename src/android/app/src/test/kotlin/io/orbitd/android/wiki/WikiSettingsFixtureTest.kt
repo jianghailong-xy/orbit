@@ -28,6 +28,21 @@ class WikiSettingsFixtureTest {
         assertEquals(workspaces.fstr("empty"), WikiModeCopy.workspacesEmpty)
         assertEquals(workspaces.fstr("add"), WikiModeCopy.addWorkspace)
         assertEquals(workspaces.fstr("addGroup"), WikiModeCopy.addWorkspaceGroup)
+        val delete = settings.fobj("delete")
+        assertEquals(delete.fstr("note"), WikiModeCopy.deleteNote)
+        assertEquals(delete.fstr("open"), WikiModeCopy.deleteOpen)
+        assertEquals(delete.fstr("confirm"), WikiModeCopy.deleteConfirm)
+        assertEquals(delete.fstr("kept"), WikiModeCopy.deleteKept)
+        assertEquals(delete.fstr("failedNative"), WikiModeCopy.deleteFailed)
+        assertEquals(delete.fobj("question").fstr("text"), WikiModeCopy.deleteQuestion(delete.fobj("question").fstr("name")))
+        assertEquals(delete.fobj("deleted").fstr("text"), WikiModeCopy.deleted(delete.fobj("deleted").fstr("name")))
+        assertEquals(delete.fobj("comesBack").fstr("text"), WikiModeCopy.deleteComesBack(delete.fobj("comesBack").fstr("repository")))
+        val bodies = delete.farr("bodies").map { it.jsonObject }
+        assertTrue(bodies.isNotEmpty())
+        bodies.forEach { assertEquals(it.fstr("text"), WikiModeCopy.deleteBody(it["entries"]?.jsonPrimitive?.intOrNull, it.fint("documents"))) }
+        assertEquals(listOf(WikiModeCopy.deleteBody(null, 0), delete.fobj("comesBack").fstr("text"), delete.fstr("kept")).joinToString("\n\n"),
+            WikiModeCopy.deleteMessage(null, 0, delete.fobj("comesBack").fstr("repository")))
+        assertEquals(listOf(WikiModeCopy.deleteBody(2606, 0), delete.fstr("kept")).joinToString("\n\n"), WikiModeCopy.deleteMessage(2606, 0, null))
         assertEquals(settings.fstr("reviewModeHint"), WikiModeCopy.reviewModeHint)
         assertEquals(settings.fstr("lead"), WikiModeCopy.reviewModeLead)
         assertEquals(settings.fstr("defaultTag"), WikiModeCopy.modeDefault)
@@ -91,17 +106,20 @@ class WikiSettingsFixtureTest {
         assertEquals("manual", WikiModeLogic.mode(WikiSpaceSettings(reviewMode = "experimental")))
     }
 
-    /** The workspaces the Set up form lists are the ones the runner reads name, by the runner's display name when it has
-     * one. */
+    /** The workspaces the forms list are the ones the runner reads name, by the runner's display name when it has one, each with
+     * its repository and whether its runner is offline — a workspace with no runner the reads name is not known to be. */
     @Test fun theFormsOptionsAreTheAccountsWorkspaces() {
         val reads = WikiMaintenanceReads(
-            workspaces = Json.parseToJsonElement("""[{"id":"w1","name":"orbit","runnerId":"r1"},{"id":"w2","name":"docs","runnerId":"r2"},{"id":"w3","name":"loose"}]""").jsonArray,
-            runners = Json.parseToJsonElement("""[{"id":"r1","name":"host-1","displayName":"Mac mini"},{"id":"r2","name":"wikova","displayName":null}]""").jsonArray)
-        assertEquals(listOf(WikiPickerOption("w1", "orbit · Mac mini"), WikiPickerOption("w2", "docs · wikova"), WikiPickerOption("w3", "loose")),
-            wikiWorkspaceRows(reads, DirectoryData()).map { it.option })
+            workspaces = Json.parseToJsonElement("""[{"id":"w1","name":"orbit","runnerId":"r1","repoUrl":"git@github.com:acme/orbit.git"},{"id":"w2","name":"docs","runnerId":"r2"},{"id":"w3","name":"loose"}]""").jsonArray,
+            runners = Json.parseToJsonElement("""[{"id":"r1","name":"host-1","displayName":"Mac mini","online":true},{"id":"r2","name":"wikova","displayName":null,"online":false}]""").jsonArray)
+        assertEquals(listOf(WikiPickerOption("w1", "orbit · Mac mini"), WikiPickerOption("w2", "docs · wikova", offline = true), WikiPickerOption("w3", "loose")),
+            wikiWorkspaceRows(reads, DirectoryData()).map { it.option() })
+        assertEquals(listOf("github.com/acme/orbit", null, null), wikiWorkspaceRows(reads, DirectoryData()).map { it.repository })
         // Before the reads come back (or when they fail), the directory this client already holds names them.
-        val data = DirectoryData(workspaces = listOf(DirectoryWorkspace("w1", "orbit", "r1")), runners = listOf(DirectoryRunner("r1", "host-1")))
-        assertEquals(listOf(WikiPickerOption("w1", "orbit · host-1")), wikiWorkspaceRows(WikiMaintenanceReads(), data).map { it.option })
+        val data = DirectoryData(workspaces = listOf(DirectoryWorkspace("w1", "orbit", "r1", repoUrl = "https://github.com/acme/orbit.git")),
+            runners = listOf(DirectoryRunner("r1", "host-1", online = true)))
+        assertEquals(listOf(WikiWorkspaceChoice("w1", "orbit · host-1", "github.com/acme/orbit", "https://github.com/acme/orbit.git", true)),
+            wikiWorkspaceRows(WikiMaintenanceReads(), data))
     }
 
     /** What the page writes (`PATCH /api/wiki/spaces/:id`): a key left out is left as it was, and all of history is sent

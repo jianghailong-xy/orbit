@@ -1,5 +1,53 @@
+import { unified } from 'unified';
+import remarkParse from 'remark-parse';
+import remarkGfm from 'remark-gfm';
 import { describe, expect, it } from 'vitest';
 import { markdownToPlainLines, markdownToPlainText } from './markdownText';
+
+// The words the page that renders these fields draws, from the parser and GFM plugin behind it:
+// the cases below take their answer from it, so none of them can pin what this file merely does.
+const INLINE_PARENTS = new Set(['paragraph', 'heading', 'emphasis', 'strong', 'delete', 'link']);
+const words = (node: any): string =>
+  node.value ?? (node.children ?? []).map(words).join(INLINE_PARENTS.has(node.type) ? '' : ' ');
+const drawn = (md: string): string =>
+  words(unified().use(remarkParse).use(remarkGfm).parse(md)).replace(/\s+/g, ' ').trim();
+
+// The inputs plainPreview.test.ts is held to, so a row and a card read a field alike.
+const NOT_MARKS = [
+  '把其他的 tea_user_profile_build_*_cnch 也修复了',
+  'file_path and snake_case_name',
+  '看_重点_吧',
+  '~/.orbit/bin takes ~30 minutes',
+  '2 * 3 * 4',
+  'foo* and bar*',
+  '** BUILD SUCCEEDED **',
+  '*.ts files',
+  '*_cnch too',
+  '--force is needed',
+  '-1 is wrong',
+  '#123 is broken',
+  '_private and __dunder',
+  'one `` tick pair stays',
+];
+const REAL_MARKS: [string, string][] = [
+  ['**bold**, *italic* and ***both***', 'bold, italic and both'],
+  ['_em_, __strong__ and ___both___', 'em, strong and both'],
+  ['~~gone~~ stays', 'gone stays'],
+  ['这是**重点**内容', '这是重点内容'],
+  ['**a *b* c** and *d **e** f*', 'a b c and d e f'],
+  ['**a*b**', 'a*b'],
+  ['_foo_bar_', 'foo_bar'],
+  ['把 tea_*_cnch 和 foo_*_bar 都修了', '把 tea_cnch 和 foo_bar 都修了'],
+  ['**run `npm test` now**', 'run npm test now'],
+];
+const CODE: [string, string][] = [
+  ['`a*b*c` and `_x_` and `~~y~~`', 'a*b*c and _x_ and ~~y~~'],
+  ['(v1-beta.*), and no `android-v*` tags', '(v1-beta.*), and no android-v* tags'],
+  ['`- x` and `#1` start this', '- x and #1 start this'],
+  ['see `tea_*_cnch` and `foo_*_bar`', 'see tea_*_cnch and foo_*_bar'],
+  ['``a_b_c`` and ``d`e`` and `f`', 'a_b_c and d`e and f'],
+  ['`[x](y)` is not a link, [z](https://example.com/z) is', '[x](y) is not a link, z is'],
+];
 
 /** The marks a row must never show. Asserted as a set on every case below, so a rule that stops
  *  firing shows up as a failure here rather than as source text on the page. */
@@ -30,7 +78,7 @@ describe('markdownToPlainText', () => {
   it('unwraps inline code, including a doubled-backtick span', () => {
     expect(markdownToPlainText('`ROW_EXCERPT_LENGTH`')).toBe('ROW_EXCERPT_LENGTH');
     expect(markdownToPlainText('run `npm test` first')).toBe('run npm test first');
-    expect(markdownToPlainText('``a `b` c``')).toBe('a `b` c'.replace(/`/g, ''));
+    expect(markdownToPlainText('``a `b` c``')).toBe('a `b` c');
     expect(markdownToPlainText('`x`')).not.toMatch(MARKS);
   });
 
@@ -75,6 +123,30 @@ describe('markdownToPlainText', () => {
     expect(markdownToPlainText('an _italic_ word')).toBe('an italic word');
     // A lone asterisk between spaces is multiplication, not an unterminated italic.
     expect(markdownToPlainText('2 * 3 * 4')).toBe('2 * 3 * 4');
+  });
+
+  it.each(NOT_MARKS)('keeps what is not a mark: %s', (md) => {
+    expect(markdownToPlainText(md)).toBe(md);
+    expect(drawn(md)).toBe(md);
+  });
+
+  it.each(REAL_MARKS)('drops a real mark: %s', (md, plain) => {
+    expect(markdownToPlainText(md)).toBe(plain);
+    expect(drawn(md)).toBe(plain);
+  });
+
+  it.each(CODE)('leaves every mark inside code alone: %s', (md, plain) => {
+    expect(markdownToPlainText(md)).toBe(plain);
+    expect(drawn(md)).toBe(plain);
+  });
+
+  it('leaves a fenced block as it was written, on one line', () => {
+    expect(markdownToPlainText('run:\n\n```sh\nls *.ts **/*.md\n- not a bullet\n# not a heading\n```\n\ndone')).toBe(
+      'run: ls *.ts **/*.md - not a bullet # not a heading done',
+    );
+    expect(markdownToPlainText('~~~\na_b_c `d`\n~~~')).toBe('a_b_c `d`');
+    // Cut off before its closing fence, as a stored excerpt can be.
+    expect(markdownToPlainText('```\n*a* and *b*')).toBe('*a* and *b*');
   });
 
   it('reduces a real mixed-Markdown goal to one line of prose', () => {
@@ -122,6 +194,24 @@ describe('markdownToPlainLines', () => {
   it('leaves at most one blank line, and none where a fence or a break stood', () => {
     expect(markdownToPlainLines('a\r\n\r\n\r\n```sh\nnpm test\n```\n\n---\n\nb  ')).toBe(
       'a\n\nnpm test\n\nb',
+    );
+  });
+
+  it.each(NOT_MARKS)('keeps what is not a mark: %s', (md) => {
+    expect(markdownToPlainLines(md)).toBe(md);
+  });
+
+  it.each(REAL_MARKS)('drops a real mark: %s', (md, plain) => {
+    expect(markdownToPlainLines(md)).toBe(plain);
+  });
+
+  it.each(CODE)('leaves every mark inside code alone: %s', (md, plain) => {
+    expect(markdownToPlainLines(md)).toBe(plain);
+  });
+
+  it('keeps a fenced block whole, its lines and their indents included', () => {
+    expect(markdownToPlainLines('run:\n\n```sh\nls *.ts\n  - not a bullet\n# not a heading\n```\n\n- **done**')).toBe(
+      'run:\n\nls *.ts\n  - not a bullet\n# not a heading\n\n• done',
     );
   });
 

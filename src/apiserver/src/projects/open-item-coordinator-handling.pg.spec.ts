@@ -49,6 +49,7 @@ import { ProjectPromotionService } from './project-promotion.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * An exception item through its coordinator's handling (`docs/project-integration-line-contract.md`

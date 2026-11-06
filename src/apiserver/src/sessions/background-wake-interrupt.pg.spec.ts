@@ -59,6 +59,8 @@ import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { TasksService } from '../tasks/tasks.service';
 import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsService } from './sessions.service';
+import '../test-support/daemon-routes-over-http';
+import { sessionLease } from '../test-support/dequeue-under-lease';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -235,7 +237,7 @@ test('an interrupt takes the payload of the wake turns it deletes with it', {
   /** What the runner's claim does to a queued session, then the inbox poll that follows it. */
   async function claimAndPoll(sessionId: string): Promise<Answer> {
     await prisma.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
-    return send('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox`);
+    return send('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox?leaseGeneration=${await sessionLease(prisma, sessionId)}`);
   }
 
   /** The aborted turn ends: what turn-complete writes when the engine finally reports it. */

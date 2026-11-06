@@ -22,8 +22,9 @@ import { isRunnerLinkGateway, RUNNER_LINK, type RunnerLinkConfig, type RunnerLin
  * Runner link calls (docs/runner-link-design.md §5.6, §6.4): the runner routes, called by the link
  * gateway on behalf of a runner connected to it, through a listener only the gateway can reach.
  *
- * The routes and everything they decide are the ones HTTPS serves. What makes a call a link call is
- * the listener it arrives on (`listenForRunnerLinkCalls`), which takes only the gateway: its secret,
+ * The routes and everything they decide are RunnerApiController's. HTTPS answers the daemon's calls
+ * 426 (runner-link-required.ts) and serves only what other processes of a runner call, and a runner's
+ * sign-in and files (D14). What makes a call a link call is the listener it arrives on (`listenForRunnerLinkCalls`), which takes only the gateway: its secret,
  * RUNNER_LINK_GATEWAY_TOKEN, in `Authorization`, as on the gateway's revocations route. The gateway
  * forwards each `Rpc` as an HTTP request:
  *
@@ -43,13 +44,12 @@ import { isRunnerLinkGateway, RUNNER_LINK, type RunnerLinkConfig, type RunnerLin
  * plus the headers Hello declared, which today's runner sends on every request (doVia,
  * src/runner-go/transport.go): capabilities, supported providers, OS, write contract, CLI version and
  * a managed runner's instance. A runner that disconnects has its calls cancelled by the gateway, which
- * closes them, so a route that watches its response close (the claim, the wake) sees it hang up exactly
- * as it does over HTTPS.
+ * closes them, so a route that watches its response close (the claim) sees it hang up.
  *
- * What changes for a link call is what the protocol says (proto `Rpc`): the four routes that long-poll
- * over HTTPS — the claim, the inbox, the wake and an approval's decision — answer at once, as if asked
- * with `wait=0`, because a hint tells the runner when to ask; every error carries `code`, `retryable` and
- * a retry hint (common/runner-link-error.filter.ts); and the inbox hands a turn whose answer was lost back
+ * What a link call gets is what the protocol says (proto `Rpc`): the claim, the inbox and an approval's
+ * decision answer at once, because a hint tells the runner when to ask (a claim that lost a row lock asks
+ * again itself first, for a few seconds at most, QueueService.claimSessionForRunner); every error carries
+ * `code`, `retryable` and a retry hint (common/runner-link-error.filter.ts); and the inbox hands a turn whose answer was lost back
  * to the process that leased it as soon as it says it is not running it (RunnerApiController.inbox), or
  * sends the fetch again under its request id.
  */
@@ -211,7 +211,7 @@ function refuse(res: ServerResponse, status: number, code: string, message: stri
 /**
  * Opens the internal listener the link gateway calls the runner routes through (§6.4), beside the
  * public one, when RUNNER_LINK_INTERNAL_PORT is set and the link is on. It serves the same app, so a
- * link call runs the same guards, pipes, interceptors and handlers as an HTTPS request.
+ * link call runs the same guards, pipes, interceptors and handlers as any other request.
  *
  * It binds RUNNER_LINK_INTERNAL_HOST, 127.0.0.1 unless set: the gateway reaches it over the internal
  * network, never through the public entry. A setting that cannot be used leaves it closed and says why

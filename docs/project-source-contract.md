@@ -6,7 +6,7 @@
 - `docs/project-agent-contract.md`（下称 **PAC**）定义 WHO / WITH WHAT / WHERE 三条解析链。本契约定义**第四条正交链 SOURCE —— 从哪份代码开始**，并复用 PAC §6 的"执行快照冻结"范式与 §12 的"错误码闭合"范式。
 - `docs/project-coordinator-status-contract.md` 定义 coordinator 状态读接口；本契约只向它贡献一个 blocker kind（§10.3）。
 
-**编号约定（唯一）**：本文所有规范性条款使用**单一序列** `SR1 … SR46`，按阅读顺序分配，全文不重复编号。§11 是索引而非重述 —— 两处编号就是两处会漂移的真相，PAC v1 的二义正是这么来的。
+**编号约定（唯一）**：本文所有规范性条款使用**单一序列** `SR1 … SR54`，按阅读顺序分配，全文不重复编号；v1.3 增补的 SR54 放在它所限定的 SR45 旁边，编号接在 SR53 之后，已有编号不重排（§16）。§11 是索引而非重述 —— 两处编号就是两处会漂移的真相，PAC v1 的二义正是这么来的。
 
 ---
 
@@ -389,6 +389,13 @@ apiserver 没有 checkout，runner 有。因此 ref→SHA 的解析必须在 run
 
 一个"根据 task 有没有 projectId 来判断"的分流会在 Project 功能上线的那一刻改变一批既有 session 的行为；一个存下来的列不会。
 
+**SR54（wiki 聊天的 SOURCE：唯一冻结 selector 的非任务会话）**（v1.3，2026-11-06，`docs/wiki-chat-design.md` §5.2）：wiki 聊天会话（`session.wiki_chat_space_id` 非空，wiki 契约 `chat.binding`）不执行任何任务，却不走 Legacy：它的代码起点固定是 origin 上的 main。普通会话从 workDir 当前的 HEAD 分出（§0），聊天要是也这样，agent 可能对着比 main 旧的代码说"文档写错了"（设计 §5.2 的实测：开会话时的提交比 main 落后 5 个）。
+- **selector 在 create 冻结**：由聊天的建会话路径与 session 行写在同一条 INSERT 里（SR28 照旧），不经 `resolveSource`——它不是优先级表的一序，是一条常量规则：`sourceState` 为 `SELECTED`，`sourceKind` 为 `CHAT_UPSTREAM`，`sourceRef` 为 `refs/heads/main`、`sourceRevisionSha` 为空，`sourceRefAuthority` 为 `REMOTE`（向 `origin` 提问：`remoteName` 缺省即 `origin`），`sourceRepoUrl` 与 `sourceRootCommitSha` 取所选 workspace 的仓库身份（SR36 的规范化），`sourceCodebaseId` 与 `sourceConfigRevision` 为空（没有 `ProjectCodebase`），`sourceRequiredContains` 为空集。
+- **pin 在首次 claim 冻结**：同 §6.3 的三步握手；runner 按会话判断（`needsSourcePin`：state 不是 `UNBOUND`），与项目任务同一条路。此后 resume、reclaim、takeover 只读（SR29、SR41）。所以聊天从首次领取时的 main 起跑，workDir 的 HEAD 不是它的输入（SR1 对它同样成立）。
+- **闸门**：G1–G4 与 G6 照旧；G0 不适用（聊天不是 Project 任务，没有绑定可查），G5 恒过（包含集为空）。拒绝只落在会话自己的 SOURCE 列上（`REFUSED`，终态，恢复是开一场新聊天，SR34），聊天面板照 §10.1 显示码与 `fixAction`；没有任务可记，也没有项目可挂 blocker（SR50 不适用）。
+- **数据模型**：`CHAT_UPSTREAM` 是 `sourceKind` 的第六个取值，只配 ref 值 selector，也是唯一允许 `sourceCodebaseId` 与 `sourceConfigRevision` 为空的非 `UNBOUND` 形状。`session_source_kind_chk`、`session_source_kind_selector_chk` 与 `session_source_snapshot_chk` 在建聊天的那次迁移里随之改写（wiki 聊天项目的 C5），在那之前没有任何行取这个值。
+- SR45 的"任何非 Project session 行为逐字节不变"对聊天以外的会话照旧成立。聊天的分流仍是那一列：它非 `UNBOUND`，只因为聊天的建会话路径把它写成了 `SELECTED`。
+
 **SR46（Legacy golden 测试）**：升级前后，Legacy 路径必须有逐字节一致的 golden 测试：同一份仓库状态、同一条 session，`branch` / `baseSha` / `isolationStatus` / 提交信息四项完全相同。三条降级分支（非 git 仓库、空仓库无 HEAD、`worktree add` 失败）**各要一条**，因为它们正是新式路径要禁止的行为，最容易在实现 SR33 时被顺手"修好"。
 
 ---
@@ -484,6 +491,7 @@ v1 冻结时这一条读作"尚未落地"，自检那时断言的是它的**缺�
 | SR45 / SR46 | 迁移后既有行全为 `UNBOUND`；三条降级分支 golden 逐字节一致 | `source-legacy.pg.spec.ts` / `worktree_test.go` |
 | SR47 / SR49 | 码表 ↔ 正文双向闭合；`fixAction` 取值封闭 | `project-source-contract.spec.ts` |
 | SR50 / SR51 / SR52 | 本契约声称的 blocker kind 集合 = 迁移新增集合；写入真库成功 | `project-source-contract.spec.ts` / `source-blocker.pg.spec.ts` |
+| SR54 | 建聊天即 `SELECTED`、kind `CHAT_UPSTREAM`、ref 为 `refs/heads/main`、codebase 与 `configRevision` 为空；首次 claim 钉住 origin 上 main 的提交，不受 workDir HEAD 影响；拒绝只落在会话上 | 聊天的 pg spec（C5）/ `source_pin_test.go` |
 
 **SR53（契约自检必须先于实现存在）**：`project-source-contract.spec.ts` 是**纯契约测试**（不连数据库、不起 Nest），断言本文的自洽性：编号唯一且连续、错误码双向闭合、冻结集合不相交、闸门全序、禁列名缺席、`fixAction` 封闭、§13 的每一行都引用得到一条 §12 用例。
 
@@ -629,3 +637,4 @@ v1 冻结时这一条读作"尚未落地"，自检那时断言的是它的**缺�
 - **v1**（2026-08-25）：首版。冻结 SR1–SR53、十个错误码、五级优先级、六级准入闸、四状态机。
 - **v1.1**（2026-09-17）：SR17 的封闭输入集增加 `integrationLineHasLanding: boolean`，§4.1 的 P5 行随之改为「本项目集成线上已有落地回执 → `integrationRef` 的 tip；否则 `upstreamRef` 的 tip」。理由是 `docs/project-integration-line-contract.md` §1.5 L10 第一行，那条契约的实现任务（`34PAfnnE8wgD9kOGvgwwU`）按 SR17「加字段即契约变更」先改本文再改代码。优先级序、错误码表、闸门与状态机不变；被加进来的是关于项目的事实，不是关于机器的事实，SR1/SR2 禁的字段仍不可表达。
 - **v1.2**（2026-10-07）：§4.1 的 P4 行改为与 P5 同款的两种写法（`integrationLineHasLanding` 为真 → `integrationRef` 的 tip；否则 `upstreamRef` 的 tip），`requiredContains` 一字未动。理由是 §1.5 L10 第一行对 P4 同样成立：P4 与 P5 读的是**同一条线**（D5 只声明两者的谓词结构互斥，不是两条线），而项目分支要等这条线上的第一条落地回执才被创建。偏离只在派发时刻可见：2026-10-07 实测项目 `34bZ3i4AvgJaaoaw5E9tH` 的集成线从未被创建（三次 LAND_TASK 全以 CHECK_FAILED 终态，工作直接并进 main），走 P4 的任务据此钉到 `refs/heads/project/34bZ3i4AvgJaaoaw5E9tH`，runner 的 `git fetch` 得到 `fatal: couldn't find remote ref` → `BASE_REF_NOT_FOUND`。本次只改一条取值，不改输入集（`integrationLineHasLanding` 自 v1.1 起已在 SR17 的封闭集合内），优先级序、错误码表、闸门与状态机不变。
+- **v1.3**（2026-11-06）：新增 SR54，wiki 聊天会话的 SOURCE（`docs/wiki-chat-design.md` §5.2，wiki 契约 `chat.source`）：SR1 原本只规定了项目任务，聊天是第一个冻结 selector 的非任务会话——ref 为 `refs/heads/main`、权威 `REMOTE`，`sourceKind` 新增 `CHAT_UPSTREAM`。它放在 §9 的 SR45 旁边，因为它限定的正是 SR45 的那句话；编号接在 SR53 之后，已有编号不重排（编号约定以唯一与连续为准，自检照旧断言）。优先级表、错误码表、闸门与状态机不变；数据模型的三条 CHECK 由建聊天的迁移改写。

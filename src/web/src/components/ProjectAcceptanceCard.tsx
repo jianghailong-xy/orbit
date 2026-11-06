@@ -1,7 +1,7 @@
 import { DownOutlined } from '@ant-design/icons';
 import { useId, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import Markdown from 'react-markdown';
+import Markdown from './Markdown';
 import remarkGfm from 'remark-gfm';
 import { api } from '../api';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { RunnerApiController } from './runner-api.controller';
@@ -9,7 +9,7 @@ const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
 const GENERATION = '33333333-3333-4333-8333-333333333333';
 
-type Dequeue = (sessionId: string, runnerId: string, leaseGeneration: string | null) => Promise<unknown>;
+type Dequeue = (sessionId: string, runnerId: string, leaseGeneration: string) => Promise<unknown>;
 
 function harness(
   owned: boolean,
@@ -101,21 +101,12 @@ test('a generation registered to another process owner cannot dequeue', async ()
   assert.equal(h.rawCalls.length, 2);
 });
 
-test('terminal sessions fence modern and legacy inbox pollers before generation checks', async () => {
+test('terminal sessions fence inbox pollers before generation checks', async () => {
   for (const status of [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED]) {
-    for (const generation of [GENERATION, null]) {
-      const h = harness(true, GENERATION, true, status);
-      await assert.rejects(h.dequeue(SESSION_ID, RUNNER_ID, generation), ConflictException);
-      assert.equal(h.rawCalls.length, 1);
-    }
+    const h = harness(true, GENERATION, true, status);
+    await assert.rejects(h.dequeue(SESSION_ID, RUNNER_ID, GENERATION), ConflictException);
+    assert.equal(h.rawCalls.length, 1);
   }
-});
-
-test('a legacy NULL poll keeps the empty-poll compatibility path after modern activation', async () => {
-  const h = harness(true, GENERATION);
-
-  assert.equal(await h.dequeue(SESSION_ID, RUNNER_ID, null), null);
-  assert.equal(h.rawCalls.length, 1);
 });
 
 test('dequeue cannot lease a turn after runner ownership changes', async () => {
@@ -123,4 +114,11 @@ test('dequeue cannot lease a turn after runner ownership changes', async () => {
 
   await assert.rejects(h.dequeue(SESSION_ID, RUNNER_ID, GENERATION), ForbiddenException);
   assert.equal(h.rawCalls.length, 1);
+});
+
+test('the route refuses a fetch that names no generation, before it reads anything', async () => {
+  const h = harness(true);
+  const controller = new RunnerApiController({} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never);
+  await assert.rejects(controller.inbox({ id: RUNNER_ID }, SESSION_ID, undefined, '1'), BadRequestException);
+  assert.equal(h.rawCalls.length, 0);
 });

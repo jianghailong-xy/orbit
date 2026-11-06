@@ -51,6 +51,49 @@ final class SessionLinePlainPreviewTests: XCTestCase {
         XCTAssertEqual(preview("run `npm test`\n\n  twice"), "run npm test twice")
     }
 
+    func testWhatIsNotAMarkStays() {
+        // The message whose row read `teauserprofilebuildcnch` under a bubble that said this.
+        for md in ["把其他的 tea_user_profile_build_*_cnch 也修复了",
+                   "file_path and snake_case_name",
+                   "看_重点_吧",
+                   "~/.orbit/bin takes ~30 minutes",
+                   "2 * 3 * 4",
+                   "foo* and bar*",
+                   "** BUILD SUCCEEDED **",
+                   "*.ts files",
+                   "*_cnch too",
+                   "--force is needed",
+                   "-1 is wrong",
+                   "#123 is broken",
+                   "_private and __dunder"] {
+            XCTAssertEqual(preview(md), md)
+        }
+    }
+
+    func testARealMarkGoes() {
+        XCTAssertEqual(preview("**bold**, *italic* and ***both***"), "bold, italic and both")
+        XCTAssertEqual(preview("_em_, __strong__ and ___both___"), "em, strong and both")
+        XCTAssertEqual(preview("~~gone~~ stays"), "gone stays")
+        XCTAssertEqual(preview("这是**重点**内容"), "这是重点内容")
+        XCTAssertEqual(preview("**a *b* c** and *d **e** f*"), "a b c and d e f")
+        XCTAssertEqual(preview("**a*b**"), "a*b")
+        XCTAssertEqual(preview("_foo_bar_"), "foo_bar")
+        // Two globs in one message: Markdown reads their marks as emphasis, and the bubble draws it so.
+        XCTAssertEqual(preview("把 tea_*_cnch 和 foo_*_bar 都修了"), "把 tea_cnch 和 foo_bar 都修了")
+        XCTAssertEqual(preview("**run `npm test` now**"), "run npm test now")
+        XCTAssertEqual(preview("above\n\n---\n***\n___\n- - -\n\nbelow"), "above below")
+        XCTAssertEqual(preview("> - ## nested\n* item"), "nested item")
+    }
+
+    func testEveryMarkInsideCodeStays() {
+        XCTAssertEqual(preview("`a*b*c` and `_x_` and `~~y~~`"), "a*b*c and _x_ and ~~y~~")
+        XCTAssertEqual(preview("(v1-beta.*), and no `android-v*` tags"), "(v1-beta.*), and no android-v* tags")
+        XCTAssertEqual(preview("`- x` and `#1` start this"), "- x and #1 start this")
+        XCTAssertEqual(preview("see `tea_*_cnch` and `foo_*_bar`"), "see tea_*_cnch and foo_*_bar")
+        XCTAssertEqual(preview("``a_b_c`` and ``d`e`` and `f`"), "a_b_c and d`e and f")
+        XCTAssertEqual(preview("one `` tick pair stays"), "one `` tick pair stays")
+    }
+
     /// The row itself, not just the helper: a reply and a message of yours still waiting for one
     /// both come out as link text.
     func testTheListRowShowsLinkText() {
@@ -65,5 +108,9 @@ final class SessionLinePlainPreviewTests: XCTestCase {
 
         let sent = session(lastUserText: "Look at [this run](https://github.com/o/r/actions/runs/123)")
         XCTAssertEqual(SessionLine.make(for: sent, live: true), .init(text: "You: Look at this run", tone: .preview))
+
+        let words = session(lastUserText: "把其他的 tea_user_profile_build_*_cnch 也修复了")
+        XCTAssertEqual(SessionLine.make(for: words, live: true),
+                       .init(text: "You: 把其他的 tea_user_profile_build_*_cnch 也修复了", tone: .preview))
     }
 }

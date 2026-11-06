@@ -48,8 +48,6 @@ class LastPageMarkTest : ComposerShellTest() {
     }
     private fun sessionRow() = hasText("Composer increments") and hasClickAction()
     private fun openWorkspace() {
-        await { has(hasText("Alpha") and hasClickAction()) }
-        compose.onAllNodes(hasText("Alpha") and hasClickAction())[0].performClick()
         await { has(sessionRow()) }
     }
     /** A finger's tap on the session's row, through MainActivity as the screen delivers one; its UP at [up] (uptime ms). */

@@ -63,8 +63,8 @@ test('SR47 错误码双向闭合', () => {
 const NON_CODE_TOKENS = new Set([
   // 状态机（§6）
   'UNBOUND', 'SELECTED', 'PINNED', 'REFUSED',
-  // selector 种类（§4）
-  'VERIFICATION_SUBJECT', 'PINNED_REVISION', 'TASK_KNOWN_GOOD', 'DEPENDENCY_CLOSURE', 'PROJECT_UPSTREAM',
+  // selector 种类（§4），以及 wiki 聊天那一种（SR54，v1.3）
+  'VERIFICATION_SUBJECT', 'PINNED_REVISION', 'TASK_KNOWN_GOOD', 'DEPENDENCY_CLOSURE', 'PROJECT_UPSTREAM', 'CHAT_UPSTREAM',
   // ref 权威（§2）与开放问题里的第三个取值（§15）
   'REMOTE', 'RUNNER_LOCAL', 'SERVER_MIRROR',
   // 既有表的既有取值。`COMPLETION_ACK_STALE` 是 SR51 点名的那一个：它是 `project_blocker.kind` 的

@@ -20,8 +20,10 @@ class RealtimeRestTest {
     private class Server : OrbitApi {
         /** Bodies by path, and by `view` for the session lists; any other list is empty. */
         val bodies = mutableMapOf<String, String>()
+        val asked = mutableListOf<String>()
         override suspend fun request(handle: SessionHandle, request: ApiRequest): ApiResponse {
             val key = (request.path + listOfNotNull(request.query.toMap()["view"])).joinToString("/")
+            asked += key
             return ApiResponse(200, (bodies[key] ?: "[]").encodeToByteArray())
         }
     }
@@ -30,32 +32,39 @@ class RealtimeRestTest {
 
     @Test fun aDirectoryReadAgainKeepsTheRowsItAlreadyHolds() = runTest {
         val server = Server()
-        server.bodies["sessions/completed"] = list(*Array(500) { row(it, "done $it") })
-        server.bodies["sessions/open"] = list(row(1000, "running"), row(1001, "waiting"))
+        server.bodies["sessions/open"] = list(row(1000, "running"), row(1001, "waiting"), *Array(500) { row(it, "parked $it") })
         server.bodies["workspaces"] = list("""{"id":"w1","name":"Orbit"}""")
         val rest = RealtimeRest(server)
         val first = rest.directory(handle)
-        server.bodies["sessions/open"] = list(row(1000, "running again"), row(1001, "waiting"), row(1002, "new"))
+        server.bodies["sessions/open"] = list(row(1000, "running again"), row(1001, "waiting"), row(1002, "new"), *Array(500) { row(it, "parked $it") })
         val second = rest.directory(handle, first)
-        // Nothing changed in Completed: every row is the object already held, so the read added no second tree.
-        val before = first.sessions.getValue("completed")
-        val after = second.sessions.getValue("completed")
-        assertEquals(500, after.size)
-        before.indices.forEach { assertSame(before[it], after[it]) }
+        // Nothing changed in the parked rows: each is the object already held, so the read added no second tree.
+        val before = first.sessions.getValue("open")
+        val after = second.sessions.getValue("open")
+        assertEquals(503, after.size)
+        (0 until 500).forEach { assertSame(before[it + 2], after[it + 3]) }
         assertSame(first.workspaces.single(), second.workspaces.single())
-        val open = second.sessions.getValue("open")
-        assertNotSame(first.sessions.getValue("open")[0], open[0])
-        assertSame(first.sessions.getValue("open")[1], open[1])
-        assertEquals(listOf("running again", "waiting", "new"), open.map { it.text("title") })
+        assertNotSame(before[0], after[0])
+        assertSame(before[1], after[1])
+        assertEquals(listOf("running again", "waiting", "new"), after.take(3).map { it.text("title") })
         // Kept or read anew, the snapshot is what a read with nothing held gives.
         assertEquals(rest.directory(handle), second)
+    }
+
+    /** iOS: a launch, a connect and an event read Open. An owner's Completed is 18 MB; the page showing it reads it. */
+    @Test fun aDirectoryReadAsksForOpenAndNotCompletedOrTrash() = runTest {
+        val server = Server()
+        val rest = RealtimeRest(server)
+        val snapshot = rest.directory(handle)
+        assertEquals(setOf("open"), snapshot.sessions.keys)
+        assertEquals(listOf("sessions/open"), server.asked.filter { it.startsWith("sessions") })
     }
 
     @Test fun aListThatIsNotAnArrayOfObjectsIsStillAProtocolError() = runTest {
         val server = Server()
         val rest = RealtimeRest(server)
         for (body in listOf("", "{}", "null", "[1]", """[{"id":"s1"},"s2"]""", """[{"id":"s1"}""", """[{"id":"s1"}] []""")) {
-            server.bodies["sessions/completed"] = body
+            server.bodies["sessions/open"] = body
             val error = runCatching { rest.directory(handle) }.exceptionOrNull()
             assertTrue("$body: $error", error is ProtocolException)
         }

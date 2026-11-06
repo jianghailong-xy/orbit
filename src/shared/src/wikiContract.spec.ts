@@ -1594,7 +1594,10 @@ describe('wiki contract', () => {
     for (const read of [routes.directory, routes.doc, routes.index]) expect(user).toContain(read);
     expect(Object.values<string>(routes).some((route) => route.includes('/api/runner/'))).toBe(false);
     expect(user.some((route) => route.startsWith('POST') && route.includes('/docs'))).toBe(false);
-    expect(docs.who.write).toMatch(/no door builds either, and the user door has no write route: any other caller is an error of the server's own code \(WikiDocs\.assertWriter\)/u);
+    // No door builds a document. Since the wiki chat (2026-11-06) the user door's one write to one is the owner's
+    // restore of a version a section kept (docs.versions.restore): it brings back text a job wrote, and writes none.
+    expect(user.filter((route) => !route.startsWith('GET ') && /\/doc(s|-)/u.test(route))).toEqual([docs.versions.routes.restore]);
+    expect(docs.who.write).toMatch(/No door builds a document, and the user door's one write is the owner's restore of a version a section kept \(versions\.restore\), which brings back text a job wrote and writes none of its own: any other caller is an error of the server's own code \(WikiDocs\.assertWriter\)/u);
     expect(docs.who.write).toMatch(/WIKI_PLAN_UNCONFIRMED/u);
     // A view: never a source, never pushed, never an agent's answer.
     expect(docs.view.push).toMatch(/Never in <orbit_wiki_context>/u);
@@ -1673,6 +1676,31 @@ describe('wiki contract', () => {
     expect(surface.decide.sessionHeader).toMatch(/WIKI_OWNER_CHANNEL_ONLY/u);
     expect(surface.proposeDescription).toMatch(/depends on the space's review mode/u);
     expect(surface.proposeDescription).not.toMatch(/waits for the owner's review/u);
+  });
+
+  it('answers a search with entries that say how old they are (the wiki_search review, 2026-11-06)', () => {
+    const search = CONTRACT.agentSurface.toolSpecs.wiki_search;
+    // A hit's fields, in the order the server writes them. Each end holds its own reading to this list: the
+    // server's answer (wiki-search.pg.spec.ts), runner-go's wikiSearchHit and its outputSchema
+    // (TestWikiAgentSurfaceIsTheContracts), OrbitKit's and Android's models (WikiContractTests, WikiContractTest).
+    expect(search.hit).toEqual([
+      'id', 'kind', 'title', 'summary', 'trust', 'anchorState', 'match', 'score',
+      'recordedAt', 'changedAt', 'anchorCheckedRef', 'anchorCheckedAt',
+    ]);
+    const age = keysOf(search.age).filter((key) => key !== 'why');
+    expect(age).toEqual(['recordedAt', 'changedAt', 'anchorCheckedRef', 'anchorCheckedAt']);
+    expect(search.hit.slice(-age.length)).toEqual(age);
+    expect(search.returns).toMatch(/how old each one is \(age\)$/u);
+    // What each one is read from, and why it is there: a check finds anchors, it does not re-read the claim.
+    expect(search.age.why).toMatch(/never that what the entry says still holds/u);
+    expect(search.age.why).toMatch(/on the runner door and on the owner's GET \/api\/wiki\/search alike/u);
+    expect(CONTRACT.anchorStates.verified).toBe('the last check found it as recorded');
+    expect(search.age.recordedAt).toMatch(/wiki_entry\.recorded_at/u);
+    expect(search.age.changedAt).toMatch(/An anchor check writes no revision/u);
+    expect(search.age.anchorCheckedRef).toMatch(/wiki_entry\.anchor_checked_ref/u);
+    expect(search.age.anchorCheckedRef).toMatch(/anchorRules\.verify\.aggregate/u);
+    expect(CONTRACT.anchorRules.verify.aggregate).toMatch(/anchor_checked_ref and anchor_checked_at are the ref and the time of the last check/u);
+    expect(search.age.anchorCheckedAt).toMatch(/wiki_entry\.anchor_checked_at/u);
   });
 
   it('gives a session a note: a claim for maintenance to check, not a write to the wiki (design section 4)', () => {

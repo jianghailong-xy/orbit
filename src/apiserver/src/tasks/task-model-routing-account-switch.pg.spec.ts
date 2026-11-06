@@ -25,6 +25,7 @@ import { WorkspacesService } from '../workspaces/workspaces.service';
 import { TasksService } from './tasks.service';
 import { TASK_RUN_TRIGGER } from './task-run-identity';
 import { TASK_RUN_ACTION } from './task-run-receipt';
+import '../test-support/dequeue-under-lease';
 
 /**
  * The account's smart model selection (Settings, `user.preferences.modelRouting`) is the master

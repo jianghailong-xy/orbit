@@ -20,6 +20,7 @@ import type {
   SlashCommandInfo,
 } from '@orbit/shared';
 import { CLAUDE_REGION_UNSUPPORTED, CLAUDE_REGION_V1, LOGIN_FAILURE_REASONS } from '@orbit/shared';
+import { RunStatus } from '@prisma/client';
 import { generateToken, sha256 } from '../common/crypto.util';
 import { namedRunnerEngines, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
 import {
@@ -56,6 +57,10 @@ import { DIR_PROBE_MAX_PATH, dirProbeAnswerOf } from './dir-probe';
 import { isInternalAddress } from '../shared/public-surface.guard';
 import { blockedRunnerRegion, claudeRegionSignInRefusal, regionMachineName, runnerRegionView } from './runner-region';
 import { activeSessionsOn, engineHealthWithActiveSessions } from '../providers/active-sessions';
+
+/** The statuses an abandoned checkout can belong to: a session that has stopped running for good.
+ *  A parked one can be dirty between turns and is not abandoned, so it is not listed. */
+const FINISHED_SESSION_STATUSES = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
 
 // Cap device-enrollment userCode lookups per user, so an authenticated insider
 // cannot brute-force another user's pending enrollment code online.
@@ -479,6 +484,76 @@ export class RunnersService {
   }
 
   /**
+   * The checkouts of this machine's finished sessions that still hold work no branch has, as the
+   * runner's last scan reported them (RunnerApiController.abandonedCheckouts). This is the list
+   * the runner page shows, with Commit and Discard beside each one; a row whose session has
+   * since been resumed or deleted is not an abandoned checkout any more and is left out.
+   *
+   * `patches` is deliberately not read here: the diff text lives in the row, can be hundreds of
+   * KB, and is fetched one checkout at a time ({@link abandonedCheckoutDiff}) when somebody opens
+   * it. `hasPatches` says whether there is anything to open.
+   */
+  async abandonedCheckouts(ownerId: string, id: string) {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId }, select: { id: true } });
+    if (!runner) throw new NotFoundException('runner not found');
+    const rows = await this.prisma.abandonedCheckout.findMany({
+      where: { runnerId: id, ownerId, session: { status: { in: FINISHED_SESSION_STATUSES } } },
+      orderBy: { observedAt: 'asc' },
+      select: {
+        sessionId: true,
+        files: true,
+        hasPatches: true,
+        observedAt: true,
+        session: {
+          select: {
+            title: true,
+            branch: true,
+            status: true,
+            commitStatus: true,
+            commitError: true,
+            commitResultMessage: true,
+          },
+        },
+      },
+    });
+    return {
+      checkouts: rows.map((row) => ({
+        sessionId: row.sessionId,
+        title: row.session.title,
+        branch: row.session.branch,
+        status: row.session.status,
+        files: row.files,
+        hasPatches: row.hasPatches,
+        observedAt: row.observedAt,
+        commitStatus: row.session.commitStatus,
+        commitError: row.session.commitError,
+        commitResultMessage: row.session.commitResultMessage,
+      })),
+    };
+  }
+
+  /** One abandoned checkout's per-file diffs, for the drawer that shows them.
+   *
+   *  Both the runner and the session are resolved for this owner first, so another account's
+   *  session is answered as one that names nothing — and a session of the caller's that has no
+   *  entry (committed, discarded, or reclaimed since the list was read) answers with no patches
+   *  rather than an error: there is simply nothing left to show. */
+  async abandonedCheckoutDiff(ownerId: string, id: string, sessionId: string) {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId }, select: { id: true } });
+    if (!runner) throw new NotFoundException('runner not found');
+    const session = await this.prisma.session.findFirst({
+      where: { id: sessionId, ownerId },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    const row = await this.prisma.abandonedCheckout.findFirst({
+      where: { sessionId, runnerId: id, ownerId },
+      select: { sessionId: true, files: true, patches: true },
+    });
+    return { sessionId, files: row?.files ?? [], patches: row?.patches ?? [] };
+  }
+
+  /**
    * Reissue a runner's long-lived credential. The old token stops authenticating
    * immediately (only the new hash is kept), so the runner will 401 until its
    * config.json runnerToken is updated and it is restarted. The raw token is
@@ -664,8 +739,7 @@ export class RunnersService {
    *
    * A runner that has not declared that engine's account-removal capability is refused in words the
    * person who pressed the button can act on — the alternative is a request that sits pending until
-   * the relay's timeout and then fails with nothing useful in it. The heartbeat refuses it too, for
-   * a runner whose declared capabilities went stale between this call and its next check-in.
+   * the relay's timeout and then fails with nothing useful in it.
    *
    * Removing an account the runner no longer reports is allowed and ends the same way: the runner
    * finds nothing left to remove and reports done. A workspace that had selected the slot keeps

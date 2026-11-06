@@ -16,31 +16,32 @@
  * ---------------
  *   (1) The inbox. A message whose answer was lost is handed to the same process again as soon as it
  *       asks saying it runs nothing — the same turn, the same delivery, within 5 s — and never to a poll
- *       that says it runs that turn, never over HTTPS before its lease runs out, and never again once the
- *       turn has completed: one delivery reached the engine, one `user` event, ANSWERED.
+ *       that says it runs that turn, and never again once the turn has completed: one delivery reached the
+ *       engine, one `user` event, ANSWERED.
  *   (2) The same under the runner dispatch pause (A2), which holds new work and not this: the lost turn
  *       still comes back within 5 s and runs once, while a message queued during the pause stays queued.
  *   (3) The claim. Sent again under the request id of a claim whose answer was lost, it answers the
  *       session that claim claimed — within 5 s, unchanged — and claims nothing else; two at once under
- *       one id claim one session between them; the pause does not hold the repeat; a new id claims anew;
- *       and over HTTPS the link's request id means nothing.
+ *       one id claim one session between them; the pause does not hold the repeat; a new id claims anew.
  *   (4) after_seq. A turn completion that waits for events not yet stored is refused as retryable and
  *       changes nothing, and goes through once they are; another runner's session is refused.
  *   (5) A database resource fault — a statement the database cancelled (SQLSTATE 57014, class 57) —
- *       answers a link call with a retryable 503 DATABASE_UNAVAILABLE, and HTTPS with the 500 it always did.
- *   (6) wait=0: the claim, the inbox, the wake and an approval's decision answer a link call at once, and
- *       go on long-polling over HTTPS.
+ *       answers a link call with a retryable 503 DATABASE_UNAVAILABLE.
+ *   (6) The claim, the inbox and an approval's decision answer a link call at once.
  *   (7) The door: only the gateway, with a token the link vouches for; and a link claim the gateway
  *       cancels while it waits for the claim lock — the runner gone — claims nothing (hungUp).
  *   (8) Every other kind (task B2b). An interrupt, end, diff, setconfig, withdraw, steer or reload whose
  *       inbox answer was lost — answered or leased once as it was handed out, so nothing hands it out again
  *       — is answered again, the same answer within 5 s, when the same process sends the fetch again
  *       under its request id, and that resend changes nothing; a fetch with no request id, another
- *       process's under the same id, an HTTPS poll and any later fetch are not handed it. The dispatch
+ *       process's under the same id and any later fetch are not handed it. The dispatch
  *       pause does not hold the resend; a message's resend is the same delivery, its lease renewed as
  *       B2's re-delivery renews it; two fetches at once under one id hand out one turn; a withdraw past
- *       its delivery window, or a steer settled since, is not handed out again; and an HTTPS hand-out
- *       records nothing.
+ *       its delivery window, or a steer settled since, is not handed out again.
+ *   (9) A claim that loses the row lock (FOR UPDATE NOWAIT, 55P03) to an inbox fetch or any other write. Over the link
+ *       it asks again by itself instead of waiting for the next HeartbeatAck: it takes the session soon after the lock
+ *       is free, holds no claim lock between attempts, stops at its bound and at the runner hanging up, and hands the
+ *       session out once.
  *
  * Every state is read on a second connection, never through the answer that wrote it.
  *
@@ -162,27 +163,9 @@ function send(
   });
 }
 
-/** The realtime collaborator: silent, except for the two waits a long poll parks in. */
-function realtimeDouble() {
-  const wakeWaits: number[] = [];
-  const named: Record<string, unknown> = {
-    waitForRunnerWake: (_runnerId: string, timeoutMs: number, hungUp?: AbortSignal) => {
-      wakeWaits.push(timeoutMs);
-      return new Promise<boolean>((resolve) => {
-        const timer = setTimeout(() => resolve(false), timeoutMs);
-        hungUp?.addEventListener('abort', () => {
-          clearTimeout(timer);
-          resolve(false);
-        }, { once: true });
-      });
-    },
-    waitForInbox: (_sessionId: string, timeoutMs: number) => sleep(timeoutMs),
-  };
-  const realtime = new Proxy(named, {
-    get: (target, key) => (typeof key === 'string' && key in target ? target[key] : key === 'then' ? undefined : () => undefined),
-  });
-  return { realtime, wakeWaits };
-}
+/** The realtime collaborator: silent. */
+const silentRealtime = () =>
+  new Proxy({}, { get: (_target, key) => (key === 'then' ? undefined : () => undefined) });
 
 /** The control plane's runner door as main.ts builds it, with the gateway's internal listener beside it. */
 async function bootDoor(db: PrismaClient, link: RunnerLinkState, realtime: unknown) {
@@ -233,7 +216,6 @@ async function bootDoor(db: PrismaClient, link: RunnerLinkState, realtime: unkno
   assert.ok(linkServer, `the internal listener did not open: ${problems.join('; ')}`);
   return {
     queue,
-    httpsPort: Number(doorUrl.slice(doorUrl.lastIndexOf(':') + 1)),
     linkPort: (linkServer.address() as AddressInfo).port,
     close: async () => {
       linkServer.closeAllConnections();
@@ -263,7 +245,7 @@ test('runner link calls: answers lost on the way back are made good, and nothing
   });
   assert.ok(link.config, `the test link did not configure: ${link.problems.join('; ')}`);
 
-  const { realtime, wakeWaits } = realtimeDouble();
+  const realtime = silentRealtime();
   const door = await bootDoor(prisma, link, realtime);
   const closers: Array<() => Promise<unknown>> = [door.close];
 
@@ -351,7 +333,7 @@ test('runner link calls: answers lost on the way back are made good, and nothing
     'x-orbit-supported-providers': PROVIDERS,
     ...extra,
   });
-  const viaHttps = (extra: Record<string, string> = {}): Record<string, string> => ({
+  const withRunnerToken = (extra: Record<string, string> = {}): Record<string, string> => ({
     authorization: `Bearer ${RUNNER_TOKEN}`,
     'x-orbit-supported-providers': PROVIDERS,
     ...extra,
@@ -384,7 +366,7 @@ test('runner link calls: answers lost on the way back are made good, and nothing
   }
 
   /** A session the connected process runs: its inbox leased to one engine generation, a message queued. */
-  async function runningSession(title: string): Promise<{ sessionId: string; turnId: string; generation: string }> {
+  async function runningSession(title: string, status: RunStatus = RunStatus.RUNNING): Promise<{ sessionId: string; turnId: string; generation: string }> {
     const sessionId = randomUUID();
     const turnId = randomUUID();
     const generation = randomUUID();
@@ -399,7 +381,7 @@ test('runner link calls: answers lost on the way back are made good, and nothing
         prompt: title,
         provider: 'claude',
         providerBuiltin: true,
-        status: RunStatus.RUNNING,
+        status,
         dispatchOrigin: 'USER',
         startsTaskWork: false,
         startedAt: new Date(),
@@ -533,20 +515,6 @@ test('runner link calls: answers lost on the way back are made good, and nothing
       assert.ok(leased.deliveredAt, 'the first hand-over stamped no delivery');
       assert.equal(redelivered.deliveredAt, leased.deliveredAt, 'the hand-over again is the same delivery, not a second one');
 
-      if (!pauseAfterTheLoss) {
-        // Over HTTPS nothing changes: a poll of the same generation is not handed a turn whose lease is
-        // live, whatever it says. (A second session's turn: an HTTPS inbox poll outlives its caller for
-        // 25 s. Not under the pause, which puts a session whose next turn would start back in the queue.)
-        const other = await runningSession(`${title}, over HTTPS`);
-        await send(door.linkPort, 'GET', inboxPath(other, ''), viaLink());
-        const abandon = new AbortController();
-        const https = send(door.httpsPort, 'GET', inboxPath(other, ''), viaHttps(), undefined, abandon.signal);
-        https.catch(() => undefined);
-        const httpsAnswer = await Promise.race([https.then(() => 'answered'), sleep(AT_ONCE_MS).then(() => 'waiting')]);
-        abandon.abort();
-        assert.equal(httpsAnswer, 'waiting', 'an HTTPS poll was handed a turn whose lease is still live');
-      }
-
       // The process runs it once: one `user` event, the turn ANSWERED, and nothing handed out again.
       const completed = await runTurn(s, 1);
       assert.equal(completed.status, 200, JSON.stringify(completed.body));
@@ -623,13 +591,9 @@ test('runner link calls: answers lost on the way back are made good, and nothing
       await setPause(false);
     }
 
-    // A new id claims anew; and over HTTPS the link's request id is nobody's business.
+    // A new id claims anew.
     const fresh = await claim(viaLink({ 'x-orbit-link-request-id': 'claim-c' }));
     assert.equal(fresh.body.sessionId, third);
-    const fourth = await queueSession('claimed over HTTPS');
-    const overHttps = await claim(viaHttps({ 'x-orbit-link-request-id': 'claim-a' }), door.httpsPort);
-    assert.equal(overHttps.body.sessionId, fourth, 'HTTPS replayed a link claim');
-    assert.equal((await sessionRow(fourth)).claimRequestId, null);
   });
 
   await t.test('(4) after_seq: a turn completion waits until its events are stored', async () => {
@@ -694,13 +658,13 @@ test('runner link calls: answers lost on the way back are made good, and nothing
     assert.equal(crossed.body.retryable, false);
   });
 
-  await t.test('(5) a database resource fault: a retryable 503 over the link, the 500 it always was over HTTPS', async () => {
+  await t.test('(5) a database resource fault: a retryable 503 over the link', async () => {
     // A control plane whose statements the database cancels after 1.5 s (SQLSTATE 57014, class 57), and
     // a session row a second connection holds locked: the inbox's FOR UPDATE on it is cancelled.
     const timeoutUrl = new URL(url);
     timeoutUrl.searchParams.set('options', '-c statement_timeout=1500');
     const faulty: PrismaClient = prismaClientFor(timeoutUrl.toString());
-    const faultyDoor = await bootDoor(faulty, link, realtimeDouble().realtime);
+    const faultyDoor = await bootDoor(faulty, link, silentRealtime());
     closers.push(async () => {
       await faultyDoor.close();
       await faulty.$disconnect();
@@ -727,10 +691,6 @@ test('runner link calls: answers lost on the way back are made good, and nothing
       assert.equal(overLink.headers['retry-after'], '2');
       assert.equal(overLink.headers['retry-after-ms'], '2000');
       assert.doesNotMatch(JSON.stringify(overLink.body), /statement timeout|canceling|session/i, 'the database\'s own words leaked');
-
-      const overHttps = await send(faultyDoor.httpsPort, 'GET', inboxPath(s, ''), viaHttps());
-      assert.equal(overHttps.status, 500, 'HTTPS answers a resource fault as it always has');
-      assert.equal(overHttps.body.retryable, undefined);
     } finally {
       await holder.query('ROLLBACK').catch(() => undefined);
       await holder.end().catch(() => undefined);
@@ -741,7 +701,7 @@ test('runner link calls: answers lost on the way back are made good, and nothing
     assert.equal(served.body.turnId, s.turnId);
   });
 
-  await t.test('(6) wait=0: link calls answer at once, HTTPS keeps its long polls', async () => {
+  await t.test('(6) link calls answer at once', async () => {
     // Nothing queued anywhere for this machine.
     await clearQueue();
     const timed = async (call: Promise<Answer>) => {
@@ -761,12 +721,6 @@ test('runner link calls: answers lost on the way back are made good, and nothing
     assert.equal(inbox.answer.body.turnId, '');
     assert.ok(inbox.ms < AT_ONCE_MS, `the inbox took ${inbox.ms} ms`);
 
-    const waits = wakeWaits.length;
-    const wake = await timed(send(door.linkPort, 'GET', '/api/runner/wake', viaLink()));
-    assert.deepEqual(wake.answer.body, { wake: false });
-    assert.ok(wake.ms < AT_ONCE_MS, `the wake took ${wake.ms} ms`);
-    assert.deepEqual(wakeWaits.slice(waits), [0], 'the link wake parked');
-
     const approval = await prisma.approval.create({
       data: { sessionId: s.sessionId, toolName: 'Bash', input: { command: 'ls' }, status: 'PENDING' },
       select: { id: true },
@@ -775,17 +729,6 @@ test('runner link calls: answers lost on the way back are made good, and nothing
     assert.equal(decision.answer.status, 200, JSON.stringify(decision.answer.body));
     assert.equal(decision.answer.body.status, 'PENDING');
     assert.ok(decision.ms < AT_ONCE_MS, `the approval poll took ${decision.ms} ms`);
-
-    // Over HTTPS the claim and the wake still wait for work; each ends here by its caller hanging up.
-    for (const pathname of ['/api/runner/sessions/claim', '/api/runner/wake']) {
-      const abandon = new AbortController();
-      const pending = send(door.httpsPort, 'GET', pathname, viaHttps(), undefined, abandon.signal);
-      pending.catch(() => undefined);
-      const state = await Promise.race([pending.then(() => 'answered'), sleep(AT_ONCE_MS).then(() => 'waiting')]);
-      abandon.abort();
-      assert.equal(state, 'waiting', `${pathname} over HTTPS stopped long-polling`);
-    }
-    assert.equal(wakeWaits.at(-1), 25_000, 'the HTTPS wake did not park for its 25 s');
   });
 
   await t.test('(7) the door takes only the gateway, and a link claim the gateway cancels claims nothing', async () => {
@@ -794,7 +737,7 @@ test('runner link calls: answers lost on the way back are made good, and nothing
     const noSecret = await send(door.linkPort, 'GET', '/api/runner/sessions/claim', { 'x-orbit-runner-link-token': linkToken });
     assert.equal(noSecret.status, 401);
     assert.equal(noSecret.body.code, 'RUNNER_LINK_GATEWAY_UNAUTHORIZED');
-    const runnerTokenOnly = await send(door.linkPort, 'GET', '/api/runner/sessions/claim', viaHttps());
+    const runnerTokenOnly = await send(door.linkPort, 'GET', '/api/runner/sessions/claim', withRunnerToken());
     assert.equal(runnerTokenOnly.status, 401, 'the internal listener took a runner token');
     const noToken = await send(door.linkPort, 'GET', '/api/runner/sessions/claim', asGateway);
     assert.equal(noToken.status, 401);
@@ -871,15 +814,6 @@ test('runner link calls: answers lost on the way back are made good, and nothing
       );
       return rows[0];
     }
-    /** Over HTTPS: whether the poll was answered within AT_ONCE_MS, and with what. It goes on waiting server-side. */
-    async function httpsPoll(s: { sessionId: string; generation: string }, runningTurnId: string, requestId: string) {
-      const abandon = new AbortController();
-      const poll = send(door.httpsPort, 'GET', inboxPath(s, runningTurnId), viaHttps(poller({ 'x-orbit-link-request-id': requestId })), undefined, abandon.signal);
-      poll.catch(() => undefined);
-      const outcome = await Promise.race([poll.then((a) => a), sleep(AT_ONCE_MS).then(() => null)]);
-      abandon.abort();
-      return outcome;
-    }
     const contentOf: Record<string, string | null> = {
       interrupt: null,
       end: null,
@@ -935,7 +869,7 @@ test('runner link calls: answers lost on the way back are made good, and nothing
       st.diagnostic(`the lost ${kind}'s answer was given again ${recoveredInMs} ms after the loss`);
 
       // Once: the resend changed nothing about the turn. Nor is it handed to another process asking under the same id,
-      // to an HTTPS poll, where the link's request id means nothing, or to any later fetch.
+      // or to any later fetch.
       assert.deepEqual(await turnState(turnId), handedOut, `${kind}: the resend handed the turn out a second time`);
       const otherProcess = await send(door.linkPort, 'GET', inboxPath(s, running), {
         ...viaLink(sameId),
@@ -943,7 +877,6 @@ test('runner link calls: answers lost on the way back are made good, and nothing
       });
       assert.equal(otherProcess.status, 200, JSON.stringify(otherProcess.body));
       assert.equal(otherProcess.body.turnId, '', `${kind}: another process was answered with this process's hand-out`);
-      assert.equal(await httpsPoll(s, running, requestId), null, `${kind}: an HTTPS poll under the same id was answered with it`);
       const later = await send(door.linkPort, 'GET', inboxPath(s, running), viaLink(poller({ 'x-orbit-link-request-id': `${requestId}-next` })));
       assert.equal(later.body.turnId, '', `${kind}: a later fetch was handed it again`);
       assert.deepEqual(await recorded(s.sessionId), { requestId, turnId }, `${kind}: a fetch that handed nothing out moved the record`);
@@ -1028,17 +961,156 @@ test('runner link calls: answers lost on the way back are made good, and nothing
     assert.equal((await turnState(diffId)).status, 'PENDING', 'the turn behind it was handed out under the same id');
     const next = await send(door.linkPort, 'GET', inboxPath(s, s.turnId), viaLink(poller({ 'x-orbit-link-request-id': 'inbox-after-at-once' })));
     assert.equal(next.body.turnId, diffId);
+  });
 
-    // Over HTTPS nothing is recorded, and the same id dequeues the next turn as it always did.
-    const h = await runningSession('handed out over HTTPS');
-    const httpsInterrupt = randomUUID();
-    await prisma.conversationTurn.create({
-      data: { id: httpsInterrupt, sessionId: h.sessionId, seq: 2, clientTurnId: randomUUID(), kind: 'interrupt', status: 'PENDING' },
+  await t.test('(9) a claim that loses the row lock: asked again at once, once only', async (st) => {
+    // The cases above left their sessions running, and a runner with no slot free has nothing to claim.
+    await sql.query('UPDATE "runner" SET "max_concurrent" = 1000 WHERE id = $1', [runnerId]);
+    const claimOverLink = (requestId: string, signal?: AbortSignal) =>
+      send(door.linkPort, 'GET', '/api/runner/sessions/claim', viaLink({ 'x-orbit-link-request-id': requestId }), undefined, signal);
+    /** Rows still held when a scenario ends, even by a failure: one left held would hang the next. */
+    const held: Array<() => Promise<void>> = [];
+    st.afterEach(async () => {
+      for (const release of held.splice(0)) await release();
     });
-    const overHttps = await send(door.httpsPort, 'GET', inboxPath(h, ''), viaHttps(poller({ 'x-orbit-link-request-id': 'over-https' })));
-    assert.equal(overHttps.body.turnId, httpsInterrupt);
-    assert.deepEqual(await recorded(h.sessionId), { requestId: null, turnId: null }, 'an HTTPS hand-out was recorded');
-    const httpsAgain = await send(door.httpsPort, 'GET', inboxPath(h, ''), viaHttps(poller({ 'x-orbit-link-request-id': 'over-https' })));
-    assert.equal(httpsAgain.body.turnId, h.turnId, 'HTTPS answered a link resend');
+    /** Holds a session's row as another route's transaction does, until the function it answers lets go. */
+    const holdRow = async (sessionId: string): Promise<() => Promise<void>> => {
+      const holder = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+      await holder.connect();
+      await holder.query('BEGIN');
+      await holder.query('SELECT id FROM "session" WHERE id = $1 FOR UPDATE', [sessionId]);
+      let holding = true;
+      const release = async () => {
+        if (!holding) return;
+        holding = false;
+        await holder.query('COMMIT').catch(() => undefined);
+        await holder.end().catch(() => undefined);
+      };
+      held.push(release);
+      return release;
+    };
+    /** Whether `call` is still unanswered after `ms`. */
+    const stillWaiting = (call: Promise<unknown>, ms: number) =>
+      Promise.race([call.then(() => false, () => false), sleep(ms).then(() => true)]);
+
+    await st.test('it meets an inbox fetch on one session: the claim waits the fetch out and the message is delivered once', async () => {
+      await clearQueue();
+      // An idle session a message just woke: its engine is warm, so its poller fetches while the claim is asked for.
+      const s = await runningSession('a message beside an inbox fetch', RunStatus.PENDING);
+      const release = await holdRow(s.sessionId);
+      const fetching = send(door.linkPort, 'GET', inboxPath(s, ''), viaLink({ 'x-orbit-link-request-id': 'meet-inbox' }));
+      await sleep(100); // the fetch is queued on the row, and takes it next
+      const claiming = claimOverLink('meet-claim');
+      assert.equal(await stillWaiting(claiming, 300), true, 'the claim gave up on the lost lock and left the rest to the next HeartbeatAck');
+      assert.equal((await sessionRow(s.sessionId)).status, RunStatus.PENDING);
+      const releasedAt = Date.now();
+      await release();
+      const fetched = await fetching;
+      assert.equal(fetched.body.turnId, '', 'the fetch handed out a message before the session was claimed');
+      const claimed = await claiming;
+      const tookMs = Date.now() - releasedAt;
+      st.diagnostic(`the claim took the session ${tookMs} ms after the lock was free`);
+      assert.equal(claimed.body?.sessionId, s.sessionId);
+      assert.ok(tookMs < AT_ONCE_MS, `the claim took ${tookMs} ms after the lock was free`);
+      const row = await sessionRow(s.sessionId);
+      assert.equal(row.status, RunStatus.RUNNING);
+      assert.equal(row.claimRequestId, 'meet-claim');
+      const handed = await send(door.linkPort, 'GET', inboxPath(s, ''), viaLink({ 'x-orbit-link-request-id': 'meet-inbox-2' }));
+      assert.equal(handed.body.turnId, s.turnId);
+      const again = await send(door.linkPort, 'GET', inboxPath(s, s.turnId), viaLink({ 'x-orbit-link-request-id': 'meet-inbox-3' }));
+      assert.equal(again.body.turnId, '', 'the message was handed out twice');
+    });
+
+    await st.test('two claims that lost it hand out one session: under two ids one has it and the other nothing, under one id both have it', async () => {
+      await clearQueue();
+      const only = await queueSession('one session, two claims');
+      let release = await holdRow(only);
+      const racing = [claimOverLink('race-a'), claimOverLink('race-b')];
+      await sleep(300);
+      let releasedAt = Date.now();
+      await release();
+      const answers = await Promise.all(racing);
+      assert.ok(Date.now() - releasedAt < AT_ONCE_MS, 'the claim that found nothing left kept asking');
+      assert.deepEqual(answers.map((a) => a.body?.sessionId ?? null).sort(), [only, null].sort(), 'not one hand-out between two ids');
+      const winner = answers.findIndex((a) => a.body?.sessionId === only);
+      assert.equal((await sessionRow(only)).claimRequestId, winner === 0 ? 'race-a' : 'race-b');
+
+      await clearQueue();
+      const first = await queueSession('claimed under one id');
+      await sleep(5);
+      const behind = await queueSession('queued behind it');
+      release = await holdRow(first);
+      const repeated = [claimOverLink('race-c'), claimOverLink('race-c')];
+      await sleep(300);
+      releasedAt = Date.now();
+      await release();
+      const [left, right] = await Promise.all(repeated);
+      assert.ok(Date.now() - releasedAt < AT_ONCE_MS, 'a claim that lost the lock took too long after it was free');
+      assert.equal(left.body?.sessionId, first);
+      assert.equal(right.body?.sessionId, first, 'one request id claimed two sessions');
+      assert.equal((await sessionRow(behind)).status, RunStatus.PENDING, 'one request id claimed the session behind it');
+    });
+
+    await st.test('it holds no claim lock while it waits, and a row held past its bound answers nothing and takes nothing', async () => {
+      await clearQueue();
+      const queued = await queueSession('its row held past the bound');
+      const release = await holdRow(queued);
+      const startedAt = Date.now();
+      const claiming = claimOverLink('held-past-bound');
+      // Every other runner's claim needs this lock. It is free between attempts, and an attempt is over in moments.
+      let free = false;
+      while (!free && Date.now() - startedAt < 2_000) {
+        const { rows } = await sql.query<{ free: boolean }>('SELECT pg_try_advisory_xact_lock(1330792788, 1) AS free');
+        free = rows[0].free;
+        if (!free) await sleep(10);
+      }
+      assert.equal(free, true, 'the claim sat on the claim lock while it waited for the row');
+      assert.equal(await stillWaiting(claiming, 300), true, 'the claim did not ask again');
+      const answer = await claiming;
+      const tookMs = Date.now() - startedAt;
+      st.diagnostic(`a row held past the bound answered after ${tookMs} ms`);
+      assert.equal(answer.status, 200);
+      assert.equal(answer.body, null);
+      assert.ok(tookMs >= 4_500 && tookMs < 8_000, `the claim gave up after ${tookMs} ms`);
+      const row = await sessionRow(queued);
+      assert.equal(row.status, RunStatus.PENDING, 'the claim took a row it could not lock');
+      assert.equal(row.claimRequestId, null);
+      await release();
+      const next = await claimOverLink('after-the-bound');
+      assert.equal(next.body?.sessionId, queued, 'the next claim did not take the session');
+    });
+
+    await st.test('it stops when the runner hangs up, and a pause it meets holds it', async () => {
+      await clearQueue();
+      const dropped = await queueSession('its runner hung up during the retries');
+      let release = await holdRow(dropped);
+      const cancel = new AbortController();
+      const cancelled = claimOverLink('hung-up', cancel.signal);
+      cancelled.catch(() => undefined);
+      await sleep(300);
+      cancel.abort();
+      await sleep(300);
+      await release();
+      await sleep(1_500); // past the longest wait between attempts
+      const untouched = await sessionRow(dropped);
+      assert.equal(untouched.status, RunStatus.PENDING, 'a claim whose runner hung up claimed the session');
+      assert.equal(untouched.claimRequestId, null);
+
+      release = await holdRow(dropped);
+      const paused = claimOverLink('met-the-pause');
+      await sleep(200);
+      await setPause(true);
+      try {
+        await release();
+        const answer = await paused;
+        assert.equal(answer.body, null, 'the pause let a claim that was asking again through');
+        assert.equal((await sessionRow(dropped)).status, RunStatus.PENDING);
+      } finally {
+        await setPause(false);
+      }
+      const connected = await claimOverLink('after-the-pause');
+      assert.equal(connected.body?.sessionId, dropped);
+    });
+
   });
 });

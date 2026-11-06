@@ -33,6 +33,7 @@ Usage: upgrade.sh [--no-pull] [--pull] [--pull-base] [--no-cache] [--prune] [--a
 EOF
 }
 
+ORIGINAL_ARGS=("$@")
 while [ $# -gt 0 ]; do
   case "$1" in
     --pull)      GIT_PULL=1 ;;
@@ -186,6 +187,277 @@ managed_runner_services_up() {
 }
 # ── end of the managed runners' section ─────────────────────────────────────────────────────────────
 
+# ── Runner link: this section is the same in both copies of /upgrade's script ───────────────────────
+# Runners work over the runner link (docs/self-hosting.md, "Runner link"), so an upgrade brings it up on a deployment that
+# has none. What .env says decides what this script may do:
+#   new       No RUNNER_LINK_* value and no runner-link profile: the link's secrets are generated once and appended to
+#             .env with RUNNER_LINK_URL=same-origin, in one write that changes no line there and prints none of them. Runners
+#             then reach the link through the web gateway's port, at the address they reach this server at.
+#   managed   RUNNER_LINK_URL=same-origin, as an install or an earlier run wrote it: .env stays as it is, and the gateway
+#             follows src/link-gateway. Its image is named by the last commit there, so a commit elsewhere recreates nothing.
+#   operator  Anything else, such as production's own host name, ACME and port 443: .env is not opened for writing, and
+#             the gateway and NATS are neither built nor restarted.
+# Which build this is comes from this checkout's docker-compose.yml, and not from this script, which may have started
+# before the pull: a build that serves runners only over the link demands the signing key there (RUNNER_LINK_SIGNING_KEY:?).
+# In such a build a link that does not come up stops the upgrade before the apiserver is recreated, so the deployment
+# goes on running the build it has. In any other it is reported as this script's last words and in its exit code, and
+# the runners stay on HTTPS. Nothing here writes RUNNER_LINK_REQUIRED, which is an administrator's.
+LINK_IMAGE=orbit-link-gateway:local
+LINK_STATE=""
+LINK_ONLY=0
+LINK_FAILURE=""
+LINK_DETAIL=""
+
+# A name's last value in .env, as Compose reads it, without its quotes or a carriage return. Only ever captured, never
+# printed.
+link_env() {
+  [ -f .env ] || return 0
+  sed -nE "s/^[[:space:]]*(export[[:space:]]+)?$1[[:space:]]*=[[:space:]]*//p" .env | tail -n 1 | tr -d '\r' |
+    sed -E "s/^\"(.*)\"[[:space:]]*\$/\\1/; s/^'(.*)'[[:space:]]*\$/\\1/"
+}
+
+# Whether the profiles Compose takes, the shell's or .env's last line, list runner-link.
+link_profile_on() {
+  printf '%s\n' "${COMPOSE_PROFILES:-$(link_env COMPOSE_PROFILES)}" | tr ',' '\n' | tr -d ' ' | grep -x runner-link >/dev/null
+}
+
+# new, managed or operator, read without writing. A name exported in this shell counts as .env does, since Compose
+# prefers it. compgen lists names alone, so no value passes through a pipe. A same-origin link whose profile was taken out
+# was turned off by hand, and is the operator's to turn on again.
+link_state() {
+  if [ "$(link_env RUNNER_LINK_URL)" = same-origin ] && ! compgen -e | grep '^RUNNER_LINK_' >/dev/null && link_profile_on; then
+    echo managed
+  elif compgen -e | grep '^RUNNER_LINK_' >/dev/null \
+    || { [ -f .env ] && grep -E "^[[:space:]]*(export[[:space:]]+)?RUNNER_LINK_[A-Z0-9_]+[[:space:]]*=[[:space:]]*(\"[^\"]|'[^']|[^\"'[:space:]#])" .env >/dev/null; } \
+    || link_profile_on; then
+    echo operator
+  else
+    echo new
+  fi
+}
+
+# What an operator's link is missing, by name, never by value.
+link_gaps() {
+  local name
+  for name in RUNNER_LINK_SIGNING_KEY RUNNER_LINK_URL RUNNER_LINK_GATEWAY_TOKEN RUNNER_LINK_PUBLIC_KEY \
+    RUNNER_LINK_NATS_APISERVER_SEED RUNNER_LINK_NATS_APISERVER_KEY RUNNER_LINK_NATS_GATEWAY_SEED RUNNER_LINK_NATS_GATEWAY_KEY; do
+    if [ -z "${!name:-}" ] && [ -z "$(link_env "$name")" ]; then printf ' %s' "$name"; fi
+  done
+  if ! link_profile_on; then printf ' %s' "COMPOSE_PROFILES(runner-link)"; fi
+}
+
+link_status() {
+  $DC ps -a nats link-gateway 2>&1 || true
+  $DC logs --tail=20 nats link-gateway 2>&1 || true
+}
+
+# Reported at the end of a build that keeps its HTTPS path; the end of the upgrade, before the apiserver, in one that has none.
+link_failed() {
+  LINK_FAILURE="$1"
+  LINK_DETAIL="$(link_status)"
+  [ "$LINK_ONLY" -eq 1 ] || return 0
+  echo "error: this build serves runners only over the runner link, and it did not come up: $LINK_FAILURE" >&2
+  printf '%s\n' "$LINK_DETAIL" | sed 's/^/       /' >&2
+  echo "       The apiserver was not recreated: this deployment goes on running the build it has, and its runners keep" >&2
+  echo "       working. Fix that and run this script again: it keeps what it already wrote to .env." >&2
+  echo "       docs/self-hosting.md, \"Runner link\"." >&2
+  exit 1
+}
+
+# Before anything is built or written.
+link_preflight() {
+  { set +x; } 2>/dev/null
+  if grep 'RUNNER_LINK_SIGNING_KEY:?' docker-compose.yml >/dev/null; then LINK_ONLY=1; fi
+  LINK_STATE="$(link_state)"
+  case "$LINK_STATE" in
+    new) echo "==> Runner link: this deployment has none; setting it up" ;;
+    managed) echo "==> Runner link: keeping it current" ;;
+    operator)
+      local gaps running health="" problem=""
+      gaps="$(link_gaps)"
+      if [ -z "$gaps" ]; then
+        running="$($DC ps -q link-gateway 2>/dev/null || true)"
+        if [ -n "$running" ]; then
+          health="$(docker inspect -f '{{with index .State "Health"}}{{.Status}}{{end}}' "$running" 2>/dev/null || true)"
+        fi
+      fi
+      if [ -n "$gaps" ]; then
+        problem="this deployment set up its own link, and .env has no value for:$gaps"
+      elif [ "$health" != healthy ]; then
+        problem="this deployment set up its own link, and link-gateway is ${health:-not running}"
+      fi
+      if [ -z "$problem" ]; then
+        echo "==> Runner link: this deployment's own; .env and the link gateway are left as they are"
+      elif [ "$LINK_ONLY" -eq 1 ]; then
+        link_failed "$problem"
+      else
+        # Its own to finish, and maybe on purpose: said, and nothing changes while runners can work over HTTPS.
+        echo "!!  warning: $problem. Its runners stay on HTTPS, and .env and the link gateway are left as they are." >&2
+        echo "!!  A later build serves runners only over the link: docs/self-hosting.md, \"Runner link\"." >&2
+      fi
+      ;;
+  esac
+}
+
+link_build() {
+  local flags=() source_sha
+  source_sha="$(git log -1 --format=%H -- src/link-gateway 2>/dev/null || true)"
+  if [ "$NO_CACHE" -eq 1 ]; then flags+=(--no-cache); fi
+  # Without a provenance attestation where this Docker makes them, as the managed runner image is built: an image of the
+  # same content keeps its ID, so Compose recreates nothing.
+  if docker build --help 2>/dev/null | grep -e --provenance >/dev/null; then flags+=(--provenance=false); fi
+  echo "==> Building the link gateway from src/link-gateway ($LINK_IMAGE, local, never pushed)"
+  if ! docker build ${flags[@]+"${flags[@]}"} --build-arg "ORBIT_SOURCE_SHA=$source_sha" -t "$LINK_IMAGE" src/link-gateway; then
+    link_failed "its image did not build (above)"
+    return 1
+  fi
+}
+
+# The lines .env gains, given the secrets.
+link_lines() {
+  local profiles
+  profiles="$(link_env COMPOSE_PROFILES | tr -d ' ')"
+  cat <<LINES
+# ─────────── Runner link: written by the upgrade script at $(date -u +%Y-%m-%dT%H:%M:%SZ) ───────────
+# docs/self-hosting.md, "Runner link". Keep these with this deployment's other secrets; no upgrade replaces them. Runners
+# reach the link through the web gateway's port, at the address they reach this server at (RUNNER_LINK_URL=same-origin),
+# so the gateway's own ports go on this host's loopback, where nothing else can collide with them. Compose takes the last
+# COMPOSE_PROFILES in this file: this one is whatever came before it, with runner-link.
+RUNNER_LINK_URL=same-origin
+RUNNER_LINK_ENV_FILE=./deploy/runner-link/behind-web-gateway.env
+RUNNER_LINK_BIND=127.0.0.1
+RUNNER_LINK_PORT=0
+RUNNER_LINK_METRICS_PORT=0
+$1
+COMPOSE_PROFILES=${profiles:+$profiles,}runner-link
+LINES
+}
+
+# The link's lines, in one write at the end of .env. Every line there stays as it was. Compose takes the last value of a
+# name, which is how COMPOSE_PROFILES gains runner-link without its line changing. The secrets stay in this variable
+# and in .env: printf is a builtin, so they are in no process's arguments.
+link_write_env() {
+  local secrets block
+  if ! secrets="$(docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges "$LINK_IMAGE" secrets)"; then
+    link_failed "its image did not make the link's secrets (above)"
+    return 1
+  fi
+  if [ "$(printf '%s\n' "$secrets" | grep -cE '^RUNNER_LINK_(SIGNING_KEY|PUBLIC_KEY|GATEWAY_TOKEN|NATS_(APISERVER|GATEWAY)_(SEED|KEY))="[^"]+"$')" != 7 ]; then
+    link_failed "its image made something other than the link's seven secrets"
+    return 1
+  fi
+  block="$(link_lines "$secrets")"
+  # A last line with no newline stays that line, ended.
+  if [ -f .env ] && [ -n "$(tail -c 1 .env)" ]; then
+    if ! printf '\n' >>.env; then
+      link_failed "this script cannot write to .env"
+      return 1
+    fi
+  fi
+  if ! ( umask 077 && printf '%s\n' "$block" >>.env ); then
+    link_failed "this script cannot write to .env"
+    return 1
+  fi
+  if [ "$(link_env RUNNER_LINK_URL)" != same-origin ]; then
+    link_failed "the link's lines did not reach .env"
+    return 1
+  fi
+  echo "    Wrote the runner link's secrets to .env (not shown); keep them with this deployment's other secrets."
+}
+
+# Its image and, for a deployment with none, its lines in .env.
+link_prepare() {
+  [ "$LINK_STATE" != operator ] || return 0
+  link_build || return 0
+  if [ "$LINK_STATE" = new ]; then link_write_env || return 0; fi
+}
+
+# What a link address answers from this project's network, as scripts/runner-link/door-check.js says it.
+link_door() {
+  $DC run --rm --no-deps -T apiserver node - "$1" <scripts/runner-link/door-check.js 2>/dev/null || echo "unreachable the check did not run"
+}
+
+# The way a runner takes: the web gateway's /runner-link, and where this deployment has an address of its own, that too,
+# through whatever stands in front of it. An address this host cannot reach proves nothing either way.
+link_door_check() {
+  local answer origin
+  answer="$(link_door http://gateway/runner-link)"
+  case "$answer" in
+    "401 UNAUTHENTICATED"*) ;;
+    *) link_failed "the web gateway's /runner-link answered: $answer, not the link gateway's refusal of a request with no token"; return 0 ;;
+  esac
+  origin="$(link_env PUBLIC_ORIGIN)"
+  origin="${origin%/}"
+  case "$origin" in
+    ""|*://localhost|*://localhost:*|*://127.*) return 0 ;;
+  esac
+  answer="$(link_door "$origin/runner-link")"
+  case "$answer" in
+    "401 UNAUTHENTICATED"*) echo "    $origin/runner-link reaches the link gateway." ;;
+    unreachable*) echo "    $origin/runner-link could not be checked from here (${answer#unreachable }); runners reach it from where they are." ;;
+    *) link_failed "$origin/runner-link answered: $answer, not the link gateway. Whatever stands in front of this deployment has to pass WebSocket upgrades on to /runner-link (docs/self-hosting.md, \"Put HTTPS in front\")" ;;
+  esac
+}
+
+# The web gateway keeps the nginx.conf it started on: Compose bind-mounts it as a single file, a new checkout replaces
+# that file under a running container, and Compose sees no change. So it is compared, as pgbackup's script is, and a
+# difference recreates it, a moment's break for web traffic and streams, and only then.
+web_gateway_refresh() {
+  local running
+  running="$($DC ps -q gateway 2>/dev/null || true)"
+  [ -n "$running" ] || return 0
+  if ! docker exec "$running" cat /etc/nginx/conf.d/default.conf | cmp -s - gateway/nginx.conf; then
+    echo "==> Recreating gateway to run this checkout's gateway/nginx.conf"
+    $DC up -d --wait --no-deps --force-recreate gateway
+  fi
+}
+
+# After the images are built, before the apiserver is recreated. NATS and the gateway need nothing of the apiserver to
+# start: its revocation list and switch are read again until they answer. --no-deps, so that nothing else moves.
+link_start() {
+  if [ "$LINK_STATE" = operator ] || [ -n "$LINK_FAILURE" ]; then
+    web_gateway_refresh
+    return 0
+  fi
+  echo "==> Starting the runner link (nats, link-gateway)"
+  if ! $DC up -d --wait --wait-timeout 180 --no-deps nats link-gateway; then
+    link_failed "nats or link-gateway did not come up within 3 minutes"
+    web_gateway_refresh
+    return 0
+  fi
+  web_gateway_refresh
+  link_door_check
+}
+
+# The last thing this script says, and what it exits with.
+link_report() {
+  if [ -n "$LINK_FAILURE" ]; then
+    {
+      echo "!!  The runner link is NOT working: $LINK_FAILURE"
+      printf '%s\n' "$LINK_DETAIL" | sed 's/^/!!    /'
+      echo "!!  This deployment keeps working: everything else was upgraded, and its runners stay on HTTPS. A later build"
+      echo "!!  serves them only over the link and will not start without it, so fix this first, then run this script again:"
+      echo "!!  it keeps what it already wrote to .env. docs/self-hosting.md, \"Runner link\"."
+    } >&2
+    return 1
+  fi
+  case "$LINK_STATE" in
+    new|managed)
+      echo "    Runner link: up. Runners connect at the address they reach this server at, within about 20 minutes, or at once"
+      echo "    as they update themselves. docs/self-hosting.md, \"Runner link\"."
+      case "$(link_env PUBLIC_ORIGIN)" in
+        https://*) ;;
+        *)
+          echo "!!  warning: this deployment's address is plain http, so its runner link is plain ws://: session content and" >&2
+          echo "!!  one-hour link tokens cross the network unencrypted, as its HTTP does today. Put TLS in front of anything" >&2
+          echo "!!  beyond a trusted LAN (docs/self-hosting.md, \"Put HTTPS in front\")." >&2
+          ;;
+      esac
+      ;;
+  esac
+}
+# ── end of the runner link's section ────────────────────────────────────────────────────────────────
+
 # A deployment runs from one checkout, because its bind mounts are relative: ./data/postgres, ./data/pg-archive,
 # ./data/files. From any other directory, a worktree included, Compose would bind that directory's empty ./data: that has
 # served production an empty database, it empties the off-host mirror's source, and every attachment stops reading. So a
@@ -309,10 +581,19 @@ if [ "$GIT_PULL" = auto ]; then
 fi
 if [ "$GIT_PULL" -eq 1 ]; then
   echo "==> git pull --ff-only"
+  SCRIPT_BEFORE_PULL="$(git hash-object "$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]}")")"
   if ! git pull --ff-only; then
     echo "error: git pull --ff-only failed — nothing was built or recreated." >&2
     echo "       Reconcile this checkout with its upstream, or pass --no-pull to deploy it as it is." >&2
     exit 1
+  fi
+  # A pull that changed this file leaves this process reading the file it opened, the old steps with the new tree. So the
+  # new script runs instead, from the start, holding what it needs, and pulls nothing again.
+  if [ "$(git hash-object "$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]}")")" != "$SCRIPT_BEFORE_PULL" ]; then
+    echo "==> The pull changed this script; running the new one"
+    rm -rf "$LOCK_DIR"
+    trap - EXIT
+    exec "$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]}")" "${ORIGINAL_ARGS[@]+"${ORIGINAL_ARGS[@]}"}" --no-pull
   fi
 fi
 
@@ -321,6 +602,12 @@ fi
 # its build arguments. Keep an explicit caller value for reproducible retries of a pinned build.
 DEPLOY_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 export ORBIT_SOURCE_SHA="${ORBIT_SOURCE_SHA:-$DEPLOY_SHA}"
+
+# The runner link (the section above). A build that needs it demands its lines before Compose can render anything, so a
+# deployment with none gets them first; any other waits until what can stop this run before anything is built has had its say.
+link_preflight
+LINK_EARLY=0
+if [ "$LINK_ONLY" -eq 1 ] && [ "$LINK_STATE" = new ]; then LINK_EARLY=1; link_prepare; fi
 
 # The web image now serving publishes the runner release the runners run today. Hand it to the build,
 # so the image built next keeps that release downloadable at /dl/previous/ — the release the control
@@ -339,7 +626,7 @@ fi
 SERVICES="apiserver wiki-worker web"
 # The services Compose lists for this deployment, read once for the Docker channel and the other apiservers below.
 COMPOSE_SERVICES="$($DC config --services 2>/dev/null || true)"
-# Managed runners stay as this deployment's .env has them: this script never writes .env. A deployment
+# Managed runners stay as this deployment's .env has them: this script writes nothing of theirs there. A deployment
 # whose .env switched on the managed-runners-docker profile (a fresh install's scripts/install-server.sh
 # does) runs the Docker channel, which is rebuilt with the rest and recreated after them, and its managed
 # runner image, rebuilt and switched to (the section above). Without that profile, Compose does not list
@@ -352,6 +639,8 @@ if printf '%s\n' "$COMPOSE_SERVICES" | grep -x docker-channel >/dev/null; then
   CHANNEL=docker-channel
   managed_runners_preflight
 fi
+# Once what can stop this run before anything is built has had its say.
+if [ "$LINK_EARLY" -eq 0 ]; then link_prepare; fi
 # The other apiservers a deployment adds in docker-compose.override.yml, apiserver-2 and on (docs/self-hosting.md,
 # "Several apiservers"). They run the apiserver's image and build nothing; they are recreated after it, below.
 # Where Compose lists none, nothing is added.
@@ -366,6 +655,7 @@ if [ -n "$CHANNEL" ]; then
   managed_runner_image_build
   managed_runner_image_switch
 fi
+link_start
 
 # `up -d` only recreates containers whose image or config changed. The locally
 # built images (apiserver, web) change here, and wiki-worker with apiserver's,
@@ -378,14 +668,11 @@ if [ "$PULL_BASE" -eq 1 ]; then
   echo "==> Refreshing base images (postgres, gateway)"
   $DC pull postgres gateway
   echo "==> Recreating the stack (apiserver applies DB migrations on boot)"
-  if [ -n "$CHANNEL" ]; then
-    # Every service but the channel, which follows the apiserver below, and the managed runners' firewall, which an
-    # upgrade leaves as it is, rules and all: only an install or --enable-managed-runner-firewall starts it.
-    ALL_BUT_CHANNEL="$($DC config --services | grep -vxE 'docker-channel|managed-runner-firewall')"
-    $DC up -d --wait $ALL_BUT_CHANNEL
-  else
-    $DC up -d --wait
-  fi
+  # Every service but the channel, which follows the apiserver below, the managed runners' firewall, which an upgrade
+  # leaves as it is, rules and all: only an install or --enable-managed-runner-firewall starts it, and the runner link's
+  # two, which link_start has seen to or leaves alone.
+  ALL_BUT_THOSE="$($DC config --services | grep -vxE 'docker-channel|managed-runner-firewall|nats|link-gateway')"
+  $DC up -d --wait $ALL_BUT_THOSE
 else
   echo "==> Recreating changed services (apiserver applies DB migrations on boot)"
   $DC up -d --wait $SERVICES gateway
@@ -411,5 +698,9 @@ if [ "$PRUNE" -eq 1 ]; then
   docker image prune -f
 fi
 
-echo "✓ Upgrade complete — all services healthy."
 [ -z "$PGBACKUP_NOTICE" ] || printf '%s\n' "$PGBACKUP_NOTICE" >&2
+if ! link_report; then
+  echo "✗ The upgrade finished, and the runner link is not working (above)." >&2
+  exit 1
+fi
+echo "✓ Upgrade complete — all services healthy."

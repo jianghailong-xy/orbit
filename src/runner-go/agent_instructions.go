@@ -213,6 +213,29 @@ func (s *ClaimedSession) insideRecordedWork() bool {
 	return s != nil && s.TaskID != ""
 }
 
+// appendSystemPrompt is what a session's engine is given after its system prompt, ahead of Orbit's own
+// instructions (withOrbitCLIInstructions): the agent's appended prompt, then what the runner has to say about the
+// checkout the session runs in (checkoutInstructions). It is read from the checkout each time an engine's
+// instructions are built, so a checkout made or brought back since the last spawn is described as it now is.
+func (s *ClaimedSession) appendSystemPrompt() string {
+	note := checkoutInstructions(s.WT)
+	if note == "" {
+		return s.Agent.AppendSystemPrompt
+	}
+	if strings.TrimSpace(s.Agent.AppendSystemPrompt) == "" {
+		return note
+	}
+	return strings.TrimRight(s.Agent.AppendSystemPrompt, "\r\n") + "\n\n" + note
+}
+
+// instructionAgent is the session's agent as an engine's instructions are built from it: its appended prompt is
+// the session's (appendSystemPrompt).
+func (s *ClaimedSession) instructionAgent() AgentExecConfig {
+	agent := s.Agent
+	agent.AppendSystemPrompt = s.appendSystemPrompt()
+	return agent
+}
+
 func withOrbitCLIInstructions(configured, executable string, insideRecordedWork, watches bool) string {
 	orbit := orbitCLIInstructions(executable, insideRecordedWork, watches)
 	if orbit == "" {

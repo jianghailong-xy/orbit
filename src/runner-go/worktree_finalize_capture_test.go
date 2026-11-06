@@ -53,7 +53,7 @@ func TestFinalizeStagingFailureDoesNotDestroyTheWork(t *testing.T) {
 	wt := lockedIndexWorktree(t, "sLost")
 
 	finalizeWorktree(wt, false)
-	removeWorktree(wt)
+	removeWorktree(wt, nil)
 
 	_, onBranch := git(wt.RepoDir, "cat-file", "-e", wt.Branch+":work.txt")
 	_, inCheckout := os.Stat(filepath.Join(wt.Path, "work.txt"))
@@ -102,7 +102,7 @@ func TestFinalizeReportsCommitFailure(t *testing.T) {
 		t.Fatalf("the error must carry git's own explanation: %v", err)
 	}
 
-	removeWorktree(wt)
+	removeWorktree(wt, nil)
 	if _, statErr := os.Stat(filepath.Join(wt.Path, "work.txt")); statErr != nil {
 		t.Fatalf("work staged but not committed must survive in the checkout: %v", statErr)
 	}
@@ -133,7 +133,7 @@ func TestFinalizeCommitsWorkAsBefore(t *testing.T) {
 	// …and the checkout is then removable, which is the whole point of committing first.
 	// Finalization no longer performs that removal; removeWorktree, which the sweep calls, is
 	// the only thing that does.
-	removeWorktree(wt)
+	removeWorktree(wt, nil)
 	if _, statErr := os.Stat(wt.Path); !os.IsNotExist(statErr) {
 		t.Fatalf("a captured checkout must still be removed: %v", statErr)
 	}
@@ -158,7 +158,7 @@ func TestFinalizeCleanSessionLeavesNoCommit(t *testing.T) {
 		t.Fatalf("an unchanged session must leave no commit: HEAD %s moved off base %s", head, wt.BaseSha)
 	}
 
-	removeWorktree(wt)
+	removeWorktree(wt, nil)
 	if _, statErr := os.Stat(wt.Path); !os.IsNotExist(statErr) {
 		t.Fatalf("an unchanged session's checkout is still removable: %v", statErr)
 	}
@@ -177,7 +177,7 @@ func TestTheSingleDeleterHonoursTheFinalizeVerdict(t *testing.T) {
 		t.Fatal("precondition: staging was supposed to fail")
 	}
 
-	removeWorktree(wt)
+	removeWorktree(wt, nil)
 
 	if _, err := os.Stat(filepath.Join(wt.Path, "work.txt")); err != nil {
 		t.Fatalf("the checkout holding the only copy must survive a removable verdict: %v", err)
@@ -200,7 +200,7 @@ func TestOrphanSweepKeepsUncapturedWork(t *testing.T) {
 	stranded.Path = inRoot
 
 	finalizeWorktree(stranded, false)
-	removeWorktree(stranded)
+	removeWorktree(stranded, nil)
 	if _, err := git(stranded.RepoDir, "cat-file", "-e", stranded.Branch+":work.txt"); err == nil {
 		t.Fatal("precondition: the locked index was supposed to keep the work off the branch")
 	}

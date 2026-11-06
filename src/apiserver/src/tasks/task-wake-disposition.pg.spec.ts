@@ -42,6 +42,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * Waking is not opening a session: the SAME fact lands in two different places, and the difference

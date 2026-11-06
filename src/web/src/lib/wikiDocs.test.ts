@@ -28,7 +28,6 @@ import {
   WIKI_MARK_WITHDRAWN,
   WIKI_NEXT_MARKED,
   WIKI_NO_DOCUMENTS,
-  WIKI_NO_DOCUMENTS_NOTE,
   WIKI_NO_QUOTE_GIVEN,
   WIKI_OPEN_THE_ENTRY,
   WIKI_REWRITE_PENDING,
@@ -427,9 +426,6 @@ describe('the home, by the confirmed plan', () => {
     expect(wikiHomeLine({ ...read, plan: null }, 1)).toBe('1 article');
     expect(wikiHomeLine(undefined, 0)).toBe(WIKI_NO_DOCUMENTS);
     expect(WIKI_NO_DOCUMENTS).toBe('No documents yet');
-    expect(WIKI_NO_DOCUMENTS_NOTE).toBe(
-      'This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space.',
-    );
   });
 
   it('folds what is not written yet into one row a category, saying how many', () => {

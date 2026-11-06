@@ -172,7 +172,7 @@ function controllerFor(prisma: unknown): RunnerApiController {
     {} as never,
     {} as never,
     {} as never,
-    {} as never,
+    { issue: async () => 'orchestration-credential' } as never,
     {} as never,
     { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
   );

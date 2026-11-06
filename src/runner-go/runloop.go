@@ -782,22 +782,28 @@ func heartbeatCommit(
 	advertised heartbeatSupervisorSnapshot,
 	commit func(CommitCommand) commitOutcome,
 ) commitOutcome {
+	// What the person pressed, so every message about it reads as that: a discard's refusal or
+	// receipt must not say "commit" (abandoned_checkout.go).
+	operation := "commit"
+	if req.Discard {
+		operation = "discard"
+	}
 	release, receipt, admitted := pool.beginManualWorktreeOperation(
 		req.SessionID,
 		advertised.supervisor,
 		advertised.permitGeneration,
 		false,
-		"commit",
+		operation,
 	)
 	if !admitted {
-		logln("not committing", req.SessionID+":", receipt)
+		logln("not "+operation+"ing", req.SessionID+":", receipt)
 		return commitOutcome{Status: "error", Message: receipt}
 	}
 	if receipt != "" {
-		logln("committing", req.SessionID+":", receipt)
+		logln(operation+"ing", req.SessionID+":", receipt)
 	}
 	res := commit(req)
-	syncManagedVolume("a commit")
+	syncManagedVolume("a " + operation)
 	release()
 	res.Message = appendWorktreeReceipt(res.Message, receipt)
 	return res
@@ -964,11 +970,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// A copy of the Google sign-in lives in a session's directory only while an agy runs on it; the
 	// copies a crash or a kill left behind go before any session starts again.
 	pruneAntigravityTokenCopies()
-	// The runner link (link_mode.go): t's daemon calls move to it when the control plane asks, and until
-	// then the shadow (link_shadow.go) mirrors the heartbeats and event batches t delivers over HTTPS on a
-	// connection of its own, which the work never waits on. Started before anything sends on t, whose
-	// requests it watches.
-	stopLink := startLink(cfg, t)
+	// The runner link (link_mode.go), which carries t's daemon calls. Started before anything sends on t.
+	stopLink := startLink(t)
 	defer stopLink()
 
 	// This machine's free-space floor (Runner.minFreeDiskMb), kept in sync the same way and for
@@ -978,15 +981,22 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// Zero is "no floor", which is what both a machine with none configured and a control plane
 	// too old to send one mean, and what the sweep reads as "no disk-pressure gate".
 	var diskFloorMb atomic.Int64
+	// The storage budget a managed runner's checkouts are held to (StorageBudget), kept in sync the
+	// same way and stored beside the floor, with the checkouts the sweep has removed since it was
+	// measured (checkoutStorage). No budget is the floor's rule as it was.
+	var storage checkoutStorage
+	// Whether session checkouts here are cloned from their workspace's checkout or written out by git: the worktrees
+	// root's filesystem is probed at start, so that the log says which before the first checkout is made. A checkout
+	// made later probes again only on a filesystem not probed yet (clone_checkout.go).
+	_, _ = clonableFilesystem(worktreesDir())
 
 	loopCtx, stopLoop := context.WithCancelCause(context.Background())
 	loopCancel := func() { stopLoop(nil) }
-	// Once the runner stops, a runner link with no connection is not waited for: the sessions' last events go over
-	// HTTPS while the control plane still takes it (linkMode.stopping).
-	if t.link != nil {
-		stopLinkStopping := context.AfterFunc(loopCtx, t.link.stopping)
-		defer stopLinkStopping()
-	}
+	// The other half of what a finished session's checkout can hold: one that still has
+	// uncommitted work is never reclaimed, so the control plane is told which ones those are
+	// (abandoned_checkout.go). Its own goroutine and its own clock — it reads every checkout,
+	// and the claim loop is not where a minute of `git status` belongs.
+	go runAbandonedCheckoutScans(loopCtx, t, pool)
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	monitorCtx, stopMonitor := context.WithCancel(context.Background())
@@ -1443,6 +1453,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				floorMb = int64(*resp.MinFreeDiskMb)
 			}
 			diskFloorMb.Store(floorMb)
+			// The storage budget is replaced the same way: an answer without one means there is none.
+			storage.budget.Store(resp.StorageBudget)
 			// Process ownership loss first. A terminal row can appear in both lists;
 			// marking its exact advertised epoch detaching before a durable cancel
 			// makes that overlap take the no-finalize path.
@@ -1657,7 +1669,13 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					res, cached := commitOutcomes[key]
 					mergeMu.Unlock()
 					if !cached {
-						res = heartbeatCommit(pool, req, advertised, commitWorktree)
+						work := commitWorktree
+						if req.Discard {
+							// The same relay, the same fence and the same result: only what it does
+							// to the checkout differs (abandoned_checkout.go).
+							work = discardWorktree
+						}
+						res = heartbeatCommit(pool, req, advertised, work)
 						if req.OperationID != "" {
 							mergeMu.Lock()
 							for old := range commitOutcomes {
@@ -2072,7 +2090,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	}
 	if worktreeGC.due(time.Now()) {
 		liveSet := pool.ids()
-		pressure := measureWorktreePressure(diskFloorMb.Load())
+		pressure := measureWorktreePressure(diskFloorMb.Load(), &storage)
 		gcWorktrees(t, liveSet, pressure)
 		worktreeGC.sweepResumable(t, pool, pressure)
 		gcUploads(liveSet)
@@ -2152,7 +2170,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// out is exactly when its disk gets tight. It costs one round trip plus a directory
 		// listing when nothing is due, and the claim long-poll guarantees a lap every 35 seconds.
 		if worktreeGC.due(time.Now()) {
-			pressure := measureWorktreePressure(diskFloorMb.Load())
+			pressure := measureWorktreePressure(diskFloorMb.Load(), &storage)
 			gcWorktrees(t, pool.ids(), pressure)
 			worktreeGC.sweepResumable(t, pool, pressure)
 		}

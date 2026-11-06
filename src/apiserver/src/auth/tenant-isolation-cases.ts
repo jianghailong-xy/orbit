@@ -113,6 +113,9 @@ export interface Tenant {
   wikiArticleSlug: string;
   wikiArticlePart: number;
   wikiDocSlug: string;
+  /** The census document's one section, and the version a rewrite of it kept (`docs.versions`). */
+  wikiDocSectionKey: string;
+  wikiDocVersionId: string;
   wikiTopicSlug: string;
   /** For /admin/*: a user an administrator acts on (with a profile photo), one of its tokens, a global provider. */
   adminSubjectId: string;
@@ -183,6 +186,8 @@ const workspaceRoutes = (prefix: 'agents' | 'workspaces', ruleOf: (t: Tenant) =>
 
 /** A message for a session, under a client turn id of its own: a replayed one would be answered as a replay. */
 const turn = (content: string) => ({ clientTurnId: `census-${content}-${randomUUID()}`, content });
+/** A wiki chat's opening turn key: a UUID, as the chat's create takes nothing else (contract `chat.create`). */
+const CENSUS_CHAT_TURN = randomUUID();
 
 /**
  * A dependency graph branch cursor, minted the way the server mints one for `ownerId` (tasks.service
@@ -466,6 +471,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /runners/:id': { request: (of) => ({ params: { id: of.runnerId } }) },
   'PATCH /runners/:id': { request: (of) => ({ params: { id: of.runnerId }, body: { displayName: 'renamed by the census' } }) },
   'DELETE /runners/:id': { request: (of) => ({ params: { id: of.spare.runnerId } }) },
+  // What a machine's finished sessions left behind holding uncommitted work. A's runner is not
+  // B's to read, and one of A's sessions is not a checkout B may ask the diff of.
+  'GET /runners/:id/abandoned-checkouts': { request: (of) => ({ params: { id: of.runnerId } }) },
+  'GET /runners/:id/abandoned-checkouts/:sessionId': {
+    request: (of) => ({ params: { id: of.runnerId, sessionId: of.sessionId } }),
+  },
   'GET /runners/:id/login': { request: (of) => ({ params: { id: of.runnerId } }) },
   'POST /runners/:id/login': { request: (of) => ({ params: { id: of.runnerId }, body: { engine: 'claude' } }) },
   'POST /runners/:id/login/code': { request: (of) => ({ params: { id: of.runnerId }, body: { code: 'census-code' } }) },
@@ -557,6 +568,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     }),
   },
   'POST /sessions/:id/commit': { request: (of) => ({ params: { id: of.sessionId } }) },
+  // Another account's session is not B's to throw work away from, whatever B knows of it.
+  'POST /sessions/:id/checkout/discard': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/adopt-branch': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/retry-message': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/retry-message': { request: (of) => ({ params: { id: of.sessionId }, body: {} }) },
@@ -696,6 +709,15 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'DELETE /wiki/spaces/:id/workspaces/:workspaceId': {
     request: (of, mine) => ({ params: { id: of.wikiSpaceId, workspaceId: mine.workspaceId } }),
   },
+  'DELETE /wiki/spaces/:id': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
+  // A space's wiki chats (contract `chat.routes`): another account's space is the plain 404 before anything is read.
+  'GET /wiki/spaces/:id/chats': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
+  'POST /wiki/spaces/:id/chats': {
+    request: (of, mine) => ({
+      params: { id: of.wikiSpaceId },
+      body: { workspaceId: mine.workspaceId, content: 'from the census', clientTurnId: CENSUS_CHAT_TURN },
+    }),
+  },
   'POST /wiki/spaces/:id/verifications/reopen': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/articles': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/article-index': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
@@ -706,6 +728,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /wiki/spaces/:id/docs': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/doc-index': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/docs/:slug': { request: (of) => ({ params: { id: of.wikiSpaceId, slug: of.wikiDocSlug } }) },
+  'GET /wiki/spaces/:id/docs/:slug/sections/:key/versions': {
+    request: (of) => ({ params: { id: of.wikiSpaceId, slug: of.wikiDocSlug, key: of.wikiDocSectionKey } }),
+  },
+  'GET /wiki/spaces/:id/doc-changes': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
+  // The owner puts the census section back as its version kept it: written, never a 404.
+  'POST /wiki/doc-versions/:id/restore': { request: (of) => ({ params: { id: of.wikiDocVersionId } }) },
   'GET /wiki/spaces/:id/share': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'PUT /wiki/spaces/:id/share': { request: (of) => ({ params: { id: of.wikiSpaceId }, body: {} }) },
   'DELETE /wiki/spaces/:id/share': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
@@ -1158,6 +1186,17 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   },
   'POST /wiki/spaces/:id/workspaces body workspaceId': {
     request: (of, mine) => ({ params: { id: mine.wikiSpaceId }, body: { workspaceId: of.workspaceId } }),
+  },
+  // A chat named into another account's workspace: no such workspace for this one (WikiChat.chosenWorkspace).
+  'POST /wiki/spaces/:id/chats body workspaceId': {
+    request: (of, mine) => ({
+      params: { id: mine.wikiSpaceId },
+      body: { workspaceId: of.workspaceId, content: 'from the census', clientTurnId: CENSUS_CHAT_TURN },
+    }),
+  },
+  // Where a space's chats run, set to another account's workspace: not one this space's chats may run in.
+  'PATCH /wiki/spaces/:id body chat.workspaceId': {
+    request: (of, mine) => ({ params: { id: mine.wikiSpaceId }, body: { chat: { workspaceId: of.workspaceId } } }),
   },
   'POST /wiki/changesets/:id/decide body decisions[].opId': {
     request: (of, mine) => ({

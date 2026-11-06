@@ -57,6 +57,7 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /wiki/spaces/:id/verifications/reopen',
   'POST /wiki/spaces/:id/workspaces',
   'DELETE /wiki/spaces/:id/workspaces/:workspaceId',
+  'DELETE /wiki/spaces/:id',
   'GET /wiki/changesets/:id',
   'GET /wiki/spaces/:id/plan',
   'GET /wiki/spaces/:id/plan/versions',
@@ -66,4 +67,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /wiki/spaces/:id/plan/redraft',
   'POST /wiki/spaces/:id/plan/versions/:version/build',
   'POST /wiki/plan-proposals/:id/decide',
+  // The owner's restore of a version a section kept (contract `docs.versions.restore`): the user door's one write to a
+  // document, which refuses an acting session WIKI_OWNER_CHANNEL_ONLY as the plan's routes do.
+  'POST /wiki/doc-versions/:id/restore',
+  // Making a wiki chat (contract `chat.door`): the owner's interactive credential's, as the binding writes are.
+  'POST /wiki/spaces/:id/chats',
 ];

@@ -40,6 +40,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { assertTripwireQuiet, bootScrubbedApiserver } from '../test-support/managed-runner-apiserver';
+import '../test-support/daemon-routes-over-http';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const WRITES = ['ensure', 'retry', 'wake', 'sleep', 'delete'];

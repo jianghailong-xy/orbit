@@ -98,9 +98,9 @@ test('turn-complete persists Codex tokens and preserves Claude model usage', {
 
   async function rows(sessionId: string) {
     return (await sql.query(
-      `SELECT model, input_tokens AS "inputTokens", output_tokens AS "outputTokens",
-              cache_creation_input_tokens AS "cacheCreationInputTokens",
-              cache_read_input_tokens AS "cacheReadInputTokens", cost_usd AS "costUsd"
+      `SELECT model, input_tokens::int AS "inputTokens", output_tokens::int AS "outputTokens",
+              cache_creation_input_tokens::int AS "cacheCreationInputTokens",
+              cache_read_input_tokens::int AS "cacheReadInputTokens", cost_usd AS "costUsd"
          FROM usage WHERE session_id = $1::uuid ORDER BY model`,
       [sessionId],
     )).rows;

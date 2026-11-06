@@ -246,14 +246,16 @@ interface SessionShape {
   lastTurnAt?: Date | null;
   title?: string;
   createdAt?: Date;
+  /** The space a wiki chat belongs to (migration 0476): written with the row, as the chat's create writes it. */
+  wikiChatSpaceId?: string | null;
 }
 
 async function session(h: Harness, ownerId: string, shape: SessionShape): Promise<string> {
   const id = randomUUID();
   await h.sql.query(
     `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id",
-                            "task_id","status","last_turn_at","dispatch_origin","created_at","updated_at")
-     VALUES ($1,$2,'p',$3,$3,$4,$5,$6,$7::run_status,$8,'USER',$9,now())`,
+                            "task_id","status","last_turn_at","dispatch_origin","created_at","updated_at","wiki_chat_space_id")
+     VALUES ($1,$2,'p',$3,$3,$4,$5,$6,$7::run_status,$8,'USER',$9,now(),$10)`,
     [
       id,
       shape.title ?? 'a session',
@@ -264,6 +266,7 @@ async function session(h: Harness, ownerId: string, shape: SessionShape): Promis
       shape.status ?? 'AWAITING_INPUT',
       utc(shape.lastTurnAt === undefined ? minutesAgo(30) : shape.lastTurnAt),
       utc(shape.createdAt ?? minutesAgo(60)),
+      shape.wikiChatSpaceId ?? null,
     ],
   );
   return id;
@@ -1271,6 +1274,60 @@ test('a read of the wiki is left out with its result, under any engine\'s name a
   for (const [one, words] of [[proposed, /WIKI-PROPOSED/u], [cli, /WIKI-CLI-PROPOSED/u], [help, /WIKI-HELP/u]] as const) {
     assert.match(kept.text, words);
     assert.ok(keptCited.has(one.toolCallId), 'and its line cites its call');
+  }
+});
+
+test("a wiki chat's drafting calls are left out with their results, the owner's words stay, and the same calls anywhere else stay too", { skip }, async () => {
+  const h = await boot();
+  const owner = await account(h, 'wiki-chat-drafts');
+  const machine = await runner(h, owner.id);
+  const ws = await workspace(h, owner.id);
+  const spaceId = await space(h, owner, ws);
+  await maintained(h, owner, spaceId, ws);
+
+  /** One conversation: the owner's question, a draft made three ways, each failing once and then working, and a call of
+   *  the wiki tools that does not draft. A command that fails and then works is a signal the dossier packs a window
+   *  around; a tool of any other kind weighs too little to open one, so each such draft is followed by a check that
+   *  carries it in — in the session that is no chat, which is the control. */
+  const conversation = async (chat: boolean) => {
+    const talk = await session(h, owner.id, {
+      workspaceId: ws, runnerId: machine.id, status: 'SUCCEEDED', lastTurnAt: minutesAgo(20),
+      title: 'Is the lease really ninety seconds?', wikiChatSpaceId: chat ? spaceId : null,
+    });
+    await turn(h, talk, 'OWNER-WORDS: the lease is two minutes now, the page still says ninety seconds.', { at: minutesAgo(50) });
+    const failedThenWorked = async (name: string, input: Record<string, unknown>, words: string, at: number) => {
+      await tool(h, talk, name, input, 'Exit code 1\nnot yet', { isError: true, at: minutesAgo(at + 0.5) });
+      return tool(h, talk, name, input, `${words} recorded`, { at: minutesAgo(at) });
+    };
+    const check = (at: number) => failedThenWorked('Bash', { command: `npm test -- lease-${at}` }, `CHECK-${at}`, at);
+    const proposed = await failedThenWorked('mcp__orbit__wiki_propose', { rationale: 'the lease changed' }, 'DRAFT-PROPOSED', 47);
+    await check(46);
+    const rewrite = await failedThenWorked('orbit__wiki_draft', { kind: 'rewrite', sections: ['1.1 §3'] }, 'DRAFT-REWRITE', 45);
+    await check(44);
+    const cli = await failedThenWorked('Bash', { command: 'orbit wiki propose --file ops.json' }, 'DRAFT-CLI', 43);
+    const help = await failedThenWorked('Bash', { command: 'orbit wiki --help' }, 'WIKI-HELP', 42);
+    await event(h, talk, 'assistant', { text: 'Drafted: the lease section, from main.' }, minutesAgo(40));
+    return { talk, drafts: [proposed, rewrite, cli], help };
+  };
+
+  const chat = await conversation(true);
+  const elsewhere = await conversation(false);
+  const inChat = await buildDossier(h.prisma, (await loadDossierRecords(h.prisma, owner.id, chat.talk))!, { literals: [] });
+  const outside = await buildDossier(h.prisma, (await loadDossierRecords(h.prisma, owner.id, elsewhere.talk))!, { literals: [] });
+
+  const citedIn = new Set(inChat.sources.map((source) => toUuid(source.id)));
+  for (const words of [/DRAFT-PROPOSED/u, /DRAFT-REWRITE/u, /DRAFT-CLI/u]) assert.doesNotMatch(inChat.text, words, "no draft's result");
+  assert.doesNotMatch(inChat.text, /wiki_propose|wiki_draft|orbit wiki propose/u, 'and no draft call');
+  for (const draft of chat.drafts) assert.ok(!citedIn.has(draft.toolCallId) && !citedIn.has(draft.useEventId), 'and no line cites one');
+  assert.match(inChat.text, /OWNER-WORDS: the lease is two minutes now/u, "the owner's words stay, first-hand as ever");
+  assert.match(inChat.text, /WIKI-HELP/u, 'a call of the wiki tools that drafts nothing stays');
+  assert.ok(citedIn.has(chat.help.toolCallId));
+
+  // The same calls in a session that is no chat are what they always were: proposals, and in the dossier.
+  const citedOutside = new Set(outside.sources.map((source) => toUuid(source.id)));
+  for (const [draft, words] of [[elsewhere.drafts[0], /DRAFT-PROPOSED/u], [elsewhere.drafts[1], /DRAFT-REWRITE/u], [elsewhere.drafts[2], /DRAFT-CLI/u]] as const) {
+    assert.match(outside.text, words);
+    assert.ok(citedOutside.has(draft.toolCallId), 'and its line cites its call');
   }
 });
 

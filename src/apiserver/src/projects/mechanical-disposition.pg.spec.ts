@@ -53,6 +53,7 @@ import {
   TaskExceptionInputProducer,
 } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * The four rounds that needed no judgement, and the one action each one settles.

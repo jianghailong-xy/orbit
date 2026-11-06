@@ -81,11 +81,22 @@
       "addable": "The live workspaces Wiki settings' Add workspace offers: no repository, and in no wiki. One the owner left out of another space counts as in none. inWiki is false in every row.",
       "clients": "Web, macOS/iOS and Android draw it as the Workspaces section between Review mode and Maintenance (docs/mocks/wiki/38-workspaces)."
     },
+    "delete": {
+      "route": "DELETE /api/wiki/spaces/:id",
+      "answer": "{ spaceId }. Another account's space, or one already gone, is the plain 404.",
+      "who": "The owner's alone: a request with a session header is refused WIKI_OWNER_CHANNEL_ONLY and a personal access token OWNER_INTERACTIVE_CREDENTIAL_REQUIRED. No agent tool and no CLI command reaches it.",
+      "takes": "The space and everything hanging off it, by foreign key in one transaction, its public link included. It cannot be undone, and a failure leaves all of it.",
+      "keeps": "Workspaces, sessions, tasks and projects. Text that names an entry keeps its words, and an orbit-wiki: link in it names nothing.",
+      "runningJobs": "Not waited for and not refused: a job's row goes with its space, so every write of its claim matches nothing, and its next write that needs the space fails, which ends the attempt with nothing left to requeue. A repository operation's result is answered 404, which a runner takes as the operation being gone.",
+      "repository": "A space with a repository is made again, empty, by the next session on that repository to use a wiki tool (`binding.automatic`), and asks for its plan's first draft like any new space. Its workspaces' rows went with the old space, a left-out mark among them. A space with no repository stays gone, and a session bound to it is refused WIKI_SPACE_UNBOUND.",
+      "clients": "Web has it on a wiki's sidebar row and at the foot of Wiki settings; macOS/iOS and Android at the foot of Wiki settings. Each asks first, naming the wiki and how many entries and documents go (docs/mocks/wiki-delete)."
+    },
     "list": {
       "route": "GET /api/wiki/spaces",
-      "row": "Every space of the owner, by slug: the space as GET /api/wiki/spaces/:id answers it, with pendingOps, planWaiting, workspaceIds and docs, which the one-space read does not carry. A client reading a server older than the last three takes them as absent.",
+      "row": "Every space of the owner, by slug: the space as GET /api/wiki/spaces/:id answers it, with pendingOps, planWaiting, chatWaiting, workspaceIds and docs, which the one-space read does not carry. A client reading a server older than the last four takes them as absent.",
       "pendingOps": "The ops of its changesets that wait in Review (decision pending). Plan proposals are not ops and are not in it. Over the owner's spaces it is what the Activity page's first banner and Review's head show.",
       "planWaiting": "The things of its plan that wait on the owner, one each: the draft, revision or build on its way (the job plan.routes.state shows) that is held — by the server (plan.jobs.held), or made and not started while the maintenance workspace's runner is offline; the draft or revision that failed with no version stored since it was asked for; the draft waiting to be confirmed; and every proposal waiting. What is only going on (queued, drafting, writing) and a build that failed are not counted. The runner is the one the space's maintenance workspace is on, online by the runners list's own rule (isRunnerOnline); with no maintenance workspace, or one deleted or without a runner, it is unknown, and unknown is not offline. The count web wikiPlanPending and OrbitKit WikiPlanLogic.pending make, held by all three to the vectors of src/shared/src/wiki-docs.fixture.json plan.states (each case's pending). Added to pendingOps over the owner's spaces, it is the number waiting on the owner that the drawer, the web sidebar and the Wiki's Activity badge show — the sum of the Activity page's amber banners.",
+      "chatWaiting": "The space's applied chat cards whose rewrite waits on the owner, one each (chat.waiting, wikiChatWaiting): held up, or read the same or failed and not seen. Added to pendingOps and planWaiting over the owner's spaces it is W on web and iOS — the drawer, the sidebar and the Activity badge — and Activity draws it as one amber banner (chat.waiting.banner). A client without the chat (Android, this phase) reads no chatWaiting and its W stays the other two, every one of which it can open. Open cards and approvals are not in it (chat.waiting.notCounted).",
       "workspaceIds": "The workspaces in it (binding) that are not deleted: the ones a row keeps there in the order they were bound, then the ones on its repository: public ids, like every id on the user door.",
       "docs": "{ written, total }: its confirmed plan's documents and how many are written, as docs.reads.directory counts them; null while it has no confirmed plan."
     },
@@ -137,6 +148,17 @@
         },
         "bounds": { "dailyRunLimit": { "min": 1, "max": 48 }, "lookbackDays": { "min": 0, "max": 365 } },
         "channel": "The owner's alone: PATCH /api/wiki/spaces/:id on the user door with no session header — or POST /api/wiki/spaces, whose maintenance is checked before the space is made and then written as the PATCH writes it (plan.jobs.trigger) — and WIKI_OWNER_CHANNEL_ONLY otherwise. A request names any of enabled, workspaceId, dailyRunLimit and lookbackDays (a provider it names is dropped, keys.provider); what it leaves out stays as it was, and lookbackDays null is a value (all history), not a key left out. A stored value out of bounds, or of a key this contract no longer has, reads as the default."
+      },
+      "chat": {
+        "type": "object",
+        "phase": "wiki chat, contract C2 (2026-11-06)",
+        "default": {
+          "workspaceId": null
+        },
+        "keys": {
+          "workspaceId": "The workspace this space's chats run in (chat.workspace): a public id on the user door, null until the owner first chooses. Only an eligible workspace is stored (chat.workspace.eligible); a stored one that stops being eligible is left as it is and not used, and the panel asks again."
+        },
+        "channel": "The owner's alone: PATCH /api/wiki/spaces/:id on the user door with no session header — WIKI_OWNER_CHANNEL_ONLY otherwise — or the chat's create naming another workspace (chat.create.rules). A request names workspaceId or leaves the key as it was; null forgets it."
       },
       "reservedForPhase2": ["embedding"]
     }
@@ -601,7 +623,7 @@
     "values": ["owner", "confirmed", "auto", "unreviewed", "proposed", "external"],
     "meaning": {
       "owner": "the owner wrote it: an owner's own add or supersede",
-      "confirmed": "an agent, a maintenance run, an import or a watch proposed it and the owner accepted it, as written or edited — or accepted its spot check, or confirmed it from the entry itself (reviewModes.entryConfirm)",
+      "confirmed": "an agent, a maintenance run, an import or a watch proposed it and the owner accepted it, as written or edited — or accepted its spot check, or confirmed it from the entry itself (reviewModes.entryConfirm), or applied a card of a chat (reviewModes.chat)",
       "auto": "the space's review mode applied it and no person has looked: Tiered for the owner's own words or a machine-verified entry, Automatic for what its verification found supported by the sources, a note's words alone not counting. Pushed; labelled Auto",
       "unreviewed": "Tiered applied it at once without the owner's words or a machine verification behind it; Automatic's verification found its sources support it only in part, could read none of them, or verified what a session that read the web proposed (reviewModes.verification.evidence); a revert or a rejected spot check restored it; or the close of a history backfill found it resting on a note with nothing first-hand beside it (maintenance.job.server.backfill.downgrade). Shown, labelled Unreviewed, and never pushed",
       "proposed": "not accepted: every proposed entry and every rejected one",
@@ -615,6 +637,7 @@
       "spotCheckAccepted": "confirmed",
       "undoneByRevertOrSpotCheck": "unreviewed",
       "entryConfirmed": "confirmed",
+      "chatApplied": "confirmed: the owner's Apply or Edit of a chat's card (reviewModes.chat); a principle's is owner, the owner's own write",
       "everyOtherAppliedOp": "unchanged"
     },
     "edited": "An owner who edits a proposal before accepting it is recorded as the author of the revision that results, and the entry's trust is still confirmed."
@@ -845,6 +868,13 @@
       "does": "The owner's Confirm of an active entry whose trust is auto or unreviewed, tainted or not: a revision the owner authored — the same content, resting on the current revision's live sources — makes its trust confirmed, and it is pushed from then on. The ops the review mode applied to it that nobody had answered, and a spot check still open on it, are answered accepted, so a later revert of their run leaves it as the owner kept it. Any other entry answers 409: a proposal is accepted in Review, and what the owner wrote or confirmed is theirs already."
     },
     "import": "An import, a maintenance run, an agent and a watch are treated alike: an origin-import changeset submitted in an automatic space waits for its verification like any other, and the import's own verdicts reach it through verification.who.import; an op citing only its note is no more than unreviewed (verification.evidence.secondHand). A source may be a bare record id with no quote. The idempotency key is what keeps a replayed batch from writing twice.",
+    "chat": {
+      "phase": "wiki chat, contract C2 (2026-11-06)",
+      "rule": "A chat's card is no op of the review mode (chat.drafts): in manual, tiered and automatic alike nothing of it applies until the owner presses, and nothing of it waits in Review or for a verification. The press is the owner's acceptance (design section 7.2): Apply records the card's ops as a changeset of origin agent, its session the chat, and accepts every op by the owner in the same transaction — decision accepted, or edited for Edit — so its entries are confirmed (trust.onApply.chatApplied) and a principle is the owner's (owner). No mode touches it: no verification even in automatic, whose verdict could otherwise overrule the owner's own words in front of them; no spot check is drawn from it; the circuit breaker does not count it; and it takes no place in pendingOpsPerSpace, opsPerTurn or opsPerSession, since it never waits.",
+      "floors": "Each floor holds as written for the owner's own word: principleOwnerOnly, because only the owner's press writes a chat's principle op (it is drafted without WIKI_KIND_OWNER_ONLY); taintedWaits, because the press is a person vouching for it (push.eligible.taintedOnlyWithTrust), and the card says Based on web content before it is pressed (chat.copy.card.web); ownerVouchedWaits, because the owner is the one deciding; and opsPerChangeset still bounds a card.",
+      "revert": "The card's Undo (chat.presses.undo) reverts a chat Apply's changeset through revert's own writes and idempotency key, though the owner accepted its ops by that press, and restores the sections the card's rewrite wrote; the revert route given that changeset does the same, one path. The changeset is no run (run.read.appliedByMode null): Activity folds it into no row and offers no Revert run… for it.",
+      "otherSessions": "A session that is not a chat proposes as before, under its space's mode (effect): nothing here changes wiki_propose outside a chat."
+    },
     "rules": {
       "pitfallMinSessions": 2,
       "spotCheckEvery": 10,
@@ -1810,7 +1840,7 @@
       "readers": "The owner, on the user door. Another owner's space or document is a plain 404."
     },
     "who": {
-      "write": "The server's docs_build and maintain jobs (build.server; origin maintenance, no session and no user), and an import the API server's container runs itself (origin import, no session and no user); no door builds either, and the user door has no write route: any other caller is an error of the server's own code (WikiDocs.assertWriter). Every write asks requireConfirmedPlan first (plan.guard): with no confirmed plan it is WIKI_PLAN_UNCONFIRMED.",
+      "write": "The server's docs_build and maintain jobs (build.server; origin maintenance, no session and no user) — and, once it is a kind, the docs_follow job (follow), as theirs — and an import the API server's container runs itself (origin import, no session and no user). No door builds a document, and the user door's one write is the owner's restore of a version a section kept (versions.restore), which brings back text a job wrote and writes none of its own: any other caller is an error of the server's own code (WikiDocs.assertWriter). Every write asks requireConfirmedPlan first (plan.guard): with no confirmed plan it is WIKI_PLAN_UNCONFIRMED.",
       "read": "The owner, on the user door."
     },
     "routes": {
@@ -1820,7 +1850,7 @@
     },
     "reads": {
       "directory": "{ spaceId, plan: { version, confirmedAt } | null, docs: { total, written }, categories }: the confirmed plan's categories in its order (number from 1), each with its documents (number <category>.<n>, title, question, written, status, updatedAt, planVersion, and lead: its two lines on the home, null for one not written — lead) and each document's sections (number, title, kind, written, stale). A space with no confirmed plan has none.",
-      "doc": "One document of the confirmed plan: its number, title, question, audience, scope (scopeOut's documents with their number and title), category, length, status, and when, from which plan version and at which origin/main commit (repoSha) it was written; its sections in the plan's order, each with the commit it was generated at and its blocks, a block's sentences each with its status, its footnote numbers, its new tokens and, once withdrawn, why, when, and through which entry or for which repository file (entryId, path — one of the two); its footnotes, numbered by first appearance — the same original and quote cited twice is one number — each with its kind, verdict, who checked it, its quote, its location (path@sha#Lstart-end, or <kind>:<record id>#c<start>-<end>) and what the page links to (links): a repository original's path, sha, lines, section, symbol and excerpt; a record's id (recordId), character range, session (sessionId, with recordId the pair a turn's, an event's or a tool call's deep link needs) and its title, number, time and label, task and project and their titles, a note's path; and its via entry; and the via entries as they stand now, with the footnotes each carried. A document of the plan not written yet is written false with its sections unwritten; one the plan does not have is a 404. counts and unsourcedShare are its sentences' as they stand.",
+      "doc": "One document of the confirmed plan: its number, title, question, audience, scope (scopeOut's documents with their number and title), category, length, status, and when, from which plan version and at which origin/main commit (repoSha) it was written; its sections in the plan's order, each with the commit it was generated at and its blocks, a block's sentences each with its id (a public id: what a chat's selection names, chat.notes.wikiContext), its status, its footnote numbers, its new tokens and, once withdrawn, why, when, and through which entry or for which repository file (entryId, path — one of the two); its footnotes, numbered by first appearance — the same original and quote cited twice is one number — each with its kind, verdict, who checked it, its quote, its location (path@sha#Lstart-end, or <kind>:<record id>#c<start>-<end>) and what the page links to (links): a repository original's path, sha, lines, section, symbol and excerpt; a record's id (recordId), character range, session (sessionId, with recordId the pair a turn's, an event's or a tool call's deep link needs) and its title, number, time and label, task and project and their titles, a note's path; and its via entry; and the via entries as they stand now, with the footnotes each carried. A document of the plan not written yet is written false with its sections unwritten; one the plan does not have is a 404. counts and unsourcedShare are its sentences' as they stand.",
       "index": "Every document of the confirmed plan, and every section whose title no other document of the plan shares — the ones every document has (known pitfalls, conventions, overview) are left out — each with its document's number and title, its category and whether it is written, in title order.",
       "writerState": "{ spaceId, planVersion, docs: [{ slug, planVersion, status, repoSha, updatedAt, sections: [{ key, materialSha256, repoSha, stale, generatedAt }] }] }: what is written, for a run to tell which sections to write again — a stale one, one whose material changed, or one whose repoSha origin/main has moved past in what it cites.",
       "writerDoc": "One document as it is written, for the server's build and maintenance jobs: the same answer as reads.doc. A job reads it to write a document's overview when the sections it summarizes were left unchanged, their sentences and footnotes as they stand.",
@@ -1898,7 +1928,421 @@
         "systemPrompt": "You are Orbit's technical writer. You write only from the materials you are given, and invent no fact, name, number or path. Write in English; keep code names, paths and commands as they are. Output only what is asked for."
       }
     },
+    "follow": {
+      "phase": "wiki chat, contract C2 (2026-11-06); docs/wiki-comment-to-session-design.md section 12.1 kept, its runner path dropped",
+      "doc": "docs/wiki-contract.md section 29; docs/wiki-chat-design.md sections 8.1 to 8.3 and 8.5",
+      "means": "Any change that reaches main, and any press of a chat's card, has the wiki follow at once: the sections it touched are written again by the wiki-worker, without waiting for maintenance to be due (twenty sessions or twenty-four hours) and without skipping a space that catches up (design section 8.1). A press's sections are always written; a merge's only where a file they cite changed.",
+      "kind": "docs_follow, a wiki_job the wiki-worker runs. It is in jobs.kinds, jobs.kindRuns and jobs.carry.kinds, and in wiki_job_kind_chk with jobs.onePerSpace's two indexes since migration 0477 (C4); the wiki-worker runs it (src/apiserver/src/wiki-worker/wiki-docs-follow-job.ts), and the facts are joined in src/apiserver/src/wiki/wiki-docs-follow.ts. No runner runs it: P11 removed the runner's documents path, so there is no orbit wiki docs follow (the 2026-10-09 design's section 11.7 is void).",
+      "triggers": {
+        "press": "An Apply or Edit of a chat's card that has rewrites, and its Try again (chat.presses): the card's sections, forced, at priorities.press, made in the press's own transaction.",
+        "merge": "A session's merge receipt into main — a landed result whose target is the repository's main (session_merge_receipt) — at priorities.chatMerge when the session is a chat, else priorities.merge, made after the receipt's transaction commits.",
+        "landing": "A landing line's receipt into main — a MAIN line task's landing, or a project's promotion recorded MERGED (docs/project-integration-line-contract.md) — at priorities.landing, made after the receipt's transaction commits.",
+        "none": "Nothing else makes one: no clock, no schedule, no sweep (hard constraint 5); with no fact there is no job. A commit pushed to main outside Orbit has no fact: the next follow job or maintenance run compares with main as it then stands and takes it in. A merge into any other branch is no fact until a landing takes it to main."
+      },
+      "space": "The spaces of the receipt's owner whose repository is the receipt's (its session's workspace, or its project's codebase, normalized as space.repoUrlNorm normalizes it). A space with no confirmed plan writes no document, and none is made for it.",
+      "queue": "At most one queued follow job a space. A fact arriving while one is queued joins it in one write — its forced sections and their presses appended, its merges appended, its priority raised to the highest it now carries — and one arriving while one runs queues the next, which runs once it ends. Facts are joined under the space's row lock (wiki_space FOR NO KEY UPDATE, the lock the space's plan and maintenance writers take), so two facts at once make one job; a change of main a follow job of the space already carries — the same receipt delivered twice, or the receipts a promotion writes for each of its tasks, one range of commits — is carried once.",
+      "sections": {
+        "forced": "A press's sections are written whatever their fingerprint: the press marks each stale (stale_at, docs.withdrawal's mark) in its own transaction, so docs.regeneration writes it again.",
+        "merges": "For the merges it carries, each written section of the confirmed plan whose repoSha the job's snapshot of origin/main has moved past in a file it cites, by the comparison a maintenance run makes (maintenance.job.docs.byRepo, docs.repoSha) narrowed to the files those commits changed; a cited file the range deleted or renamed away is withdrawn first (docs.withdrawalPaths). A section whose fingerprint did not change asks no model and writes nothing (docs.regeneration).",
+        "overview": "A document some of whose sections were written has its overview handed to the writer as a build hands it, and written as its fingerprint decides."
+      },
+      "material": "Each section's material is the build's (docs.material, docs.build), and a forced section is handed two things more (design section 8.2), so that entriesPerSection cannot squeeze out the entry the owner just applied and the section come back as it was: the entries the card wrote, as they stand after it, each with its live sources (docs.material.rules.sourcesPerEntry); and the owner's turns in the chat, as records the writer may cite — a turn is first-hand (sourceRules.firstHand), a document or a sentence of one never is (docs.view.source). A merge's sections are handed, besides, the files its commits changed, cut as docs.build.repository cuts a section's sources and read at the job's snapshot. Every sentence is still quoted from a first-hand original and checked word for word (docs.verification).",
+      "catchUp": "A space that catches up (maintenance.job.catchUp) still follows: catch-up skips a maintenance run's documents step, never a follow job, which writes only what changed.",
+      "rules": {
+        "sectionsPerDay": 40
+      },
+      "daily": "Of the sections merges and landings ask for — never a press's — a space's follow jobs write at most rules.sectionsPerDay in one UTC day, counted as the sections its follow jobs wrote for them since midnight UTC (a section left unchanged costs nothing and is not counted). A job that would pass it writes them in the plan's order up to what is left and leaves the rest as they are — still behind main, so the next maintenance run writes them (maintenance.job.docs) — and its report says how many it left (report.left), which Activity says (docs.versions.reads.changes, copy.changes.leftOne and leftMany). A press's sections are neither counted nor left.",
+      "priorities": {
+        "press": 1,
+        "chatMerge": 1,
+        "merge": 0,
+        "landing": 0
+      },
+      "priority": "The highest of what it carries: priorities.press for a press, priorities.chatMerge for a chat's merge, priorities.merge and priorities.landing otherwise. At 1 it is the owner's work, ahead of background maintenance (jobs.priority), and its model calls carry it into the queue (modelQueue.priority).",
+      "run": "The wiki-worker runs it as docs.build.server runs a build, over its sections alone (runWikiDocsBuild's only): the snapshot of origin/main through the runner of the space's maintenance workspace — which need not be the chat's (design section 5) — the reads, the model calls through the queue under docs.build.server.steps and units of their own, so a replay reuses every answer, and each section written through WikiDocs.write as soon as it is done (docs.who.write).",
+      "exclusion": "It runs beside a job of its space that writes no document and waits for one that does (jobs.onePerSpace).",
+      "waiting": {
+        "reasons": [
+          "maintenance_running",
+          "build_running",
+          "plan_running",
+          "rewrite_running",
+          "worker_not_running",
+          "model_unconfigured",
+          "model_auth_failed",
+          "model_down",
+          "no_workspace",
+          "runner_missing",
+          "runner_offline",
+          "runner_upgrade"
+        ],
+        "rule": "Why a follow job that is not running waits, by wikiDocsFollowWaiting (src/shared/src/wikiChat.ts): a queued one first for a job of its space that writes documents and runs — maintain, docs_build, plan_draft or plan_revise, or another docs_follow, each reason naming which — then for the System model (its read state, systemModel.read, when it is not up), then for the runner its repository is read through (repoOps.looks, when it is not ready); a parked one (waiting_for) for what it is parked on. A queued job none of these holds up is merely in line: rewriting, not waiting. Each reason is said in copy.waiting, on the card and on Activity alike; Settings is offered beside no_workspace and runner_missing, which the owner fixes in Wiki settings.",
+        "settings": [
+          "no_workspace",
+          "runner_missing"
+        ]
+      },
+      "outcomes": "Each section it takes up ends written (its sentences replaced), unchanged (its fingerprint the stored one, nothing withdrawn: only a merge's), gone (the confirmed plan no longer has it: design section 10's Section no longer in the plan; it is not written), or failed (left unwritten: the model failed, or its quotes did not check out). A forced section that was written reads updated when docs.versions.compare finds a sentence changed against the version it replaced, and same when none did: it reads the same, and the card says so rather than pretend (design section 8.3). The job succeeds when no section it took up failed, and otherwise fails as content with the others written, as a build does (docs.build.server.end); an infra failure is retried (jobs.retry).",
+      "report": "{ sections: [{ doc, key, outcome, changed, versionId, forced, draftIds }], left, usage } on the job (jobs.progress, jobs.carry): the card read and Activity's changes read read it; the jobs read does not (jobs.read.never).",
+      "activity": "The job is a row of Activity's Runs card as any job (jobs.read). What it wrote is in Recently changed as Docs rows with their reasons (docs.versions.reads.changes), and a job that left sections for maintenance adds the row that says how many.",
+      "versions": "Every section it writes keeps the version it replaced (docs.versions), with the reason of the fact that asked for it: chat for a press, merge or landing for a receipt."
+    },
+    "versions": {
+      "phase": "wiki chat, contract C2 (2026-11-06); docs/wiki-comment-to-session-design.md section 12.2 kept",
+      "doc": "docs/wiki-contract.md section 30; docs/wiki-chat-design.md section 8.4",
+      "table": "wiki_doc_section_version",
+      "means": "Any section written again — by maintenance, a build or a follow job — keeps the sentences it replaced and why, so the document page and Activity can say what changed and after what (design section 8.4), and a chat's Undo can put a section back.",
+      "kept": "Every write that replaces a section — any section a write names whose outcome is not unchanged (docs.regeneration) — keeps the section it replaced as a version, in WikiDocs.write's own transaction, whoever wrote it: a maintenance run, a build, a follow job or a restore. A section written for the first time replaced nothing and keeps nothing; one left unchanged was not written again and keeps nothing.",
+      "row": "Its owner, space, document slug and section key; the blocks, sentences (text, status, footnote numbers, new tokens, withdrawal) and footnotes the section held, as they were; the section's repoSha, materialSha256 and generatedAt then; why it was replaced (reasons); when; and what replaced it — the job, or the owner's restore.",
+      "rules": {
+        "perSection": 5,
+        "changesListed": 50
+      },
+      "retention": "At most rules.perSection versions a section: keeping one more deletes the oldest in the same transaction.",
+      "reasons": {
+        "values": [
+          "maintenance",
+          "build",
+          "merge",
+          "landing",
+          "chat",
+          "restore"
+        ],
+        "maintenance": "A maintenance run (its run).",
+        "build": "A build of a plan version (its job, the version).",
+        "merge": "A follow job, for a session's merge into main (the session's title and the commit).",
+        "landing": "A follow job, for a landing into main (the task's or the project's title and the commit).",
+        "chat": "A follow job, for a chat's press (the chat's title and the card): After chat <title>.",
+        "restore": "The owner restored a version (restore).",
+        "words": "wikiDocVersionReason says a reason as a row reads it (copy.reasons), wikiDocVersionHeading as See changes heads it, with the commit when there is one: After <title> merged · 7f3e2a1."
+      },
+      "compare": "Sentence by sentence (design section 8.4: See changes), by wikiDocSentenceDiff: a version's sentences against the text that replaced it — the next version's, or the section as it stands for the newest — as their longest common subsequence, compared by text with outer whitespace trimmed and inner runs of it read as one space, a removal drawn before the addition where both orders are as long. Each sentence is same, removed (struck through) or added (shaded); changed counts each run of removed and added sentences as the larger of the two, so one sentence rewritten is one change. A heading, a code block or a diagram is no sentence and is not compared.",
+      "routes": {
+        "versions": "GET /api/wiki/spaces/:id/docs/:slug/sections/:key/versions",
+        "restore": "POST /api/wiki/doc-versions/:id/restore",
+        "changes": "GET /api/wiki/spaces/:id/doc-changes"
+      },
+      "reads": {
+        "doc": "The document read (docs.reads.doc) gives each section its latest change — change: { versionId, reason, at, changed } or null — so the page can mark copy.card.sectionUpdated beside a section written since the reader last looked (wikiSeenKey, on the client) and open its versions.",
+        "versions": "{ spaceId, slug, key, versions }: the section's versions, newest first, at most rules.perSection, each { id, reason, at, replacedBy, changed, rows } — rows and changed its comparison with the text that replaced it. A section the confirmed plan does not have is a 404.",
+        "changes": "{ spaceId, changes }: Activity's Docs rows for Recently changed, newest first, at most rules.changesListed — { kind: section, doc, key, where, title, versionId, reason, at, changed } for a version kept, and { kind: left, jobId, at, left } for a follow job that left sections for maintenance — each said by wikiDocChangeLine (copy.changes). The timeline (GET /api/wiki/spaces/:id/timeline) keeps its items as they are, ops alone, so no client reading it meets a row it does not know."
+      },
+      "restore": "The owner's one write to a document (docs.who.write): POST /api/wiki/doc-versions/:id/restore puts the section back as the version kept it — its blocks, sentences and footnotes, its repoSha and its materialSha256, so the section counts by its old fingerprint and the next maintenance run does not write it again for nothing (design section 8.4) — and the text it replaces is kept as a version too (reason restore), so a restore is itself undone the same way. It writes as WikiDocs.write does (the via entries FOR SHARE first; a sentence through an entry since withdrawn is stored withdrawn and its section stale) and asks requireConfirmedPlan first; a section the confirmed plan no longer has is a 409, and so is a version of another section's. User door, JWT only: a session header is refused WIKI_OWNER_CHANNEL_ONLY, a personal access token OWNER_INTERACTIVE_CREDENTIAL_REQUIRED, another owner's version is the plain 404. A chat's Undo restores through the same writer (chat.presses.undo).",
+      "who": "Kept by WikiDocs.write and its restore, read by the owner on the user door; no tool reads or writes one (docs.tool).",
+      "words": "copy.changes, copy.reasons and copy.result (chat.copy)."
+    },
     "tool": "none: no MCP tool reads or writes a document. Writing is the server's jobs' (who.write); reading is the owner's, in the Wiki."
+  },
+
+  "chat": {
+    "phase": "wiki chat, contract C2 (2026-11-06)",
+    "doc": "docs/wiki-contract.md section 28; docs/wiki-chat-design.md sections 3 to 7 and 12",
+    "design": "docs/wiki-chat-design.md",
+    "board": "docs/mocks/wiki/42-wiki-chat.png",
+    "why": "The owner's decisions of 2026-11-06 (docs/wiki-chat-design.md section 12.1): a round button at the bottom right of every wiki page opens a chat docked beside it, to talk while reading and change the wiki while talking. The chat is an ordinary session — tools, approvals, permission modes, cost, the session list and the phone all as they are — of the workspace the owner chose for the space, in a worktree of its own started from origin/main. Its agent never changes a document's text, which the next rewrite would wash away: every request lands where a rewrite keeps it — an entry, a section's rewrite, the plan, or main (design section 6) — and the agent only drafts. Nothing is written until the owner presses Apply on the owner's door, which confirms what it writes, skips the machine's verification, and rewrites the sections it touches (docs.follow), each rewrite keeping the version it replaced (docs.versions).",
+    "tables": [
+      "wiki_chat_draft"
+    ],
+    "migrations": "Made by the tasks that need them — session.wiki_chat_space_id with the chat (C5, migration 0476, beside conversation_turn.wiki_context: the ids a message's page and selection notes are read from at delivery; 0479 validates 0476's SOURCE CHECKs and builds session_wiki_chat_space_idx CONCURRENTLY), wiki_chat_draft with the presses (C6) — each numbered after a scan of main, every origin/project/* and the pushed orbit/* branches, and entered in the censuses: db-write-inventory, public-id-coverage's CONTROLLERS, PUBLIC_ID_FIELDS, the migration ledger and the personal-access-token decorators.",
+    "rules": {
+      "selectionSentencesMax": 20,
+      "rewritesMax": 5,
+      "chatsListed": 50
+    },
+    "rulesNote": "selectionSentencesMax is the most sentences one selection attaches (design section 4.2): more is a section, which the page attachment names. rewritesMax is the most sections one card rewrites (design section 8.2). chatsListed is the most chats the list read names; its counts are over every chat of the space.",
+    "binding": {
+      "column": "session.wiki_chat_space_id",
+      "rule": "A nullable UUID on session, written by create alone, in the session row's own INSERT, and never afterwards: a session is a chat for its whole life or never. create writes only a space of the session's own owner, read under that owner. No foreign key (storage.ids: a reference into history): deleting a space leaves its chats as sessions, the id a tombstone, and their cards go with the space. Indexed by (wiki_chat_space_id, created_at) for list.",
+      "is": "A session is a chat exactly when wiki_chat_space_id is set. That alone makes its wiki_propose and the corrects of its wiki_note draft (agentSurface.chat), opens wiki_draft to it, has its first message carry notes.chat and its messages a wikiContext, gives it the SOURCE of source and a worktree of its own, keeps its draft calls out of the dossier (dossier), and puts it in list.",
+      "read": "GET /api/sessions/:id adds wikiChatSpaceId, the space's public id or null, so the session page can say where the chat came from (copy.panel.fromWiki) and open it beside the space's wiki. A chat is in its workspace's session list as any session is (design section 4.1).",
+      "otherSessions": "A session whose column is null is untouched by everything here: its wiki_propose, wiki_note and SOURCE are what they were."
+    },
+    "workspace": {
+      "setting": "space.settings.chat.workspaceId",
+      "eligible": "A workspace of the space (space.binding: on its repository or named by a row, and not left out), not deleted and switched on (a session cannot start in one that is off), whose sessions run in worktrees of their own (workspace.enableWorktree). Nothing else is offered or stored: a chat never runs in a shared checkout.",
+      "choose": "Chosen once for a space, at its first chat, among list.choices, and remembered in space.settings.chat.workspaceId; Runs in changes it (create with another workspaceId, or the settings PATCH). No default is worked out: the workspace a space's sessions last opened in, board 36's default, could carry the chat onto a production machine (design section 5.1). The orbit space's workspace, orbit-develop on HPC, is the owner's choice of 2026-11-06: their first pick there, never a name in the code.",
+      "none": "With no eligible workspace the panel says copy.panel.noWorktree and offers no composer; the button is drawn as ever (design section 10).",
+      "gone": "A remembered workspace that was deleted, left out or taken out of worktrees is neither used nor replaced: the panel asks again (list.workspace eligible false, copy.panel.chooseWorkspace).",
+      "offline": "A workspace whose runner is offline stays the space's. A chat on it is made and waits for its runner as any session waits, the panel says copy.panel.offline with the machine's name, the wiki reads as usual, and nothing moves the chat to another machine (design section 5.1)."
+    },
+    "source": "origin/main, through the projects' SOURCE machinery (docs/project-source-contract.md SR54): create writes the selector in the session row's own INSERT — state SELECTED, kind CHAT_UPSTREAM, ref refs/heads/main, authority REMOTE asked through the remote origin, the chat workspace's repository as its identity, no codebase, no configRevision and nothing it must contain — and the first claim pins the commit through the three-step handshake (section 6.3 there), so the chat starts from main as it stood then, whatever the workspace's checkout has checked out. A resume, a reclaim or a takeover reads the pin and never resolves again. The runner tells by the session (needsSourcePin: a SOURCE state that is not UNBOUND), as for a project task. A refusal (section 10.1 there) is the chat's: on the session's SOURCE columns and in the panel with its fixAction, never on a task or a project; recovery is a new chat. Main moves while a chat goes on: each page and selection note carries its section's repoSha (notes), so the agent can tell a section written at an older main from the code it reads, and fetch origin/main when it matters (design section 5.2).",
+    "branch": "A chat that ends with no commit of its own leaves no branch: when its session ends, the runner deletes the worktree's branch if it holds nothing past the pinned commit (design section 5.2; a runner release). A chat with commits is any session's: its worktree bar, its Merge — the owner's press, never automatic — and, once the change reaches main, docs.follow.",
+    "routes": {
+      "create": "POST /api/wiki/spaces/:id/chats",
+      "list": "GET /api/wiki/spaces/:id/chats",
+      "drafts": "GET /api/wiki/chats/:id/drafts",
+      "draft": "GET /api/wiki/chat-drafts/:id",
+      "apply": "POST /api/wiki/chat-drafts/:id/apply",
+      "edit": "POST /api/wiki/chat-drafts/:id/edit",
+      "discard": "POST /api/wiki/chat-drafts/:id/discard",
+      "undo": "POST /api/wiki/chat-drafts/:id/undo",
+      "retry": "POST /api/wiki/chat-drafts/:id/retry",
+      "seen": "POST /api/wiki/chat-drafts/:id/seen"
+    },
+    "door": "Every route is the user door's (JwtAuthGuard and WikiRolloutGuard), and another owner's space, chat or card is the plain 404 (refusalRules.notFound). A request with a session header (X-Orbit-Session-Id) is refused WIKI_OWNER_CHANNEL_ONLY whatever the session, as decide is (agentSurface.decide): no agent makes a chat, reads a card through this door or presses anything. The writes take only the owner's interactive credential — a personal access token is refused OWNER_INTERACTIVE_CREDENTIAL_REQUIRED, as the binding's writes are (space.binding.ownerChannel) — and the reads take a token with wiki:read. A :id is a public id, as every id on the user door; GET /api/wiki/chats/:id/drafts takes the chat's session id.",
+    "create": {
+      "body": "{ workspaceId?, content, clientTurnId, wikiContext?, engine?, model?, permissionMode? }",
+      "rules": "workspaceId, when given, must be eligible (workspace.eligible) and becomes the space's remembered one if it is another (Runs in); without it the remembered one is used, and with none eligible the request is a 400 saying to choose one. content is the owner's first message, word for word, and clientTurnId a UUID: the turn is filed as the session message door files the owner's — an explicit routing intent under the client's UUID — so its words are first-hand (reviewModes.tiered.auto.ownerWords) and a section may quote them as a source (docs.follow.material). wikiContext is held to notes.wikiContext. engine, model and permissionMode are New session's, each defaulting as a session of that workspace does.",
+      "makes": "Through SessionsService.create, in one transaction: an ordinary session of the workspace — titled, listed, priced and approved as any — with wiki_chat_space_id set (binding), a worktree of its own required (a workspace that turned worktrees off meanwhile is refused 409, and nothing is made), the SOURCE selector of source, and its first turn. The first delivery appends notes.chat, then the turn's page and selection notes, to the owner's words.",
+      "answer": "{ sessionId, chat }: the session's public id, and its row as list serves it."
+    },
+    "list": {
+      "answer": "{ spaceId, workspace, choices, fab, chats }",
+      "workspace": "The remembered workspace as it stands — { id, name, runner, online, eligible } — or null when none is remembered: name and runner as space.workspaces names them, online by the runners list's own rule (isRunnerOnline), eligible as workspace.eligible reads it now. The panel asks to choose while it is null or not eligible.",
+      "choices": "Every eligible workspace of the space, as { id, name, runner, online }, in the order space.workspaces lists them.",
+      "fab": "{ needsYou, working, updated } over every chat of the space not in Trash, counted as fab.counts says: a client draws the button from these three alone, so the button never depends on which chats a page happens to list.",
+      "chats": "The space's chats not in Trash, newest first, at most rules.chatsListed: { sessionId, title, status, open, createdAt, updatedAt, drafts, needsYou } — open as fab.counts reads it, drafts how many cards it holds, needsYou how many of fab.needsYou are its. The button opens the chat holding the first card that needs the owner, else the newest open chat, else a new one (design section 3)."
+    },
+    "turns": "A chat's later messages go through the session's own message door, POST /api/sessions/:id/turns, as the owner's — an explicit routing intent under a UUID clientTurnId — with one optional field more for a chat, wikiContext (notes.wikiContext); a message to any other session that carries one is refused 400. Its content is the owner's words alone, whatever rides along (design section 4.2), so every turn of the owner's in a chat is first-hand.",
+    "notes": {
+      "how": "Each block below is appended at delivery, after the owner's words, as every control-plane note is (src/apiserver/src/runner-api/control-plane-note.ts, recorded beside the echo as controlPlaneNote): conversation_turn.content stays the owner's words alone, and a client draws each block as an Orbit attachment whose line is wikiChatNoteLabel of its opening tag's attributes (board 42 ②: Orbit attached: Wiki selection · 3.1 §3 · 1 sentence · 2 sources), its body folded open on a press. A client that does not know a tag names it as any unknown block — generically, as context — so the Android client and every older one draw them and count nothing from them (design section 9).",
+      "chat": {
+        "tag": "orbit_wiki_chat",
+        "when": "the chat's first message, and no other",
+        "text": "<orbit_wiki_chat>\nYou are chatting beside a page of this repository's Orbit wiki. The page the owner is reading, and any sentences they select, arrive as Orbit attachments.\nThe wiki's documents are written by the server from the code and from records. Never edit a document's text, and never cite a document or a sentence of one as a source.\nBefore you change anything, decide where the request belongs: knowledge goes into an entry (wiki_propose); a section behind main is rewritten from main, and a change to how a document is organized or written goes into the plan (both wiki_draft); a change to the system itself is a change to the code, or to the design document it cites.\nEverything you propose or draft in this chat is a draft: nothing changes until the owner applies it. Say what each draft would change, never call one applied, and pass replaces with a draft's id when you revise it.\n</orbit_wiki_chat>",
+        "label": "copy.notes.chat"
+      },
+      "page": {
+        "tag": "orbit_wiki_page",
+        "when": "a message whose wikiContext names its page",
+        "attributes": "of (doc, entry or plan); for a document, doc (its number), slug, section (the section's number), key and repoSha (the section's); for an entry, entry (its public id) and title; for the plan, doc and slug",
+        "body": "For a document's section, its title and its sentences as the document read serves them now, each with its footnotes (as selection's); for an entry, the entry as wiki_get answers it; for the plan, the document's definition as the plan read serves it — the page brings the plan, since a session reads none (plan.who).",
+        "labels": "copy.notes.pageDoc, copy.notes.pageEntry and copy.notes.pagePlan"
+      },
+      "selection": {
+        "tag": "orbit_wiki_selection",
+        "when": "a message whose wikiContext carries a selection",
+        "attributes": "doc, slug, section, key, to (the last section's number, when the sentences run past the first), sentences and sources (how many of each the body holds), and repoSha (the first section's)",
+        "body": "Each selected sentence as the document shows it when the turn is delivered, in reading order under its section's title, with its footnotes: a repository original as path@sha#Lstart-end, a record as <kind> <record id> in session <session id>, and the entry it came through as via entry <id>. The server reads them at delivery, from the ids — the sentences, the footnotes as the document read serves them, redacted as that read redacts — never from text the client sends.",
+        "label": "copy.notes.selection"
+      },
+      "drafts": {
+        "tag": "orbit_wiki_drafts",
+        "when": "the owner's next message after one or more presses (presses.afterwards)",
+        "attributes": "applied, edited, discarded and undone: how many cards each",
+        "body": "One line per card pressed since the agent's last turn: its id, its label, what became of it (applied, edited, discarded or undone), for an applied one the entries it wrote with their trust, and how its rewrite stands then.",
+        "label": "copy.notes.drafts"
+      },
+      "wikiContext": {
+        "shape": "{ page?, selection? }: page one of { kind: doc, docSlug, sectionKey }, { kind: entry, entryId } or { kind: plan, docSlug }; selection { docSlug, sectionKey, sentenceIds } — sectionKey the section the selection starts in, sentenceIds from 1 to rules.selectionSentencesMax of the document's sentence ids, each once, which may run on into later sections of the same document. No other key.",
+        "shown": "Each part is what the composer shows, and the owner may cross either out: what is not shown is not sent (design section 4.2). The page follows the reader and is frozen when the message is sent: a document page sends its document and the section nearest the scroll position, the entry drawer its entry, a plan page its document.",
+        "check": "wikiChatContextErrors (src/shared/src/wikiChat.ts) names the path of each thing wrong, as validateWikiSources does; the door refuses a message whose wikiContext has any, WIKI_SCHEMA with those paths, before anything is filed. A sentence id the document does not hold at delivery is left out of the note and said so in it, never guessed."
+      }
+    },
+    "drafts": {
+      "table": "wiki_chat_draft",
+      "what": "A card is a row of its own, never a changeset (design section 7.1): it takes no place in pendingOpsPerSpace, leaves no proposed entry, is in no Review and no verification, and counts toward neither opsPerTurn nor opsPerSession, since it waits for no review; it holds at most limits.opsPerChangeset ops. It keeps its id, owner, space and chat session; its kind; the agent's rationale; for entry its ops as the request named them, each one checked, and similar[] beside an add or a supersede; for rewrite its sections and reason; for plan its change; its rewrites (rewrites); tainted, whether the chat had read the web when it was drafted; replaces, the card it replaced; the press (decision, decided_at, and the changeset it recorded); undone_at; and seen_at, the owner having opened its settled rewrite.",
+      "kinds": {
+        "entry": "Entry ops, from wiki_propose — add, amend, supersede, retire, reinforce and challenge — or the challenge of a wiki_note's corrects (agentSurface.chat). Label: copy.card.addKind with the new entry's kind, or the op's own (copy.card.amend …), or copy.card.changes for more than one op.",
+        "rewrite": "A rewrite of sections from main (design section 6, second row: the section lags behind main), from wiki_draft: its sections are its rewrites. Its press only queues them (docs.follow): no entry is written. Label copy.card.rewrite; its Apply button is copy.actions.rewrite.",
+        "plan": "A change to the plan, from wiki_draft (design section 6, third row), shaped as a plan proposal's change. Its press edits, confirms and rebuilds the plan through the plan's own doors in one go. It arrives with the plan card (design section 14, second step): until then wiki_draft refuses it (agentSurface.chat.draft.plan). Label copy.card.plan."
+      },
+      "made": "A card is made by the tool call that drafted it, in that call's transaction, and the call answers its id (toolResult). A request none of whose ops passed makes none. The card is drawn from that id, never from the conversation's text, and its state is read from the server (read), so every engine, the full session page and the phone draw the same card (design section 7.1).",
+      "replace": "A card names the open card of the same chat it replaces (replaces, agentSurface.chat.replaces): that card reads Replaced from then on, whatever else holds, and only the newest of a chain can be pressed. A card that is not open, or another chat's, is no card to replace: the call is refused WIKI_SCHEMA at replaces, and nothing is made.",
+      "states": {
+        "draft": "Just drafted, nothing pressed: Draft · <label>.",
+        "replaced": "A newer card of the chat replaced it.",
+        "changed": "An entry it changes moved off the revision it was drafted against (baseRevision), or left active, or a section it rewrites was written since it was drafted: Changed since this draft. Redo sends copy.card.redoMessage as the owner's next message, and the agent drafts again.",
+        "applied": "Pressed Apply or Edit: Applied · Confirmed by you. Its rewrite stands under it (results).",
+        "discarded": "Pressed Discard.",
+        "not_applied": "Its chat ended, or went to Trash, with it unpressed.",
+        "undone": "Applied, then undone (presses.undo)."
+      },
+      "derivation": "Read, never stored (design section 3: derived on read, as the landing session's liveness is): wikiChatDraftState (src/shared/src/wikiChat.ts) over the card's facts — its press, undone_at, whether a newer card replaced it, whether its chat is open (one of OPEN_SESSION_STATUSES, not in Trash) and whether its base moved — taking the first that holds of: applied or edited (undone once undone_at is set), discarded, replaced, not applied (its chat not open), changed, draft. A chat restored from Trash or resumed reads its unpressed cards as they read before it ended. tainted is a tag, not a state: copy.card.web with copy.card.webNote, on whatever state the card is in.",
+      "actions": "What a card offers is wikiChatCardActions of its read (copy.actions): an open entry card Apply, Edit and Discard; a rewrite card Rewrite and Discard; a plan card Apply & rebuild, Open in Plan and Discard; a changed card Redo and Discard; an applied card Undo while it is undoable, Open entry for an entry card, and from its rewrite Settings (a waiting reason the owner fixes in Wiki settings), Try again (failed) or See changes (updated or read the same). Replaced, discarded, not applied and undone cards offer nothing.",
+      "results": {
+        "values": [
+          "rewriting",
+          "waiting",
+          "updated",
+          "same",
+          "failed",
+          "gone"
+        ],
+        "rule": "An applied card's rewrite is the newest docs_follow job that carried its press (docs.follow), read as: rewriting while the job is queued with nothing holding it up or runs; waiting, with docs.follow.waiting's reason, while something holds it up; and once the job has ended, each of the card's sections as docs.follow.outcomes says — updated (its sentences changed), same (it was written and reads the same), failed (it was left unwritten) or gone (the confirmed plan no longer has it) — and the card's as the first of failed, same, updated and gone that one of its sections is. A card with no rewrites has no rewrite; an applied card whose job has not run yet reads rewriting.",
+        "line": "The line under the card is wikiChatResultLine (copy.result): Rewriting <sections>… — from main@<sha> once the job named its commit — Rewrite waiting · <reason>, Rewrite failed, or the sections as they came out, led by Wiki updated when one changed (board 42 ③: Wiki updated · 3.1 §3 — 1 sentence · 7.1 §2 — reads the same).",
+        "seen": "seen is the owner having opened the card's settled rewrite (presses.seen): it settles a same or a failed rewrite for the waiting count (waiting) and the button's updated, and nothing else.",
+        "waits": "A rewrite waits on the owner — the card adds one to the Wiki's waiting count (waiting) — while it is waiting, and while it read the same or failed and is not seen; it stops when the owner opens it, tries again (a new job), or undoes the card. Rewriting and updated never wait. Nothing is silent: each is on the card, and the ones that wait are counted (design section 11, Nothing blocks in silence)."
+      },
+      "rewrites": "Worked out when the card is drafted and shown on it before it is pressed (design section 8.2), by wikiChatRewrites: the sections the chat's owner turns attached (page and selection notes), newest first; then the sections holding a sentence whose footnote came through an entry the card changes (its via_entry_id), in the plan's order; then, for a new entry, the sections it fits (docs.affected.fit) by their score, best first, ties in the plan's order — each section once, only written sections of the confirmed plan, at most rules.rewritesMax. A rewrite card's are the sections wiki_draft named. A card with none is applied without a rewrite. Before the press the page marks each with copy.card.wouldRewrite, and each opens beside the chat.",
+      "read": "GET /api/wiki/chat-drafts/:id and GET /api/wiki/chats/:id/drafts (every card of a chat, oldest first) answer a card as { id, sessionId, kind, state, label, rationale, ops, sections, rewrites, similar, tainted, replaces, replacedBy, decision, decidedAt, undoneAt, undoable, changesetId, rewrite, createdAt }: state from derivation, ops as checked with each one's entry as it now stands, rewrites with each section's document number, section number and title, undoable as presses.undo decides it, and rewrite { jobId, result, reason, sha, sections: [{ doc, key, where, result, changed, versionId }], seen, settledAt } or null. The reads write nothing.",
+      "toolResult": "What the drafting call answers (agentSurface.chat): { status: draft, draftId, … }. The transcript draws the card from draftId wherever the call is shown — the panel, the full session page, the phone — and a client that does not know the answer draws the call as any tool call (design section 9)."
+    },
+    "presses": {
+      "oneCardOnePress": "A card is pressed once, all its ops together (design section 7.2). A press on a card that is not open — replaced, discarded, not applied, undone, or applied already for apply, edit and discard — is a plain 409 naming its state, and writes nothing; the same press twice answers the first, marked replayed.",
+      "apply": "An entry card: in one transaction, the card's ops are checked again (sources, compare-and-set: an op whose base moved is refused WIKI_REVISION_CONFLICT, nothing is written, and the card reads changed), recorded as one changeset of origin agent whose session is the chat, and accepted by the owner in the same transaction (states.op pending to accepted), with the effect reviewModes.chat states: trust confirmed (trust.onApply.chatApplied), a principle's owner, no verification. Then, in the same transaction, the card's rewrites are queued as forced sections of a docs_follow job (docs.follow.triggers.press). A rewrite card: its sections queued, nothing else written. A plan card: the plan's edit, confirmation and build through their own doors (plan.routes), all or nothing — a gate it fails writes nothing and says so on the card (C12).",
+      "edit": "As Review's Edit (effectPolicy.decide.edit): the body { ops: [{ seq, changes }] } lays the owner's version over the card's ops, shaped as an amend's changes; the ops are recorded edited, each revision authored by the owner (trust.edited), and the rest is apply's. An entry card alone.",
+      "discard": "Marks the card discarded and writes nothing else: no rejection, no reason, no counter-example — nothing of it was ever an entry (design section 7.2).",
+      "undo": "Takes the card back, in one transaction: for an entry card, the changeset its Apply recorded is reverted through reviewModes.revert's own writes and idempotency key (revert:<changeset id>) — an add's entry retired, an entry an amend changed restored to the revision before the Apply with the trust it had then — though the owner accepted those ops; then each section the card's rewrite wrote is restored to the version that rewrite kept (docs.versions.restore), unless it was written again since, which is left as it is and named in the answer, as revert names an entry changed since. A rewrite that has not started loses the card's sections (a job left with nothing is cancelled); one that runs writes none of the card's sections it has not written yet, and the ones it wrote are restored. A card is undoable while it is applied and every op is an add or an amend — the two a revert can take back; a supersede and a retire end a lineage nothing brings back (states.entry), and a reinforce or a challenge is answered as any other, the challenge in Review — and a rewrite card is undoable while it is applied. The card reads Undone.",
+      "retry": "Try again: an applied card whose rewrite failed queues its sections again, forced, as its Apply did (docs.follow.triggers.press). Any other card is a plain 409.",
+      "seen": "The owner opened the card's settled rewrite — the panel showed it, scrolled to it from the button, or See changes opened it: seen_at is set, once, and the rewrite stops waiting if it read the same or failed (drafts.results.waits). It writes nothing else, and a card with no settled rewrite answers without writing.",
+      "afterwards": "Applied, edited, discarded and undone reach the agent with the owner's next message, as notes.drafts; no turn is opened for them (design section 7.2).",
+      "floor": "decide stays on the owner door alone, and no tool accepts or confirms (agentSurface.notTools): a press is the owner's, on the owner door, and a card is never a confirmation by itself (design section 11)."
+    },
+    "trust": "Apply and Edit write confirmed (trust.onApply.chatApplied): the press is the owner's acceptance, as Review's Accept is. A principle is the owner's own write: owner. The chat's own words are first-hand sources, which is why a card may cite them and say so on its Sources (copy.card.yourMessage) — and a share link with Footnotes on shows that quote to its visitors (share-links/public-wiki.ts), which the card's Sources say (design section 10).",
+    "fab": {
+      "states": [
+        "idle",
+        "working",
+        "needs_you",
+        "updated"
+      ],
+      "where": "Every wiki page — but Settings and a share link — at the window's bottom right, an icon alone: 52 across and 24 from the edges on a desktop, 56 and 16 plus the safe area on a phone, in the brand's blue, fixed to the window. It hides while the panel or the sheet is open and comes back where it was. The page's foot keeps 88 clear for it, and it floats above the entry drawer The page header gets no Chat button, and its other buttons do not move (design section 3).",
+      "counts": "{ needsYou, working, updated }, which list serves, counted by wikiChatFabCounts over the space's chats not in Trash: needsYou adds, for an open chat, the approvals and questions its session waits on the owner for (as the session list counts them), and for every chat each card that needs the owner — an open card (draft or changed) or a rewrite that waits (drafts.results.waits); working is an open chat with a turn queued or running, or a card whose rewrite is rewriting; updated counts the cards whose rewrite came out updated and is not seen.",
+      "state": "wikiChatFabState: needs you while needsYou is above 0 (copy.fab.needsYouOne or needsYouMany, an amber number), else working (copy.fab.working, a ring going round), else updated while updated is above 0 (copy.fab.updated, a green check, gone once opened), else idle (copy.fab.idle). Read on every list read, never stored (design section 3)."
+    },
+    "panel": {
+      "header": "The chat's title — pressed, the space's chat history (list) — then + (a new chat), ↗ (the full session page, where #-references, model switching and slash commands are) and ✕ (fold it away; the chat goes on). Under the title, one line always says where it runs: workspace · machine · engine · mode (board 42: orbit-develop · HPC · Claude Opus 5.5 · Default).",
+      "address": "The page's address carries ?chat=<session>: turning pages keeps the panel open, and a reload brings it back.",
+      "composer": "A short composer: text, the attachments (notes.wikiContext), send and Stop. Nothing else: the rest is the full session page's.",
+      "belongs": "A chat belongs to one space: another space's wiki shows that space's chats. It is in its workspace's session list too, its page headed copy.panel.fromWiki.",
+      "widths": {
+        "atLeast1440": "docked on the right, 400 wide by default, dragged between 320 and 560; the contents column as it is",
+        "from1200": "docked on the right; the contents column folds into the existing Contents drawer",
+        "from640": "slides in from the right over the right of the page, with no scrim; Contents drawer",
+        "below640": "a bottom sheet, half and full height; Contents drawer"
+      },
+      "drawer": "The entry drawer opens to the left of the panel. These widths are tuned against the real page when the panel is built (design section 4.1).",
+      "clients": "The web draws it (C8, C9); iOS draws a two-height sheet whose half height leaves the page scrollable (C11, design section 9); Android has none this phase."
+    },
+    "waiting": {
+      "means": "What the chat adds to the Wiki's waiting count W (docs/wiki-design.md section 12.3.3: every thing that waits on the owner is in W, and every thing in W can be found): the space's applied cards whose rewrite waits (drafts.results.waits), one each — a rewrite held up, or one that read the same or failed and is not seen. It is space.list.chatWaiting, counted by wikiChatWaiting.",
+      "notCounted": "An open card is not: drafts do not chase the owner (design section 11: no clock, drafts neither nag nor expire), and the button counts them. An approval is not: the session list counts it already, and W counts nothing twice.",
+      "banner": "On Activity, one amber banner for the space's part, copy.waitingBanner (wikiChatWaitingBanner), opening the chat at the first such card; W's banners still add up to W.",
+      "android": "Android has no chat this phase and reads no chatWaiting: its W stays pendingOps and planWaiting, every one of which it can open — counting a thing it cannot show would break W's one rule."
+    },
+    "dossier": "A maintenance run's dossier of a chat leaves out its drafting calls — wiki_propose and wiki_draft, and a wiki_note that carries corrects — as it leaves out a call that reads the wiki (src/apiserver/src/wiki/wiki-dossier.ts): a card the owner discarded must not come back through the next run. The owner's turns stay in it, first-hand as ever (design section 7.1).",
+    "realtime": "wiki.changed (realtime) carries the space's id when a card is made, replaced or pressed, and when its rewrite's job is queued, held up, starts or ends: the panel, the button and Activity read again.",
+    "boundaries": "A share link's visitor has no button and sees no chat. A chat in Trash leaves the history; what was applied stands, and its unpressed cards read not applied. A quota or a slot shows as on any session (Waiting for slot). A possible duplicate is shown on the card before the press (similar[]), since semantic search is off (design section 10). A sent selection whose section was written again since — by maintenance or anything else — is drawn with copy.notes.outdated, its sentences kept as they were sent; a card drafted on it reads as drafts.derivation says (changed).",
+    "copy": {
+      "fab": {
+        "idle": "Chat",
+        "working": "Working…",
+        "needsYouOne": "1 needs you",
+        "needsYouMany": "{n} need you",
+        "updated": "Wiki updated"
+      },
+      "panel": {
+        "newChat": "New chat",
+        "runsIn": "Runs in",
+        "fromWiki": "From Wiki",
+        "ask": "Ask",
+        "emptyHint": "Ask about this page, or say what should change.",
+        "emptyNote": "Nothing in the wiki changes until you apply it.",
+        "placeholder": "Ask about this page, or say what should change",
+        "placeholderDraft": "Reply, or say what to change in the draft",
+        "noWorktree": "Turn on worktrees for a workspace in this repository to chat here",
+        "chooseWorkspace": "Choose where this space's chats run",
+        "offline": "{machine} is offline. The chat waits for it to come back.",
+        "mergeNote": "Once this reaches main, Orbit rewrites what it touches."
+      },
+      "card": {
+        "draft": "Draft · {label}",
+        "addKind": "Add {kind}",
+        "amend": "Amend entry",
+        "supersede": "Supersede entry",
+        "retire": "Retire entry",
+        "reinforce": "Reinforce entry",
+        "challenge": "Challenge entry",
+        "changes": "{n} changes",
+        "rewrite": "Rewrite from main",
+        "plan": "Plan change",
+        "rewrites": "Rewrites",
+        "sources": "Sources",
+        "yourMessage": "Your message in this chat",
+        "footnote": "Your message · this chat",
+        "wouldRewrite": "Draft would rewrite this section",
+        "sectionUpdated": "Updated",
+        "replaced": "Replaced",
+        "replacedNote": "A newer draft took over.",
+        "changed": "Changed since this draft",
+        "web": "Based on web content",
+        "webNote": "Read before you apply.",
+        "applied": "Applied · Confirmed by you",
+        "discarded": "Discarded",
+        "notApplied": "Not applied",
+        "undone": "Undone",
+        "redoMessage": "This draft no longer applies: what it changes has changed since. Draft it again from what is there now."
+      },
+      "actions": {
+        "apply": "Apply",
+        "edit": "Edit",
+        "discard": "Discard",
+        "rewrite": "Rewrite",
+        "apply_rebuild": "Apply & rebuild",
+        "open_in_plan": "Open in Plan",
+        "redo": "Redo",
+        "undo": "Undo",
+        "open_entry": "Open entry",
+        "try_again": "Try again",
+        "see_changes": "See changes",
+        "settings": "Settings"
+      },
+      "result": {
+        "rewriting": "Rewriting {where}…",
+        "rewritingFrom": "Rewriting {where} from main@{sha}…",
+        "waiting": "Rewrite waiting · {reason}",
+        "failed": "Rewrite failed",
+        "updatedLead": "Wiki updated",
+        "sentenceOne": "{where} — 1 sentence",
+        "sentenceMany": "{where} — {n} sentences",
+        "same": "{where} — reads the same",
+        "gone": "{where} — no longer in the plan"
+      },
+      "waiting": {
+        "maintenance_running": "Maintenance is running",
+        "build_running": "The documents are being built",
+        "plan_running": "The plan is being drafted",
+        "rewrite_running": "Another rewrite is running",
+        "worker_not_running": "wiki worker not running",
+        "model_unconfigured": "System model not configured",
+        "model_auth_failed": "System model refused the key",
+        "model_down": "System model unreachable",
+        "no_workspace": "Maintenance has no workspace",
+        "runner_missing": "The maintenance workspace has no runner",
+        "runner_offline": "Waiting for the runner to come online",
+        "runner_upgrade": "Upgrade the runner to read the repository"
+      },
+      "notes": {
+        "chat": "Wiki chat",
+        "pageDoc": "Wiki page · {where}",
+        "pageEntry": "Wiki entry · {title}",
+        "pagePlan": "Wiki plan · {doc}",
+        "selection": "Wiki selection · {where} · {sentences} · {sources}",
+        "sentenceOne": "1 sentence",
+        "sentenceMany": "{n} sentences",
+        "sourceOne": "1 source",
+        "sourceMany": "{n} sources",
+        "drafts": "Wiki drafts · {counts}",
+        "applied": "{n} applied",
+        "edited": "{n} edited",
+        "discarded": "{n} discarded",
+        "undone": "{n} undone",
+        "outdated": "Outdated"
+      },
+      "waitingBanner": {
+        "one": "1 rewrite needs you",
+        "many": "{n} rewrites need you"
+      },
+      "changes": {
+        "rewritten": "{where} rewritten · {reason} · {changed}",
+        "restored": "{where} restored · {changed}",
+        "changedOne": "1 sentence changed",
+        "changedMany": "{n} sentences changed",
+        "same": "reads the same",
+        "leftOne": "1 section left for the next maintenance run",
+        "leftMany": "{n} sections left for the next maintenance run"
+      },
+      "reasons": {
+        "maintenance": "after maintenance",
+        "build": "after the build of plan version {version}",
+        "merge": "after {title} merged",
+        "landing": "after {title} landed",
+        "chat": "after chat {title}",
+        "restore": "restored by you"
+      }
+    },
+    "vectors": "src/shared/src/wiki-chat.fixture.json: the cards, the lines under them, the button, the waiting count, the follow job's waiting reasons, the pairs of jobs that may run at once, the rewrites, the sentence-level comparison, the attachment lines, wikiContext, and the Docs rows. wikiChatContract.spec.ts runs them through src/shared/src/wikiChat.ts; OrbitKit reads the same file for the client half (C11)."
   },
 
   "systemModel": {
@@ -2007,7 +2451,7 @@
     "table": "wiki_job",
     "migration": "src/apiserver/prisma/migrations/0401_wiki_job/migration.sql",
     "columns": ["id", "owner_id", "space_id", "kind", "input", "priority", "state", "waiting_for", "attempts", "next_attempt_at", "lease_owner", "lease_generation", "lease_deadline_at", "progress", "report", "error", "failure_kind", "created_at", "updated_at", "started_at", "ended_at"],
-    "kinds": ["verify", "articles", "import", "plan_draft", "plan_revise", "docs_build", "maintain", "smoke"],
+    "kinds": ["verify", "articles", "import", "plan_draft", "plan_revise", "docs_build", "maintain", "smoke", "docs_follow"],
     "kindRuns": {
       "articles": "The server's articles writer (P4, articles.serverExecution): the space's topic articles, written by the wiki worker with the System model. Its input is {}; it is made after a maintenance run of the space by the rule articles.regeneration states, at priority 0 (articles.job), and until it is first claimed it waits for its space's next round of maintenance, one round at most (priority). It reads the plan, takes up the topics whose fingerprint changed, groups a big topic (articles.serverExecution.steps), has the model name the groups and write the articles through the queue — step articles, a unit per topic, fingerprint and part — and writes them through WikiArticles.write. Its ref is the space's snapshot's sha, asked for once and parked on when there is none (repoOps.waiting). It succeeds when every topic it took up is written or unchanged, and fails as content, its report on the row, when one was left unwritten.",
       "smoke": "One model call, its answer and usage written into the job's report: the shortest route through the queue, and P1's end-to-end proof that claim, call, write-back and settle work together. It runs no pipeline and reads nothing; its input is { system?, prompt?, maxTokens? }, each with a default. A kind whose phase has not landed stays queued — the claim takes only the kinds the worker's build runs — so no deployment is handed work it would have to fail.",
@@ -2016,7 +2460,8 @@
       "plan_draft": "A draft of the space's plan on the server (P6, plan.jobs.server): the four steps of plan.jobs.run — the catalogue, each category's details, each document's outline, the rules' draft — through the queue, gated on the space's snapshot and by the plan's gate, three rounds at most; stored as a version the wiki_job authored. Its input is { planJobId }; its report is { kind, planJobId, outcome, version, error, plan: plan.jobs.report }. Made by advanceWikiPlanJob for a draft the space's creation or its owner asked for, at plan.jobs.server.priority.",
       "plan_revise": "A revision of the space's plan on the server (P6, plan.jobs.server): plan.jobs.run.revise through the queue — the new catalogue with what each document is made from and the conventions it moves, then the documents that merge or are new — gated as plan_draft is. Its input and report are plan_draft's; the owner's instructions are the plan job's own. Made by advanceWikiPlanJob for the owner's redraft with instructions.",
       "docs_build": "The documents' build on the server (P7, docs.build.server): the documents of a confirmed plan version, written by the wiki-worker with the System model. Made by the owner's confirmation of the version (plan.jobs.server.build), at docs.build.server.priority; its input is { planJobId }. It reads the repository at a snapshot's commit through the space's runner, the records through the material read, writes each section through WikiDocs.write, says how far it got and how it ended on its plan job, and fails as content when a section was left unwritten.",
-      "maintain": "A space's Wiki maintenance run on the server (P8, maintenance.job.server): run by the wiki-worker with the deployment's System model and the space's snapshot (a task's session ran it with orbit wiki maintain until P10). Its input is { runId } — the wiki_maintenance_run the trigger made beside it, which carries why the run was made, how far it must read and how the space stood; a backfill's also names its sessions (maintenance.job.server.backfill), and differs from what follows as that says — and the job executes exactly that run: the dossiers through WikiMaintenance.dossierPage, one request per dossier through the queue (step extract, unit the session's id, at most rules.extractConcurrency in flight), the checks and the one retry of wiki-maintain.ts, the dry run and then the batches of at most limits.opsPerChangeset ops with the run's own breaker (wiki-maintain-job.ts), the cursor advance through WikiMaintenance.advanceRecorded, its own ops verified twice and then up to rules.adoptOpsMax adopted (P3's verifyWikiOps with a maintenance-job principal), the anchors read in pages of anchorRules.verify.rules.listEntriesMax entries, an entry every anchor of which still holds at the snapshot's commit left out (anchorRules.verify.skip, after at most maintenance.job.server.rules.anchorDiffsMax diffs, one at a time), the entries left to check sent together whichever page they were read on, at most that many entries a wiki_repo_op — the most one operation may carry — and each written back in reports of at most anchorRules.verify.rules.reportEntriesMax entries — and the documents' step (maintenance.job.docs) with P7's writer and P6's plan gate — its comparison (maintenance.job.docs.byRepo) one diff a repoSha the snapshot reaches and none at the head, and then the files it compares read by commit: what the touched sections of one commit name in one read at that commit and all of it in one read at the head, the read cache first and more than one operation only where repoOps.read.operationBytes packs them so, each operation asked once the one before it has settled; a diff's names keyed as the runner's comparison keyed them (wikiGitChanges), by the path at the section's commit — a rename under its old path, the one withdrawn ({ path: the old path, change: renamed, to: the new path }), and its new path as added, either end touching a section that names it — and the files at that commit the head's less what the range added or renamed into place, plus what it deleted or renamed away, so a cited file deleted since is read there, as the runner read the commit itself, and its going is a change. It reports maintenance.job.report plus the token spend, and its end queues the articles a successful run owes (articles.regeneration); the round after it is claimed before that articles job, which yields it that one round (priority). A failure of the platform is thrown as infra and the job is tried again without counting against the space; a failure of the work ends the run (outcome failed, the space's streak one higher) and the job fails as content (§5.5)."
+      "maintain": "A space's Wiki maintenance run on the server (P8, maintenance.job.server): run by the wiki-worker with the deployment's System model and the space's snapshot (a task's session ran it with orbit wiki maintain until P10). Its input is { runId } — the wiki_maintenance_run the trigger made beside it, which carries why the run was made, how far it must read and how the space stood; a backfill's also names its sessions (maintenance.job.server.backfill), and differs from what follows as that says — and the job executes exactly that run: the dossiers through WikiMaintenance.dossierPage, one request per dossier through the queue (step extract, unit the session's id, at most rules.extractConcurrency in flight), the checks and the one retry of wiki-maintain.ts, the dry run and then the batches of at most limits.opsPerChangeset ops with the run's own breaker (wiki-maintain-job.ts), the cursor advance through WikiMaintenance.advanceRecorded, its own ops verified twice and then up to rules.adoptOpsMax adopted (P3's verifyWikiOps with a maintenance-job principal), the anchors read in pages of anchorRules.verify.rules.listEntriesMax entries, an entry every anchor of which still holds at the snapshot's commit left out (anchorRules.verify.skip, after at most maintenance.job.server.rules.anchorDiffsMax diffs, one at a time), the entries left to check sent together whichever page they were read on, at most that many entries a wiki_repo_op — the most one operation may carry — and each written back in reports of at most anchorRules.verify.rules.reportEntriesMax entries — and the documents' step (maintenance.job.docs) with P7's writer and P6's plan gate — its comparison (maintenance.job.docs.byRepo) one diff a repoSha the snapshot reaches and none at the head, and then the files it compares read by commit: what the touched sections of one commit name in one read at that commit and all of it in one read at the head, the read cache first and more than one operation only where repoOps.read.operationBytes packs them so, each operation asked once the one before it has settled; a diff's names keyed as the runner's comparison keyed them (wikiGitChanges), by the path at the section's commit — a rename under its old path, the one withdrawn ({ path: the old path, change: renamed, to: the new path }), and its new path as added, either end touching a section that names it — and the files at that commit the head's less what the range added or renamed into place, plus what it deleted or renamed away, so a cited file deleted since is read there, as the runner read the commit itself, and its going is a change. It reports maintenance.job.report plus the token spend, and its end queues the articles a successful run owes (articles.regeneration); the round after it is claimed before that articles job, which yields it that one round (priority). A failure of the platform is thrown as infra and the job is tried again without counting against the space; a failure of the work ends the run (outcome failed, the space's streak one higher) and the job fails as content (§5.5).",
+      "docs_follow": "The follow job (the wiki chat, C4, docs.follow): the sections a chat's press or a change that reached main touched, written again by the wiki-worker with the System model at once — not when maintenance is next due, and not skipped while the space catches up. Made by the press in its own transaction, or after a merge receipt into main commits (docs.follow.triggers), at the highest priority it carries (docs.follow.priorities); its input is { facts }, every fact that joined it while it was queued. It reads the repository at a snapshot's commit through the runner of the space's maintenance workspace, takes up a press's sections whatever their fingerprint and a merge's where a file it changed is cited and the section's own material changed (docs.follow.sections), within the day's budget (docs.follow.daily), writes each through WikiDocs.write with the reason of the fact that asked for it (docs.versions), reports { sections, left, usage } (docs.follow.report), and fails as content when a section was left unwritten."
     },
     "states": ["queued", "running", "waiting", "succeeded", "failed", "cancelled"],
     "waitingFor": ["repo", "model"],
@@ -2031,7 +2476,7 @@
       "sweep": "A running job whose lease_deadline_at passed goes back to queued, attempts one higher and the next attempt on retry.backoffSeconds, failure_kind infra and the error `LEASE_EXPIRED: the worker holding this job stopped before settling it`; the takeover starts the job from the beginning, and the request rows it already made answer the replay (modelQueue.identity). These are the leases nobody handed back — the worker crashed, was killed, or exited before its hand-back was written — and their rule is unchanged: a stopped worker's jobs never reach the sweep (handBack).",
       "handBack": "The owner's decision of 2026-10-09: a deploy does not count against a job's attempts (design section 5.4). A worker that is stopped (SIGTERM, modelQueue.shutdown) hands each job it runs back in one write, a compare-and-set on the claim's generation: state queued, the lease columns and next_attempt_at cleared, attempts as they were, failure_kind cleared, and the error `WORKER_STOPPED: the worker was stopped and handed this job back; the next one takes it over at once, without counting an attempt`. The next claim — the next process's first pass, or another worker's — takes it at once in its space's order (lease.claim, priority) — an articles job handed back has been claimed, so it waits for no round — never after a backoff; before this, the sweep counted a stop as a lost attempt and backed the job off, and on 2026-10-09 docs_build 79620f23 lost three of its ten attempts to three deploys and, backing off 30 s at 06:56Z, was overtaken by its space's priority 0 articles job. A job parked on a repository operation whose wait the stop cuts short is handed back the same way (repoOps.waiting). Its requests are let go as modelQueue.shutdown says and met again by the replay; its writes are made under their idempotency keys, so the replay writes nothing twice. It is no failure: it writes no run row and no cursor, so the space's consecutive failures are not touched; Activity draws the job queued with its place in line, never `retrying in` (nextAttemptAt is null) and no error (read), and orbit wiki import prints it as the job's last try (import.server.cli), its attempts as they were. What it finished that its replay will not do again is on its row already (carry), and the report the replay ends with counts it."
     },
-    "onePerSpace": "At most one job per space runs at a time (design section 5.1, as the hidden list's maxConcurrent 1 was): the claim skips a space whose job is running, and a partial unique index over space_id WHERE state = 'running' is the same rule in the database, for two schedulers that read at once. A job that is waiting (waiting_for set) holds no lease and does not occupy the space.",
+    "onePerSpace": "At most one job per space runs at a time (design section 5.1, as the hidden list's maxConcurrent 1 was), with one exception, the owner's decision of 2026-11-06 (docs/wiki-chat-design.md section 8.5): a docs_follow job (docs.follow) runs beside a job of its space that writes no document — articles, verify, import or smoke — and waits only for the ones that do: maintain, docs_build, plan_draft, plan_revise and another docs_follow. So two jobs of a space run at once only when one is docs_follow and the other writes no document (wikiJobsMayOverlap in src/shared/src/wikiChat.ts); every other pair waits as before, articles and verify included. The claim takes a space's next due job in its own order (priority) that no running job of the space excludes, and the database holds the same rule for two schedulers that read at once with two partial unique indexes over space_id in place of wiki_job_space_running_key: one WHERE state = 'running' AND kind <> 'docs_follow' (of everything but the follow job, at most one runs), and one WHERE state = 'running' AND kind IN ('maintain', 'docs_build', 'plan_draft', 'plan_revise', 'docs_follow') (at most one job that writes documents). A follow job beside a verify cannot deadlock with it: a verdict withdraws sentences and marks sections stale in its entry's own transaction, entries first and documents after, the order a document write takes them (docs.withdrawal), so no cycle forms — src/apiserver/src/wiki-worker/wiki-docs-follow-job.pg.spec.ts proves it. Migration 0477 (C4) made docs_follow a kind and the two indexes, wiki_job_space_running_other_key and wiki_job_space_running_writer_key, in place of 0401's one. What it leaves: a press while maintenance writes the documents still waits for it, and Rewrite waiting says so (docs.follow.waiting); how long is design section 14's second measurement. A job that is waiting (waiting_for set) holds no lease and does not occupy the space.",
     "priority": "Integer, default 0. Owner-initiated work — a plan draft, a review, a build, an import from the command line — is made with a higher priority than background maintenance, and the claim takes the highest first; within one priority, the longest-waiting job first. A verify job is made with 1: the session that proposed the op is waiting for it, and the space knows nothing of what was proposed until the verdict arrives; the pass a maintenance run makes over what ended sessions left waiting (verification.adoption, P8) is background work at 0. Maintenance goes first, and an articles job yields one round at most (the owner's decision of 2026-10-10): an articles job that has never been claimed waits for its space's round — the first maintain job of the space made after it, of no lower a priority — until that round has ended, every attempt and backoff of it included, so the round is claimed first although it was made later. Once the round has ended, a maintain job made after it finds the articles job ahead in first-come order: the articles job yields that one round alone and is never starved. On the canary every round's end queued an articles job that ran for an hour and a half or more (1d4b9a86: 673 calls and 1.56 million input tokens, nearly every topic's fingerprint changed by the round's twenty-odd sessions), and the next round, queued moments later, waited behind it (61e91611: an hour and 47 minutes). The round is usually not made yet when the articles job is: a run's end queues the articles job, and the trigger made the next round only at the owner's next event about the space — 15 s later in that case, 99 s after 61e91611 (articles 3f3a8f90 claimed at 07:19:42, its round 96cd83f0 made at 07:21:20), 8.6 to 99.2 s after every canary run that queued one, while the worker's pass comes every 5 s. The trigger has no clock of its own, only events, so no fixed wait could be sure to cover that gap: instead the end of a server run that queued its space's articles job asks the trigger for the next round at once (maintenance.job.server.trigger), and a space still due has the round made then, right behind the articles job and before the run lets the space go — the claim takes it first, deterministically. A space no longer due makes no round, and its articles job runs at the next pass, not a moment later. A job claimed before — handed back (lease.handBack), put back for infra, parked on a repository operation — has had its turn and waits for no round, and a running job is never touched: only which queued job a claim takes changes. No priority changes for it: a job's calls carry its priority into the model queue (modelQueue.priority), where a lower one would rank the articles behind every other space's calls, and wiki_job_counts_chk holds every priority at 0 or above. Across spaces nothing moves: a space keeps the place in the line its first job by priority and first come gives it, whichever of its jobs takes that place (lease.claim, read.jobRules.ahead). The owner's work at 1 still goes before both.",
     "retry": {
       "backoffSeconds": [0, 10, 30],
@@ -2043,8 +2488,8 @@
     "concurrencyPerWorker": 4,
     "pollSeconds": 5,
     "startup": "A worker runs one pass the moment it starts — sweep, then claim — so a job left queued, handed back by a stopped worker (lease.handBack) or held by a dead one (lease.sweep) is picked up where it stands.",
-    "make": "The pipelines enqueue a job as a row (kind, input, priority, state queued), for every account (P11, 2026-10-19). Each pipeline has its own route or trigger: since P3 a submission that recorded an op an Automatic space holds back (reviewModes.verification.waits) makes a verify job for the session that proposed it, after its own transaction commits, at the waiting priority (priority above) — and so does the owner reopening ops a verdict should not have decided (verification.reopen), whose sessions are usually long gone — with one queued job per session and space, since a job reads the ops that wait when it runs (a later submission rides it, while an op arriving mid-run gets a job of its own); since P5 the runner door's import-jobs route makes an `import` job (import.server.create); since P4 an articles job is made where the server records the end of a maintenance run, by the rule articles.regeneration states (articles.serverExecution.made); since P6 a plan job is made as a `plan_draft` or `plan_revise` job (plan.jobs.server.make); since P7 the owner's confirmation of a plan version makes a docs_build job (docs.build.server.made); since P8 the maintenance trigger makes a maintain job with its run (maintenance.job.server); and smoke is made by the specs directly.",
-    "progress": "A job's progress column is its own pipeline's to write (a step, a count, what it is doing), under its lease generation; report is what it ends with — the whole job's, whatever attempts it took — and until then holds only what its attempts carry to a replay (carry). The smoke job writes a report; the import job writes both (import.server.progress, import.server.report); the articles job writes its report (articles.serverExecution.ends), and so does the verify job (jobs.kindRuns.verify); the plan jobs write both (plan.jobs.server.progress, plan.jobs.server.finish), and so does the docs_build job (docs.build.server.progress, docs.build.server.end).",
+    "make": "The pipelines enqueue a job as a row (kind, input, priority, state queued), for every account (P11, 2026-10-19). Each pipeline has its own route or trigger: since P3 a submission that recorded an op an Automatic space holds back (reviewModes.verification.waits) makes a verify job for the session that proposed it, after its own transaction commits, at the waiting priority (priority above) — and so does the owner reopening ops a verdict should not have decided (verification.reopen), whose sessions are usually long gone — with one queued job per session and space, since a job reads the ops that wait when it runs (a later submission rides it, while an op arriving mid-run gets a job of its own); since P5 the runner door's import-jobs route makes an `import` job (import.server.create); since P4 an articles job is made where the server records the end of a maintenance run, by the rule articles.regeneration states (articles.serverExecution.made); since P6 a plan job is made as a `plan_draft` or `plan_revise` job (plan.jobs.server.make); since P7 the owner's confirmation of a plan version makes a docs_build job (docs.build.server.made); since P8 the maintenance trigger makes a maintain job with its run (maintenance.job.server); since the wiki chat (C4) a chat's press, and a merge receipt into main once it commits, make or join the space's docs_follow job (docs.follow.triggers, docs.follow.queue); and smoke is made by the specs directly.",
+    "progress": "A job's progress column is its own pipeline's to write (a step, a count, what it is doing), under its lease generation; report is what it ends with — the whole job's, whatever attempts it took — and until then holds only what its attempts carry to a replay (carry). The smoke job writes a report; the import job writes both (import.server.progress, import.server.report); the articles job writes its report (articles.serverExecution.ends), and so does the verify job (jobs.kindRuns.verify); the plan jobs write both (plan.jobs.server.progress, plan.jobs.server.finish), and so does the docs_build job (docs.build.server.progress, docs.build.server.end), and the docs_follow job (its step, and the sections done of those it took up with the commit it writes from; docs.follow.report).",
     "carry": {
       "phase": "server execution, the whole job's report — 2026-10-10, the canary's articles 3f3a8f90 and f917aef5 (P10)",
       "doc": "docs/wiki-contract.md section 24.10",
@@ -2060,7 +2505,8 @@
         "import": "Nothing: its input is fixed, a replay reads every note again through the requests it already made, and proposes the same ops under the same key (import.server), so its report is the whole job's already.",
         "plan_draft": "Nothing: its materials are kept on its plan job at its first run (plan.jobs.server.materials), so a replay asks the same questions through the requests it already made and goes through every round again; its tokens are already every request of the job, and its seconds run from the plan job's start.",
         "plan_revise": "Nothing, as plan_draft.",
-        "smoke": "Nothing: one call."
+        "smoke": "Nothing: one call.",
+        "docs_follow": "Each section written, as its report says it (docs.follow.report): a replay does not mark a press's section stale again and so does not write it twice, finds a merge's written at the head and leaves it, and the report counts each section once — the attempt that wrote it is its outcome."
       },
       "calls": "The calls and usage a report gives are read off the job's own wiki_model_request rows, each once (wikiJobModelCalls): a replay meets the rows its earlier attempts made rather than making new ones, so a call it reuses is not counted again, and a call an attempt made that the replay never asked again is still counted. articles counts the requests that answered; docs_build and maintain also count the ones that ended in a failure of their own (a refusal, a budget), never one failed on its step's wait limit, which was the platform's and is asked again under the next attempt. maintain's tokens are every call of the run once (maintenance.job.run.tokens), its docs.tokens the documents' steps' and the plan proposal's; before this, the documents' calls were counted twice in the run's tokens, and the second verification pass counted its looked ops as calls though its requests — the first pass's units, asked with another prompt — were refused as already existing and never reached the model. Since it asks under units of its own (maintenance.job.server.verify), its requests are calls like any other.",
       "seconds": "docs_build's seconds run from the job's first claim to its end, and maintain's from the run's first start, as a plan job's run from its plan job's start; maintain's docs.seconds is the time each attempt spent in the documents step, added up.",
@@ -2252,8 +2698,8 @@
     { "code": "WIKI_QUOTA", "httpStatus": 429, "scope": "op", "when": "A session's new note is past agentSurface.note.rules.perSession. Or the op is past limits.opsPerChangeset in its request; or it would wait for the owner and pass limits.opsPerTurn for the request or limits.opsPerSession for the calling session (limitNotes.quota); or the review mode would apply it and the changeset would pass the circuit breaker (reviewModes.floors)." },
     { "code": "WIKI_REVIEW_QUEUE_FULL", "httpStatus": 429, "scope": "op", "when": "The op would wait for review and the space already has limits.pendingOpsPerSpace pending ops that wait on the owner's decision (spot checks and ops waiting for their verification not counted)." },
     { "code": "WIKI_PROBE_REFUSED", "httpStatus": 422, "scope": "op", "when": "The title or text, or a session's note (agentSurface.note.probe), reads as a tool probe (test, probe, TEST_WRITE_CHECK). The message says the tool works and not to retry." },
-    { "code": "WIKI_OWNER_CHANNEL_ONLY", "httpStatus": 403, "scope": "request", "when": "A decide, a revert, an entry's Reject or Confirm, a reopening of verifications, a change of the review mode or of automaticSpotChecks, or any request of the plan's on the user door (plan.who.owner) arrived with a session header, whatever the session's role: each is the owner's, on the user door, with no acting session." },
-    { "code": "WIKI_SESSION_EXCLUDED", "httpStatus": 403, "scope": "request", "addedByThisContract": true, "when": "The calling session verifies, forems or judges work (task.verifiesTaskId, task.isForeman, a judgment session). Knowledge is not evidence, so such a session neither reads nor proposes." },
+    {"code": "WIKI_OWNER_CHANNEL_ONLY", "httpStatus": 403, "scope": "request", "when": "A decide, a revert, an entry's Reject or Confirm, a reopening of verifications, a change of the review mode or of automaticSpotChecks, or any request of the plan's on the user door (plan.who.owner) arrived with a session header, whatever the session's role: each is the owner's, on the user door, with no acting session. So is every route of the wiki chat (chat.door: making or listing chats, reading cards, and the presses — apply, edit, discard, undo, retry, seen) and a restore of a section's version (docs.versions.restore)."},
+    {"code": "WIKI_SESSION_EXCLUDED", "httpStatus": 403, "scope": "request", "addedByThisContract": true, "when": "The calling session verifies, forems or judges work (task.verifiesTaskId, task.isForeman, a judgment session). Knowledge is not evidence, so such a session neither reads nor proposes. And wiki_draft from a session that is not a wiki chat (agentSurface.chat.draft.who): it drafts for the owner of a chat, and no other session has one."},
     { "code": "WIKI_IDEMPOTENCY_KEY_REUSED", "httpStatus": 409, "scope": "request", "addedByThisContract": true, "when": "An idempotency key the owner already used arrived with a different request (its normalized digest differs). The same request under the same key is a replay and gets the recorded answer." },
     { "code": "WIKI_CURSOR_BEHIND", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A succeeded run asked to advance the cursor to a token behind the space's watermark: another run already went further, and the cursor only moves forward (maintenance.cursor.advance). The answer carries the cursor as it stands." },
     { "code": "WIKI_CURSOR_INVALID", "httpStatus": 400, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A cursor token that no dossier page of this space handed out: one that does not decode, one of another space, or a position past the furthest page the space's dossier route has issued." },
@@ -2282,7 +2728,15 @@
       "wiki_search": {
         "readOnly": true,
         "params": { "query": "required", "kinds": "optional", "topic": "optional", "paths": "optional", "limit": "optional, 1 to limits.searchLimitMax" },
-        "returns": "entries only: id, kind, title, summary, trust, anchorState, match (searchMatches) and score"
+        "returns": "entries only: id, kind, title, summary, trust, anchorState, match (searchMatches), score, and how old each one is (age)",
+        "hit": ["id", "kind", "title", "summary", "trust", "anchorState", "match", "score", "recordedAt", "changedAt", "anchorCheckedRef", "anchorCheckedAt"],
+        "age": {
+          "why": "So that a caller can judge for itself how old what an entry says is (the wiki_search review, 2026-11-06): anchorState verified says that the last check found the anchors as recorded (anchorStates), never that what the entry says still holds. Every hit carries all four, on the runner door and on the owner's GET /api/wiki/search alike; a time is ISO 8601 in UTC.",
+          "recordedAt": "When the entry was recorded: the birth of its lineage (wiki_entry.recorded_at), when it was first proposed or written. No amend moves it; a supersede is a lineage of its own.",
+          "changedAt": "When its current revision was written (the created_at of the wiki_entry_revision at its current_revision): the last change to what it says. An anchor check writes no revision and leaves it as it was. Null only for an entry deleted while the search read it.",
+          "anchorCheckedRef": "The ref its anchors were last checked at (wiki_entry.anchor_checked_ref): a commit of the space's main, as the maintenance run reports it. Null until the first check, and again after an amend that gives the anchors anew (anchorRules.verify.aggregate); an amend that leaves them alone keeps it, so a check can be older than changedAt.",
+          "anchorCheckedAt": "When that check was made (wiki_entry.anchor_checked_at); null exactly when anchorCheckedRef is."
+        }
       },
       "wiki_get": {
         "readOnly": true,
@@ -2309,6 +2763,36 @@
       "wiki_note": "orbit wiki note"
     },
     "notTools": "No tool accepts, confirms, decides, hard-deletes or overwrites a page. Confirmation exists only on the owner channel.",
+    "chat": {
+      "phase": "wiki chat, contract C2 (2026-11-06)",
+      "doc": "docs/wiki-contract.md section 11 and section 28.4; docs/wiki-chat-design.md section 7.1",
+      "who": "A chat session (chat.binding: session.wiki_chat_space_id set). Its space is that one, the space its workspace is in — create chose an eligible workspace of it (chat.workspace).",
+      "propose": "In a chat, wiki_propose drafts. Every op — add, amend, supersede and retire, and the reinforce and challenge that apply at once elsewhere — is checked as ever (refusalRules.order: schema, sources, quotes, redaction, compare-and-set, the taint mark; not quota, review queue or breaker, which a draft takes no place in) and the ops that pass become one card (chat.drafts), written nowhere else: no changeset, no entry, no Review, no verification. It answers { status: draft, draftId, ops: [each draft, or refused with its reasons], similar[] }; a request none of whose ops passed makes no card and answers as it would have. dryRun checks and makes nothing. A principle op is not refused WIKI_KIND_OWNER_ONLY in a chat: it waits for the owner's press, which is the owner's own write (reviewModes.chat). In every space and every review mode alike: the mode never touches a card.",
+      "note": "In a chat, wiki_note's corrects drafts its challenge: the note is kept as anywhere (note.stored), and the challenge becomes a card, not an op; challenged answers { status: draft, draftId }. A note without corrects is unchanged: it was only ever a lead for maintenance.",
+      "replaces": "In a chat both tools take one parameter more, replaces: the id of an open card of the same chat that the new one replaces (chat.drafts.replace). It joins toolSpecs.wiki_propose.params when the runner serves it (C6), as wiki_draft joins tools.",
+      "draft": {
+        "tool": "wiki_draft",
+        "readOnly": false,
+        "destructive": false,
+        "params": {
+          "kind": "required: rewrite or plan (chat.drafts.kinds; entry ops are wiki_propose's)",
+          "sections": "rewrite: required, 1 to chat.rules.rewritesMax of { doc, section }: a document's slug and a section's key, each a written section of the confirmed plan (WIKI_SCHEMA naming it otherwise)",
+          "change": "plan: required, shaped as a plan proposal's change (plan.proposals)",
+          "reason": "required: why, in a sentence or two; the card shows it",
+          "replaces": "optional: the id of an open card of this chat that this one replaces",
+          "idempotencyKey": "required"
+        },
+        "returns": "{ status: draft, draftId, kind, rewrites }, or refused with its reasons",
+        "who": "A chat alone. Any other session is refused WIKI_SESSION_EXCLUDED, its message saying that wiki_draft works only in a wiki chat; a verifier, foreman or judgment session is refused it as every wiki call (excludedSessions).",
+        "plan": "The plan kind arrives with the plan card (design section 14, second step). Until then a plan draft is refused WIKI_SCHEMA at kind, its message saying plan drafts are not open yet.",
+        "cli": "orbit wiki draft",
+        "route": "POST /api/runner/wiki/drafts",
+        "description": "Draft, for the owner of this wiki chat to apply, a change that is not an entry: a rewrite of wiki sections from main, when the code changed and a section did not follow it, or a change to how the wiki's documents are planned. Nothing is written until the owner presses Apply on the card, so never call a draft applied. A change to what the wiki knows is an entry: use wiki_propose. Works only in a wiki chat.",
+        "arrival": "It joins tools, toolSpecs and cli when the runner serves it (C6, a runner release): TestWikiAgentSurfaceIsTheContracts (src/runner-go/wiki_tools_test.go) holds tools to the tools a binary serves, so a fifth name there before the binary serves it would fail every runner build. Until then this is its contract, word for word; the cli/mcp parity, the help coverage and agent_instructions' three family tables take it with the tool.",
+        "notTools": "It accepts nothing, confirms nothing, decides nothing and overwrites no page: it makes a card the owner may press. notTools holds as written."
+      },
+      "unchanged": "Outside a chat nothing here applies: wiki_propose, wiki_note, their descriptions and every answer are what they were."
+    },
     "proposeDescription": "Record only what someone could not read from the code: a decision and what was rejected, a pitfall and its fix, a convention. Cite the turns or records it came from; a claim you cannot cite is not ready. Whether it takes effect depends on the space's review mode, and what has taken effect other sessions can find in a search: tell the user what each op's status says, and never call a pending op saved.",
     "noteDescription": "Tell the wiki something this session learned that someone could not read from the code: a decision and why, a trap and its fix, a rule the owner gave. One claim, in one or two sentences. Maintenance reads it later against this session's records and writes an entry only if they bear it out, so it is not in the wiki yet and may never be. Not for progress or status: use task_progress_report. If your engine keeps its own memory, what you write there is read the same way: do not write both. To say an entry is wrong, pass corrects with its id: the entry is flagged at once.",
     "note": {
@@ -2375,7 +2859,20 @@
           "GET /api/wiki/spaces/:id/docs/:slug",
           "GET /api/wiki/spaces/:id/doc-index",
           "GET /api/wiki/system-model",
-          "GET /api/wiki/spaces/:id/jobs"
+          "GET /api/wiki/spaces/:id/jobs",
+          "POST /api/wiki/spaces/:id/chats",
+          "GET /api/wiki/spaces/:id/chats",
+          "GET /api/wiki/chats/:id/drafts",
+          "GET /api/wiki/chat-drafts/:id",
+          "POST /api/wiki/chat-drafts/:id/apply",
+          "POST /api/wiki/chat-drafts/:id/edit",
+          "POST /api/wiki/chat-drafts/:id/discard",
+          "POST /api/wiki/chat-drafts/:id/undo",
+          "POST /api/wiki/chat-drafts/:id/retry",
+          "POST /api/wiki/chat-drafts/:id/seen",
+          "GET /api/wiki/spaces/:id/docs/:slug/sections/:key/versions",
+          "POST /api/wiki/doc-versions/:id/restore",
+          "GET /api/wiki/spaces/:id/doc-changes"
         ]
       },
       "runner": {
@@ -2386,7 +2883,8 @@
           "GET /api/runner/wiki/entries/:id",
           "POST /api/runner/wiki/changesets",
           "POST /api/runner/wiki/notes",
-          "GET /api/runner/wiki/context"
+          "GET /api/runner/wiki/context",
+        "POST /api/runner/wiki/drafts"
         ],
         "verificationRoutes": ["GET /api/runner/wiki/spaces/:id/verifications", "POST /api/runner/wiki/spaces/:id/verifications/request"],
         "verificationNote": "The session that proposed the ops, and no other (reviewModes.verification.who.runner): X-Orbit-Session-Id is required, and another session's op or another owner's anything is a 404.",
@@ -2416,7 +2914,7 @@
       "why": "The confirmation card in the runner is not a gate: the server never checks it and a headless call passes it. So only the owner channel decides."
     },
     "readBoundary": "A session reads a space's entries only when its workspace is in that space (space.binding): being in a space is the owner agreeing to share confirmed entries across the space's workspaces, which the owner takes back by leaving one out. A pending proposal is visible only to the session that made it.",
-    "excludedSessions": "Verifier, foreman and judgment sessions are refused every wiki_* call (WIKI_SESSION_EXCLUDED) and are never pushed to.",
+    "excludedSessions": "Verifier, foreman and judgment sessions are refused every wiki_* call (WIKI_SESSION_EXCLUDED) and are never pushed to. wiki_draft is refused the same way to every session that is not a wiki chat (agentSurface.chat.draft.who).",
     "rollout": {
       "env": "ORBIT_WIKI",
       "values": ["off", "canary", "on"],
@@ -2438,12 +2936,15 @@
       "a changeset recorded something, after its transaction commits",
       "the owner decided ops, after the transaction commits",
       "a space was created, its settings changed, or a workspace was added to it, turned back on or left out",
+      "a space was deleted, after its transaction commits",
       "the owner reverted a changeset or rejected an entry, after the transaction commits",
       "a verdict was recorded, after its transaction commits",
       "pending ops expired or were withdrawn",
       "a topic's articles were written, or a space's topics seeded, after the transaction commits",
       "a version of a space's plan was stored or confirmed, or a change to it proposed or decided, after the transaction commits",
-      "a document's sections were written, or sentences of it withdrawn for a repository file gone from origin/main, after the transaction commits"
+      "a document's sections were written, or sentences of it withdrawn for a repository file gone from origin/main, after the transaction commits",
+      "a chat's card was made, replaced or pressed, or its rewrite's job was queued, held up, started or ended (chat.realtime), after the transaction commits",
+      "a section was restored to a version it kept (docs.versions.restore), after the transaction commits"
     ],
     "notPublishedWhen": ["an idempotent replay", "a dryRun", "a request that recorded nothing"],
     "correctness": "Nothing depends on it. Dropping every announcement changes only how long a client waits: clients re-read on focus and on reconnect.",

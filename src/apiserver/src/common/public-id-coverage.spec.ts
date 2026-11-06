@@ -50,6 +50,7 @@ import { WikiHealthController } from '../wiki/wiki-health.controller';
 import { WikiJobsController } from '../wiki/wiki-jobs.controller';
 import { WikiPlanController } from '../wiki/wiki-plan.controller';
 import { WikiDocsController } from '../wiki/wiki-docs.controller';
+import { WikiChatController } from '../wiki/wiki-chat.controller';
 
 // Every id crossing the HTTP boundary arrives from a URL, a human, or a model — pasted out of a
 // client link, echoed from a previous tool result, or invented. The columns behind them are all
@@ -72,7 +73,7 @@ import { WikiDocsController } from '../wiki/wiki-docs.controller';
 // says otherwise". An allowlist would let a param nobody classified through unchecked. UUID
 // exceptions are route-specific below: a generic `requestId` exemption would also silently exempt
 // future public request-row addresses.
-const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version', 'account', 'slug', 'engine', 'part', 'revision']);
+const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version', 'account', 'slug', 'engine', 'part', 'revision', 'key']);
 // `part` is an article's number within its topic (0 the article or overview, 1… its subtopic
 // parts): GET /wiki/spaces/:id/articles/:slug/:part, an integer ParseIntPipe guards.
 // `engine` is a provider name (`claude`, `codex`), the engine whose account store a removal is
@@ -80,6 +81,8 @@ const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version', 'account',
 // login engine — an id here would be addressed as a name no engine answers to.
 // `revision` is an evidence revision's number within its task: GET /tasks/:taskId/evidence/:revision/files, digits that
 // `FilesService.evidenceFiles` reads as a bigint, and a 404 for anything else.
+// `key` is a plan section's key within its document (`s3`, `overview`), matched as text as the document's `slug` is:
+// GET /wiki/spaces/:id/docs/:slug/sections/:key/versions, a 404 for a section the confirmed plan does not have.
 
 const OPAQUE_PARAM_ROUTES: Readonly<Record<string, string>> = {};
 
@@ -139,6 +142,9 @@ const CONTROLLERS = [
   // The documents (migration 0326, contract `docs`): the owner's directory, document and index. `slug`
   // is the plan document's.
   WikiDocsController,
+  // A space's wiki chats (migration 0476, contract `chat`): making one and reading them. The create's
+  // `workspaceId` is decoded by the body pipe.
+  WikiChatController,
 ];
 
 // Nest records one entry per decorated argument under `__routeArguments__`, keyed

@@ -1,5 +1,7 @@
 package io.orbitd.android.directory
 
+import io.orbitd.android.hasRowMenu
+import io.orbitd.android.openRowMenu
 import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.compose.ui.semantics.Role
@@ -67,16 +69,14 @@ class ProjectSessionsDeviceTest {
                 compose.waitUntil(20_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
 
                 // A05-6 · Alpha's list: the project's sessions as one row in its coordinator's place, in their words.
-                await { exists(hasTestTag("workspace:$alpha")) }
-                compose.onNodeWithTag("workspace:$alpha").performClick()
                 await { exists(hasTestTag("project-row:$launch")) && exists(hasTestTag("project-row-line") and hasText("Waiting for your confirmation · Quota retry"), unmerged = true) }
-                assertFalse("the coordinator is the row", exists(hasContentDescription("Options for Coordinate launch")))
-                assertFalse("so is the member running here", exists(hasContentDescription("Options for Wire tests")))
-                assertTrue(exists(hasContentDescription("Options for Plain notes")))
+                assertFalse("the coordinator is the row", exists(hasRowMenu("Options for Coordinate launch")))
+                assertFalse("so is the member running here", exists(hasRowMenu("Options for Wire tests")))
+                assertTrue(exists(hasRowMenu("Options for Plain notes")))
                 assertTrue(exists(hasText("3/8") and hasAnyAncestor(hasTestTag("project-progress-chip")), unmerged = true))
                 assertTrue(exists(hasTestTag("project-row-running"), unmerged = true))
                 capture("01-list-project-row")
-                compose.onNodeWithContentDescription("Options for Launch").performClick()
+                compose.onNode(hasRowMenu("Options for Launch")).openRowMenu()
                 await { exists(hasText("Open Session") and hasAnyAncestor(isDialog())) }
                 assertEquals(listOf("Open Session", "Sessions", "Open Project", "Pin", "Move…", "Close"), dialogButtons())
                 capture("02-project-row-menu")

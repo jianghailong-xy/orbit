@@ -304,6 +304,7 @@ POST   /wiki/spaces  |  PATCH /wiki/spaces/:id       设置：push / autoAccept 
 GET    /wiki/spaces/:id/workspaces                   列出 workspace 和可加入的 workspace
 POST   /wiki/spaces/:id/workspaces                   加入 workspace，或把留在外面的打开
 DELETE /wiki/spaces/:id/workspaces/:workspaceId      把 workspace 留在外面
+DELETE /wiki/spaces/:id                               永久删除这个 wiki（`docs/mocks/wiki-delete`）
 GET    /wiki/spaces/:id                              首页数据：principles、topics、recent decisions、health、usage
 GET    /wiki/spaces/:id/entries?kind&topic&status&q&cursor
 GET    /wiki/entries/:id?include=sources,history,exposure
@@ -488,7 +489,7 @@ EXECUTABLE 判据）——随维护会话在 P11（2026-10-19）删除：维护�
 
 ### 8.2 维护作业「Wiki maintenance」（阶段 2）
 
-- **开关**：在 space 设置里打开维护，指定 workspace（决定从哪台 runner 读仓库）和每日运行次数（`dailyRunLimit`）。
+- **开关**：在 space 设置或首页的设置卡里打开维护，指定 workspace（决定从哪台 runner 读仓库）和每日运行次数（`dailyRunLimit`）。
   - 模型是部署配置的 System model：不再选 provider（P11 起 provider 不是设置），不花账号自己的 key、订阅或账号池，也不占 runner 槽位。
 - **触发（事实驱动，不用时钟）**
   - 每个已提交事实都会让 `wiki_cursor.backlog` 加一：会话结算、任务终态、审批回答、merge receipt、判据修订。
@@ -712,8 +713,14 @@ iPhone 抽屉、web 手机抽屉、web 桌面侧栏、iPad 与 macOS 侧栏都�
 - **类目怎么排**：手机与 iOS 一类一组（iOS 是分组卡片，grouped 背景）。web 桌面一类一张卡：主区 ≥1100px（容器查询）排两列，否则一列（图 33 ①②）。
 - **末尾**：手机与 iOS 是 `Browse by category · A–Z index`。web 桌面不放这一行，目录栏最上面就有。
 - **没有确认的 plan 时**：照今天目录的逻辑列主题文章（`wikiReadsByDocs` 为假的那支），每行只有标题、没有导语。内容状态行写 `N articles`。
-- **新 space**（还没有文档、也没配维护，图 31 ⑥）：只画一张卡，写 `This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space.`，加一个 `Set up maintenance`，进 Wiki 设置的 Maintenance。内容状态行写 `No documents yet`。
-- **首页上不再有任何管理区块**：状态行、待审横幅 / Review 卡、plan 横幅 / Plan 卡、Recent decisions、Recently changed、Agents used 都在 Activity。web 桌面撤掉右栏（图 33）。
+- **还没有能读的东西时**（没有写好的文档，也没有主题文章，图 41）：主区画一张设置卡，三步是 `Connect the repository`、`Confirm the plan`、`Write the documents`。一次只有一步在动，最多一个主按钮。颜色沿用全站约定：琥珀等 owner，蓝色是系统在做，绿勾做完了，灰色还没到。内容状态行照旧写 `No documents yet`。
+  - 卡不存状态，每次按读到的内容判断：plan 的状态和 Activity 的 Plan 卡读同一份（`wikiPlanLook`），规则在 web 的 `wikiStart.ts`，三端都对 `src/shared/src/wiki-start.fixture.json`，那里列出 plan 每种状态下卡说什么。
+  - 第 1 步等 owner 时，`Set up…` 原地打开 Set up maintenance 表单，不跳设置页。下拉框只列这个 wiki 的 workspace（一个都没有时列全部），默认选读者刚才所在的那个，它的 runner 离线就选第一台在线的；离线的排最后，标 `offline`。Wiki 设置里打开的是同一个表单。
+  - plan 确认之后、第一篇写完之前，卡在类目上面。第一篇写完或出现主题文章，卡就走，这些状态回到 Activity。有原则时卡在原则组下面。
+- **账号里还没有 wiki**（图 41 ④）：同一张卡，标题换成 `Set up your first wiki`，第 1 步的 `Create wiki…` 打开同一个表单，下拉框按仓库分组，没有仓库的 workspace 不列。提交走 `POST /wiki/spaces`，一次建 space、开维护、起草第一版 plan，成功后进新 wiki，卡已经在第 2 步。没有一个 workspace 有仓库时，第 1 步说明缺什么，不给按钮。
+  - 建 wiki 就等于开维护（owner 2026-11-02 定）：没有「只建不开」，那种 wiki 什么也不会发生。
+  - 卡上不写 space，用户看到的词一直是 wiki。
+- **首页上不再有任何管理区块**：状态行、待审横幅 / Review 卡、plan 横幅 / Plan 卡、Recent decisions、Recently changed、Agents used 都在 Activity。web 桌面撤掉右栏（图 33）。设置卡是唯一的例外（owner 2026-11-02 定）：它只在没有内容时出现，有内容之后管理信息仍然只在 Activity。
 
 #### 12.3.2 Activity：管理信息
 
@@ -787,9 +794,9 @@ iPhone 抽屉、web 手机抽屉、web 桌面侧栏、iPad 与 macOS 侧栏都�
 
 #### 12.3.7 新句子
 
-`Activity` · `N waiting on you` · `N new since you last looked` · `· N in <space>` · `N documents · M written` · `+N not written yet` · `N documents · Not written yet` · `No documents yet` · `This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space.` · `Set up maintenance` · `Manage spaces` · `· N waiting`。另外单数写作 `1 proposal to review`。
+`Activity` · `N waiting on you` · `N new since you last looked` · `· N in <space>` · `N documents · M written` · `+N not written yet` · `N documents · Not written yet` · `No documents yet` · `Manage spaces` · `· N waiting`。另外单数写作 `1 proposal to review`。设置卡的句子全部在 `wikiStart.ts`（图 41）。
 
-每个新句子先在 web 的 lib（`src/web/src/lib/wiki.ts`、`wikiDocs.ts`、`wikiPlan.ts`）里定义，再在 Swift 的 `WikiCopy` 里镜像。`WikiCopyParityTests` 等 parity 测试跟着改：缺了对应项必须红，不许 skip。
+每个新句子先在 web 的 lib（`src/web/src/lib/wiki.ts`、`wikiDocs.ts`、`wikiPlan.ts`、`wikiStart.ts`）里定义，再在 Swift 的 `WikiCopy` 里镜像。`WikiCopyParityTests` 等 parity 测试跟着改：缺了对应项必须红，不许 skip。
 
 ---
 
@@ -914,10 +921,12 @@ H4 精度 <50%、出现任何一次泄漏，或 H5 显示检索不比编译差�
 | `06–09-phone-*` | 手机：入口、首页、详情、Review；排成「web 手机 \| iOS \| 说明」三栏逐区块对照 |
 | `10-architecture` | 技术架构图 |
 | `30-drawer-entry` | 从抽屉进入 Wiki 的第一屏：抽屉那一行的数、现状（一张管理看板）、改后（首页是内容）；web 手机 \| iOS \| 说明（§12.3） |
-| `31-home-states` | 首页往下、Activity 页、有原则时、换 space（一个时只有名字 / 两个以上的菜单）、多个 space 时四处同一个数、新 space、加载中 |
+| `31-home-states` | 首页往下、Activity 页、有原则时、换 space（一个时只有名字 / 两个以上的菜单）、多个 space 时四处同一个数、新 space、加载中；新 space 的那张卡已由图 41 取代 |
 | `32-ipad-entry` | iPad 三栏：中栏是目录，详情栏默认是内容首页 |
 | `33-desktop` | web 桌面（1920×1080、1440×900）：首页主区是内容；Activity 页沿用图 29 的卡片排法 |
 | `38-workspaces` | Wiki 设置的 Workspaces 卡（web、iOS）：谁在这个 wiki 里、开关、`Add workspace…`、没有仓库的 wiki，以及开和关的规则（owner 2026-11-02 定） |
+| `41-home-setup` | 还没有内容的 Wiki：今天和提议对比、设置卡的四个样子（web 桌面、web 手机、iOS）、没有 wiki 时的 `Create wiki` 表单，以及每种状态说什么、按钮去哪里的规则表 |
+| `../wiki-delete/01-delete-wiki` | 删除 Wiki（web、iOS、Android）：侧栏 ⋯ 菜单、设置页底部、确认框、删除之后 |
 
 ## 附 B：Wikova 借鉴对照
 

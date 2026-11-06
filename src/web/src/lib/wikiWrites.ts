@@ -180,6 +180,18 @@ export function updateWikiSpace(spaceId: string, body: WikiSpaceUpdate): Promise
   return api(`/wiki/spaces/${encodeURIComponent(spaceId)}`, { method: 'PATCH', body });
 }
 
+/** What makes a wiki: its name, its repository, and its maintenance from the start. */
+export interface WikiSpaceCreate {
+  title: string;
+  repoUrl: string;
+  maintenance: NonNullable<WikiSpaceUpdate['maintenance']>;
+}
+
+/** `POST /api/wiki/spaces` — the owner's: the wiki, with maintenance on and its plan's first draft asked for. */
+export function createWikiSpace(body: WikiSpaceCreate): Promise<{ slug: string }> {
+  return api('/wiki/spaces', { method: 'POST', body });
+}
+
 /** `POST /api/wiki/spaces/:id/workspaces` — bring a workspace into the wiki, or back into it. */
 export function addWikiWorkspace(spaceId: string, workspaceId: string): Promise<unknown> {
   return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/workspaces`, { method: 'POST', body: { workspaceId } });
@@ -188,6 +200,11 @@ export function addWikiWorkspace(spaceId: string, workspaceId: string): Promise<
 /** `DELETE /api/wiki/spaces/:id/workspaces/:workspaceId` — leave a workspace out of the wiki. */
 export function leaveWikiWorkspaceOut(spaceId: string, workspaceId: string): Promise<unknown> {
   return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/workspaces/${encodeURIComponent(workspaceId)}`, { method: 'DELETE' });
+}
+
+/** `DELETE /api/wiki/spaces/:id` — delete a wiki and all it holds, for good (contract `space.delete`). */
+export function deleteWikiSpace(spaceId: string): Promise<unknown> {
+  return api(`/wiki/spaces/${encodeURIComponent(spaceId)}`, { method: 'DELETE' });
 }
 
 // ── The plan's writes (contract `plan.routes`), the owner's door only ───────────────────────────

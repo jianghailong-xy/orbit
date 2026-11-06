@@ -34,6 +34,48 @@ public enum WikiModeCopy {
     public static let addWorkspace = "Add workspace…"                             // WIKI_ADD_WORKSPACE
     public static let addWorkspaceGroup = "Workspaces with no repository"         // WIKI_ADD_WORKSPACE_GROUP
 
+    // MARK: Delete wiki (docs/mocks/wiki-delete)
+
+    public static let deleteTitle = "Delete this wiki"                            // WIKI_DELETE_TITLE
+    public static let deleteNote = "Its entries, documents and history are permanently deleted." // WIKI_DELETE_NOTE
+    public static let deleteOpen = "Delete wiki…"                                 // WIKI_DELETE_OPEN
+    public static let deleteConfirm = "Delete wiki"                               // WIKI_DELETE_CONFIRM
+    public static let deleteKept = "Workspaces and sessions are kept."            // WIKI_DELETE_KEPT
+    /// What an alert titles a refusal; the web says one inside its dialog, with no title.
+    public static let deleteFailed = "Couldn't delete the wiki"
+    public static func deleteQuestion(_ name: String) -> String { "Delete wiki “\(name)”?" }
+    public static func deleted(_ name: String) -> String { "Deleted wiki “\(name)”" }
+    /// What a wiki with a repository does after it: the next session on the repository makes it again.
+    public static func deleteComesBack(_ repository: String) -> String {
+        "The next session on \(repository) to use the wiki starts a new, empty one."
+    }
+    /// What the question says it takes (`wikiDeleteBody`). `entries` is nil when the health read has not answered:
+    /// the sentence still says what goes, with no number in it.
+    public static func deleteBody(entries: Int?, documents: Int) -> String {
+        let counted = { (count: Int, one: String, many: String) -> String in
+            let format = NumberFormatter()
+            format.numberStyle = .decimal
+            format.locale = Locale(identifier: "en_US")
+            return "\(format.string(from: NSNumber(value: count)) ?? String(count)) \(count == 1 ? one : many)"
+        }
+        var things: [String] = []
+        if let entries {
+            if entries > 0 { things.append(counted(entries, "entry", "entries")) }
+        } else {
+            things.append("entries")
+        }
+        if documents > 0 { things.append(counted(documents, "document", "documents")) }
+        let whose = entries == 1 && documents == 0 ? "its" : "their"
+        let subject = things.isEmpty ? "Its history" : "Its \(things.joined(separator: ", ")) and \(whose) history"
+        return "\(subject) will be permanently deleted. This cannot be undone."
+    }
+    /// The question's whole message: what goes, what a repository's wiki does next, and what stays.
+    public static func deleteMessage(entries: Int?, documents: Int, repository: String?) -> String {
+        [deleteBody(entries: entries, documents: documents), repository.map(deleteComesBack), deleteKept]
+            .compactMap { $0 }
+            .joined(separator: "\n\n")
+    }
+
     /// A mode's name (`WIKI_MODE_LABELS`). Empty for one this build does not know.
     public static func modeLabel(_ mode: WikiReviewMode) -> String {
         switch mode {
@@ -181,13 +223,14 @@ public enum WikiModeLogic {
 
     /// The settings page's sections, top to bottom — the web's order (`WIKI_SETTINGS_SECTIONS`).
     public enum SettingsSection: String, CaseIterable, Sendable {
-        case reviewMode, workspaces, maintenance
+        case reviewMode, workspaces, maintenance, delete
 
         public var title: String {
             switch self {
             case .reviewMode:  return WikiModeCopy.reviewMode
             case .workspaces:  return WikiModeCopy.workspaces
             case .maintenance: return WikiModeCopy.maintenance
+            case .delete:      return WikiModeCopy.deleteTitle
             }
         }
     }

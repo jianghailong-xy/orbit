@@ -810,7 +810,22 @@ final class WikiModel {
         }
     }
 
-    /// Who is in a space and who can be added: Wiki settings' Workspaces section.
+    /// Create wiki: the space, with maintenance on and its plan's first draft asked for, in one request — then that
+    /// space on screen, read into the list so the home finds it. Nil on success, else the sentence to show.
+    func createSpace(_ request: WikiSpaceCreate) async -> String? {
+        busy = true
+        defer { busy = false }
+        do {
+            let space = try await api.createWikiSpace(request)
+            selectedSlug = space.slug
+            await loadSpaces()
+            return nil
+        } catch {
+            return Self.refusal(error)
+        }
+    }
+
+    /// Who is in a space and who can be added: Wiki settings' Workspaces section, and what Set up maintenance offers.
     func loadSpaceWorkspaces(_ space: WikiSpace) async {
         guard let listed = try? await api.wikiSpaceWorkspaces(space.id) else { return }
         spaceWorkspaces[space.id] = listed
@@ -833,6 +848,27 @@ final class WikiModel {
             await loadSpaceWorkspaces(space)
             return Self.refusal(error)
         }
+    }
+
+    /// How many entries a space's delete would take, for the question it asks; nil when the read fails.
+    func entryCount(_ space: WikiSpace) async -> Int? {
+        try? await api.wikiHealth(spaceID: space.id).entries
+    }
+
+    /// Delete a wiki for good (contract `space.delete`). `leave` runs the moment it is gone, before the wikis are read
+    /// again, so the page that asked never draws the next wiki's settings. Nil on success, else the sentence to show.
+    func deleteSpace(_ space: WikiSpace, leave: () -> Void) async -> String? {
+        busy = true
+        defer { busy = false }
+        do {
+            try await api.deleteWikiSpace(space.id)
+        } catch {
+            return Self.refusal(error)
+        }
+        leave()
+        spaceWorkspaces[space.id] = nil
+        await reloadAfterWrite()
+        return nil
     }
 
     // MARK: an entry a review mode applied

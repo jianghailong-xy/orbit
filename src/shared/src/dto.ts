@@ -1072,6 +1072,20 @@ export interface SessionLiveState {
   worktreeBranch?: string;
 }
 
+/** A managed runner's storage budget (RunnerHeartbeatResponse.storageBudget; the runner's
+ *  `StorageBudget`, src/runner-go/types.go). The byte counts are integers. */
+export interface StorageBudget {
+  /** The most the volume may hold: past it, the channel stops the container (VOLUME_OVER_LIMIT). */
+  limitBytes: number;
+  /** What it held when measured, as Docker's GET /system/df sizes a volume. */
+  usageBytes: number;
+  /** When that measurement was taken, RFC 3339: never earlier than when it finished, since the
+   *  runner adds back every checkout it began removing after this time. */
+  measuredAt: string;
+  /** The free space below which the runner reclaims checkouts. Zero is no floor. */
+  floorBytes: number;
+}
+
 export interface RunnerHeartbeatResponse {
   /** Session IDs the control plane wants the runner to interrupt / end. */
   cancelSessionIds: string[];
@@ -1133,8 +1147,23 @@ export interface RunnerHeartbeatResponse {
    *  Unlike `maxConcurrent`, absence here is a value rather than "no news": null is what a
    *  machine with no floor configured stores, an older control plane sends nothing, and both
    *  mean the same thing — no gate. The runner must therefore treat an absent field as "no
-   *  floor" and not as "keep whatever you last heard". */
+   *  floor" and not as "keep whatever you last heard".
+   *
+   *  A Kubernetes managed runner whose owner set no floor is sent a default instead, a quarter of
+   *  its PVC's size (docs/session-checkout-storage-design.md §5). The default is not stored, so the
+   *  auto-run disk gate still reads the owner's setting. */
   minFreeDiskMb?: number | null;
+  /** The storage budget a Docker managed runner's checkouts are held to: its data volume as the
+   *  restricted Docker channel last measured it, and the floor to reclaim at
+   *  (docs/session-checkout-storage-design.md §5). statfs inside the container reports the host's
+   *  disk, not the volume's limit, so the runner judges free space against this instead.
+   *
+   *  Absence is a value, as for `minFreeDiskMb`: the runner reads an answer without it as no budget.
+   *  Only a Docker managed runner's answer carries one, and a managed runner's every beat reconciles
+   *  in full, so every answer it gets carries it; the link's quiet answer, which goes to other
+   *  runners only, never does. Absent on older control planes, for every other runner, while the
+   *  managed runner switch is off, and while the channel has measured nothing. */
+  storageBudget?: StorageBudget;
   /** The one Codex rate-limit reset step this runner process should perform
    *  (docs/codex-rate-limit-reset-contract.md §6). Sent only to a process that declared
    *  `codex-rate-limit-reset-v1`, heartbeats with a leaseOwner and is not draining; redelivered
@@ -1979,6 +2008,10 @@ export interface CommitCommand {
   leaseOwner: string;
   /** The session's worktree branch, e.g. orbit/<slug>-<hash>. */
   branch: string;
+  /** Throw the checkout's uncommitted work away instead of committing it — the owner's Discard
+   *  on an abandoned checkout. Only sent to a runner that declares `abandoned-checkout-v1`: an
+   *  older one would ignore the field and commit the work instead, which is the opposite. */
+  discard?: boolean;
 }
 
 export interface ArtifactCommand {
@@ -2516,9 +2549,15 @@ export interface TurnCompleteRequest {
    *  un-files one. */
   subtype?: string;
   numTurns?: number;
+  /** The turn's cost, except on a Claude completion: there it is the engine's running total
+   *  (`total_cost_usd`), as `modelUsage` is, and the control plane books the difference. */
   costUsd?: number;
   usage?: TokenUsage;
   modelUsage?: Record<string, ModelUsage>;
+  /** Which engine process `costUsd` and `modelUsage` are running totals of, and what it started
+   *  from. Omitted by runners older than it, whose Claude totals are measured from what the session
+   *  last booked instead (runner-api/running-totals.ts). */
+  runningTotals?: RunningTotals;
   /** Provider-neutral runtime session/thread id discovered during this turn. */
   runtimeSessionId?: string;
   // ── Live worktree state (so the composer's status bar updates each turn) ──
@@ -2541,6 +2580,21 @@ export interface TurnCompleteRequest {
   branchSha?: string;
   /** The worktree's actual current HEAD branch (see SessionLiveState.worktreeBranch). */
   worktreeBranch?: string;
+}
+
+/**
+ * Claude Code counts cost and tokens per process, and a process started with `--resume` restores
+ * the totals its transcript last saved, which a killed process never wrote. A completion's
+ * `costUsd` and `modelUsage` are such totals; this says whose, so the turn's own share is their
+ * difference from the totals booked before (runner-go/claude_running_totals.go).
+ */
+export interface RunningTotals {
+  /** One id per engine process the runner started. */
+  process: string;
+  /** What that process restored when it started: its first completion is measured from these,
+   *  and each later one from the completion before it. Zero for a new conversation, and for a
+   *  transcript that saved nothing. */
+  restored: { costUsd: number; modelUsage: Record<string, ModelUsage> };
 }
 
 /**
@@ -2738,6 +2792,25 @@ export interface WorktreesRemovableResponse {
   resumable?: { id: string; branch: string }[];
 }
 
+/** One finished session's checkout that still holds work no branch has, as the runner's scan
+ *  found it. The control plane keeps only the ones whose session is finished; the rest of what the
+ *  runner reports (a parked session's dirty checkout, say) is dropped. */
+export interface AbandonedCheckoutReport {
+  sessionId: string;
+  /** @orbit/shared ChangedFile[] against the session's fork point. */
+  files: ChangedFile[];
+  /** The same files' unified diffs, when the report had room for them. */
+  patches?: FilePatch[];
+}
+
+/**
+ * Runner → control plane: the WHOLE inventory of checkouts that hold uncommitted work. A row the
+ * control plane holds that is absent from this list is one the runner no longer finds abandoned.
+ */
+export interface AbandonedCheckoutsRequest {
+  checkouts: AbandonedCheckoutReport[];
+}
+
 /**
  * Runner → control plane: the outcome of a {@link MergeCommand}. `merged` advanced main
  * (mergedSha is the new HEAD); `conflict` means the merge was aborted cleanly; `error`
@@ -2787,7 +2860,9 @@ export interface SessionCommitResultRequest {
   /** Absent only for an in-flight command issued by a pre-fence control plane. */
   operationId?: string;
   leaseOwner?: string;
-  status: 'committed' | 'nochange' | 'error' | 'released';
+  /** `discarded` answers a CommitCommand that carried `discard`: the checkout's uncommitted
+   *  work is gone, which leaves it as clean as a commit does. */
+  status: 'committed' | 'nochange' | 'discarded' | 'error' | 'released';
   message?: string;
   /** For `error`: the runner's own plain-language sentence about why the commit failed and what
    *  to do about it, beside git's words in `message`. Absent when it has nothing better to say. */

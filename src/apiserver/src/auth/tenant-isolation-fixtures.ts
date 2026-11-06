@@ -459,7 +459,8 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     const wikiSpaceId = idOf(await as('POST', '/wiki/spaces', { title: `${name} wiki` }), 'a wiki space');
     // The wiki as its maintenance runs leave it: a topic with an article of two parts, an entry
     // waiting on its owner, a changeset waiting on its owner, a plan confirmed at version 1 with one
-    // document, a draft of version 2, and a proposal to change it.
+    // document of one section, that document written and its section written again once — the version
+    // the rewrite kept — a draft of version 2, and a proposal to change it.
     const wikiTopicId = randomUUID();
     const wikiLeadId = randomUUID();
     const wikiEntryId = randomUUID();
@@ -467,6 +468,11 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     const wikiChangesetOpId = randomUUID();
     const wikiConfirmedPlanId = randomUUID();
     const wikiPlanProposalId = randomUUID();
+    const wikiPlanDocId = randomUUID();
+    const wikiPlanSectionId = randomUUID();
+    const wikiDocId = randomUUID();
+    const wikiDocSectionId = randomUUID();
+    const wikiDocVersionId = randomUUID();
     const wiki = (text: string, values: unknown[]) => sql.query(text, values);
     await wiki(`INSERT INTO "wiki_topic"("id","space_id","owner_id","slug","title") VALUES ($1,$2,$3,'census','Census')`, [wikiTopicId, wikiSpaceId, ownerId]);
     await wiki(
@@ -496,8 +502,36 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     );
     await wiki(
       `INSERT INTO "wiki_plan_doc"("id","plan_id","owner_id","position","category","slug","title","question","length_min","length_max")
-       VALUES (gen_random_uuid(),$1,$2,0,'census','census','Census','What does the census hold?',100,1000)`,
-      [wikiConfirmedPlanId, ownerId],
+       VALUES ($3,$1,$2,0,'census','census','Census','What does the census hold?',100,1000)`,
+      [wikiConfirmedPlanId, ownerId, wikiPlanDocId],
+    );
+    await wiki(
+      `INSERT INTO "wiki_plan_section"("id","doc_id","owner_id","position","key","title","kind","covers","length","sources")
+       VALUES ($1,$2,$3,0,'census','Census','overview','What the census holds.',100,'{}')`,
+      [wikiPlanSectionId, wikiPlanDocId, ownerId],
+    );
+    await wiki(
+      `INSERT INTO "wiki_doc"("id","space_id","owner_id","slug","plan_id","plan_version","plan_doc_id","repo_sha")
+       VALUES ($1,$2,$3,'census',$4,1,$5,repeat('c',40))`,
+      [wikiDocId, wikiSpaceId, ownerId, wikiConfirmedPlanId, wikiPlanDocId],
+    );
+    await wiki(
+      `INSERT INTO "wiki_doc_section"("id","doc_id","owner_id","key","plan_section_id","material_sha256","blocks","repo_sha")
+       VALUES ($1,$2,$3,'census',$4,repeat('d',64),'[{"kind":"paragraph"}]',repeat('c',40))`,
+      [wikiDocSectionId, wikiDocId, ownerId, wikiPlanSectionId],
+    );
+    await wiki(
+      `INSERT INTO "wiki_doc_sentence"("id","section_id","owner_id","position","block","text","status")
+       VALUES (gen_random_uuid(),$1,$2,0,0,'The census holds one sentence now.','transition')`,
+      [wikiDocSectionId, ownerId],
+    );
+    await wiki(
+      `INSERT INTO "wiki_doc_section_version"("id","space_id","owner_id","doc_slug","section_key","blocks","sentences","footnotes",
+                                              "repo_sha","material_sha256","generated_at","reason","job_id")
+       VALUES ($1,$2,$3,'census','census','[{"kind":"paragraph"}]',
+               '[{"block":0,"text":"The census held another sentence.","status":"transition","notes":[],"newTokens":[],"withdrawn":null}]','[]',
+               repeat('b',40),repeat('e',64),now(),'maintenance',gen_random_uuid())`,
+      [wikiDocVersionId, wikiSpaceId, ownerId],
     );
     await wiki(
       `INSERT INTO "wiki_plan"("id","space_id","owner_id","version","status","origin","base_version","categories","docs_min","docs_max","gate","author_user_id")
@@ -653,6 +687,8 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       wikiArticleSlug: 'census',
       wikiArticlePart: 1,
       wikiDocSlug: 'census',
+      wikiDocSectionKey: 'census',
+      wikiDocVersionId,
       wikiTopicSlug: 'census',
       adminSubjectId: adminSubject.userId,
       adminSubjectTokenId,

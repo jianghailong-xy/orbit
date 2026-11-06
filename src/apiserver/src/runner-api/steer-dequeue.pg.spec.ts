@@ -10,6 +10,7 @@ import {
   SESSION_CURRENT_WORK_ROUTING_V1,
 } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
+import '../test-support/dequeue-under-lease';
 
 /**
  * What the inbox predicate actually selects, run as SQL against a real Postgres.
@@ -63,6 +64,7 @@ before(async () => {
   // (migration 0448): read with the session lock, NULL on every case here, which polls as HTTPS does.
   await client.query(`
     DROP TABLE IF EXISTS steer_dequeue_test."conversation_turn";
+    DROP TABLE IF EXISTS steer_dequeue_test."inbox_lease_generation";
     DROP TABLE IF EXISTS steer_dequeue_test."session";
     CREATE TABLE steer_dequeue_test."session" (
       id uuid PRIMARY KEY,
@@ -78,6 +80,12 @@ before(async () => {
       task_id uuid,
       status text NOT NULL,
       cancel_requested_at timestamptz
+    );
+    CREATE TABLE steer_dequeue_test."inbox_lease_generation" (
+      generation uuid PRIMARY KEY,
+      session_id uuid NOT NULL,
+      lease_owner uuid,
+      retired_at timestamptz
     );
     CREATE TABLE steer_dequeue_test."conversation_turn" (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -110,6 +118,7 @@ beforeEach(async () => {
   if (!PG_URL) return;
   await client.query(`
     TRUNCATE "conversation_turn";
+    TRUNCATE "inbox_lease_generation";
     DELETE FROM "session";
   `);
   await session(AgentProvider.CLAUDE);
@@ -139,6 +148,15 @@ function pgTx() {
         '',
       );
       return (await client.query(text, values as never[])).rows;
+    },
+    // test-support/dequeue-under-lease.ts gives the session a live lease generation through these.
+    $executeRaw: async (...args: unknown[]) => {
+      const { strings, values } = renderRawQuery(args);
+      const text = strings.reduce(
+        (sql, part, i) => sql + part + (i < values.length ? `$${i + 1}` : ''),
+        '',
+      );
+      return (await client.query(text, values as never[])).rowCount ?? 0;
     },
     // Everything past the predicate is stubbed: this file is about which row is chosen.
     runEvent: { findFirst: async () => null },

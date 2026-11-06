@@ -43,6 +43,7 @@ function mapping(change: Partial<ManagedRunner> = {}): ManagedRunner {
     nodeName: null,
     nodeUid: null,
     reservation: null,
+    volumeMeasurement: null,
     demandRevision: 2,
     lastDemandAt: null,
     capacityRevision: null,

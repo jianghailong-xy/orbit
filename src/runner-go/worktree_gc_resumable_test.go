@@ -62,6 +62,8 @@ type resumableFixture struct {
 	atRequest func(ids []string)
 	// alsoAnswer is what the reply calls resumable besides, asked or not.
 	alsoAnswer []string
+	// reports is every abandoned-checkout inventory this runner POSTed, newest last.
+	reports []AbandonedCheckoutsRequest
 }
 
 func newResumableFixture(t *testing.T) *resumableFixture {
@@ -86,6 +88,16 @@ func newResumableFixture(t *testing.T) *resumableFixture {
 }
 
 func (f *resumableFixture) answer(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/api/runner/abandoned-checkouts" {
+		var body AbandonedCheckoutsRequest
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		f.reports = append(f.reports, body)
+		f.mu.Unlock()
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+		return
+	}
 	if r.URL.Path != "/api/runner/sessions/worktrees-removable" {
 		http.Error(w, "unexpected", http.StatusNotFound)
 		return
@@ -158,6 +170,17 @@ func (f *resumableFixture) queryCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.queries
+}
+
+// lastReport is the abandoned-checkout inventory the runner sent most recently.
+func (f *resumableFixture) lastReport(t *testing.T) AbandonedCheckoutsRequest {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.reports) == 0 {
+		t.Fatal("the runner sent no abandoned-checkout inventory")
+	}
+	return f.reports[len(f.reports)-1]
 }
 
 // checkout adds a session's checkout the way a session that committed and pushed its work leaves it,
@@ -3043,10 +3066,10 @@ func TestTheRunLoopCallsEverySideOfTheResumableSweep(t *testing.T) {
 	}
 	body := string(source)
 	// The first half first and on nothing but the sweeper's schedule, and the second behind it, both times.
-	if !strings.Contains(body, "if worktreeGC.due(time.Now()) {\n\t\tliveSet := pool.ids()\n\t\tpressure := measureWorktreePressure(diskFloorMb.Load())\n\t\tgcWorktrees(t, liveSet, pressure)\n\t\tworktreeGC.sweepResumable(t, pool, pressure)\n") {
+	if !strings.Contains(body, "if worktreeGC.due(time.Now()) {\n\t\tliveSet := pool.ids()\n\t\tpressure := measureWorktreePressure(diskFloorMb.Load(), &storage)\n\t\tgcWorktrees(t, liveSet, pressure)\n\t\tworktreeGC.sweepResumable(t, pool, pressure)\n") {
 		t.Error("the startup sweep must run the first half, then the second, whenever a sweep is due")
 	}
-	if !strings.Contains(body, "if worktreeGC.due(time.Now()) {\n\t\t\tpressure := measureWorktreePressure(diskFloorMb.Load())\n\t\t\tgcWorktrees(t, pool.ids(), pressure)\n\t\t\tworktreeGC.sweepResumable(t, pool, pressure)\n") {
+	if !strings.Contains(body, "if worktreeGC.due(time.Now()) {\n\t\t\tpressure := measureWorktreePressure(diskFloorMb.Load(), &storage)\n\t\t\tgcWorktrees(t, pool.ids(), pressure)\n\t\t\tworktreeGC.sweepResumable(t, pool, pressure)\n") {
 		t.Error("the claim loop's sweep must run the first half, then the second, whenever a sweep is due")
 	}
 	if got := strings.Count(body, "gcResumableCheckouts(t, pool, pressure)"); got != 1 {

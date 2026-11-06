@@ -1,5 +1,8 @@
 package io.orbitd.android.management
 
+import io.orbitd.android.pickFromSessionOptions
+import io.orbitd.android.hasRowMenu
+import io.orbitd.android.openRowMenu
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.core.view.WindowCompat
@@ -39,13 +42,12 @@ class ManagementShellTest {
 
     @Test fun aCancelledWorkspaceEditIsNotThereWhenTheFormOpensAgain() {
         signIn()
-        compose.onNodeWithTag("workspace:${fixture.WORKSPACE}").performClick()
-        compose.onNodeWithContentDescription("Workspace settings").performClick()
+        compose.pickFromSessionOptions("Settings")
         await("Working directory")
         name().performTextReplacement("Cancelled edit")
         compose.onNode(hasText("Cancel") and hasClickAction()).performClick()
         await("Fixture session")
-        compose.onNodeWithContentDescription("Workspace settings").performClick()
+        compose.pickFromSessionOptions("Settings")
         await("Working directory")
         name().assert(hasText("Alpha"))
         assertTrue(fixture.writes("workspaces/${fixture.WORKSPACE}").isEmpty())
@@ -114,9 +116,8 @@ class ManagementShellTest {
 
     @Test fun theSharePanelStopsWritingWhenTheDirectoryIsNoLongerCurrent() {
         signIn()
-        compose.onNodeWithTag("workspace:${fixture.WORKSPACE}").performClick()
         await("Fixture session")
-        compose.onNodeWithContentDescription("Options for Fixture session").performClick()
+        compose.onNode(hasRowMenu("Options for Fixture session")).openRowMenu()
         compose.onNode(hasText("Share…") and hasClickAction()).performClick()
         await("Tool calls and output")
         compose.onNode(hasText("Only you") and isSelectable()).assertIsEnabled()
@@ -145,7 +146,7 @@ class ManagementShellTest {
         app().realtime.setNetwork(true, "fixture")
         runBlocking { fixture.signIn(app().session) }
         compose.waitUntil(60_000) { app().session.state.value is AuthState.SignedIn && app().realtime.state.value.directoryFresh }
-        compose.waitUntil(60_000) { compose.onAllNodesWithTag("workspace:${fixture.WORKSPACE}").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("directory-list").fetchSemanticsNodes().isNotEmpty() }
     }
     private fun runnerPage() {
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()

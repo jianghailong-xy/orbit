@@ -98,6 +98,7 @@ final class WikiAPIClientTests: XCTestCase {
         let workspaces = try await api.wikiSpaceWorkspaces("S1")
         try await api.addWikiWorkspace(spaceID: "S1", workspaceID: "W2")
         try await api.leaveWikiWorkspaceOut(spaceID: "S1", workspaceID: "W1")
+        try await api.deleteWikiSpace("S1")
 
         XCTAssertEqual(workspaces.workspaces, [WikiSpaceWorkspaceRow(id: "W1", name: "shop-cli @ EU", runner: "build-01", inWiki: false)])
         XCTAssertEqual(workspaces.addable, [WikiSpaceWorkspaceRow(id: "W2", name: "notes", runner: nil, inWiki: false)])
@@ -121,6 +122,20 @@ final class WikiAPIClientTests: XCTestCase {
             "GET /api/wiki/spaces/S1/workspaces",
             "POST /api/wiki/spaces/S1/workspaces",
             "DELETE /api/wiki/spaces/S1/workspaces/W1",
+            "DELETE /api/wiki/spaces/S1",
         ])
+    }
+
+    func testMakingAWikiPostsToTheSpaces() async throws {
+        let log = WikiRequestLog()
+        WikiAPIURLProtocol.handler = { request in
+            log.record(request)
+            return (201, WikiFixtures.space)
+        }
+        let space = try await client().createWikiSpace(
+            WikiSpaceCreate(title: "orbit", repoUrl: "https://github.com/jianghailong-xy/orbit.git",
+                            maintenance: WikiMaintenanceUpdate(enabled: true, workspaceId: "W1", dailyRunLimit: 8, lookbackDays: .some(14))))
+        XCTAssertEqual(space.slug, "orbit")
+        XCTAssertEqual(log.all, ["POST /api/wiki/spaces"])
     }
 }

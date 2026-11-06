@@ -58,6 +58,7 @@ import { ProjectPromotionService } from './project-promotion.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import '../test-support/dequeue-under-lease';
 
 /**
  * Exception items (docs/project-integration-line-contract.md §4): a task FAILED from any door opens
@@ -1438,7 +1439,7 @@ test('an integration failure with no coordinator to hand it to is the owner\'s',
  *
  * `createTurn` on a conversation between turns files it PENDING, and the inbox hands a turn out
  * only to a session that is RUNNING — the claim is what makes the difference, and there is no
- * runner long-polling in this process to take it. Written here for the same reason `attempt` writes
+ * runner asking in this process to take it. Written here for the same reason `attempt` writes
  * the session row it starts from: the fixture stands in for the runner, not for the product.
  */
 async function claimed(stack: Stack, sessionId: string): Promise<void> {

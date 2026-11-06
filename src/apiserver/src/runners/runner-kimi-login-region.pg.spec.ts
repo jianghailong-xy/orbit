@@ -32,7 +32,6 @@ import { RunnersService } from './runners.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const CAPABLE = `session-worktree-ops-v1,${KIMI_LOGIN_REGION_V1}`;
-const OLDER = 'session-worktree-ops-v1';
 
 const suite = URL ? test : test.skip;
 
@@ -89,16 +88,7 @@ suite("Kimi's sign-in site on real PostgreSQL", { timeout: 120_000 }, async (t) 
     }
   });
 
-  await t.test('(2) a runner that cannot choose a site is refused the start, and the row says why', async () => {
-    const { ownerId, runnerId } = await runner();
-    await runners.startLogin(ownerId, runnerId, { engine: 'kimi', region: 'mainland-cn' });
-    assert.equal(await relay.drainLoginRequest(runnerId, OLDER), undefined);
-    const state = await runners.getLoginState(ownerId, runnerId);
-    assert.equal(state.status, 'failed');
-    assert.match(state.message ?? '', /too old to choose a Kimi site/u);
-  });
-
-  await t.test('(3) cancelling, and a start naming no site, leave no site behind', async () => {
+  await t.test('(2) cancelling, and a start naming no site, leave no site behind', async () => {
     const { ownerId, runnerId } = await runner();
     await runners.startLogin(ownerId, runnerId, { engine: 'kimi', region: 'global' });
     await runners.cancelLogin(ownerId, runnerId);

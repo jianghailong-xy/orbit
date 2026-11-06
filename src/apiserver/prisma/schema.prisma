@@ -516,10 +516,11 @@ model DispatchPause {
 }
 
 /// The runner link's cut-over switch, RUNNER_LINK_REQUIRED (docs/runner-link-design.md §11.3, §11.4, D15;
-/// migration 0446): at most one row, id 1, written only by an administrator through
-/// PUT /api/admin/runner-link-required (runner-api/runner-link-required.ts). While `required`, the runner
-/// daemon's routes answer HTTPS 426 UPGRADE_REQUIRED and the link gateway tells runners MODE_LINK. No row is
-/// the same as a row that is off. `runner_link_switch_one_row_chk` (`id` = 1) lives only in the migration.
+/// migration 0446): at most one row, id 1. The cut-over is over and nothing in this build reads or writes it:
+/// the runner daemon's routes always answer HTTPS 426 UPGRADE_REQUIRED. The table stays for a rollback to a build
+/// from before the cleanup, which reads the row: there, while `required`, those routes answer 426 and the link
+/// gateway tells runners MODE_LINK, and no row is the same as a row that is off.
+/// `runner_link_switch_one_row_chk` (`id` = 1) lives only in the migration.
 model RunnerLinkSwitch {
   id          Int      @id @default(1) @db.SmallInt
   required    Boolean
@@ -903,6 +904,9 @@ model Runner {
   managedWorkload     Json?    @map("managed_workload")
 
   sessions Session[]
+  // Checkouts of this machine's finished sessions that still hold work no branch has, as its
+  // last scan reported them (migration 0474).
+  abandonedCheckouts AbandonedCheckout[]
   // Workspaces `orbit register` minted for this machine (one per project dir + tool).
   workspaces Workspace[]
   // Narrow, revocable credentials minted for headless processes on this machine.
@@ -1337,8 +1341,9 @@ model ManagedRunner {
   /// receipt may advance it, which this version never does.
   generation         Int                          @default(1)
   /// Compare-and-set counter: every manager and owner write of this row is `WHERE revision = <read>`
-  /// and bumps it. Two writes of their own columns are predicate writes instead and leave it: demand
-  /// (`demandRevision`, `lastDemandAt`, RUNNING desired) and a drained instance's `stopAcknowledgedAt`.
+  /// and bumps it. Three writes of their own columns are predicate writes instead and leave it: demand
+  /// (`demandRevision`, `lastDemandAt`, RUNNING desired), a drained instance's `stopAcknowledgedAt`,
+  /// and the manager's `volumeMeasurement`.
   revision           Int                          @default(1)
   /// The run backend that made this mapping's volume and instances, and alone drives them
   /// (managed-runner-backend.ts): `kubernetes` — every mapping before migration 0430 — or `docker`.
@@ -1364,6 +1369,12 @@ model ManagedRunner {
   /// migration 0413): storage while its volume exists, compute from admission until its instance is
   /// proven stopped. Written only together with `managed_runner_capacity`, in one transaction.
   reservation        Json?
+  /// The data volume as its backend last measured it (Docker: the channel's `limitBytes` and
+  /// `usageBytes`), `{limitBytes, usageBytes, measuredAt}`, which the runner's heartbeat relays as its
+  /// storage budget (managed-runner-storage.ts, migration 0480). Written by the manager under its
+  /// lease when the figures change; `measuredAt` is when it first read them, never before the
+  /// backend took them. Null until a measurement is read, and always on Kubernetes.
+  volumeMeasurement  Json?                        @map("volume_measurement")
   /// Demand: bumped by every piece of work addressed to this runner while the switch is on
   /// (managed-runner-demand.ts), whatever the state. Sleep compares it before it stops anything.
   demandRevision     Int                          @default(0) @map("demand_revision")
@@ -1757,6 +1768,11 @@ model Session {
   // billing, accrued per turn
   numTurns             Int       @default(0) @map("num_turns")
   costUsd              Float     @default(0) @map("cost_usd")
+  // The running totals of cost and tokens (Claude Code's `total_cost_usd` and `modelUsage`) the
+  // session's engine last reported, as booked, with the engine process they belong to: what the
+  // next completion of that process is measured from (runner-api/running-totals.ts). Null until a
+  // completion reporting running totals is booked (migration 0478).
+  engineUsageTotals    Json?     @map("engine_usage_totals")
   // How full the context window is RIGHT NOW: the tokens the latest top-level assistant message
   // actually cost (fresh input + cache reads + cache writes + output), denormalized from the
   // turn_end event that already carries it for the clients' context gauge. A long-lived session
@@ -1941,6 +1957,12 @@ model Session {
   /// that cannot be written down becomes a run that started from somewhere nobody chose.
   sourceRefusalCode        String?   @map("source_refusal_code")
   sourceRefusalDetail      Json?     @map("source_refusal_detail")
+  /// The wiki space this session is a chat of (migration 0476, wiki contract `chat.binding`): a session
+  /// is a chat exactly when it is set. Written by the chat's create in this row's own INSERT and never
+  /// afterwards (a trigger refuses the UPDATE), so a session is a chat for its whole life or never. No
+  /// foreign key: a deleted space leaves its chats as sessions. Its partial index over
+  /// (wiki_chat_space_id, created_at) is the migration's alone, as schema.prisma cannot spell one.
+  wikiChatSpaceId          String?   @map("wiki_chat_space_id") @db.Uuid
   // ── Per-session git worktree isolation ──────────────────────────────────────
   // When the agent's workDir is a git repo, the runner runs this session in its own
   // git worktree on `branch`, forked from `baseSha` (the workDir HEAD at claim time).
@@ -2041,6 +2063,10 @@ model Session {
   // Same ABA fence as mergeOperationId, for heartbeat-delivered commits.
   commitOperationId    String?   @map("commit_operation_id") @db.Uuid
   commitOperationOwner String?   @map("commit_operation_owner") @db.Uuid
+  // What the queued relay does when it runs (migration 0474): NULL commits the checkout's
+  // uncommitted work onto the branch, 'discard' throws that work away. Only ever 'discard' for a
+  // runner that declares abandoned-checkout-v1 — an older one ignores the flag and commits.
+  commitAction         String?   @map("commit_action")
   // Product lifecycle: completedAt moves an Open session to Completed; deletedAt moves
   // it to Trash. Both retain all data and restore clears them. archivedAt is a temporary
   // rolling-deploy compatibility mirror maintained by migration 0076's database trigger.
@@ -2133,6 +2159,10 @@ model Session {
   coordinatorWakes      ProjectCoordinatorWake[] @relation("CoordinatorJudgmentSession")
   attachments           Attachment[]
   diff                  SessionDiff?
+  /// The checkout this session left behind holding uncommitted work, as the runner last reported
+  /// it (migration 0474). Removed when the work is committed or discarded, or by the next report
+  /// that no longer names it.
+  abandonedCheckout     AbandonedCheckout?
   // Personal colored labels applied to this session (many-to-many via the join table).
   tagLinks              SessionTagLink[]
   // Append-only record of every merge attempted for this session's branch, however it was made.
@@ -2352,6 +2382,39 @@ model SessionDiff {
   @@map("session_diff")
 }
 
+/// A finished session's checkout that still holds work no branch has (migration 0474).
+///
+/// It exists because removeWorktree refuses such a checkout and nothing else could act on it:
+/// gcWorktrees carried it past every cap forever, and the only copy of the work sat on one
+/// machine's disk with no way to see it, commit it or throw it away. The runner scans its
+/// checkouts and POSTs the whole set (`/runner/abandoned-checkouts`); this table is that set, so
+/// the runner page can show it and offer the two exits. `files` and `patches` are the diff as the
+/// scan computed it (@orbit/shared ChangedFile[] and FilePatch[]). The row goes when the work is
+/// committed or discarded, and on the next report that no longer names the checkout.
+model AbandonedCheckout {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  /// Tenant scope, denormalized for the list query (every read filters by it).
+  ownerId   String   @map("owner_id") @db.Uuid
+  runnerId  String   @map("runner_id") @db.Uuid
+  runner    Runner   @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  sessionId String   @unique @map("session_id") @db.Uuid
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  /// @orbit/shared ChangedFile[]: what the checkout holds against the session's fork point.
+  files     Json
+  /// @orbit/shared FilePatch[]: the same files' unified diffs, when the report had room. Null
+  /// when it did not (the report's patch budget) — the file list is still true.
+  patches   Json?
+  /// Whether `patches` holds anything, so the list query can say so without reading the diff.
+  hasPatches Boolean @default(false) @map("has_patches")
+  /// When the runner's scan found it in this state.
+  observedAt DateTime @map("observed_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([ownerId, runnerId])
+  @@map("abandoned_checkout")
+}
+
 // A personal, colored label the owner can apply to their sessions (Files.app-style Tags).
 // Per-owner: every query filters by ownerId. `isSystem` marks the 7 seeded preset-color tags
 // (Red…Gray) — always present, selectable, but not renamable/deletable; user-created tags are
@@ -2522,10 +2585,10 @@ model LlmUsage {
   sessionId                String   @map("session_id") @db.Uuid
   session                  Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   model                    String
-  inputTokens              Int      @default(0) @map("input_tokens")
-  outputTokens             Int      @default(0) @map("output_tokens")
-  cacheCreationInputTokens Int      @default(0) @map("cache_creation_input_tokens")
-  cacheReadInputTokens     Int      @default(0) @map("cache_read_input_tokens")
+  inputTokens              BigInt   @default(0) @map("input_tokens")
+  outputTokens             BigInt   @default(0) @map("output_tokens")
+  cacheCreationInputTokens BigInt   @default(0) @map("cache_creation_input_tokens")
+  cacheReadInputTokens     BigInt   @default(0) @map("cache_read_input_tokens")
   costUsd                  Float    @default(0) @map("cost_usd")
   createdAt                DateTime @default(now()) @map("created_at")
 
@@ -2584,6 +2647,10 @@ model ConversationTurn {
   /// Coordinator-context digest attached to this delivery. It is acknowledged onto Session only
   /// when this exact top-level turn succeeds under the same engine generation and compaction epoch.
   coordinatorContextKey String? @map("coordinator_context_key") @db.Char(64)
+  /// A wiki chat's message: the page and selection it carried (`{ page?, selection? }`, wiki contract
+  /// `chat.notes.wikiContext`, migration 0476), as ids. Delivery reads what they name and appends it as
+  /// the control plane's note, so `content` stays the owner's words. Null for every other turn.
+  wikiContext     Json?     @map("wiki_context")
   answeredAt      DateTime? @map("answered_at")
   createdAt       DateTime  @default(now()) @map("created_at")
 
@@ -7348,6 +7415,8 @@ model WikiSpace {
   planJobs        WikiPlanJob[]
   /// Its documents, written section by section from the confirmed plan (0326).
   docs            WikiDoc[]
+  /// The sections its documents' writes replaced, as they stood (0475).
+  docVersions     WikiDocSectionVersion[]
   /// Its public links, live and ended (0403).
   shareLinks      ShareLink[]
 
@@ -8183,6 +8252,51 @@ model WikiDocFootnote {
   @@map("wiki_doc_footnote")
 }
 
+/// A section as it stood before a write replaced it, and why (migration 0475, contract `docs.versions`): kept by
+/// `WikiDocs.write` and the owner's restore, at most 5 a section. Named by the document's slug and the section's key,
+/// as the plan names them, so it outlives the section row it was taken from.
+model WikiDocSectionVersion {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  spaceId           String    @map("space_id") @db.Uuid
+  ownerId           String    @map("owner_id") @db.Uuid
+  space             WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_doc_section_version_space_fkey")
+  docSlug           String    @map("doc_slug")
+  sectionKey        String    @map("section_key")
+  /// The section's blocks as they stood.
+  blocks            Json
+  /// `[{ block, text, status, notes, newTokens, withdrawn }, …]`: its sentences in order, `notes` the places of their
+  /// footnotes in `footnotes`.
+  sentences         Json
+  /// `[{ kind, ref, sha, lineStart, lineEnd, charStart, charEnd, locator, quote, excerpt, verdict, checkedBy, viaEntryId }, …]`.
+  footnotes         Json
+  repoSha           String    @map("repo_sha")
+  materialSha256    String    @map("material_sha256") @db.Char(64)
+  model             String?
+  stats             Json      @default("{}")
+  dispositions      Json      @default("[]")
+  generatedAt       DateTime  @map("generated_at") @db.Timestamptz(3)
+  /// `maintenance` | `build` | `merge` | `landing` | `chat` | `restore`: why it was replaced.
+  reason            String
+  /// The session's, task's, project's or chat's title (merge, landing, chat).
+  reasonTitle       String?   @map("reason_title")
+  /// The commit a merge or a landing put on main.
+  reasonSha         String?   @map("reason_sha")
+  /// The plan version a build wrote.
+  reasonPlanVersion Int?      @map("reason_plan_version")
+  /// The job whose write replaced it; NULL for the owner's restore. A history reference with no foreign key.
+  jobId             String?   @map("job_id") @db.Uuid
+  /// The version the owner's restore put back in its place. A history reference with no foreign key.
+  restoredVersionId String?   @map("restored_version_id") @db.Uuid
+  replacedAt        DateTime  @default(now()) @map("replaced_at") @db.Timestamptz(3)
+  /// The order a section's versions were kept in, the newest last.
+  seq               BigInt    @default(autoincrement())
+
+  @@unique([id, ownerId], map: "wiki_doc_section_version_id_owner_id_key")
+  @@index([spaceId, docSlug, sectionKey, seq], map: "wiki_doc_section_version_section_idx")
+  @@index([spaceId, seq], map: "wiki_doc_section_version_space_seq_idx")
+  @@map("wiki_doc_section_version")
+}
+
 /// The System model as the wiki-worker last found it, and the worker's heartbeat (migration 0400, contract
 /// `systemModel.status`; docs/wiki-server-execution-design.md §5.3). Exactly one row, id 1: the worker writes
 /// it, the apiserver only reads it. No column holds the endpoint's address or its key.
@@ -8209,15 +8323,15 @@ model WikiModelStatus {
 /// docs/wiki-server-execution-design.md §5.1). The wiki-worker claims it the way the Watch delivery
 /// worker claims a delivery — `UPDATE … FROM (SELECT … FOR UPDATE SKIP LOCKED)`, a fresh lease
 /// generation per claim, every later write a compare-and-set on that generation — holds one space's
-/// single running job at a time (a partial unique index over `space_id`), and ends it with what it
-/// reported. At most one kind runs today (`smoke`, the queue's own end-to-end probe); the pipeline
-/// kinds arrive with the phases that implement them.
+/// single running job at a time (partial unique indexes over `space_id`), with one exception since
+/// 0477: a `docs_follow` job runs beside a job of its space that writes no document (contract
+/// `jobs.onePerSpace`) — and ends it with what it reported.
 model WikiJob {
   id      String    @id @default(uuid(7)) @db.Uuid
   ownerId String    @map("owner_id") @db.Uuid
   spaceId String    @map("space_id") @db.Uuid
   space   WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_job_space_fkey")
-  /// `verify` | `articles` | `import` | `plan_draft` | `plan_revise` | `docs_build` | `maintain` | `smoke`.
+  /// `verify` | `articles` | `import` | `plan_draft` | `plan_revise` | `docs_build` | `maintain` | `smoke` | `docs_follow`.
   kind  String
   /// The job's own material: what to verify, draft, build — never the model's address or key.
   input Json   @default("{}")
@@ -8251,9 +8365,10 @@ model WikiJob {
   @@index([priority(sort: Desc), createdAt, id], map: "wiki_job_claim_idx")
   /// The lease-expiry sweep, as the migration creates it: partial over running rows.
   @@index([leaseDeadlineAt], map: "wiki_job_lease_expiry_idx")
-  /// One running job per space: what the claim skips a busy space by, and what holds it anyway —
-  /// a partial unique index the migration creates (`wiki_job_space_running_key`), which Prisma's own
-  /// index syntax cannot express, so it lives in the SQL and nowhere else.
+  /// One running job per space, the follow job's exception aside: what the claim skips a busy space by,
+  /// and what holds it anyway — two partial unique indexes 0477 creates (`wiki_job_space_running_other_key`,
+  /// `wiki_job_space_running_writer_key`, in place of 0401's `wiki_job_space_running_key`), which Prisma's
+  /// own index syntax cannot express, so they live in the SQL and nowhere else.
   @@map("wiki_job")
 }
 

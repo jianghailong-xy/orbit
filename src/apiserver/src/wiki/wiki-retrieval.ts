@@ -86,8 +86,8 @@ export interface WikiSearchRequest {
   paths?: readonly string[];
   limit?: number;
   /** Which of the fields a hit does not carry by default the caller asked for — the API's own
-   *  `?include=` convention. `space`, `topics` and `anchor` are the three names
-   *  (`WikiSearchRowAdditions`); anything else is not a field and is ignored. */
+   *  `?include=` convention. `space` and `topics` are the two names (`WikiSearchRowAdditions`);
+   *  anything else is not a field and is ignored, `anchor` included now that every hit carries it. */
   include?: readonly string[];
   /** Phase 2's leg. Accepted, reported, and off (see the module header). */
   semantic?: boolean;
@@ -504,11 +504,14 @@ export class WikiRetrieval {
         trust: true,
         anchorState: true,
         stats: true,
-        // Three columns of a row this query is already reading. What the caller ASKED for decides
+        // How old the entry is, which every hit says (contract `agentSurface.toolSpecs.wiki_search.age`).
+        recordedAt: true,
+        anchorCheckedRef: true,
+        anchorCheckedAt: true,
+        // Two columns of a row this query is already reading. What the caller ASKED for decides
         // what comes back, not what is read: the projection below is where `include` bites, so a
         // column nothing asked for cannot reach an agent's tool output by being selected here.
         topics: true,
-        anchorCheckedRef: true,
         space: { select: { slug: true } },
       },
     });
@@ -530,10 +533,12 @@ export class WikiRetrieval {
             stats: entry.stats,
             changedAt: changedTimes.get(entry.id) ?? null,
             // Carried through the ranking, not read off it: `compareRanked` orders by score, trust,
-            // anchor state, usage and the changed time, and none of these three is a term in it.
+            // anchor state, usage and the changed time, and none of these five is a term in it.
+            recordedAt: entry.recordedAt,
+            anchorCheckedRef: entry.anchorCheckedRef,
+            anchorCheckedAt: entry.anchorCheckedAt,
             spaceSlug: entry.space.slug,
             topics: entry.topics,
-            anchorCheckedRef: entry.anchorCheckedRef,
           },
         ];
       })
@@ -550,11 +555,15 @@ export class WikiRetrieval {
         // A fused score is a sum of at most two terms of about 1/61: rounded so two runs of the
         // same search answer with the same number rather than with float noise.
         score: Number(hit.score.toFixed(6)),
-        // Each of the three only when it was named, so a hit answered without `include` is exactly
-        // the contract's list of fields — which `wiki-search.pg.spec.ts` pins key by key.
+        // How old the entry is, for the reader to judge (contract `age`); a time is ISO 8601 in UTC.
+        recordedAt: hit.recordedAt.toISOString(),
+        changedAt: hit.changedAt?.toISOString() ?? null,
+        anchorCheckedRef: hit.anchorCheckedRef,
+        anchorCheckedAt: hit.anchorCheckedAt?.toISOString() ?? null,
+        // Each of the two only when it was named, so a hit answered without `include` is exactly
+        // the contract's list of fields (`hit`) — which `wiki-search.pg.spec.ts` pins key by key.
         ...(include.includes('space') ? { spaceSlug: hit.spaceSlug } : {}),
         ...(include.includes('topics') ? { topics: hit.topics } : {}),
-        ...(include.includes('anchor') ? { anchorCheckedRef: hit.anchorCheckedRef } : {}),
       }));
   }
 

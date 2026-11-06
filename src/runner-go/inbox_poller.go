@@ -16,21 +16,21 @@ import (
 // loop that fetches, the wait after a fetch that failed, and the table of turns being processed that a turn handed
 // over again is checked against.
 //
-// Over HTTPS it fetches as every runner always has: a long poll (the server holds GET /runner/sessions/:id/inbox for
-// 25 s), another as soon as one answers, and another a second after one that failed.
-//
-// Over the runner link the inbox answers at once and never waits for a turn (wait=0), so the poller fetches only when
-// there is something to fetch, and never on a timer:
+// The inbox answers at once and never waits for a turn, so the poller fetches only when there is something to fetch,
+// and never on a timer:
 //
 //   - its first fetch: nothing has been heard about the session yet;
 //   - an InboxHint for the session, or the session named in the HintState of a HeartbeatAck (link_hints.go);
 //   - after a fetch that handed it a turn: more may wait behind it, so it fetches until the inbox answers nothing;
-//   - after a fetch that failed, once its backoff has passed: exponential with full jitter from inboxLinkBackoffMin to
-//     inboxLinkBackoffMax, never sooner than the answer's retry_after. The question the fetch asked is still open, and
+//   - after a fetch that failed, once its backoff has passed: exponential with full jitter from inboxBackoffMin to
+//     inboxBackoffMax, never sooner than the answer's retry_after. The question the fetch asked is still open, and
 //     no hint need ever answer it: a turn handed out under this generation's lease whose answer was lost is IN_FLIGHT,
 //     which no HintState names.
 //
-// Every fetch over the link says which message or shell turn this process is running in the session (runningTurnId,
+// A transport with no link has no hints to wait for: the daemon's always has the link, and only the session loops' unit
+// tests run on one, fetching one after another from a control plane of their own.
+//
+// Every fetch says which message or shell turn this process is running in the session (runningTurnId,
 // which linkMode.call adds from what the poller records): the control plane hands a turn of this generation's lease
 // straight back when the fetch does not name it, which is a fetch whose answer was lost (§5.6), rather than when its
 // lease runs out 300 s later. A turn counts as running from the answer that handed it over until the control plane
@@ -45,16 +45,14 @@ import (
 // followed by one under its request id, however long the link stays down, until one is answered (linkRequestIDs).
 //
 // A fetch refused for the lease (isLeaseOwnershipError: 409, 403, 404) ends the poller: the generation never owns the
-// inbox again. Nor does a poller whose context has ended, or that has been closed, ever fetch again, in either mode: the
-// engine it fetched for is gone, and a control turn handed to it would have no receiver (retirePendingGeneration in
+// inbox again. Nor does a poller whose context has ended, or that has been closed, ever fetch again: the engine it
+// fetched for is gone, and a control turn handed to it would have no receiver (retirePendingGeneration in
 // session.go releases the generation's lease for the same reason).
 
 const (
-	// inboxHTTPRetry is the wait after a failed fetch over HTTPS, as it always was.
-	inboxHTTPRetry = time.Second
-	// The backoff after a failed fetch over the link (§7): exponential, with full jitter.
-	inboxLinkBackoffMin = time.Second
-	inboxLinkBackoffMax = 30 * time.Second
+	// The backoff after a failed fetch (§7): exponential, with full jitter.
+	inboxBackoffMin = time.Second
+	inboxBackoffMax = 30 * time.Second
 )
 
 // errInboxPollerClosed is a poller asked for a turn once its generation has ended.
@@ -66,10 +64,10 @@ type inboxPoller struct {
 	t               *Transport
 	sessionID       string
 	leaseGeneration string
-	// gate says, in link mode, that there is something to fetch: link_hints.go marks it from the time the poller is
-	// made until it is closed. Nil on a transport with no link mode.
+	// gate says that there is something to fetch: link_hints.go marks it from the time the poller is made until it is
+	// closed. Nil on a transport with no link.
 	gate *linkGate
-	// failures counts the fetches in a row that failed, for the link's backoff.
+	// failures counts the fetches in a row that failed, for the backoff.
 	failures int
 	// ids is the request id its fetches go under over the link, kept while one gets no answer.
 	ids linkRequestIDs
@@ -103,14 +101,13 @@ func (p *inboxPoller) next(ctx context.Context) (*RunInboxResponse, error) {
 		if err := p.stopped(ctx); err != nil {
 			return nil, err
 		}
-		onLink := p.t.link != nil && p.t.link.inUse()
-		if onLink {
-			due, err := p.t.link.gates.take(ctx, func() *linkGate { return p.gate }, linkLongPoll)
+		if p.gate != nil {
+			due, err := p.t.link.gates.take(ctx, func() *linkGate { return p.gate }, linkHintWait)
 			if err != nil {
 				return nil, err
 			}
 			if !due {
-				continue // nothing said there is anything to fetch: the mode is looked at again
+				continue // nothing said there is anything to fetch
 			}
 			if err := p.stopped(ctx); err != nil {
 				return nil, err
@@ -125,12 +122,9 @@ func (p *inboxPoller) next(ctx context.Context) (*RunInboxResponse, error) {
 			if isLeaseOwnershipError(err) {
 				return nil, err
 			}
-			wait := inboxHTTPRetry
-			if onLink {
-				p.failures++
-				wait = inboxLinkBackoff(p.failures, err)
-				p.markDue() // the question the fetch asked is still open
-			}
+			p.failures++
+			wait := inboxBackoff(p.failures, err)
+			p.markDue() // the question the fetch asked is still open
 			logln(fmt.Sprintf("inbox poll failed for %s: %v; fetching again in %s", p.sessionID, err, wait.Round(time.Millisecond)))
 			timer := time.NewTimer(wait)
 			select {
@@ -143,7 +137,7 @@ func (p *inboxPoller) next(ctx context.Context) (*RunInboxResponse, error) {
 		}
 		p.failures = 0
 		if resp == nil {
-			continue // a long poll that held and yielded nothing, or a link fetch with nothing to hand out
+			continue // nothing to hand out
 		}
 		handed := p.handedOver(resp)
 		if handed == handedClosed {
@@ -181,7 +175,7 @@ func (p *inboxPoller) stopped(ctx context.Context) error {
 	return nil
 }
 
-// markDue makes the next fetch over the link go at once.
+// markDue makes the next fetch go at once.
 func (p *inboxPoller) markDue() {
 	if p.gate != nil {
 		p.t.link.gates.mark(p.gate)
@@ -259,11 +253,11 @@ func (p *inboxPoller) clearInflight(turnID string) {
 	delete(p.turns, turnID)
 }
 
-// inboxLinkBackoff is the wait before a fetch over the link goes again after its failures-th failure in a row:
-// exponential with full jitter, its ceiling from inboxLinkBackoffMin doubling up to inboxLinkBackoffMax, and never
-// sooner than the failed answer asked (inboxRetryAfter).
-func inboxLinkBackoff(failures int, err error) time.Duration {
-	ceiling := min(inboxLinkBackoffMin<<min(max(failures-1, 0), 5), inboxLinkBackoffMax)
+// inboxBackoff is the wait before a fetch goes again after its failures-th failure in a row: exponential with full
+// jitter, its ceiling from inboxBackoffMin doubling up to inboxBackoffMax, and never sooner than the failed answer asked
+// (inboxRetryAfter).
+func inboxBackoff(failures int, err error) time.Duration {
+	ceiling := min(inboxBackoffMin<<min(max(failures-1, 0), 5), inboxBackoffMax)
 	wait := time.Duration(linkJitter(int64(ceiling))) + time.Millisecond
 	return max(wait, inboxRetryAfter(err))
 }

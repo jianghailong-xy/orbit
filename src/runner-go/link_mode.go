@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,36 +17,24 @@ import (
 	"orbit/linkpb"
 )
 
-// The runner link's work path (docs/runner-link-design.md §5.6, §7, decision D15). The daemon starts on HTTPS, as every
-// runner always has, and moves its work to the link only when the control plane asks for that:
+// The runner link's work path (docs/runner-link-design.md §5.6, §7). The link is the one way the daemon's work goes. It
+// is in use from the moment the daemon's transport has it (startLink), whatever a gateway or the control plane says.
 //
-//   - an HTTPS call to a daemon route answered UPGRADE_REQUIRED (the server's RUNNER_LINK_REQUIRED switch, task D0); or
-//   - a Welcome or HeartbeatAck saying MODE_LINK, on the work connection or on the shadow's (link_shadow.go).
+// Every call to a daemon route (linkDaemonRoutes: the routes of the apiserver's RunnerApiController that take the runner
+// credential) goes over the work connection (link_work.go), as an Rpc carrying the HTTP request (TunnelRequest), and its
+// answer comes back as the HTTP answer would. The heartbeat is the exception: it travels as a Heartbeat frame whose
+// parts are sent by digest (link_heartbeat.go). Every other call, the agent tool API, the release check and the
+// attachments, stays on HTTPS (D14). Each call has one request_id, which every resend of it keeps: after a lost
+// connection or a failure that says the call can be sent again, it is sent again under that id, and the control plane
+// answers a repeated claim with the session the first one claimed (task B2), and a repeated inbox fetch with the turn
+// the first one handed out (task B2b). A claim or an inbox fetch that got no answer at all is followed by one under the
+// same id, however much later, until one gets an answer (linkRequestIDs).
 //
-// It goes back to HTTPS when one of them says MODE_HTTP, save one said too soon after HTTPS refused a call for the
-// gateway to have read the switch since (linkModeReadLag). While nothing has asked, the link is not in use: doVia runs
-// doHTTP exactly as before, and no work connection is opened. ORBIT_LINK_MODE=off, or "linkMode": "off" in
-// config.json, keeps it that way whatever the control plane says.
-//
-// In link mode every call to a daemon route (linkDaemonRoutes: the routes of the apiserver's RunnerApiController that
-// take the runner credential) goes over the work connection (link_work.go), as an Rpc carrying the HTTP request
-// (TunnelRequest), and its answer comes back as the HTTP answer would. The heartbeat is the exception: it travels as a
-// Heartbeat frame whose parts are sent by digest (link_heartbeat.go). Every other call, the agent tool API, the
-// release check and the attachments, stays on HTTPS (D14). Each call has one request_id, which every resend of it
-// keeps: after a lost connection or a failure that says the call can be sent again, it is sent again under that id,
-// and the control plane answers a repeated claim with the session the first one claimed (task B2), and a repeated
-// inbox fetch with the turn the first one handed out (task B2b). A claim or an inbox fetch that got no answer at all
-// is followed by one under the same id, however much later, until one gets an answer (linkRequestIDs).
-//
-// The long polls do not hang on the server in link mode (§5.6): a claim, an inbox fetch or the wake is asked only
-// once a hint says something waits, or the HeartbeatAck's HintState does (link_hints.go); a session's inbox poller
-// decides when its own fetches go (inbox_poller.go). Every inbox fetch over the link says which turn this process is
-// running in the session (runningTurnId).
+// Nothing hangs on the server (§5.6): a claim, an inbox fetch or the wake is asked only once a hint says something
+// waits, or the HeartbeatAck's HintState does (link_hints.go); a session's inbox poller decides when its own fetches go
+// (inbox_poller.go). Every inbox fetch says which turn this process is running in the session (runningTurnId).
 
 const (
-	// linkModeEnv set to off (or 0, false, no) keeps every daemon call on HTTPS, whatever the control plane says. So
-	// does "linkMode": "off" in config.json. Anything else follows the control plane.
-	linkModeEnv = "ORBIT_LINK_MODE"
 	// linkAfterSeqPending is the control plane's answer to a call whose after_seq is not stored yet
 	// (runner-link-call.ts): 503, retryable, with the delay to send it again after.
 	linkAfterSeqPending = "RUNNER_LINK_AFTER_SEQ_PENDING"
@@ -60,75 +47,40 @@ const (
 
 // Variables only so that tests can shorten them.
 var (
-	// linkLongPoll is how long a long poll waits for its hint in link mode before it answers that nothing came: the
-	// window of the HTTP long polls (LONG_POLL_MS in runner-api.controller.ts), so their callers keep their pace. An
-	// inbox poller waits it out without fetching, and looks again at whether the link is in use.
-	linkLongPoll = 25 * time.Second
-	// linkApprovalRecheck is how often a pending approval is read again in link mode while no ApprovalHint says it
-	// was decided: the heartbeat's interval. The hint comes milliseconds after the decision commits, a lost one is
-	// made good by the next HeartbeatAck's HintState, and a new connection asks again; this covers what HintState
-	// cannot name (a card with no turn, tool call or job, or past its cap of 1000).
+	// linkHintWait is how long a claim, an inbox poller or the wake waits for its hint before it looks again: the claim
+	// loop answers that nothing came and goes round, so that it keeps its pace, and the others just go on waiting.
+	linkHintWait = 25 * time.Second
+	// linkApprovalRecheck is how often a pending approval is read again while no ApprovalHint says it was decided: the
+	// heartbeat's interval. The hint comes milliseconds after the decision commits, a lost one is made good by the next
+	// HeartbeatAck's HintState, and a new connection asks again; this covers what HintState cannot name (a card with no
+	// turn, tool call or job, or past its cap of 1000).
 	linkApprovalRecheck = 30 * time.Second
 	// linkAfterSeqWait bounds how long a call waits for the events it depends on (after_seq) to be stored. Past it,
 	// the call depends only on what the control plane has acknowledged storing: an event batch the session gave up
 	// on is never stored, and a turn completion must not wait for it forever.
 	linkAfterSeqWait = 30 * time.Second
-	// linkModeReadLag is how long after HTTPS refused a daemon call a MODE_HTTP may come from a gateway that has not
-	// read RUNNER_LINK_REQUIRED since it went on: the apiserver refuses from the moment it is switched on, and the
-	// gateway tells runners MODE_LINK from its next read, a second apart (src/link-gateway/mode.go), plus the read's own
-	// time. Until a gateway says MODE_LINK, a MODE_HTTP its gateway decided within it is not taken as the switch
-	// (observeSince: a Welcome's counts from when its connection was opened), and the work waits for the link.
-	linkModeReadLag = 2 * time.Second
 )
 
-// errLinkModeHTTP is the link refusing a call because the control plane said MODE_HTTP: the call reached no backend,
-// and goes over HTTPS.
-var errLinkModeHTTP = errors.New("the runner link is in MODE_HTTP: daemon calls go over HTTPS")
+// errLinkGatewayModeHTTP is a gateway that says MODE_HTTP, in a Welcome or a HeartbeatAck: it forwards nothing, because
+// its server's RUNNER_LINK_REQUIRED is off, or it has not read that yet. An older server's: this one's always say
+// MODE_LINK. Nothing else carries the work, so the runner keeps asking.
+var errLinkGatewayModeHTTP = errors.New("the gateway says MODE_HTTP, so it forwards nothing: this runner works only over the runner link, which its server must have switched on")
 
-// linkModeOff reports whether the link mode is turned off on this machine, and what turned it off.
-func linkModeOff(cfg *RunnerConfig) (bool, string) {
-	if v, ok := os.LookupEnv(linkModeEnv); ok {
-		switch strings.ToLower(strings.TrimSpace(v)) {
-		case "off", "0", "false", "no":
-			return true, linkModeEnv + "=" + v
-		}
-	}
-	if cfg != nil && strings.EqualFold(strings.TrimSpace(cfg.LinkMode), "off") {
-		return true, `"linkMode": "off" in ` + configPath()
-	}
-	return false, ""
-}
-
-// startLink makes t the daemon's transport and gives it the runner link: the link mode, unless it is turned off, and
-// the shadow (link_shadow.go). The daemon's transport names no caller (runnerCallerHeader). Called once, before
-// anything sends on t; the func it returns ends both.
-func startLink(cfg *RunnerConfig, t *Transport) func() {
+// startLink makes t the daemon's transport and gives it the runner link, which carries the daemon's work from now on.
+// The daemon's transport names no caller (runnerCallerHeader). Called once, before anything sends on t; the func it
+// returns ends the link.
+func startLink(t *Transport) func() {
 	t.caller = ""
-	if off, why := linkModeOff(cfg); off {
-		logln("runner link mode: off (" + why + "); daemon calls stay on HTTPS")
-		// What a process in link mode left unacknowledged in the spool still goes first, over HTTPS, and nothing
-		// newer is numbered over it (session.go): the spool is the session's, whatever carries its events now.
-		t.spooled = newLinkEvents(nil, logln)
-	} else {
-		t.link = newLinkMode(t, logln)
-	}
-	stopShadow := startLinkShadow(cfg, t)
-	return func() {
-		stopShadow()
-		if t.link != nil {
-			t.link.close()
-		}
-		if t.spooled != nil {
-			t.spooled.close() // what is still held goes back to the spool, for the next process
-		}
-	}
+	t.link = newLinkMode(t, logln)
+	t.link.start()
+	return t.link.close
 }
 
 // linkCloseWait is how long a stopping runner waits for the link's connection to end, past the stop's envelope.
 const linkCloseWait = 5 * time.Second
 
-// linkMode is the link mode of the daemon's transport t: where the control plane says its work goes, the work
-// connection, the hints its long polls wait on, and what each session's resume needs.
+// linkMode is the link of the daemon's transport t: the work connection, the hints its waits are ended by, and what
+// each session's resume needs.
 type linkMode struct {
 	t      *Transport
 	log    func(...any)
@@ -136,19 +88,7 @@ type linkMode struct {
 	gates  *linkGates
 	events *linkEvents // the sessions' durable and live event streams over the link (link_events.go)
 
-	mu sync.Mutex
-	// server is the transport the control plane last said the daemon's work goes over, in a Welcome or a HeartbeatAck
-	// of the work connection or the shadow's; MODE_UNSPECIFIED until one says.
-	server linkpb.Mode
-	// refused is set by an HTTPS daemon call answered UPGRADE_REQUIRED, at refusedAt, and cleared by a MODE_HTTP
-	// observe takes as the switch: while it is set, the work waits for the link rather than going back to HTTPS.
-	refused   bool
-	refusedAt time.Time
-	why       string // what put the link in use, for the log
-	closed    bool
-	// changed is closed, and replaced, whenever whether the link is in use changes: the shadow waits on it.
-	changed chan struct{}
-
+	mu         sync.Mutex
 	sessions   map[string]*linkSession // by the session id as the daemon names it
 	supervised []string                // the sessions the newest heartbeat named
 	// selfUpdateOwed is set when the link asks this runner to check its release now: a newly assigned release, or a
@@ -157,13 +97,9 @@ type linkMode struct {
 	requestSeq     atomic.Uint64
 }
 
-// linkSession is what the link knows of one session the daemon supervises: what a Hello resumes it from (§5.4) and the
-// seq a call depending on its events waits for (after_seq).
+// linkSession is what the link knows of one session the daemon supervises, beside its event stream: what a Hello resumes
+// it with (§5.4).
 type linkSession struct {
-	// sent is the highest event seq handed to the control plane for the session, stored or not; stored, the highest
-	// it acknowledged storing. sentRow and storedRow are the same of the events it stores as rows (linkRowEvent).
-	sent, stored       uint64
-	sentRow, storedRow uint64
 	// turn is the message or shell turn the inbox handed this process that no turn completion, and no end of the
 	// engine generation it was handed to, has ended yet: what a Hello resumes the session with, and what every inbox
 	// fetch over the link says this process is running (runningTurnId).
@@ -172,155 +108,30 @@ type linkSession struct {
 }
 
 func newLinkMode(t *Transport, log func(...any)) *linkMode {
-	m := &linkMode{t: t, log: log, gates: newLinkGates(), changed: make(chan struct{}), sessions: map[string]*linkSession{}}
+	m := &linkMode{t: t, log: log, gates: newLinkGates(), sessions: map[string]*linkSession{}}
 	m.work = newLinkWork(m, newLinkClient(t.baseURL, t.token, t.leaseOwner, m.hello), log)
 	m.events = newLinkEvents(m, log)
 	return m
 }
 
-// inUse reports whether the daemon's work goes over the link now: the control plane asked for it, and nothing has
-// sent it back to HTTPS since.
-func (m *linkMode) inUse() bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.inUseLocked()
+// start opens the work connection.
+func (m *linkMode) start() {
+	m.log("runner link: daemon calls go over the runner link as process " + m.t.leaseOwner)
+	m.work.start()
 }
 
-func (m *linkMode) inUseLocked() bool {
-	return !m.closed && (m.server == linkpb.Mode_MODE_LINK || m.refused)
-}
-
-// standDown is the shadow's question (link_shadow.go): whether it must hold no connection now, because the work
-// connection holds the process's one, and the channel closed when that may change.
-func (m *linkMode) standDown() (bool, <-chan struct{}) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.inUseLocked(), m.changed
-}
-
-// observe takes a mode the control plane stated, in a Welcome or a HeartbeatAck, and what said it.
-func (m *linkMode) observe(mode linkpb.Mode, source string) {
-	m.observeSince(mode, source, time.Now())
-}
-
-// observeSince is observe for a mode its gateway decided no sooner than since: a Welcome states the mode the gateway
-// gave its connection on taking the upgrade, which came after the runner began to open it.
-func (m *linkMode) observeSince(mode linkpb.Mode, source string, since time.Time) {
-	if mode == linkpb.Mode_MODE_UNSPECIFIED {
-		return // not stated: the runner keeps the transport it is using
-	}
-	m.mu.Lock()
-	if m.server == mode && (mode == linkpb.Mode_MODE_LINK || !m.refused) {
-		m.mu.Unlock()
-		return
-	}
-	if at := m.httpNewsAtLocked(); mode == linkpb.Mode_MODE_HTTP && since.Before(at) {
-		// HTTPS still refuses: the work stays on the link, and its next connection opens at `at` (linkWork.loop).
-		m.log(fmt.Sprintf("runner link: %s said MODE_HTTP less than %s after %s, so its gateway, which reads RUNNER_LINK_REQUIRED every second, may not have read it yet; daemon calls stay on the runner link, and its next connection opens in %s",
-			source, linkModeReadLag, m.why, max(time.Until(at), 0).Round(time.Millisecond)))
-		m.mu.Unlock()
-		return
-	}
-	m.server = mode
-	if mode == linkpb.Mode_MODE_HTTP {
-		m.refused = false
-	} else {
-		m.why = source + " said MODE_LINK"
-	}
-	m.updateLocked(source + " said MODE_HTTP")
-	m.mu.Unlock()
-}
-
-// httpNewsAt is when a MODE_HTTP will be taken as the switch while HTTPS refuses the work: linkModeReadLag after the
-// refusal, unless a gateway has said MODE_LINK since, after which every MODE_HTTP is. Zero while HTTPS does not refuse.
-func (m *linkMode) httpNewsAt() time.Time {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.httpNewsAtLocked()
-}
-
-func (m *linkMode) httpNewsAtLocked() time.Time {
-	if !m.refused || m.server == linkpb.Mode_MODE_LINK {
-		return time.Time{}
-	}
-	return m.refusedAt.Add(linkModeReadLag)
-}
-
-// upgradeRequired takes an HTTPS daemon call answered UPGRADE_REQUIRED: the control plane serves daemon routes only
-// over the link now.
-func (m *linkMode) upgradeRequired(call string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.refused {
-		return
-	}
-	m.refused, m.refusedAt = true, time.Now()
-	m.why = "the control plane answered " + call + " with UPGRADE_REQUIRED"
-	m.updateLocked("")
-}
-
-// linkUnusable sends the work back to HTTPS because the link cannot carry it, unless the control plane refused HTTPS:
-// then the work waits for the link, since nothing else would carry it either.
-func (m *linkMode) linkUnusable(why string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.refused || m.server != linkpb.Mode_MODE_LINK {
-		return
-	}
-	m.server = linkpb.Mode_MODE_UNSPECIFIED
-	m.updateLocked(why)
-}
-
-// stopping takes that the runner has begun to stop (runLoop): from then on a link without a connection is not waited
-// for. Unless the control plane refused HTTPS, the work goes back to HTTPS at once when the link has no connection now,
-// or loses the one it has (linkWork.stopping), and with it what the sessions' event streams hold: their last flushes
-// reach the control plane within the stop's grace instead of waiting for the link until it runs out. What HTTPS does
-// not store within it stays in the spool, as before (close).
-func (m *linkMode) stopping() {
-	if m.work.stopping() {
-		m.linkUnusable("the runner is stopping and the runner link is not connected")
-	}
-}
-
-// updateLocked starts or stops the work connection as the link comes into use or goes out of it, and tells whoever
-// waits on the change. off says why it goes out of use.
-func (m *linkMode) updateLocked(off string) {
-	use := m.inUseLocked()
-	m.events.setOnLink(use)
-	if use == m.work.running() {
-		return
-	}
-	close(m.changed)
-	m.changed = make(chan struct{})
-	if use {
-		m.log("runner link mode: on — " + m.why + "; daemon calls go over the runner link as process " + m.t.leaseOwner)
-		m.work.start()
-		return
-	}
-	if m.closed {
-		m.log("runner link mode: off — the runner is stopping")
-	} else {
-		m.log("runner link mode: off — " + off + "; daemon calls go over HTTPS")
-	}
-	m.work.stop()
-	// A release the link assigned is the link's: the release check asks over HTTPS again.
-	setLinkAssignedRelease(nil)
-}
-
-// close ends the link mode with the runner. What the sessions' event streams still hold is kept in the spool for the
-// next process (link_events.go).
+// close ends the link with the runner. What the sessions' event streams still hold is kept in the spool for the next
+// process (link_events.go).
 func (m *linkMode) close() {
-	m.mu.Lock()
-	m.closed = true
-	m.updateLocked("")
-	m.mu.Unlock()
+	m.log("runner link: closing: the runner is stopping")
+	m.work.stop()
+	setLinkAssignedRelease(nil)
 	m.work.wait(linkCloseWait)
 	m.events.close()
 }
 
-// doVia is a call of the daemon's transport (Transport.doVia). A call to a daemon route goes over the link while the
-// link is in use; any other call, and every call while it is not, goes over HTTPS (viaHTTP). An HTTPS daemon call
-// answered UPGRADE_REQUIRED puts the link in use and is made again over it, within the same timeout.
+// doVia is a call of the daemon's transport (Transport.doVia). A call to a daemon route goes over the link, within
+// timeout; any other call goes over HTTPS (viaHTTP).
 func (m *linkMode) doVia(ctx context.Context, method, path string, body, out interface{}, timeout time.Duration,
 	headers map[string]string, viaHTTP func(context.Context) error) error {
 	route, daemon := linkDaemonRoute(method, path)
@@ -332,39 +143,7 @@ func (m *linkMode) doVia(ctx context.Context, method, path string, body, out int
 	}
 	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	if m.inUse() {
-		err := m.call(cctx, route, method, path, body, out, headers)
-		if errors.Is(err, errLinkModeHTTP) && !m.inUse() {
-			return viaHTTP(cctx)
-		}
-		return err
-	}
-	err := viaHTTP(cctx)
-	if !linkUpgradeRequired(err) {
-		return err
-	}
-	m.upgradeRequired(method + " " + strings.SplitN(path, "?", 2)[0])
-	if !m.inUse() {
-		return err
-	}
-	lerr := m.call(cctx, route, method, path, body, out, headers)
-	if !linkUnreachable(lerr) {
-		return lerr
-	}
-	// Neither way is open yet. Said as a failure of the network, not as the 426: a caller retries that, while the 426
-	// reads as permanent, and stopping the runner is not the answer to a link that is still coming up.
-	return fmt.Errorf("the control plane serves %s %s only over the runner link, which is not connected yet: %w",
-		method, strings.SplitN(path, "?", 2)[0], lerr)
-}
-
-// linkUpgradeRequired reports whether err is a daemon route refusing HTTPS because the control plane serves it only
-// over the link now (task D0): 426, or a body whose code is UPGRADE_REQUIRED.
-func linkUpgradeRequired(err error) bool {
-	var httpErr *transportHTTPError
-	if !errors.As(err, &httpErr) {
-		return false
-	}
-	return httpErr.statusCode == http.StatusUpgradeRequired || httpErr.code() == "UPGRADE_REQUIRED"
+	return m.call(cctx, route, method, path, body, out, headers)
 }
 
 // linkAnswerTooLarge reports whether err is the gateway refusing to relay an answer larger than one frame may be once
@@ -372,12 +151,6 @@ func linkUpgradeRequired(err error) bool {
 func linkAnswerTooLarge(err error) bool {
 	var httpErr *transportHTTPError
 	return errors.As(err, &httpErr) && httpErr.code() == "BACKEND_ANSWER_TOO_LARGE"
-}
-
-// linkUnreachable reports whether err says the link did not carry the call at all: no connection came up in time, or
-// it was refused for MODE_HTTP.
-func linkUnreachable(err error) bool {
-	return errors.Is(err, errLinkModeHTTP) || errors.Is(err, errLinkNotConnected)
 }
 
 // call makes one daemon call over the link and reads its answer as doHTTP reads an HTTPS answer: a 2xx body into out,
@@ -577,42 +350,6 @@ func (m *linkMode) sessionLocked(id string) *linkSession {
 	return s
 }
 
-// sentEvents records events handed to the control plane for a session, before the request goes.
-func (m *linkMode) sentEvents(sessionID string, events []RunEvent) {
-	if len(events) == 0 {
-		return
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	s := m.sessionLocked(sessionID)
-	for _, e := range events {
-		if e.Seq > 0 {
-			s.sent = max(s.sent, uint64(e.Seq))
-			if linkRowEvent(e.Type, e.Payload) {
-				s.sentRow = max(s.sentRow, uint64(e.Seq))
-			}
-		}
-	}
-}
-
-// storedEvents records events the control plane acknowledged storing.
-func (m *linkMode) storedEvents(sessionID string, events []RunEvent) {
-	if len(events) == 0 {
-		return
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	s := m.sessionLocked(sessionID)
-	for _, e := range events {
-		if e.Seq > 0 {
-			s.stored = max(s.stored, uint64(e.Seq))
-			if linkRowEvent(e.Type, e.Payload) {
-				s.storedRow = max(s.storedRow, uint64(e.Seq))
-			}
-		}
-	}
-}
-
 // handedTurn records a turn the inbox handed this process (inboxPoller.handedOver): a message or shell turn is what it
 // executes until the turn's completion, or the end of the engine generation it was handed to.
 func (m *linkMode) handedTurn(sessionID string, r *RunInboxResponse) {
@@ -661,28 +398,18 @@ func (m *linkMode) supervising(ids []string) {
 	}
 }
 
-// afterSeq is what a call depending on a session's events waits for (after_seq): the highest seq handed to the control
-// plane, over HTTPS or to its event stream on the link, of an event it stores as a row. The control plane counts a
-// call's events stored once a row holds a seq at or past after_seq (assertAfterSeqStored, runner-link-call.ts); a
-// live event or a bare ping is stored as nothing, and a call that waited for one would wait for ever. storedRowSeq is
-// the highest of those it acknowledged storing.
+// afterSeq is what a call depending on a session's events waits for (after_seq): the highest seq handed to its event
+// stream of an event the control plane stores as a row. The control plane counts a call's events stored once a row holds
+// a seq at or past after_seq (assertAfterSeqStored, runner-link-call.ts); a live event or a bare ping is stored as
+// nothing, and a call that waited for one would wait for ever. storedRowSeq is the highest of those it acknowledged
+// storing.
 func (m *linkMode) afterSeq(sessionID string) uint64 {
 	handed, _ := m.events.rowSeqs(sessionID)
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if s := m.sessions[sessionID]; s != nil {
-		return max(s.sentRow, handed)
-	}
 	return handed
 }
 
 func (m *linkMode) storedRowSeq(sessionID string) uint64 {
 	_, stored := m.events.rowSeqs(sessionID)
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if s := m.sessions[sessionID]; s != nil {
-		return max(s.storedRow, stored)
-	}
 	return stored
 }
 
@@ -707,7 +434,7 @@ func (m *linkMode) resumeStates() []*linkpb.SessionResume {
 	for id := range ids {
 		r := &linkpb.SessionResume{SessionId: id, LastSeq: held[id]}
 		if s := m.sessions[id]; s != nil {
-			r.LastSeq, r.TurnId = max(s.sent, held[id]), s.turn
+			r.TurnId = s.turn
 		}
 		out = append(out, r)
 	}
@@ -788,7 +515,6 @@ var linkDaemonRoutes = []string{
 	"POST /runner/login-result",
 	"POST /runner/cursor-key-check-result",
 	"GET /runner/sessions/claim",
-	"GET /runner/wake",
 	"GET /runner/sessions/reclaim",
 	"POST /runner/sessions/:id/source/pin",
 	"POST /runner/sessions/:id/takeover-leases",
@@ -811,9 +537,10 @@ var linkDaemonRoutes = []string{
 	linkRouteTurnComplete,
 	"POST /runner/sessions/:id/events",
 	"POST /runner/sessions/:id/finalize",
-	"POST /runner/sessions/:id/complete",
 	"POST /runner/sessions/:id/import-result",
 	"POST /runner/sessions/worktrees-removable",
+	// The checkout inventory a machine reports for its own finished sessions (abandoned_checkout.go).
+	"POST /runner/abandoned-checkouts",
 	"POST /runner/sessions/:id/merge-result",
 	"POST /runner/sessions/:id/commit-result",
 	"POST /runner/sessions/:id/diff",

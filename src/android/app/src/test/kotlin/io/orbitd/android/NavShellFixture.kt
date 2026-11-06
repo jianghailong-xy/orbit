@@ -41,6 +41,14 @@ internal object NavShell {
     val holdDeletes = java.util.concurrent.ConcurrentHashMap<String, CompletableDeferred<Unit>>()
     /** A read of the Open list waits for this before it answers, with the list as it was when the read arrived. */
     @Volatile var holdOpen: CompletableDeferred<Unit>? = null
+    /** A read of Completed or Trash waits for this, and is then answered with [scopeStatus] if there is one. */
+    @Volatile var holdScope: CompletableDeferred<Unit>? = null
+    @Volatile var scopeStatus: Int? = null
+    /** More rows than the two sessions, by view, as [row] spells them; the account's folders and tags; a read of the workspaces that fails. */
+    @Volatile var extra: Map<String, List<String>> = emptyMap()
+    @Volatile var folders = "[]"
+    @Volatile var tags = "[]"
+    @Volatile var failWorkspaces: Int? = null
 
     fun reset() {
         calls.clear(); refuse = null; mergeAnswer = "merged"; mergeStatus = null
@@ -48,7 +56,14 @@ internal object NavShell {
         // An earlier test's held request is dropped, never answered: answered now, it would write into this test's server state
         // and post its toast here.
         holdDelete = null; holdOpen = null; holdDeletes.clear()
+        holdScope = null; scopeStatus = null; extra = emptyMap(); folders = "[]"; tags = "[]"; failWorkspaces = null
     }
+
+    /** A row of Alpha's. [fields] are more of its JSON, starting with a comma. */
+    fun row(id: String, title: String, at: String = "2026-10-09T01:00:00Z", pending: Int = 0, fields: String = "") =
+        """{"id":"$id","title":"$title","status":"AWAITING_INPUT","runState":"AWAITING_INPUT","lifecycleState":"OPEN",
+        "agent":{"id":"$ALPHA","name":"Alpha"},"agentId":"$ALPHA","createdAt":"2026-10-08T08:00:00Z","lastTurnAt":"$at",
+        "capabilities":{"canComplete":true,"canRestore":false},"pendingApprovals":$pending$fields}"""
 
     val workspaces = """[
         {"id":"$ALPHA","name":"Alpha","runnerId":"r1","enabled":true,"position":0,"createdAt":"2026-10-01T01:00:00.000Z"},
@@ -70,8 +85,8 @@ internal object NavShell {
             "agent":{"id":"$ALPHA","name":"Alpha"},"agentId":"$ALPHA","createdAt":"2026-10-08T08:00:00Z","lastTurnAt":"2026-10-09T01:00:00Z",
             "capabilities":{"canComplete":${state == "OPEN"},"canRestore":${state != "OPEN"}},"tags":[],"pendingApprovals":0$linked}"""
     }
-    private fun view(name: String) = "[" + listOf(SESSION, PLAIN).filter { (lifecycle[it] ?: "OPEN") == name.uppercase() }
-        .joinToString(",") { session(it) } + "]"
+    private fun view(name: String) = "[" + (listOf(SESSION, PLAIN).filter { (lifecycle[it] ?: "OPEN") == name.uppercase() }
+        .map { session(it) } + extra[name].orEmpty()).joinToString(",") + "]"
 
     private val task = """{"id":"$TASK","title":"Assign me","status":"OPEN","priority":0,"createdAt":"2026-10-08T00:00:00Z",
         "updatedAt":"2026-10-08T00:00:00Z","creatorType":"USER","comments":[],"dependsOn":[],"dependedOnBy":[]}"""
@@ -92,12 +107,20 @@ internal object NavShell {
         when {
             path == "auth/logout" -> ok("{}")
             path == "users/me" -> ok("""{"id":"u1","email":"owner@a05c.test","name":"Owner"}""")
-            path == "workspaces" -> ok(workspaces)
+            path == "workspaces" -> failWorkspaces?.let { ApiResponse(it, "{}".encodeToByteArray()) } ?: ok(workspaces)
+            path == "workspaces/$ALPHA" -> ok("""{"id":"$ALPHA","name":"Alpha","runnerId":"r1","enabled":true}""")
+            path == "session-folders" -> ok(folders)
+            path == "session-tags" -> ok(tags)
             path == "runners" -> ok("""[{"id":"r1","name":"Fixture runner","online":true}]""")
+            path == "sessions/search" -> ok("""{"q":"Review","contentSearched":true,"total":1,"hits":[{"id":"$SESSION","title":"Found by search","status":"RUNNING"}]}""")
             path == "sessions" -> {
                 val name = api.query.firstOrNull { it.first == "view" }?.second ?: "open"
                 val answer = view(name)
                 if (name == "open") holdOpen?.await()
+                else {
+                    holdScope?.await()
+                    scopeStatus?.let { return@HttpTransport ApiResponse(it, "{}".encodeToByteArray()) }
+                }
                 ok(answer)
             }
             id != null && api.path.size == 2 && method == "GET" -> ok(session(id))

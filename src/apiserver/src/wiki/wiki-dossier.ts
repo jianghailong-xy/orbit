@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import {
   WIKI_MAINTENANCE_RULES,
+  wikiCallDraftsInChat,
   wikiCallReadsWiki,
   wikiCallWritesNote,
   wikiEstimateTokens,
@@ -80,6 +81,8 @@ export interface DossierSessionRow {
   taskId: string | null;
   parentSessionId: string | null;
   dispatchOrigin: string;
+  /** The space this session is a wiki chat of (migration 0476), or null: a chat's drafting calls stay out. */
+  wikiChatSpaceId?: string | null;
 }
 
 export interface DossierTurnRow {
@@ -268,7 +271,8 @@ export async function loadDossierRecords(reader: DossierReader, ownerId: string,
   const [session] = await reader.$queryRaw<DossierSessionRow[]>`
     SELECT s."id"::text AS "id", s."title", s."provider", s."engine", s."model", s."status"::text AS "status",
            s."created_at" AS "createdAt", s."task_id"::text AS "taskId",
-           s."parent_session_id"::text AS "parentSessionId", s."dispatch_origin"::text AS "dispatchOrigin"
+           s."parent_session_id"::text AS "parentSessionId", s."dispatch_origin"::text AS "dispatchOrigin",
+           s."wiki_chat_space_id"::text AS "wikiChatSpaceId"
       FROM "session" s
      WHERE s."id" = ${sessionId}::uuid AND s."owner_id" = ${ownerId}::uuid`;
   if (!session) return null;
@@ -877,6 +881,7 @@ function timeline(records: DossierRecords, redact: (text: string) => string, cla
   }
 
   // The agent's own trace.
+  const chat = Boolean(records.session.wikiChatSpaceId);
   const results = new Map<string, DossierEventRow>();
   for (const event of records.events) {
     if (event.type === 'tool_result' && event.resultOf) results.set(event.resultOf, event);
@@ -910,6 +915,10 @@ function timeline(records: DossierRecords, redact: (text: string) => string, cla
           break;
         }
         // The evidence for a note is before it: a later result keeps the line it always had.
+        // A wiki chat's drafting call, left out with its result (contract `chat.dossier`): every op a chat
+        // proposes and every `wiki_draft` is a card the owner may discard, and a discarded one must not come
+        // back through this run. The owner's words in the chat stay: they are turns, above.
+        if (chat && wikiCallDraftsInChat(event.toolName, event.command)) break;
         const named = claims && event.createdAt.getTime() <= claims.lastAt ? claims.resultLines.get(event.toolUseId ?? '') : undefined;
         const line = toolLine(event, results.get(event.toolUseId ?? ''), redact, named);
         if (!line) break;
@@ -924,6 +933,7 @@ function timeline(records: DossierRecords, redact: (text: string) => string, cla
         if (!finished) break;
         const command = redact(event.bgCommand ?? '');
         if (MEMORY_PATH.test(command) || wikiCallReadsWiki(null, command) || wikiCallWritesNote(null, command)) break;
+        if (chat && wikiCallDraftsInChat(null, command)) break;
         const record = held(runEventParts('background_task', { command: event.bgCommand, summary: event.bgSummary }), redact);
         const ok = ['0', 'None', ''].includes(String(event.bgExit ?? '')) && event.bgStatus !== 'failed';
         const exit = event.bgExit === null || event.bgExit === '' ? '' : ` exit=${event.bgExit}`;

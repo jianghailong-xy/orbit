@@ -1276,6 +1276,11 @@ public final class APIClient: @unchecked Sendable {
     public func submitWikiChangeset(spaceID: String, _ req: WikiChangesetRequest) async throws -> WikiChangeResult {
         try await post("wiki/spaces/\(spaceID)/changesets", body: req)
     }
+    /// `POST /wiki/spaces`: a wiki made by its owner — the space, with maintenance on and its plan's first draft asked
+    /// for, in one request; answers with the space. Maintenance is refused to every session.
+    public func createWikiSpace(_ req: WikiSpaceCreate) async throws -> WikiSpace {
+        try await post("wiki/spaces", body: req)
+    }
     /// `PATCH /wiki/spaces/:id`: the owner's settings — the review mode, Automatic's spot checks and
     /// maintenance; answers with the space as the server kept it. Refused to every session.
     public func updateWikiSpace(_ id: String, _ req: WikiSpaceUpdate) async throws -> WikiSpace {
@@ -1292,6 +1297,10 @@ public final class APIClient: @unchecked Sendable {
     /// `DELETE /wiki/spaces/:id/workspaces/:workspaceId`: leave a workspace out of the wiki. Refused to every session.
     public func leaveWikiWorkspaceOut(spaceID: String, workspaceID: String) async throws {
         try await deleteRaw("wiki/spaces/\(spaceID)/workspaces/\(workspaceID)")
+    }
+    /// `DELETE /wiki/spaces/:id`: delete a wiki and all it holds, for good. Refused to every session.
+    public func deleteWikiSpace(_ id: String) async throws {
+        try await deleteRaw("wiki/spaces/\(id)")
     }
     /// `POST /wiki/entries/:id/confirm`: the owner vouching for what a review mode applied — the entry
     /// becomes Confirmed and is pushed from then on.

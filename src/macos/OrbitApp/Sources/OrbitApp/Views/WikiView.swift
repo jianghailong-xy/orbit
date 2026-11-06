@@ -23,8 +23,7 @@ struct WikiHomeActions {
     var openEntry: (String) -> Void = { _ in }
     var pickSpace: (String) -> Void = { _ in }
     var search: (String) async -> [WikiSearchHit] = { _ in [] }
-    /// The space's Wiki settings: the gear in the bar (mock 12 ①), Manage spaces, and a new space's Set up
-    /// maintenance (mock 31 ⑥).
+    /// The space's Wiki settings: the gear in the bar (mock 12 ①) and Manage spaces.
     var openSettings: () -> Void = {}
     /// The Contents sheet — the directory — from the list button in the bar (mock 30 ③).
     var openContents: () -> Void = {}
@@ -41,6 +40,8 @@ struct WikiHomeActions {
     var openIndex: () -> Void = {}
     /// The home's first read again, after it failed.
     var retry: () -> Void = {}
+    /// What a step of the setup card offers (mock 41).
+    var startAction: (WikiStartLogic.ActionTo) -> Void = { _ in }
 }
 
 /// One space's home (design §12.3.1, mocks 30 ③, 31 ① ③ ⑥ ⑦): the large title with the space beside it, the
@@ -48,7 +49,8 @@ struct WikiHomeActions {
 /// each category a group of cards on the grouped background, each written document its number, title and two
 /// lines of lead, what is not written yet folded into one row — and Browse by category · A–Z index at the
 /// foot. Its bands are `WikiLogic.HomeBand`'s, in their order. How the wiki is kept is Activity's, behind the
-/// bar's history mark with what waits on the owner on it.
+/// bar's history mark with what waits on the owner on it — but for the setup card, which stands in the documents
+/// band until there is something to read (mock 41).
 ///
 /// WHAT IS KNOWN IS DRAWN AT ONCE: the head is the spaces list the drawer has already read; the line and the
 /// documents are grey bars (`.redacted`) until the home's own first read is in.
@@ -64,6 +66,10 @@ struct WikiHomePage: View {
     /// The line under the head (`WikiLogic.homeLine`): nil, a grey bar, while the first read is out.
     var line: String? = nil
     var documents: WikiLogic.HomeDocuments = .loading
+    /// The setup card, as the plan reads; nil until the plan is in. The documents band says whether it is drawn.
+    var start: WikiStartLogic.Card? = nil
+    /// A write is on its way: the setup card's Draft plan takes no second press.
+    var busy = false
     /// When the reader last looked (`WikiSeenLog`): what the principles' blue dots mark; nil marks none.
     var seen: Double? = nil
     /// The first read failed: said where the documents would be, with Retry.
@@ -274,32 +280,26 @@ struct WikiHomePage: View {
         }
     }
 
-    /// The documents by category (mock 30 ③), the topic articles before a plan, a new space's card (mock 31 ⑥),
-    /// or grey bars while the first read is out (mock 31 ⑦).
+    /// The documents by category (mock 30 ③), the topic articles before a plan, or grey bars while the first read
+    /// is out (mock 31 ⑦) — and, until any of it can be read, the setup card: alone, or above a plan's categories
+    /// while none of their documents is written (mock 41 ⑦).
     @ViewBuilder private var documentsBand: some View {
         switch documents {
         case .loading:
             if failed { failure } else { skeleton }
-        case .categories(let categories):
+        case .categories(let categories, let nothingWritten):
+            if nothingWritten { startCard }
             ForEach(categories) { category in self.category(category) }
         case .topics(let groups):
             ForEach(groups) { group in topics(group) }
-        case .newSpace:
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(WikiDocCopy.noDocumentsNote)
-                        .font(.orbitSubtext)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Button(WikiPlanCopy.setUp, action: actions.openSettings)
-                        .font(.orbitSubtext.weight(.semibold))
-                        .buttonStyle(.borderless)
-                }
-                .padding(.vertical, 4)
-            }
-        case .nothing:
-            EmptyView()
+        case .start:
+            startCard
         }
+    }
+
+    /// The setup card, once the plan it reads is in.
+    @ViewBuilder private var startCard: some View {
+        if let start { WikiStartSection(card: start, busy: busy, act: actions.startAction) }
     }
 
     /// One category: its written documents with their leads, then one row for the rest — `+3 not written yet`,
@@ -435,6 +435,158 @@ struct WikiHomePage: View {
                 }
             }
         }
+    }
+}
+
+/// The setup card (mock 41): a section whose head is the card's title with its lead under it, and a row a step — a
+/// numbered circle (a tick when done, amber waits on the owner, blue is the server at work, grey has not come yet), then
+/// the title, the text, how far the writing has got, the note and at most one prominent button (`WikiStartCard.tsx`).
+struct WikiStartSection: View {
+    let card: WikiStartLogic.Card
+    var busy = false
+    var act: (WikiStartLogic.ActionTo) -> Void = { _ in }
+
+    var body: some View {
+        Section {
+            ForEach(Array(card.steps.enumerated()), id: \.element.id) { index, step in
+                row(step, number: index + 1)
+            }
+        } header: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(card.title)
+                    .font(.title3.bold())
+                    .foregroundStyle(Color.primary)
+                    .accessibilityAddTraits(.isHeader)
+                Text(card.lead)
+                    .font(.orbitLabel)
+                    .foregroundStyle(Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .textCase(nil)
+        }
+    }
+
+    private func row(_ step: WikiStartLogic.Step, number: Int) -> some View {
+        let moving = step.state == .wait || step.state == .run
+        return HStack(alignment: .top, spacing: 11) {
+            WikiStartMark(state: step.state, number: number)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(step.title)
+                    .font(.orbitProse.weight(moving ? .semibold : .regular))
+                    .foregroundStyle(step.state == .todo ? Color.secondary : Color.primary)
+                Text(step.text)
+                    .font(.orbitSubtext)
+                    .foregroundStyle(moving ? Color.primary : Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let progress = step.progress {
+                    ProgressView(value: Double(progress.done), total: Double(max(1, progress.total)))
+                        .padding(.top, 7)
+                    if let now = progress.now {
+                        (Text(WikiPlanCopy.writingNow) + Text(" ") + Text(now).bold())
+                            .font(.orbitLabel)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                if let note = step.note {
+                    Text(note)
+                        .font(.orbitLabel)
+                        .foregroundStyle(Color.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let action = step.action { button(action) }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    /// At most one is prominent: what the owner has to press. The other is the way to the plan while the server works.
+    private func button(_ action: WikiStartLogic.Action) -> some View {
+        Group {
+            if action.primary {
+                Button(action.label) { act(action.to) }
+                    .buttonStyle(.borderedProminent)
+            } else {
+                Button(action.label) { act(action.to) }
+                    .buttonStyle(.bordered)
+            }
+        }
+        .buttonBorderShape(.capsule)
+        .fontWeight(.semibold)
+        .disabled(busy && action.to == .draft)
+        .padding(.top, 7)
+    }
+}
+
+/// A step's circle: its number, or a tick once it is done, in the Wiki's colours.
+private struct WikiStartMark: View {
+    let state: WikiStartLogic.StepState
+    let number: Int
+
+    private var fill: Color {
+        switch state {
+        case .done: return WikiPalette.color(.green).opacity(0.12)
+        case .wait: return WikiPalette.color(.amber)
+        case .run:  return WikiPalette.color(.blue)
+        case .todo: return Color.clear
+        }
+    }
+
+    private var edge: Color {
+        switch state {
+        case .done: return WikiPalette.color(.green).opacity(0.35)
+        case .wait, .run: return fill
+        case .todo: return Color.secondary.opacity(0.4)
+        }
+    }
+
+    private var ink: Color {
+        switch state {
+        case .done: return WikiPalette.color(.green)
+        case .wait, .run: return Color.white
+        case .todo: return Color.secondary
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            Circle().fill(fill)
+            Circle().strokeBorder(edge, lineWidth: 1)
+            if state == .done {
+                Image(systemName: "checkmark")
+                    .font(.orbitMeta.weight(.bold))
+            } else {
+                Text("\(number)")
+                    .font(.orbitLabel.weight(.semibold).monospacedDigit())
+            }
+        }
+        .foregroundStyle(ink)
+        .frame(width: 24, height: 24)
+        .padding(.top, 1)
+    }
+}
+
+/// The Wiki of an account with no wiki (mock 41 ⑧): the title, then the setup card, whose first step makes one.
+struct WikiFirstStartPage: View {
+    let card: WikiStartLogic.Card
+    var act: (WikiStartLogic.ActionTo) -> Void = { _ in }
+
+    var body: some View {
+        List {
+            Section {
+                Text(WikiCopy.title)
+                    .font(.largeTitle.bold())
+                    .accessibilityAddTraits(.isHeader)
+                    .padding(.top, 4)
+                    .wikiHomeOnBackground()
+            }
+            WikiStartSection(card: card, act: act)
+        }
+        .wikiHomeListStyle()
+        .environment(\.defaultMinListRowHeight, 0)
+        .navigationTitle("")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
     }
 }
 

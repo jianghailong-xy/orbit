@@ -49,6 +49,7 @@ import {
   verifyRunnerLinkToken,
   type RunnerLinkClaims,
 } from './runner-link-token';
+import '../test-support/daemon-routes-over-http';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);

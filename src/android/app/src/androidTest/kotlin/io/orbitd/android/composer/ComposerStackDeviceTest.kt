@@ -1,5 +1,7 @@
 package io.orbitd.android.composer
 
+import io.orbitd.android.startNewSession
+import io.orbitd.android.openWorkspaceInDrawer
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
@@ -172,13 +174,9 @@ class ComposerStackDeviceTest {
         })
         keep("a07c-stack-providers", api("/providers"))
         signIn()
-        val workspace = seeded("enginesWorkspace").field("id")!!
-        compose.waitUntil(30_000) { has(hasTestTag("workspace:$workspace")) }
-        compose.onNodeWithTag("workspace:$workspace").performScrollTo().performClick()
-        // The workspace's own New session (the drawer's is off screen).
-        compose.waitUntil(30_000) { compose.onAllNodes(hasText("New session") and hasClickAction() and isEnabled()).fetchSemanticsNodes().any { it.boundsInRoot.left >= 0f } }
-        val buttons = compose.onAllNodes(hasText("New session") and hasClickAction() and isEnabled())
-        buttons[buttons.fetchSemanticsNodes().indexOfFirst { it.boundsInRoot.left >= 0f }].performClick()
+        compose.waitUntil(30_000) { has(hasTestTag("directory-list")) }
+        compose.openWorkspaceInDrawer(seeded("enginesWorkspace").field("name")!!)
+        compose.startNewSession()
         fun engineList(): List<String> {
             compose.waitUntil(30_000) { has(hasTestTag("new-session-engine") and isEnabled()) }
             compose.onNodeWithTag("new-session-engine").performClick()

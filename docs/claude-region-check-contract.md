@@ -69,8 +69,8 @@ page's words, so the two compare line for line), move `CLAUDE_REGIONS_AS_OF`, an
 `GET /runner/region-check?viaProxy=0|1`, with the runner token like every runner route.
 
 - **Plain HTTPS, never the runner link.** The request has to leave through Claude's proxy (②), so it is marked
-  `@StaysOnHttps()` (`src/apiserver/src/runner-api/runner-link-required.ts`) and answers while
-  `RUNNER_LINK_REQUIRED` is on.
+  `@StaysOnHttps()` (`src/apiserver/src/runner-api/runner-link-required.ts`) and answers over HTTPS, where the daemon's
+  other routes answer 426.
 - **The runner's side.** One request per check, through the proxy `claude` would use for `https://api.anthropic.com`
   (the process env, then the `env` of `settings.json`). `orbit register --proxy` puts the Orbit host into
   `NO_PROXY`, so the runner builds this request's transport with that proxy explicitly, and goes direct when there

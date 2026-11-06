@@ -30,6 +30,9 @@ const (
 	sessionTerminalHandoffV1         = "session-terminal-handoff-v1"
 	sessionWorktreeOpsV1             = "session-worktree-ops-v1"
 	sessionMergeRecoveryV1           = "session-merge-recovery-v1"
+	// The commit relay may also carry `discard`, and this runner reports which finished
+	// sessions' checkouts still hold uncommitted work (abandoned_checkout.go).
+	abandonedCheckoutCapabilityV1 = "abandoned-checkout-v1"
 	// CURRENT_WORK v1 guarantees startup-envelope support and flushes its runtime-authored USER
 	// receipt before any completion/finalization that can terminalize an unacknowledged delivery.
 	sessionCurrentWorkRoutingV1 = "session-current-work-routing-v1"
@@ -77,6 +80,7 @@ func init() {
 		sessionTerminalHandoffV1,
 		sessionWorktreeOpsV1,
 		sessionMergeRecoveryV1,
+		abandonedCheckoutCapabilityV1,
 		sessionCurrentWorkRoutingV1,
 		sessionClaudeSteerWithdrawV1,
 		sessionClaudeCoordinatorContextV1,
@@ -221,33 +225,28 @@ type Transport struct {
 	// runner credential says in runnerCallerHeader. Empty on the daemon's own transport, which never
 	// sends the header.
 	caller string
-	// link is the runner link the daemon's work moves to once the control plane asks for it
-	// (link_mode.go). Set only on the daemon's transport, by startLink; nil everywhere else, where
-	// every call goes over HTTPS.
+	// link is the runner link, which carries the daemon's work (link_mode.go). Set only on the daemon's
+	// transport, by startLink; nil everywhere else, where every call goes over HTTPS: `orbit mcp`, the CLI
+	// verbs and the approval hook, which name themselves (runnerCallerHeader), and the release check.
 	link *linkMode
-	// spooled is the sessions' event streams of a daemon whose link mode is turned off: they hold what a
-	// process in link mode left unacknowledged in the link spool, which goes over HTTPS before anything
-	// newer (session.go). Set by startLink in place of link; nil everywhere else.
-	spooled *linkEvents
 }
 
-// eventStreams is the sessions' event streams of the daemon's transport (link_events.go): the link mode's,
-// or with the link mode off, those that send what the link spool holds over HTTPS. Nil on any other
-// transport.
+// eventStreams is the sessions' event streams of the daemon's transport (link_events.go). Nil on any
+// other transport.
 func (t *Transport) eventStreams() *linkEvents {
 	if t.link != nil {
 		return t.link.events
 	}
-	return t.spooled
+	return nil
 }
 
 // runnerCallerHeader names the process making a request with the runner credential when it is not
-// the runner daemon: `orbit mcp`, the Antigravity approval hook, or a CLI verb. The runner link's
-// cutover (task D0) refuses the daemon routes over HTTPS with UPGRADE_REQUIRED only to calls that
-// carry no marker, because those processes share some of the daemon's routes (the approvals, an
-// orchestration credential's refresh) and hold no link of their own. Marking them rather than the
-// daemon means a daemon too old to know the link carries no marker either, and is refused like any
-// other daemon. The daemon's transport never sets it (TestTheDaemonNeverSaysWhoIsCalling).
+// the runner daemon: `orbit mcp`, the Antigravity approval hook, or a CLI verb. The control plane
+// refuses the daemon routes over HTTPS with UPGRADE_REQUIRED only to calls that carry no marker,
+// because those processes share some of the daemon's routes (the approvals, an orchestration
+// credential's refresh) and hold no link of their own. Marking them rather than the daemon means a
+// daemon too old to know the link carries no marker either, and is refused like any other daemon.
+// The daemon's transport never sets it (TestTheDaemonNeverSaysWhoIsCalling).
 const runnerCallerHeader = "X-Orbit-Runner-Caller"
 
 // The callers runnerCallerHeader names.
@@ -339,9 +338,8 @@ func (t *Transport) doHeaders(ctx context.Context, method, path string, body, ou
 }
 
 // doVia is doHeaders sent through client: t.client for every call but the wiki door's
-// (wiki_conn.go). On the daemon's transport in link mode, a daemon route's call goes over the
-// runner link instead (linkMode.doVia); every other call, and every call while the link is not in
-// use, is doHTTP's.
+// (wiki_conn.go). On the daemon's transport a daemon route's call goes over the runner link
+// instead (linkMode.doVia); every other call is doHTTP's.
 func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path string, body, out interface{}, timeout time.Duration, headers map[string]string) error {
 	if t.link != nil {
 		return t.link.doVia(ctx, method, path, body, out, timeout, headers, func(ctx context.Context) error {
@@ -461,22 +459,21 @@ func (t *Transport) me() (*MeResponse, error) {
 	return &r, nil
 }
 
-// longPollCallTimeout bounds one claim or inbox fetch: the server's 25 s long poll, and room to spare. A variable only
-// so that tests can shorten it.
-var longPollCallTimeout = 35 * time.Second
+// fetchCallTimeout bounds one claim or inbox fetch, the wait for a connection included. A variable only so that tests
+// can shorten it.
+var fetchCallTimeout = 35 * time.Second
 
-// claimSession long-polls; returns nil when the server holds then yields nothing. In link mode the
-// claim does not hang on the server: it is asked once a hint says a session waits (link_hints.go),
-// and nil is the hint not coming. ids is the claim loop's request id over the link (linkRequestIDs):
-// a claim that got no answer goes again under it, as soon as the loop asks again.
+// claimSession is the session the control plane hands this runner, nil for none. It is asked once a hint says a session
+// waits (link_hints.go), and nil is the hint not coming as well. ids is the claim loop's request id over the link
+// (linkRequestIDs): a claim that got no answer goes again under it, as soon as the loop asks again.
 func (t *Transport) claimSession(ctx context.Context, ids *linkRequestIDs) (*ClaimedSession, error) {
-	if t.link != nil && t.link.inUse() {
-		if due, err := t.link.gates.takeClaim(ctx, linkLongPoll); !due {
+	if t.link != nil {
+		if due, err := t.link.gates.takeClaim(ctx, linkHintWait); !due {
 			return nil, err
 		}
 	}
 	var r ClaimedSession
-	err := t.do(ids.with(ctx), "GET", "/runner/sessions/claim", nil, &r, longPollCallTimeout)
+	err := t.do(ids.with(ctx), "GET", "/runner/sessions/claim", nil, &r, fetchCallTimeout)
 	ids.settle(err)
 	if ids.kept() {
 		t.link.gates.markClaim() // the question the claim asked is still open, which no hint may say
@@ -490,21 +487,11 @@ func (t *Transport) claimSession(ctx context.Context, ids *linkRequestIDs) (*Cla
 	return &r, nil
 }
 
-// waitForWake long-polls GET /runner/wake: true once the control plane has something this runner's
-// heartbeat carries waiting for it (see runWakeLoop), false when the poll times out. In link mode
-// the wake is a CommandsHint (or a new connection, whose first heartbeat is owed at once), and
-// nothing is asked.
+// waitForWake is true once the control plane has something this runner's heartbeat carries waiting for it (see
+// runWakeLoop), false when nothing said so for a while. The wake is a CommandsHint, or a new connection, whose first
+// heartbeat is owed at once; nothing is asked. Only the daemon waits for it, on the transport that has the link.
 func (t *Transport) waitForWake(ctx context.Context) (bool, error) {
-	if t.link != nil && t.link.inUse() {
-		return t.link.gates.takeWake(ctx, linkLongPoll)
-	}
-	var r struct {
-		Wake bool `json:"wake"`
-	}
-	if err := t.do(ctx, "GET", "/runner/wake", nil, &r, 35*time.Second); err != nil {
-		return false, err
-	}
-	return r.Wake, nil
+	return t.link.gates.takeWake(ctx, linkHintWait)
 }
 
 // reclaim lists every open session assigned to this runner so its lightweight
@@ -532,51 +519,12 @@ func (t *Transport) pinSessionSource(ctx context.Context, sessionID string, req 
 	return &r, nil
 }
 
-// postEvents delivers a batch of a session's events and returns once they are stored: over HTTPS, as every runner
-// always has, or, while the runner link is in use, on the session's event stream there (link_events.go). A batch HTTPS
-// answers UPGRADE_REQUIRED goes over the link, and one the link gives back once it is out of use goes over HTTPS.
-// A session's supervisor does not come through here: it hands its events to its stream itself (session.go).
+// postEvents posts a batch of a session's events as a request of its own, on a transport with no link: the session
+// loops' unit tests run on one. The daemon's session supervisors hand their events to their streams on the runner link
+// (session.go, link_events.go).
 func (t *Transport) postEvents(ctx context.Context, sessionID string, batch RunEventBatch) error {
-	for {
-		if t.link != nil && t.link.inUse() {
-			err := t.link.events.deliver(ctx, sessionID, batch.Events)
-			if !errors.Is(err, errLinkEventsOffLink) {
-				return err
-			}
-		}
-		err := t.postEventsHTTPS(ctx, sessionID, batch)
-		if !errors.Is(err, errLinkEventsMoved) {
-			return err
-		}
-	}
-}
-
-// postEventsHTTPS posts a batch of a session's events over HTTPS. On the daemon's transport it also records what a Hello
-// resumes the session from and what its turn completion waits for (link_mode.go), and that the session's event stream
-// on the link need not send these again. Answered UPGRADE_REQUIRED, it puts the link in use and returns
-// errLinkEventsMoved: the control plane takes the session's events over the link now, where they go instead.
-func (t *Transport) postEventsHTTPS(ctx context.Context, sessionID string, batch RunEventBatch) error {
 	batch.LeaseOwner = t.leaseOwner
-	path := "/runner/sessions/" + sessionID + "/events"
-	if t.link == nil {
-		return t.do(ctx, "POST", path, batch, nil, 35*time.Second)
-	}
-	t.link.sentEvents(sessionID, batch.Events)
-	err := t.doHTTP(ctx, t.client, "POST", path, batch, nil, 35*time.Second, nil)
-	if linkUpgradeRequired(err) {
-		t.link.upgradeRequired("POST " + path)
-		if t.link.inUse() {
-			return errLinkEventsMoved
-		}
-		return err
-	}
-	if err == nil && len(batch.Events) > 0 {
-		t.link.storedEvents(sessionID, batch.Events)
-		if s := t.link.events.stream(sessionID); s != nil {
-			s.storedOverHTTPS(batch.Events[0].Seq, batch.Events[len(batch.Events)-1].Seq)
-		}
-	}
-	return err
+	return t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/events", batch, nil, 35*time.Second)
 }
 
 // finalizeRun finalizes the current run server-side and reports back whether the isolated worktree
@@ -589,17 +537,7 @@ func (t *Transport) finalizeRun(ctx context.Context, sessionID string, b RunFina
 	b.LeaseOwner = t.leaseOwner
 	path := "/runner/sessions/" + sessionID + "/finalize"
 	if err := t.do(ctx, "POST", path, b, &r, 35*time.Second); err != nil {
-		// A newly upgraded runner can overlap an older control-plane replica during a
-		// rolling deploy. Only a missing canonical route falls back; every other error
-		// remains authoritative and keeps the checkout for safety.
-		if !strings.Contains(err.Error(), "POST "+path+" -> 404 ") {
-			return true, err
-		}
-		r = RunFinalizeResponse{}
-		legacyPath := "/runner/sessions/" + sessionID + "/complete"
-		if legacyErr := t.do(ctx, "POST", legacyPath, b, &r, 35*time.Second); legacyErr != nil {
-			return true, legacyErr
-		}
+		return true, err
 	}
 	return r.KeepCheckout, nil
 }
@@ -608,20 +546,33 @@ func (t *Transport) finalizeRun(ctx context.Context, sessionID string, b RunFina
 // checkouts) may be garbage-collected. Ids absent from the reply belong to still-resumable
 // sessions and must be kept.
 func (t *Transport) worktreesRemovable(ids []string) ([]string, error) {
-	if len(ids) == 0 {
-		return nil, nil
-	}
-	var r WorktreesRemovableResponse
-	if err := t.do(nil, "POST", "/runner/sessions/worktrees-removable",
-		map[string][]string{"ids": ids}, &r, 15*time.Second); err != nil {
+	r, err := t.worktreesJudgement(ids)
+	if err != nil {
 		return nil, err
 	}
 	return r.Removable, nil
 }
 
+// worktreesJudgement is the whole answer both halves of a sweep and the abandoned-checkout
+// inventory read: which checkouts no longer have a use, and which sessions are at rest here.
+func (t *Transport) worktreesJudgement(ids []string) (WorktreesRemovableResponse, error) {
+	var r WorktreesRemovableResponse
+	if len(ids) == 0 {
+		return r, nil
+	}
+	err := t.do(nil, "POST", "/runner/sessions/worktrees-removable",
+		map[string][]string{"ids": ids}, &r, 15*time.Second)
+	return r, err
+}
+
+// abandonedCheckouts replaces this runner's inventory of finished sessions' checkouts that
+// still hold uncommitted work (abandoned_checkout.go).
+func (t *Transport) abandonedCheckouts(b AbandonedCheckoutsRequest) error {
+	return t.do(nil, "POST", "/runner/abandoned-checkouts", b, nil, 60*time.Second)
+}
+
 // inbox fetches the next user turn of an interactive session; returns nil when there is none
-// (turnId == ""): over HTTPS a long poll the server holds, over the runner link at once. Every
-// session loop fetches through its inboxPoller (inbox_poller.go), which decides when.
+// (turnId == ""). Every session loop fetches through its inboxPoller (inbox_poller.go), which decides when.
 //
 // `acceptsSteer` says this binary knows the `steer` kind — a message written into the turn
 // already running. It is a property of the runner, not of the session: every session loop
@@ -635,7 +586,7 @@ func (t *Transport) inbox(ctx context.Context, sessionID, leaseGeneration string
 	if leaseGeneration != "" {
 		path += "&leaseGeneration=" + url.QueryEscape(leaseGeneration)
 	}
-	if err := t.do(ctx, "GET", path, nil, &r, longPollCallTimeout); err != nil {
+	if err := t.do(ctx, "GET", path, nil, &r, fetchCallTimeout); err != nil {
 		return nil, err
 	}
 	if r.TurnID == "" {
@@ -1132,12 +1083,13 @@ func (t *Transport) createApproval(ctx context.Context, sessionID string, body i
 	return r.ID, nil
 }
 
-// pollApproval long-polls one approval; a "PENDING" status means the server's window
-// elapsed undecided and the caller should re-poll. In link mode the read answers at once, so it is
-// paced instead: asked when an ApprovalHint or a HeartbeatAck says the approval was decided, and at
-// most every linkApprovalRecheck otherwise.
+// pollApproval reads one approval; a "PENDING" status means it is still undecided and the caller should
+// ask again. `orbit mcp` and the approval hook, which hold no link, long-poll it over HTTPS: the server
+// holds the read. On the daemon's transport the read answers at once, so it is paced instead: asked when
+// an ApprovalHint or a HeartbeatAck says the approval was decided, and at most every linkApprovalRecheck
+// otherwise.
 func (t *Transport) pollApproval(ctx context.Context, sessionID, approvalID string) (*ApprovalDecisionResponse, error) {
-	if t.link != nil && t.link.inUse() {
+	if t.link != nil {
 		if _, err := t.link.gates.takeApproval(ctx, approvalID, linkApprovalRecheck); err != nil {
 			return nil, err
 		}

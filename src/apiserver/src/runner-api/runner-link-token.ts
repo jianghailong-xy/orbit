@@ -10,6 +10,9 @@ import {
   verify,
   type KeyObject,
 } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { MANAGED_RUNNERS_ENABLED_ENV, readManagedRunnerGate } from '../managed-runners/managed-runner-gate';
+import { MANAGED_RUNNERS_PROFILE_ENV } from '../managed-runners/managed-runner-profile';
 
 /**
  * The runner link's connection tokens (docs/runner-link-design.md §5.4, §6.2; migration 0443).
@@ -24,11 +27,13 @@ import {
  * The link is switched on by three settings, all of them or none:
  *
  *   RUNNER_LINK_SIGNING_KEY    base64 of an Ed25519 private key in PEM (PKCS#8)
- *   RUNNER_LINK_URL            the ws:// or wss:// address of the cell's gateway
+ *   RUNNER_LINK_URL            the ws:// or wss:// address of the cell's gateway, or `same-origin`: it sits behind
+ *                              this deployment's own web gateway and port, and each runner is told the address
+ *                              it reached this server at (sameOriginLinkUrl)
  *   RUNNER_LINK_GATEWAY_TOKEN  the secret the gateway presents to read the revocations
  *
  * None set, the link is off and both of its routes answer 404 RUNNER_LINK_NOT_CONFIGURED, which is
- * what a server older than them answers too. Some set, or one unreadable, it is off as well, and
+ * what a server older than them answers too, and no runner can work. Some set, or one unreadable, it is off as well, and
  * each problem is logged once at boot: a mistake in the link's configuration never stops the server
  * the HTTP protocol runs on.
  */
@@ -47,6 +52,12 @@ export const RUNNER_LINK_TOKEN_TTL_SECONDS = 60 * 60;
  */
 export const RUNNER_LINK_REVOCATION_WINDOW_MS = (RUNNER_LINK_TOKEN_TTL_SECONDS + 10 * 60) * 1000;
 
+/** RUNNER_LINK_URL's value for a gateway behind this deployment's own web gateway and port (sameOriginLinkUrl). */
+export const RUNNER_LINK_SAME_ORIGIN = 'same-origin';
+
+/** Where the web gateway passes the runner link on to the link gateway (gateway/nginx.conf). */
+export const RUNNER_LINK_PATH = '/runner-link';
+
 /** The one cell there is (tenant_cell's CHECK in migration 0443). */
 export const RUNNER_LINK_CELL = 'cell-1';
 
@@ -60,9 +71,30 @@ export interface RunnerLinkConfig {
   publicKey: KeyObject;
   /** The JWS header's `kid`: the public key's RFC 7638 thumbprint, so a gateway can hold two keys. */
   keyId: string;
-  /** Where cell-1's gateway listens — the address of the only cell. */
+  /** Where cell-1's gateway listens — the address of the only cell. With sameOrigin, the deployment's own address. */
   linkUrl: string;
   gatewayToken: string;
+  /** Set for RUNNER_LINK_URL=same-origin: what sameOriginLinkUrl decides each runner's address from. */
+  sameOrigin?: SameOriginLink;
+}
+
+/** What an operator configured, and sameOriginLinkUrl goes by. Nothing here comes from a request. */
+export interface SameOriginLink {
+  /** PUBLIC_ORIGIN says https: the deployment's own address has TLS, and no request can talk a runner out of it. */
+  https: boolean;
+  /** The hosts a runner may reach this deployment at over plain HTTP by design, whatever PUBLIC_ORIGIN says: the host of
+   *  the managed runners' runner.serverUrl, the one way their firewall leaves them (docs/self-hosting.md). */
+  directHosts: readonly string[];
+}
+
+/** What a link-token request says about how it arrived, as the web gateway hands it over. */
+export interface LinkTokenArrival {
+  /** The Host the web gateway received, port included: X-Orbit-Request-Host, which gateway/nginx.conf overwrites. */
+  host?: string;
+  /** X-Forwarded-Proto as it reached the web gateway: X-Orbit-Request-Proto, which gateway/nginx.conf overwrites. */
+  forwardedProto?: string;
+  /** It came through a proxy in front of the web gateway: one TRUSTED_PROXIES names, or whose X-Forwarded-For shows. */
+  proxied?: boolean;
 }
 
 /** The link as this process runs it: its configuration, or null while it is off, and why. */
@@ -91,14 +123,17 @@ export interface RunnerLinkClaims {
   exp: number;
 }
 
-/** The three settings as the environment spells them, read once at boot. */
+/** The settings as the environment spells them, read once at boot. */
 export function readRunnerLink(settings: {
   signingKey?: string;
   linkUrl?: string;
   gatewayToken?: string;
+  /** PUBLIC_ORIGIN and the managed runners' runner.serverUrl: read only for RUNNER_LINK_URL=same-origin. */
+  publicOrigin?: string;
+  managedRunnerServerUrl?: string;
 }): RunnerLinkState {
   const signingKey = settings.signingKey?.trim() ?? '';
-  const linkUrl = settings.linkUrl?.trim() ?? '';
+  let linkUrl = settings.linkUrl?.trim() ?? '';
   const gatewayToken = settings.gatewayToken?.trim() ?? '';
   if (!signingKey && !linkUrl && !gatewayToken) return { config: null, problems: [] };
 
@@ -120,8 +155,17 @@ export function readRunnerLink(settings: {
       );
     }
   }
+  let sameOrigin: SameOriginLink | undefined;
   if (!linkUrl) {
     problems.push('RUNNER_LINK_URL is not set');
+  } else if (linkUrl === RUNNER_LINK_SAME_ORIGIN) {
+    const origin = httpOrigin(settings.publicOrigin);
+    if (origin) {
+      linkUrl = `${origin.protocol === 'https:' ? 'wss' : 'ws'}://${origin.host}${RUNNER_LINK_PATH}`;
+      sameOrigin = { https: origin.protocol === 'https:', directHosts: directHosts(settings.managedRunnerServerUrl) };
+    } else {
+      problems.push(`RUNNER_LINK_URL=${RUNNER_LINK_SAME_ORIGIN} needs PUBLIC_ORIGIN to be an http:// or https:// origin, and it is ${JSON.stringify(settings.publicOrigin ?? '')}`);
+    }
   } else if (!isLinkAddress(linkUrl)) {
     problems.push(`RUNNER_LINK_URL=${JSON.stringify(linkUrl)} is not a ws:// or wss:// address`);
   }
@@ -137,7 +181,7 @@ export function readRunnerLink(settings: {
   }
   const publicKey = createPublicKey(key);
   return {
-    config: { signingKey: key, publicKey, keyId: thumbprint(publicKey), linkUrl, gatewayToken },
+    config: { signingKey: key, publicKey, keyId: thumbprint(publicKey), linkUrl, gatewayToken, ...(sameOrigin ? { sameOrigin } : {}) },
     problems: [],
   };
 }
@@ -147,20 +191,104 @@ export function runnerLinkFrom(
   config: Pick<ConfigService, 'get'>,
   log: Pick<Logger, 'error'> = new Logger('RunnerLink'),
 ): RunnerLinkState {
-  const state = readRunnerLink({
+  const state = readRunnerLink(runnerLinkSettings(config));
+  for (const problem of state.problems) log.error(problem);
+  // Compose refuses to start this apiserver without the signing key. Outside Compose, this is what says so.
+  if (!state.config && state.problems.length === 0) log.error('The runner link is not configured, and runners work only over it: no runner can work with this server');
+  return state;
+}
+
+/** readRunnerLink's settings from this process's configuration. */
+export function runnerLinkSettings(config: Pick<ConfigService, 'get'>) {
+  return {
     signingKey: config.get<string>('RUNNER_LINK_SIGNING_KEY'),
     linkUrl: config.get<string>('RUNNER_LINK_URL'),
     gatewayToken: config.get<string>('RUNNER_LINK_GATEWAY_TOKEN'),
-  });
-  for (const problem of state.problems) log.error(problem);
-  return state;
+    publicOrigin: config.get<string>('PUBLIC_ORIGIN'),
+    // Read only where managed runners are on: off, the process reads no profile (managed-runner-gate.ts).
+    managedRunnerServerUrl: readManagedRunnerGate(config.get<string>(MANAGED_RUNNERS_ENABLED_ENV)).enabled
+      ? managedRunnerServerUrl(config.get<string>(MANAGED_RUNNERS_PROFILE_ENV))
+      : undefined,
+  };
+}
+
+/** The managed runners' runner.serverUrl, from their profile where this deployment has one. */
+function managedRunnerServerUrl(profilePath: string | undefined): string | undefined {
+  if (!profilePath) return undefined;
+  try {
+    const url = (JSON.parse(readFileSync(profilePath, 'utf8')) as { runner?: { serverUrl?: unknown } }).runner?.serverUrl;
+    return typeof url === 'string' ? url : undefined;
+  } catch {
+    // None here, as with ORBIT_MANAGED_RUNNERS_DIR unset. Whether a profile that is there reads is the manager's to say.
+    return undefined;
+  }
+}
+
+/**
+ * The address a runner is told with RUNNER_LINK_URL=same-origin, where the link gateway sits behind this deployment's
+ * own web gateway: it reaches the link the way it reached this request (docs/self-hosting.md, "Runner link"). What each
+ * header can do, given that nothing reaches the apiserver but through the web gateway, which overwrites the X-Orbit-*
+ * two with what it received:
+ *
+ *   - PUBLIC_ORIGIN says https: the answer is that origin's wss://, and no header changes it. A Host, an X-Forwarded-Proto,
+ *     an X-Forwarded-For and an X-Forwarded-Host are not read for its address. The one other answer is the plain-HTTP
+ *     address the operator gave the managed runners, for a request that names that host and shows no proxy in front; a
+ *     request that came through one gets the origin.
+ *   - PUBLIC_ORIGIN says http: the deployment has no TLS of its own to keep, and may not know its own address at all (the
+ *     default is localhost), so the answer is the Host the request arrived with, checked to be only a host and a port.
+ *     X-Forwarded-Proto can only raise it: `https` among its values gives wss, for a proxy with TLS in front of a
+ *     deployment whose PUBLIC_ORIGIN was never set; nothing a client writes there gives ws where wss would have been.
+ *
+ * A Host reaches only the answer to the request that carried it: the answer is computed from that request alone, keeps
+ * nothing and is never cached. To point another runner elsewhere, an attacker must already be on that runner's path,
+ * over plain HTTP, where it can rewrite the answer itself and read the runner's token as well. TRUSTED_PROXIES is not
+ * needed for any of this; a request through a proxy it names counts as proxied, whatever its X-Forwarded-For says.
+ */
+export function sameOriginLinkUrl(config: RunnerLinkConfig, arrival: LinkTokenArrival): string {
+  const link = config.sameOrigin;
+  if (!link) return config.linkUrl;
+  const host = linkHost(arrival.host);
+  if (link.https) {
+    return host !== null && !arrival.proxied && link.directHosts.includes(host) ? `ws://${host}${RUNNER_LINK_PATH}` : config.linkUrl;
+  }
+  if (host === null) return config.linkUrl;
+  const secure = (arrival.forwardedProto ?? '').split(',').some((proto) => proto.trim().toLowerCase() === 'https');
+  return `${secure ? 'wss' : 'ws'}://${host}${RUNNER_LINK_PATH}`;
+}
+
+/** A Host header as a host and an optional port, lowercased, or null for anything else: no path, credentials or query
+ *  can travel into a link address through it. */
+function linkHost(value: string | undefined): string | null {
+  const host = value?.trim().toLowerCase() ?? '';
+  return /^(?:[a-z0-9_](?:[a-z0-9_.-]*[a-z0-9_])?|\[[0-9a-f:.]+\])(?::[0-9]{1,5})?$/.test(host) ? host : null;
+}
+
+/** An http:// or https:// origin, and nothing past it, or null. */
+function httpOrigin(value: string | undefined): URL | null {
+  try {
+    const url = new URL((value ?? '').trim());
+    const bare = (url.pathname === '/' || url.pathname === '') && !url.search && !url.hash && !url.username && !url.password;
+    return (url.protocol === 'http:' || url.protocol === 'https:') && bare ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The plain-HTTP host a managed runner's server URL names, if it names one. */
+function directHosts(serverUrl: string | undefined): string[] {
+  try {
+    const url = new URL((serverUrl ?? '').trim());
+    return url.protocol === 'http:' ? [url.host.toLowerCase()] : [];
+  } catch {
+    return [];
+  }
 }
 
 /** What both link routes answer while the link is off: the 404 of a server without them. */
 export function runnerLinkNotConfigured(): NotFoundException {
   return new NotFoundException({
     code: RUNNER_LINK_NOT_CONFIGURED,
-    message: 'The runner link is not configured on this Orbit server; runners keep working over HTTP.',
+    message: 'This Orbit server has no runner link, and runners work only over it. On the server, run .claude/skills/upgrade/upgrade.sh, which sets it up (docs/self-hosting.md, "Runner link").',
   });
 }
 
@@ -177,6 +305,7 @@ export function signRunnerLinkToken(
   config: RunnerLinkConfig,
   subject: Pick<RunnerLinkClaims, 'runnerId' | 'ownerId' | 'cellId' | 'leaseOwner' | 'credential'>,
   now: Date,
+  linkUrl: string = config.linkUrl,
 ): { token: string; claims: RunnerLinkClaims } {
   const iat = Math.floor(now.getTime() / 1000);
   const claims: RunnerLinkClaims = {
@@ -185,7 +314,7 @@ export function signRunnerLinkToken(
     runnerId: subject.runnerId,
     ownerId: subject.ownerId,
     cellId: subject.cellId,
-    linkUrl: config.linkUrl,
+    linkUrl,
     leaseOwner: subject.leaseOwner,
     credential: subject.credential,
     iat,

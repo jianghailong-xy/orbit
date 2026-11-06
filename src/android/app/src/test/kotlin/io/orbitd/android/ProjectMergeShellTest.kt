@@ -339,8 +339,6 @@ class ProjectMergeShellTest {
     @Test fun theNeedsYouBarOpensAWaitingMergeOnItsProjectsSessionsPage() {
         ProjectShell.promotion = candidate("READY"); ProjectShell.mergeWaiting = true
         signIn()
-        await { exists(hasTestTag("workspace:${ProjectShell.ALPHA}")) }
-        compose.onNodeWithTag("workspace:${ProjectShell.ALPHA}").performClick()
         await { exists(hasText("Plain notes") and hasClickAction()) }
         compose.onNode(hasText("Plain notes") and hasClickAction()).performClick()
         await { exists(hasTestTag("needs-you-bar-text") and hasText("Approve merge to main"), unmerged = true) &&
@@ -358,8 +356,6 @@ class ProjectMergeShellTest {
     @Test fun theMergesPushOpensItsSessionsPageAsTheProjectsRoot() {
         ProjectShell.promotion = candidate("READY")
         signIn()
-        await { exists(hasTestTag("workspace:${ProjectShell.ALPHA}")) }
-        compose.onNodeWithTag("workspace:${ProjectShell.ALPHA}").performClick()
         await { exists(hasText("Plain notes") and hasClickAction()) }
         compose.onNode(hasText("Plain notes") and hasClickAction()).performClick()
         await { exists(hasContentDescription("Back")) }
@@ -437,8 +433,6 @@ class ProjectMergeShellTest {
         }
     private fun openPage() {
         signIn()
-        await { exists(hasTestTag("workspace:${ProjectShell.ALPHA}")) }
-        compose.onNodeWithTag("workspace:${ProjectShell.ALPHA}").performClick()
         await { exists(hasTestTag("project-row:$launch")) }
         compose.onNodeWithTag("project-row:$launch").performClick()
         // The coordinator's row: a merge card above it can push the last members out of the lazy list's composed rows.

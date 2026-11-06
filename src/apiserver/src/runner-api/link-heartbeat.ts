@@ -130,7 +130,14 @@ export const HEARTBEAT_DELIVERIES = {
   },
   leaseLostSessionIds: { how: 'EVERY_BEAT', reads: 'the lease of every supervised session, by the leaseLostSessionIds rule' },
   maxConcurrent: { how: 'EVERY_BEAT', reads: 'runner.max_concurrent, which the quiet answer carries' },
-  minFreeDiskMb: { how: 'EVERY_BEAT', reads: 'runner.min_free_disk_mb, which the quiet answer carries' },
+  minFreeDiskMb: {
+    how: 'EVERY_BEAT',
+    reads: 'runner.min_free_disk_mb, which the quiet answer carries; the default floor of a managed runner whose owner set none is stated by the full reconcile alone, which every beat of a managed runner is',
+  },
+  storageBudget: {
+    how: 'FULL_ONLY',
+    reads: 'only a managed runner has one (managed-runners/managed-runner-storage.ts), and a managed runner is admitted by RunnerAuthGuard and reconciles in full on every beat',
+  },
   mergeRequests: {
     how: 'MARKED',
     writers: ['sessions/sessions.service.ts#mergeToMain', 'sessions/sessions.service.ts#checkAfterRepairTurn'],
@@ -138,8 +145,10 @@ export const HEARTBEAT_DELIVERIES = {
   },
   commitRequests: {
     how: 'MARKED',
-    writers: ['sessions/sessions.service.ts#commitWorktree'],
-    pending: 'a commit pending on any session of the runner, whichever process holds it',
+    // Both press doors — Commit and the abandoned-checkout Discard — go through the one queued
+    // attempt, and that is where the runner is woken.
+    writers: ['sessions/sessions.service.ts#queueCheckoutAction'],
+    pending: 'a commit or discard pending on any session of the runner, whichever process holds it',
   },
   artifactRequests: {
     how: 'MARKED',
