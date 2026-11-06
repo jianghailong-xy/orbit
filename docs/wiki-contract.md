@@ -214,6 +214,12 @@ pg spec 用执行计划钉住了这一点。它声明为 IMMUTABLE（里面的 `
   - 这两个写入都只属于 owner：带会话头回 `WIKI_OWNER_CHANNEL_ONLY`，个人访问令牌回 `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，因为谁在 space 里就是谁能读它的条目。两者都不动游标：加入的 workspace 从 space 当前的水位往后读。
   - 会话所在 workspace 不在任何 space 时返回 `WIKI_SPACE_UNBOUND`，并用一句话说明怎么绑；被留在外面的 workspace 返回同一个码，并说明这一点。项目通过其 codebase 的仓库地址找到 space，没有单独的表。
   - Wiki 设置的 Workspaces 卡（web、macOS/iOS、Android，在 Review mode 和 Maintenance 之间，效果图 38）读 `GET /api/wiki/spaces/:id/workspaces`：`{ workspaces, addable }`，每行 `{ id, name, runner, inWiki }`。`workspaces` 是这个仓库上、或这个 space 的行点名的活 workspace，按名字排（不分大小写），切开关时行不跳，被留在外面的留在列表里，`inWiki` 为 false。`addable` 是 `Add workspace…` 能加的：没有仓库、也不在任何 wiki 里（被别的 space 留在外面的算不在）。
+- **删除**（`space.delete`）：`DELETE /api/wiki/spaces/:id` 永久删除一个 wiki，回 `{ spaceId }`；别人的或已经没有的回普通 404。
+  - 只属于 owner：带会话头回 `WIKI_OWNER_CHANNEL_ONLY`，个人访问令牌回 `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，没有 agent 工具和 CLI 命令。
+  - 一个事务里按外键删掉 space 下的全部内容，包括公开链接；不能撤销，失败时什么都不少。Workspace、会话、任务和项目不动；文字里的 `orbit-wiki:` 链接从此指向不存在的内容。
+  - 不等、也不拒绝在跑的作业：作业行随 space 一起没了，它按租约写的都匹配不到行，下一次需要 space 的写入失败，这次尝试就结束，也没有行可以重排。仓库操作的结果回 404，runner 当作操作已不存在。
+  - 有仓库的 wiki 会被这个仓库下一个调 wiki 工具的会话重新建出来，是空的，和任何新 space 一样请求 plan 的初稿；它的 workspace 行随旧 space 没了，留在外面的标记也一样。没有仓库的不会回来，绑在它上面的会话回 `WIKI_SPACE_UNBOUND`。
+  - 入口：web 在侧栏的 wiki 行和 Wiki 设置页底部，macOS/iOS 和 Android 在 Wiki 设置页底部；都先确认，写明 wiki 的名字和要删的条目数、文档数（效果图 `docs/mocks/wiki-delete`）。
 - **设置**（`settings` jsonb，缺省的键按默认值读）：
   - `push`，默认开（owner 2026-09-25 拍板：推送默认开，每个 space 可以关）；
   - `autoAcceptReinforce`，默认开：非 owner 的 reinforce 立即生效；关掉后进 Review；

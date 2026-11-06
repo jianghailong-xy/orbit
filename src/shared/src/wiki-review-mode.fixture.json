@@ -27,7 +27,8 @@
     "sections": [
       "Review mode",
       "Workspaces",
-      "Maintenance"
+      "Maintenance",
+      "Delete this wiki"
     ],
     "workspaces": {
       "lead": "Agents in these workspaces read this wiki, and maintenance learns from their sessions.",
@@ -37,6 +38,26 @@
       "empty": "No workspace is in this wiki yet.",
       "add": "Add workspace…",
       "addGroup": "Workspaces with no repository"
+    },
+    "delete": {
+      "note": "Its entries, documents and history are permanently deleted.",
+      "open": "Delete wiki…",
+      "confirm": "Delete wiki",
+      "kept": "Workspaces and sessions are kept.",
+      "failedNative": "Couldn't delete the wiki",
+      "question": { "name": "orbit · vLLM preview", "text": "Delete wiki “orbit · vLLM preview”?" },
+      "deleted": { "name": "orbit · vLLM preview", "text": "Deleted wiki “orbit · vLLM preview”" },
+      "comesBack": { "repository": "github.com/acme/shop", "text": "The next session on github.com/acme/shop to use the wiki starts a new, empty one." },
+      "bodies": [
+        { "entries": 2606, "documents": 0, "text": "Its 2,606 entries and their history will be permanently deleted. This cannot be undone." },
+        { "entries": 5120, "documents": 30, "text": "Its 5,120 entries, 30 documents and their history will be permanently deleted. This cannot be undone." },
+        { "entries": 1, "documents": 0, "text": "Its 1 entry and its history will be permanently deleted. This cannot be undone." },
+        { "entries": 1, "documents": 1, "text": "Its 1 entry, 1 document and their history will be permanently deleted. This cannot be undone." },
+        { "entries": 0, "documents": 2, "text": "Its 2 documents and their history will be permanently deleted. This cannot be undone." },
+        { "entries": 0, "documents": 0, "text": "Its history will be permanently deleted. This cannot be undone." },
+        { "entries": null, "documents": 0, "text": "Its entries and their history will be permanently deleted. This cannot be undone." },
+        { "entries": null, "documents": 14, "text": "Its entries, 14 documents and their history will be permanently deleted. This cannot be undone." }
+      ]
     },
     "reviewModeHint": "Only you can switch it",
     "lead": "Who has to look at a change before agents get it.",

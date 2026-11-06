@@ -2,8 +2,8 @@ import SwiftUI
 import OrbitKit
 
 // Wiki settings (criterion 8, mock 20): which review mode the space runs in, whether Automatic sends
-// spot checks, which workspaces are in the wiki (mock 38), and the space's Wiki maintenance run — pushed from
-// the Wiki home's gear.
+// spot checks, which workspaces are in the wiki (mock 38), the space's Wiki maintenance run, and deleting the wiki
+// (docs/mocks/wiki-delete) — pushed from the Wiki home's gear.
 //
 // The app's own settings form, not a new one: inset-grouped sections, a header and a footer each
 // (`SettingsSheet.swift`). The sections are `WikiModeLogic.SettingsSection` in its order, which is the
@@ -27,6 +27,8 @@ struct WikiSettingsActions {
     /// Set up… when maintenance is off, Edit… when it is on: the same sheet.
     var setUp: () -> Void = {}
     var turnOff: () -> Void = {}
+    /// Delete wiki…, which asks first.
+    var delete: () -> Void = {}
 }
 
 /// The settings page, drawn from the space as the server kept it.
@@ -146,6 +148,12 @@ struct WikiSettingsPage: View {
                     Button(WikiModeCopy.maintenanceEdit + "…", action: actions.setUp)
                     Button(WikiModeCopy.turnOff, role: .destructive, action: actions.turnOff)
                 }
+            }
+        case .delete:
+            Section {
+                Button(WikiModeCopy.deleteOpen, role: .destructive, action: actions.delete)
+            } footer: {
+                Text(WikiModeCopy.deleteNote)
             }
         }
     }
@@ -500,6 +508,10 @@ struct WikiSettingsView: View {
 
     @State private var settingUp = false
     @State private var notice: String?
+    @State private var confirmingDelete = false
+    /// What the delete's question counts, read with the page; nil until then, or when the read fails.
+    @State private var deleteEntries: Int?
+    @State private var deleteRefusal: String?
 
     var body: some View {
         if let wiki = model.wiki, let space = wiki.currentSpace {
@@ -509,6 +521,19 @@ struct WikiSettingsView: View {
                     await wiki.loadSpaces()
                     await wiki.loadSystemModel()
                     await wiki.loadSpaceWorkspaces(space)
+                }
+                .task(id: space.id) { deleteEntries = await wiki.entryCount(space) }
+                .orbitConfirmation(WikiModeCopy.deleteQuestion(name(of: space, in: wiki)), isPresented: $confirmingDelete) {
+                    Button(WikiModeCopy.deleteConfirm, role: .destructive) { delete(space, from: wiki) }
+                    Button(WikiModeCopy.cancel, role: .cancel) {}
+                } message: {
+                    Text(WikiModeCopy.deleteMessage(entries: deleteEntries, documents: space.docs?.written ?? 0,
+                                                    repository: space.repoUrlNorm))
+                }
+                .alert(WikiModeCopy.deleteFailed, isPresented: Binding(get: { deleteRefusal != nil }, set: { if !$0 { deleteRefusal = nil } })) {
+                    Button("OK", role: .cancel) { deleteRefusal = nil }
+                } message: {
+                    Text(deleteRefusal ?? "")
                 }
                 .sheet(isPresented: $settingUp) { WikiSetUpSheet(wiki: wiki, space: space) }
                 .alert(WikiCopy.settingsSaveFailed, isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
@@ -529,7 +554,23 @@ struct WikiSettingsView: View {
             setUp: { settingUp = true },
             turnOff: {
                 Task { finish(await wiki.updateSpace(space, WikiSpaceUpdate(maintenance: WikiMaintenanceUpdate(enabled: false)))) }
-            })
+            },
+            delete: { confirmingDelete = true })
+    }
+
+    private func name(of space: WikiSpace, in wiki: WikiModel) -> String {
+        WikiSpaceLogic.names(wiki.spaces)[space.id] ?? space.title ?? space.slug
+    }
+
+    /// The page goes as soon as the wiki does, back to the one the Wiki opens now, or to its empty state.
+    private func delete(_ space: WikiSpace, from wiki: WikiModel) {
+        let said = WikiModeCopy.deleted(name(of: space, in: wiki))
+        Task {
+            deleteRefusal = await wiki.deleteSpace(space) {
+                model.nav.pop()
+                model.showToast(said)
+            }
+        }
     }
 
     private func workspaceLabel(_ id: String) -> String? {

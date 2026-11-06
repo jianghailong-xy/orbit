@@ -202,6 +202,11 @@ export function leaveWikiWorkspaceOut(spaceId: string, workspaceId: string): Pro
   return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/workspaces/${encodeURIComponent(workspaceId)}`, { method: 'DELETE' });
 }
 
+/** `DELETE /api/wiki/spaces/:id` — delete a wiki and all it holds, for good (contract `space.delete`). */
+export function deleteWikiSpace(spaceId: string): Promise<unknown> {
+  return api(`/wiki/spaces/${encodeURIComponent(spaceId)}`, { method: 'DELETE' });
+}
+
 // ── The plan's writes (contract `plan.routes`), the owner's door only ───────────────────────────
 
 /**

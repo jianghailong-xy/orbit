@@ -1738,6 +1738,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary; the owner is told the space already exists when it does.',
   },
   {
+    at: 'wiki/wiki.service.ts#deleteSpace',
+    shape: 'TX_RETRIED',
+    locks: 'wiki_space FOR UPDATE (rank 60), then the DELETE and its cascades over the wiki\'s own rows (rank 60) and its share_link. A writer holding a row of this wiki and waiting for the space is the one cycle this can have, and it loses to the deadlock detector whole.',
+    identity: 'The space id and its owner.',
+    isolation: '',
+    attempts: 2,
+    replay: 'The row is re-read under its lock; a space already gone is the same 404 on any attempt.',
+    effects: 'None inside. After the commit and outside the closure: one `wiki.changed` for the space.',
+    answer: 'Typed 503, the owner presses again. Capped at 2 attempts with a 60s per-attempt deadline, as a cascade this size should absorb one collision, not spend four deadlines on the same one.',
+  },
+  {
     at: 'wiki/wiki.service.ts#bindOnFirstUse',
     shape: 'TX_RETRIED',
     locks: 'wiki_space and wiki_space_workspace, the space under the user foreign key FOR KEY SHARE (rank 10) and the binding under both of its own; the workspace row is read unlocked first and is not written.',

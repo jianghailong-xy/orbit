@@ -60,6 +60,15 @@ import {
   WIKI_SETTINGS,
   WIKI_ADD_WORKSPACE,
   WIKI_ADD_WORKSPACE_GROUP,
+  WIKI_DELETE_CONFIRM,
+  WIKI_DELETE_KEPT,
+  WIKI_DELETE_NOTE,
+  WIKI_DELETE_OPEN,
+  WIKI_DELETE_TITLE,
+  wikiDeleteBody,
+  wikiDeleteComesBack,
+  wikiDeleted,
+  wikiDeleteQuestion,
   WIKI_SETTINGS_SECTIONS,
   WIKI_WORKSPACE_LEFT_OUT,
   WIKI_WORKSPACES,
@@ -112,6 +121,16 @@ interface Fixture {
     crumb: string;
     sections: string[];
     workspaces: { lead: string; leftOut: string; join: string; joinNoRepository: string; empty: string; add: string; addGroup: string };
+    delete: {
+      note: string;
+      open: string;
+      confirm: string;
+      kept: string;
+      question: { name: string; text: string };
+      deleted: { name: string; text: string };
+      comesBack: { repository: string; text: string };
+      bodies: Array<{ entries: number | null; documents: number; text: string }>;
+    };
     reviewModeHint: string;
     lead: string;
     defaultTag: string;
@@ -235,6 +254,20 @@ describe('the Wiki settings page says the fixture’s words, in its order', () =
     expect(WIKI_WORKSPACES_EMPTY).toBe(settings.workspaces.empty);
     expect(WIKI_ADD_WORKSPACE).toBe(settings.workspaces.add);
     expect(WIKI_ADD_WORKSPACE_GROUP).toBe(settings.workspaces.addGroup);
+  });
+
+  it('says Delete wiki’s words, and how much goes at each count', () => {
+    const words = settings.delete;
+    expect(WIKI_DELETE_TITLE).toBe(settings.sections[3]);
+    expect(WIKI_DELETE_NOTE).toBe(words.note);
+    expect(WIKI_DELETE_OPEN).toBe(words.open);
+    expect(WIKI_DELETE_CONFIRM).toBe(words.confirm);
+    expect(WIKI_DELETE_KEPT).toBe(words.kept);
+    expect(wikiDeleteQuestion(words.question.name)).toBe(words.question.text);
+    expect(wikiDeleted(words.deleted.name)).toBe(words.deleted.text);
+    expect(wikiDeleteComesBack(words.comesBack.repository)).toBe(words.comesBack.text);
+    expect(words.bodies.length).toBeGreaterThan(0);
+    for (const body of words.bodies) expect(wikiDeleteBody(body.entries, body.documents)).toBe(body.text);
   });
 
   it('titles the page and its sections in the order every client draws them', () => {

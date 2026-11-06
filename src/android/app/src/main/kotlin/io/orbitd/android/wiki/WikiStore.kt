@@ -678,6 +678,15 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { wikiRefusal(error) }
     }
 
+    /** Delete a wiki for good (contract `space.delete`). [leave] runs the moment it is gone, before the wikis are read
+     * again, so the page that asked never draws the next wiki's settings. Null on success, else the sentence to show. */
+    suspend fun deleteSpace(space: WikiSpace, leave: () -> Unit): String? = owned({ refusal -> refusal?.let { notice(it, WikiModeCopy.deleteTitle, space.slug) } }) work@{
+        try { client.deleteSpace(space.id) }
+        catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { return@work wikiRefusal(error) }
+        leave()
+        outdate(SPACES, HOME, ACTIVITY); reloadAfterWrite(); null
+    }
+
     // MARK: an entry a review mode applied
 
     suspend fun confirm(entry: WikiEntry): String? = answer(entry.id, WikiModeCopy.confirmed, entry.displayTitle) { client.confirmEntry(entry.id) }

@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>删除 Wiki · 设计图</title>
+<link rel="stylesheet" href="../../../src/web/src/components/ui/root.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/reset.css">
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../wiki/phone-mock.css">
+<link rel="stylesheet" href="../wiki/wiki-p2.css">
+<script src="marks.js"></script>
+<style>
+html, body { background: #e6e8ec; }
+body.m { margin: 0; padding: 0; display: block; }
+.b-part { width: 1600px; margin: 20px; padding: 28px 34px 34px; background: #e6e8ec; box-sizing: border-box; font-family: "Inter", "Noto Sans CJK SC", sans-serif; color: #24272e; }
+.b-part h1 { margin: 0 0 8px; font-size: 25px; line-height: 1.3; font-weight: 700; }
+.b-lede { margin: 0 0 12px; max-width: 1480px; font-size: 14px; line-height: 1.72; color: #4a5160; }
+.b-lede b { color: #24272e; }
+.b-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin: 0 0 10px; font-size: 12.5px; color: #5d6472; }
+.pb-band { margin: 26px 0 14px; font-size: 16px; }
+.pb-band:first-of-type { margin-top: 14px; }
+
+.b-row { display: flex; align-items: flex-start; gap: 26px; }
+.b-col { display: flex; flex-direction: column; gap: 18px; }
+.b-fig { margin: 0; flex: none; }
+.b-fig figcaption { margin: 0 0 7px; font-size: 13px; line-height: 1.45; color: #5d6472; }
+.b-fig figcaption b { color: #24272e; font-weight: 600; }
+.b-shot { position: relative; line-height: 0; border-radius: 10px; box-shadow: 0 0 0 1px rgba(30, 36, 48, .12); background: #fff; }
+.b-shot img { display: block; width: 100%; border-radius: 10px; }
+.b-ring { position: absolute; border: 1.8px dashed #e8710a; border-radius: 8px; pointer-events: none; box-sizing: border-box; }
+.b-badge { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #e8710a; color: #fff; font: 700 12.5px/22px "Inter", sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+
+.b-note { flex: 1 1 0; min-width: 0; font-size: 13.5px; line-height: 1.68; color: #33373f; }
+.b-note p { margin: 0 0 11px; }
+.b-note b { color: #1d2026; }
+.b-note .en { font-family: "Inter", sans-serif; color: #1d2026; }
+.b-n { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin-right: 6px; border-radius: 50%; background: #e8710a; color: #fff; font: 700 12px/20px "Inter", sans-serif; vertical-align: 1px; }
+
+/* iOS at three quarters, as the phones beside it. */
+.b-fig .pb-ios.full { zoom: .74; }
+.b-ios-card-mark { outline: 2.4px dashed #e8710a; outline-offset: 3px; }
+.b-set-f-end { padding-bottom: 12px; }
+
+/* Android, drawn from WikiSettingsScreen.kt and the workspace form's AlertDialog. */
+.an { position: relative; width: 298px; height: 646px; overflow: hidden; border-radius: 26px; background: #f7f7f9; box-shadow: 0 0 0 1px rgba(30, 36, 48, .16); font-family: "Inter", sans-serif; color: #1c1c1f; }
+.an-status { display: flex; justify-content: space-between; padding: 9px 20px 0; font-size: 11px; color: #3c3c43; }
+.an-bar { display: flex; align-items: center; gap: 14px; padding: 15px 15px 11px; font-size: 16.5px; font-weight: 500; }
+.an-bar svg { width: 19px; height: 19px; }
+.an-h { padding: 15px 19px 6px; font-size: 13px; font-weight: 600; color: #4f4f58; }
+.an-card { margin: 0 13px; border-radius: 12px; background: #fff; box-shadow: 0 0 0 .5px rgba(0, 0, 0, .08); }
+.an-r { display: flex; justify-content: space-between; align-items: center; min-height: 44px; padding: 0 14px; font-size: 13.5px; }
+.an-r + .an-r { border-top: 1px solid #eeeef1; }
+.an-r .v { color: #70707a; }
+.an-r.tint { color: #2e6aff; }
+.an-r.red { color: #e5383b; font-weight: 500; }
+.an-f { padding: 7px 21px 0; font-size: 11.5px; line-height: 1.5; color: #70707a; }
+.an-dim { position: absolute; inset: 0; background: rgba(0, 0, 0, .32); }
+.an-dialog { position: absolute; left: 22px; right: 22px; top: 158px; padding: 20px 20px 12px; border-radius: 24px; background: #fff; box-shadow: 0 12px 40px rgba(0, 0, 0, .25); }
+.an-dialog h4 { margin: 0 0 10px; font-size: 18px; line-height: 1.32; font-weight: 500; }
+.an-dialog p { margin: 0 0 9px; font-size: 13px; line-height: 1.5; color: #4f4f58; }
+.an-dialog .btns { display: flex; justify-content: flex-end; gap: 4px; margin-top: 12px; }
+.an-dialog .btns span { padding: 7px 10px; font-size: 13.5px; font-weight: 500; color: #2e6aff; }
+.an-dialog .btns span.red { color: #e5383b; }
+
+/* The rule tables and the decisions. */
+.b-part table.rt { width: 100%; border-collapse: collapse; font-size: 13.5px; line-height: 1.6; background: #fff; border-radius: 10px; overflow: hidden; }
+table.rt th, table.rt td { padding: 9px 13px; border-bottom: 1px solid #e8eaee; text-align: left; vertical-align: top; }
+table.rt tr:last-child td { border-bottom: 0; }
+table.rt th { background: #f3f4f6; font-weight: 600; color: #33373f; white-space: nowrap; }
+table.rt td:first-child { color: #33373f; white-space: nowrap; font-weight: 600; }
+table.rt code, .b-files code, .b-note code, .b-dec code { font: 12px/1.4 "DejaVu Sans Mono", monospace; background: #eef0f3; border-radius: 4px; padding: 0 4px; overflow-wrap: anywhere; }
+table.rt .en, .b-dec .en { font-family: "Inter", sans-serif; }
+.b-todo { color: #b4570a; font-weight: 600; }
+
+.b-dec { margin: 0 0 16px; padding: 15px 18px 16px; border-radius: 12px; background: #fff; }
+.b-dec h3 { margin: 0 0 4px; font-size: 15.5px; line-height: 1.45; font-weight: 700; }
+.b-dec .why { margin: 0 0 10px; font-size: 13.5px; line-height: 1.65; color: #4a5160; }
+.b-opts { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 12px; }
+.b-opt { padding: 11px 13px; border-radius: 9px; background: #f5f6f8; font-size: 13.5px; line-height: 1.65; color: #3a3e47; }
+.b-opt.rec { background: #eaf1ff; box-shadow: inset 0 0 0 1.4px #5b8cff; }
+.b-opt b { display: block; margin-bottom: 3px; color: #1d2026; }
+.b-opt .tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 5px; background: #2e6aff; color: #fff; font-size: 11.5px; font-weight: 600; line-height: 18px; vertical-align: 1px; }
+.b-files { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.b-files div { padding: 12px 14px; border-radius: 10px; background: #fff; font-size: 13px; line-height: 1.75; color: #3a3e47; }
+.b-files b { display: block; margin-bottom: 3px; color: #1d2026; }
+</style>
+</head>
+<body class="m">
+<div class="pb-sheet" style="display:none"></div>
+<script src="../wiki/phone-mock-antd.js"></script>
+<script src="../wiki/phone-mock.js"></script>
+
+<section class="b-part">
+  <h1>删除 Wiki · ① 网页</h1>
+  <p class="b-lede">现在哪个端都删不了 wiki，因为服务端没有这个接口。提议加一个<b>只有你本人能用的永久删除</b>：网页在侧栏 ⋯ 菜单和 Wiki 设置页底部，iOS / macOS / Android 在 Wiki 设置页底部。这一页是<b>真实页面按真实点击截的</b>（今天的代码，加一份不进产品的原型）。条目数是示意，不是生产读数；<code>orbit · vLLM preview</code> 那行照你的截图。</p>
+  <div class="b-legend"><span class="pb-tag con">Orbit 一致性</span>沿用现成组件和用词 <span class="pb-tag new">新词</span>新增的界面文案 <span class="pb-tag ask">已拍板</span>见第 ③ 页</div>
+
+  <div class="pb-band"><span class="pb-bn">1</span>侧栏 <small>· 选中那一行，今天什么也没有</small></div>
+  <div class="b-row">
+    <figure class="b-fig" style="width:330px" data-shot="today-row">
+      <figcaption><b>今天</b> · 鼠标放在这一行上</figcaption>
+      <div class="b-shot"><img src="shots/today-row.png"></div>
+    </figure>
+    <figure class="b-fig" style="width:330px" data-shot="row-menu" data-marks="1:more,2:itemDelete">
+      <figcaption><b>提议</b> · 悬停出现 ⋯，点开菜单</figcaption>
+      <div class="b-shot"><img src="shots/row-menu.png"></div>
+    </figure>
+    <div class="b-note" style="padding-top:26px">
+      <p><span class="b-n">1</span><b>⋯ 和 Workspace 行完全一样。</b>悬停或菜单打开时才出现，右键整行也打开同一个菜单，等你处理的数字悬停时让位给 ⋯。<span class="pb-tag con">Orbit 一致性</span></p>
+      <p><span class="b-n">2</span><b>两项，删除用分隔线隔开并标红。</b>和 Workspace 的 <span class="en">Configure · Delete workspace…</span> 同一个结构。<span class="pb-tag new">新词</span><span class="en">Wiki settings · Delete wiki…</span></p>
+      <p>点错这一步不会有任何后果：<span class="en">Delete wiki…</span> 只是打开确认框。</p>
+    </div>
+  </div>
+
+  <div class="pb-band"><span class="pb-bn">2</span>Wiki 设置页底部 <small>· 人已经在这个 wiki 里时的入口</small></div>
+  <div class="b-row">
+    <figure class="b-fig" style="width:520px" data-shot="today-settings">
+      <figcaption><b>今天</b> · 页面到 Maintenance 就结束了</figcaption>
+      <div class="b-shot"><img src="shots/today-settings.png"></div>
+    </figure>
+    <figure class="b-fig" style="width:520px" data-shot="settings-new" data-marks="3:card">
+      <figcaption><b>提议</b> · 最后一张卡</figcaption>
+      <div class="b-shot"><img src="shots/settings-new.png"></div>
+    </figure>
+    <div class="b-note" style="padding-top:26px">
+      <p><span class="b-n">3</span><b>放在最后，一句话说清后果。</b>红框按钮只打开确认框，不直接删。这页其它控件都是立刻生效，只有这一个要确认。<span class="pb-tag new">新词</span><span class="en">Delete this wiki · Its entries, documents and history are permanently deleted. · Delete wiki…</span></p>
+    </div>
+  </div>
+
+  <div class="pb-band"><span class="pb-bn">3</span>确认框 <small>· 两个入口打开同一个框</small></div>
+  <div class="b-row">
+    <figure class="b-fig" style="width:640px" data-shot="dialog-norepo" data-marks="4:dialog">
+      <figcaption><b>你这个 wiki</b> · 没有仓库</figcaption>
+      <div class="b-shot"><img src="shots/dialog-norepo.png"></div>
+    </figure>
+    <div class="b-col">
+      <figure class="b-fig" style="width:424px" data-shot="dialog-repo" data-marks="5:dialog">
+        <figcaption><b>有仓库的 wiki</b> · 多一句（<span class="pb-tag ask" style="margin:0">拍板 2 · A</span>）</figcaption>
+        <div class="b-shot"><img src="shots/dialog-repo.png"></div>
+      </figure>
+    </div>
+    <div class="b-col">
+      <figure class="b-fig" style="width:424px" data-shot="dialog-error" data-marks="6:error">
+        <figcaption><b>删除失败</b> · 框留着，写明原因</figcaption>
+        <div class="b-shot"><img src="shots/dialog-error.png"></div>
+      </figure>
+    </div>
+  </div>
+  <div class="b-note" style="margin-top:14px">
+    <p><span class="b-n">4</span><b>标题点名，正文说数量。</b>写法和组件沿用会话的 <span class="en">Delete permanently?</span>：<code>ConfirmDialog</code>，焦点默认在 Cancel，点框外不会关。按 Enter 只会按到 Cancel。<span class="pb-tag con">Orbit 一致性</span><span class="pb-tag new">新词</span><span class="en">Delete wiki “…”? · Its N entries, N documents and their history will be permanently deleted. This cannot be undone. · Workspaces and sessions are kept. · Delete wiki</span></p>
+    <p><span class="b-n">5</span><b>有仓库的 wiki 删掉后会回来，所以要说。</b>今天的规则是：这个仓库的会话一用 wiki 工具，没有 wiki 就新建一个（<code>wiki.service.ts:882</code>、<code>:923</code>）。这里按「保留今天的规则」画的。<span class="pb-tag new">新词</span><span class="en">The next session on github.com/… to use the wiki starts a new, empty one.</span></p>
+    <p><span class="b-n">6</span><b>删除是一个数据库事务，失败不会删一半。</b>错误显示在框内是 <code>ConfirmDialog</code> 现成的行为。</p>
+  </div>
+
+  <div class="pb-band"><span class="pb-bn">4</span>删完之后 <small>· 除了 toast，都是现成的页面和文案</small></div>
+  <div class="b-row">
+    <figure class="b-fig" style="width:492px" data-shot="after-delete" data-marks="7:toast:under">
+      <figcaption><b>还有别的 wiki</b> · 回到 /wiki，侧栏变成 2</figcaption>
+      <div class="b-shot"><img src="shots/after-delete.png"></div>
+    </figure>
+    <figure class="b-fig" style="width:492px" data-shot="after-last" data-marks="8:noSpace:under">
+      <figcaption><b>删掉最后一个</b> · Wiki 分组消失，入口还在</figcaption>
+      <div class="b-shot"><img src="shots/after-last.png"></div>
+    </figure>
+    <figure class="b-fig" style="width:492px" data-shot="after-gone-link" data-marks="9:noSpace">
+      <figcaption><b>旧链接 / 别的设备</b> · 打开已删除的 wiki</figcaption>
+      <div class="b-shot"><img src="shots/after-gone-link.png"></div>
+    </figure>
+  </div>
+  <div class="b-note" style="margin-top:14px">
+    <p><span class="b-n">7</span><b>落点走现有规则：</b>当前 workspace 绑定的 wiki，其次上次看的，再其次文档最多的（<code>wikiSpace.ts:52</code>）。如果从侧栏删的是另一个 wiki，留在当前页不动。<span class="pb-tag new">新词</span><span class="en">Deleted wiki “…”</span></p>
+    <p><span class="b-n">8</span>和 <span class="b-n" style="margin-left:0">9</span>现有的空状态文案，不新增、不改动。</p>
+  </div>
+</section>
+
+<section class="b-part">
+  <h1>删除 Wiki · ② 手机与原生端</h1>
+  <p class="b-lede">文案四端相同。左边两张是<b>真实的手机网页</b>，iOS 和 Android 是按现有页面<b>手绘</b>的。原生端只放设置页底部：抽屉里 Wiki 只有一行入口、不按 wiki 分行（<code>CompactShell.swift:999</code>），没有哪一行能挂菜单。原生端 wiki 选择器底部现成的 <span class="en">Manage spaces</span> 进的就是 Wiki 设置页，所以删除放在这页的底部，顺着已有的路就能找到。</p>
+  <div class="b-row" style="gap:20px;margin-top:18px">
+    <figure class="b-fig" style="width:298px" data-shot="phone-menu" data-marks="10:more">
+      <figcaption><b>手机网页</b> · 抽屉</figcaption>
+      <div class="b-shot"><img src="shots/phone-menu.png"></div>
+    </figure>
+    <figure class="b-fig" style="width:298px" data-shot="phone-dialog">
+      <figcaption><b>手机网页</b> · 确认</figcaption>
+      <div class="b-shot"><img src="shots/phone-dialog.png"></div>
+    </figure>
+
+    <figure class="b-fig">
+      <figcaption><b>iOS / macOS</b> · Wiki 设置页滚到底</figcaption>
+      <div class="pb-ios full grouped"><div data-ios="status"></div>
+        <div class="io-nav"><span class="io-glass l"><svg class="sf "><use href="#sf-back"/></svg></span><div class="io-navtitle"><b>Wiki settings</b></div></div>
+        <div class="io-set-h">Workspaces</div>
+        <div class="io-card">
+          <div class="io-lrow"><span class="lb" style="color:#8A8A8D">No workspace is in this wiki yet.</span></div>
+          <div class="io-lrow tint"><span class="lb">Add workspace…</span></div>
+        </div>
+        <div class="io-set-f">This wiki has no repository behind it, so a workspace joins only when you add it.</div>
+        <div class="io-set-h">Maintenance</div>
+        <div class="io-card">
+          <div class="io-lrow"><span class="lb">Wiki maintenance</span><span class="v">Off</span></div>
+          <div class="io-lrow tint"><span class="lb">Set up…</span></div>
+        </div>
+        <div class="io-set-f">Keeps the wiki up to date from sessions, tasks and receipts as they settle. Runs on the server with this deployment’s System model.</div>
+        <div class="io-card b-ios-card-mark" style="margin-top:30px;border-radius:26px">
+          <div class="io-lrow red"><span class="lb">Delete wiki…</span></div>
+        </div>
+        <div class="io-set-f b-set-f-end">Its entries, documents and history are permanently deleted.</div>
+      </div>
+    </figure>
+
+    <figure class="b-fig">
+      <figcaption><b>iOS</b> · 确认（alert）</figcaption>
+      <div class="pb-ios full grouped"><div data-ios="status"></div>
+        <div class="io-nav"><span class="io-glass l"><svg class="sf "><use href="#sf-back"/></svg></span><div class="io-navtitle"><b>Wiki settings</b></div></div>
+        <div class="io-set-h">Maintenance</div>
+        <div class="io-card">
+          <div class="io-lrow"><span class="lb">Wiki maintenance</span><span class="v">Off</span></div>
+          <div class="io-lrow tint"><span class="lb">Set up…</span></div>
+        </div>
+        <div class="io-card" style="margin-top:30px;border-radius:26px">
+          <div class="io-lrow red"><span class="lb">Delete wiki…</span></div>
+        </div>
+        <div class="io-set-f">Its entries, documents and history are permanently deleted.</div>
+        <div class="io-dimbg"></div>
+        <div class="io-alert" style="top:240px"><b>Delete wiki “orbit · vLLM preview”?</b><p>Its 2,606 entries and their history will be permanently deleted. This cannot be undone.</p><p>Workspaces and sessions are kept.</p><div class="btns"><span>Cancel</span><span class="red">Delete wiki</span></div></div>
+      </div>
+    </figure>
+
+  </div>
+
+  <div class="b-row" style="gap:20px;margin-top:22px;align-items:flex-start">
+    <figure class="b-fig">
+        <figcaption><b>Android</b> · Wiki 设置页滚到底</figcaption>
+        <div class="an">
+          <div class="an-status"><span>9:41</span><span>▾ ▮</span></div>
+          <div class="an-bar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12H5M11 5l-7 7 7 7"/></svg>Wiki settings</div>
+          <div class="an-h">Workspaces</div>
+          <div class="an-card"><div class="an-r"><span class="v">No workspace is in this wiki yet.</span></div><div class="an-r tint">Add workspace…</div></div>
+          <div class="an-f">This wiki has no repository behind it, so a workspace joins only when you add it.</div>
+          <div class="an-h">Maintenance</div>
+          <div class="an-card"><div class="an-r"><span>Wiki maintenance</span><span class="v">Off</span></div><div class="an-r tint">Set up…</div></div>
+          <div class="an-f">Keeps the wiki up to date from sessions, tasks and receipts as they settle.</div>
+          <div class="an-h">Delete this wiki</div>
+          <div class="an-card b-ios-card-mark" style="border-radius:12px"><div class="an-r red">Delete wiki…</div></div>
+          <div class="an-f">Its entries, documents and history are permanently deleted.</div>
+        </div>
+      </figure>
+    <figure class="b-fig">
+      <figcaption><b>Android</b> · 确认（AlertDialog）</figcaption>
+      <div class="an">
+        <div class="an-status"><span>9:41</span><span>▾ ▮</span></div>
+        <div class="an-bar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12H5M11 5l-7 7 7 7"/></svg>Wiki settings</div>
+        <div class="an-dim"></div>
+        <div class="an-dialog"><h4>Delete wiki “orbit · vLLM preview”?</h4><p>Its 2,606 entries and their history will be permanently deleted. This cannot be undone.</p><p>Workspaces and sessions are kept.</p><div class="btns"><span>Cancel</span><span class="red">Delete wiki</span></div></div>
+      </div>
+    </figure>
+    <div class="b-note" style="padding-top:26px">
+      <p><span class="b-n">10</span><b>手机网页的抽屉没有悬停，所以每行常驻 ⋯，</b>和 Workspace 行同一条 CSS 规则。<span class="pb-tag con">Orbit 一致性</span></p>
+      <p><b>iOS / macOS：</b>Wiki 设置页 <code>Form</code> 的最后一节，一个红字行加一句 footer。确认走现成的 <code>orbitConfirmation</code>：手机上是 alert，iPad 和 macOS 上是 confirmationDialog，不用分开写（<code>ConfirmationStyle.swift</code>）。服务端拒绝时要把原因显示出来，不能关框后什么都不说。<span class="pb-tag con">Orbit 一致性</span></p>
+      <p><b>Android：</b><code>WikiCard</code> 里一个 <code>SettingsButtonRow(destructive = true)</code>，确认用 <code>AlertDialog</code>，和 <span class="en">Delete agent</span> 同款。<span class="pb-tag con">Orbit 一致性</span></p>
+      <p><b>删完之后：</b>原生端退出设置页回到 Wiki 首页，打开现有规则选出的下一个 wiki，并提示 <span class="en">Deleted wiki “…”</span>；一个都不剩时显示现有空状态。</p>
+    </div>
+  </div>
+</section>
+
+<section class="b-part">
+  <h1>删除 Wiki · ③ 规则与拍板结果</h1>
+
+  <div class="pb-band"><span class="pb-bn">1</span>拍板结果 <small>· 2026-11-06，owner 全部按蓝框（推荐）定</small></div>
+
+  <div class="b-dec">
+    <h3>拍板 1 · 永久删除，还是进回收站？</h3>
+    <p class="why">wiki 之外只有公开分享链接指向它，而且链接随它一起删（<code>schema.prisma:2201</code>）。数据库从一开始就按「删 space 级联删除」设计（<code>docs/wiki-contract.md:164</code>）。</p>
+    <div class="b-opts">
+      <div class="b-opt rec"><b>A 永久删除<span class="tag">推荐</span></b>一条数据库语句，四端都简单。误删只能靠备份恢复，所以确认框要写清楚数量。</div>
+      <div class="b-opt"><b>B 进回收站，保留一段时间后清除</b>可以反悔。代价是每个读 wiki 的地方都要过滤、要做恢复界面和定时清除，而且被删的 wiki 还占着名字和仓库，工作量明显更大。</div>
+    </div>
+  </div>
+
+  <div class="b-dec">
+    <h3>拍板 2 · 有仓库的 wiki（orbit、wikova）删掉之后怎么办？</h3>
+    <p class="why">你要删的 vLLM preview 没有仓库，不受这条影响：它的名字来自 title，只有没有仓库的 wiki 才这样显示（<code>wikiSpace.ts:30</code>）。但正式功能要回答这个问题：今天这个仓库的会话一用 wiki 工具，没有 wiki 就会新建。</p>
+    <div class="b-opts">
+      <div class="b-opt rec"><b>A 下次用到时自动建一个空的<span class="tag">推荐</span></b>规则不变，确认框说明。相当于「清空重来」；和任何新 wiki 一样，会自动请求起草 plan，维护默认关闭。</div>
+      <div class="b-opt"><b>B 一直空着，直到你手动建回来</b>更符合「删除」的字面意思，但要新增一条「这个仓库不要 wiki」的记录，以及建回来的入口。会话调用 wiki 工具时会被拒绝并说明原因。</div>
+      <div class="b-opt"><b>C 只允许删没有仓库的 wiki</b>最省事也最安全，orbit 这种大 wiki 不可能被误删。但有仓库的 wiki 永远删不掉，功能不完整。</div>
+    </div>
+  </div>
+
+  <div class="b-dec">
+    <h3>拍板 3 · 入口放几处？</h3>
+    <div class="b-opts">
+      <div class="b-opt rec"><b>A 网页侧栏 ⋯ + 各端设置页底部<span class="tag">推荐</span></b>就是图上画的。你找删除时看的就是侧栏这一行；Workspace 的删除原先也只藏在深处，后来加到了侧栏行上。</div>
+      <div class="b-opt"><b>B 所有端都只放设置页底部</b>改动更少，更不容易误点，但要先进 wiki 再进设置才能找到。</div>
+    </div>
+  </div>
+
+  <div class="b-dec">
+    <h3>拍板 4 · 确认要多重？</h3>
+    <div class="b-row" style="gap:16px">
+      <div class="b-opts" style="flex:1 1 0;min-width:0;grid-auto-flow:row">
+        <div class="b-opt rec"><b>A 普通确认<span class="tag">推荐</span></b>和永久删除会话同一种框。框里点名 wiki、写明条目数，焦点默认在 Cancel。</div>
+        <div class="b-opt"><b>B 输入 wiki 名字才能点删除（右图）</b>最难误删，尤其是 orbit 这种几千条的 wiki。但产品里没有先例，要在三套客户端各做一个新控件。</div>
+      </div>
+      <figure class="b-fig" style="width:340px" data-shot="dialog-typed">
+        <div class="b-shot"><img src="shots/dialog-typed.png"></div>
+      </figure>
+    </div>
+  </div>
+
+  <div class="pb-band"><span class="pb-bn">2</span>规则 <small>· 图上看不出来、实现时要守住的</small></div>
+  <table class="rt">
+    <tr><th>情况</th><th>结果</th><th>依据 / 状态</th></tr>
+    <tr><td>谁能删</td><td>只有你本人在已登录的客户端里。Agent 会话回 <code>WIKI_OWNER_CHANNEL_ONLY</code>，个人访问令牌回 <code>OWNER_INTERACTIVE_CREDENTIAL_REQUIRED</code>。不提供 MCP 工具和 CLI 命令。</td><td>和 Workspaces 卡的开关同一道门（<code>wiki.controller.ts:164</code>）</td></tr>
+    <tr><td>一起删掉</td><td>条目及其修订、出处、使用记录，变更集，主题和文章，plan 和文档，作业，维护记录，workspace 绑定，公开分享链接。</td><td>外键都是级联，条目之间的取代关系两端同时删除（<code>docs/wiki-contract.md:164</code>）。<code>wiki-delete-space.pg.spec.ts</code> 在真实 PostgreSQL 上验证</td></tr>
+    <tr><td>不动</td><td>Workspace、会话、任务、项目。会话记录和评论里已有的文字保留，其中的 <code>orbit-wiki:</code> 链接指向的内容已不存在。</td><td>wiki 之外没有表依赖它（只有 ShareLink）</td></tr>
+    <tr><td>删除时有作业在跑</td><td>不拦。作业行随 wiki 消失，worker 下一次写入失败后结束，不会重试，也不会把 wiki 建回来。</td><td><code>wiki-delete-space.pg.spec.ts</code> 用真实执行器验证</td></tr>
+    <tr><td>正在用这个 wiki 的会话</td><td>下一次调 wiki 工具时：有仓库的按拍板 2，没有仓库的回现有的 <code>WIKI_SPACE_UNBOUND</code>。</td><td><code>wiki.service.ts:863</code></td></tr>
+    <tr><td>别的设备开着这个 wiki</td><td>收到 <code>wiki.changed</code> 后刷新。网页显示 <span class="en">No wiki space by that name.</span>；原生端没有按 wiki 区分的地址，转到现有规则选出的下一个 wiki。</td><td>图 9；<code>WikiModel.currentSpace</code></td></tr>
+    <tr><td>数字从哪来</td><td>条目数用现有的 <code>GET /wiki/spaces/:id/health</code>（在用的条目），文档数用列表行的 <code>docs.written</code>。读不到时写不带数字的句子，确认框照常打开。</td><td>不新增读接口</td></tr>
+    <tr><td>很大的 wiki</td><td>同步删除，按钮转圈，框不关。</td><td>实测：10,000 条目、300,000 条使用记录约 0.9 秒（本地空闲 PostgreSQL），不需要后台删除</td></tr>
+  </table>
+
+  <div class="pb-band"><span class="pb-bn">3</span>改了哪些地方 <small>· 实际还有各端的测试和对照夹具</small></div>
+  <div class="b-files">
+    <div><b>服务端</b><code>wiki.controller.ts</code> <code>wiki.service.ts</code> <code>pat-owner-channel-routes.ts</code> <code>tenant-isolation-cases.ts</code> <code>db-write-inventory.ts</code> <code>wiki.contract.json</code> <code>docs/wiki-contract.md</code></div>
+    <div><b>网页</b><code>TasksSidePanel.tsx</code> <code>WikiSettingsPage.tsx</code> <code>WikiDeleteDialog.tsx</code> <code>wikiReviewMode.ts</code> <code>wikiWrites.ts</code> <code>index.css</code></div>
+    <div><b>iOS / macOS</b><code>APIClient.swift</code> <code>WikiModel.swift</code> <code>WikiSettingsView.swift</code> <code>WikiModeLogic.swift</code></div>
+    <div><b>Android</b><code>WikiClient.kt</code> <code>WikiStore.kt</code> <code>WikiSettingsScreen.kt</code> <code>WikiCopy.kt</code> <code>WikiLogic.kt</code></div>
+  </div>
+</section>
+
+<script>
+  window.drawMarks = () => {
+    for (const fig of document.querySelectorAll('[data-shot]')) {
+      const m = window.SHOT_MARKS[fig.dataset.shot];
+      const holder = fig.querySelector('.b-shot');
+      if (!holder) continue;
+      holder.querySelectorAll('.b-ring, .b-badge').forEach((e) => e.remove());
+      const scale = holder.clientWidth / m.w;
+      for (const spec of (fig.dataset.marks || '').split(',').filter(Boolean)) {
+        const [n, key, where] = spec.split(':');
+        const b = m.boxes[key];
+        if (!b) { console.error('missing box', fig.dataset.shot, key); continue; }
+        const pad = 3;
+        const x = Math.max(2, b[0] * scale - pad), y = Math.max(2, b[1] * scale - pad);
+        const w = Math.min(holder.clientWidth - 4 - x, b[2] * scale + 2 * pad), h = Math.min(holder.clientHeight - 4 - y, b[3] * scale + 2 * pad);
+        const ring = document.createElement('div');
+        ring.className = 'b-ring';
+        Object.assign(ring.style, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` });
+        const badge = document.createElement('div');
+        badge.className = 'b-badge';
+        badge.textContent = n;
+        Object.assign(badge.style, { left: `${Math.min(holder.clientWidth - 14, x + w - 11)}px`, top: `${where === 'under' ? y + h - 11 : Math.max(-8, y - 11)}px` });
+        holder.append(ring, badge);
+      }
+    }
+  };
+</script>
+</body>
+</html>

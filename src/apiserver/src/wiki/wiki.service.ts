@@ -1276,6 +1276,38 @@ export class WikiService {
     return { spaceId, workspaceId };
   }
 
+  /**
+   * Delete a space and all it holds, for good (contract `space.delete`). Nothing outside the wiki depends on it, so the
+   * foreign keys take everything with the one row, its public link included; workspaces and sessions stay. A job
+   * running in it loses its row, and its next write ends it. A space with a repository is made again, empty, by the
+   * next session on that repository to use the wiki (`bindOnFirstUse`): the owner is told so before they press.
+   */
+  async deleteSpace(ownerId: string, spaceId: string, actingSessionId: string | null = null) {
+    if (actingSessionId) {
+      return refuse(
+        'WIKI_OWNER_CHANNEL_ONLY',
+        'deleting a wiki is the account owner\'s to do, through an owner channel with no acting session: '
+          + 'report what should change, and let a person change it.',
+      );
+    }
+    await withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        const locked = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT "id" FROM "wiki_space"
+          WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid
+          FOR UPDATE`;
+        if (locked.length === 0) throw new NotFoundException('no such wiki space');
+        await tx.wikiSpace.delete({ where: { id: spaceId }, select: { id: true } });
+      },
+      // The size of a wiki's cascade, not of its one row: the default deadline would fail the wikis it matters most for.
+      // A deadlock victim loses at the statement that lost, so one more attempt absorbs a writer that arrived at the same rows.
+      loggedRetry(this.logger, 'wiki.deleteSpace', { transaction: { timeout: 60_000, maxWait: 10_000 }, maxAttempts: 2 }),
+    );
+    this.realtime?.publishWikiChanged(ownerId, spaceId);
+    return { spaceId };
+  }
+
   // ── The single write entry point (§4.1) ───────────────────────────────────────────────────────
 
   /**

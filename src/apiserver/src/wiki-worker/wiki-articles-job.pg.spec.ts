@@ -528,7 +528,10 @@ test('the System model refuses the key: the queue stops at the first 401, nothin
   // The request waits for the key until its step's limit; then the job is the platform's to retry, not ended.
   const [job] = await jobs(h, o);
   await h.sql.query(`UPDATE "wiki_model_request" SET "enqueued_at" = now() - interval '901 seconds' WHERE "job_id" = $1`, [job.id]);
-  await until('the job to be handed back', w, async () => (await jobs(h, o))[0].failure_kind === 'infra', 20);
+  // Only the queue's pass runs here: it fails the request, and the job's own run hands the job back. A claim pass would
+  // take the job again before it is read, as its first retry is due at once (WIKI_JOB.retryBackoffSeconds[0] is 0).
+  await w.queue.runOnce();
+  await w.executor.whenIdle();
   const back = (await jobs(h, o))[0];
   assert.equal(back.state, 'queued', 'retried, not ended');
   assert.equal(back.attempts, 1);

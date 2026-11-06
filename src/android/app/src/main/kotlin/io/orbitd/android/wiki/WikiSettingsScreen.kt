@@ -40,7 +40,8 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 
 // Wiki settings (iOS `WikiSettingsView.swift`; criterion 8, mock 20): which review mode the space runs in, whether
-// Automatic sends spot checks, and the space's Wiki maintenance run — pushed from the Wiki home's gear. The app's own
+// Automatic sends spot checks, the space's Wiki maintenance run, and deleting the wiki (docs/mocks/wiki-delete) — pushed
+// from the Wiki home's gear. The app's own
 // settings form: inset-grouped sections, a header and a footer each. The sections are `WikiModeLogic.SettingsSection`
 // in its order, which is the web page's; the modes are `WikiModeLogic.modes`; every word is `WikiModeCopy`'s.
 
@@ -53,6 +54,8 @@ internal class WikiSettingsActions(
     /** Set up… when maintenance is off, Edit… when it is on: the same sheet. */
     val setUp: () -> Unit = {},
     val turnOff: () -> Unit = {},
+    /** Delete wiki…, which asks first. */
+    val delete: () -> Unit = {},
 )
 
 /** The settings page, drawn from the space as the server kept it: the workspace is where the repository is read from,
@@ -169,6 +172,15 @@ internal fun WikiSettingsPage(route: OrbitRoute, space: WikiSpace, workspaceLabe
                             SettingsButtonRow(WikiModeCopy.turnOff, "wiki-settings-turn-off", busy, destructive = true, onClick = actions.turnOff)
                         }
                     }
+                }
+                WikiModeLogic.SettingsSection.DELETE -> {
+                    item(key = "delete-header") { WikiPlanSectionHead(section.title) }
+                    item(key = "delete") {
+                        WikiCard(Modifier.testTag("wiki-settings-delete")) {
+                            SettingsButtonRow(WikiModeCopy.deleteOpen, "wiki-settings-delete-open", busy, destructive = true, onClick = actions.delete)
+                        }
+                    }
+                    item(key = "delete-footer") { WikiPlanFootnote(WikiModeCopy.deleteNote) }
                 }
             }
         }
@@ -521,8 +533,13 @@ internal fun WikiSettingsScreen(store: WikiStore, route: OrbitRoute, data: Direc
     var settingUp by rememberSaveable { mutableStateOf(false) }
     var notice by rememberSaveable { mutableStateOf<String?>(null) }
     var members by remember { mutableStateOf<WikiSpaceWorkspaces?>(null) }
+    var confirmingDelete by rememberSaveable { mutableStateOf(false) }
+    var deleteRefusal by rememberSaveable { mutableStateOf<String?>(null) }
+    /** What the delete's question counts, read with the page; null until then, or when the read fails. */
+    var deleteEntries by remember { mutableStateOf<Int?>(null) }
     suspend fun readMembers(id: String) { optional { store.client.spaceWorkspaces(id) }?.let { members = it } }
     LaunchedEffect(store, state.currentSpace?.id) { state.currentSpace?.let { readMembers(it.id) } }
+    LaunchedEffect(store, state.currentSpace?.id) { deleteEntries = state.currentSpace?.let { optional { store.client.health(it.id).entries } } }
     LaunchedEffect(store) { store.loadSpaces() }
     LaunchedEffect(store) { store.loadSystemModel() }
     val choices = rememberWikiWorkspaceChoices(store, data).choices
@@ -544,8 +561,31 @@ internal fun WikiSettingsScreen(store: WikiStore, route: OrbitRoute, data: Direc
                 finish(answer)
             } },
             setUp = { settingUp = true },
-            turnOff = { scope.launch { finish(store.updateSpace(space, wikiMaintenanceOff())) } }),
+            turnOff = { scope.launch { finish(store.updateSpace(space, wikiMaintenanceOff())) } },
+            delete = { confirmingDelete = true }),
         workspaces = members)
     if (settingUp) WikiSetUpSheet(store, space, data, close = { settingUp = false })
     WikiRefusalAlert(WikiCopy.settingsSaveFailed, notice) { notice = null }
+    if (confirmingDelete) {
+        val name = WikiSpaceLogic.names(state.spaces)[space.id] ?: space.title ?: space.slug
+        AlertDialog(onDismissRequest = { confirmingDelete = false }, modifier = Modifier.testTag("wiki-delete-dialog"),
+            title = { Text(WikiModeCopy.deleteQuestion(name)) },
+            text = { Text(WikiModeCopy.deleteMessage(deleteEntries, space.docs?.written ?: 0, space.repoUrlNorm)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmingDelete = false
+                    scope.launch {
+                        // The page goes as soon as the wiki does, back to the one the Wiki opens now, or to its empty state.
+                        deleteRefusal = store.deleteSpace(space) {
+                            nav.back()
+                            OrbitToasts.show(WikiModeCopy.deleted(name))
+                        }
+                    }
+                }, modifier = Modifier.testTag("wiki-delete-confirm")) { Text(WikiModeCopy.deleteConfirm, color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingDelete = false }, modifier = Modifier.testTag("wiki-delete-cancel")) { Text(WikiModeCopy.cancel) }
+            })
+    }
+    WikiRefusalAlert(WikiModeCopy.deleteFailed, deleteRefusal) { deleteRefusal = null }
 }
