@@ -1594,7 +1594,10 @@ describe('wiki contract', () => {
     for (const read of [routes.directory, routes.doc, routes.index]) expect(user).toContain(read);
     expect(Object.values<string>(routes).some((route) => route.includes('/api/runner/'))).toBe(false);
     expect(user.some((route) => route.startsWith('POST') && route.includes('/docs'))).toBe(false);
-    expect(docs.who.write).toMatch(/no door builds either, and the user door has no write route: any other caller is an error of the server's own code \(WikiDocs\.assertWriter\)/u);
+    // No door builds a document. Since the wiki chat (2026-11-06) the user door's one write to one is the owner's
+    // restore of a version a section kept (docs.versions.restore): it brings back text a job wrote, and writes none.
+    expect(user.filter((route) => !route.startsWith('GET ') && /\/doc(s|-)/u.test(route))).toEqual([docs.versions.routes.restore]);
+    expect(docs.who.write).toMatch(/No door builds a document, and the user door's one write is the owner's restore of a version a section kept \(versions\.restore\), which brings back text a job wrote and writes none of its own: any other caller is an error of the server's own code \(WikiDocs\.assertWriter\)/u);
     expect(docs.who.write).toMatch(/WIKI_PLAN_UNCONFIRMED/u);
     // A view: never a source, never pushed, never an agent's answer.
     expect(docs.view.push).toMatch(/Never in <orbit_wiki_context>/u);
