@@ -796,6 +796,74 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
 
 ---
 
+### 8.5 Linux Auto sandbox：shell 入参与逃逸授权【实测 + 设计，2026-11-08】
+
+**范围**：HPC/Linux，固定 `2026.10.14-941492e`；macOS 不在本次任务范围。这里记录的是进入
+`orbit-bash`、尚未还原 HOME/删除凭据时的环境，不是命令最后看到的环境。探针只改测试会话的临时包装；
+产品 `writeCursorShellWrapper` 没有改动。[复现、脱敏规则和限制](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/README.md)、
+[探针原文](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/probe.go.txt)、
+[离线断言](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/check.py)。
+
+**实测入参**：下表每个 JSON 保留完整 `argv`（含包装路径）、`cwd`、全部环境键值、时间、PID，以及 fd 5 的载荷。
+凭据值为 `<REDACTED>`，路径/UUID 按实测工具脱敏；不能把占位符当成原值。
+
+| 路径 | 记录 | argv / cwd / 环境的差异 |
+|---|---|---|
+| 登录环境快照 | [00](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/00-snapshot.json) | `[orbit-bash, -O, extglob, -ilc, <4793 字节快照脚本>]`；cwd 为 `<RUN>/work`；34 个环境变量，没有 `CURSOR_REQUEST_ID` / `CURSOR_CONVERSATION_ID`，没有 fd 5 |
+| CLI 未询问的 `ls` | [01](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/01-unasked-ls.json) | 以下命令均为 `[orbit-bash, -O, extglob, -c, <固定 loader>, --]`；cwd 同快照；39 个环境变量 |
+| Orbit Auto 允许的 `touch auto-allowed.txt` | [02](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/02-auto-allowed-touch.json) | 与 01 的 argv、cwd、env 完全相同；实际命令在 fd 5 |
+| 经卡片路径允许的前台 `python3 -c 'print(424242)'` | [03](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/03-card-path-python.json) | 与 01、02 的 argv、cwd、env 完全相同；**本次 ALLOWED 由测试 harness 提供，没有生产 UI 的人点卡片记录** |
+| 请求 `block_until_ms: 0` 的后台命令及随后前台命令 | [04](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/04-background.json)、[05](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/05-foreground.json) | fd 5 分别为 `sleep 4; printf background\0`、`printf foreground\0`；同一轮共用 request ID |
+| 两个不同文本的并发后台命令 | [06](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/06-concurrent-a.json)、[07](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/07-concurrent-b.json) | argv、cwd、env 完全相同；fd 5 分别带 A/B 文本；PID 和 socket inode 不同 |
+| 两个相同文本的并发后台命令 | [08](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/08-identical-a.json)、[09](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/09-identical-b.json) | argv、cwd、env、fd 5 文本完全相同；PID 和 socket inode 不同；两次进入包装间隔小于 3 秒（命令各 sleep 3 秒） |
+
+- **快照次数**：本次一次会话、四轮、九条命令只记录到启动时一次 `-ilc`；不能把 §8.3 的旧描述理解为本次每条命令都重新拍快照。
+- **实际命令不在 argv**：所有 `-c` 的 loader 相同，以 `IFS= builtin read -r -d '' __cursor_command <&5` 开头，
+  随后关闭 fd 5、从 fd 3 还原快照、执行命令、向 fd 4 写回状态。fd 5 是 socket，内容为命令文本加 NUL。
+  探针用 `recv(MSG_PEEK)` 读取副本，未消耗 Bash 要读的数据。仅 hash `argv[-2]` 会把所有命令认成同一条。
+- **env 没有授权身份**：`CURSOR_REQUEST_ID` 在同一轮不同命令、相同并发命令之间共用；
+  `CURSOR_CONVERSATION_ID` 标识会话；`__CURSOR_SANDBOX_ENV_RESTORE` 只还原这些变量，没有 toolCallId 或人批标志。
+  34→39 新增的是 `CURSOR_AGENT`、`CURSOR_CONVERSATION_ID`、`CURSOR_REQUEST_ID`、`AGENT_TRANSCRIPTS`、
+  `__CURSOR_SANDBOX_ENV_RESTORE`；完整继承值见各 JSON。快照和命令在包装入口仍带 CLI 凭据，包装稍后才删掉。
+- **协议与卡片**：[stdout](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/process/stdout.jsonl) 中 `ls` 无
+  `session/request_permission`；其余八次有请求；[stdin](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/process/stdin.jsonl)
+  对八次都回 `allow-once`。[summary](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/summary.json) 只有 Python 一张卡，
+  其余请求有 `permission_auto_allowed`。toolCallId 在 ACP 中可见，未出现在包装的 argv/env/fd 5 中。
+  ACP `rawInput` 只保留 command，**没有独立记录到模型工具参数中的数值 `block_until_ms: 0`**；该值是探针 prompt 的要求。
+  sleep 命令尚未经过等待时间就报告完成且 stdout 为空，前台 printf 报告输出，是本次后台执行的可见证据。
+  [timeline](evidence/cursor-cli/2026.10.14-941492e/sandbox-shell-linux/process/timeline.jsonl) 保留请求、答复和完成顺序；
+  它的相对毫秒时间与包装的绝对纳秒不是同一时基，不能相减声称测得了答复到 exec 的延迟。
+
+**选择：执行实例绑定的 runner broker；不接受命令 hash 一次性文件作为逃逸授权【设计，未实现】**。
+
+本次没有发现从 ACP toolCallId 到某个包装实例的可靠关联键。不同 PID/socket 能区分实例，但协议没有给它们到
+permission request 的映射。即使先原子写 grant、再回答 `allow-once`、以原子 rename 保证仅一个消费者，
+相同文本的另一个调用仍可能先拿到 grant；加 cwd、会话、request ID、短 TTL 也不能区分 08/09。
+因此“一次最多逃逸一个”不等于“只有人批的那个实例逃逸”；按文本先进先出也不成立。上述结论来自记录的相等性，
+不是声称已实现或压测过 grant。
+
+安全退路必须把人批绑定到执行实例，而不能推测哪个调用先 exec：
+
+1. 每次包装进入默认 sandbox，包括快照、CLI 未询问、Auto 允许、嵌套 shell，以及无法识别的 argv/fd 布局。
+   原有 ACP 卡片允许只表示 CLI 可以继续，**不能单凭这个 allow-once 发放逃逸权**。
+2. runner 管理会话私有 broker。需要逃逸的包装在执行前建立一次连接，由 broker 分配一次性实例标识并保存
+   PID/启动身份、会话代次、精确命令字节、cwd 和将使用的环境。既有卡片的批准最多作为“候选需要逃逸”的线索，
+   不是可被命令消费的 bearer grant。broker/授权状态必须放在 sandbox 不可修改的位置。
+3. 没有可靠 ACP→包装关联时，**在这个等待中的实例上重新出示明确的执行批准卡**，显示实际命令和 cwd。
+   只有人批准这张实例卡，broker 才在该连接上一次性启动所批准的命令（自己控制 argv/cwd/env，并转发 stdio/退出码）；
+   不把“任意 unsandboxed exec”能力、环境开关或共享 grant 文件交给包装。已有 ACP 卡可能因此多问一次，
+   这是确保只逃逸人批实例的代价；不能悄悄把一次 ACP 批准转给同文本的先到者。
+4. 不同命令/相同命令都按连接分别记账；批准 A 不释放 B，批准被消费后立即注销，连接关闭、取消、过期、runner 重启
+   或身份/载荷不一致都撤销候选。后台进程启动时一次决定隔离方式，之后继续运行不延长授权，后续调用也不能复用它。
+   socket 丢失、格式不认识、无法绑定到实例等不确定情况都保持 sandbox；需要逃逸的命令可能失败，应明确通知模型再请求。
+
+这是保守的设计选择，并非已证明原 ACP 卡可无感逃逸；本任务不实现 broker 或 sandbox。
+实施时须测试并发批准/取消、相同命令竞争、后台生命周期、重启、恶意连接、重复回复和环境/命令替换；
+还须补生产 UI 人批实测。若产品要求“一张既有 ACP 卡批准后，该 CLI 实例必定无 sandbox 执行”，
+当前证据不能支持，需要额外的可靠逐调用传递通道；不能以 hash grant 宣称满足。
+
+---
+
 ## 9. 登录、API key 与 token（覆盖要求 7）
 
 - **登录链接**【实测 `login-link-and-logout` + 两次完整计时】：
