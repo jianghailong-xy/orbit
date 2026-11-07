@@ -199,6 +199,7 @@ apiserver 要能出站访问 `open.feishu.cn`（或 `open.larksuite.com`）的 H
 - 飞书在 3 秒内没收到确认就会重推同一事件。`feishu_inbound_event` 上 `(appId, eventId)` 的唯一约束兜底，
   重复的直接确认，不再处理。
 - 凭证失效、应用被停用或删除：按 1 分钟起、最长 1 小时退避重连，原因写进 `lastError`；飞书明确说应用已停用或删除时停止重连。
+- 每个副本把自己每条连接的状态（CONNECTING / CONNECTED / BACKOFF / STOPPED、连续失败次数、下次重试时间、错误）与心跳写进 `feishu_link`（F0-2），设置页数心跳新鲜的 CONNECTED 行。SDK 以 `autoReconnect: false` 运行，重连由 Orbit 掌握；断线后立即重连一次，失败才进入退避。长连接端点失败时再换一次 `tenant_access_token`，取飞书的错误码写 `lastError`；10003（应用不存在）、10013（应用状态异常）视为已删除或停用，停止重连，直到应用被重新保存（这两个码待真租户冒烟核实）。
 - 连接数 = 应用数 × 副本数。`tenant_access_token` 由 SDK 按应用、按副本各自缓存续期。应用数到几百时，改成按行租约把每个
   应用分给两个副本连（v1 不做）；管理区显示的应用数就是看这个的。
 - 出站任何副本都可以发。限频按 429 给出的建议等待时间退避（§6.3），不做跨进程令牌桶：单个账号的量远低于上限。
@@ -401,6 +402,7 @@ service token 照旧可用，要保留自定义逻辑的可以继续写桥接。
 | --- | --- | --- |
 | `feishu_app` | F0 | 账号的应用配置与主人身份（§4.1、§5） |
 | `feishu_inbound_event` | F0 | 入站收件箱与去重（§7.1） |
+| `feishu_link` | F0 | 每个副本每个应用一条连接的状态与心跳，设置页「连接中的副本数」由它计数（§4.4） |
 | `feishu_connect_code` | F1 | 主人身份的绑定码（§5.1） |
 | `feishu_message` | F1 | 发出的卡片登记，用于改卡与回复路由（§6.2、§7.3） |
 | `feishu_thread` | F2 | 消息链 / 话题 ↔ 会话，`(appId, chatId, rootMessageId)` 唯一 |

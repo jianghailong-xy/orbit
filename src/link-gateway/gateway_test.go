@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -30,7 +32,7 @@ const (
 func TestHelloIsAnsweredWithWelcome(t *testing.T) {
 	h := newHarness(t, nil)
 	_, w := h.connect(runnerA, processA)
-	if w.GetProtocolVersion() != 1 || w.GetMode() != linkpb.Mode_MODE_HTTP || w.GetHeartbeatIntervalMs() != 30000 ||
+	if w.GetProtocolVersion() != 1 || w.GetMode() != linkpb.Mode_MODE_LINK || w.GetHeartbeatIntervalMs() != 30000 ||
 		w.GetLimits().GetMaxFrameBytes() != 256<<10 || !strings.HasPrefix(w.GetConnectionId(), "c-") {
 		t.Fatalf("welcome %v", w)
 	}
@@ -185,7 +187,8 @@ func TestHeartbeatsAreRecordedAndAnswered(t *testing.T) {
 	tc, _ := h.connect(runnerA, processA)
 	tc.send(&linkpb.Frame{Body: &linkpb.Frame_Heartbeat{Heartbeat: &linkpb.Heartbeat{ProcessId: processA, IdleCapacity: 3}}})
 	ack := tc.expect("heartbeat_ack", 5*time.Second).GetHeartbeatAck()
-	if ack.GetMode() != linkpb.Mode_MODE_HTTP || len(ack.GetReconcileJson()) != 0 {
+	// Without backends, as this harness is built, a beat is answered at once with nothing to apply.
+	if ack.GetMode() != linkpb.Mode_MODE_LINK || len(ack.GetReconcileJson()) != 0 {
 		t.Fatalf("ack %v", ack)
 	}
 	if h.g.metrics.heartbeats.get() != 1 {
@@ -382,48 +385,39 @@ func TestRevocationsCloseLiveConnections(t *testing.T) {
 	}
 }
 
-// The two invariants B4 must keep when it adds forwarding: a MODE_HTTP connection forwards no Rpc, and a shadow
-// mirror is forwarded in no mode.
-func TestRpcForwardingInvariants(t *testing.T) {
-	shadow := &linkpb.Rpc{RequestId: "shadow:c-1:7"}
-	normal := &linkpb.Rpc{RequestId: "r-1"}
-	for _, mode := range []linkpb.Mode{linkpb.Mode_MODE_UNSPECIFIED, linkpb.Mode_MODE_HTTP, linkpb.Mode_MODE_LINK} {
-		if mayForward(mode, shadow) {
-			t.Errorf("a shadow mirror may be forwarded in %v", mode)
-		}
-		if mayForward(mode, normal) != (mode == linkpb.Mode_MODE_LINK) {
-			t.Errorf("%v: an ordinary Rpc may be forwarded = %v", mode, mayForward(mode, normal))
-		}
-	}
-
-	for _, mode := range []linkpb.Mode{linkpb.Mode_MODE_HTTP, linkpb.Mode_MODE_LINK} {
-		t.Run(mode.String(), func(t *testing.T) {
-			h := newHarness(t, func(c *config) { c.Mode = mode })
+// Every Rpc is answered with exactly one RpcResult: forwarded, with the route's answer, or refused not retryable by a
+// gateway without backends.
+func TestEveryRpcIsForwardedOrRefusedOnce(t *testing.T) {
+	for _, withBackends := range []bool{true, false} {
+		t.Run(fmt.Sprintf("backends=%v", withBackends), func(t *testing.T) {
+			h := newHarness(t, nil)
 			var forwarded []string
-			h.g.forward = func(c *conn, rpc *linkpb.Rpc) {
-				forwarded = append(forwarded, rpc.GetRequestId())
-				c.send(&linkpb.Frame{Body: &linkpb.Frame_RpcResult{RpcResult: &linkpb.RpcResult{RequestId: rpc.GetRequestId(),
-					Outcome: &linkpb.RpcResult_Tunnel{Tunnel: &linkpb.TunnelResponse{Status: 200}}}}}, false)
+			if withBackends {
+				h.g.forward = func(c *conn, rpc *linkpb.Rpc) {
+					forwarded = append(forwarded, rpc.GetRequestId())
+					c.send(&linkpb.Frame{Body: &linkpb.Frame_RpcResult{RpcResult: &linkpb.RpcResult{RequestId: rpc.GetRequestId(),
+						Outcome: &linkpb.RpcResult_Tunnel{Tunnel: &linkpb.TunnelResponse{Status: 200}}}}}, false)
+				}
 			}
-			tc, w := h.connect(runnerA, processA)
-			for _, id := range []string{"r-1", "shadow:" + w.GetConnectionId() + ":99"} {
+			tc, _ := h.connect(runnerA, processA)
+			for _, id := range []string{"r-1", "r-2"} {
 				tc.send(&linkpb.Frame{Body: &linkpb.Frame_Rpc{Rpc: &linkpb.Rpc{RequestId: id,
 					Body: &linkpb.Rpc_Tunnel{Tunnel: &linkpb.TunnelRequest{Method: "POST", Path: "/runner/heartbeat", JsonBody: []byte(`{}`)}}}}})
 				res := tc.expect("rpc_result", 5*time.Second).GetRpcResult()
 				if res.GetRequestId() != id {
 					t.Fatalf("result for %s answers %s", id, res.GetRequestId())
 				}
-				wantForwarded := mode == linkpb.Mode_MODE_LINK && id == "r-1"
-				if (res.GetTunnel() != nil) != wantForwarded {
-					t.Fatalf("%s in %v: result %v", id, mode, res)
+				if withBackends && res.GetTunnel().GetStatus() != 200 ||
+					!withBackends && (res.GetFailure().GetCode() != "NOT_FORWARDED" || res.GetFailure().GetRetryable()) {
+					t.Fatalf("%s: result %v", id, res)
 				}
 			}
-			want := []string{}
-			if mode == linkpb.Mode_MODE_LINK {
-				want = []string{"r-1"}
+			want, result := "", "not_forwarded"
+			if withBackends {
+				want, result = "r-1,r-2", "forwarded"
 			}
-			if strings.Join(forwarded, ",") != strings.Join(want, ",") {
-				t.Fatalf("forwarded %v, want %v", forwarded, want)
+			if strings.Join(forwarded, ",") != want || h.g.metrics.rpcs.get(result) != 2 {
+				t.Fatalf("forwarded %v, link_rpcs_total{result=%q} %v", forwarded, result, h.g.metrics.rpcs.get(result))
 			}
 		})
 	}
@@ -431,34 +425,32 @@ func TestRpcForwardingInvariants(t *testing.T) {
 
 func TestFramesOverTheLimitAreRefusedAndChunksAreJoined(t *testing.T) {
 	h := newHarness(t, nil)
-	tc, w := h.connect(runnerA, processA)
-	// A mirrored event batch far over 256 KiB, sent in Chunks, is joined and compared.
-	eb, raw := bigEventBatch(t, 600<<10)
-	typed := &linkpb.Frame{Id: 2, Body: &linkpb.Frame_EventBatch{EventBatch: eb}}
+	joined := make(chan []byte, 1)
+	h.g.forward = func(c *conn, rpc *linkpb.Rpc) {
+		joined <- rpc.GetTunnel().GetJsonBody()
+		c.send(&linkpb.Frame{Body: &linkpb.Frame_RpcResult{RpcResult: &linkpb.RpcResult{RequestId: rpc.GetRequestId(),
+			Outcome: &linkpb.RpcResult_Tunnel{Tunnel: &linkpb.TunnelResponse{Status: 202}}}}}, false)
+	}
+	tc, _ := h.connect(runnerA, processA)
+	// A request far over 256 KiB, sent in Chunks, is joined and handled as the frame it makes up.
+	body, _ := json.Marshal(map[string]string{"output": strings.Repeat("output <line> & more\n", 30_000)})
+	big := &linkpb.Frame{Id: 2, Body: &linkpb.Frame_Rpc{Rpc: &linkpb.Rpc{RequestId: "r-big",
+		Body: &linkpb.Rpc_Tunnel{Tunnel: &linkpb.TunnelRequest{Method: "POST", Path: "/runner/sessions/s-big/events", JsonBody: body}}}}}
 	next := uint64(2)
-	msgs, err := encodeFrame(typed, maxFrameBytes, func() uint64 { next++; return next })
+	msgs, err := encodeFrame(big, maxFrameBytes, func() uint64 { next++; return next })
 	if err != nil || len(msgs) < 3 {
 		t.Fatalf("%d messages, %v", len(msgs), err)
 	}
 	for _, m := range msgs {
 		tc.sendRaw(m)
 	}
-	// Its raw half is over the limit too, so it travels in Chunks as well.
-	next++
-	mirror := &linkpb.Frame{Id: next, Body: &linkpb.Frame_Rpc{Rpc: &linkpb.Rpc{RequestId: "shadow:" + w.GetConnectionId() + ":2",
-		Body: &linkpb.Rpc_Tunnel{Tunnel: &linkpb.TunnelRequest{Method: "POST", Path: "/runner/sessions/" + eb.GetSessionId() + "/events", JsonBody: raw}}}}}
-	msgs, err = encodeFrame(mirror, maxFrameBytes, func() uint64 { next++; return next })
-	if err != nil || len(msgs) < 2 {
-		t.Fatalf("%d messages, %v", len(msgs), err)
-	}
-	for _, m := range msgs {
-		tc.sendRaw(m)
-	}
 	tc.outID = next
-	tc.expect("rpc_result", 5*time.Second)
-	eventually(t, 5*time.Second, "the joined batch compared", func() bool {
-		return h.g.metrics.shadowPairs.get("events", "match") == 1
-	})
+	if res := tc.expect("rpc_result", 5*time.Second).GetRpcResult(); res.GetRequestId() != "r-big" || res.GetTunnel().GetStatus() != 202 {
+		t.Fatalf("result %v", res)
+	}
+	if got := <-joined; !bytes.Equal(got, body) {
+		t.Fatalf("joined %d bytes, sent %d", len(got), len(body))
+	}
 	// One message over the limit ends the connection.
 	tc.sendRaw(make([]byte, maxFrameBytes+1))
 	tc.closed(10 * time.Second)
@@ -496,12 +488,18 @@ func TestMetricsEndpoint(t *testing.T) {
 		"# TYPE link_handshake_duration_seconds histogram",
 		`link_disconnects_total{reason="ping_timeout"} 0`,
 		"# TYPE link_rtt_seconds histogram",
-		`link_shadow_pairs_total{kind="events",result="mismatch"} 0`,
+		`link_hints_total{kind="claim",result="no_connection"} 0`,
 		`link_gateway_build_info{version="dev"} 1`,
 		`link_frames_received_total{type="hello"} 1`,
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing %q", want)
+		}
+	}
+	// The shadow period's comparison and the switch's mode are gone, and so are their series.
+	for _, gone := range []string{"link_shadow_", "link_mode_", `result="mode_http"`} {
+		if strings.Contains(text, gone) {
+			t.Errorf("%q is still exposed", gone)
 		}
 	}
 	if t.Failed() {

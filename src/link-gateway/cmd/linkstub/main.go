@@ -1,9 +1,9 @@
-// Command linkstub stands in for everything the link gateway calls in MODE_LINK, so that one gateway can be loaded past
+// Command linkstub stands in for everything the link gateway calls, so that one gateway can be loaded past
 // what a staging stack's apiservers and database carry (scripts/runner-link/gateway-limit.sh). It answers each call with
 // the smallest answer its route gives that the gateway and a runner take as valid, a fixed delay after the call arrived
 // (-delay, 5 ms by default):
 //
-//   - the gateway's reads on LINK_API_URL: the revocation list (nothing revoked) and the RUNNER_LINK_REQUIRED switch (on);
+//   - the gateway's read on LINK_API_URL: the revocation list (nothing revoked);
 //   - every call the gateway forwards to LINK_INTERNAL_API_URLS: the welcome route (each session asked about held, its
 //     durable seq 0, no release), heartbeats (the answer to a beat that reconciled nothing, as runner_presence gives it,
 //     with empty link hints), event batches alone and merged (each stored through its last seq, none refused), and any

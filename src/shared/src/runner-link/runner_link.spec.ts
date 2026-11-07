@@ -109,6 +109,7 @@ function samples(): Sample[] {
       sessionIds: ['ses-1', 'ses-2'],
       supportedProviders: ['claude', 'codex', 'cursor'],
       facts: [fact, { kind: 'repos', sha256: '2c26b46b68ffc68f' }],
+      beatId: 17n,
     }),
     sample(pb.FactSchema, fact),
     sample(pb.HeartbeatAckSchema, {
@@ -117,6 +118,7 @@ function samples(): Sample[] {
       wantFacts: ['repos'],
       hints,
       release,
+      beatId: 17n,
     }),
     sample(pb.EventBatchSchema, {
       sessionId: 'ses-1',

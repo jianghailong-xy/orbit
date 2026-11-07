@@ -35,8 +35,6 @@ type gateway struct {
 	reg         *registry
 	now         func() time.Time
 	draining    atomic.Bool
-	// linkRequired is the server's RUNNER_LINK_REQUIRED switch as last read (mode.go).
-	linkRequired atomic.Bool
 
 	// hints relays runner hints from NATS (hints.go); nil when LINK_NATS_URL is not set.
 	hints *hintRelay
@@ -51,8 +49,7 @@ type gateway struct {
 	// watchers is who watches which session live, by runner (live.go).
 	watchers *watcherBook
 
-	// forward hands an Rpc to a backend: forwardRPC, behind mayForward, which lets only a connection in MODE_LINK
-	// forward; nil without backends.
+	// forward hands an Rpc to a backend (forwardRPC); nil without backends.
 	forward func(c *conn, rpc *linkpb.Rpc)
 
 	// drill is what LINK_DRILL_LOSE_ANSWERS armed (drill.go); nil, as it is unless a drill sets it.
@@ -73,14 +70,13 @@ func newGateway(cfg config, logger *slog.Logger) *gateway {
 		reg:         newRegistry(cfg.MaxConnsPerRunner),
 		now:         time.Now,
 	}
-	g.metrics = newGatewayMetrics(version, deny, func() float64 { return float64(shadowPending.Load()) })
+	g.metrics = newGatewayMetrics(version, deny)
 	g.credit = newCreditBook(g, cfg.link)
 	g.watchers = newWatcherBook(cfg.link.WatchersTTL)
 	g.metrics.ingestEvents.fn = func() float64 { return float64(g.credit.depth().Events) }
 	g.metrics.ingestBytes.fn = func() float64 { return float64(g.credit.depth().Bytes) }
 	g.metrics.watchedSessions.fn = func() float64 { return float64(g.watchers.watched()) }
-	// Built in MODE_HTTP too, since the switch can turn MODE_LINK on at any time; they dial nothing until a call is
-	// forwarded.
+	// Configuration requires backends; a gateway built without them, as some tests build it, forwards nothing.
 	if len(cfg.InternalAPIURLs) > 0 {
 		g.backends = newBackendPool(cfg, g.metrics, logger)
 		g.forward = forwardRPC
@@ -95,7 +91,6 @@ func newGateway(cfg config, logger *slog.Logger) *gateway {
 		g.pace = newPacer(cfg.DrillIngestRate)
 	}
 	g.metrics.ingestWaiting.fn = func() float64 { return float64(g.credit.waitingSessions()) }
-	g.metrics.mode.set(modeGauge(g.mode()))
 	return g
 }
 
@@ -347,26 +342,7 @@ func serveMain(args []string) int {
 		g.hints = relay
 	}
 	go g.sweepWatchers(ctx.Done())
-	switch {
-	case cfg.Mode == linkpb.Mode_MODE_LINK:
-		logger.Info("LINK_MODE=link: runners are told MODE_LINK, whatever RUNNER_LINK_REQUIRED says")
-	case g.backends == nil:
-		logger.Warn("LINK_INTERNAL_API_URLS is not set: runners are told MODE_HTTP whatever RUNNER_LINK_REQUIRED says, " +
-			"since there is nowhere to forward their calls to")
-	default:
-		modes := &modePoller{
-			url:    cfg.APIURL + "/api/runner/link/mode",
-			token:  cfg.GatewayToken,
-			client: &http.Client{Timeout: 10 * time.Second},
-			g:      g,
-		}
-		// One read before serving, as for the revocation list; until a read succeeds, runners are told MODE_HTTP.
-		modes.report(modes.fetch(ctx))
-		go modes.run(ctx, cfg.ModeInterval)
-	}
-	if g.backends != nil {
-		logger.Info("runner calls are forwarded on connections in MODE_LINK", "backends", g.backends.String(), "timeout", cfg.RPCTimeout)
-	}
+	logger.Info("runner calls are forwarded", "backends", g.backends.String(), "timeout", cfg.RPCTimeout)
 	if g.drill != nil {
 		logger.Warn("LINK_DRILL_LOSE_ANSWERS is set: answers are lost on purpose, for a drill", "lose", g.drill.String())
 	}
@@ -415,7 +391,7 @@ func serveMain(args []string) int {
 		}
 	}()
 	logger.Info("link gateway serving", "version", version, "listen", cfg.ListenAddr, "metrics", cfg.MetricsAddr,
-		"tls", cfg.TLSMode, "cell", cfg.CellID, "keys", len(cfg.PublicKeys), "mode", g.mode().String(), "hints", g.hints != nil)
+		"tls", cfg.TLSMode, "cell", cfg.CellID, "keys", len(cfg.PublicKeys), "hints", g.hints != nil)
 
 	sig := make(chan os.Signal, 2)
 	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
