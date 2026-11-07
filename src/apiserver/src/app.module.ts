@@ -37,6 +37,7 @@ import { WikiModule } from './wiki/wiki.module';
 import { WikiChatModule } from './wiki/wiki-chat.module';
 import { ManagedRunnerGateModule } from './managed-runners/managed-runner-gate';
 import { ManagedRunnerModule } from './managed-runners/managed-runner.module';
+import { FeishuModule } from './feishu/feishu.module';
 
 @Module({
   imports: [
@@ -79,6 +80,8 @@ import { ManagedRunnerModule } from './managed-runners/managed-runner.module';
     WikiChatModule,
     ManagedRunnerGateModule,
     ManagedRunnerModule,
+    // Each account's own Feishu (Lark) app, and the administrators' switch for them (docs/feishu-bot-design.md).
+    FeishuModule,
   ],
   // Registered here rather than in main.ts (where WorkspaceAliasInterceptor is) because it needs
   // PrismaService injected, which only the DI container can provide.

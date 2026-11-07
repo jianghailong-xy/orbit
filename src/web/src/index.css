@@ -21887,6 +21887,96 @@ div.landing-jobs-open {
 .admin-signin-error {
   color: var(--error);
 }
+/* Admin → Integrations: how many Feishu apps accounts have connected. */
+.admin-feishu-count {
+  color: var(--text-2);
+}
+/* Settings → Integrations → Feishu (FeishuIntegrationPage): the account's own app, then the steps in Feishu's
+   console. Its fields reuse the admin Sign-in settings' rows, labels and hints. */
+.feishu-page {
+  max-width: 720px;
+  margin: 0 auto;
+}
+.feishu-intro {
+  margin: 4px 0 20px;
+  color: var(--text-3);
+}
+.feishu-card {
+  margin-bottom: 16px;
+}
+/* Above the app. The Alert's own `margin: 0` (ui/Alert.css, loaded later) is one class deep, so this is two. */
+.feishu-page > .feishu-not-allowed {
+  margin-bottom: 16px;
+}
+.feishu-fields {
+  display: grid;
+  gap: 20px;
+}
+.feishu-hint {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.feishu-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 0;
+}
+.feishu-facts dt {
+  color: var(--text-2);
+}
+.feishu-facts dd {
+  min-width: 0;
+  margin: 0;
+}
+.feishu-facts code,
+.feishu-copy code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--fill-muted);
+  color: var(--text-1);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.feishu-platforms {
+  display: grid;
+  gap: 10px;
+}
+.feishu-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.feishu-steps {
+  display: grid;
+  gap: 16px;
+  margin: 0 0 16px;
+  padding-left: 20px;
+}
+.feishu-steps p {
+  margin: 4px 0 0;
+  color: var(--text-2);
+}
+.feishu-names {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.feishu-names li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+.feishu-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 /* Admin → Users: one row an account — who, how they sign in, whether they can, when they last used
    Orbit, since when — and its actions: the one most often wanted in sight, the rest in its menu
    (docs/mocks/admin-users-redesign, direction A). Columns give way as the table's own box narrows,

@@ -15,6 +15,7 @@ import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminSignInPage } from './pages/AdminSignInPage';
+import { AdminIntegrationsPage } from './pages/AdminIntegrationsPage';
 import { InfrastructurePage } from './pages/InfrastructurePage';
 import { ProviderConnectPage, ProviderPickPage } from './pages/ProviderConnectPage';
 import { ProviderPoolPage } from './pages/ProviderPoolPage';
@@ -28,6 +29,7 @@ import { RunnerDetailPage } from './pages/RunnerDetailPage';
 import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedLinksPage } from './pages/SharedLinksPage';
 import { AccessTokensPage } from './pages/AccessTokensPage';
+import { FeishuIntegrationPage } from './pages/FeishuIntegrationPage';
 import { SharedLinkPage, SharedProjectTaskRoute } from './pages/SharedLinkPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
 import { SharedWikiDocRoute } from './pages/SharedWikiPage';
@@ -218,6 +220,15 @@ export function App() {
                 </DocView>
               }
             />
+            {/* The account's own Feishu or Lark app (docs/feishu-bot-design.md §4.1, §4.2). */}
+            <Route
+              path="settings/integrations/feishu"
+              element={
+                <DocView>
+                  <FeishuIntegrationPage />
+                </DocView>
+              }
+            />
             <Route
               path="admin"
               element={
@@ -232,6 +243,15 @@ export function App() {
               element={
                 <DocView>
                   <AdminSignInPage />
+                </DocView>
+              }
+            />
+            {/* The admin area's Integrations: Feishu bots' switch (docs/feishu-bot-design.md §4.1). */}
+            <Route
+              path="admin/integrations"
+              element={
+                <DocView>
+                  <AdminIntegrationsPage />
                 </DocView>
               }
             />
