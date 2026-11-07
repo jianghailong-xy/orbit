@@ -200,19 +200,48 @@ final class WikiChatCardLookTests: XCTestCase {
         XCTAssertEqual(WikiChatLogic.faceLabel("whyNot"), "Why not")
     }
 
-    // MARK: a plan card (C12, design §6's third row, board 42 ④ ③)
+    // MARK: a plan card (C12, C17, design §6's third row, board 42 ④ ③)
+
+    private static let runtime: [String: Any] = ["key": "runtime", "title": "Runtime", "opens": false]
 
     private static let planChange: [String: Any] = [
         "baseVersion": 4, "version": NSNull(),
-        "doc": ["slug": "sessions-runtime", "title": "Sessions runtime", "number": "3.1"],
-        "category": ["key": "runtime", "title": "Runtime", "opens": false],
-        "fields": [],
-        "sections": [["key": "recovery", "title": "Recovery", "number": 2, "edit": "changed", "fields": ["covers"],
-                      "covers": "What survives a respawn, for a first-time reader: the model first."]],
+        "docs": [[
+            "slug": "sessions-runtime", "title": "Sessions runtime", "number": "3.1", "added": false, "category": runtime,
+            "fields": [],
+            "sections": [["key": "recovery", "title": "Recovery", "number": 2, "edit": "changed", "fields": ["covers"],
+                          "covers": "What survives a respawn, for a first-time reader: the model first."]],
+        ]],
+        "moves": [],
+    ]
+
+    /// One document split in two (board 42 ③): a section moved into a new document, the old one's overview rewritten.
+    private static let splitChange: [String: Any] = [
+        "baseVersion": 4, "version": NSNull(),
+        "docs": [
+            ["slug": "sessions-runtime", "title": "Sessions runtime", "number": "3.1", "added": false, "category": runtime, "fields": [],
+             "sections": [["key": "s1", "title": "Overview", "number": 1, "edit": "changed", "fields": ["covers"],
+                           "covers": "For a first-time reader: the model first."]]],
+            ["slug": "delivery-and-heartbeats", "title": "Delivery and heartbeats", "number": "3.5", "added": true, "category": runtime,
+             "fields": [], "sections": []],
+        ],
+        "moves": [[
+            "title": "Delivery and heartbeats", "fields": [], "covers": NSNull(),
+            "from": ["doc": "sessions-runtime", "number": "3.1", "key": "s3", "section": 3],
+            "to": ["doc": "delivery-and-heartbeats", "number": "3.5", "key": "s3", "section": 1],
+        ]],
+    ]
+
+    /// The sections the split's press rewrites: the old document's overview, and the new document whole.
+    private static let splitRewrites: [[String: Any]] = [
+        ["doc": "sessions-runtime", "key": "s1", "where": "3.1 §1", "title": "Overview"],
+        ["doc": "delivery-and-heartbeats", "key": "s3", "where": "3.5 §1", "title": "Delivery and heartbeats"],
+        ["doc": "delivery-and-heartbeats", "key": "s4", "where": "3.5 §2", "title": "Heartbeats"],
     ]
 
     /// The face says what the change does to the document — the section it changes and the covers it writes — then
-    /// why; the buttons are Apply & rebuild, Open in Plan and Discard; an applied one offers no Undo, only its rebuild's.
+    /// why; the buttons are Apply & rebuild, Open in Plan and Discard; an applied one offers Undo while the plan stands
+    /// where its press left it (C17), Open in Plan, and its rebuild's own.
     func testAPlanCardSaysWhatItsChangeDoesAndOffersApplyAndRebuild() throws {
         let rewrites: [[String: Any]] = [["doc": "sessions-runtime", "key": "recovery", "where": "3.1 §2", "title": "Recovery"]]
         let open = try card(["kind": "plan", "label": "Plan change", "rationale": "Written for a first-time reader.", "rewrites": rewrites,
@@ -224,20 +253,23 @@ final class WikiChatCardLookTests: XCTestCase {
             .init(label: "Covers", value: "§2 Recovery: What survives a respawn, for a first-time reader: the model first."),
             .init(label: "Why", value: "Written for a first-time reader."),
         ])
-        XCTAssertEqual(open.change?.sections.first?.covers, "What survives a respawn, for a first-time reader: the model first.")
+        XCTAssertEqual(open.change?.docs.first?.sections.first?.covers, "What survives a respawn, for a first-time reader: the model first.")
         let look = WikiChatLogic.cardLook(open)
         XCTAssertEqual(look.title, "Draft · Plan change")
         XCTAssertEqual(look.actions, [.applyRebuild, .openInPlan, .discard])
+        // Within one document, the Rewrites row links each section.
+        XCTAssertEqual(WikiChatLogic.rewriteLinks(kind: open.kind, rewrites: open.rewrites).map(\.label), ["3.1 §2"])
 
         var applied = Self.planChange
         applied["version"] = 5
-        let pressed = try card(["kind": "plan", "label": "Plan change", "state": "applied", "decision": "applied", "rewrites": rewrites,
-                                "change": applied, "rewrite": rewrite(["result": "failed", "sections": [
+        let pressed = try card(["kind": "plan", "label": "Plan change", "state": "applied", "decision": "applied", "undoable": true,
+                                "rewrites": rewrites, "change": applied, "rewrite": rewrite(["result": "failed", "sections": [
                                     ["doc": "sessions-runtime", "key": "recovery", "where": "3.1 §2", "result": "failed", "changed": NSNull(), "versionId": NSNull()],
                                 ]])])
         let after = WikiChatLogic.cardLook(pressed)
         XCTAssertEqual([after.title, after.actions.map(\.rawValue).joined(separator: ","), after.rewriteActions.map(\.rawValue).joined(separator: ",")],
-                       ["Applied · Confirmed by you", "", "try_again"], "no Undo for a plan card: the plan keeps every version")
+                       ["Applied · Confirmed by you", "undo,open_in_plan", "try_again"])
+        XCTAssertNil(after.note)
         XCTAssertEqual(pressed.change?.version, 5)
         XCTAssertEqual(WikiChatLogic.resultLook(pressed)?.line, "Rewrite failed")
 
@@ -246,19 +278,81 @@ final class WikiChatCardLookTests: XCTestCase {
         XCTAssertEqual(older.rows, [.init(label: "Why", value: "To ride out one gateway restart.")])
     }
 
+    /// Once the plan moved on since its press, an applied plan card offers Open in Plan alone and says why under its
+    /// title (C17, `wikiChatPlanMovedNote`); an entry card that cannot be undone, or a plan card undone, says nothing.
+    func testAnAppliedPlanCardTheOwnerCanNoLongerUndoSaysWhy() throws {
+        let moved = WikiChatLogic.cardLook(try card(["kind": "plan", "label": "Plan change", "state": "applied", "decision": "applied",
+                                                     "undoable": false, "change": Self.planChange]))
+        XCTAssertEqual(moved.title, "Applied · Confirmed by you")
+        XCTAssertEqual(moved.tone, .green)
+        XCTAssertEqual(moved.actions, [.openInPlan])
+        XCTAssertEqual(moved.note, "The plan has changed since, so this can no longer be undone.")
+        XCTAssertFalse(moved.inReview)
+        XCTAssertTrue(moved.quiet)
+        XCTAssertNil(WikiChatLogic.cardLook(try card(["state": "applied", "undoable": false])).note)
+        XCTAssertNil(WikiChatLogic.cardLook(try card(["kind": "plan", "label": "Plan change", "state": "undone"])).note)
+    }
+
+    /// A card that splits a document (board 42 ③): its face heads with both documents, says the move first and then
+    /// each document's rows, each section named with its document's number; its Rewrites row links each document once,
+    /// at its first section — `3.1 · 3.5` — where any other card links each section (C17).
+    func testAPlanCardOverSeveralDocumentsSaysEachAndLinksEachOnce() throws {
+        let split = try card(["kind": "plan", "label": "Plan change", "rationale": "One document said two things.",
+                              "rewrites": Self.splitRewrites, "change": Self.splitChange])
+        let face = WikiChatLogic.cardFace(split)
+        XCTAssertEqual(face.heading, "3.1 Sessions runtime · 3.5 Delivery and heartbeats")
+        XCTAssertEqual(face.rows, [
+            .init(label: "Moves", value: "3.1 §3 Delivery and heartbeats → new document 3.5"),
+            .init(label: "Changes", value: "3.1 §1 Overview (covers)"),
+            .init(label: "Covers", value: "3.1 §1 Overview: For a first-time reader: the model first."),
+            .init(label: "Document", value: "3.5 · New document in Runtime"),
+            .init(label: "Why", value: "One document said two things."),
+        ])
+        let links = WikiChatLogic.rewriteLinks(kind: split.kind, rewrites: split.rewrites)
+        XCTAssertEqual(links.map(\.label), ["3.1", "3.5"])
+        XCTAssertEqual(links.map { WikiChatLogic.sectionID(doc: $0.doc, key: $0.key) },
+                       ["sessions-runtime#s1", "delivery-and-heartbeats#s3"], "each document opens at its first section")
+        let entry = try card(["rewrites": Self.splitRewrites])
+        XCTAssertEqual(WikiChatLogic.rewriteLinks(kind: entry.kind, rewrites: entry.rewrites).map(\.label), ["3.1 §1", "3.5 §1", "3.5 §2"])
+        // A section the confirmed plan no longer numbers is named `slug §key`: its document is the slug.
+        let unnumbered = try card(["kind": "plan", "rewrites": [
+            ["doc": "sessions-runtime", "key": "s1", "where": "sessions-runtime §s1", "title": NSNull()],
+            ["doc": "runbooks", "key": "s1", "where": "4.1 §1", "title": NSNull()],
+        ]])
+        XCTAssertEqual(WikiChatLogic.rewriteLinks(kind: unnumbered.kind, rewrites: unnumbered.rewrites).map(\.label), ["sessions-runtime", "4.1"])
+    }
+
     /// A new document says so, and the category it opens.
     func testAPlanCardsNewDocumentSaysItsCategory() throws {
         var change = Self.planChange
-        change["doc"] = ["slug": "runbooks", "title": "Runbooks", "number": NSNull()]
-        change["category"] = ["key": "operations", "title": "Operations", "opens": true]
-        change["sections"] = [["key": "s1", "title": "Restarting the runner", "number": 1, "edit": "added", "fields": [], "covers": "The steps, in order."]]
+        change["docs"] = [[
+            "slug": "runbooks", "title": "Runbooks", "number": "4.1", "added": true,
+            "category": ["key": "operations", "title": "Operations", "opens": true], "fields": [],
+            "sections": [["key": "s1", "title": "Restarting the runner", "number": 1, "edit": "added", "fields": [], "covers": "The steps, in order."]],
+        ]]
         let face = WikiChatLogic.cardFace(try card(["kind": "plan", "label": "Plan change", "rationale": " ", "change": change]))
-        XCTAssertEqual(face.heading, "Runbooks")
+        XCTAssertEqual(face.heading, "4.1 Runbooks")
         XCTAssertEqual(face.rows, [
             .init(label: "Document", value: "New document in a new category, Operations"),
             .init(label: "Adds", value: "§1 Restarting the runner"),
             .init(label: "Covers", value: "§1 Restarting the runner: The steps, in order."),
         ])
+    }
+
+    /// A change read leniently, as every card read is: a server one release apart that leaves out an empty list or a
+    /// flag draws fewer rows instead of failing the card.
+    func testAPlanChangeWithoutItsEmptyListsStillReads() throws {
+        let sparse = try card(["kind": "plan", "label": "Plan change", "rationale": " ", "change": [
+            "baseVersion": 4, "docs": [["slug": "leases", "title": "Leases", "number": "3.2", "category": Self.runtime]],
+        ]])
+        let change = try XCTUnwrap(sparse.change)
+        XCTAssertEqual(change.moves, [])
+        XCTAssertNil(change.version)
+        XCTAssertEqual(change.docs.first?.added, false)
+        XCTAssertEqual(change.docs.first?.sections, [])
+        let face = WikiChatLogic.cardFace(sparse)
+        XCTAssertEqual(face.heading, "3.2 Leases")
+        XCTAssertEqual(face.rows, [])
     }
 
     /// A press the plan's gate refused lists every error the gate found under its reason, as the web's card does.

@@ -104,17 +104,22 @@ export function storedSections(raw: unknown): WikiChatSectionRef[] {
   });
 }
 
-/** A plan card's change as its row keeps it (`wiki_chat_draft.change`, contract `chat.drafts.kinds.plan`); null on any other card. */
+/**
+ * A plan card's change as its row keeps it (`wiki_chat_draft.change`, contract `chat.drafts.kinds.plan`); null on any
+ * other card. A card drafted before one card changed several documents (C12) kept `{ doc, category }`: its one document.
+ */
 export function storedPlanChange(row: Pick<DraftRow, 'kind' | 'change'>): WikiPlanCardChange | null {
   if (row.kind !== 'plan' || row.change === null || typeof row.change !== 'object' || Array.isArray(row.change)) return null;
-  const change = row.change as Partial<WikiPlanCardChange>;
-  if (typeof change.baseVersion !== 'number' || !change.doc || typeof change.doc !== 'object') return null;
+  const change = row.change as Partial<WikiPlanCardChange> & { doc?: WikiPlanCardChange['docs'][number]; category?: WikiPlanCardChange['categories'][number] | null };
+  const docs = Array.isArray(change.docs) ? change.docs : change.doc && typeof change.doc === 'object' ? [change.doc] : [];
+  if (typeof change.baseVersion !== 'number' || docs.length === 0) return null;
   return {
     baseVersion: change.baseVersion,
     version: typeof change.version === 'number' ? change.version : null,
-    doc: change.doc,
-    category: change.category ?? null,
+    docs,
+    categories: Array.isArray(change.categories) ? change.categories : change.category ? [change.category] : [],
     build: typeof change.build === 'string' ? change.build : null,
+    undoVersion: typeof change.undoVersion === 'number' ? change.undoVersion : null,
   };
 }
 
@@ -146,6 +151,11 @@ export interface DraftFacts {
   replacedBy: ReadonlyMap<string, string>;
   /** Each card whose base moved since it was drafted (contract `chat.drafts.states.changed`). */
   moved: ReadonlySet<string>;
+  /**
+   * Each applied plan card the plan moved on from since its press: a version stored after the one it made, a draft or a
+   * confirmed one. Undo is off for it (contract `chat.presses.undo`; C17).
+   */
+  planMoved: ReadonlySet<string>;
 }
 
 /**
@@ -155,7 +165,7 @@ export interface DraftFacts {
  * the press decides an applied or discarded card's state whatever moved after it.
  */
 export async function draftFacts(db: Reader, ownerId: string, rows: readonly DraftRow[]): Promise<DraftFacts> {
-  if (rows.length === 0) return { openChats: new Set(), replacedBy: new Map(), moved: new Set() };
+  if (rows.length === 0) return { openChats: new Set(), replacedBy: new Map(), moved: new Set(), planMoved: new Set() };
   const chats = await db.session.findMany({
     where: { ownerId, id: { in: [...new Set(rows.map((row) => row.sessionId))] } },
     select: { id: true, status: true, deletedAt: true },
@@ -225,7 +235,21 @@ export async function draftFacts(db: Reader, ownerId: string, rows: readonly Dra
       }
     }
   }
-  return { openChats, replacedBy, moved };
+  // An applied plan card's Undo stands while the plan does where its press left it: the newest version, confirmed (C17).
+  const planMoved = new Set<string>();
+  const applied = rows.filter((row) => row.kind === 'plan' && row.decision === 'applied' && row.undoneAt === null);
+  for (const spaceId of new Set(applied.map((row) => row.spaceId))) {
+    const newest = await db.wikiPlan.findFirst({
+      where: { ownerId, spaceId, status: { in: ['draft', 'confirmed'] } },
+      orderBy: { version: 'desc' },
+      select: { version: true, status: true },
+    });
+    for (const row of applied.filter((one) => one.spaceId === spaceId)) {
+      const made = storedPlanChange(row)?.version ?? null;
+      if (!newest || newest.status !== 'confirmed' || made === null || newest.version !== made) planMoved.add(row.id);
+    }
+  }
+  return { openChats, replacedBy, moved, planMoved };
 }
 
 /** A card's state (contract `chat.drafts.derivation`), from its own columns and its facts. */
@@ -258,17 +282,20 @@ export function sectionViews(plan: PlanRow | null, sections: readonly WikiChatSe
 }
 
 /**
- * A plan card's sections (contract `chat.drafts.kinds.plan`): each as the confirmed plan numbers it when it has it — the
- * version a press confirmed, or the one a changed section stands in before the press — else where the change puts it,
- * under the number the version it was drafted on gives its document (a new document has none yet).
+ * A plan card's sections (contract `chat.drafts.kinds.plan`; C17): each as the confirmed plan numbers it when it has it —
+ * the version a press confirmed, or the one a changed section stands in before the press — else where the change puts
+ * it, under the number its document has in the change (`3.5 §1` for a section of a new document, or one moved into it).
  */
 export function planCardSectionViews(plan: PlanRow | null, change: WikiChatPlanChangeView, sections: readonly WikiChatSectionRef[]): WikiChatDraftSectionView[] {
-  return sections.map((section, i) => {
+  return sections.map((section) => {
     const [confirmed] = sectionViews(plan, [section]);
     if (confirmed!.title !== null) return confirmed!;
-    const one = change.sections.find((s) => s.key === section.key);
-    const n = one?.number ?? i + 1;
-    return { doc: section.doc, key: section.key, where: change.doc.number ? wikiChatWhere(change.doc.number, n) : `§${n}`, title: one?.title ?? null };
+    const doc = change.docs.find((one) => one.slug === section.doc);
+    const one = doc?.sections.find((s) => s.key === section.key && s.edit !== 'removed');
+    const moved = change.moves.find((move) => move.to.doc === section.doc && move.to.key === section.key);
+    const n = one?.number ?? moved?.to.section ?? null;
+    if (!doc || n === null) return confirmed!;
+    return { doc: section.doc, key: section.key, where: wikiChatWhere(doc.number, n), title: one?.title ?? moved?.title ?? null };
   });
 }
 
@@ -432,10 +459,11 @@ async function readPlanCardRewrites(
       continue;
     }
     const report = (job?.report ?? null) as { repoSha?: unknown; docs?: Array<{ slug?: unknown; sections?: BuildReportSection[] }> } | null;
-    const reported = (Array.isArray(report?.docs) ? report!.docs : []).find((doc) => doc.slug === change.doc.slug)?.sections ?? [];
+    // Each section by its own document's part of the report: a card may rebuild several (C17).
+    const reportedOf = (slug: string) => (Array.isArray(report?.docs) ? report!.docs : []).find((doc) => doc.slug === slug)?.sections ?? [];
     const sections: WikiDocsFollowRewriteSection[] = [];
     for (const s of asked) {
-      const one = reported.find((section) => section.key === s.key);
+      const one = reportedOf(s.doc).find((section) => section.key === s.key);
       const inPlan = plan?.docs.some((doc) => doc.slug === s.doc && doc.sections.some((section) => section.key === s.key)) ?? false;
       if (!one || (one.outcome !== 'written' && one.outcome !== 'unchanged')) {
         sections.push({ doc: s.doc, key: s.key, result: !one && !inPlan ? 'gone' : 'failed', changed: null, versionId: null });
@@ -475,12 +503,18 @@ async function readPlanCardRewrites(
 }
 
 /** A card as what it offers and what it counts are read from (`wikiChatCardActions`, `wikiChatFabCounts`, `wikiChatWaiting`). */
-export function cardOf(row: DraftRow, state: WikiChatDraftState, rewrite: WikiDocsFollowRewrite | undefined, plan: PlanRow | null): WikiChatCard {
+export function cardOf(
+  row: DraftRow,
+  state: WikiChatDraftState,
+  rewrite: WikiDocsFollowRewrite | undefined,
+  plan: PlanRow | null,
+  planMoved = false,
+): WikiChatCard {
   const view = rewrite ? rewriteView(rewrite, plan, row.seenAt !== null) : null;
   return {
     kind: row.kind as WikiChatDraftKind,
     state,
-    undoable: wikiChatDraftUndoable(row.kind as WikiChatDraftKind, state, storedOps(row.ops)),
+    undoable: wikiChatDraftUndoable(row.kind as WikiChatDraftKind, state, storedOps(row.ops), planMoved),
     rewrite: view
       ? { result: view.result, reason: view.reason, sha: view.sha, seen: view.seen, sections: view.sections.map((s) => ({ where: s.where, result: s.result, ...(s.changed !== null ? { changed: s.changed } : {}) })) }
       : null,
@@ -569,7 +603,7 @@ export async function draftViews(db: Reader, ownerId: string, rows: readonly Dra
       decision: (row.decision as WikiChatDraftView['decision']) ?? null,
       decidedAt: row.decidedAt?.toISOString() ?? null,
       undoneAt: row.undoneAt?.toISOString() ?? null,
-      undoable: wikiChatDraftUndoable(row.kind as WikiChatDraftKind, state, storedOps(row.ops)),
+      undoable: wikiChatDraftUndoable(row.kind as WikiChatDraftKind, state, storedOps(row.ops), facts.planMoved.has(row.id)),
       changesetId: row.changesetId,
       rewrite: rewrite ? rewriteView(rewrite, plan, row.seenAt !== null) : null,
       change: planViews.get(row.id)?.change ?? null,
@@ -596,7 +630,7 @@ export async function cardsOfChats(db: Reader, ownerId: string, chatIds: readonl
   for (const row of rows) {
     if (!plans.has(row.spaceId)) plans.set(row.spaceId, rewrites.size > 0 ? await confirmedPlanOf(db, ownerId, row.spaceId) : null);
     const cards = out.get(row.sessionId) ?? [];
-    cards.push(cardOf(row, draftStateOf(row, facts), rewrites.get(row.id), plans.get(row.spaceId) ?? null));
+    cards.push(cardOf(row, draftStateOf(row, facts), rewrites.get(row.id), plans.get(row.spaceId) ?? null, facts.planMoved.has(row.id)));
     out.set(row.sessionId, cards);
   }
   return out;
@@ -775,7 +809,11 @@ export async function draftsNote(db: Reader, input: { ownerId: string; sessionId
       continue;
     }
     if (what === 'undone') {
-      lines.push(`- ${id} ${view.label}: undone. What its Apply wrote was taken back, and the sections it rewrote were restored where nothing wrote them since.`);
+      // A plan card's Undo put the plan back as a version of its own (C17): the agent drafts from that one next.
+      const undid = view.kind === 'plan' ? storedPlanChange(byId.get(view.id)!)?.undoVersion ?? null : null;
+      lines.push(undid !== null && view.change
+        ? `- ${id} ${view.label}: undone. The plan is back to what version ${view.change.baseVersion} said, stored and confirmed as version ${undid}, and the sections its rebuild wrote were restored where nothing wrote them since.`
+        : `- ${id} ${view.label}: undone. What its Apply wrote was taken back, and the sections it rewrote were restored where nothing wrote them since.`);
       continue;
     }
     const written = view.ops

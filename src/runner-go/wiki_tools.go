@@ -46,7 +46,8 @@ const (
 )
 
 // wikiDraftKinds is what wiki_draft drafts (contract `agentSurface.chat.draft.params.kind`): a rewrite of sections from
-// main, or a plan change (the plan card, C12), whose change is the whole document as it should read.
+// main, or a plan change (the plan card, C12), whose change is the documents as they should read — several in one card
+// since C17, so a split is one card.
 var wikiDraftKinds = []string{"rewrite", "plan"}
 
 // wikiEntryKinds is contracts/wiki.contract.json kinds, in the order the contract lists them. The
@@ -409,7 +410,7 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 				"kind": map[string]interface{}{
 					"type":        "string",
 					"enum":        wikiDraftKinds,
-					"description": "rewrite: these sections lag behind main and are written again from it. plan: a change to how a document is planned or written, sent as change.",
+					"description": "rewrite: these sections lag behind main and are written again from it. plan: a change to how documents are planned or written — one or several in one card — sent as change.",
 				},
 				"sections": map[string]interface{}{
 					"type":     "array",
@@ -421,10 +422,11 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 					}, "doc", "section"),
 					"description": "rewrite: 1 to " + strconv.Itoa(wikiDraftSectionsMax) + " written sections of the confirmed plan, each { doc, section }.",
 				},
-				"change": map[string]interface{}{"type": "object", "description": "plan: the change, shaped as a plan proposal's: { doc, category? } — " +
-					"the whole document as it should read (the plan page attaches it), and the category it opens when it needs one the plan " +
-					"does not have. A writing requirement goes into the covers of the sections it is for: the writer reads covers, so the " +
-					"next rewrite keeps it."},
+				"change": map[string]interface{}{"type": "object", "description": "plan: the change, { docs, categories? } — docs, each document " +
+					"whole as it should read (the plan page attaches one), one of the plan's by its slug or a new one; categories, the ones " +
+					"it opens that the plan does not have. One card changes several documents at once: to split a document, send it without " +
+					"the sections that move and a new document holding them. A writing requirement goes into the covers of the sections it " +
+					"is for: the writer reads covers, so the next rewrite keeps it."},
 				"reason": map[string]interface{}{
 					"type":        "string",
 					"description": "Why, in a sentence or two: what lags behind main, or what the plan should do. The card shows it.",
