@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>code_explore · architecture board</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Card.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/ChoiceControls.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  /* Board chrome only; every class is prefixed ce- so nothing collides with index.css. */
+  .ce-part { margin-top: 22px; }
+  .ce-part:first-of-type { margin-top: 0; }
+  .ce-two { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .ce-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .ce-col-h { font-size: 13px; font-weight: 700; margin: 0 0 2px; display: flex; align-items: center; gap: 8px; }
+  .ce-box { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 9px 12px; }
+  .ce-box h4 { margin: 0 0 3px; font-size: 13px; font-weight: 650; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .ce-box p { margin: 0; font-size: 12px; color: var(--text-2); line-height: 1.55; }
+  .ce-box.ce-new { border: 1.5px solid var(--brand); background: var(--brand-tint); }
+  .ce-box.ce-new h4 { color: var(--brand-strong); }
+  .ce-box.ce-bad { border-color: var(--error-border); background: var(--error-bg); }
+  .ce-box.ce-warn { border-color: var(--warning-border); background: var(--warning-bg); }
+  .ce-box.ce-ext { border-style: dashed; }
+  .ce-down { text-align: center; color: var(--text-4); font-size: 16px; line-height: 14px; }
+  .ce-num { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--text-1); }
+  .ce-tag { font-size: 10.5px; font-weight: 700; padding: 0 6px; border-radius: 4px; line-height: 17px; white-space: nowrap; }
+  .ce-tag.ce-m1 { background: #e8f5e9; color: #2e7d32; }
+  .ce-tag.ce-m2 { background: #fff3e0; color: #b35c00; }
+  .ce-tag.ce-m3 { background: #f3e5f5; color: #6a1b9a; }
+  .ce-tag.ce-old { background: #eef0f3; color: #646a73; }
+  .ce-arch { display: grid; grid-template-columns: 210px 26px 330px 26px 360px 26px 1fr; align-items: stretch; }
+  .ce-arrow { display: flex; align-items: center; justify-content: center; color: var(--text-4); font-size: 20px; }
+  .ce-seq { margin: 0; padding: 0; list-style: none; counter-reset: s; }
+  .ce-seq li { display: grid; grid-template-columns: 26px 92px 1fr; gap: 8px; align-items: start; padding: 6px 0; border-top: 1px dashed var(--border-subtle); font-size: 12.5px; color: var(--text-1); line-height: 1.55; }
+  .ce-seq li:first-child { border-top: 0; }
+  .ce-seq li::before { counter-increment: s; content: counter(s); display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--text-1); color: #fff; font-size: 11px; font-weight: 700; margin-top: 1px; }
+  .ce-lane { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 4px; text-align: center; white-space: nowrap; }
+  .ce-lane.e { background: #eef0f3; color: #3b4048; }
+  .ce-lane.r { background: #e8f5e9; color: #2e7d32; }
+  .ce-lane.s { background: #fff3e0; color: #b35c00; }
+  .ce-lane.d { background: #e3f2fd; color: #1565c0; }
+  .ce-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .ce-tbl th, .ce-tbl td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border-subtle); vertical-align: top; line-height: 1.5; }
+  .ce-tbl th { font-size: 11.5px; color: var(--text-3); font-weight: 700; }
+  .ce-flow { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-2); flex-wrap: wrap; margin-top: 10px; }
+  .ce-flow .ce-n { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 5px 9px; color: var(--text-1); }
+  .ce-flow .ce-to { color: var(--text-4); }
+  .ce-settings { width: 560px; }
+  .ce-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 0; }
+  .ce-row + .ce-row { border-top: 0; }
+  .ce-hint { color: var(--text-3); font-size: 12px; }
+  .ce-ghost { opacity: .45; }
+  .ce-qs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  .ce-q { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 10px 12px; }
+  .ce-q h4 { margin: 0 0 6px; font-size: 13px; font-weight: 650; }
+  .ce-opt { font-size: 12px; color: var(--text-2); line-height: 1.55; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border-subtle); margin-top: 6px; }
+  .ce-opt b { color: var(--text-1); }
+  .ce-opt.ce-rec { border: 1.5px solid var(--brand); background: var(--brand-tint); }
+  .ce-rec-l { font-size: 10.5px; font-weight: 700; color: var(--brand-strong); margin-left: 4px; }
+  .ce-phases { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .ce-ph { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 9px 11px; }
+  .ce-ph h4 { margin: 0 0 4px; font-size: 13px; font-weight: 650; }
+  .ce-ph .ce-d { font-size: 11.5px; color: var(--text-3); margin-bottom: 4px; }
+  .ce-ph p { margin: 0; font-size: 12px; color: var(--text-2); line-height: 1.55; }
+  .ce-ph.ce-gate { border: 1.5px solid var(--warning-solid); background: var(--warning-bg); }
+</style>
+</head>
+<body class="m">
+<div class="m-sheet zh">
+
+<section id="part-1" class="ce-part">
+  <h1 class="m-h1">code_explore · 给所有引擎的快速代码定位</h1>
+  <p class="m-sub">主会话问一句"X 在哪里"，便宜模型在会话的检出目录里并行搜索，只交回 <span class="a-mono">path:行区间</span> 加一句理由。模型走服务端那把 DeepSeek key（部署方付费），服务端分三级记录并自动打标签，用来持续优化。数据：一台 runner 主机最近 30 天（2026-11-06）。</p>
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k">今天</span> vs <span class="m-k new">改造后</span></div>
+    <div class="ce-two">
+      <div class="ce-col">
+        <div class="ce-col-h"><span class="m-k">① 今天</span>每个引擎在主会话里自己探索</div>
+        <div class="ce-box"><h4>主会话 grep / sed -n / cat，读完再改</h4><p>885 个有编辑的会话：第一次编辑前 p50 <span class="ce-num">12 分钟</span>、累计工具输出 <span class="ce-num">37 万字符</span>（p90 78 万）</p></div>
+        <div class="ce-down">↓</div>
+        <div class="ce-box ce-warn"><h4>其中 61% 是"最后没改的文件" + 搜索输出</h4><p>读了没改的文件 47.8% · 搜索 13.1%。这些内容留在上下文里，之后 p50 还有 <span class="ce-num">107</span> 次模型调用，每次都要重读一遍</p></div>
+        <div class="ce-down">↓</div>
+        <div class="ce-box ce-bad"><h4>子代理探索又慢又贵，而且各引擎各有一套</h4><p>Claude 的 Explore 30 天 136 次，110 次跑在 Opus 5.5 上：p50 <span class="ce-num">10 分钟</span>、<span class="ce-num">101</span> 次工具调用、按 API 价约 <span class="ce-num">$4.4</span> 一次。Codex 的 spawn_agent、Kimi 的 Agent 也都用主模型；没有一档所有引擎通用、又便宜的定位能力</p></div>
+      </div>
+      <div class="ce-col">
+        <div class="ce-col-h"><span class="m-k new">② 改造后</span>先定位，再按区间读</div>
+        <div class="ce-box ce-new"><h4>主会话调用 <span class="a-mono">code_explore(question)</span></h4><p>七种引擎同名同用，都经 <span class="a-mono">orbit mcp</span> 调用；只读，不弹审批卡</p></div>
+        <div class="ce-down">↓</div>
+        <div class="ce-box ce-new"><h4>便宜模型并行搜索 · ≤ 25 秒</h4><p>runner 在 worktree 里执行 grep / files / read（每轮最多 8 个，最多 4 轮）；模型调用经服务端转发给 DeepSeek</p></div>
+        <div class="ce-down">↓</div>
+        <div class="ce-box ce-new"><h4>交回 ≤ 12 条 <span class="a-mono">path:行区间</span> + 理由 · ≤ 1.5k token</h4><p>每条都经 Orbit 核对：必须是实际看到过的内容，并且在当前检出目录里存在。主会话只读这些区间</p></div>
+        <div class="ce-down">↓</div>
+        <div class="ce-box"><h4>服务端审计 + 自动标签 → 持续优化</h4><p>命中 = 主会话随后读过或改过返回的区间；漏召回 = 改了但没返回的文件。不需要人工标注</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="part-2" class="ce-part">
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k">③ 组件</span>仓库在 runner 上，key 在服务端；代码只在调用模型时经服务端发给 DeepSeek</div>
+    <div class="ce-arch">
+      <div class="ce-col">
+        <div class="ce-col-h">引擎（7 种）</div>
+        <div class="ce-box"><h4>Claude · Codex · Kimi</h4><p>DSH · Cursor · Antigravity · OpenCode</p></div>
+        <div class="ce-box ce-new"><h4>提示里加一句指引 <span class="ce-tag ce-m3">M3</span></h4><p>进入陌生代码区域时，先调 code_explore，再只读返回的区间</p></div>
+      </div>
+      <div class="ce-arrow">→</div>
+      <div class="ce-col">
+        <div class="ce-col-h">runner（owner 的机器）</div>
+        <div class="ce-box ce-new"><h4><span class="a-mono">orbit mcp</span> · code_explore <span class="ce-tag ce-m1">M1</span></h4><p><span class="a-mono">readOnlyHint</span>；按各引擎的工具超时定预算（Claude 不限 · Codex 300 秒 · DSH 60 秒 · OpenCode 30 秒）</p></div>
+        <div class="ce-box ce-new"><h4>守护进程：探索循环 <span class="ce-tag ce-m1">M1</span></h4><p>经后台 socket 接到请求 → 每轮向服务端要动作 → 并发执行 → 核对结果 → 返回。key 不在 runner 上</p></div>
+        <div class="ce-box"><h4>worktree 里的只读工具 <span class="ce-tag ce-m1">M1</span></h4><p>grep（Orbit 管理的 rg）· files · read（限行数）· P1 后加 outline。默认遵守 .gitignore，拒读 .env* 和私钥</p></div>
+      </div>
+      <div class="ce-arrow">⇄</div>
+      <div class="ce-col">
+        <div class="ce-col-h">Orbit 服务端（apiserver）</div>
+        <div class="ce-box ce-new"><h4><span class="a-mono">POST /runner/sessions/:id/explore/turns</span> <span class="ce-tag ce-m2">M2</span></h4><p>会话凭证鉴权 → 账户开关 → 全局并发和账户/会话配额 → 调用 DeepSeek（JSON mode，沿用 <span class="a-mono">deepSeekCall</span>）</p></div>
+        <div class="ce-box ce-new"><h4>审计表 <span class="ce-tag ce-m2">M2</span></h4><p><span class="a-mono">code_explore_call</span>（第 0、1 级）· <span class="a-mono">code_explore_turn</span>（第 2 级，开关打开时才写，30 天清理）</p></div>
+        <div class="ce-box ce-new"><h4>打标签作业 <span class="ce-tag ce-m2">M2</span></h4><p>读会话后续的 <span class="a-mono">RunEvent</span>，算出命中和漏召回</p></div>
+        <div class="ce-box"><h4>Settings 偏好 <span class="ce-tag ce-m2">M2</span></h4><p><span class="a-mono">PATCH /users/me/preferences</span>：两个开关，账户级</p></div>
+      </div>
+      <div class="ce-arrow">→</div>
+      <div class="ce-col">
+        <div class="ce-col-h">外部</div>
+        <div class="ce-box ce-ext"><h4>DeepSeek API</h4><p>服务端的 <span class="a-mono">DEEPSEEK_API_KEY</span>，部署方付费；模型由 <span class="a-mono">DEEPSEEK_EXPLORE_MODEL</span> 指定（缺省沿用 <span class="a-mono">DEEPSEEK_MODEL</span>），具体型号 M0 定</p></div>
+        <div class="ce-box"><h4>已有的同类调用 <span class="ce-tag ce-old">已有</span></h4><p>会话命名和 recap 已经用这把 key</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="part-3" class="ce-part">
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k">④ 一次调用</span>默认墙钟 25 秒，到时间就交回已有结果并标 partial</div>
+    <ol class="ce-seq">
+      <li><span class="ce-lane e">引擎</span><span>主会话调用 <span class="a-mono">code_explore({question, paths?})</span>。</span></li>
+      <li><span class="ce-lane r">runner</span><span><span class="a-mono">orbit mcp</span> 交给守护进程，带上本会话的工具超时；预算取 min(25 秒, 超时的一半)。</span></li>
+      <li><span class="ce-lane s">apiserver</span><span>第 n 轮：带上问题、顶层目录和已经看过的结果。检查开关、配额，然后调用 DeepSeek。</span></li>
+      <li><span class="ce-lane d">DeepSeek</span><span>返回 JSON 动作清单：<span class="a-mono">{actions: [grep | files | read …] ≤ 8}</span>，或者 <span class="a-mono">{done: true, locations}</span>。</span></li>
+      <li><span class="ce-lane r">runner</span><span>在 worktree 里并发执行这些动作，输出有上限（grep 最多 200 行、read 每个最多 200 行、一轮合计最多 2.4 万字符），结果带进下一轮。最多 4 轮。</span></li>
+      <li><span class="ce-lane r">runner</span><span>核对：每条位置必须和实际看到过的 grep 命中或 read 区间重叠，文件和行号在当前 worktree 里存在，不满足就丢弃；去重后最多 12 条。</span></li>
+      <li><span class="ce-lane e">引擎</span><span>收到 <span class="a-mono">{locations: [{path, startLine, endLine, why}], coverage, usage}</span>，只读这些区间。</span></li>
+      <li><span class="ce-lane s">apiserver</span><span>已经写好第 0、1 级记录，开关打开时再写第 2 级；打标签作业之后补上命中和漏召回。</span></li>
+    </ol>
+    <p class="m-cap">失败时直接说明（例如 "code explore unavailable; search with rg"），不让 agent 反复重试。DeepSeek 限流不会影响会话本身用的 provider。</p>
+  </div>
+</section>
+
+<section id="part-4" class="ce-part">
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k">⑤ 审计三级</span>已定：第 2 级保留 30 天，Settings 开关，默认关</div>
+    <table class="ce-tbl">
+      <tr><th style="width:120px">级别</th><th>内容</th><th style="width:150px">默认</th><th style="width:210px">保留</th></tr>
+      <tr><td><b>0 · 元数据</b></td><td>账户、工作区、会话、任务、commit、是否有未提交改动、引擎、模型、轮数、每轮延迟、token、估算花费、状态、位置条数、标签</td><td>始终记录</td><td>跟随会话，会话删除时一起删除</td></tr>
+      <tr><td><b>1 · 问答</b></td><td>问题文本，以及返回的位置（路径、行区间、理由，不含代码）。这些本来就在会话转录里，所以没有新增暴露面</td><td>始终记录</td><td>跟随会话</td></tr>
+      <tr><td><b>2 · 完整内容</b></td><td>每一轮的动作、工具输出（即代码）、模型原始回复；入库前过 <span class="a-mono">secret-redaction</span></td><td><b>Settings 开关，默认关</b></td><td><b>30 天</b>，由清理作业删除；会话删除时一起删除</td></tr>
+    </table>
+    <div class="ce-flow">
+      <span class="ce-n">code_explore 返回位置</span><span class="ce-to">→</span>
+      <span class="ce-n">主会话之后 60 次工具调用</span><span class="ce-to">→</span>
+      <span class="ce-n">读过或改过返回的区间 = 命中</span><span class="ce-to">·</span>
+      <span class="ce-n">改了但没返回的文件 = 漏召回</span><span class="ce-to">→</span>
+      <span class="ce-n">命中率、召回率 → 看板、离线回放、挑评测样本</span>
+    </div>
+  </div>
+</section>
+
+<section id="part-5" class="ce-part">
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k new">⑥ Settings</span>新增一张卡片，放在 Session orchestration 之后；沿用现有的卡片、行和开关，不新造外观；文案用英文</div>
+    <div class="ce-two" style="grid-template-columns: 560px 1fr; align-items: start;">
+      <div class="ce-settings">
+        <div class="orbit-card ce-ghost" style="margin-bottom:16px"><div class="orbit-card-head"><h2 class="orbit-card-title">Session orchestration</h2></div><div class="orbit-card-body" style="padding:12px 24px"><div class="ce-row"><div><div>Let sessions orchestrate</div><div class="ce-hint">Sessions in every workspace can spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused.</div></div><div style="flex:none"><button class="orbit-switch" data-checked type="button"><span class="orbit-switch-thumb"></span></button></div></div></div></div>
+        <div class="orbit-card">
+          <div class="orbit-card-head"><h2 class="orbit-card-title">Code explore</h2></div>
+          <div class="orbit-card-body">
+            <div class="ce-row">
+              <div>
+                <div>Let agents use code explore</div>
+                <div class="ce-hint">Agents in every engine can ask a fast model where the code they need lives. It searches the session's checkout on the runner and returns file and line pointers. The question and the code it reads go to DeepSeek through this Orbit server.</div>
+              </div>
+              <div style="flex:none" class="m-mark"><span class="m-n">1</span><button class="orbit-switch" type="button"><span class="orbit-switch-thumb"></span></button></div>
+            </div>
+            <div class="ce-row">
+              <div>
+                <div>Keep full explore records</div>
+                <div class="ce-hint">Keep every step of each explore call, including the code it read, for 30 days so Orbit can improve the search. Off: only what the conversation already shows, plus counts and timings.</div>
+              </div>
+              <div style="flex:none" class="m-mark"><span class="m-n">2</span><button class="orbit-switch" type="button"><span class="orbit-switch-thumb"></span></button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="m-notes" style="margin:0">
+        <li><span class="m-n">1</span><span><b>功能开关</b>：账户级偏好。图里画的是推荐的方案 B，默认关（见 ⑦ Q1）。关闭时，<span class="a-mono">code_explore</span> 不出现在工具列表里，调用也会被拒绝，和 Session orchestration 关闭时的行为一样。</span></li>
+        <li><span class="m-n">2</span><span><b>第 2 级记录</b>：已定，默认关，保留 30 天。打开后只对之后的调用生效；关闭时已经存的记录照常到期清理。</span></li>
+        <li><span class="m-n">·</span><span>iOS 和 Android 的 Settings 同步加这两行，放在 Session 相关设置那组里（各平台的位置按 ios-settings-order 的约定）。</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="part-6" class="ce-part">
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k state">⑦ 待定 · 要你拍板</span>已定的两项：服务端 DeepSeek key（部署方付费）；三级记录，第 2 级 30 天、默认关</div>
+    <div class="ce-qs">
+      <div class="ce-q"><h4>Q1 · 功能本身默认开还是关</h4>
+        <div class="ce-opt"><b>A：所有账户默认开。</b>采用率最高；但其他账户的代码会在用户不知情的情况下发给 DeepSeek。</div>
+        <div class="ce-opt ce-rec"><b>B：默认关，各账户在 Settings 里自己打开</b><span class="ce-rec-l">推荐</span><br>部署方自己的账户上线时就打开。对其他账户开放之前，先核实 DeepSeek 的原始条款（数据在中国境内存储、是否用于训练、保留多久）。</div>
+      </div>
+      <div class="ce-q"><h4>Q2 · M0 评测从哪里拿 key</h4>
+        <div class="ce-opt ce-rec"><b>A：HPC 上放一个评测专用的 key 文件</b><span class="ce-rec-l">推荐</span><br>评测直接调用 DeepSeek，评测完就删除。和产品代码解耦，过不了门槛就不用做服务端。</div>
+        <div class="ce-opt"><b>B：先做转发接口，评测走服务端那把 key。</b>顺带测出真实延迟；但服务端的工作要排在门槛之前。</div>
+      </div>
+      <div class="ce-q"><h4>Q3 · 每条结果要不要带理由</h4>
+        <div class="ce-opt ce-rec"><b>A：<span class="a-mono">path:行区间</span> + 一句不超过 15 个词的理由</b><span class="ce-rec-l">推荐</span><br>每条约多 20 token，主会话可以据此决定先读哪一段。</div>
+        <div class="ce-opt"><b>B：只给 <span class="a-mono">path:行区间</span>。</b>最省 token；主会话要自己判断先读哪段。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="part-7" class="ce-part">
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k">⑧ 落地（按代价排）</span>M0 是门槛：达不到就停，不做产品化</div>
+    <div class="ce-phases">
+      <div class="ce-ph"><h4>前置 · Orbit 自带 rg</h4><div class="ce-d">2–3 天 · 待你确认</div><p>给每个引擎的 PATH 末尾配上 rg，不覆盖系统已有的。P0 的 Codex 修复已核实通过，等合入和发版</p></div>
+      <div class="ce-ph ce-gate"><h4>M0 · 离线评测</h4><div class="ce-d">3–4 天 · 门槛</div><p>用历史任务构造评测集，在基线 commit 上测。比较 rg 基线、DeepSeek 两个候选、主会话当时的轨迹。门槛：recall@10 ≥ 0.7，p50 ≤ 20 秒，单次 ≤ $0.01</p></div>
+      <div class="ce-ph"><h4>M1 · runner</h4><div class="ce-d">1–1.5 周</div><p>工具、探索循环、结果核对、预算；单元测试 + 真实 CLI 加假模型的测试，七种引擎都要跑通</p></div>
+      <div class="ce-ph"><h4>M2 · 服务端和设置</h4><div class="ce-d">约 1.5 周</div><p>转发接口、配额、两张审计表、清理和打标签作业；Settings 三端；更新信任边界文档</p></div>
+      <div class="ce-ph"><h4>M3 · 指引和 A/B</h4><div class="ce-d">2–3 天 + 观察 2 周</div><p>按任务 id 奇偶分组。看第一次编辑前的读/搜次数和字符数、总成本、任务结果、返工率、采用率</p></div>
+    </div>
+    <ul class="m-notes">
+      <li><span class="m-n">1</span><span><b>为什么模型走服务端</b>：key 不下发到 runner，也不进引擎环境；限流、配额和审计集中在一处；服务端本来就存着会话转录，新增的只是"转发给 DeepSeek"和"第 2 级留存"。</span></li>
+      <li><span class="m-n">2</span><span><b>为什么要核对结果</b>：便宜模型会编造位置。只放行"实际看到过、而且存在"的位置，这条检查是确定性的，不依赖模型。</span></li>
+      <li><span class="m-n">3</span><span><b>不做</b>：按会话常驻的语言服务器（内存放不下）、trigram 索引（rg 约 0.05 秒，不是瓶颈）、向量检索（留到 P3，等评测框架就绪）。</span></li>
+    </ul>
+  </div>
+</section>
+
+</div>
+</body>
+</html>
