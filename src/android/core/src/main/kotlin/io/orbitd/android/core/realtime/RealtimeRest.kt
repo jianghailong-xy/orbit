@@ -39,14 +39,21 @@ internal class RealtimeRest(private val api: OrbitApi, private val background: C
         }
     }
 
-    /** Open is the app's list (iOS): what a launch, a connect and an event read. Completed and Trash are read by the page showing them. */
-    suspend fun directory(handle: SessionHandle, previous: DirectorySnapshot? = null): DirectorySnapshot = coroutineScope {
-        val workspaces = async { objects(handle, listOf("workspaces"), previous = previous?.workspaces) }
-        val folders = async { objects(handle, listOf("session-folders"), previous = previous?.folders) }
-        val tags = async { objects(handle, listOf("session-tags"), previous = previous?.tags) }
-        val runners = async { objects(handle, listOf("runners"), previous = previous?.runners) }
-        val open = async { objects(handle, listOf("sessions"), listOf("view" to "open"), previous?.sessions?.get("open")) }
-        DirectorySnapshot(workspaces.await(), mapOf("open" to open.await()), folders.await(), tags.await(), runners.await())
+    /** Open is the app's list (iOS): what a launch, a connect and an event read. Completed and Trash are read by the page showing them.
+     * Only [lists] are read; every other list is [previous]'s, as it was. */
+    suspend fun directory(handle: SessionHandle, previous: DirectorySnapshot? = null,
+        lists: Set<DirectoryList> = DirectoryList.ALL): DirectorySnapshot = coroutineScope {
+        fun read(list: DirectoryList, path: String, held: List<JsonObject>?, query: List<Pair<String, String>> = emptyList()) =
+            if (list in lists) async { objects(handle, listOf(path), query, held) } else null
+        val workspaces = read(DirectoryList.WORKSPACES, "workspaces", previous?.workspaces)
+        val folders = read(DirectoryList.FOLDERS, "session-folders", previous?.folders)
+        val tags = read(DirectoryList.TAGS, "session-tags", previous?.tags)
+        val runners = read(DirectoryList.RUNNERS, "runners", previous?.runners)
+        val open = read(DirectoryList.OPEN, "sessions", previous?.sessions?.get("open"), listOf("view" to "open"))
+        DirectorySnapshot(workspaces?.await() ?: previous?.workspaces.orEmpty(),
+            mapOf("open" to (open?.await() ?: previous?.sessions?.get("open").orEmpty())),
+            folders?.await() ?: previous?.folders.orEmpty(), tags?.await() ?: previous?.tags.orEmpty(),
+            runners?.await() ?: previous?.runners.orEmpty())
     }
 
     /** `after=` pages are 200 events, as on iOS and web: five of them are the server's SSE_GAP_CAP. */

@@ -46,6 +46,31 @@ data class RecordAnchor(val kind: String, val id: String, val seq: Long)
 @Serializable
 data class ControlEvent(val type: String, val sessionId: String = "", val data: JsonObject = JsonObject(emptyMap()))
 
+/** The lists the store reads as its directory ([RealtimeRest.directory]). */
+internal enum class DirectoryList {
+    WORKSPACES, FOLDERS, TAGS, RUNNERS, OPEN;
+    companion object { val ALL: Set<DirectoryList> = entries.toSet() }
+}
+
+/** What an account event moves of the store's lists (docs/list-freshness-design.md §4 R5). A session's, an approval's or a background
+ * job's moves its row in Open and nothing else the store reads; each library event its own list, and `agent.changed` the workspaces.
+ * Runners have no event: a connect reads them. Any other type — a task's, a project's, a watch's, the wiki's, or one this build does
+ * not know — reads none of them. */
+internal fun directoryListsMovedBy(type: String): Set<DirectoryList> = when {
+    type.startsWith("session.") || type.startsWith("approval.") || type == "background.task" -> setOf(DirectoryList.OPEN)
+    type == "tag.changed" -> setOf(DirectoryList.TAGS)
+    type == "folder.changed" -> setOf(DirectoryList.FOLDERS)
+    type == "agent.changed" -> setOf(DirectoryList.WORKSPACES)
+    else -> emptySet()
+}
+
+/** The account events that move [RealtimeState.invalidationRevision]: every type of src/shared/src/realtime.ts `ControlEventType` this
+ * build knows, but `wiki.changed`, which by contract asks for the wiki to be read again and nothing else, and `notification`, which
+ * carries nothing yet. A type this build does not know asks for no read at all (R5). */
+internal val INVALIDATING_EVENTS = setOf("session.created", "session.updated", "session.ended", "session.error", "approval.requested",
+    "approval.resolved", "background.task", "task.changed", "agent.changed", "task.list.changed", "tag.changed", "folder.changed",
+    "provider.changed", "project.criteria_decisions.changed", "project.changed", "watch.changed")
+
 enum class ConnectionState { STOPPED, CONNECTING, CONNECTED, BACKOFF }
 enum class FailureReason { NETWORK, HTTP, PROTOCOL, STORAGE }
 data class RealtimeError(val reason: FailureReason, val httpStatus: Int? = null) {
@@ -109,8 +134,8 @@ data class RealtimeState(
     val session: SessionState? = null,
     val controlConnection: ConnectionState = ConnectionState.STOPPED,
     val controlError: RealtimeError? = null,
-    /** Changes on every control reconnect and non-ping event, including empty sessionId events.
-     * Business pages use it to re-read their own authoritative REST state. */
+    /** Changes on every control reconnect, and once for each burst of account events ([RealtimeStore.EVENT_WINDOW_MS]) that held one
+     * of [INVALIDATING_EVENTS], including empty sessionId events. Business pages use it to re-read their own authoritative REST state. */
     val invalidationRevision: Long = 0,
     /** How many account events of each type this handle's stream has delivered, and how many times the stream has
      * (re)connected. A page that owns a model re-reads it on the event types that concern it (iOS `AppModel.apply`)
