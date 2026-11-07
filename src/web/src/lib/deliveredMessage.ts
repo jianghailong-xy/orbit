@@ -22,7 +22,15 @@
  * older reading of the text to fall back on.
  */
 
-import { isAuthErrorText, isRetryableApiErrorText, isUsageLimitErrorText, type SessionMessageCard } from '@orbit/shared';
+import {
+  isAuthErrorText,
+  isRetryableApiErrorText,
+  isUsageLimitErrorText,
+  parseWikiChatNoteTag,
+  WIKI_CHAT_NOTE_TAGS,
+  wikiChatNoteLabel,
+  type SessionMessageCard,
+} from '@orbit/shared';
 import { parseSessionMessage } from './sessionMessage';
 
 /**
@@ -160,6 +168,9 @@ const TAG_LABEL: Record<string, string> = {
  *  holds. */
 export const WIKI_CONTEXT_TAG = 'orbit_wiki_context';
 
+/** The wiki chat's blocks (wiki contract `chat.notes`), whose line is read off their opening tag's attributes. */
+const WIKI_CHAT_TAGS: ReadonlySet<string> = new Set(Object.values(WIKI_CHAT_NOTE_TAGS));
+
 /** Each name once, in the order first seen, counted where it repeats. */
 function countNames(names: string[]): string {
   const counts = new Map<string, number>();
@@ -182,6 +193,10 @@ function countNames(names: string[]): string {
  * (`<orbit_wiki_context entries="3">`, wiki-push.ts) — "Wiki context · 3 entries". Counted here
  * rather than by reading the block's lines, which is what the expanded list is for: this line is
  * the one that has to be right while the block is still folded shut.
+ *
+ * A wiki chat's blocks are named the same way, off their opening tag's attributes
+ * (`wikiChatNoteLabel`, wiki contract `chat.notes`): "Wiki selection · 3.1 §3 · 1 sentence · 2 sources".
+ * One whose tag lacks what its line needs is named generically, as any block this does not know.
  */
 export function describeNote(note: string): string {
   const names: string[] = [];
@@ -191,6 +206,9 @@ export function describeNote(note: string): string {
     if (tag === WIKI_CONTEXT_TAG) {
       const count = /^<orbit_wiki_context\s+entries="(\d+)"/.exec(rest)?.[1];
       names.push(count ? `Wiki context · ${count} entries` : 'Wiki context');
+    } else if (tag && WIKI_CHAT_TAGS.has(tag)) {
+      const chatNote = parseWikiChatNoteTag(rest);
+      names.push(chatNote ? wikiChatNoteLabel(chatNote) : 'context');
     } else {
       names.push(tag && Object.hasOwn(TAG_LABEL, tag) ? TAG_LABEL[tag] : 'context');
     }

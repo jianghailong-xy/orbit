@@ -424,6 +424,9 @@ func TestResumableSweepKeeps(t *testing.T) {
 		prepare func(t *testing.T, f *resumableFixture, path, session string)
 		// atTheSecondLook marks the one reason only the second look asks about, for what it costs.
 		atTheSecondLook bool
+		// onlyWithoutABudget marks a reason a storage budget's floor sets aside (underBudgetFloor): the two weeks
+		// themselves, and a commit only the session's own branch has.
+		onlyWithoutABudget bool
 	}{
 		{name: "a modified tracked file", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			writeUnder(t, path, "base.txt", "changed and not committed\n")
@@ -443,18 +446,18 @@ func TestResumableSweepKeeps(t *testing.T) {
 			writeUnder(t, path, "scratch/untracked.txt", "only here\n")
 			ageCheckout(t, path, 20)
 		}},
-		{name: "a commit no remote has", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a commit no remote has", onlyWithoutABudget: true, prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			commitFile(t, path, "unpushed.txt", "local\n", "unpushed")
 			ageCheckout(t, path, 20)
 		}},
-		{name: "a file written within two weeks, content unchanged", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a file written within two weeks, content unchanged", onlyWithoutABudget: true, prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			ageCheckout(t, path, 20)
 			now := time.Now().Add(-13 * 24 * time.Hour)
 			if err := os.Chtimes(filepath.Join(path, session+".txt"), now, now); err != nil {
 				t.Fatal(err)
 			}
 		}},
-		{name: "build output written within two weeks", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "build output written within two weeks", onlyWithoutABudget: true, prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			ignoring(t, path, "dist/")
 			ageCheckout(t, path, 20)
 			writeUnder(t, path, "dist/deep/app.js", "a recent build is a recent use\n")
@@ -464,7 +467,7 @@ func TestResumableSweepKeeps(t *testing.T) {
 				_ = os.Chtimes(dir, ago, ago)
 			}
 		}},
-		{name: "a file deleted within two weeks", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a file deleted within two weeks", onlyWithoutABudget: true, prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			ignoring(t, path, "dist/")
 			writeUnder(t, path, "dist/deep/app.js", "a build\n")
 			ageCheckout(t, path, 20)
@@ -674,34 +677,51 @@ func TestResumableSweepKeeps(t *testing.T) {
 		}},
 	}
 	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			f := newResumableFixture(t)
-			const session = "sess-kept"
-			path := f.checkout(t, session)
-			neighbour := f.checkout(t, "sess-neighbour")
-			c.prepare(t, f, path, session)
-			// The first look is a judgement of its own, not a draft of the second.
-			secondLook := make(chan struct{}, 1)
-			f.set(func() {
-				f.atSecondLook[session] = func() {
-					secondLook <- struct{}{}
-					if !c.atTheSecondLook {
-						t.Errorf("%s got past the first look", c.name)
+		// Under a storage budget's floor the same reasons keep a checkout however recently it was written.
+		for _, underABudget := range []bool{false, true} {
+			if underABudget && c.onlyWithoutABudget {
+				continue
+			}
+			name := c.name
+			if underABudget {
+				name = "under a storage budget's floor, " + name
+			}
+			t.Run(name, func(t *testing.T) {
+				f := newResumableFixture(t)
+				const session = "sess-kept"
+				path := f.checkout(t, session)
+				neighbour := f.checkout(t, "sess-neighbour")
+				c.prepare(t, f, path, session)
+				pressure := diskUnderTheFloor()
+				if underABudget {
+					// Both two days old, well inside the two weeks: what keeps this one is what it holds.
+					ageCheckout(t, path, 2)
+					ageCheckout(t, neighbour, 2)
+					pressure = measureWorktreePressure(0, smallBudgetUnderItsFloor())
+				}
+				// The first look is a judgement of its own, not a draft of the second.
+				secondLook := make(chan struct{}, 1)
+				f.set(func() {
+					f.atSecondLook[session] = func() {
+						secondLook <- struct{}{}
+						if !c.atTheSecondLook {
+							t.Errorf("%s got past the first look", c.name)
+						}
 					}
+				})
+
+				gcResumableCheckouts(f.transport, f.pool, pressure)
+
+				if c.atTheSecondLook && len(secondLook) == 0 {
+					t.Errorf("%s is the second look's to find: the first look does not pay for it", c.name)
+				}
+				requireCheckoutOnDisk(t, path, c.name)
+				requireCheckoutReclaimed(t, neighbour, "its neighbour goes, so the sweep did run")
+				if _, err := git(path, "rev-parse", "--verify", "HEAD"); err != nil {
+					t.Fatalf("the kept checkout must still be a checkout: %v", err)
 				}
 			})
-
-			sweepOnFullDisk(f)
-
-			if c.atTheSecondLook && len(secondLook) == 0 {
-				t.Errorf("%s is the second look's to find: the first look does not pay for it", c.name)
-			}
-			requireCheckoutOnDisk(t, path, c.name)
-			requireCheckoutReclaimed(t, neighbour, "its neighbour goes, so the sweep did run")
-			if _, err := git(path, "rev-parse", "--verify", "HEAD"); err != nil {
-				t.Fatalf("the kept checkout must still be a checkout: %v", err)
-			}
-		})
+		}
 	}
 }
 
@@ -1540,9 +1560,10 @@ func TestARestartGoesOnAsItDidWhereAnythingElseIsTheCase(t *testing.T) {
 			mustGit(t, f.repo, "update-ref", absentRefName(job.SessionID), job.Branch)
 		}},
 		{name: "its branch is new", want: outcome{true, true, isoWorktree}, prepare: func(t *testing.T, f *resumableFixture, job *ClaimedSession) {}},
-		{name: "its branch has gone, its base ref and mark have not", want: outcome{true, true, isoWorktree}, prepare: func(t *testing.T, f *resumableFixture, job *ClaimedSession) {
+		// With a mark saying its checkout is away, the branch comes back from the mark first, and the restart leaves
+		// the checkout away as any other (TestABranchDeletedWhileItsCheckoutIsAwayComesBackWithIt).
+		{name: "its branch has gone, its base ref has not, and nothing marks its checkout away", want: outcome{true, true, isoWorktree}, prepare: func(t *testing.T, f *resumableFixture, job *ClaimedSession) {
 			mustGit(t, f.repo, "update-ref", baseRefName(job.SessionID), "HEAD")
-			mustGit(t, f.repo, "update-ref", absentRefName(job.SessionID), "HEAD")
 		}},
 		{name: "an empty directory stands at its path", want: outcome{true, true, isoWorktree}, prepare: func(t *testing.T, f *resumableFixture, job *ClaimedSession) {
 			mustGit(t, f.repo, "branch", job.Branch)
@@ -2298,7 +2319,7 @@ func (s *resumableSchedule) sweepAfter(d time.Duration, pressure worktreeGCPress
 	s.t.Helper()
 	s.clock.Advance(d)
 	asked := s.queryCount()
-	logs := captureLogs(s.t, func() { s.sweeper.sweepResumable(s.transport, s.pool, pressure) })
+	logs := captureLogs(s.t, func() { s.sweeper.sweepResumable(s.transport, s.pool, pressure, false) })
 	return logs, s.queryCount() != asked
 }
 
@@ -3066,14 +3087,21 @@ func TestTheRunLoopCallsEverySideOfTheResumableSweep(t *testing.T) {
 	}
 	body := string(source)
 	// The first half first and on nothing but the sweeper's schedule, and the second behind it, both times.
-	if !strings.Contains(body, "if worktreeGC.due(time.Now()) {\n\t\tliveSet := pool.ids()\n\t\tpressure := measureWorktreePressure(diskFloorMb.Load(), &storage)\n\t\tgcWorktrees(t, liveSet, pressure)\n\t\tworktreeGC.sweepResumable(t, pool, pressure)\n") {
+	if !strings.Contains(body, "if worktreeGC.due(time.Now()) {\n\t\tliveSet := pool.ids()\n\t\tpressure := measureWorktreePressure(diskFloorMb.Load(), &storage)\n\t\tgcWorktrees(t, liveSet, pressure)\n\t\tworktreeGC.sweepResumable(t, pool, pressure, false)\n") {
 		t.Error("the startup sweep must run the first half, then the second, whenever a sweep is due")
 	}
-	if !strings.Contains(body, "if worktreeGC.due(time.Now()) {\n\t\t\tpressure := measureWorktreePressure(diskFloorMb.Load(), &storage)\n\t\t\tgcWorktrees(t, pool.ids(), pressure)\n\t\t\tworktreeGC.sweepResumable(t, pool, pressure)\n") {
+	if !strings.Contains(body, "if worktreeGC.due(time.Now()) {\n\t\t\tpressure := measureWorktreePressure(diskFloorMb.Load(), &storage)\n\t\t\tgcWorktrees(t, pool.ids(), pressure)\n\t\t\tworktreeGC.sweepResumable(t, pool, pressure, false)\n") {
 		t.Error("the claim loop's sweep must run the first half, then the second, whenever a sweep is due")
 	}
 	if got := strings.Count(body, "gcResumableCheckouts(t, pool, pressure)"); got != 1 {
 		t.Errorf("sweepResumable must be the one door to the second half, or it runs past a wait: found %d calls", got)
+	}
+	// Only the room made for a new checkout under a storage budget goes past the wait, through that same door.
+	room := strings.Index(body, "func (s *worktreeSweeper) makeRoom(")
+	pastTheWait := strings.Index(body, "sweepResumable(t, pool, pressure, true)")
+	if strings.Count(body, "sweepResumable(t, pool, pressure, true)") != 1 || room < 0 || pastTheWait < room ||
+		pastTheWait > room+strings.Index(body[room:], "\n}\n") {
+		t.Error("makeRoom, and nothing else, must take the second half past the wait")
 	}
 	// One sweeper, for as long as the process runs, which starts it with no wait: that is what a restart forgetting
 	// the wait comes to, and nothing but sweepResumable may touch it.
@@ -3088,7 +3116,9 @@ func TestTheRunLoopCallsEverySideOfTheResumableSweep(t *testing.T) {
 	} else {
 		end := door + strings.Index(body[door:], "\n}\n")
 		rest := strings.Replace(body[:door]+body[end:], "\tresumableWaitUntil time.Time\n", "", 1)
-		if strings.Contains(strings.Replace(rest, "while resumableWaitUntil is ahead", "", 1), "resumableWaitUntil") {
+		rest = strings.Replace(rest, "\tresumableWaitMeasured time.Time\n", "", 1)
+		if strings.Contains(strings.Replace(rest, "while resumableWaitUntil is ahead", "", 1), "resumableWaitUntil") ||
+			strings.Contains(rest, "resumableWaitMeasured") {
 			t.Error("nothing but sweepResumable may read or write the wait")
 		}
 	}

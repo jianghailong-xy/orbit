@@ -29,7 +29,7 @@
 # Settings, besides the staging stack's own (staging-lib.sh, staging-up.sh):
 #   ORBIT_MASS_DISCONNECT_RUNNERS      runners                                                      10
 #   ORBIT_MASS_DISCONNECT_CUT          runners the partition cuts off, a fifth of them or more       2
-#   ORBIT_MASS_DISCONNECT_SECONDS      how long each outage lasts                                   180
+#   ORBIT_MASS_DISCONNECT_SECONDS      how long each outage lasts                                   420
 #   ORBIT_MASS_DISCONNECT_SWEEP_AFTER  the partition: how many seconds after the first runner cut off crosses the
 #                                      reaper's offline line its next sweep is to fall, under 30; the runners cut off
 #                                      and the moment are chosen for it (README.md). Unset, the partition cuts off
@@ -71,11 +71,12 @@ node_late="${ORBIT_MASS_DISCONNECT_NODE_LATE:-1}"
 # The second link gateway node, with ORBIT_MASS_DISCONNECT_GATEWAYS=2 (staging.gateways.compose.yml).
 gateway_b="$project-link-gateway-b"
 # The reaper's own numbers (src/apiserver/src/realtime/reaper.service.ts, src/apiserver/src/runners/runner-presence.ts):
-# silent for longer than offline_after, a runner reads as offline; a sweep every sweep_every; nothing reaped as offline
+# silent for longer than offline_after, a runner reads as offline to the reaper (five minutes; the runner list still
+# calls it offline at 90 s); a sweep every sweep_every; nothing reaped as offline
 # for startup_grace after the apiserver starts; the mass silence counts the runners that missed a beat (silent for
 # longer than silent_after) among those heard from within window of that line. And the runner's heartbeat interval
 # (src/runner-go/runloop.go).
-offline_after=90 silent_after=45 sweep_every=30 startup_grace=180 window=600 heartbeat=30
+offline_after=300 silent_after=45 sweep_every=30 startup_grace=180 window=600 heartbeat=30
 [[ "$count" =~ ^[1-9][0-9]*$ ]] || die "ORBIT_MASS_DISCONNECT_RUNNERS must be a positive whole number, not $count"
 [[ "$cut" =~ ^[1-9][0-9]*$ ]] || die "ORBIT_MASS_DISCONNECT_CUT must be a positive whole number, not $cut"
 [[ "$outage" =~ ^[1-9][0-9]*$ ]] || die "ORBIT_MASS_DISCONNECT_SECONDS must be a positive whole number, not $outage"
@@ -84,7 +85,7 @@ offline_after=90 silent_after=45 sweep_every=30 startup_grace=180 window=600 hea
   die "ORBIT_MASS_DISCONNECT_SWEEP_AFTER must be a number of seconds above 0 and under $sweep_every, not $sweep_after"
 [ "$cut" -lt "$count" ] || die "ORBIT_MASS_DISCONNECT_CUT ($cut) must leave some of the $count runners connected"
 [ $((cut * 5)) -ge "$count" ] || die "ORBIT_MASS_DISCONNECT_CUT ($cut) must be a fifth of the $count runners or more"
-# A runner that beat just before the cut is past the offline line 90 s into it, and the sweep after that comes within
+# A runner that beat just before the cut is past the reap line 300 s into it, and the sweep after that comes within
 # 30 s: two sweeps more than that, and every runner cut off is past the line for at least one whole sweep interval.
 [ "$outage" -ge $((offline_after + 2 * sweep_every)) ] ||
   die "ORBIT_MASS_DISCONNECT_SECONDS ($outage) must be $((offline_after + 2 * sweep_every)) or more: every runner cut off has to be past the reaper's offline line for a sweep"

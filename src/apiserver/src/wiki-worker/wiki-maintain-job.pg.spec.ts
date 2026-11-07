@@ -116,6 +116,13 @@
  *      session that gets new records afterwards is read by the next ordinary run, whose notes pass goes the way of a duplicate;
  *      its end makes the round a due space owes, ahead of the next batch; and a worker stopped between its verdicts hands it
  *      back, and the replay records nothing twice.
+ *  32. a replay after the lease ran out (2026-11-06, the orbit space's runs of 09:24 and 10:27, `maintenance.job.server.replay`):
+ *      the first attempt asked about every session and recorded their ops, and stalled before its advance; meanwhile a session
+ *      got records (the extraction's case) or a second memory write (the notes pass's). The replay asks each the question the
+ *      first attempt asked, from the case file kept with it (`modelQueue.material`) — where it used to build the question again,
+ *      be refused as asked before with a different call, and fail the round (extraction) or leave the notes unanswered — and
+ *      the round succeeds with no question asked of the model again, no op written twice, and the session's record naming the
+ *      case file the extraction read.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts
  *
@@ -152,7 +159,7 @@ import { WikiPlans } from '../wiki/wiki-plan';
 import { WikiRefusalError, WikiService, type WikiPrincipal } from '../wiki/wiki.service';
 import { WikiRepoOps, type WikiRepoOpWake } from './wiki-repo-ops';
 import { toUuid, WIKI_ANCHOR_RULES, WIKI_DOCS_BUILD_JOB, WIKI_JOB, WIKI_LIMITS, WIKI_MAINTAIN_JOB, WIKI_MAINTENANCE_JOB, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
-import { WikiJobExecutor, WIKI_JOB_RUNNERS, type WikiJobRunner } from './wiki-job-executor';
+import { WikiJobExecutor, WikiJobInfraError, WIKI_JOB_RUNNERS, type WikiJobRunner } from './wiki-job-executor';
 import { claimWikiJobs, reclaimExpiredWikiJobs, WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
 import { WikiModelStatusProbe } from './wiki-model-status';
@@ -495,8 +502,12 @@ const REPO_WAKE: WikiRepoOpWake = {
 /** What the runs of a case said as they went (`WikiJobContext.log`), every worker's; cleared by `clearWork`. */
 const runLog: string[] = [];
 
-/** The worker under test, its kind map the one the worker module builds — with this spec's services. */
-function worker(h: Harness, over: { repoWaitMs?: number; wake?: boolean } = {}): { queue: WikiModelRequestQueue; executor: WikiJobExecutor } {
+/**
+ * The worker under test, its kind map the one the worker module builds — with this spec's services. `leaseMs` and `renewMs` are
+ * its jobs' lease and how often it is renewed: the deployment's, unless a case wants a worker whose job lease runs out only when
+ * the case says so (the replay cases).
+ */
+function worker(h: Harness, over: { repoWaitMs?: number; wake?: boolean; leaseMs?: number; renewMs?: number } = {}): { queue: WikiModelRequestQueue; executor: WikiJobExecutor } {
   const options = { leaseMs: HARNESS_LEASE_MS, renewMs: HARNESS_RENEW_MS, partialMs: 40, pollMs: 30 };
   const config_ = config(h);
   const queue = new WikiModelRequestQueue(
@@ -526,7 +537,9 @@ function worker(h: Harness, over: { repoWaitMs?: number; wake?: boolean } = {}):
       },
     }),
   };
-  const executor = new WikiJobExecutor(h.prisma as unknown as PrismaService, queue, options, runners);
+  const executor = new WikiJobExecutor(
+    h.prisma as unknown as PrismaService, queue, { ...options, leaseMs: over.leaseMs ?? HARNESS_LEASE_MS, renewMs: over.renewMs ?? HARNESS_RENEW_MS }, runners,
+  );
   live.push({ queue, executor });
   return { queue, executor };
 }
@@ -4411,4 +4424,192 @@ test('a record that arrives between two page reads is extracted with its session
   assert.equal(cursor.positionAt?.toISOString(), restedAt(14, 30).toISOString());
   assert.equal(await h.prisma.sessionMergeReceipt.count({ where: { sessionId: ids[0]!, createdAt: { gt: cursor.positionAt! } } }), 1,
     'what the session recorded mid-run is still ahead of the cursor, for the next run');
+});
+
+// ── A replay after the lease ran out (2026-11-06) ────────────────────────────────────────────────
+
+/**
+ * The first advance of a run held, as a worker on a stalled host holds its job: every question asked and answered, the ops
+ * recorded, the cursor not moved. `release` lets the held attempt go as the platform's failure; by then another worker holds the
+ * job, and what the attempt settles is nothing. The advances after the first are the server's own.
+ */
+function holdFirstAdvance(h: Harness): { held: () => boolean; release: () => void; restore: () => void } {
+  let holding = false;
+  let release: () => void = () => undefined;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  h.maintenance.advanceRecorded = (async (...args: Parameters<WikiMaintenance['advanceRecorded']>) => {
+    if (holding) return WikiMaintenance.prototype.advanceRecorded.apply(h.maintenance, args);
+    holding = true;
+    await released;
+    throw new WikiJobInfraError('the stalled attempt was let go after its job was taken over');
+  }) as WikiMaintenance['advanceRecorded'];
+  return {
+    held: () => holding,
+    release: () => release(),
+    restore: () => {
+      h.maintenance.advanceRecorded = WikiMaintenance.prototype.advanceRecorded;
+    },
+  };
+}
+
+/** The job's lease runs out, as it does when its worker stops renewing: the next pass's sweep puts it back and claims it. */
+async function leaseRunsOut(h: Harness, jobId: string): Promise<void> {
+  const { rowCount } = await h.sql.query(
+    `UPDATE "wiki_job" SET "lease_deadline_at" = now() - interval '1 second' WHERE "id" = $1 AND "state" = 'running'`, [jobId],
+  );
+  assert.equal(rowCount, 1, 'the job is running under the stalled attempt');
+}
+
+/** A job's questions of the extraction and of the notes pass: each row, by step, unit and attempt. */
+async function questionsOf(h: Harness, jobId: string): Promise<string[]> {
+  return (await h.sql.query<{ row: string }>(
+    `SELECT "step" || ' ' || "unit" || ' ' || "attempt" AS "row" FROM "wiki_model_request"
+      WHERE "job_id" = $1 AND "step" IN ('extract', 'claims') ORDER BY 1`, [jobId],
+  )).rows.map((one) => one.row);
+}
+
+/** The space's ops and the changesets that hold them. */
+async function writtenOps(h: Harness, fx: Fixture): Promise<{ changesets: number; ops: string[] }> {
+  const rows = await h.prisma.wikiChangesetOp.findMany({ where: { ownerId: h.ownerId, changeset: { spaceId: fx.spaceId } }, orderBy: { id: 'asc' }, select: { id: true, changesetId: true } });
+  return { changesets: new Set(rows.map((row) => row.changesetId)).size, ops: rows.map((row) => row.id) };
+}
+
+/** The hash the space's record of a session holds: what `unchanged` compares the session's next read with. */
+async function recordedHash(h: Harness, fx: Fixture, sessionId: string): Promise<string> {
+  return (await h.sql.query<{ hash: string }>(`SELECT "hash" FROM "wiki_dossier" WHERE "space_id" = $1 AND "session_id" = $2`, [fx.spaceId, sessionId])).rows[0]!.hash;
+}
+
+/** The session's case file as a page reads it now, and its notes' file. */
+async function readNow(h: Harness, sessionId: string): Promise<{ hash: string; text: string; notes: string }> {
+  const reader = h.prisma as unknown as DossierReader;
+  const records = (await loadDossierRecords(reader, h.ownerId, sessionId))!;
+  const dossier = await buildDossier(reader, records, { literals: [] });
+  const notes = await buildDossier(reader, records, { literals: [], claims: true });
+  return { hash: dossier.hash, text: dossier.text, notes: notes.text };
+}
+
+/** The prompt a job's question of `step` about a session was asked with. */
+async function promptAsked(h: Harness, jobId: string, step: string, sessionId: string): Promise<string> {
+  return (await h.sql.query<{ prompt: string }>(
+    `SELECT "request"->>'prompt' AS "prompt" FROM "wiki_model_request" WHERE "job_id" = $1 AND "step" = $2 AND "unit" = $3`, [jobId, step, sessionId],
+  )).rows[0]!.prompt;
+}
+
+/**
+ * The first attempt of the fixture's run, held at its advance with its ops recorded; then `between` — what the sessions do
+ * while it stalls — and the lease running out; then the replay, by the next worker, to its end. Answers what the first
+ * attempt left, for the case to hold the replay to. The first worker's lease is an hour long and never renewed: it runs out
+ * when the case says so and not before, however slowly a loaded host gets the attempt to its advance — where a 60-second
+ * lease could run out first, and that worker's own next pass take the job over while the attempt still runs.
+ */
+async function replayedAfterLostLease(h: Harness, fx: Fixture, between: () => Promise<void>): Promise<{ questions: string[]; written: { changesets: number; ops: string[] }; hits: number }> {
+  const hold = holdFirstAdvance(h);
+  try {
+    await pass(h, worker(h, { leaseMs: 3_600_000, renewMs: 3_600_000 }), async () => hold.held());
+    const questions = await questionsOf(h, fx.jobId);
+    const written = await writtenOps(h, fx);
+    const hits = h.model.hits.length;
+    await between();
+    await leaseRunsOut(h, fx.jobId);
+    await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state));
+    return { questions, written, hits };
+  } finally {
+    hold.release();
+    hold.restore();
+  }
+}
+
+/** The questions of the extraction and the notes pass among the calls the model was sent since `from`. */
+function asksSince(h: Harness, from: number): number {
+  return h.model.hits.slice(from).filter((hit) => isExtraction(hit.prompt) || isNotesPass(hit.prompt)).length;
+}
+
+test('a run whose lease ran out is replayed, and a session that got records meanwhile is asked what the first attempt asked: the round succeeds, the model is asked nothing again and no op is written twice (2026-11-06)', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await realFixture(h);
+  const going = await workedSession(h, fx);
+  const still = await workedSession(h, fx);
+  h.model.answer = ({ prompt }) => (isExtraction(prompt)
+    ? JSON.stringify([entryOf(fx, prompt, `PORT 在导入时读取 ${createHash('sha256').update(prompt).digest('hex').slice(0, 8)}`)])
+    : SUPPORTED);
+  let read = '';
+  let now = { hash: '', text: '', notes: '' };
+  const first = await replayedAfterLostLease(h, fx, async () => {
+    read = await recordedHash(h, fx, going.id);
+    // While the first attempt stalls, one session goes on: the owner writes to it again, and the test is run once more.
+    await h.sql.query(
+      `INSERT INTO "conversation_turn"("id","session_id","seq","client_turn_id","content","status","kind","send_intent")
+       VALUES ($1,$2,2,$3,$4,'ANSWERED','message','NEXT_TURN')`,
+      [randomUUID(), going.id, `spec-${randomUUID()}`, '再确认一次：端口一律从 fixture 的返回值里取，任何地方都不要写死。'],
+    );
+    await recordCall(h, going.id, 'Bash', { command: 'go test ./...' }, 'ok  \texample.com/app\t0.180s');
+    now = await readNow(h, going.id);
+  });
+  // The first attempt asked about both sessions and recorded an op of each; the session the replay read is another.
+  assert.deepEqual(first.questions, [`extract ${going.id} 1`, `extract ${still.id} 1`].sort());
+  assert.deepEqual([first.written.changesets, first.written.ops.length], [1, 2]);
+  assert.notEqual(now.hash, read, 'the session went on: read again, its case file is not the one the first attempt asked about');
+  assert.ok(!(await promptAsked(h, fx.jobId, 'extract', going.id)).includes(now.text));
+
+  // The round succeeds, one lost lease counted against the job and two starts on the run.
+  const job = await h.sql.query<{ state: string; attempts: number; error: string | null }>(`SELECT "state", "attempts", "error" FROM "wiki_job" WHERE "id" = $1`, [fx.jobId]);
+  assert.deepEqual(job.rows[0], { state: 'succeeded', attempts: 1, error: null }, String(job.rows[0]?.error));
+  const run = await runRow(h, fx.runId);
+  assert.deepEqual([run.outcome, run.attempts], ['succeeded', 2]);
+  assert.equal(runLog.filter((line) => line.includes('already exists with a different call')).length, 0);
+  // Nothing asked twice: the replay asked the model no question of the extraction, made no request of its own for it, and the
+  // run's calls are its requests, each once — the two extractions and the two verdicts.
+  assert.equal(asksSince(h, first.hits), 0, 'the replay asked the model nothing the first attempt had asked');
+  assert.deepEqual(await questionsOf(h, fx.jobId), first.questions);
+  const report = run.report as unknown as { dossiers: number; entries: Record<string, number>; ops: Record<string, number>; tokens: Record<string, number> };
+  assert.deepEqual([report.dossiers, report.entries.kept, report.ops.recorded, report.ops.refused, report.tokens.calls], [2, 2, 2, 0, 4]);
+  // Nothing written twice: the replay's batch is the first attempt's, and met its own changeset; each op got one verdict.
+  assert.deepEqual(await writtenOps(h, fx), first.written);
+  assert.deepEqual(await ownVerdicts(h, fx.jobId), { verdicts: 2, waiting: 0 });
+  // The space's record says what the extraction read, not the newer read: the next run holds the session to the file asked.
+  assert.equal(await recordedHash(h, fx, going.id), read);
+});
+
+test('the notes pass is replayed the same way: a session that wrote another note meanwhile has its notes asked as the first attempt asked them, and its entry is neither lost nor written twice (2026-11-06)', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await realFixture(h);
+  const noted = await workedSession(h, fx, { notes: [NOTE] });
+  h.model.answer = ({ prompt }) => {
+    if (isExtraction(prompt)) return JSON.stringify([entryOf(fx, prompt, 'PORT 在导入时读取')]);
+    if (isNotesPass(prompt)) return shownAs(fx, prompt, 'The fixture owes the test its url');
+    return SUPPORTED;
+  };
+  let now = { hash: '', text: '', notes: '' };
+  const first = await replayedAfterLostLease(h, fx, async () => {
+    // While the first attempt stalls, the agent writes a second note to its memory: a claim only the notes pass reads.
+    await recordCall(h, noted.id, 'Write', {
+      file_path: '/home/me/.claude/projects/app/memory/note-2.md',
+      content: '---\ntype: project\n---\nThe fixture reads PORT when it is imported, so setting it afterwards changes nothing.\n',
+    }, 'File created.');
+    now = await readNow(h, noted.id);
+  });
+  assert.deepEqual(first.questions, [`claims ${noted.id} 1`, `extract ${noted.id} 1`]);
+  assert.deepEqual([first.written.changesets, first.written.ops.length], [2, 2], 'the extraction\'s op and the note\'s, each in a batch of its own');
+  // The extraction reads the session as before (a write to memory is no line of it); the notes pass reads another file.
+  assert.ok((await promptAsked(h, fx.jobId, 'extract', noted.id)).includes(`\n==== CASE FILE ====\n${now.text}\n==== END OF CASE FILE ====`));
+  assert.ok(now.notes.includes('C2 claim: The fixture reads PORT when it is imported'));
+  assert.ok(!(await promptAsked(h, fx.jobId, 'claims', noted.id)).includes(now.notes));
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  assert.equal(runLog.filter((line) => line.includes('already exists with a different call')).length, 0, runLog.join('\n'));
+  // The notes the replay reports are the ones the first attempt asked about, answered as it answered them.
+  const report = (await runRow(h, fx.runId)).report as unknown as { claims: Record<string, number>; ops: Record<string, number> };
+  assert.deepEqual(report.claims, { ...emptyClaims, claudeSessions: 1, seen: 1, shown: 1, entries: 1 });
+  assert.deepEqual([report.ops.recorded, report.ops.refused], [2, 0]);
+  assert.equal(asksSince(h, first.hits), 0, 'the replay asked the model nothing the first attempt had asked');
+  assert.deepEqual(await questionsOf(h, fx.jobId), first.questions);
+  assert.deepEqual(await writtenOps(h, fx), first.written);
+  assert.deepEqual(await ownVerdicts(h, fx.jobId), { verdicts: 2, waiting: 0 });
+  const ops = await h.prisma.wikiChangesetOp.findMany({ where: { ownerId: h.ownerId, changeset: { spaceId: fx.spaceId } }, select: { promptedBy: true } });
+  assert.deepEqual(ops.filter((op) => op.promptedBy !== null).map((op) => op.promptedBy), [{ eventId: noted.writes.get('note-1.md'), file: 'note-1.md' }], 'the first note\'s entry, once');
 });

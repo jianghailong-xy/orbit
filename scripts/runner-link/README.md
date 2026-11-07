@@ -139,13 +139,14 @@ agent session's `ORBIT_*` variables, which Compose would otherwise prefer to the
 `src/apiserver/src/realtime/reaper-mass-disconnect.pg.spec.ts` cuts runners off from a cell of two production apiservers
 over one database, on the clock (design §15.6). It needs no staging stack. Its header lists the cases.
 
-- **The default run is case (1) alone**, a smoke of about 5 minutes, most of it the reaper's startup grace. That fits
-  the 600 s a spec gets from `scripts/run-pg-spec.sh` and from CI's pg shards, so CI runs the smoke alone.
-- **The mass disconnections, cases (2) to (5),** take about 20 minutes more and run only when
-  `REAPER_MASS_DISCONNECT_CASES` names them. Every case, about 25 minutes:
+- **The default run is case (1) alone**, a smoke of about 6 minutes: the runner is cut before the startup grace
+  ends, and most of the wait is the five-minute reap line. That fits the 600 s a spec gets from
+  `scripts/run-pg-spec.sh` and from CI's pg shards, so CI runs the smoke alone.
+- **The mass disconnections, cases (2) to (5),** take about 30 minutes more and run only when
+  `REAPER_MASS_DISCONNECT_CASES` names them. Every case, about 40 minutes:
 
   ```bash
-  REAPER_MASS_DISCONNECT_CASES=1,2,3,4,5 RUN_PG_SPEC_TIMEOUT=2700 \
+  REAPER_MASS_DISCONNECT_CASES=1,2,3,4,5 RUN_PG_SPEC_TIMEOUT=3000 \
     bash scripts/run-pg-spec.sh src/apiserver/src/realtime/reaper-mass-disconnect.pg.spec.ts
   ```
 
@@ -175,7 +176,7 @@ scripts/runner-link/loadgen-run.sh --name full-1h -- -duration 1h -event-rate 20
   running. Its rows are SQL inserts, and each runner's token and process id are kept in the `loadgen` schema. A
   running session is leased to its runner's process and has an engine session id, as a claim and an engine start leave
   it. `arm` gives each run new running sessions, so a run starts from seq 1 on sessions the reaper never finished;
-  `loadgen-run.sh` disarms them as soon as the loadgen exits, before the reaper reads the fleet's silence (90 s) and
+  `loadgen-run.sh` disarms them as soon as the loadgen exits, before the reaper reads the fleet's silence (five minutes) and
   queues their cancellation for the runners' next processes.
 - **The connections** go to the gateway container's own address (`-connect`), so no docker-proxy stands between, and
   TLS still checks the certificate's `link-gateway` name.

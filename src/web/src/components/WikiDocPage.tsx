@@ -15,7 +15,8 @@ import {
   UpOutlined,
 } from '@ant-design/icons';
 import { WikiEmpty } from './WikiCards';
-import { WikiChatLitCtx, useWikiChatAsk } from './WikiChat';
+import { WikiChatLitCtx, useWikiChat, useWikiChatAsk, wikiChatSectionId } from './WikiChat';
+import { WikiSeeChanges } from './WikiSeeChanges';
 import { WikiDiagram } from './WikiDiagram';
 import { WIKI_DOC_SECTION_EVENT, WikiContentsButton } from './WikiDirectory';
 import { WikiAnchorMark, WikiKindMark, WikiStatusBadge, WikiTrustBadge } from './WikiMarks';
@@ -24,7 +25,8 @@ import { Button, LinkButton } from './ui/Button';
 import { Drawer } from './ui/Drawer';
 import { Popover } from './ui/Popover';
 import { Tooltip } from './ui/Tooltip';
-import { wikiDocQuery, wikiDocsQuery, wikiEntriesQuery, wikiSpaceQuery } from '../lib/queries';
+import { wikiDocQuery, wikiDocVersionsQuery, wikiDocsQuery, wikiEntriesQuery, wikiSpaceQuery } from '../lib/queries';
+import { WIKI_CHAT_SECTION_UPDATED, WIKI_CHAT_WOULD_REWRITE } from '../lib/wikiChat';
 import { MOBILE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import {
   WIKI_COL_ANCHOR,
@@ -33,11 +35,15 @@ import {
   WIKI_TITLE,
   wikiAnchorMark,
   wikiEntryPath,
+  readWikiSeen,
+  wikiSeenKey,
   wikiShowMore,
   wikiSpacePath,
+  writeWikiSeen,
   type WikiEntry,
   type WikiTrust,
 } from '../lib/wiki';
+import { wikiChatWhere, type WikiDocSectionChange } from '@orbit/shared';
 import { wikiBrowsePath, wikiSentenceGap } from '../lib/wikiArticles';
 import {
   WIKI_DOC_COVERS,
@@ -132,6 +138,7 @@ export function WikiDocRoute({ spaceId, spaceSlug, slug }: { spaceId: string; sp
   return (
     <WikiDocPage
       doc={doc.data}
+      spaceId={spaceId}
       spaceSlug={spaceSlug}
       github={wikiGithubRepo(space.data?.repoUrlNorm)}
       docs={directory.data ? directory.data.docs : null}
@@ -148,12 +155,15 @@ interface OpenNote {
 
 export function WikiDocPage({
   doc,
+  spaceId = null,
   spaceSlug,
   github,
   docs,
   entries,
 }: {
   doc: WikiDocView;
+  /** The space, whose sections' kept versions See changes reads; without it a section's Updated opens nothing. */
+  spaceId?: string | null;
   spaceSlug: string;
   github: string | null;
   docs: { written: number; total: number } | null;
@@ -171,6 +181,17 @@ export function WikiDocPage({
   // A selection in the text snaps to whole sentences and offers Ask, beside a wiki chat (WikiChat.tsx).
   const articleRef = useRef<HTMLElement>(null);
   const chat = useWikiChatAsk(doc, articleRef);
+  // The sections an open card of the chat beside the page would rewrite, marked before the press (board 42 ②).
+  const wouldRewrite = useWikiChat()?.wouldRewrite ?? null;
+  // A section written since the reader last looked at this document wears Updated (board 42 ③, contract
+  // `docs.versions.reads.doc`): the stamp as it stood when the page opened, or the opening itself for a first look —
+  // a section written while the reader is on it is still news. Leaving moves the stamp, so what was seen is not news.
+  const seenKey = wikiSeenKey(spaceSlug, `doc:${doc.slug}`);
+  const [seen] = useState(() => readWikiSeen(seenKey) || Date.now());
+  useEffect(() => {
+    writeWikiSeen(seenKey);
+    return () => writeWikiSeen(seenKey);
+  }, [seenKey]);
 
   // The section on screen, for the directory to light (`WIKI_DOC_SECTION_EVENT`): the topmost one whose
   // heading has come into the top half of the window. jsdom has no IntersectionObserver; nothing is lit there.
@@ -258,6 +279,9 @@ export function WikiDocPage({
               key={section.key}
               doc={doc}
               section={section}
+              spaceId={spaceId}
+              would={wouldRewrite?.has(wikiChatSectionId(doc.slug, section.key)) ?? false}
+              updated={section.change && Date.parse(section.change.at) > seen ? section.change : null}
               notes={notes}
               open={open}
               setOpen={setOpen}
@@ -401,9 +425,27 @@ function blockRuns(section: WikiDocSectionView): Array<{ kind: 'paragraph' | 'it
   return runs;
 }
 
+/** A sentence's text as the comparison reads it (`wikiDocSentenceDiff`): trimmed, inner runs of space as one. */
+const sentenceKey = (text: string): string => text.trim().replace(/\s+/gu, ' ');
+
+/**
+ * The sentences a section's last write added, read from the version it kept (its rows against the section as it
+ * stands), so the page can line them green (board 42 ③). Read only for a section the reader has not seen since.
+ */
+function useAddedSentences(spaceId: string | null, slug: string, key: string, change: WikiDocSectionChange | null): ReadonlySet<string> {
+  const read = useQuery(wikiDocVersionsQuery(change && spaceId ? spaceId : null, slug, key));
+  return useMemo(() => {
+    const version = change ? read.data?.versions.find((one) => one.id === change.versionId) : undefined;
+    return new Set((version?.rows ?? []).filter((row) => row.op === 'added').map((row) => sentenceKey(row.text)));
+  }, [read.data, change]);
+}
+
 function WikiDocSectionText({
   doc,
   section,
+  spaceId,
+  would,
+  updated,
   notes,
   open,
   setOpen,
@@ -414,6 +456,11 @@ function WikiDocSectionText({
 }: {
   doc: WikiDocView;
   section: WikiDocSectionView;
+  spaceId: string | null;
+  /** An open card of the chat beside the page would rewrite it. */
+  would: boolean;
+  /** Its latest change, when it came after the reader last looked: Updated, and See changes behind it. */
+  updated: WikiDocSectionChange | null;
   notes: Map<number, WikiDocFootnoteView>;
   open: OpenNote | null;
   setOpen: (open: OpenNote | null) => void;
@@ -422,6 +469,8 @@ function WikiDocSectionText({
   spaceSlug: string;
   via: Map<string, WikiDocViaEntry>;
 }) {
+  const [seeing, setSeeing] = useState(false);
+  const added = useAddedSentences(spaceId, doc.slug, section.key, updated);
   const sentences = (b: number) =>
     section.blocks[b].sentences.map((sentence, s) => (
       <WikiDocSentence
@@ -430,6 +479,7 @@ function WikiDocSectionText({
         doc={doc}
         section={section}
         sentence={sentence}
+        added={added.has(sentenceKey(sentence.text))}
         notes={notes}
         open={open}
         setOpen={setOpen}
@@ -450,7 +500,40 @@ function WikiDocSectionText({
             {WIKI_REWRITE_PENDING}
           </span>
         )}
+        {updated && (
+          <button type="button" className="wk-dc-upd" aria-expanded={seeing} onClick={() => setSeeing((shown) => !shown)}>
+            <span className="bd" />
+            {WIKI_CHAT_SECTION_UPDATED}
+          </button>
+        )}
       </h2>
+      {seeing && updated && spaceId && (
+        <div className="wk-dc-see">
+          <WikiSeeChanges
+            spaceId={spaceId}
+            doc={doc.slug}
+            sectionKey={section.key}
+            where={wikiChatWhere(doc.number, section.number)}
+            versionId={updated.versionId}
+          />
+        </div>
+      )}
+      {would ? (
+        <div className="wk-dc-would">
+          <span className="wk-dc-would-tag">{WIKI_CHAT_WOULD_REWRITE}</span>
+          <WikiDocSectionBody section={section} sentences={sentences} />
+        </div>
+      ) : (
+        <WikiDocSectionBody section={section} sentences={sentences} />
+      )}
+    </section>
+  );
+}
+
+/** A section's text: its runs of paragraphs, list items, headings, code and diagrams, or the line of one not written. */
+function WikiDocSectionBody({ section, sentences }: { section: WikiDocSectionView; sentences: (b: number) => ReactNode }) {
+  return (
+    <>
       {!section.written ? (
         <p className="wk-dc-unwritten">{WIKI_DOC_SECTION_NOT_WRITTEN}</p>
       ) : (
@@ -476,7 +559,7 @@ function WikiDocSectionText({
           ),
         )
       )}
-    </section>
+    </>
   );
 }
 
@@ -489,6 +572,7 @@ function WikiDocSentence({
   doc,
   section,
   sentence,
+  added = false,
   notes,
   open,
   setOpen,
@@ -501,6 +585,8 @@ function WikiDocSentence({
   doc: WikiDocView;
   section: WikiDocSectionView;
   sentence: WikiDocSentenceView;
+  /** The section's last write added it, since the reader last looked: lined green (board 42 ③). */
+  added?: boolean;
   notes: Map<number, WikiDocFootnoteView>;
   open: OpenNote | null;
   setOpen: (open: OpenNote | null) => void;
@@ -539,12 +625,12 @@ function WikiDocSentence({
   ) : null;
   const text = mark ? (
     <Tooltip content={explained} toggleOnClick side="bottom" align="start" popupClassName="wk-dc-tip-pop">
-      <span className={`${MARK_CLASS[mark]}${snapped ? ' wk-snap' : ''}`} data-mark={mark} data-wk-sid={sentence.id} tabIndex={0}>
+      <span className={`${MARK_CLASS[mark]}${snapped ? ' wk-snap' : ''}${added ? ' wk-newline' : ''}`} data-mark={mark} data-wk-sid={sentence.id} tabIndex={0}>
         {words}
       </span>
     </Tooltip>
   ) : (
-    <span className={[lit ? 'hl' : '', snapped ? 'wk-snap' : ''].filter(Boolean).join(' ') || undefined} data-wk-sid={sentence.id}>
+    <span className={[lit ? 'hl' : '', snapped ? 'wk-snap' : '', added ? 'wk-newline' : ''].filter(Boolean).join(' ') || undefined} data-wk-sid={sentence.id}>
       {words}
     </span>
   );

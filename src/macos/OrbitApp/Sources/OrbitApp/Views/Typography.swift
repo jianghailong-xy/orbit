@@ -128,6 +128,15 @@ extension Font {
     /// the system's own swipe buttons on an iOS 26.5 simulator: at 18pt the checkmark circle, pin and
     /// trash come out within half a point of theirs (19pt drew them a point and a half larger).
     static let orbitSwipeGlyph: Font = .system(size: 18, weight: .regular)
+
+    /// The mark inside the wiki chat's round button (docs/wiki-chat-design.md §3): a fixed disc of 56 on a phone and
+    /// 52 elsewhere, so — like `orbitAgentGlyph` in an avatar — a Dynamic-Type-static mark scaled to the disc.
+    static func orbitFabGlyph(_ diameter: CGFloat) -> Font {
+        .system(size: diameter * 0.4, weight: .semibold)
+    }
+
+    /// The round button's amber number and green check, in their fixed 20pt badge.
+    static let orbitFabBadge: Font = .system(size: 12, weight: .bold)
 }
 
 /// Additive line leading (points on top of the font's own line height) for transcript prose.

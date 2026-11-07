@@ -24,6 +24,7 @@ export const WIKI_RUN_KINDS: Record<WikiJobKind, string> = {
   docs_build: 'Documents',
   maintain: 'Maintenance',
   smoke: 'Model check',
+  docs_follow: 'Rewrite',
 };
 
 export const WIKI_RUN_QUEUED = 'Queued';

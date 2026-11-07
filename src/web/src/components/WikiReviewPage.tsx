@@ -1,5 +1,5 @@
-import { Fragment, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   AimOutlined,
@@ -12,6 +12,7 @@ import {
 } from '@ant-design/icons';
 import type { WikiEntryChanges } from '@orbit/shared';
 import { relTime } from './Transcript';
+import { wikiReviewItemAnchor } from '../lib/wikiChat';
 import { WikiCard, WikiEmpty } from './WikiCards';
 import { WikiTitleSummaryFields } from './WikiEntryDrawer';
 import { WikiAim } from './WikiMarks';
@@ -147,6 +148,16 @@ export function WikiReviewPage({ spaceSlug }: { spaceSlug: string | null }) {
   // the next one is better than being thrown back to the first.
   const current = shown.length === 0 ? 0 : Math.min(at, shown.length - 1);
   const visible = phone ? shown.slice(current, current + 1) : shown;
+  // Opened at one item (`#rv-<changeset>-<seq>`: a chat card whose challenge waits here): that card, in view — on a
+  // phone the page turns to it.
+  const location = useLocation();
+  const item = location.hash.slice(1);
+  const asked = item ? shown.findIndex(({ changeset, op }) => wikiReviewItemAnchor(changeset.id, op.seq) === item) : -1;
+  useEffect(() => {
+    if (asked < 0) return;
+    if (phone) setAt(asked);
+    document.getElementById(item)?.scrollIntoView?.({ block: 'center' });
+  }, [asked, item, phone]);
   const sessions = new Set(changesets.map((changeset) => changeset.sessionId).filter(Boolean));
   const oldest = [...changesets].sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))[0]?.createdAt;
 
@@ -329,7 +340,7 @@ function ReviewCard({
     : [];
 
   return (
-    <div className="approval-card wk-prop">
+    <div className="approval-card wk-prop" id={wikiReviewItemAnchor(changeset.id, op.seq)}>
       <div className="approval-head">
         <WikiOpChip op={op.op} />
         <span className="kind">{kindWord}</span>

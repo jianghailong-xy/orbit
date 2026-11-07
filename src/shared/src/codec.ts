@@ -620,6 +620,15 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'versionId',
   'restoredVersionId',
   'keptVersionId',
+  // The wiki space a session is a chat of (migration 0476, wiki contract `chat.binding.read`): what the
+  // session page's From Wiki label opens. A history reference with no foreign key, so it may 404 —
+  // never a fence.
+  'wikiChatSpaceId',
+  // A wiki chat's cards (migration 0483, contract `chat.drafts`): the card a drafting tool answers (`draftId`), which the
+  // panel draws and `GET /wiki/chat-drafts/:id` reads, and the card a newer one replaced (`replacesId`, a history
+  // reference with no foreign key). Addresses a reader follows — never a fence: a press is decided on the card's row.
+  'draftId',
+  'replacesId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

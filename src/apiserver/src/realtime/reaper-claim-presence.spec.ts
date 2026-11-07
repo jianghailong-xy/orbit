@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
-import { ReaperService } from './reaper.service';
+import { RUNNER_REAP_AFTER_MS, ReaperService } from './reaper.service';
 
 /**
  * A claim is presence. A runner process that has just started claims at once, while its first
@@ -18,7 +18,8 @@ import { ReaperService } from './reaper.service';
 
 const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
-const OFFLINE_AFTER_MS = 90_000;
+/** The window a claim counts as presence for: the reaper's reap line, not the 90 s the list shows. */
+const REAP_AFTER_MS = RUNNER_REAP_AFTER_MS;
 /** The woken runner's row: the last beat of the instance that went to sleep. */
 const SLEPT_MS = 6 * 60_000;
 
@@ -101,7 +102,7 @@ test('does not reap the run a just-started runner claimed before its first heart
 // The negative control: a run claimed longer ago than the window, on a runner silent ever since,
 // is reaped exactly as before.
 test('still reaps a run claimed longer ago than the window on a runner silent since', async () => {
-  const reaper = reaperFor({ claimedAgoMs: 3 * 60_000 });
+  const reaper = reaperFor({ claimedAgoMs: REAP_AFTER_MS + 60_000 });
   await reaper.sweep();
   assert.equal(reaper.finalized.length, 1);
   assert.equal(reaper.finalized[0]?.status, RunStatus.FAILED);
@@ -111,7 +112,7 @@ test('still reaps a run claimed longer ago than the window on a runner silent si
 // The verdict is read from the sweep's snapshot and written a transaction later: a run claimed
 // again in between (parked, sent a message, claimed by a runner that just started) is not reaped.
 test('does not reap a run claimed again between the sweep read and the write', async () => {
-  const reaper = reaperFor({ claimedAgoMs: 3 * 60_000, claimedAgoAtWriteMs: 1_000 });
+  const reaper = reaperFor({ claimedAgoMs: REAP_AFTER_MS + 60_000, claimedAgoAtWriteMs: 1_000 });
   await reaper.sweep();
   assert.deepEqual(reaper.finalized, [], 'the write asks the row it writes, under its lock');
   assert.ok(reaper.wheres[0]?.OR, 'the finalizing write carries the claim clause');
@@ -126,7 +127,7 @@ test('reaps a run never claimed, as before, when its runner is silent', async ()
 // Kept apart from the window on purpose: a claim is presence for as long as a heartbeat would be,
 // and no longer.
 test('a claim stops counting once it is older than the window', async () => {
-  const reaper = reaperFor({ claimedAgoMs: OFFLINE_AFTER_MS + 5_000 });
+  const reaper = reaperFor({ claimedAgoMs: REAP_AFTER_MS + 5_000 });
   await reaper.sweep();
   assert.equal(reaper.finalized.length, 1);
 });

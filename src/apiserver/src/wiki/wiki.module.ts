@@ -5,6 +5,7 @@ import { WikiController } from './wiki.controller';
 import { AdminWikiController } from './wiki-admin.controller';
 import { WikiArticles } from './wiki-articles';
 import { WikiArticlesController } from './wiki-articles.controller';
+import { WikiChatDrafts } from './wiki-chat-drafts';
 import { WikiDocs } from './wiki-docs';
 import { WikiDocsController } from './wiki-docs.controller';
 import { WikiHealth } from './wiki-health';
@@ -57,7 +58,9 @@ import { WikiSystemModelController } from './wiki-system-model.controller';
   // their calls (contract `jobs.read`) for Activity, the same way.
   // AdminRoleGuard depends only on the global PrismaService, so it is provided here too (UsersModule does not export
   // it), as ProvidersModule does for its admin controller.
-  providers: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiMaintenanceTrigger, WikiRunReads, WikiHealth, WikiPlans, WikiDocs, WikiSystemModelReads, WikiJobReads, AdminRoleGuard],
-  exports: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiPlans, WikiDocs],
+  // WikiChatDrafts keeps a wiki chat's cards and the owner's presses (contract `chat.drafts`, `chat.presses`): it writes
+  // through WikiService and WikiDocs, and the runner door and the chat's own module reach it through this module's export.
+  providers: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiMaintenanceTrigger, WikiRunReads, WikiHealth, WikiPlans, WikiDocs, WikiSystemModelReads, WikiJobReads, WikiChatDrafts, AdminRoleGuard],
+  exports: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiPlans, WikiDocs, WikiChatDrafts],
 })
 export class WikiModule {}

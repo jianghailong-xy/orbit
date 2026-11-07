@@ -29,6 +29,10 @@ const (
 	refAuthorityRemote      = "REMOTE"
 	refAuthorityRunnerLocal = "RUNNER_LOCAL"
 
+	// The one selector kind that executes no task (SR54): a wiki chat starts from origin's main, frozen
+	// like a project task's line but with no codebase behind it, so its snapshot carries no codebaseId.
+	sourceKindChatUpstream = "CHAT_UPSTREAM"
+
 	// §10.1's codes, spelled here only where the runner can actually report one: a resolution refusal
 	// is sent to /source/pin, a checkout refusal is setupSourceWorktree's.
 	sourceRefusalAuthorityUnreachable = "SOURCE_AUTHORITY_UNREACHABLE"
@@ -47,6 +51,13 @@ var fullSha = regexp.MustCompile(`^[0-9a-f]{40}$`)
 // forbidden (SR45/SR46).
 func needsSourcePin(job *ClaimedSession) bool {
 	return job != nil && job.Source != nil && job.Source.State != "" && job.Source.State != sourceStateUnbound
+}
+
+// isWikiChat reports whether job is a wiki chat (wiki contract chat.binding): the session the server
+// froze a CHAT_UPSTREAM selector for when it made it. Nothing else on the claim says so, and nothing
+// needs to — the kind is frozen in the session row's own INSERT and never rewritten (SR28, SR54).
+func isWikiChat(job *ClaimedSession) bool {
+	return job != nil && job.Source != nil && job.Source.Kind == sourceKindChatUpstream
 }
 
 // ensureSourcePinned runs steps 2 and 3 for one job and reports whether the run may proceed.

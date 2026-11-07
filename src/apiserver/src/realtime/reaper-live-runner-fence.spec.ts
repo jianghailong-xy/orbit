@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
-import { ReaperService } from './reaper.service';
+import { RUNNER_REAP_AFTER_MS, ReaperService } from './reaper.service';
 
 /**
- * A runner is declared offline by ABSENCE: nothing wrote `lastHeartbeatAt` for 90s. Absence is
- * evidence only while the channel that records presence works — and that channel is a database
- * write, while the verdict that kills the session is a database read. Under connection-pool
- * exhaustion the write path fails first, so a live runner stops being able to say it is there at
- * exactly the moment the reaper keeps being able to say it is gone.
+ * A runner is declared offline by ABSENCE: nothing wrote `lastHeartbeatAt` for the reaper's five
+ * minutes (the runner list calls it offline at 90 s). Absence is evidence only while the channel
+ * that records presence works — and that channel is a database write, while the verdict that kills
+ * the session is a database read. Under connection-pool exhaustion the write path fails first, so a
+ * live runner stops being able to say it is there at exactly the moment the reaper keeps being able
+ * to say it is gone.
  *
  * Two things follow, and each is fenced here:
  *
@@ -23,7 +24,8 @@ import { ReaperService } from './reaper.service';
  */
 
 const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
-const OFFLINE_AFTER_MS = 90_000;
+/** The reaper's reap line: five minutes, though the runner list calls a machine offline at 90 s. */
+const REAP_AFTER_MS = RUNNER_REAP_AFTER_MS;
 
 /** Prisma's own name for "the transaction infrastructure failed", as the storm delivered it. */
 function unableToStartATransaction(): Error {
@@ -54,7 +56,7 @@ interface SweepPlan {
  */
 function reaperUnderStorm() {
   const finalized: Array<{ sessionId: string; data: Record<string, unknown> }> = [];
-  let plan: SweepPlan = { sessions: [], liveHeartbeatAgeMs: 2 * OFFLINE_AFTER_MS };
+  let plan: SweepPlan = { sessions: [], liveHeartbeatAgeMs: 2 * REAP_AFTER_MS };
   // Which session the transaction now running belongs to. forceFinalize is awaited one session at
   // a time, so one cursor is enough to give each its own answer.
   let current = '';
@@ -96,10 +98,10 @@ function reaperUnderStorm() {
           endReason: null,
           startsTaskWork: true,
           task: null,
-          // What the ONE snapshot at the top of the sweep saw: three missed heartbeats.
+          // What the ONE snapshot at the top of the sweep saw: well past the reap line.
           assignedRunner: {
             status: 'ONLINE',
-            lastHeartbeatAt: new Date(Date.now() - 2 * OFFLINE_AFTER_MS),
+            lastHeartbeatAt: new Date(Date.now() - 2 * REAP_AFTER_MS),
           },
         })),
     },
@@ -147,7 +149,7 @@ const C = '11111111-1111-4111-8111-11111111111c';
 // meant to withdraw a verdict that stopped being true, not to stop reaping.
 test('still reaps a session whose runner is silent at write time too', async () => {
   const reaper = reaperUnderStorm();
-  const reaped = await reaper.sweep({ sessions: [A], liveHeartbeatAgeMs: 2 * OFFLINE_AFTER_MS });
+  const reaped = await reaper.sweep({ sessions: [A], liveHeartbeatAgeMs: 2 * REAP_AFTER_MS });
   assert.deepEqual(reaped, [A], 'a genuinely gone runner is still reaped');
   assert.equal(reaper.finalized[0]?.data.status, RunStatus.FAILED);
   assert.equal(reaper.finalized[0]?.data.error, 'runner offline');
@@ -173,30 +175,30 @@ test('stops calling runners offline once its own database has refused a transact
     sessions: [A, B, C],
     // Still unrecorded at write time: the storm is what stopped the heartbeat reaching the row,
     // so re-reading it inside the transaction cannot save these two. Only the fault can.
-    liveHeartbeatAgeMs: 2 * OFFLINE_AFTER_MS,
+    liveHeartbeatAgeMs: 2 * REAP_AFTER_MS,
     failTransactionsFor: [A],
   });
   assert.deepEqual(reaped, [], 'B and C follow the fault in the same sweep, and are not evidence');
 });
 
 // A storm reaches the sweep AFTER it has already finalized someone, so the fence outlives the sweep
-// it was raised in: the 90s of silence a next-sweep verdict rests on overlaps the sweep that just
+// it was raised in: the five minutes of silence a next-sweep verdict rests on overlaps the sweep that just
 // failed. It is disqualified evidence, not a latch — one sweep that the database answers in full
 // re-arms the reaper, or the first storm would stop it for the life of the process.
 test('carries the fence into the next sweep, and drops it after a clean one', async () => {
   const reaper = reaperUnderStorm();
   assert.deepEqual(
-    await reaper.sweep({ sessions: [A], liveHeartbeatAgeMs: 2 * OFFLINE_AFTER_MS, failTransactionsFor: [A] }),
+    await reaper.sweep({ sessions: [A], liveHeartbeatAgeMs: 2 * REAP_AFTER_MS, failTransactionsFor: [A] }),
     [],
     'the fault is this sweep\'s own',
   );
   assert.deepEqual(
-    await reaper.sweep({ sessions: [B], liveHeartbeatAgeMs: 2 * OFFLINE_AFTER_MS }),
+    await reaper.sweep({ sessions: [B], liveHeartbeatAgeMs: 2 * REAP_AFTER_MS }),
     [],
     'the silence B is judged on overlaps the sweep that just failed',
   );
   assert.deepEqual(
-    await reaper.sweep({ sessions: [C], liveHeartbeatAgeMs: 2 * OFFLINE_AFTER_MS }),
+    await reaper.sweep({ sessions: [C], liveHeartbeatAgeMs: 2 * REAP_AFTER_MS }),
     [C],
     'a sweep the database answered in full re-arms the reaper',
   );

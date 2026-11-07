@@ -128,10 +128,13 @@ const ROW: {
     state: "the CLI wouldn't say",
     auth: 'unknown',
     codex: {
-      text: ['Codex', "0.156.0 · the CLI wouldn't say", 'Unknown', '—', 'Sign in'],
+      // A failed check, not a sign-out: no Sign in on the row (it stays in More), no reading to show,
+      // and the note saying it retries.
+      text: ['Codex', '0.156.0', 'Couldn’t check', 'No reading',
+        'The runner didn’t answer the sign-in check this time. It tries again every 5 minutes; sessions can still start.'],
       tag: 'default',
       bar: null,
-      buttons: ['Sign in · primary'],
+      buttons: ['More actions · text'],
     },
     count: '1 runner · 2 signed in',
     folded: null,

@@ -744,8 +744,10 @@ suite('(q) the core tables keep every trigger that predates this project', async
   // plane that reads it, give an older one's task run the task's engine pin, and refuse any change
   // of a recorded engine — reading `task` at most, and writing no other relation; 20 since 0426
   // added `session_cursor_runner_acquisition_guard`, which does for Cursor CLI what 0377's does for
-  // DeepSeek Harness and writes no other relation either.
-  assert.deepEqual(counts, { run_event: 1, session: 20, task: 32 });
+  // DeepSeek Harness and writes no other relation either; 21 since 0476 added
+  // `session_wiki_chat_space_guard`, which refuses an UPDATE that would change which wiki space a
+  // session is a chat of, and writes nothing.
+  assert.deepEqual(counts, { run_event: 1, session: 21, task: 32 });
 
   // And every one that went is named, so a reader can tell a removal from an accident.
   for (const trigger of [
