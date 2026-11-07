@@ -360,7 +360,7 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
   `Only the owner of this bot can answer this card.`，什么都不写。
 - 过期的卡（审批已在别处答了、会话已结束）：回 `Already answered in Orbit.`，并把卡改成终态。
 - 成功：toast，卡片原地变成终态（§6.2）。
-- 实现（F2-1，迁移 0499）：`FeishuCardActions`（`feishu/feishu-card-actions.ts`，独立的 `FeishuActionsModule`，因为
+- 实现（F2-1，迁移 0500）：`FeishuCardActions`（`feishu/feishu-card-actions.ts`，独立的 `FeishuActionsModule`，因为
   FeishuModule 不能 import SessionsModule——后者经 CoordinatorJudgmentModule 到 PushModule，PushModule 又 import FeishuModule；
   它在启动时向 `FeishuRouter` 登记）。只受理工具审批的 `approval.allow` / `approval.deny`：`approvalsInFeishu` 关着、点击带
   `rememberRules`（或 `remember`）、点名编排确认卡或提问，一律只回 toast、零写入；`SessionsService.decideApproval` 的

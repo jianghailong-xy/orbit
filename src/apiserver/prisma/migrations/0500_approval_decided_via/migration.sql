@@ -24,7 +24,7 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 0499: the project line stands at 0498 (F1-5), 0496 is F3-1's (in flight), 0497 is held for project
+-- 0500: the project line stands at 0499 (F2-3, feishu_thread); 0496 is F3-1's, 0497 is held for project
 -- 34tXXUHZEcGeWeB0hp5YU (project instruction 6). Can run twice: ADD COLUMN IF NOT EXISTS, DROP CONSTRAINT IF EXISTS.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 

@@ -8467,7 +8467,7 @@ export class SessionsService {
    *  it up and returns it to claude's --permission-prompt-tool.
    *
    *  `credential` is the door the decider came in by, recorded on the decision that lands
-   *  (`decided_credential_kind`, 0499). A FEISHU one is a click on a Feishu card
+   *  (`decided_credential_kind`, 0500). A FEISHU one is a click on a Feishu card
    *  (docs/feishu-bot-design.md §7.2): its clicker's open_id and the card's message_id are recorded
    *  beside it, and it carries only a plain allow or deny — "always allow" widens a standing grant and
    *  "Create and start" starts work, both of which stay in the app — so either is refused before anything

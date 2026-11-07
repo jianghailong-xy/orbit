@@ -2812,12 +2812,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it is
       // not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
       '0498_feishu_message_closed',
-      // 0499 adds three nullable columns and one CHECK to `approval` (docs/feishu-bot-design.md §7.2, task F2-1): the
+      // 0500 adds three nullable columns and one CHECK to `approval` (docs/feishu-bot-design.md §7.2, task F2-1): the
       // credential an approval's decision came in by, and the Feishu clicker and card when that was a Feishu card. It is
       // not a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six
       // preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it
       // is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
-      '0499_approval_decided_via'],
+      '0500_approval_decided_via'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
