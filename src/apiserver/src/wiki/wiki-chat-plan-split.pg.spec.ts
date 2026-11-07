@@ -717,10 +717,12 @@ test('a plan card of two documents: a split gated as one edit, one press, its re
     let rows = await rowVersions();
     let jobs = await planJobIds();
     const refused = await trashedMeanwhile(() => press(cardE, 'apply'));
-    assert.deepEqual([refused.status, refused.json.message], [404, 'no such wiki space'], refused.text);
+    // What was written first: a press that went through writes its version, and only its answer's read of the card, a
+    // card of a wiki in Trash, would then be refused.
     assert.deepEqual(await rowVersions(), rows, 'the press wrote nothing: no version, no confirmation, no press');
     assert.deepEqual((await planJobIds()).filter((id) => !jobs.includes(id)), [], 'and asked for no build');
     assert.equal((await draftRow(cardE)).decision, null);
+    assert.deepEqual([refused.status, refused.json.message], [404, 'no such wiki space'], refused.text);
     // Restored, the same press goes through: what refused it was the Trash.
     await restore();
     const pressed = await press(cardE, 'apply');
@@ -729,10 +731,10 @@ test('a plan card of two documents: a split gated as one edit, one press, its re
     rows = await rowVersions();
     jobs = await planJobIds();
     const undoRefused = await trashedMeanwhile(() => press(cardE, 'undo'));
-    assert.deepEqual([undoRefused.status, undoRefused.json.message], [404, 'no such wiki space'], undoRefused.text);
     assert.deepEqual(await rowVersions(), rows, 'the Undo wrote nothing: no version, no restore, no card');
     assert.deepEqual((await planJobIds()).filter((id) => !jobs.includes(id)), [], 'and asked for no build');
     assert.equal((await draftRow(cardE)).undone_at, null);
+    assert.deepEqual([undoRefused.status, undoRefused.json.message], [404, 'no such wiki space'], undoRefused.text);
     await restore();
     const undone = await press(cardE, 'undo');
     assert.deepEqual([undone.status, undone.json.draft?.state, undone.json.planVersion], [200, 'undone', 8], undone.text);
