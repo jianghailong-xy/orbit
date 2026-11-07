@@ -219,9 +219,9 @@ final class SessionFolderPageWiringTests: XCTestCase {
     /// outside (§3.3).
     func testThePagesRowsAreTheListsRows() throws {
         let agents = code(try appSource("Views/AgentsView.swift"))
-        let listRow = try slice(agents, from: "@ViewBuilder private func sessionRow(_ s: Session)", to: "\n    }")
+        let listRow = try slice(agents, from: "@ViewBuilder private func sessionRow(_ s: Session", to: "\n    }")
         let pageRow = try slice(code(try appSource("Views/SessionFolderPage.swift")),
-                                from: "@ViewBuilder private func sessionRow(_ s: Session)", to: "\n    }")
+                                from: "@ViewBuilder private func sessionRow(_ s: Session", to: "\n    }")
         for part in ["AgentSessionRow(session: s, deleted:",
                      "app.openSessionRow(s)",
                      "row.sessionRowActions(s, scope:",

@@ -67,7 +67,9 @@ final class SessionProjectPageWiringTests: XCTestCase {
                      "line: { lines.line(for: $0, watching: inputs.watch(for: $0.id),",
                      "recaps: inputs.recaps) }",
                      "coordinators: coordinators,",
-                     "contentSessions: inputs.view == .open ? inputs.accountSessions : inputs.allSessions"] {
+                     "contentSessions: inputs.view == .open ? inputs.accountSessions : inputs.allSessions",
+                     // A project is a row only where its coordinator runs (owner 2026-11-07, option A).
+                     "workspaceID: inputs.workspaceID,"] {
             XCTAssertTrue(listing.contains(part), "the workspace grouping carries `\(part)`")
         }
         let inputs = try slice(agents, from: "private var listInputs: SessionListInputs {", to: "\n    }")
@@ -82,11 +84,13 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(folders.contains("folders: projectListing.folders"))
         XCTAssertTrue(folders.contains("projectListing.entries.map(\\.timeGroupingSession)"))
         XCTAssertTrue(agents.contains("let projectRows = Dictionary(uniqueKeysWithValues: projectListing.projects.map { ($0.id, $0) })"))
-        XCTAssertTrue(agents.contains("listRow(session, projects: projectRows)"))
-        let row = try slice(agents, from: "@ViewBuilder private func listRow(_ s: Session, projects: [String: SessionProjectRow])", to: "\n    }")
+        XCTAssertTrue(agents.contains("let projectMarks = grouping.projectListing.marks"))
+        XCTAssertTrue(agents.contains("listRow(session, projects: projectRows, marks: projectMarks)"))
+        XCTAssertFalse(agents.contains("listRow(session, projects: projectRows)"), "every row is handed the marks")
+        let row = try slice(agents, from: "@ViewBuilder private func listRow(_ s: Session, projects: [String: SessionProjectRow],", to: "\n    }")
         XCTAssertTrue(row.contains("if let project = projects[s.id]"))
         XCTAssertTrue(row.contains("projectRow(project)"), "the recency projection is rendered as a project, never as a session")
-        XCTAssertTrue(row.contains("sessionRow(s)"))
+        XCTAssertTrue(row.contains("sessionRow(s, mark: marks[s.id])"))
         XCTAssertEqual(try branches(of: "private static func projectListing(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionProjectListing {", in: agents), ["os(iOS)"])
 
         let page = code(try appSource("Views/SessionFolderPage.swift"))
@@ -94,6 +98,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(folderListing.contains("SessionProjectGrouping.listing(inputs.sessions,"))
         XCTAssertTrue(folderListing.contains("folderID: inputs.folderID"))
         XCTAssertTrue(folderListing.contains("searching: inputs.searching"))
+        XCTAssertTrue(folderListing.contains("workspaceID: inputs.workspaceID,"))
         let pageInputs = try slice(page, from: "private var listInputs: SessionListInputs {", to: "\n    }")
         for part in ["sessions: app.agents?.agentSessions ?? [],", "folderID: address.folderID,",
                      "searching: isSearching,", "watches: app.watches?.summaries ?? [:],"] {
@@ -101,11 +106,13 @@ final class SessionProjectPageWiringTests: XCTestCase {
         }
         XCTAssertTrue(page.contains("return projectListing.entries.map(\\.timeGroupingSession)"))
         XCTAssertTrue(page.contains("let projectRows = Dictionary(uniqueKeysWithValues: projectListing.projects.map { ($0.id, $0) })"))
-        XCTAssertTrue(page.contains("listRow(session, projects: projectRows)"))
-        let folderRow = try slice(page, from: "@ViewBuilder private func listRow(_ s: Session, projects: [String: SessionProjectRow])", to: "\n    }")
+        XCTAssertTrue(page.contains("let projectMarks = grouping.projectListing.marks"))
+        XCTAssertTrue(page.contains("listRow(session, projects: projectRows, marks: projectMarks)"))
+        XCTAssertFalse(page.contains("listRow(session, projects: projectRows)"), "every row is handed the marks")
+        let folderRow = try slice(page, from: "@ViewBuilder private func listRow(_ s: Session, projects: [String: SessionProjectRow],", to: "\n    }")
         XCTAssertTrue(folderRow.contains("if let project = projects[s.id]"))
         XCTAssertTrue(folderRow.contains("projectRow(project)"))
-        XCTAssertTrue(folderRow.contains("sessionRow(s)"))
+        XCTAssertTrue(folderRow.contains("sessionRow(s, mark: marks[s.id])"))
     }
 
     /// Both lists regroup only when an input changed: the body reads the memo, and the grouping is
@@ -885,5 +892,61 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let mac = try slice(agents, from: "ForEach(agents.agentSessions) { s in", to: "\n            }")
         XCTAssertFalse(mac.contains("SessionProject"))
         XCTAssertFalse(mac.contains("projectRow("))
+    }
+
+    /// Where a project has no row (owner 2026-11-07, docs/mocks/project-rows-by-workspace, option A), a
+    /// member is a row of its own: the project row's chip leads its second line, read out as the web's
+    /// hover; its long press opens the project's sessions; it moves on its own; and the iPad's arrow keys
+    /// reach it as they reach any tagged row. The project's own page and the Mac draw no mark.
+    func testAMemberWhoseProjectHasNoRowHereCarriesTheMarkAndSessions() throws {
+        let agents = code(try appSource("Views/AgentsView.swift"))
+        let rowView = try slice(agents, from: "struct AgentSessionRow: View {", to: "private func lineColor(")
+        XCTAssertTrue(rowView.contains("var projectMark: SessionProjectMark? = nil"))
+        for layout in ["private var regularIOSRow: some View {", "private var compactRow: some View {"] {
+            let body = try slice(rowView, from: layout, to: "\n    }")
+            let second = try slice(body, from: "HStack(spacing: 7) {", to: "Text(line.text)")
+            let lines = second.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+            XCTAssertEqual(lines.dropFirst().first, "if let projectMark { SessionProjectMarkChip(mark: projectMark) }",
+                           "\(layout) leads its second line with the mark")
+        }
+        XCTAssertEqual(try branches(of: "SessionProjectMarkChip(mark: projectMark)", in: agents), ["os(iOS)"])
+        let mac = try slice(agents, from: "ForEach(agents.agentSessions) { s in", to: "\n            }")
+        XCTAssertFalse(mac.contains("projectMark"), "the Mac's list does not group (design §8)")
+
+        let page = code(try appSource("Views/SessionProjectPage.swift"))
+        let chip = try slice(page, from: "struct SessionProjectMarkChip: View {", to: "\n}\n")
+        XCTAssertTrue(chip.contains("SessionProjectProgressChip(counts: mark.taskCounts, running: mark.runningCount, status: mark.status)"),
+                      "the project row's own chip")
+        XCTAssertTrue(chip.contains(".accessibilityLabel(SessionProjectCopy.markHint(title: mark.title))"),
+                      "read out as the web's hover says it")
+        XCTAssertFalse(chip.contains("Button") || chip.contains("onTapGesture"), "not a press of its own on a phone")
+        XCTAssertEqual(try branches(of: "struct SessionProjectMarkChip: View {", in: page), ["os(iOS)"])
+
+        for relative in ["Views/AgentsView.swift", "Views/SessionFolderPage.swift"] {
+            let source = code(try appSource(relative))
+            let row = try slice(source, from: "@ViewBuilder private func sessionRow(_ s: Session", to: "\n    }")
+            XCTAssertTrue(row.contains("projectMark: mark)"), relative)
+            XCTAssertTrue(row.contains("let onSessions: (() -> Void)? = mark.map { mark in"), relative)
+            XCTAssertTrue(row.contains("app.openProjectSessions(SessionProjectAddress(projectID: mark.projectId,"), relative)
+            XCTAssertEqual(row.components(separatedBy: "onSessions: onSessions)").count - 1, 2,
+                           "\(relative): both row shapes offer the project's sessions")
+            XCTAssertTrue(row.contains(".tag(s.id)"), relative)
+        }
+
+        let actions = code(try appSource("Views/SessionRowActions.swift"))
+        let menu = try slice(actions, from: "@ViewBuilder private var menu: some View {", to: "\n    }")
+        let sessions = try XCTUnwrap(menu.range(
+            of: "Button(action: onSessions) { Label(SessionProjectCopy.sessions, systemImage: \"list.bullet\") }"))
+        let rename = try XCTUnwrap(menu.range(of: "if !isTrash { renameButton }"))
+        XCTAssertLessThan(sessions.lowerBound, rename.lowerBound, "Sessions comes first")
+        XCTAssertTrue(try slice(menu, from: "if let onSessions {", to: "renameButton").contains("Section {"),
+                      "in a group of its own")
+        let move = try slice(actions, from: "private var moveAction: RowSwipeAction? {", to: "\n    }")
+        XCTAssertTrue(move.contains("if onSessions == nil, let membership = session.projectMembership, membership.role != .coordinator { return nil }"),
+                      "a member whose project has no row here moves on its own")
+
+        let memberRow = try slice(page, from: "@ViewBuilder private func sessionRow(_ session: Session)", to: "\n    }")
+        XCTAssertFalse(memberRow.contains("projectMark") || memberRow.contains("onSessions"),
+                       "the project's own page draws its members unmarked")
     }
 }
