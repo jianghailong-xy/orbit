@@ -76,6 +76,8 @@ export interface FeishuAppChange {
   messageDetail?: FeishuMessageDetail;
   /** Whether a tool approval's card has Allow once and Deny (§7.2). Off, it has only Open in Orbit. */
   approvalsInFeishu?: boolean;
+  /** Where a session started from the owner's direct messages opens (§7.3); null clears it. */
+  defaultWorkspaceId?: string | null;
 }
 
 /**

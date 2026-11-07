@@ -5,11 +5,10 @@ import { FeishuCardActions } from './feishu-card-actions';
 import { FeishuModule } from './feishu.module';
 
 /**
- * The Feishu actions that call into the account's sessions (docs/feishu-bot-design.md §7.2): the owner's clicks on
- * cards (FeishuCardActions). A module of its own because FeishuModule cannot import SessionsModule: SessionsModule
- * reaches PushModule (through CoordinatorJudgmentModule), and PushModule imports FeishuModule. This one imports all
- * three and is imported by nothing but AppModule, so there is no ring; FeishuCardActions registers itself with
- * FeishuRouter when the module starts.
+ * The owner's clicks on approval cards (FeishuCardActions, docs/feishu-bot-design.md §7.2, §7.4). A module of its own,
+ * imported by nothing but AppModule, so it needs no forwardRef of its own: it imports FeishuModule, PushModule (for
+ * FeishuTransport) and SessionsModule, and FeishuCardActions registers itself with FeishuRouter when the module starts.
+ * The router asks FeishuDirectService first (its default-workspace card) and hands every other click to it.
  */
 @Module({
   imports: [FeishuModule, PushModule, SessionsModule],

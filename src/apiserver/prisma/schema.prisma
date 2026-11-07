@@ -371,6 +371,8 @@ model User {
   feishuChatRoutes FeishuChatRoute[]
   /// The alert cards sent to the owner of the account's Feishu app (migration 0495).
   feishuMessages   FeishuMessage[]
+  /// The Feishu message chains of its sessions (migration 0499).
+  feishuThreads    FeishuThread[]
 
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
@@ -3001,7 +3003,8 @@ model Activity {
   type           String
   payload        Json?
   /// The door the write came in through (docs/personal-access-token-design.md §6.4): `LOGIN` |
-  /// `PAT`. NULL on a row no user credential wrote.
+  /// `PAT` | `FEISHU` (the account's Feishu bot, docs/feishu-bot-design.md §7.2, 0499). NULL on a row no user
+  /// credential wrote.
   credentialKind String?  @map("credential_kind")
   /// The personal access token's id when `credentialKind` is `PAT`, and only then
   /// (activity_credential_chk, 0384). No FK, like actorId: the record outlives the token.
@@ -8714,6 +8717,7 @@ model FeishuApp {
   links              FeishuLink[]
   chatRoutes         FeishuChatRoute[]
   messages           FeishuMessage[]
+  threads            FeishuThread[]
 
   @@map("feishu_app")
 }
@@ -8828,6 +8832,32 @@ model FeishuMessage {
   @@index([openItemId], map: "feishu_message_open_item_id_idx")
   @@index([ownerId], map: "feishu_message_owner_id_idx")
   @@map("feishu_message")
+}
+
+/// A Feishu message chain that belongs to a session (docs/feishu-bot-design.md §7.3, §7.5, migration 0499), written only
+/// by feishu/feishu-direct.service.ts: the chain the owner started with a new direct message (the bot's receipt
+/// answers it), and each alert card the owner replied to. `(appId, chatId, rootMessageId)` is unique; `lastSpokenAt`
+/// says which of a session's chains its replies go back to. `sessionId` carries no foreign key, as
+/// `FeishuMessage.sessionId` carries none; every reader scopes it by `ownerId`.
+model FeishuThread {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  ownerId       String    @map("owner_id") @db.Uuid
+  owner         User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "feishu_thread_owner_id_fkey")
+  appId         String    @map("app_id")
+  app           FeishuApp @relation(fields: [appId], references: [appId], onDelete: Cascade, onUpdate: Cascade, map: "feishu_thread_app_id_fkey")
+  chatId        String    @map("chat_id")
+  /// The message the chain starts from: Feishu's `root_id` of every reply in it.
+  rootMessageId String    @map("root_message_id")
+  sessionId     String    @map("session_id") @db.Uuid
+  /// When someone last spoke in the chain: its opening, or the owner's latest reply in it.
+  lastSpokenAt  DateTime  @default(now()) @map("last_spoken_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([appId, chatId, rootMessageId], map: "feishu_thread_app_id_chat_id_root_message_id_key")
+  @@index([sessionId, lastSpokenAt], map: "feishu_thread_session_id_last_spoken_at_idx")
+  @@index([ownerId], map: "feishu_thread_owner_id_idx")
+  @@map("feishu_thread")
 }
 
 /// The inbound inbox of the Feishu bot integration (docs/feishu-bot-design.md §7.1, migration 0492): every event an

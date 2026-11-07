@@ -1,4 +1,4 @@
-import { ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, ValidateIf } from 'class-validator';
 import {
   FEISHU_APP_ID_MAX_LENGTH,
   FEISHU_CHAT_ALLOWED_MAX,
@@ -45,6 +45,11 @@ export class ChangeFeishuAppDto implements FeishuAppChange {
   @IsOptional()
   @IsBoolean()
   approvalsInFeishu?: boolean;
+  /** Where the owner's new direct messages open a session (§7.3); null clears it. */
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsPublicId()
+  defaultWorkspaceId?: string | null;
 }
 
 /** `PUT /admin/integrations/feishu`: "Allow accounts to connect Feishu bots". */

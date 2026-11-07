@@ -354,6 +354,15 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
 
 一个会话可能有几条消息链（从私聊开的那条，加上主人回复过的提醒卡）。回传（§7.5）发到最近一次有人发言的那条。
 
+落地（F2-3，`feishu/feishu-direct.service.ts`，迁移 0499）：
+
+- 回复成功不另发回执（与 iOS 横幅的 Reply 一样），会话的回答由 §7.5 回传；`createTurn` 拒绝时（会话已结束、在废纸篓）回
+  `Orbit didn't send this to the session: <原因>.`。回复一条不属于任何会话的消息，回一句说明，不开新会话。
+- 选默认 workspace 的卡片点完只写 `defaultWorkspaceId`、把卡改成终态，提示主人把消息再发一次；那条消息本身不补开会话。
+- 幂等：turn 的 clientTurnId 由 appId 与 event_id 派生，新会话的 id 由 appId 与 message_id 派生，同一事件再处理找到第一次写的行；
+  回执的飞书 uuid 由被回复的 message_id 与用途派生。每个新 turn / 新会话写一行 `activity`（`credential_kind = FEISHU`，
+  payload 带 appId、open_id、message_id），0499 把 `activity_credential_chk` 放宽到 FEISHU。
+
 ### 7.4 卡片按钮
 
 - **核对点击者**：卡片可以被转发。回调里的 open_id 必须等于应用的 `ownerOpenId`，否则回
@@ -370,7 +379,9 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
   `decided_feishu_open_id`、`decided_feishu_message_id`。卡片不 PATCH：`FeishuTransport.answerCard` 在行的租约下按此刻画好
   （还有待批就重画、否则终态并记 CLOSED），随回调同步返回 `{ toast, card: { type: 'raw', data } }`；行被别人持有时只回
   toast，由对账改卡。收件箱给路由 2.5 秒，超时先回 `Working…`，算完后用回调的 `event.token` 调
-  `POST /open-apis/interactive/v1/card/update` 补卡一次（30 分钟内）。Activity 上的 FEISHU 留痕不在本任务内。
+  `POST /open-apis/interactive/v1/card/update` 补卡一次（30 分钟内）。落地的 FEISHU 决定在同一事务里另记一行 Activity
+  （`feishu.approval.decided`，credential_kind FEISHU，payload 带 sessionId、approvalId、behavior、appId、openId、messageId）；
+  重放的事件、过期卡的点击不再记。
 
 ### 7.5 会话的回复回到飞书
 

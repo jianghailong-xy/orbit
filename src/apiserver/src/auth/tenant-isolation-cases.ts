@@ -925,6 +925,10 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
     request: (of) => ({ params: {}, body: { name: 'census token', scopes: ['tasks:read'], workspaceIds: [of.workspaceId] } }),
   },
 
+  // The default workspace of the owner's Feishu direct messages (docs/feishu-bot-design.md §7.3): the workspace is read
+  // before the app, so A's is answered as one that names nothing (404) and nothing is written.
+  'PATCH /integrations/feishu body defaultWorkspaceId': { request: (of) => ({ params: {}, body: { defaultWorkspaceId: of.workspaceId } }) },
+
   ...workspaceFieldCases('agents'),
   ...workspaceFieldCases('workspaces'),
 

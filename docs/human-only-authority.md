@@ -90,7 +90,8 @@ Allow once or Deny on a tool-permission approval's card (`SessionsService.decide
 while the app's `approvalsInFeishu` is on, from the clicker whose open_id is the app's `ownerOpenId`.
 It carries a plain allow or deny only — never `rememberRules` ("always allow" widens a standing grant)
 or `startAfterCreate`, either of which is refused before anything is written — and the decision records
-`decided_credential_kind = FEISHU` with the clicker's open_id and the card's message_id (0500). Orbit's
+`decided_credential_kind = FEISHU` with the clicker's open_id and the card's message_id (0500), and, in the
+same transaction, an `activity` row `feishu.approval.decided` with `credential_kind = FEISHU`. Orbit's
 own confirmation cards (`orbit_task_create`, `orbit_project_create`, `orbit_agent_create` / `update`,
 deleting a runner, the MCP orchestration grant and the rest filed as `orbit_<name>`) and owner items
 have no action on their cards: only Open in Orbit. A click is stronger than a bearer token — Feishu makes

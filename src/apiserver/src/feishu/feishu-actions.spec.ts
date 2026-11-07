@@ -12,7 +12,7 @@ import { FEISHU_ALLOWED_ACTIONS, FEISHU_INFRASTRUCTURE } from './feishu-actions'
 //   (1) every allowlist entry names a method that exists on its service, once;
 //   (2) every call the feishu module's sources make on an injected service — `this.<field>.<method>(` where the
 //       constructor injects `<field>: <Class>` — is either on the module's own infrastructure or on the allowlist;
-//   (3) the allowlist is read-only until a task adds a write together with §7.2's condition for it.
+//   (3) the writes on it are exactly the ones §7.2 allows so far, each added by its task with §7.2's condition for it.
 
 const FEISHU_DIR = path.resolve(__dirname, '../../src/feishu');
 
@@ -91,10 +91,12 @@ test('(2) the census reads a call it should refuse', () => {
   assert.deepEqual(serviceCalls(sample), ['SessionsService.createTurn', 'PrismaService.$queryRaw']);
 });
 
-test('(3) the allowlist\'s writes are exactly those §7.2 allows so far: answering an approval (F2-1)', () => {
-  assert.deepEqual(FEISHU_ALLOWED_ACTIONS.filter((a) => a.access !== 'READ').map((a) => `${a.service}.${a.method}`), [
-    'SessionsService.decideApproval',
-  ]);
+test('(3) the writes on the allowlist are the ones §7.2 allows so far', () => {
+  assert.deepEqual(
+    FEISHU_ALLOWED_ACTIONS.filter((a) => a.access !== 'READ').map((a) => `${a.service}.${a.method}`).sort(),
+    // F2-3: reply to a session, open a session from the owner's direct messages. F2-1: answer a tool approval on its card.
+    ['SessionsService.create', 'SessionsService.createTurn', 'SessionsService.decideApproval'],
+  );
 });
 
 test('(3) decideApproval is called, and only from the card actions', () => {

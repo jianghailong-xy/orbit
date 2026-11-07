@@ -2812,6 +2812,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it is
       // not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
       '0498_feishu_message_closed',
+      // 0499 is one new table for the Feishu bot integration (docs/feishu-bot-design.md §7.3, task F2-3):
+      // `feishu_thread`, the Feishu message chains that belong to a session, with its primary key, a unique index on
+      // (app_id, chat_id, root_message_id), indexes on (session_id, last_spoken_at) and owner_id, one CHECK and foreign
+      // keys to `user` and `feishu_app` (app_id, both ON DELETE CASCADE); and `activity_credential_chk` replaced so
+      // credential_kind may also be FEISHU. Neither is a preserved relation, no `task`, `session`, `project` or
+      // `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function, trigger
+      // or type is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE.
+      '0499_feishu_thread',
+
       // 0500 adds three nullable columns and one CHECK to `approval` (docs/feishu-bot-design.md §7.2, task F2-1): the
       // credential an approval's decision came in by, and the Feishu clicker and card when that was a Feishu card. It is
       // not a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six

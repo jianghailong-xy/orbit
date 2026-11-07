@@ -10,12 +10,14 @@
  *
  *   (1) Allow once: answered within Feishu's 3 seconds with the toast `Allowed.` and the card drawn as its outcome with no
  *       button; the runner's long poll gets allow; the decision records credentialKind FEISHU, the clicker's open_id
- *       and the card's message_id; the card's row is CLOSED, and nothing PATCHes it after;
+ *       and the card's message_id, and one Activity row (`feishu.approval.decided`, credential_kind FEISHU, with the
+ *       app, open_id and message_id); the card's row is CLOSED, and nothing PATCHes it after;
  *   (2) what the runner gets is what a decision through the web app's route gives it, id aside;
  *   (3) Deny: the long poll gets deny, recorded as FEISHU;
  *   (4) a click that carries "always allow" (`rememberRules`) is refused with a toast and writes nothing: the
  *       approval stays PENDING, no standing grant is made — the write trap sees only the inbox's own record;
- *   (5) the same click's event handled a second time decides nothing more: one decision, its time unchanged;
+ *   (5) the same click's event handled a second time decides nothing more: one decision, its time unchanged, one
+ *       Activity row; a stale card's click records none;
  *   (6) a stale card — its approval answered elsewhere, or its session no longer running — is answered
  *       `Already answered in Orbit.` and drawn as its outcome; the approval is left as it was;
  *   (7) approvalsInFeishu off: the card has no Allow or Deny, and a click naming the approval is refused, writing
@@ -49,6 +51,7 @@ import { CARD_WORKING, FeishuInboxService } from './feishu-inbox.service';
 import { FEISHU_TEST_OPEN_PLATFORM_ENV } from './feishu-open-platform';
 import { FeishuOutbound } from './feishu-outbound';
 import type { FeishuChatRouteService } from './feishu-chat-route.service';
+import type { FeishuDirectService } from './feishu-direct.service';
 import type { FeishuOwnerService } from './feishu-owner.service';
 import { FeishuRouter, type InboundEvent } from './feishu-router';
 import { FakeOpenPlatform, type FakeConnection, type FakeRequest } from './test-support/fake-open-platform';
@@ -187,6 +190,9 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
     return { eventId, answer: ack.data as Json, ms };
   }
   const approvalRow = (id: string) => db.approval.findUniqueOrThrow({ where: { id } });
+  /** The Activity rows recording a Feishu decision of this approval (§7.2). */
+  const decidedActivity = (approvalId: string) =>
+    db.activity.findMany({ where: { type: 'feishu.approval.decided', payload: { path: ['approvalId'], equals: approvalId } } });
   const patchesOf = (messageId: string) =>
     fake.messages.filter((m: FakeRequest) => m.method === 'PATCH' && m.path === `/open-apis/im/v1/messages/${messageId}`);
 
@@ -214,6 +220,11 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
     assert.equal(row.decidedFeishuMessageId, messageId);
     assert.equal(row.decidedById, ownerId);
     assert.equal(row.rememberRule, null);
+    const [activity, ...more] = await decidedActivity(approvalId);
+    assert.deepEqual(more, [], 'one Activity row');
+    assert.equal(activity?.credentialKind, 'FEISHU');
+    assert.equal(activity?.actorId, ownerId);
+    assert.deepEqual(activity?.payload, { sessionId: s, approvalId, behavior: 'allow', appId: X.appId, openId: ALICE, messageId });
     assert.equal((await db.feishuMessage.findFirstOrThrow({ where: { messageId } })).status, 'CLOSED');
     await sleep(1_500); // the badge reconcile the decision schedules has run: it leaves a CLOSED card alone.
     assert.deepEqual(patchesOf(messageId), [], 'nothing PATCHes the card after');
@@ -227,6 +238,7 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
     const webDecision = await webWaiting;
     assert.deepEqual(without(decision.json, 'id', 'publicId'), without(webDecision.json, 'id', 'publicId'), 'the same decision, whichever door it came in by');
     assert.equal((await approvalRow(viaWeb)).decidedCredentialKind, 'LOGIN', 'the web app\'s decision is recorded as LOGIN');
+    assert.deepEqual(await decidedActivity(viaWeb), [], 'and writes no Feishu Activity row');
   });
 
   await t.test('(3) Deny: the runner gets deny, recorded as FEISHU', async () => {
@@ -243,6 +255,10 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
     assert.equal(row.decidedCredentialKind, 'FEISHU');
     assert.equal(row.decidedFeishuOpenId, ALICE);
     assert.equal(row.decidedFeishuMessageId, messageId);
+    const activity = await decidedActivity(approvalId);
+    assert.equal(activity.length, 1);
+    assert.equal(activity[0]!.credentialKind, 'FEISHU');
+    assert.deepEqual(activity[0]!.payload, { sessionId: s, approvalId, behavior: 'deny', appId: X.appId, openId: ALICE, messageId });
   });
 
   // ── the write trap, for what a refused click may write: the inbox's own record of it, and nothing else ───────────
@@ -309,6 +325,7 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
     const again = await approvalRow(approvalId);
     assert.equal(again.status, 'ALLOWED');
     assert.equal(again.decidedAt?.getTime(), first.decidedAt?.getTime(), 'one decision: its time is the first one\'s');
+    assert.equal((await decidedActivity(approvalId)).length, 1, 'and one Activity row');
     assert.deepEqual(
       (await strayWrites(before, eventId, app)).filter((w) => !w.includes('UPDATE feishu_inbound_event')),
       [],
@@ -328,6 +345,7 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
     const row = await approvalRow(answered.approvalId);
     assert.equal(row.status, 'DENIED', 'left as it was');
     assert.equal(row.decidedCredentialKind, null);
+    assert.deepEqual(await decidedActivity(answered.approvalId), [], 'a stale card records nothing');
     assert.equal((await db.feishuMessage.findFirstOrThrow({ where: { messageId: answered.messageId } })).status, 'CLOSED');
 
     // The session no longer running: nothing waits on the card's answer any more.
@@ -338,6 +356,7 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
     assert.deepEqual(g.answer.toast, { type: 'info', content: STALE });
     assert.match(allText(g.answer.card.data), /No longer waiting in Orbit/);
     assert.equal((await approvalRow(gone.approvalId)).status, 'PENDING', 'no decision was written');
+    assert.deepEqual(await decidedActivity(gone.approvalId), []);
 
     // An approval of no account's, or another account's, is answered the same.
     const n = await refusedClick(answered.messageId, { action: 'approval.allow', approvalId: randomUUID() });
@@ -372,7 +391,7 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
 
   await t.test('(8) an answer later than the budget: "Working…", then the card once through the update token', async () => {
     const prisma = db as unknown as PrismaService;
-    const router = new FeishuRouter(prisma, {} as FeishuOwnerService, {} as FeishuChatRouteService);
+    const router = new FeishuRouter(prisma, {} as FeishuOwnerService, {} as FeishuChatRouteService, { handleCardAction: async () => null } as unknown as FeishuDirectService);
     const transport = new FeishuTransport(prisma, new FeishuAppService(prisma), new FeishuOutbound());
     const actions = new FeishuCardActions(prisma, router, {} as SessionsService, transport, new FeishuOutbound());
     const lateCard = { schema: '2.0', header: { title: { tag: 'plain_text', content: 'late' } } };

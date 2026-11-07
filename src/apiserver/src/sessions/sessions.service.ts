@@ -8532,8 +8532,12 @@ export class SessionsService {
       where: { id: approvalId, sessionId: id },
       select: { toolName: true, input: true },
     });
-    // Only the first decision on a still-PENDING approval applies (idempotent).
-    const res = await this.prisma.approval.updateMany({
+    // Only the first decision on a still-PENDING approval applies (idempotent). A Feishu card's
+    // decision is also an Activity row (docs/feishu-bot-design.md §7.2): written in the same
+    // transaction, and only by the decision that lands, so a replayed event or a stale card's
+    // click records nothing more.
+    const decide = async (db: Prisma.TransactionClient) => {
+      const landed = await db.approval.updateMany({
       where: { id: approvalId, sessionId: id, status: 'PENDING' },
       data: {
         status,
@@ -8557,6 +8561,22 @@ export class SessionsService {
         decidedAt: new Date(),
       },
     });
+      if (feishu && landed.count > 0) {
+        await db.activity.create({
+          data: {
+            actorId: ownerId,
+            type: 'feishu.approval.decided',
+            credentialKind: 'FEISHU',
+            payload: {
+              sessionId: id, approvalId, behavior: dto.behavior,
+              appId: feishu.appId, openId: feishu.openId, messageId: feishu.messageId ?? null,
+            } as Prisma.InputJsonValue,
+          },
+        });
+      }
+      return landed;
+    };
+    const res = await withTransactionRetry(this.prisma, (tx) => decide(tx), loggedRetry(this.logger, 'sessions.decideApproval'));
     const a = await this.prisma.approval.findFirst({ where: { id: approvalId, sessionId: id } });
     if (!a) throw new NotFoundException('approval not found');
     if (res.count > 0) {
