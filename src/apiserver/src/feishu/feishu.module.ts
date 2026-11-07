@@ -27,6 +27,7 @@ import { FeishuRouter } from './feishu-router';
   controllers: [FeishuController, FeishuAdminController],
   // AdminRoleGuard depends only on the global PrismaService, so it is provided here too (UsersModule does not export it).
   providers: [FeishuAppService, AdminRoleGuard, FeishuRouter, FeishuInboxService, FeishuLinkService, FeishuOutbound, FeishuOwnerService, FeishuChatRouteService, FeishuDirectService],
-  exports: [FeishuAppService, FeishuOutbound],
+  // FeishuRouter for the card actions (feishu-actions.module.ts), which register with it.
+  exports: [FeishuAppService, FeishuOutbound, FeishuRouter],
 })
 export class FeishuModule {}

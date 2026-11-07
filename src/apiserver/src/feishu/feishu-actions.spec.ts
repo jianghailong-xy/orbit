@@ -94,7 +94,12 @@ test('(2) the census reads a call it should refuse', () => {
 test('(3) the writes on the allowlist are the ones §7.2 allows so far', () => {
   assert.deepEqual(
     FEISHU_ALLOWED_ACTIONS.filter((a) => a.access !== 'READ').map((a) => `${a.service}.${a.method}`).sort(),
-    // F2-3: reply to a session, open a session from the owner's direct messages.
-    ['SessionsService.create', 'SessionsService.createTurn'],
+    // F2-3: reply to a session, open a session from the owner's direct messages. F2-1: answer a tool approval on its card.
+    ['SessionsService.create', 'SessionsService.createTurn', 'SessionsService.decideApproval'],
   );
+});
+
+test('(3) decideApproval is called, and only from the card actions', () => {
+  const callers = sources().filter(({ text }) => serviceCalls(text).includes('SessionsService.decideApproval')).map(({ file }) => file);
+  assert.deepEqual(callers, ['feishu-card-actions.ts']);
 });

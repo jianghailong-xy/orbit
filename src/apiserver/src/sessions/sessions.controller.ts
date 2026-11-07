@@ -944,7 +944,7 @@ export class SessionsController {
     @Param('approvalId', PublicIdPipe) approvalId: string,
     @Body() dto: ApprovalDecisionRequest,
   ) {
-    return this.sessions.decideApproval(user.userId, id, approvalId, dto);
+    return this.sessions.decideApproval(user.userId, id, approvalId, dto, user.credential);
   }
 
   /**
