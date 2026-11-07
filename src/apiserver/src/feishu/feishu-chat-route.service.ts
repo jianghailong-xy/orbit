@@ -17,7 +17,7 @@ import {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { renderConnectGroupCard } from './cards/feishu-cards';
-import { FeishuOutbound, feishuUuid } from './feishu-outbound';
+import { FeishuOutbound, feishuDedupeUuid } from './feishu-outbound';
 import { credentialsOf, type FeishuOwnerApp } from './feishu-owner.service';
 
 /** What the bot answers in a group (§8.1). English, as every word the bot sends (CLAUDE.md §5). */
@@ -172,7 +172,7 @@ export class FeishuChatRouteService {
     this.logger.log(`feishu app ${app.appId} of account ${app.ownerId}: the owner asked to connect a group; card sent`);
     const card = renderConnectGroupCard(chat.name, confirmUrl(ticket), FEISHU_CHAT_TICKET_TTL_MINUTES);
     const sent = await this.outbound.reply(credentials, message.messageId, { msgType: 'interactive', content: card }, {
-      uuid: feishuUuid(`connect-card:${message.messageId}`),
+      uuid: feishuDedupeUuid('connect-card', app.appId, message.messageId),
     });
     if (!sent.ok) this.logger.warn(`feishu app ${app.appId}: the connect card was not delivered (code ${sent.feishuCode ?? sent.status})`);
   }
@@ -287,7 +287,7 @@ export class FeishuChatRouteService {
     const credentials = credentialsOf(app);
     if (!credentials) return;
     const result = await this.outbound.reply(credentials, messageId, { msgType: 'text', content: { text: words } }, {
-      uuid: feishuUuid(`reply:${messageId}:${words}`),
+      uuid: feishuDedupeUuid('group-reply', app.appId, messageId, words),
     });
     if (!result.ok) this.logger.warn(`feishu app ${app.appId}: a reply was not delivered (code ${result.feishuCode ?? result.status})`);
   }

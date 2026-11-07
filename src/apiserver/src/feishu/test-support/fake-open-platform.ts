@@ -78,6 +78,8 @@ export interface FakeRequest {
   body: unknown;
   /** When it arrived (Date.now()). */
   at: number;
+  /** A message send or reply: the message_id it was answered with — a repeat of a `uuid` gets the first one's. */
+  answeredWith?: string;
 }
 
 /** What a route answers: an HTTP status, a JSON body, and any headers beside the content type. */
@@ -122,6 +124,8 @@ export class FakeOpenPlatform {
   /** Groups by chat_id, as the chat API answers them; a chat_id not here is answered Feishu's refusal. */
   readonly chats = new Map<string, { name: string; external: boolean }>();
   private readonly apps = new Map<string, FakeFeishuApp>();
+  /** The message each de-duplication key (`uuid`) delivered, per app. */
+  private readonly byUuid = new Map<string, string>();
   private readonly routes = new Map<string, FakeRoute>();
   private readonly sockets = new Map<number, WsSocket>();
   private readonly pending = new Map<string, (ack: FakeAck) => void>();
@@ -136,9 +140,21 @@ export class FakeOpenPlatform {
     this.route('GET', '/open-apis/bot/v3/info', (request) =>
       this.withToken(request, (app) => ({ status: 200, body: { code: 0, msg: 'ok', bot: { app_name: app.botName ?? 'Fake bot', open_id: `ou_bot_${app.appId}` } } })));
     const message = (request: FakeRequest & { platform: FeishuPlatform }) =>
-      this.withToken(request, () => {
+      this.withToken(request, (app) => {
+        // Feishu delivers one message per `uuid` (its de-duplication key) within an hour, and answers a repeat with the
+        // message it already delivered; a repeat is in `requests`, never in `messages`.
+        const uuid = (request.body as { uuid?: unknown } | null)?.uuid;
+        const key = typeof uuid === 'string' && request.method === 'POST' ? `${app.platform}:${app.appId}:${uuid}` : null;
+        const known = key ? this.byUuid.get(key) : undefined;
+        if (known) {
+          request.answeredWith = known;
+          return { status: 200, body: { code: 0, msg: 'success', data: { message_id: known } } };
+        }
         this.messages.push(request);
-        return { status: 200, body: { code: 0, msg: 'success', data: { message_id: `om_fake_${randomBytes(8).toString('hex')}` } } };
+        const messageId = `om_fake_${randomBytes(8).toString('hex')}`;
+        if (request.method === 'POST') request.answeredWith = messageId;
+        if (key) this.byUuid.set(key, messageId);
+        return { status: 200, body: { code: 0, msg: 'success', data: { message_id: messageId } } };
       });
     this.route('GET', '/open-apis/contact/v3/users/:user_id', (request) =>
       this.withToken(request, () => {
@@ -283,12 +299,15 @@ export class FakeOpenPlatform {
       return;
     }
     const route = this.match(request.method, request.path);
+    const routed = platform === null ? null : { ...request, platform };
     const answer: FakeAnswer =
-      platform === null
+      routed === null
         ? { status: 404, body: { code: 404, msg: `no platform at /${prefix}` } }
         : route
-          ? await route({ ...request, platform })
+          ? await route(routed)
           : { status: 404, body: { code: 404, msg: `no route for ${request.method} ${request.path}` } };
+    // What the route answered a send or reply with, on the request `requests` holds too.
+    if (routed?.answeredWith) request.answeredWith = routed.answeredWith;
     res.writeHead(answer.status, { ...answer.headers, 'content-type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify(answer.body));
   }
