@@ -16,6 +16,7 @@ class SessionProjectCopyParityTest {
     private val copy = File(root, "src/macos/OrbitKit/Sources/OrbitKit/App/SessionProjectCopy.swift").readText()
     private val page = File(root, "src/macos/OrbitApp/Sources/OrbitApp/Views/SessionProjectPage.swift").readText()
     private val projects = File(root, "src/macos/OrbitKit/Sources/OrbitKit/Models/Projects.swift").readText()
+    private val web = File(root, "src/web/src/lib/sessionProjects.ts").readText()
 
     private val count = 23
 
@@ -52,6 +53,38 @@ class SessionProjectCopyParityTest {
             SessionProjectCopy.startSuggestion(buildJsonObject { put("line", "MAIN"); put("automatic", false); put("maxConcurrentTasks", 2) }))
         assertSentence(copy, SessionProjectCopy.landingSilentWord(count), "$count" to "\\($0)")
         assertSentence(copy, SessionProjectCopy.landingSilentWord(null))
+    }
+
+    /** The mark on a member's own row, where its project has no row (owner 2026-11-07, option A): the web's hover, word for word in
+     * the web's `SESSION_PROJECT_COPY` and in OrbitKit's; and the Sessions its long press adds, the web's word too. */
+    @Test fun theMarksWordsAreTheWebsAndTheSwifts() {
+        assertSentence(copy, SessionProjectCopy.markHint("§"), "§" to "\\(title)")
+        val template = SessionProjectCopy.markHint("\${title}")
+        assertTrue("sessionProjects.ts no longer says `$template`", web.contains("  markHint: (title: string) => `$template`,"))
+        assertTrue("sessionProjects.ts no longer says '${SessionProjectCopy.sessions}'", web.contains("  sessions: '${SessionProjectCopy.sessions}',"))
+        assertEquals("Part of Launch · open its sessions", SessionProjectCopy.markHint("Launch"))
+    }
+
+    /** The words of the web's `SESSION_PROJECT_COPY` the tests in this file hold, to the Swift that OrbitKit holds to the web's
+     * (`startSuggestion` through MainBranchCopyTest). */
+    private val held = setOf("noCoordinator", "openSession", "sessions", "openProject", "pin", "unpin", "move", "coordinatorSection",
+        "pageSubtitleLoading", "startReview", "startNotAsked", "startHint", "progress", "markHint", "waitingSession", "pageSubtitle",
+        "pageProgress", "startAsked", "pageNotStarted", "startSuggestion")
+    /** The web's words this table does not carry: the progress hover, which a phone has no pointer for; Open Coordinator, which no
+     * session list draws; and the project page's status line before any count, its empty and its failed states, which the page here
+     * draws outside this table (`statusLabel`, its own empty line, the shared StatusMessage). */
+    private val notInThisTable = setOf("progressHint", "openCoordinator", "pageStatus", "pageEmpty", "pageUnread", "retry")
+
+    /** Every word of the web's `SESSION_PROJECT_COPY` is held here or named above as not in this table: a word the web adds that
+     * Android does not carry fails (OrbitKit's `testEveryWebWordIsHeldHereOrNamed`). */
+    @Test fun everyWebWordIsHeldHereOrNamed() {
+        val table = web.substringAfter("export const SESSION_PROJECT_COPY = {", "").substringBefore("\n} as const;", "")
+        val keys = Regex("^  (\\w+):", RegexOption.MULTILINE).findAll(table).map { it.groupValues[1] }.toList()
+        assertTrue("no words read from SESSION_PROJECT_COPY", keys.isNotEmpty())
+        val unheld = keys.filter { it !in held && it !in notInThisTable }
+        assertTrue("SESSION_PROJECT_COPY says $unheld, which SessionProjectCopy neither holds nor names", unheld.isEmpty())
+        val gone = (held + notInThisTable - keys.toSet()).sorted()
+        assertTrue("SESSION_PROJECT_COPY no longer says $gone", gone.isEmpty())
     }
 
     /** The landing line's words: the count a server sends alone, several jobs, and the job's own state words. */

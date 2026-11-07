@@ -41,6 +41,12 @@ data class SessionProjectRow(
     }
 }
 
+/** The project an ordinary row belongs to where that project has no row: a member in a workspace its coordinator does not run in
+ * (owner 2026-11-07, docs/mocks/project-rows-by-workspace, option A). OrbitKit `SessionProjectMark`, the web's `SessionProjectMark`. */
+data class SessionProjectMark(val projectId: String, val title: String, val status: String,
+    /** Null for a project the sidebar does not list (a DONE one, an older server): the mark is its status. */
+    val taskCounts: ProjectTaskCounts?, val runningCount: Int)
+
 /** A row of the list: an ordinary session, or a project in place of its members. */
 sealed interface SessionProjectEntry {
     val id: String
@@ -67,9 +73,11 @@ sealed interface SessionProjectEntry {
     }
 }
 
-/** [assigned]: the sessions as their folders count them — a member in its coordinator's folder, wherever it is filed itself. */
+/** [assigned]: the sessions as their folders count them — a member in its coordinator's folder, wherever it is filed itself.
+ * [marks]: the members among [sessions] that are rows of their own here, by session id — their project's row is in the workspace its
+ * coordinator runs in, not this one. */
 data class SessionProjectListing(val assigned: List<DirectorySession>, val projects: List<SessionProjectRow>,
-    val sessions: List<DirectorySession>, val entries: List<SessionProjectEntry>)
+    val sessions: List<DirectorySession>, val entries: List<SessionProjectEntry>, val marks: Map<String, SessionProjectMark>)
 
 /** OrbitKit `SessionProjectGrouping`, a port of the web's `sessionProjects.ts` (design §4, §6, §7), after folder grouping. */
 object SessionProjectGrouping {
@@ -78,30 +86,48 @@ object SessionProjectGrouping {
 
     /**
      * [sessions]: this workspace's for [view]; [folders]: its folders. [coordinators] and [contentSessions] are every workspace's: a
-     * coordinator elsewhere still places and words the row, and a member elsewhere still supplies its line. [folderId] lists a
+     * coordinator decides where its project's row is, and a member elsewhere still supplies its line. [folderId] lists a
      * folder's page. [line] is the session line, by default [SessionLine.make] with the watch a session is parked on.
+     *
+     * A project is a row only in the workspace its coordinator runs in, [workspaceId] being the list's own. Anywhere else its members
+     * are that workspace's own rows, filed by their own folders and each marked with the project (owner 2026-11-07,
+     * docs/mocks/project-rows-by-workspace, option A). A project with no coordinator, or one whose coordinator's workspace nobody can
+     * tell, is a row wherever it has members, as before. Without a [workspaceId], every project with members here is a row.
      */
     internal fun listing(sessions: List<DirectorySession>, folders: List<Folder>, projects: List<JsonObject>, view: SessionView,
         byTag: Boolean, searching: Boolean = false, folderId: String? = null, runnerOffline: Boolean = false, now: Instant = Instant.now(),
         coordinators: List<DirectorySession> = emptyList(), contentSessions: List<DirectorySession>? = null,
-        watching: Map<String, WatchSessionSummary> = emptyMap(), recaps: Boolean = true,
+        watching: Map<String, WatchSessionSummary> = emptyMap(), recaps: Boolean = true, workspaceId: String? = null,
         line: ((DirectorySession) -> SessionLine)? = null): SessionProjectListing {
         // A LANDING row is platform work with no engine (LS6): it is never a project row's member, and it never counts among the
         // row's needs-you, running or background jobs, should a flat read ever carry one.
         val conversations = sessions.filterNot { it.isLanding }
         if (!listShowsProjects(view, byTag, searching))
-            return SessionProjectListing(conversations, emptyList(), conversations, conversations.map { SessionProjectEntry.Session(it) })
+            return SessionProjectListing(conversations, emptyList(), conversations, conversations.map { SessionProjectEntry.Session(it) }, emptyMap())
         fun watch(session: DirectorySession) = watching[watchKey(session.id)]
         val sessionLine = line ?: { session -> SessionLine.make(session, live = true, watching = watch(session), recaps = recaps, now = now) }
         val coordinatorByProject = mutableMapOf<String, DirectorySession>()
         for (session in coordinators + conversations) session.projectMembership?.takeIf { it.isCoordinator }?.let { coordinatorByProject[key(it.projectId)] = session }
+        // The project whose row holds this session here, by its key: none for a session in no project, or for a member whose coordinator
+        // runs in another workspace. Where the coordinator runs is read as the list reads a session's workspace, in either spelling.
+        fun heldBy(session: DirectorySession): String? {
+            val project = key(session.projectMembership?.projectId ?: return null)
+            val home = coordinatorByProject[project]?.workspace
+            return if (workspaceId != null && home != null && !ObjectId.same(home, workspaceId)) null else project
+        }
         val groups = linkedMapOf<String, MutableList<DirectorySession>>()
-        for (session in conversations) session.projectMembership?.let { groups.getOrPut(key(it.projectId)) { mutableListOf() } += session }
-        // Folder rows count every local member under its coordinator's folder, whatever folder the member itself is in.
-        val assigned = conversations.map { session -> session.projectMembership?.let { session.copy(folderId = coordinatorByProject[key(it.projectId)]?.folderId) } ?: session }
+        for (session in conversations) heldBy(session)?.let { groups.getOrPut(it) { mutableListOf() } += session }
+        // Folder rows count every member a row holds under its coordinator's folder, whatever folder the member itself is in.
+        val assigned = conversations.map { session -> heldBy(session)?.let { session.copy(folderId = coordinatorByProject[it]?.folderId) } ?: session }
         fun inScope(id: String?): Boolean = if (folderId != null) ObjectId.same(id, folderId) else id == null || folders.none { ObjectId.same(it.id, id) }
-        val loose = conversations.filter { it.projectMembership == null && inScope(it.folderId) }
-        if (groups.isEmpty()) return SessionProjectListing(assigned, emptyList(), loose, loose.map { SessionProjectEntry.Session(it) })
+        val loose = conversations.filter { heldBy(it) == null && inScope(it.folderId) }
+        val marks = loose.mapNotNull { session ->
+            val membership = session.projectMembership ?: return@mapNotNull null
+            val summary = projects.firstOrNull { it.text("id")?.let(::key) == key(membership.projectId) }
+            session.id to SessionProjectMark(membership.projectId, summary?.text("title") ?: membership.projectTitle,
+                summary?.text("status") ?: membership.projectStatus, taskCounts(summary), summary?.obj("buckets")?.number("running") ?: 0)
+        }.toMap()
+        if (groups.isEmpty()) return SessionProjectListing(assigned, emptyList(), loose, loose.map { SessionProjectEntry.Session(it) }, marks)
         // Each project's share of the content list, split once.
         val contentByProject = contentSessions?.filter { it.projectMembership != null && !it.isLanding }?.groupBy { key(it.projectMembership!!.projectId) }
         val rows = mutableListOf<SessionProjectRow>()
@@ -147,7 +173,7 @@ object SessionProjectGrouping {
             val needsYou = members.any { lines[it.id]?.tone == SessionLine.Tone.APPROVAL }
             val runningCount = if (runnerOffline) 0 else members.count { it.isRunning() }
             val jobs = !runnerOffline && members.any { it.isRunningJob(watch(it)) }
-            val counts = summary?.obj("taskCounts")?.let { ProjectTaskCounts(it.number("done") ?: 0, it.number("failed") ?: 0, it.number("total") ?: 0) }
+            val counts = taskCounts(summary)
             rows += SessionProjectRow(membership.projectId, summary?.text("title") ?: membership.projectTitle, summary?.text("status") ?: membership.projectStatus,
                 members, content.size, coordinator, rowFolder, coordinator?.pinnedAt, latest.lastTurnAt ?: latest.createdAt, coordinator?.createdAt ?: latest.createdAt,
                 needsYou, runningCount > 0, jobs, when { needsYou -> SessionProjectRow.Indicator.NEEDS_YOU; runningCount > 0 -> SessionProjectRow.Indicator.RUNNING
@@ -160,8 +186,12 @@ object SessionProjectGrouping {
                 if (view == SessionView.OPEN && (a.first.pinnedAt != null) != (b.first.pinnedAt != null)) (if (a.first.pinnedAt != null) -1 else 1)
                 else b.second.compareTo(a.second)
             }.map { it.first }
-        return SessionProjectListing(assigned, rows, loose, entries)
+        return SessionProjectListing(assigned, rows, loose, entries, marks)
     }
+
+    /** A project's progress as its `GET /projects/sidebar` row stores it; null for a project the sidebar does not list. */
+    private fun taskCounts(summary: JsonObject?) =
+        summary?.obj("taskCounts")?.let { ProjectTaskCounts(it.number("done") ?: 0, it.number("failed") ?: 0, it.number("total") ?: 0) }
 
     /** Either spelling of an id is one key. */
     internal fun key(id: String) = ObjectId.canonical(id) ?: id
@@ -179,6 +209,9 @@ object SessionProjectGrouping {
  * (docs/session-list-projects-design.md §6). */
 object SessionProjectCopy {
     fun progress(done: Int, total: Int) = "$done/$total"
+    /** The progress mark on a member's own row, where its project has no row (owner 2026-11-07): the web's hover, here what the mark
+     * says to a screen reader. The way in is the long press's Sessions. */
+    fun markHint(title: String) = "Part of $title · open its sessions"
     fun waitingSession(text: String, title: String) = "$text · $title"
     const val noCoordinator = "No coordinator"
     const val openSession = "Open Session"

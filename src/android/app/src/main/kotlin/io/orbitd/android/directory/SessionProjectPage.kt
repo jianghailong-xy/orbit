@@ -143,6 +143,16 @@ internal fun ProjectProgressChip(counts: ProjectTaskCounts?, running: Int, statu
     }
 }
 
+/** The project's progress leading the second line of a member's own row, where its project has no row (owner 2026-11-07,
+ * docs/mocks/project-rows-by-workspace, option A; iOS `SessionProjectMarkChip`): the project row's own chip. A phone does not press it on
+ * its own — the long press has Sessions — so a screen reader hears it as the web's hover, beside the progress it shows. */
+@Composable
+internal fun SessionProjectMarkChip(mark: SessionProjectMark) {
+    Box(Modifier.testTag("session-project-mark:${mark.projectId}").semantics { contentDescription = SessionProjectCopy.markHint(mark.title) }) {
+        ProjectProgressChip(mark.taskCounts, mark.runningCount, mark.status)
+    }
+}
+
 /** Done, running and failed out of the total, over a grey track (iOS `SessionProjectProgressBar`). */
 @Composable
 internal fun ProjectProgressBar(counts: ProjectTaskCounts, running: Int, modifier: Modifier = Modifier) {
