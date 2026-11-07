@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
+import { FeishuOwnerService, type FeishuTextMessage } from './feishu-owner.service';
 
 /** Who a Feishu event acts as (docs/feishu-bot-design.md §7.2): always the account its app belongs to. */
 export interface FeishuActor {
@@ -68,20 +69,48 @@ export function classify(eventType: string, payload: unknown): { route: FeishuRo
 }
 
 /**
+ * The text of a message event, with where it was sent and by whom; null for anything that is not a text message. In a
+ * group, the @mention placeholders (`@_user_1`) are dropped. Pure; exported for its spec.
+ */
+export function textMessageOf(payload: unknown): FeishuTextMessage | null {
+  const event = obj(obj(payload).event);
+  const message = obj(event.message);
+  const chatType = str(message.chat_type);
+  const openId = str(obj(obj(event.sender).sender_id).open_id);
+  const messageId = str(message.message_id);
+  if ((chatType !== 'p2p' && chatType !== 'group') || !openId || !messageId || str(message.message_type) !== 'text') return null;
+  let text: unknown;
+  try {
+    text = obj(JSON.parse(str(message.content) ?? '')).text;
+  } catch {
+    return null;
+  }
+  if (typeof text !== 'string') return null;
+  return { chatType, openId, messageId, text: chatType === 'group' ? text.replace(/@_user_\d+/g, ' ').trim() : text.trim() };
+}
+
+/**
  * FeishuRouter (docs/feishu-bot-design.md §3, §7): sends each inbound event to its branch, acting as the account the app
- * belongs to — read from feishu_app as the event is routed, so an event of an app that is gone acts nowhere. Every branch
- * records the event and does nothing more yet (task F0-2); later tasks fill them in, each calling only service methods on
- * the §7.2 allowlist (feishu/feishu-actions.ts). What is logged names the event, the app, the branch and the account,
+ * belongs to — read from feishu_app as the event is routed, so an event of an app that is gone acts nowhere. A text
+ * message that is an owner code, or the owner's `disconnect`, goes to FeishuOwnerService (§5); every other branch records
+ * the event and does nothing more yet; later tasks fill them in, each calling only service methods on the §7.2 allowlist
+ * (feishu/feishu-actions.ts). What is logged names the event, the app, the branch and the account,
  * never the message's text.
  */
 @Injectable()
 export class FeishuRouter {
   private readonly logger = new Logger(FeishuRouter.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly owner: FeishuOwnerService,
+  ) {}
 
   async route(event: InboundEvent): Promise<RouteDecision | null> {
-    const app = await this.prisma.feishuApp.findUnique({ where: { appId: event.appId }, select: { ownerId: true } });
+    const app = await this.prisma.feishuApp.findUnique({
+      where: { appId: event.appId },
+      select: { ownerId: true, appId: true, platform: true, appSecretEnc: true, ownerOpenId: true },
+    });
     if (!app) {
       this.logger.log(`feishu event ${event.eventId} of app ${event.appId} dropped: the app is no longer connected`);
       return null;
@@ -92,6 +121,10 @@ export class FeishuRouter {
       credential: { kind: 'FEISHU', appId: event.appId, openId, ...(messageId ? { messageId } : {}) },
     };
     this.logger.log(`feishu event ${event.eventId} of app ${event.appId} routed as ${route} for account ${app.ownerId}`);
+    if (route === 'DIRECT_MESSAGE' || route === 'GROUP_MENTION') {
+      const message = textMessageOf(event.payload);
+      if (message) await this.owner.handleMessage(app, message);
+    }
     return { route, actor };
   }
 }

@@ -2783,7 +2783,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // Neither is a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of the
       // six preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so
       // it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: both tables start empty.
-      '0492_feishu_inbound_event'],
+      '0492_feishu_inbound_event',
+      // 0494 is one new table for the Feishu bot integration (docs/feishu-bot-design.md §5.1): `feishu_connect_code`, the
+      // owner-identity codes, with its primary key, a unique index on code_hash, indexes on owner_id and expires_at, one
+      // CHECK, and a foreign key to `user` (ON DELETE CASCADE). It is not a preserved relation, no `task`, `session`,
+      // `project` or `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no
+      // function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence. No
+      // INSERT, UPDATE or DELETE: the table starts empty.
+      '0494_feishu_connect_code'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

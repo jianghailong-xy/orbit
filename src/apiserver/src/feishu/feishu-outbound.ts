@@ -79,6 +79,25 @@ export class FeishuOutbound {
     });
   }
 
+  /**
+   * `GET /open-apis/contact/v3/users/:user_id` (open_id): a person's name in the app's tenant, for display (§5.1). Null
+   * when Feishu does not say — the permission not granted, the person out of the app's range, Feishu unreachable.
+   */
+  async userName(app: FeishuAppCredentials, openId: string): Promise<string | null> {
+    try {
+      const answer = (await feishuClient(app).request({
+        method: 'GET',
+        url: `open-apis/contact/v3/users/${encodeURIComponent(openId)}`,
+        params: { user_id_type: 'open_id' },
+      })) as { code?: unknown; data?: { user?: { name?: unknown } } } | null;
+      const name = answer?.code === 0 ? answer.data?.user?.name : undefined;
+      return typeof name === 'string' && name.trim() !== '' ? name.trim().slice(0, 200) : null;
+    } catch {
+      this.logger.log(`feishu app ${app.appId}: a user's name could not be read`);
+      return null;
+    }
+  }
+
   private async call(app: FeishuAppCredentials, request: Request): Promise<FeishuSendResult> {
     const client = feishuClient(app);
     for (let attempt = 0; ; attempt++) {

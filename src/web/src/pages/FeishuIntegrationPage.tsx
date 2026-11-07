@@ -9,13 +9,15 @@ import {
   type FeishuAppChange,
   type FeishuAppConnect,
   type FeishuAppSettings,
+  type FeishuConnectCode,
   type FeishuIntegration,
   type FeishuPlatform,
+  type FeishuTestMessageResult,
 } from '@orbit/shared';
 import { api } from '../api';
 import { Alert } from '../components/ui/Alert';
 import { Badge } from '../components/ui/Badge';
-import { Button } from '../components/ui/Button';
+import { Button, LinkButton } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Popconfirm } from '../components/ui/Popconfirm';
 import { Radio, RadioGroup } from '../components/ui/Radio';
@@ -189,6 +191,120 @@ function AppSummary({
               </Button>
             }
           />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export const CONNECT_ACCOUNT = 'Connect your Feishu account';
+export const OPEN_BOT = 'Open the bot in Feishu';
+export const SEND_TEST = 'Send me a test message';
+export const DISCONNECT_OWNER = 'Disconnect';
+/** §5.1: what the owner's identity is for, and who can take it. */
+export const OWNER_HINT =
+  'Orbit sends your alerts to this Feishu account, and only takes direct messages and card answers from it. '
+  + 'Whoever sends the bot a code you generate here becomes the owner, so keep the code to yourself.';
+
+/**
+ * Who the app's owner is (docs/feishu-bot-design.md §5): the Feishu account Orbit sends alerts to. Connect your Feishu
+ * account generates a one-time code (8 characters, 10 minutes) to send the bot in a direct message; while one is shown,
+ * the page reads the app again every few seconds, so the owner's name appears as soon as the bot has the code.
+ * Disconnect clears it; the app stays connected. Send me a test message checks the whole way to the owner's chat.
+ */
+function OwnerSection({ app }: { app: FeishuAppSettings }) {
+  const qc = useQueryClient();
+  const message = useToast();
+  const [code, setCode] = useState<FeishuConnectCode | null>(null);
+  const owner = app.ownerOpenId;
+  // The code was answered while someone else, or nobody, was the owner: a new owner means it was used.
+  const [ownerAtCode, setOwnerAtCode] = useState<string | null>(null);
+  const waiting = code !== null && owner === ownerAtCode && Date.parse(code.expiresAt) > Date.now();
+  useQuery({ ...feishuIntegrationQuery(), refetchInterval: waiting ? 3_000 : false, enabled: waiting });
+  const shown = code !== null && owner === ownerAtCode ? code : null;
+  const generate = useMutation({
+    mutationFn: () => api<FeishuConnectCode>('/integrations/feishu/connect-codes', { method: 'POST' }),
+    onSuccess: (answer) => {
+      setOwnerAtCode(owner);
+      setCode(answer);
+    },
+    onError: (e: Error) => message.error("Couldn't generate a code", e.message),
+  });
+  const disconnect = useMutation({
+    mutationFn: () => api<FeishuIntegration>('/integrations/feishu/owner', { method: 'DELETE' }),
+    onSuccess: (integration) => {
+      qc.setQueryData(feishuIntegrationQuery().queryKey, integration);
+      setCode(null);
+      message.success('Feishu account disconnected', 'Orbit stops sending alerts to Feishu until you connect an account again.');
+    },
+    onError: (e: Error) => message.error("Couldn't disconnect", e.message),
+  });
+  const test = useMutation({
+    mutationFn: () => api<FeishuTestMessageResult>('/integrations/feishu/test', { method: 'POST' }),
+    onSuccess: () => message.success('Test message sent', 'Look for it in your direct messages with the bot.'),
+    onError: (e: Error) => message.error("Couldn't send the test message", e.message),
+  });
+  const copy = async (text: string) => {
+    if (await copyText(text)) message.success('Code copied');
+    else message.error("Couldn't copy the code", 'Select it and copy it by hand.');
+  };
+  return (
+    <section className="orbit-card feishu-card" aria-label="Your Feishu account">
+      <div className="orbit-card-head">
+        <h2 className="orbit-card-title">Your Feishu account</h2>
+        {owner ? <Badge tone="success">Connected</Badge> : <Badge>Not connected</Badge>}
+      </div>
+      <div className="orbit-card-body feishu-fields">
+        <p className="feishu-owner-state">
+          {owner ? (
+            <>
+              Connected as <strong className="feishu-owner-name">{app.ownerName ?? 'a Feishu user whose name Orbit could not read'}</strong>.
+            </>
+          ) : (
+            'No Feishu account is connected yet, so Orbit has nobody to send alerts to.'
+          )}
+        </p>
+        <p className="feishu-hint">{OWNER_HINT}</p>
+        {shown && (
+          <div className="feishu-code" aria-label="Your code">
+            <div className="feishu-code-row">
+              <code className="feishu-code-value">{shown.code}</code>
+              <Button size="small" onClick={() => void copy(shown.code)}>
+                Copy
+              </Button>
+            </div>
+            <p className="feishu-hint">
+              Send this code to the bot in a direct message, not in a group. It works once, until{' '}
+              {new Date(shown.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.
+            </p>
+            <div>
+              <LinkButton variant="primary" href={shown.applink} target="_blank" rel="noreferrer">
+                {OPEN_BOT}
+              </LinkButton>
+            </div>
+          </div>
+        )}
+        <div className="feishu-actions">
+          {owner && (
+            <Popconfirm
+              title="Disconnect your Feishu account?"
+              description="Orbit stops sending alerts to Feishu. The app stays connected, and you can connect an account again with a new code."
+              confirmText={DISCONNECT_OWNER}
+              danger
+              onConfirm={() => disconnect.mutateAsync()}
+              trigger={
+                <Button danger loading={disconnect.isPending}>
+                  {DISCONNECT_OWNER}
+                </Button>
+              }
+            />
+          )}
+          <Button disabled={!owner} loading={test.isPending} title={owner ? undefined : 'Connect your Feishu account first'} onClick={() => test.mutate()}>
+            {SEND_TEST}
+          </Button>
+          <Button variant={owner ? 'default' : 'primary'} loading={generate.isPending} onClick={() => generate.mutate()}>
+            {owner ? (shown ? 'Generate another code' : 'Connect a different account') : shown ? 'Generate another code' : CONNECT_ACCOUNT}
+          </Button>
         </div>
       </div>
     </section>
@@ -438,6 +554,7 @@ export function FeishuIntegrationPage() {
         />
       )}
       {app && <AppSummary app={app} allowed={allowed} onReplace={() => setReplacing(true)} />}
+      {app && allowed && <OwnerSection app={app} />}
       {(!app || replacing) && (
         <CredentialsForm key={app ? `${app.platform}:${app.appId}` : 'new'} app={app} allowed={allowed} onDone={app ? () => setReplacing(false) : undefined} />
       )}

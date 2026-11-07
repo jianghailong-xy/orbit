@@ -29,7 +29,8 @@ const { WebSocketServer } = require('ws') as { WebSocketServer: new (options: { 
  * neither is answered 404.
  *
  * It knows the self-built apps a spec registers (`addApp`) and answers what Orbit asks of them: the token trade,
- * `POST /open-apis/auth/v3/tenant_access_token/internal`; the bot's own name, `GET /open-apis/bot/v3/info`; sending,
+ * `POST /open-apis/auth/v3/tenant_access_token/internal`; the bot's own name, `GET /open-apis/bot/v3/info`; a person's name,
+ * `GET /open-apis/contact/v3/users/:user_id` (`userNames`); sending,
  * replying to and updating messages under `/open-apis/im/v1/messages`; and the long connection as the SDK speaks it
  * (task F0-2's comment has the protocol): `POST /callback/ws/endpoint` answers a `ws://` address on this same server,
  * whose WebSocket carries `pbbp2.Frame`s (fake-frames.ts). Each open WebSocket is a `FakeConnection`; `push` sends it
@@ -95,6 +96,8 @@ export const FAKE_INVALID_PARAM = { code: 10003, msg: 'invalid param' } as const
 export const FAKE_SECRET_INVALID = { code: 10014, msg: 'app secret invalid' } as const;
 /** The long connection's endpoint refusing credentials. */
 export const FAKE_WS_AUTH_FAILED = { code: 514, msg: 'auth failed' } as const;
+/** The contact API refusing a person outside the app's range, or without the permission granted. */
+export const FAKE_NO_USER_AUTHORITY = { code: 41050, msg: 'no user authority error' } as const;
 /** A request whose tenant_access_token the platform did not hand out. */
 export const FAKE_TOKEN_INVALID = { code: 99991663, msg: 'Invalid access token for authorization. Please make a request with token attached.' } as const;
 
@@ -112,6 +115,8 @@ export class FakeOpenPlatform {
   readonly connections: FakeConnection[] = [];
   /** Messages sent, replied and updated through `/open-apis/im/v1/messages`, as they arrived. */
   readonly messages: FakeRequest[] = [];
+  /** People's names by open_id, as the contact API answers them; an open_id not here is answered Feishu's refusal. */
+  readonly userNames = new Map<string, string>();
   private readonly apps = new Map<string, FakeFeishuApp>();
   private readonly routes = new Map<string, FakeRoute>();
   private readonly sockets = new Map<number, WsSocket>();
@@ -131,6 +136,14 @@ export class FakeOpenPlatform {
         this.messages.push(request);
         return { status: 200, body: { code: 0, msg: 'success', data: { message_id: `om_fake_${randomBytes(8).toString('hex')}` } } };
       });
+    this.route('GET', '/open-apis/contact/v3/users/:user_id', (request) =>
+      this.withToken(request, () => {
+        const openId = decodeURIComponent(request.path.split('/').pop() ?? '');
+        const name = request.query.get('user_id_type') === 'open_id' ? this.userNames.get(openId) : undefined;
+        return name === undefined
+          ? { status: 400, body: FAKE_NO_USER_AUTHORITY }
+          : { status: 200, body: { code: 0, msg: 'success', data: { user: { open_id: openId, name } } } };
+      }));
     this.route('POST', '/open-apis/im/v1/messages', message);
     this.route('POST', '/open-apis/im/v1/messages/:message_id/reply', message);
     this.route('PATCH', '/open-apis/im/v1/messages/:message_id', message);

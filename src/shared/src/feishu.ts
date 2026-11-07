@@ -127,3 +127,42 @@ export const FEISHU_APP_SCOPES = [
 ] as const;
 export const FEISHU_APP_EVENTS = ['im.message.receive_v1', 'im.chat.member.bot.deleted_v1'] as const;
 export const FEISHU_APP_CALLBACKS = ['card.action.trigger'] as const;
+
+/**
+ * The owner's identity (§5): who in the app's tenant the account is. A one-time code generated in Settings →
+ * Feishu, sent to the bot in a direct message, makes its sender the owner.
+ */
+export const FEISHU_CONNECT_CODE_LENGTH = 8;
+export const FEISHU_CONNECT_CODE_TTL_MINUTES = 10;
+
+/** `POST /api/integrations/feishu/connect-codes`: the code, once, when it stops working, and the link to the bot's chat. */
+export interface FeishuConnectCode {
+  code: string;
+  expiresAt: string;
+  /** A Feishu (or Lark) applink that opens a direct message with the bot. */
+  applink: string;
+}
+
+/** Where each platform's applinks open (§5.1). */
+export const FEISHU_APPLINK_ORIGINS: Readonly<Record<FeishuPlatform, string>> = {
+  FEISHU: 'https://applink.feishu.cn',
+  LARK: 'https://applink.larksuite.com',
+};
+
+/** The applink that opens a direct message with an app's bot. */
+export function feishuBotApplink(platform: FeishuPlatform, appId: string): string {
+  return `${FEISHU_APPLINK_ORIGINS[platform]}/client/bot/open?appId=${encodeURIComponent(appId)}`;
+}
+
+/** The 404 an owner route answers while the account has no app. */
+export const FEISHU_NO_APP_MESSAGE = 'No Feishu app is connected to this account.';
+
+/** The 409 `POST /api/integrations/feishu/test` answers while no owner is connected. */
+export const FEISHU_NO_OWNER = 'FEISHU_NO_OWNER';
+export const FEISHU_NO_OWNER_MESSAGE =
+  'Nobody is connected as the owner of this Feishu app yet, so there is no one to send a test message to. Connect your Feishu account first.';
+
+/** `POST /api/integrations/feishu/test`: Feishu accepted the message for the owner. */
+export interface FeishuTestMessageResult {
+  sent: true;
+}

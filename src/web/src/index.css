@@ -21987,6 +21987,31 @@ div.landing-jobs-open {
   align-items: center;
   gap: 6px;
 }
+/* The owner's identity (FeishuIntegrationPage OwnerSection): the one-time code, large enough to read off and type. */
+.feishu-owner-state {
+  margin: 0;
+}
+.feishu-code {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: var(--fill-muted);
+}
+.feishu-code p {
+  margin: 0;
+}
+.feishu-code-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.feishu-code-value {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 22px;
+  letter-spacing: 0.18em;
+  color: var(--text-1);
+}
 /* Admin → Users: one row an account — who, how they sign in, whether they can, when they last used
    Orbit, since when — and its actions: the one most often wanted in sight, the rest in its menu
    (docs/mocks/admin-users-redesign, direction A). Columns give way as the table's own box narrows,

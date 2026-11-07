@@ -34,7 +34,7 @@ vi.mock('../lib/toast', () => ({ useToast: () => toast }));
 const copied: string[] = [];
 vi.mock('../lib/clipboard', () => ({ copyText: vi.fn(async (text: string) => (copied.push(text), true)) }));
 const { api } = await import('../api');
-const { FeishuIntegrationPage, MESSAGE_DETAIL_HINT, NOT_ALLOWED_NOTICE, SECRET_UNREADABLE_NOTICE } = await import('./FeishuIntegrationPage');
+const { CONNECT_ACCOUNT, DISCONNECT_OWNER, FeishuIntegrationPage, MESSAGE_DETAIL_HINT, NOT_ALLOWED_NOTICE, OPEN_BOT, SECRET_UNREADABLE_NOTICE, SEND_TEST } = await import('./FeishuIntegrationPage');
 
 const SECRET = 'feishu-secret-never-shown-again';
 
@@ -47,6 +47,12 @@ let connectedReplicas: number;
 /** What the stand-in's Feishu answers the next save with, when not a token. */
 let refuse: ApiError | null;
 let requests: Array<{ method: string; body?: unknown }>;
+/** The app's owner as the stand-in keeps it (§5): bound once a code is "sent to the bot". */
+let owner: { openId: string; name: string | null } | null;
+/** The owner routes' requests, apart from `requests` (which are the app's own route's). */
+let ownerRequests: Array<{ method: string; path: string }>;
+/** What the stand-in answers POST …/test with when it refuses. */
+let refuseTest: ApiError | null;
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
 
@@ -60,8 +66,8 @@ const app = (): FeishuAppSettings | null =>
     messageDetail: stored.messageDetail ?? 'TITLES_ONLY',
     approvalsInFeishu: true,
     defaultWorkspaceId: null,
-    ownerOpenId: null,
-    ownerName: null,
+    ownerOpenId: owner?.openId ?? null,
+    ownerName: owner?.name ?? null,
     botName: null,
     lastConnectedAt: null,
     lastEventAt: null,
@@ -145,9 +151,26 @@ beforeEach(() => {
   connectedReplicas = 0;
   refuse = null;
   requests = [];
+  owner = null;
+  ownerRequests = [];
+  refuseTest = null;
   vi.mocked(api).mockReset();
   vi.mocked(api).mockImplementation(async (path: string, options: { method?: string; body?: unknown } = {}) => {
     const method = options.method ?? 'GET';
+    if (path.startsWith('/integrations/feishu/')) {
+      ownerRequests.push({ method, path });
+      if (path === '/integrations/feishu/connect-codes' && method === 'POST') {
+        return { code: 'KQ7M2XPA', expiresAt: '2099-01-01T08:10:00.000Z', applink: `https://applink.feishu.cn/client/bot/open?appId=${stored!.appId}` };
+      }
+      if (path === '/integrations/feishu/owner' && method === 'DELETE') {
+        owner = null;
+        return { allowed, app: app() };
+      }
+      if (path === '/integrations/feishu/test' && method === 'POST') {
+        if (refuseTest) throw refuseTest;
+        return { sent: true };
+      }
+    }
     if (path !== '/integrations/feishu') throw new Error(`the stand-in server has no ${method} ${path}`);
     requests.push({ method, ...(options.body === undefined ? {} : { body: structuredClone(options.body) }) });
     if (method === 'PUT') {
@@ -333,6 +356,70 @@ describe('the app connected', () => {
     await open();
     expect(badge()).toBe('Needs its App Secret');
     expect(card('Your app')!.textContent).toContain(SECRET_UNREADABLE_NOTICE);
+  });
+});
+
+describe("the owner's identity", { timeout: 30_000 }, () => {
+  const connected = () => {
+    stored = { platform: 'FEISHU', appId: 'cli_owner_app', secret: SECRET, enabled: true };
+    connectedReplicas = 1;
+  };
+
+  it('with nobody connected, generates a code to send the bot, with a link to its chat, and shows the owner once bound', async () => {
+    connected();
+    await open();
+    const section = card('Your Feishu account');
+    expect(section, 'the owner section').toBeTruthy();
+    expect(section!.textContent).toContain('No Feishu account is connected yet');
+    expect(button(SEND_TEST, section)?.disabled, 'nobody to send a test message to').toBe(true);
+    expect(button(DISCONNECT_OWNER, section)).toBeUndefined();
+
+    await click(button(CONNECT_ACCOUNT, section), CONNECT_ACCOUNT);
+    expect(ownerRequests).toEqual([{ method: 'POST', path: '/integrations/feishu/connect-codes' }]);
+    const shown = card('Your Feishu account')!;
+    expect(shown.querySelector('.feishu-code-value')?.textContent).toBe('KQ7M2XPA');
+    expect(shown.textContent).toContain('Send this code to the bot in a direct message, not in a group. It works once');
+    const link = [...shown.querySelectorAll<HTMLAnchorElement>('a')].find((a) => a.textContent?.trim() === OPEN_BOT);
+    expect(link?.href).toBe('https://applink.feishu.cn/client/bot/open?appId=cli_owner_app');
+    expect(link?.target).toBe('_blank');
+    await click(button('Copy', shown), 'Copy the code');
+    expect(copied).toEqual(['KQ7M2XPA']);
+
+    // The bot gets the code: the page, reading the app again while the code is shown, names the owner.
+    owner = { openId: 'ou_alice', name: 'Alice Example' };
+    await vi.waitFor(() => expect(card('Your Feishu account')?.querySelector('.feishu-owner-name')?.textContent).toBe('Alice Example'), { timeout: 8_000 });
+    expect(card('Your Feishu account')?.querySelector('.feishu-code-value'), 'the used code is gone').toBeNull();
+    expect(button(SEND_TEST, card('Your Feishu account'))?.disabled).toBe(false);
+  });
+
+  it('sends a test message to the owner, and says why when the server refuses', async () => {
+    connected();
+    owner = { openId: 'ou_alice', name: 'Alice Example' };
+    await open();
+    await click(button(SEND_TEST, card('Your Feishu account')), SEND_TEST);
+    expect(ownerRequests).toEqual([{ method: 'POST', path: '/integrations/feishu/test' }]);
+    expect(toast.success).toHaveBeenCalledWith('Test message sent', 'Look for it in your direct messages with the bot.');
+
+    refuseTest = new ApiError('Feishu did not deliver the test message (Feishu error 230013: Bot has NO availability to this user.).', 502);
+    await click(button(SEND_TEST, card('Your Feishu account')), SEND_TEST);
+    expect(toast.error).toHaveBeenCalledWith("Couldn't send the test message", refuseTest.message);
+  });
+
+  it("names an owner Feishu would not name as such, and disconnects them after asking; the app stays", async () => {
+    connected();
+    owner = { openId: 'ou_carol', name: null };
+    await open();
+    expect(card('Your Feishu account')!.textContent).toContain('Connected as a Feishu user whose name Orbit could not read.');
+    await click(button(DISCONNECT_OWNER, card('Your Feishu account')), DISCONNECT_OWNER);
+    const confirm = button(DISCONNECT_OWNER, document.body.querySelector('.orbit-popconfirm') ?? document.body);
+    expect(document.body.textContent).toContain('Orbit stops sending alerts to Feishu. The app stays connected');
+    expect(ownerRequests).toEqual([]);
+    const dialogButtons = [...document.body.querySelectorAll<HTMLButtonElement>('button')].filter((b) => b.textContent?.trim() === DISCONNECT_OWNER);
+    await click(dialogButtons.at(-1) ?? confirm, 'Disconnect in the question');
+    expect(ownerRequests).toEqual([{ method: 'DELETE', path: '/integrations/feishu/owner' }]);
+    await vi.waitFor(() => expect(card('Your Feishu account')!.textContent).toContain('No Feishu account is connected yet'));
+    expect(card('Your app'), 'the app stays').toBeTruthy();
+    expect(button(CONNECT_ACCOUNT, card('Your Feishu account'))).toBeTruthy();
   });
 });
 
