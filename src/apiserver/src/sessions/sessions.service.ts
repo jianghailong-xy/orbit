@@ -8464,13 +8464,25 @@ export class SessionsService {
   }
 
   /** Record a human allow/deny on a pending approval; the runner's next read picks
-   *  it up and returns it to claude's --permission-prompt-tool. */
+   *  it up and returns it to claude's --permission-prompt-tool.
+   *
+   *  `credential` is the door the decider came in by, recorded on the decision that lands
+   *  (`decided_credential_kind`, 0499). A FEISHU one is a click on a Feishu card
+   *  (docs/feishu-bot-design.md §7.2): its clicker's open_id and the card's message_id are recorded
+   *  beside it, and it carries only a plain allow or deny — "always allow" widens a standing grant and
+   *  "Create and start" starts work, both of which stay in the app — so either is refused before anything
+   *  is written. */
   async decideApproval(
     ownerId: string,
     id: string,
     approvalId: string,
     dto: ApprovalDecisionRequest,
+    credential?: AuthCredential,
   ): Promise<ApprovalInfo> {
+    const feishu = credential?.kind === 'FEISHU' ? credential : null;
+    if (feishu && (dto.rememberRules !== undefined || dto.startAfterCreate !== undefined)) {
+      throw new BadRequestException('a decision from a Feishu card is a plain allow or deny: "always allow" and "Create and start" stay in Orbit');
+    }
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       select: { id: true, workspaceId: true, sessionKind: true },
@@ -8539,6 +8551,9 @@ export class SessionsService {
             ? (dto.rememberRules as unknown as Prisma.InputJsonValue)
             : Prisma.DbNull,
         decidedById: ownerId,
+        decidedCredentialKind: credential?.kind ?? null,
+        decidedFeishuOpenId: feishu?.openId ?? null,
+        decidedFeishuMessageId: feishu?.messageId ?? null,
         decidedAt: new Date(),
       },
     });

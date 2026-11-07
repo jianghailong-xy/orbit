@@ -34,6 +34,10 @@ export class ChangeFeishuAppDto implements FeishuAppChange {
   @IsOptional()
   @IsIn(FEISHU_MESSAGE_DETAILS)
   messageDetail?: FeishuMessageDetail;
+
+  @IsOptional()
+  @IsBoolean()
+  approvalsInFeishu?: boolean;
 }
 
 /** `PUT /admin/integrations/feishu`: "Allow accounts to connect Feishu bots". */

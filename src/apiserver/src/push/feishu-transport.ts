@@ -8,6 +8,7 @@ import {
   renderFeishuTerminalCard,
   type FeishuAlert,
   type FeishuApprovalItem,
+  type FeishuCard,
 } from '../feishu/cards/feishu-cards';
 import { FeishuAppService } from '../feishu/feishu-app.service';
 import type { FeishuAppCredentials } from '../feishu/feishu-open-platform';
@@ -315,6 +316,64 @@ export class FeishuTransport {
       this.log.warn(`feishu cards could not be closed: ${(err as Error).message}`);
     }
     return { closed, busy };
+  }
+
+  /**
+   * The approval card a click on it in Feishu answers with (docs/feishu-bot-design.md §7.1, §7.4): drawn as it stands
+   * now, for the callback to return, rather than PATCHed. `answerable` is what may still be answered on it — the
+   * session's PENDING approvals an answer could still reach (SessionsService.listApprovals): while one the card lists is
+   * among them, the card is drawn again with what is pending (an answered approval loses its buttons, the rest keep
+   * theirs); otherwise it is drawn as its outcome, with no buttons, and the row is CLOSED, as `closeSettled` would close
+   * it. Taken under the row's lease and only when every announcement was drawn, so it never races the pump or the
+   * reconcile: null when the row is held, already closed, not an approval card of this app, or there is nothing to draw
+   * — the click is then answered with its toast alone, and the reconcile draws the card. Never throws.
+   */
+  async answerCard(target: FeishuTarget, messageId: string, answerable: ReadonlySet<string>): Promise<{ card: FeishuCard; closed: boolean } | null> {
+    try {
+      const token = randomUUID();
+      const leaseUntil = new Date(Date.now() + this.timing.alertLeaseMs);
+      const [held] = await this.prisma.$queryRaw<{ id: string; alert: FeishuAlert | null; session_id: string | null; approval_id: string | null }[]>`
+        UPDATE "feishu_message" SET "lease_token" = ${token}::uuid, "lease_until" = ${leaseUntil}::timestamptz
+         WHERE "app_id" = ${target.appId} AND "owner_id" = ${target.ownerId}::uuid AND "message_id" = ${messageId}
+           AND "kind" = 'approval' AND "status" = 'SENT' AND "rendered_revision" = "revision"
+           AND ("lease_until" IS NULL OR "lease_until" < now())
+        RETURNING "id", "alert", "session_id", "approval_id"`;
+      if (!held) return null;
+      let drawn: { card: FeishuCard; alert: FeishuAlert; closed: boolean } | null = null;
+      try {
+        const listed = held.alert?.kind === 'approval' ? held.alert.approvals : [];
+        const openUrl = orbitUrl({ sessionId: held.session_id });
+        const ctx = { detail: target.detail, approvalsInFeishu: target.approvalsInFeishu, openUrl };
+        if (held.session_id && listed.some((a) => answerable.has(a.id))) {
+          const alert = await this.approvalCard(target, held.session_id, held.approval_id).render();
+          if (alert) drawn = { card: renderFeishuCard(alert, ctx), alert, closed: false };
+        }
+        if (!drawn && held.alert) {
+          const rows = await this.prisma.approval.findMany({
+            where: { id: { in: listed.map((a) => a.id) }, session: { ownerId: target.ownerId } },
+            select: { id: true, status: true, decidedAt: true },
+          });
+          const byId = new Map(rows.map((r) => [r.id, r]));
+          const outcome = approvalOutcome(
+            listed.map((a) => ({ toolName: a.toolName, status: byId.get(a.id)?.status ?? null, decidedAt: byId.get(a.id)?.decidedAt ?? null })),
+            new Date(),
+          );
+          drawn = { card: renderFeishuTerminalCard(held.alert, ctx, outcome), alert: held.alert, closed: true };
+        }
+      } finally {
+        // What the card now shows is what the row says it shows; a CLOSED row is not drawn again by anyone.
+        await this.prisma.$executeRaw`
+          UPDATE "feishu_message"
+             SET "lease_token" = NULL, "lease_until" = NULL, "updated_at" = now(),
+                 "status" = ${drawn?.closed ? 'CLOSED' : 'SENT'},
+                 "alert" = CASE WHEN ${drawn !== null && !drawn.closed}::boolean THEN ${JSON.stringify(drawn?.alert ?? null)}::jsonb ELSE "alert" END
+           WHERE "id" = ${held.id}::uuid AND "lease_token" = ${token}::uuid`;
+      }
+      return drawn ? { card: drawn.card, closed: drawn.closed } : null;
+    } catch (err) {
+      this.log.warn(`feishu approval card could not be drawn for a click: ${(err as Error).message}`);
+      return null;
+    }
   }
 
   /** An approval card that still holds, drawn again with what is pending now. */

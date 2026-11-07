@@ -22,6 +22,16 @@ export type FeishuRoute =
   /** Anything else the app is subscribed to: acknowledged and recorded, never acted on. */
   | 'IGNORED';
 
+/**
+ * What answers the owner's clicks on cards (feishu/feishu-card-actions.ts). It registers itself when its module starts,
+ * since it lives beside the services it calls rather than in this module (feishu-actions.module.ts says why); while
+ * none is registered, a click that passes the owner check is recorded and answered with nothing.
+ */
+export interface FeishuCardActionHandler {
+  answer(event: InboundEvent, actor: FeishuActor): Promise<unknown>;
+  deliverLate(event: InboundEvent, answer: unknown, clickedAt: number): Promise<void>;
+}
+
 /** An inbox row as the router reads it. */
 export interface InboundEvent {
   appId: string;
@@ -97,7 +107,8 @@ export function textMessageOf(payload: unknown): FeishuTextMessage | null {
  * Only the owner is served (§7.3, §7.4). Any other direct message is answered with one English sentence — that the bot
  * takes direct messages only from its owner, or, while nobody is the owner, how to become it — and writes nothing. A
  * card click is checked first of all: a clicker whose open_id is not the app's ownerOpenId (a forwarded card) is
- * answered with a toast and writes nothing. Every later card action goes through that same check. Every other branch
+ * answered with a toast and writes nothing. Every later card action goes through that same check; the owner's clicks
+ * are answered by the registered FeishuCardActionHandler (feishu-card-actions.ts, task F2-1). Every other branch
  * records the event and does nothing more yet; later tasks fill them in, each calling only service methods on the §7.2 allowlist
  * (feishu/feishu-actions.ts). What is logged names the event, the app, the branch and the account,
  * never the message's text.
@@ -105,11 +116,30 @@ export function textMessageOf(payload: unknown): FeishuTextMessage | null {
 @Injectable()
 export class FeishuRouter {
   private readonly logger = new Logger(FeishuRouter.name);
+  private cardActions?: FeishuCardActionHandler;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly owner: FeishuOwnerService,
   ) {}
+
+  /** Who answers the owner's card clicks from now on. */
+  useCardActions(handler: FeishuCardActionHandler): void {
+    this.cardActions = handler;
+  }
+
+  /**
+   * A card click's answer that was ready only after the inbox had answered Feishu `Working…` (§7.1): what it carries for
+   * the card goes through the callback's update token. Never throws.
+   */
+  async lateAnswer(event: InboundEvent, answer: unknown, clickedAt: number): Promise<void> {
+    if (!this.cardActions || event.eventType !== 'card.action.trigger') return;
+    try {
+      await this.cardActions.deliverLate(event, answer, clickedAt);
+    } catch (error) {
+      this.logger.warn(`feishu event ${event.eventId} of app ${event.appId}: the late card answer failed: ${(error as Error).message}`);
+    }
+  }
 
   async route(event: InboundEvent): Promise<RouteDecision | null> {
     const app = await this.prisma.feishuApp.findUnique({
@@ -131,6 +161,7 @@ export class FeishuRouter {
         this.logger.log(`feishu event ${event.eventId} of app ${event.appId}: a card click by someone other than the owner, refused`);
         return { route, actor, answer: { toast: { type: 'error', content: FEISHU_OWNER_REPLIES.strangerCard } } };
       }
+      if (this.cardActions) return { route, actor, answer: await this.cardActions.answer(event, actor) };
       return { route, actor };
     }
     if (route === 'DIRECT_MESSAGE' || route === 'GROUP_MENTION') {

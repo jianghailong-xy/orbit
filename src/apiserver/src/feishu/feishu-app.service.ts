@@ -193,13 +193,15 @@ export class FeishuAppService {
   }
 
   /**
-   * `PATCH /integrations/feishu`: the app's own switch, and how much an alert card carries (§6.4). 404 while the
+   * `PATCH /integrations/feishu`: the app's own switch, how much an alert card carries (§6.4), and whether a tool
+   * approval is answered on its card (§7.2). 404 while the
    * account has no app; nothing asked, nothing written.
    */
   async change(ownerId: string, change: FeishuAppChange): Promise<FeishuIntegration> {
     const data = {
       ...(change.enabled !== undefined ? { enabled: change.enabled } : {}),
       ...(change.messageDetail !== undefined ? { messageDetail: change.messageDetail } : {}),
+      ...(change.approvalsInFeishu !== undefined ? { approvalsInFeishu: change.approvalsInFeishu } : {}),
     };
     if (Object.keys(data).length > 0) {
       const { count } = await this.prisma.feishuApp.updateMany({ where: { ownerId }, data });

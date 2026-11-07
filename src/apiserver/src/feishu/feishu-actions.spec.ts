@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { PushService } from '../push/push.service';
+import { SessionsService } from '../sessions/sessions.service';
 import { FEISHU_ALLOWED_ACTIONS, FEISHU_INFRASTRUCTURE } from './feishu-actions';
 
 // The census of what a Feishu event may call (docs/feishu-bot-design.md §7.2, decision 1), pinned both ways, as
@@ -16,7 +17,7 @@ import { FEISHU_ALLOWED_ACTIONS, FEISHU_INFRASTRUCTURE } from './feishu-actions'
 const FEISHU_DIR = path.resolve(__dirname, '../../src/feishu');
 
 /** The classes the allowlist may name, by the name it uses. A later task adds the service it allows a method of. */
-const SERVICES: Record<string, { prototype: object }> = { PushService };
+const SERVICES: Record<string, { prototype: object }> = { PushService, SessionsService };
 
 /** Production sources of the feishu module: not specs, not the specs' fake. */
 function sources(): Array<{ file: string; text: string }> {
@@ -90,6 +91,13 @@ test('(2) the census reads a call it should refuse', () => {
   assert.deepEqual(serviceCalls(sample), ['SessionsService.createTurn', 'PrismaService.$queryRaw']);
 });
 
-test('(3) the allowlist holds only reads until the actions of F2 add their writes', () => {
-  assert.deepEqual(FEISHU_ALLOWED_ACTIONS.filter((a) => a.access !== 'READ').map((a) => `${a.service}.${a.method}`), []);
+test('(3) the allowlist\'s writes are exactly those §7.2 allows so far: answering an approval (F2-1)', () => {
+  assert.deepEqual(FEISHU_ALLOWED_ACTIONS.filter((a) => a.access !== 'READ').map((a) => `${a.service}.${a.method}`), [
+    'SessionsService.decideApproval',
+  ]);
+});
+
+test('(3) decideApproval is called, and only from the card actions', () => {
+  const callers = sources().filter(({ text }) => serviceCalls(text).includes('SessionsService.decideApproval')).map(({ file }) => file);
+  assert.deepEqual(callers, ['feishu-card-actions.ts']);
 });

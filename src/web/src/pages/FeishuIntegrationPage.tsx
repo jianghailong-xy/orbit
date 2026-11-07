@@ -57,6 +57,11 @@ export const MESSAGE_DETAIL_HINT =
   + "On, they also carry tool inputs, recaps, failure reasons, the agent's messages and questions, and owner item text, "
   + "and all of it is stored on Feishu's servers.";
 
+/** §7.2, decision 1: what the approvals switch says. "Always allow" stays in Orbit either way. */
+export const APPROVALS_IN_FEISHU_HINT =
+  "On, a tool approval's card has Allow once and Deny, answered by you only. "
+  + '"Always allow", questions, and Orbit\'s own confirmation cards are answered in Orbit. Off, cards only open Orbit.';
+
 export const NOT_ALLOWED_NOTICE = 'An administrator has turned off Feishu bots on this Orbit server.';
 /** Said when the saved secret no longer decrypts (§4.1): the app stays, but Orbit cannot act as it until the secret is entered again. */
 export const SECRET_UNREADABLE_NOTICE =
@@ -94,6 +99,7 @@ function AppSummary({
   const message = useToast();
   const switchId = useId();
   const detailId = useId();
+  const approvalsId = useId();
   const change = useMutation({
     mutationFn: (body: FeishuAppChange) => api<FeishuIntegration>('/integrations/feishu', { method: 'PATCH', body }),
     onSuccess: (integration) => qc.setQueryData(feishuIntegrationQuery().queryKey, integration),
@@ -173,6 +179,20 @@ function AppSummary({
             checked={app.messageDetail === 'FULL'}
             loading={change.isPending && change.variables?.messageDetail !== undefined}
             onCheckedChange={(on) => change.mutate({ messageDetail: on ? 'FULL' : 'TITLES_ONLY' })}
+          />
+        </div>
+        <div className="admin-signin-row">
+          <div>
+            <div className="admin-signin-label" id={approvalsId}>
+              Answer approvals in Feishu
+            </div>
+            <div className="admin-signin-hint">{APPROVALS_IN_FEISHU_HINT}</div>
+          </div>
+          <Switch
+            aria-labelledby={approvalsId}
+            checked={app.approvalsInFeishu}
+            loading={change.isPending && change.variables?.approvalsInFeishu !== undefined}
+            onCheckedChange={(approvalsInFeishu) => change.mutate({ approvalsInFeishu })}
           />
         </div>
         <div className="feishu-actions">

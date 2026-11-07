@@ -74,6 +74,8 @@ export interface FeishuAppChange {
   enabled?: boolean;
   /** How much an alert card carries (§6.4). Details are stored on Feishu's servers once sent. */
   messageDetail?: FeishuMessageDetail;
+  /** Whether a tool approval's card has Allow once and Deny (§7.2). Off, it has only Open in Orbit. */
+  approvalsInFeishu?: boolean;
 }
 
 /**

@@ -360,6 +360,17 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
   `Only the owner of this bot can answer this card.`，什么都不写。
 - 过期的卡（审批已在别处答了、会话已结束）：回 `Already answered in Orbit.`，并把卡改成终态。
 - 成功：toast，卡片原地变成终态（§6.2）。
+- 实现（F2-1，迁移 0499）：`FeishuCardActions`（`feishu/feishu-card-actions.ts`，独立的 `FeishuActionsModule`，因为
+  FeishuModule 不能 import SessionsModule——后者经 CoordinatorJudgmentModule 到 PushModule，PushModule 又 import FeishuModule；
+  它在启动时向 `FeishuRouter` 登记）。只受理工具审批的 `approval.allow` / `approval.deny`：`approvalsInFeishu` 关着、点击带
+  `rememberRules`（或 `remember`）、点名编排确认卡或提问，一律只回 toast、零写入；`SessionsService.decideApproval` 的
+  FEISHU 凭证本身也拒绝 `rememberRules` 与 `startAfterCreate`。是否过期按 `SessionsService.listApprovals(…, 'PENDING')`
+  （答复还能送达的待批）判断；别的账号的审批与不存在的同样回 `Already answered in Orbit.`。审批决定在 `approval` 行上记
+  `decided_credential_kind`（LOGIN / PAT / IMPERSONATION / FEISHU，Web 的决定也记）以及 FEISHU 时的
+  `decided_feishu_open_id`、`decided_feishu_message_id`。卡片不 PATCH：`FeishuTransport.answerCard` 在行的租约下按此刻画好
+  （还有待批就重画、否则终态并记 CLOSED），随回调同步返回 `{ toast, card: { type: 'raw', data } }`；行被别人持有时只回
+  toast，由对账改卡。收件箱给路由 2.5 秒，超时先回 `Working…`，算完后用回调的 `event.token` 调
+  `POST /open-apis/interactive/v1/card/update` 补卡一次（30 分钟内）。Activity 上的 FEISHU 留痕不在本任务内。
 
 ### 7.5 会话的回复回到飞书
 
