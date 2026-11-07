@@ -136,6 +136,28 @@ const openInOrbit = (url: string): Element => ({
   tag: 'button', text: plain('Open in Orbit'), type: 'default', behaviors: [{ type: 'open_url', default_url: url }],
 });
 
+/** The card the bot answers the owner's `@<bot> connect` in a group with (§8.1): one button, to Orbit's confirm page. */
+export const CONNECT_GROUP_TITLE = 'Connect this group to Orbit';
+export const CONNECT_GROUP_BUTTON = 'Connect in Orbit';
+export function renderConnectGroupCard(chatName: string | null, confirmUrl: string, ttlMinutes: number): FeishuCard {
+  return {
+    schema: '2.0',
+    config: { update_multi: true, summary: { content: CONNECT_GROUP_TITLE } },
+    header: { title: plain(CONNECT_GROUP_TITLE), subtitle: plain(chatName ?? ''), template: 'blue' },
+    body: {
+      direction: 'vertical',
+      elements: [
+        text(
+          'Open Orbit to choose the workspace, the permission mode, who in this group can start sessions, and the limits. '
+          + 'Nothing runs from this group until you confirm there.',
+        ),
+        note(`Only you can use this link, once, within ${ttlMinutes} minutes.`),
+        row([{ tag: 'button', text: plain(CONNECT_GROUP_BUTTON), type: 'primary', behaviors: [{ type: 'open_url', default_url: confirmUrl }] }]),
+      ],
+    },
+  };
+}
+
 /**
  * A card within FEISHU_CARD_MAX_BYTES. Only what FULL adds can be long, so a card over the limit is drawn again with
  * every detail text cut shorter, each cut one saying so. A card that is still too long with none left (a stretch of

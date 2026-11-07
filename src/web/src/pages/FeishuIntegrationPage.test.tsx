@@ -10,6 +10,7 @@ import {
   FEISHU_APP_SCOPES,
   FEISHU_APP_TAKEN_MESSAGE,
   type FeishuAppSettings,
+  type FeishuChatRoute,
   type FeishuMessageDetail,
   type FeishuPlatform,
 } from '@orbit/shared';
@@ -58,6 +59,8 @@ let requests: Array<{ method: string; body?: unknown }>;
 let owner: { openId: string; name: string | null } | null;
 /** The owner routes' requests, apart from `requests` (which are the app's own route's). */
 let ownerRequests: Array<{ method: string; path: string }>;
+let chatRoutes: FeishuChatRoute[];
+let chatRequests: Array<{ method: string; path: string; body?: unknown }>;
 /** What the stand-in answers POST …/test with when it refuses. */
 let refuseTest: ApiError | null;
 let container: HTMLDivElement | null = null;
@@ -162,8 +165,25 @@ beforeEach(() => {
   ownerRequests = [];
   refuseTest = null;
   vi.mocked(api).mockReset();
+  chatRoutes = [];
+  chatRequests = [];
   vi.mocked(api).mockImplementation(async (path: string, options: { method?: string; body?: unknown } = {}) => {
     const method = options.method ?? 'GET';
+    if (path === '/workspaces') return [{ id: 'ws-1', name: 'groups workspace', runner: { name: 'build-box' } }];
+    if (path.startsWith('/integrations/feishu/chats')) {
+      chatRequests.push({ method, path, ...(options.body === undefined ? {} : { body: structuredClone(options.body) }) });
+      if (method === 'GET') return { routes: structuredClone(chatRoutes), pending: null };
+      const id = path.split('/').pop();
+      const route = chatRoutes.find((r) => r.id === id);
+      if (!route) throw new ApiError('No such connected group.', 404);
+      if (method === 'PATCH') {
+        const change = options.body as { enabled?: boolean };
+        if (change.enabled !== undefined) Object.assign(route, { enabled: change.enabled, disabledReason: change.enabled ? null : 'OWNER' });
+        return route;
+      }
+      chatRoutes = chatRoutes.filter((r) => r.id !== id);
+      return { removed: true };
+    }
     if (path.startsWith('/integrations/feishu/')) {
       ownerRequests.push({ method, path });
       if (path === '/integrations/feishu/connect-codes' && method === 'POST') {
@@ -445,6 +465,42 @@ describe("the owner's identity", { timeout: 30_000 }, () => {
     await vi.waitFor(() => expect(card('Your Feishu account')!.textContent).toContain('No Feishu account is connected yet'));
     expect(card('Your app'), 'the app stays').toBeTruthy();
     expect(button(CONNECT_ACCOUNT, card('Your Feishu account'))).toBeTruthy();
+  });
+});
+
+describe('the connected groups (§8.1)', () => {
+  beforeEach(() => {
+    stored = { platform: 'FEISHU', appId: 'cli_mine', secret: SECRET, enabled: true };
+  });
+  const route = (over: Partial<FeishuChatRoute> = {}): FeishuChatRoute => ({
+    id: 'route-1', chatId: 'oc_team', chatName: 'Release team', workspaceId: 'ws-1', permissionMode: 'acceptEdits',
+    allowedOpenIds: [], maxConcurrentSessions: 2, sessionsPerDay: 20, enabled: true, disabledReason: null,
+    confirmedAt: '2026-11-08T08:00:00.000Z', updatedAt: '2026-11-08T08:00:00.000Z', ...over,
+  });
+
+  it('says how a group is connected while none is', async () => {
+    await open();
+    expect(card('Groups')!.textContent).toContain('send "@bot connect" there');
+    expect(card('Groups')!.textContent).toContain('No groups are connected.');
+  });
+
+  it('lists each group with where and how it runs, switches it off with PATCH, and removes it after asking', async () => {
+    chatRoutes = [route(), route({ id: 'route-2', chatName: 'Ops', enabled: false, disabledReason: 'BOT_REMOVED', allowedOpenIds: ['ou_bob'] })];
+    await open();
+    const groups = card('Groups')!;
+    expect(groups.textContent).toContain('Release team');
+    expect(groups.textContent).toContain('groups workspace · Accept Edits mode · Everyone in the group · up to 2 at a time, 20 a day');
+    expect(groups.textContent).toContain('1 person and you');
+    expect(groups.textContent).toContain('The bot was removed from the group.');
+    const [team, ops] = [...groups.querySelectorAll<HTMLElement>('.feishu-group')];
+    expect(ops.querySelector('[role="switch"]')?.hasAttribute('disabled') || ops.querySelector('[role="switch"]')?.getAttribute('aria-disabled') === 'true').toBe(true);
+    await click(team.querySelector('[role="switch"]'), 'the switch');
+    expect(chatRequests.find((r) => r.method === 'PATCH')).toEqual({ method: 'PATCH', path: '/integrations/feishu/chats/route-1', body: { enabled: false } });
+    await click(button('Remove', team), 'Remove');
+    const confirm = [...document.body.querySelectorAll<HTMLButtonElement>('button')].filter((b) => b.textContent?.trim() === 'Remove group').at(-1);
+    await click(confirm, 'Remove group');
+    expect(chatRequests.find((r) => r.method === 'DELETE')).toEqual({ method: 'DELETE', path: '/integrations/feishu/chats/route-1' });
+    await vi.waitFor(() => expect(card('Groups')!.textContent).not.toContain('Release team'));
   });
 });
 

@@ -227,7 +227,10 @@ export class FeishuOwnerService {
     return this.replyTo(app, message.messageId, words);
   }
 
-  /** A text reply to one message, as the app; null when its secret no longer decrypts. Writes nothing. */
+  /**
+   * A text reply to one message, as the app; null when its secret no longer decrypts. Writes nothing. Its Feishu uuid is
+   * the message and the words, so the same event handled twice is delivered once.
+   */
   async replyTo(app: FeishuOwnerApp, messageId: string, words: string): Promise<FeishuSendResult | null> {
     const credentials = credentialsOf(app);
     if (!credentials) return null;
@@ -244,7 +247,7 @@ export class FeishuOwnerService {
 const text = (words: string) => ({ msgType: 'text', content: { text: words } });
 
 /** The app's credentials, or null when its secret no longer decrypts (§4.1). */
-function credentialsOf(app: { platform: string; appId: string; appSecretEnc: string }): FeishuAppCredentials | null {
+export function credentialsOf(app: { platform: string; appId: string; appSecretEnc: string }): FeishuAppCredentials | null {
   try {
     return { platform: app.platform as FeishuPlatform, appId: app.appId, appSecret: decryptSecret(app.appSecretEnc) };
   } catch {

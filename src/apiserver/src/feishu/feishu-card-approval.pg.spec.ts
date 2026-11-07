@@ -48,6 +48,7 @@ import { FeishuCardActions } from './feishu-card-actions';
 import { CARD_WORKING, FeishuInboxService } from './feishu-inbox.service';
 import { FEISHU_TEST_OPEN_PLATFORM_ENV } from './feishu-open-platform';
 import { FeishuOutbound } from './feishu-outbound';
+import type { FeishuChatRouteService } from './feishu-chat-route.service';
 import type { FeishuOwnerService } from './feishu-owner.service';
 import { FeishuRouter, type InboundEvent } from './feishu-router';
 import { FakeOpenPlatform, type FakeConnection, type FakeRequest } from './test-support/fake-open-platform';
@@ -371,7 +372,7 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
 
   await t.test('(8) an answer later than the budget: "Working…", then the card once through the update token', async () => {
     const prisma = db as unknown as PrismaService;
-    const router = new FeishuRouter(prisma, {} as FeishuOwnerService);
+    const router = new FeishuRouter(prisma, {} as FeishuOwnerService, {} as FeishuChatRouteService);
     const transport = new FeishuTransport(prisma, new FeishuAppService(prisma), new FeishuOutbound());
     const actions = new FeishuCardActions(prisma, router, {} as SessionsService, transport, new FeishuOutbound());
     const lateCard = { schema: '2.0', header: { title: { tag: 'plain_text', content: 'late' } } };

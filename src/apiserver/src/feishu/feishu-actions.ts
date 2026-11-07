@@ -49,6 +49,7 @@ export const FEISHU_INFRASTRUCTURE = [
   'FeishuRouter',
   'FeishuOutbound',
   'FeishuOwnerService',
+  'FeishuChatRouteService',
   'FeishuCardActions',
   // The alert cards' own machinery (push/feishu-transport.ts): a click draws the card it was made on (§7.4).
   'FeishuTransport',
