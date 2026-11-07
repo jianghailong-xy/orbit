@@ -2,6 +2,7 @@ import { ConflictException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import {
   uuidToBase62,
+  type ExternalMessageFrom,
   type SessionMessageCard,
   type SessionMessageFrom,
   type SessionReplyOption,
@@ -402,13 +403,64 @@ export async function readSessionMessageFrom(
 export function pendingMessageColumns(
   text: string | null,
   from: SessionMessageFrom | null,
-): { lastUserText: string | null; lastUserFromSessionId: string | null; lastUserFromTitle: string | null } {
+  /** Who outside Orbit sent it (a Feishu group's member, docs/feishu-bot-design.md §8.2); null for anybody else. */
+  external: ExternalMessageFrom | null = null,
+): {
+  lastUserText: string | null;
+  lastUserFromSessionId: string | null;
+  lastUserFromTitle: string | null;
+  lastUserFromExternalSource: string | null;
+  lastUserFromExternalName: string | null;
+} {
   const sender = text === null ? null : from;
+  const outsider = text === null ? null : external;
   return {
     lastUserText: text,
     lastUserFromSessionId: sender?.sessionId ?? null,
     lastUserFromTitle: sender?.title ?? null,
+    lastUserFromExternalSource: outsider?.source ?? null,
+    lastUserFromExternalName: outsider?.name ?? null,
   };
+}
+
+/** A session row's `lastUserFromExternal`, read back from the two columns `pendingMessageColumns` writes. */
+export function lastUserFromExternalOf(row: {
+  lastUserFromExternalSource: string | null;
+  lastUserFromExternalName: string | null;
+}): ExternalMessageFrom | null {
+  return row.lastUserFromExternalSource === 'FEISHU'
+    ? { source: 'FEISHU', name: row.lastUserFromExternalName }
+    : null;
+}
+
+/**
+ * Who outside Orbit sent a turn, as the one door that knows writes it (feishu-group.service.ts): the source, the
+ * sender's id there (a Feishu open_id) and their name, null when Feishu would not say.
+ */
+export interface ExternalTurnSender {
+  source: 'FEISHU';
+  id: string;
+  name: string | null;
+}
+
+/** The turn's columns for an outside sender (migration 0502), or none. A name is kept to one line of 200 characters. */
+export function externalSenderColumns(sender: ExternalTurnSender | null | undefined): {
+  externalSenderSource?: string;
+  externalSenderId?: string;
+  externalSenderName?: string | null;
+} {
+  if (!sender) return {};
+  const name = sender.name?.replace(/\s+/g, ' ').trim().slice(0, 200) || null;
+  return { externalSenderSource: sender.source, externalSenderId: sender.id, externalSenderName: name };
+}
+
+/** A turn's outside sender as the clients and the runner are told it — never its open_id — or null. */
+export function externalSenderOf(
+  turn: { externalSenderSource?: string | null; externalSenderName?: string | null } | null | undefined,
+): ExternalMessageFrom | null {
+  return turn?.externalSenderSource === 'FEISHU'
+    ? { source: 'FEISHU', name: turn.externalSenderName ?? null }
+    : null;
 }
 
 /** A session row's `lastUserFrom`, read back from the two columns `pendingMessageColumns` writes. */

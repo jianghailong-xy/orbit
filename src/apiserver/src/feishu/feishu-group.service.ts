@@ -2,6 +2,7 @@ import { HttpException, Inject, Injectable, Logger, forwardRef } from '@nestjs/c
 import { Prisma } from '@prisma/client';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import type { ExternalTurnSender } from '../sessions/session-message';
 import { SessionsService } from '../sessions/sessions.service';
 import { feishuDerivedUuid, refusalWords } from './feishu-direct.service';
 import { FeishuOutbound, feishuDedupeUuid } from './feishu-outbound';
@@ -69,6 +70,9 @@ export interface FeishuGroupMention {
  *     back into the topic through the outbox (§7.5). A refusal before the session is written is answered in the topic.
  *   - A mention inside a topic whose root is a session's is a turn of that session through `SessionsService.createTurn`,
  *     with no intent, so the ordinary steer / queue rules apply. A topic no session owns is answered and starts nothing.
+ *   - Either way the turn records who sent it (§8.2, migration 0502): 'FEISHU', the sender's open_id and the name Feishu
+ *     gives — unless the sender is the bot's owner, whose words are the owner's. Clients draw "From Feishu · <name>",
+ *     and the runner tells the agent the message is not the account owner's.
  *
  * Handled at least once (§7.1), so every write is keyed on the event, as in feishu-direct.service.ts: the session's id
  * from the app and the message, a turn's clientTurnId from the app and the event, and every reply's Feishu uuid from the
@@ -98,12 +102,27 @@ export class FeishuGroupService {
       await this.reply(app, message.messageId, 'empty', FEISHU_GROUP_WORK_REPLIES.empty(bot), inTopic);
       return;
     }
-    if (inTopic) await this.turn(app, actor, route, message, message.rootId!, bot);
-    else await this.start(app, actor, route, message);
+    const sender = await this.senderOf(app, message.openId);
+    if (inTopic) await this.turn(app, actor, route, message, message.rootId!, bot, sender);
+    else await this.start(app, actor, route, message, sender);
+  }
+
+  /**
+   * Who the turn is from when it is not the account owner (§8.2, sender attribution): a group member, by open_id and
+   * the name Feishu gives for them. The bot's owner speaking in a group is the owner, and is no outside sender. The
+   * name is read each handling, and a replay's turn keeps the one it was written with.
+   */
+  private async senderOf(app: FeishuOwnerApp, openId: string): Promise<ExternalTurnSender | undefined> {
+    if (app.ownerOpenId !== null && openId === app.ownerOpenId) return undefined;
+    const credentials = credentialsOf(app);
+    const name = credentials ? await this.outbound.userName(credentials, openId) : null;
+    return { source: 'FEISHU', id: openId, name };
   }
 
   /** A top-level mention: a session in the route's workspace and mode, answered in a topic. */
-  private async start(app: FeishuOwnerApp, actor: FeishuActor, route: FeishuGroupRoute, message: FeishuGroupMention): Promise<void> {
+  private async start(
+    app: FeishuOwnerApp, actor: FeishuActor, route: FeishuGroupRoute, message: FeishuGroupMention, sender: ExternalTurnSender | undefined,
+  ): Promise<void> {
     const sessionId = feishuDerivedUuid('feishu-group-session', app.appId, message.messageId);
     const find = () => this.prisma.session.findFirst({ where: { id: sessionId, ownerId: route.ownerId }, select: { id: true, title: true } });
     let session = await find();
@@ -119,7 +138,7 @@ export class FeishuGroupService {
         const made = await this.sessions.create(
           route.ownerId,
           { workspaceId: route.workspaceId, prompt: message.text, permissionMode: route.permissionMode },
-          { id: sessionId, credential: actor.credential },
+          { id: sessionId, credential: actor.credential, ...(sender ? { externalSender: sender } : {}) },
         );
         session = { id: made.id, title: made.title };
       } catch (error) {
@@ -149,7 +168,10 @@ export class FeishuGroupService {
   }
 
   /** A mention inside a topic: a turn of the topic's session. */
-  private async turn(app: FeishuOwnerApp, actor: FeishuActor, route: FeishuGroupRoute, message: FeishuGroupMention, root: string, bot: string): Promise<void> {
+  private async turn(
+    app: FeishuOwnerApp, actor: FeishuActor, route: FeishuGroupRoute, message: FeishuGroupMention, root: string, bot: string,
+    sender: ExternalTurnSender | undefined,
+  ): Promise<void> {
     const thread = await this.prisma.feishuThread.findFirst({
       where: { appId: app.appId, ownerId: route.ownerId, chatId: message.chatId, rootMessageId: root },
       select: { sessionId: true },
@@ -161,6 +183,7 @@ export class FeishuGroupService {
     const sessionId = thread.sessionId;
     try {
       await this.sessions.createTurn(route.ownerId, sessionId, { clientTurnId: feishuDerivedUuid('feishu-turn', app.appId, message.eventId), content: message.text }, {
+        ...(sender ? { externalSender: sender } : {}),
         // Written with the turn, so a replay of this clientTurnId records nothing again.
         onTurnWritten: async (tx, turn) => {
           await this.registerTopic(tx, app, route, message.chatId, root, sessionId);

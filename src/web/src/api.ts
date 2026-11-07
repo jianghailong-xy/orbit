@@ -14,6 +14,7 @@ import type {
   SessionLandingView,
   SessionMessageCard,
   SessionMessageFrom,
+  ExternalMessageFrom,
   SessionReplyCard,
   SessionMoveTargets,
   SessionRequestView,
@@ -1759,6 +1760,10 @@ export type SessionListItem = Record<string, any> & {
    *  §3.5). Null for the owner's own words; absent from an older server, where every message reads as
    *  the owner's, as it always did. */
   lastUserFrom?: SessionMessageFrom | null;
+  /** Who sent it when somebody outside Orbit did — a Feishu group's member (docs/feishu-bot-design.md
+   *  §8.2): the row says `From Feishu · <name>` instead of "You". Null for anybody else; absent from an
+   *  older server. */
+  lastUserFromExternal?: ExternalMessageFrom | null;
 };
 
 /** The repair conversation attached to a merge recovery on its parent session. */
@@ -1850,6 +1855,8 @@ export interface SessionDetail {
   recapAt?: string | null;
   /** Who sent the unanswered message, as the list row carries it (`SessionListItem.lastUserFrom`). */
   lastUserFrom?: SessionMessageFrom | null;
+  /** And when somebody outside Orbit sent it (`SessionListItem.lastUserFromExternal`). */
+  lastUserFromExternal?: ExternalMessageFrom | null;
   startedAt?: string | null;
   finishedAt?: string | null;
   error?: string | null;

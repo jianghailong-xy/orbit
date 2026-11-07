@@ -40,7 +40,7 @@ import { isNoiseSystemEvent, NON_REPLAYABLE_EVENT_TYPES } from '../common/system
 import { isSessionGenerating } from '../common/session-generating';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { readOpenRequestPeers } from '../sessions/session-request';
-import { lastUserFromOf } from '../sessions/session-message';
+import { lastUserFromExternalOf, lastUserFromOf } from '../sessions/session-message';
 import { readSessionProjectMembership } from '../sessions/session-project-membership';
 import { readConfirmationsUnderReview } from '../tasks/owner-confirmation-read';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
@@ -1492,6 +1492,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         // Who sent lastUserText, when another session did (0485).
         lastUserFromSessionId: true,
         lastUserFromTitle: true,
+        // Who outside Orbit sent it (0502).
+        lastUserFromExternalSource: true,
+        lastUserFromExternalName: true,
         recapText: true,
         recapAt: true,
         // The engine it runs on, and what the old rules derive it from for a row that has none.
@@ -1583,6 +1586,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       lastUserText: previewText(s.lastUserText),
       // Who sent it, as the list row says: null for the owner's own, and cleared with it.
       lastUserFrom: lastUserFromOf(s),
+      lastUserFromExternal: lastUserFromExternalOf(s),
       recapText: s.recapText ?? null,
       recapAt: s.recapAt ? s.recapAt.toISOString() : null,
       // Read fresh with the status it qualifies: the same summary has to be able to say both

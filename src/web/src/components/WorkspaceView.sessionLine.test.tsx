@@ -320,6 +320,26 @@ describe('sessionLine names who sent the message it previews', () => {
       .toBe('Build the package: ship it');
   });
 
+  // A Feishu group member's message (`lastUserFromExternal`, docs/feishu-bot-design.md §8.2): named as the
+  // conversation heads their bubble, `From Feishu · <name>`, never You.
+  it('names a Feishu group member as From Feishu · <name>, while the turn runs and after it stopped', () => {
+    const outsider = { source: 'FEISHU', name: 'Lin Mei' };
+    expect(sessionLine({ status: 'RUNNING', lastAssistantText: 'previous reply', lastUserText: 'fix the **flaky** test', lastUserFromExternal: outsider }, true))
+      .toEqual({ text: 'From Feishu · Lin Mei: fix the flaky test', tone: 'preview' });
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: 'fix the flaky test', lastUserFrom: null, lastUserFromExternal: outsider }, true))
+      .toEqual({ text: 'From Feishu · Lin Mei: fix the flaky test', tone: 'preview' });
+    expect(sessionLine({ status: 'FAILED', lastUserText: 'fix the flaky test', lastUserFromExternal: outsider }, false))
+      .toEqual({ text: 'From Feishu · Lin Mei: fix the flaky test', tone: 'preview' });
+    // Feishu would not say the name.
+    expect(sessionLine({ status: 'RUNNING', lastUserText: 'fix it', lastUserFromExternal: { source: 'FEISHU', name: null } }, true))
+      .toEqual({ text: 'From Feishu: fix it', tone: 'preview' });
+    // Cleared with the text (null), or a source this client does not know: the owner's own, as before.
+    expect(sessionLine({ status: 'RUNNING', lastUserText: 'fix it', lastUserFromExternal: null }, true))
+      .toEqual({ text: 'You: fix it', tone: 'preview' });
+    expect(sessionLine({ status: 'RUNNING', lastUserText: 'fix it', lastUserFromExternal: { source: 'SLACK', name: 'Lin Mei' } }, true))
+      .toEqual({ text: 'You: fix it', tone: 'preview' });
+  });
+
   it('changes nothing above the message, and a sender with no message makes no line', () => {
     expect(sessionLine({ status: 'RUNNING', lastToolUse: 'Bash', lastUserText: report, lastUserFrom: from }, true))
       .toEqual({ text: 'Running Bash…', tone: 'running' });

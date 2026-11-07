@@ -113,10 +113,11 @@ import { TaskStartCard } from './TaskStartCard';
 import { parseProjectStarted } from '../lib/projectStarted';
 import { ProjectStartedCard } from './ProjectStartedCard';
 import { parseSessionMessage } from '../lib/sessionMessage';
+import { externalSenderLabel, parseExternalSender } from '../lib/externalSender';
 import { parseConfirmationReturn, parseConfirmationReviewRequest } from '../lib/confirmationReviewTurns';
 import type { ConfirmationReturnCard, ConfirmationReviewRequestCard } from '@orbit/shared';
 import { ReviewRequestedCard, SentBackByReviewerCard } from './ConfirmationReviewTurnCards';
-import type { SessionMessageCard as SessionMessage, SessionReplyCard as SessionReply } from '@orbit/shared';
+import type { ExternalMessageFrom, SessionMessageCard as SessionMessage, SessionReplyCard as SessionReply } from '@orbit/shared';
 import { SessionMessageCard } from './SessionMessageCard';
 import { parseSessionReplies, withoutReplyBlocks } from '../lib/sessionRequest';
 import { SessionReplyCards } from './SessionReplyCard';
@@ -571,6 +572,10 @@ type TextNode = {
   // the echo (`sessionMessage`, lib/sessionMessage). Somebody's words, but not the reader's: drawn
   // as "From [that session]" instead of the owner's bubble.
   sessionMessage?: SessionMessage;
+  // Somebody outside Orbit sent it — a connected Feishu group's member — as the control plane recorded
+  // beside the echo (`externalSender`, lib/externalSender): still a bubble, headed `From Feishu · <name>`
+  // so it does not read as the owner's own.
+  externalSender?: ExternalMessageFrom;
   // The outcomes of this session's own requests the turn handed back, when the control plane
   // recorded them beside the echo (`sessionReplies`, lib/sessionRequest). Drawn as reply cards.
   sessionReplies?: SessionReply[];
@@ -1192,6 +1197,7 @@ function buildTranscript(
         const taskStart = taskStartFromPayload ?? retriedTaskStart;
         const startedCard = parseProjectStarted(p) ?? undefined;
         const sessionMessage = parseSessionMessage(p) ?? undefined;
+        const externalSender = parseExternalSender(p.externalSender) ?? undefined;
         const sessionReplies = parseSessionReplies(p) ?? undefined;
         const reviewRequest = parseConfirmationReviewRequest(p) ?? undefined;
         const reviewReturn = parseConfirmationReturn(p) ?? undefined;
@@ -1229,6 +1235,7 @@ function buildTranscript(
             taskStart,
             startedCard,
             sessionMessage,
+            externalSender,
             sessionReplies,
             reviewRequest,
             reviewReturn,
@@ -2790,6 +2797,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
     ) : null;
   return (
     <div className="chat-user-wrap">
+      {node.externalSender && <div className="chat-user-from">{externalSenderLabel(node.externalSender)}</div>}
       <div
         className={queued ? 'chat-msg chat-user chat-queued' : 'chat-msg chat-user'}
         data-seq={queued ? undefined : node.seq}

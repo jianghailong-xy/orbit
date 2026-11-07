@@ -1189,7 +1189,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     identity: "The opening turn's fixed `initial-<session id>` clientTurnId — the one the claim and every other seeder of that turn use.",
     isolation: '',
     attempts: 4,
-    replay: 'A victim wrote no turn and linked nothing, so a re-run seeds once. Whether the turn already exists is read under the Session lock inside the closure (`ensurePromptSeeded`), so a re-run that finds a seeder got there first writes nothing.',
+    replay: 'A victim wrote no turn and linked nothing, so a re-run seeds once. Whether the turn already exists is read under the Session lock inside the closure (`ensurePromptSeeded`), so a re-run that finds a seeder got there first writes nothing — except, for a session a Feishu group member opened, the outside sender (0502) on that turn while it is still PENDING with none, a conditional UPDATE a re-run finds already done.',
     effects: 'None inside. `create` wakes the claim queue after this commits.',
     answer: "Typed 503 from the global boundary, after `create` has committed the session — create's own statements are not atomic with this one.",
   },
