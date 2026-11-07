@@ -1,0 +1,107 @@
+# TEMPORARY (probe branch probe/c17-plan-card-shots, never merged). Task 34tCu2BUrQzPhteUu7QoR (C17), on C11's harness
+# (task 34se1Wpwmw3db4PGWDHLa) with four plan card stages. The commit under
+# test is the task branch's tip (this commit's parent), plus .c17-probe/ and this file, which replaces
+# .github/workflows/client.yml on this branch only. Adapted from docs/evidence/wiki-diagram-apple/probe-harness.
+#
+# client.yml's own gates (macOS: OrbitKit `swift test` + OrbitApp `swift build`; iOS: XcodeGen + xcodebuild for the
+# Simulator) run unchanged on the parent commit itself, dispatched on probe/c11-wiki-chat-gates, so this file holds
+# only the pictures:
+#   • shots — .c17-probe/run.sh on macos-26: the iPhone and Mac probe apps built from the commit's own shell and shared
+#     sources, driven by XCUITest against .c17-probe/stub.py.
+#   • report — pushes the result, summaries, logs and pictures to probe/c17-plan-card-shots-results.
+name: C17 plan card probe (iPhone)
+
+on:
+  push:
+    branches: ["probe/c17-plan-card-shots"]
+
+concurrency:
+  group: client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shots:
+    name: C17 plan card probe (iPhone)
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Build, drive and capture
+        id: capture
+        continue-on-error: true
+        run: |
+          PASSES=ios ONLY_TESTING="C11ProbeUITests/WikiChatShotTests/testPlanCardDraft C11ProbeUITests/WikiChatShotTests/testPlanCardApplied C11ProbeUITests/WikiChatShotTests/testPlanCardMoved C11ProbeUITests/WikiChatShotTests/testPlanCardUndone" \
+            bash .c17-probe/run.sh 2>&1 | tee run-output.log
+          exit "${PIPESTATUS[0]}"
+      - name: Keep the build's errors and the run's output beside the shots
+        if: always()
+        run: |
+          mkdir -p .c17-probe/shots
+          cp run-output.log .c17-probe/shots/run-output.log 2>/dev/null || true
+          { swift --version 2>&1 | head -2; xcodebuild -version; xcodegen --version; sw_vers; } > .c17-probe/shots/toolchain.txt
+          for log in .c17-probe/build-*.log; do
+            [ -f "$log" ] || continue
+            base=$(basename "$log" .log)
+            grep -E "error:|Test Case|Executed|\*\* TEST|\*\* BUILD" "$log" | head -400 > ".c17-probe/shots/summary-$base.txt" || true
+            tail -300 "$log" > ".c17-probe/shots/tail-$base.txt" || true
+          done
+          find .c17-probe/shots -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
+          # XCTest names its own failure attachments with quotes ("Debug description for "…" Button"), and
+          # upload-artifact refuses such a path.
+          python3 - .c17-probe/shots <<'PY'
+          import os, re, sys
+          for root, dirs, files in os.walk(sys.argv[1], topdown=False):
+              for name in files + dirs:
+                  safe = re.sub(r'[\"\\:<>|*?\r\n]', '_', name)
+                  if safe != name:
+                      os.rename(os.path.join(root, name), os.path.join(root, safe))
+                      print("renamed", name, "->", safe)
+          PY
+          echo "capture=${{ steps.capture.outcome }}" > .c17-probe/shots/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: c17-shots
+          path: .c17-probe/shots
+      - name: Fail as the capture did
+        if: steps.capture.outcome != 'success'
+        run: exit 1
+
+  report:
+    name: Push the results where a clone can read them
+    needs: [shots]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Push to probe/c17-plan-card-shots-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "shots: ${{ needs.shots.result }}"
+          } > RESULTS.txt
+          cat RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/c17-plan-card-shots-results
