@@ -26752,6 +26752,13 @@ button.agent-progress-agent:hover {
 .wk-chat-choice:hover { border-color: var(--brand); background: var(--brand-tint); }
 .wk-chat-choice .m { font-size: 12px; color: var(--text-3); }
 .wk-chat-body { flex: 1; min-height: 0; overflow-y: auto; overflow-anchor: none; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; }
+/* A person's meta row runs out to the left of the bubble's column on one line (.chat-user-meta), but the panel is 320–560
+   wide and its body is a scroll box, which cuts off whatever runs past its left edge (C15). Here the attachment line
+   takes a line of its own under the bubble and wraps there, whole, as board 42 ① shows it; the copy and the time keep
+   their line under it, where the dot that led into the attachment line has nothing left to lead into. */
+.wk-chat-body .chat-user-meta { flex-wrap: wrap; height: auto; min-height: 18px; }
+.wk-chat-body .chat-user-meta > .chat-injected-head { order: -1; flex: 1 1 100%; white-space: normal; text-align: right; }
+.wk-chat-body .chat-user-meta > .chat-meta-sep:has(+ .chat-injected-head) { display: none; }
 .wk-chat-empty { margin: 34px 16px; text-align: center; font-size: 13.5px; line-height: 1.7; color: var(--text-2); }
 .wk-chat-compose { flex: none; margin: 2px 12px 12px; padding: 8px 9px 8px 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-raised); }
 .wk-chat-compose:focus-within { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(51, 112, 255, .14); }

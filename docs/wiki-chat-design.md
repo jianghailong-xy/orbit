@@ -210,6 +210,8 @@ agent 判断错了怎么办：你接着说，或者按 Discard。卡上写明落
 
 `Undo` 恢复的是这张卡触发的那一版之前的句子。恢复后这节按原指纹算，不会被下一次维护无故重写。
 
+撤销 `Rewrite from main` 卡（owner 11-07 定）：恢复的旧版是按旧提交写的。如果 main 改过这一节引用的文件，下一次维护按 main 再写一遍。这是有原因的重写，不算无故，行为不变；但不能静默，撤销后的这类卡上写一句 `If main has changed the files this section draws on, the next maintenance run writes it from main again.`（web 的 `WIKI_CHAT_UNDONE_REWRITE_NOTE`，iOS 的 `WikiChatCopy.cardUndoneRewriteNote`）。main 没改过这些文件时，指纹不变，下一次维护不动这一节。
+
 ### 8.5 和「一个 space 只跑一个作业」的冲突（owner 11-06 定）
 
 契约 `jobs.onePerSpace`：同一 space 同时只跑一个作业，running 的作业不会被打断，优先级只决定排队中谁先走。`jobs.priority` 记过 canary 上一个 articles 作业跑了一个半小时以上（673 次调用），后面的作业等了 1 小时 47 分。生产上 orbit space 两周的模型请求 81% 是 articles（11-04 的数据）。

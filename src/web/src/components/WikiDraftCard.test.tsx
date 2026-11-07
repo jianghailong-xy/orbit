@@ -320,6 +320,23 @@ describe('the presses (design §7.2, contract `chat.presses`)', () => {
     await press('Undo');
     expect(pressed()).toEqual(['discard', 'undo']);
     expect(text('.wk-draft-k')).toBe('Undone');
+    // An entry's Undo stands as it is: no note under the title.
+    expect(document.querySelector('.wk-draft-note')).toBeNull();
+  });
+
+  it('an undone Rewrite from main says that the next maintenance run writes it from main again, if main has moved its files', async () => {
+    // Design §8.4 (owner 11-07): the Undo puts back the version written at an older commit, and the next run follows main.
+    await show(draft({
+      kind: 'rewrite', label: 'Rewrite from main', ops: [], similar: [], rewrites: [REWRITES[0]!],
+      state: 'applied', decision: 'applied', undoable: true, rewrite: { ...UPDATED, seen: true },
+    }));
+    expect(document.querySelector('.wk-draft-note')).toBeNull();
+    await press('Undo');
+    expect(pressed()).toEqual(['undo']);
+    expect(text('.wk-draft-k')).toBe('Undone');
+    expect(text('.wk-draft-note')).toBe('If main has changed the files this section draws on, the next maintenance run writes it from main again.');
+    // A line, not a button: there is nothing to press about it.
+    expect(document.querySelector('.wk-draft-note')!.tagName).toBe('DIV');
   });
 
   it('Edit lays the owner’s version over the op and applies it; with nothing changed it waits', async () => {

@@ -124,9 +124,13 @@ describe('describeNote', () => {
 
   it("names a wiki chat's blocks the way board 42 does, off their opening tags", () => {
     expect(describeNote(`\n\n${WIKI_SELECTION}`)).toBe('Wiki selection · 3.1 §3 · 1 sentence · 2 sources');
-    // The chat's first message: its standing rules, then the page and the selection, in delivery's order.
+    // The chat's first message: its standing rules, then the page and the selection, in delivery's order. The line
+    // lists what the owner attached — the page and the selection, as board 42 ① shows it — not the rules (C15).
     expect(describeNote(`\n\n${WIKI_CHAT_PROMPT}\n\n${WIKI_PAGE}\n\n${WIKI_SELECTION}`))
-      .toBe('Wiki chat, Wiki page · 3.1 §3, Wiki selection · 3.1 §3 · 1 sentence · 2 sources');
+      .toBe('Wiki page · 3.1 §3, Wiki selection · 3.1 §3 · 1 sentence · 2 sources');
+    expect(describeNote(`\n\n${WIKI_CHAT_PROMPT}\n\n${WIKI_SELECTION}`)).toBe('Wiki selection · 3.1 §3 · 1 sentence · 2 sources');
+    // A first message sent with neither carries the rules alone, and names nothing.
+    expect(describeNote(`\n\n${WIKI_CHAT_PROMPT}`)).toBe('');
     expect(describeNote('<orbit_wiki_selection doc="3.1" section="3" to="4" sentences="2" sources="3">\n§3 A\nx\n</orbit_wiki_selection>'))
       .toBe('Wiki selection · 3.1 §3–§4 · 2 sentences · 3 sources');
     expect(describeNote('<orbit_wiki_page of="entry" entry="34x" title="The &quot;turn&quot; lease">\n{}\n</orbit_wiki_page>'))

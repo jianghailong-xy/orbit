@@ -1,8 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { WIKI_CHAT_COPY, type WikiChatDraftView } from '@orbit/shared';
 import { ApiError } from '../api';
 import {
   WIKI_CHAT_SEND_FAILED,
+  WIKI_CHAT_UNDONE_REWRITE_NOTE,
   wikiChatCardFace,
   wikiChatCardLook,
   wikiChatDraftIdOf,
@@ -121,6 +124,11 @@ describe('how a card looks in each state (design §7.3, board 42 ② ③ ④)', 
     ['not applied', { state: 'not_applied' }, 'Not applied', 'grey', [], null, true],
     ['undone', { state: 'undone' }, 'Undone', 'grey', [], null, true],
     ['a rewrite drafted', { kind: 'rewrite', label: 'Rewrite from main', state: 'draft' }, 'Draft · Rewrite from main', 'brand', ['rewrite', 'discard'], null, false],
+    // Its Undo holds until main moves what the section draws on (design §8.4, owner 11-07, C15).
+    [
+      'a rewrite undone', { kind: 'rewrite', label: 'Rewrite from main', state: 'undone' }, 'Undone', 'grey', [],
+      'If main has changed the files this section draws on, the next maintenance run writes it from main again.', true,
+    ],
     ['a plan change', { kind: 'plan', label: 'Plan change', state: 'draft' }, 'Draft · Plan change', 'brand', ['apply_rebuild', 'open_in_plan', 'discard'], null, false],
   ] as const)('%s', (_name, over, title, tone, actions, note, quiet) => {
     const look = wikiChatCardLook(card({ ops: add, ...(over as Partial<WikiChatDraftView>) }));
@@ -130,6 +138,18 @@ describe('how a card looks in each state (design §7.3, board 42 ② ③ ④)', 
     expect(look.note).toBe(note);
     expect(look.quiet).toBe(quiet);
     expect(look.inReview).toBe(false);
+  });
+
+  it('says on an undone Rewrite from main what design §8.4 says the next maintenance run does (owner 11-07, C15)', () => {
+    const design = readFileSync(resolve(__dirname, '../../../../docs/wiki-chat-design.md'), 'utf8');
+    const versions = design.slice(design.indexOf('### 8.4'), design.indexOf('### 8.5'));
+    expect(versions).toContain('Rewrite from main');
+    expect(versions).toContain(WIKI_CHAT_UNDONE_REWRITE_NOTE);
+    // Only that card: an entry's Undo, or a rewrite still applied, carries no such line.
+    expect(wikiChatCardLook(card({ kind: 'rewrite', label: 'Rewrite from main', state: 'undone' })).note).toBe(WIKI_CHAT_UNDONE_REWRITE_NOTE);
+    expect(wikiChatCardLook(card({ kind: 'rewrite', label: 'Rewrite from main', state: 'applied', undoable: true })).note).toBeNull();
+    expect(wikiChatCardLook(card({ kind: 'entry', state: 'undone' })).note).toBeNull();
+    expect(wikiChatCardLook(card({ kind: 'plan', label: 'Plan change', state: 'undone' })).note).toBeNull();
   });
 
   it('says an applied card whose challenge waits in Review is in Review, amber, its note opening Review — not confirmed', () => {

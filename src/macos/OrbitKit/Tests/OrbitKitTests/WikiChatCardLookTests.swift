@@ -117,6 +117,9 @@ final class WikiChatCardLookTests: XCTestCase {
             ("undone", ["state": "undone"], "Undone", .grey, [], nil, true),
             ("a rewrite drafted", ["kind": "rewrite", "label": "Rewrite from main", "state": "draft"], "Draft · Rewrite from main",
              .accent, [.rewrite, .discard], nil, false),
+            // Its Undo holds until main moves what the section draws on (design §8.4, owner 11-07, C15).
+            ("a rewrite undone", ["kind": "rewrite", "label": "Rewrite from main", "state": "undone"], "Undone", .grey, [],
+             "If main has changed the files this section draws on, the next maintenance run writes it from main again.", true),
             ("a plan change", ["kind": "plan", "label": "Plan change", "state": "draft"], "Draft · Plan change", .accent,
              [.applyRebuild, .openInPlan, .discard], nil, false),
         ]

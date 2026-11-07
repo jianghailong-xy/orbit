@@ -217,6 +217,9 @@ public enum WikiChatCopy {
     public static let pressFailed = "The card couldn’t be pressed"
     /// The card's read failing: the call stands, its card cannot be read now.
     public static let cardUnread = "This card couldn’t be read. It is still there: open the chat again to retry."
+    /// The note on an undone Rewrite from main card (design §8.4, owner 11-07, C15): the Undo holds until main moves
+    /// what the section draws on.
+    public static let cardUndoneRewriteNote = "If main has changed the files this section draws on, the next maintenance run writes it from main again."
     /// Edit's sheet (design §7.2: as Review's Edit, the owner's own version of the ops).
     public static let editTitle = "Edit, then apply"
     public static let editNote = "What you change here is applied as your own version of the draft."
@@ -340,6 +343,7 @@ public enum WikiChatCopy {
         "WIKI_CHAT_REDO_MESSAGE": cardRedoMessage,
         "WIKI_CHAT_PRESS_FAILED": pressFailed,
         "WIKI_CHAT_CARD_UNREAD": cardUnread,
+        "WIKI_CHAT_UNDONE_REWRITE_NOTE": cardUndoneRewriteNote,
         "WIKI_CHAT_EDIT_TITLE": editTitle,
         "WIKI_CHAT_EDIT_NOTE": editNote,
         "WIKI_CHAT_EDIT_TITLE_FIELD": editTitleField,
