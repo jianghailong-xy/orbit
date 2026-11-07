@@ -103,10 +103,12 @@ public enum WikiCopy {
     /// The three forms the entry page's actions open (`EntryEditor`), and what each says when done.
     public static let editNote = "Only the title and the one-line summary change here."
     public static let supersedeNote = "The replacement keeps this entry’s kind, fields and anchor, and this entry points at it."
-    public static let retireNote = "Agents stop getting this entry. It stays in History, struck through, and the reason goes on the record."
+    /// Retire…'s dialog, on an entry's page and on a challenge's card: what retiring does, and that it is final
+    /// (contract `reviewModes.effect.rule`: no revert or Reject brings a retired lineage back).
+    public static let retireNote = "Agents stop getting this entry. It stays in History, struck through, and the reason goes on the record. This cannot be undone."   // WIKI_RETIRE_NOTE
     public static let titlePlaceholder = "Title"
     public static let summaryPlaceholder = "One line"
-    public static let reasonPlaceholder = "Why it no longer holds"
+    public static let reasonPlaceholder = "Why it no longer holds"          // WIKI_RETIRE_REASON_PLACEHOLDER
     public static let save = "Save"
     public static let supersedeConfirm = "Supersede"
     public static let retireConfirm = "Retire"
@@ -169,7 +171,6 @@ public enum WikiCopy {
     public static let decidedEdited = "Accepted with your edits"            // WIKI_DECIDED_EDITED
     public static let rejected = "Rejected"                                 // WIKI_DECIDED_REJECTED
     public static let decidedKept = "Kept"                                  // WIKI_DECIDED_KEPT
-    public static let decidedReconfirmed = "Re-confirmed"                   // WIKI_DECIDED_RECONFIRMED
     public static let decidedAmended = "Amended"                            // WIKI_DECIDED_AMENDED
     /// A Review answer the server refused: what failed, with its reason under it.
     public static let decideFailed = "Couldn't record your answer"          // WIKI_DECIDE_FAILED
@@ -806,7 +807,8 @@ public enum WikiLogic {
     public static func decidedToast(op: WikiOpKind?, action: WikiDecideAction) -> String {
         switch action {
         case .edit:      return WikiCopy.decidedEdited
-        case .reconfirm: return WikiCopy.decidedReconfirmed
+        // A challenge's Keep: the toast says the button's word, so a press meant as Retire reads as what it did.
+        case .reconfirm: return WikiCopy.decidedKept
         case .amend:     return WikiCopy.decidedAmended
         case .retire:    return WikiCopy.retired
         case .reject:    return op == .retire ? WikiCopy.decidedKept : WikiCopy.rejected

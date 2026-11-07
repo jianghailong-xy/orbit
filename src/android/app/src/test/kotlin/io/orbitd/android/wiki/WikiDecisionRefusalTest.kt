@@ -45,4 +45,13 @@ class WikiDecisionRefusalTest {
         }
         assertEquals("an accepted retire proposal", WikiCopy.withdrawnRefused, WikiLogic.decisionRefusal("withdrawn", "retire", "accept"))
     }
+
+    /** A challenge's answer floats the word of the button pressed: Keep says Kept — "Re-confirmed" read as nothing done to
+     * an owner who meant Retire (2026-11-07) — Amend… says Amended and Retire… Retired. */
+    @Test fun aChallengesAnswerSaysTheWordOfItsButton() {
+        assertEquals("Kept", WikiLogic.decidedToast("challenge", "reconfirm"))
+        assertEquals("Amended", WikiLogic.decidedToast("challenge", "amend"))
+        assertEquals("Retired", WikiLogic.decidedToast("challenge", "retire"))
+        assertEquals("the Retire card's Keep says the same word", "Kept", WikiLogic.decidedToast("retire", "reject"))
+    }
 }

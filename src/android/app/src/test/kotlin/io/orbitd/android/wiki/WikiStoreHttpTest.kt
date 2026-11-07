@@ -212,6 +212,18 @@ class WikiStoreHttpTest {
         assertEquals(WikiCopy.withdrawnRefused, store.decide(amend, "accept"))
     }
 
+    /** A challenge's Retire… says why: the reason its dialog sends goes on the record as the decide's `note`, which the
+     * server retires the entry with (contract `anchorRules.verify.answers.retire`). */
+    @Test fun aChallengesRetireSendsItsReasonAsTheNote() = runBlocking {
+        val store = store()
+        store.loadReview()
+        val challenge = store.state.value.reviewCards.first { it.op.op == "challenge" }
+        assertNull(store.decide(challenge, "retire", note = "The anchor moved for good"))
+        assertEquals(buildJsonObject { putJsonArray("decisions") { add(buildJsonObject {
+            put("opId", "op-challenge"); put("action", "retire"); put("note", "The anchor moved for good") }) } },
+            body("POST wiki/changesets/$changeset/decide"))
+    }
+
     @Test fun ownerWritesCarryTheBaseRevisionAndAKeyPerPress() = runBlocking {
         val store = store()
         store.loadEntry(entryId)

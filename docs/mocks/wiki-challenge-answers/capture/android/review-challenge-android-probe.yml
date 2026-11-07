@@ -1,0 +1,78 @@
+# TEMPORARY (probe branch probe/review-challenge-android, never merged). Task 34tDf8rxHzhwoGyK6r0kj: real pictures of
+# the Wiki Review challenge card on an Android emulator. The commit under test is this commit's parent plus .rv-android/
+# and this file. The host that holds the task has its one shared emulator locked by another task for hours.
+name: Review challenge probe (Android emulator)
+
+on:
+  push:
+    branches: ["probe/review-challenge-android"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rv-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shots:
+    name: Review challenge card on API 36
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: orbit
+          POSTGRES_PASSWORD: orbit
+          POSTGRES_DB: orbit
+        ports: ["5734:5432"]
+        options: >-
+          --health-cmd "pg_isready -U orbit" --health-interval 5s --health-timeout 5s --health-retries 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Android SDK packages
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;36.0.0' >/dev/null
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+      - name: The stack (database restored, apiserver on :3734)
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash .rv-android/server.sh
+      - name: Debug APK from this commit
+        run: |
+          bash src/android/gradlew -p src/android --no-daemon --max-workers=2 :app:assembleDebug -q
+          ls -la src/android/app/build/outputs/apk/debug/
+          git -C src/android rev-parse HEAD > .rv-android/shots/source-sha.txt
+          sha256sum src/android/app/build/outputs/apk/debug/app-debug.apk > .rv-android/shots/apk-sha256.txt
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Drive the app on the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: bash .rv-android/emulator.sh "$GITHUB_WORKSPACE/src/android/app/build/outputs/apk/debug/app-debug.apk"
+      - name: Keep the pictures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: rv-android-shots
+          path: .rv-android/shots
+          if-no-files-found: warn
+          retention-days: 7
