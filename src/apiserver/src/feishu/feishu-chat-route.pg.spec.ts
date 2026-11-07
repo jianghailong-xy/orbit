@@ -267,11 +267,15 @@ test('Feishu: a group is connected only by the owner\'s connect and the confirm 
     const [app, links] = [await appRow(), await linkRows()];
     const before = await mark();
     await reprocess(connectEvent);
-    await until('the card again', () => repliesTo(m.messageId).length === 2);
-    const [first, second] = repliesTo(m.messageId);
+    // Sent again with the same ticket under the same uuid, so Feishu (and the fake, as Feishu does) delivers it once.
+    const sentTo = () => fake.requests.filter((r) => r.method === 'POST' && r.path === `/open-apis/im/v1/messages/${m.messageId}/reply`);
+    await until('the card sent again', () => sentTo().length === 2);
+    const [first, second] = sentTo();
     assert.equal(ticketOf(second), ticket);
     assert.equal((second.body as { uuid?: string }).uuid, (first.body as { uuid?: string }).uuid);
     assert.ok((first.body as { uuid?: string }).uuid, 'the card carries a Feishu uuid');
+    assert.equal(second.answeredWith, first.answeredWith, 'Feishu answered the repeat with the card it delivered');
+    assert.equal(repliesTo(m.messageId).length, 1, 'one card delivered');
     assert.deepEqual(await strayWrites(before, connectEvent, app, links), []);
   });
 
