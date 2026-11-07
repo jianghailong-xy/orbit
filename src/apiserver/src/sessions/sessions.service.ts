@@ -805,6 +805,19 @@ interface AccountSwitchWrite {
   cursorAccountPinned?: boolean;
 }
 
+/** completeProjectSessions' gate: the owner's project, and one that is DONE or CANCELLED. */
+function refuseUnlessProjectFinished(project: { status: string } | null | undefined): void {
+  if (!project) throw new NotFoundException('project not found');
+  if (project.status !== 'DONE' && project.status !== 'CANCELLED') {
+    throw new ConflictException({
+      code: 'PROJECT_STILL_OPEN',
+      message:
+        `This project is ${project.status}: its sessions move to Completed together only once it is `
+        + 'DONE or CANCELLED. Nothing was moved.',
+    });
+  }
+}
+
 @Injectable()
 export class SessionsService {
   private readonly logger = new Logger(SessionsService.name);
@@ -8087,6 +8100,27 @@ export class SessionsService {
     reason: SessionEndReason,
     lifecycle?: 'completedAt' | 'deletedAt',
     requireNoProjectBinding = false,
+  ) {
+    // Retried whole. Every terminal transition is decided from the Session row under its lock, so a
+    // re-run sees whichever end actually committed rather than re-applying one that did not.
+    return withTransactionRetry(
+      this.prisma,
+      (tx) => this.transitionEndLocked(tx, ownerId, sessionId, reason, lifecycle, requireNoProjectBinding),
+      loggedRetry(this.logger, 'sessions.transitionEnd'),
+    );
+  }
+
+  /**
+   * transitionEnd's work, inside the caller's transaction: it takes the Session row lock itself, and a
+   * caller ending several sessions in one transaction (completeProjectSessions) holds them already.
+   */
+  private async transitionEndLocked(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    sessionId: string,
+    reason: SessionEndReason,
+    lifecycle?: 'completedAt' | 'deletedAt',
+    requireNoProjectBinding = false,
   ): Promise<{
     changed: boolean;
     runnerId: string | null;
@@ -8097,174 +8131,170 @@ export class SessionsService {
     endReason: SessionEndReason | null;
     projectBound: boolean;
   }> {
-    // Retried whole. Every terminal transition is decided from the Session row under its lock, so a
-    // re-run sees whichever end actually committed rather than re-applying one that did not.
-    return withTransactionRetry(this.prisma, async (tx) => {
-      const locked = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT id FROM "session"
-        WHERE id = ${sessionId}::uuid AND "owner_id" = ${ownerId}::uuid
-        FOR UPDATE`;
-      if (locked.length === 0) throw new NotFoundException('session not found');
-      const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId } });
-      // End and Trash both land here; the platform's landing container is not a person's to close or
-      // throw away (§2.9 LS6).
-      assertEngineSessionRow(session);
-      if (requireNoProjectBinding) {
-        // Every Project binding path takes this same Session lock first. A non-locking lookup made
-        // after acquiring it therefore decides a stable fact: an existing adopter is preserved,
-        // while a future adopter cannot pass the deleted_at guard until this transaction commits.
-        const project = await tx.project.findFirst({
-          where: { coordinatorSessionId: sessionId },
-          select: { id: true },
-        });
-        if (project) {
-          return {
-            changed: false,
-            runnerId: session.assignedRunnerId,
-            status: session.status,
-            lifecycleState: deriveSessionLifecycleState(session),
-            filingState: deriveSessionFilingState(session),
-            endReason:
-              session.endReason == null ? null : (session.endReason as SessionEndReason),
-            projectBound: true,
-          };
-        }
-      }
-      if (lifecycle === 'completedAt' && session.deletedAt != null) {
-        throw new ConflictException(
-          'a session in Trash must be moved to Open before it can be completed',
-        );
-      }
-      const now = new Date();
-      // Keep the first filing timestamp stable across retries. This matters especially
-      // for deletedAt, which starts the Trash retention clock.
-      const lifecycleData: {
-        completedAt?: Date;
-        /** @deprecated Rolling-version compatibility mirror. */
-        archivedAt?: Date;
-        deletedAt?: Date;
-      } = {};
-      let finalCompletedAt = session.completedAt ?? session.archivedAt;
-      let finalDeletedAt = session.deletedAt;
-      if (lifecycle === 'completedAt' && finalCompletedAt == null) {
-        lifecycleData.completedAt = now;
-        // Keep old replicas and clients coherent during the compatibility window.
-        lifecycleData.archivedAt = now;
-        finalCompletedAt = now;
-      }
-      if (lifecycle === 'deletedAt' && session.deletedAt == null) {
-        lifecycleData.deletedAt = now;
-        finalDeletedAt = now;
-      }
-      const lifecycleState = deriveSessionLifecycleState({
-        completedAt: finalCompletedAt,
-        deletedAt: finalDeletedAt,
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM "session"
+      WHERE id = ${sessionId}::uuid AND "owner_id" = ${ownerId}::uuid
+      FOR UPDATE`;
+    if (locked.length === 0) throw new NotFoundException('session not found');
+    const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId } });
+    // End and Trash both land here; the platform's landing container is not a person's to close or
+    // throw away (§2.9 LS6).
+    assertEngineSessionRow(session);
+    if (requireNoProjectBinding) {
+      // Every Project binding path takes this same Session lock first. A non-locking lookup made
+      // after acquiring it therefore decides a stable fact: an existing adopter is preserved,
+      // while a future adopter cannot pass the deleted_at guard until this transaction commits.
+      const project = await tx.project.findFirst({
+        where: { coordinatorSessionId: sessionId },
+        select: { id: true },
       });
-      const filingState = deriveSessionFilingState({
-        completedAt: finalCompletedAt,
-        deletedAt: finalDeletedAt,
-      });
-      if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
-        if (Object.keys(lifecycleData).length > 0 || requireNoProjectBinding) {
-          await tx.session.update({
-            where: { id: sessionId },
-            data: {
-              ...lifecycleData,
-              ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
-            },
-          });
-        }
+      if (project) {
         return {
           changed: false,
           runnerId: session.assignedRunnerId,
           status: session.status,
-          lifecycleState,
-          filingState,
+          lifecycleState: deriveSessionLifecycleState(session),
+          filingState: deriveSessionFilingState(session),
           endReason:
             session.endReason == null ? null : (session.endReason as SessionEndReason),
-          projectBound: false,
+          projectBound: true,
         };
       }
-      await terminalizePendingCurrentWorkSteers(tx, sessionId, {
-        code: CURRENT_WORK_SESSION_ENDED,
-        reason: 'CURRENT_WORK was not delivered because the session ended.',
-      });
-      // Both branches below retire every queued message, a Watch wake among them: its delivery
-      // stops reading DELIVERED first (watches/watch-wake-drain.ts).
-      await deadLetterQueuedWatchWakes(tx, sessionId, {
-        code: 'OBSERVER_SESSION_ENDED',
-        ending: `an end was requested: ${reason}`,
-      });
-      // An exception item queued for this project's coordinator goes back to being owed, and to the
-      // account owner: a conversation that is ending cannot read it (projects/project-open-item.ts).
-      await returnQueuedTurns(tx, sessionId, { code: 'SESSION_ENDED', ending: true });
-      // Outcomes queued back to this session as an asker are let go, to be held for it and written on
-      // its task. The requests queued here are left to the end itself: the status write below (or the
-      // finalize after it) closes them RECIPIENT_ENDED, which wins over UNDELIVERED (session-request.ts).
-      await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: false, retryArmed: false });
-      if (session.status === RunStatus.PENDING) {
+    }
+    if (lifecycle === 'completedAt' && session.deletedAt != null) {
+      throw new ConflictException(
+        'a session in Trash must be moved to Open before it can be completed',
+      );
+    }
+    const now = new Date();
+    // Keep the first filing timestamp stable across retries. This matters especially
+    // for deletedAt, which starts the Trash retention clock.
+    const lifecycleData: {
+      completedAt?: Date;
+      /** @deprecated Rolling-version compatibility mirror. */
+      archivedAt?: Date;
+      deletedAt?: Date;
+    } = {};
+    let finalCompletedAt = session.completedAt ?? session.archivedAt;
+    let finalDeletedAt = session.deletedAt;
+    if (lifecycle === 'completedAt' && finalCompletedAt == null) {
+      lifecycleData.completedAt = now;
+      // Keep old replicas and clients coherent during the compatibility window.
+      lifecycleData.archivedAt = now;
+      finalCompletedAt = now;
+    }
+    if (lifecycle === 'deletedAt' && session.deletedAt == null) {
+      lifecycleData.deletedAt = now;
+      finalDeletedAt = now;
+    }
+    const lifecycleState = deriveSessionLifecycleState({
+      completedAt: finalCompletedAt,
+      deletedAt: finalDeletedAt,
+    });
+    const filingState = deriveSessionFilingState({
+      completedAt: finalCompletedAt,
+      deletedAt: finalDeletedAt,
+    });
+    if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+      if (Object.keys(lifecycleData).length > 0 || requireNoProjectBinding) {
         await tx.session.update({
           where: { id: sessionId },
           data: {
             ...lifecycleData,
             ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
-            status: RunStatus.CANCELLED,
-            endReason: reason,
-            cancelRequestedAt: now,
-            finishedAt: now,
-            // A queued session can still be holding what its last run left running — a job parked
-            // with the session and never reaped — and CANCELLED is the end of the line for it
-            // (CLEARED_RUNNING_WORK). The runner is told to stop by the same cancelRequestedAt,
-            // and what its drain then reports is refused: this status has closed the door.
-            ...CLEARED_RUNNING_WORK,
           },
-        });
-        // A session that ends before it ran is still a finish of the task's work, and may be the one
-        // a DONE task's identity was waiting for (§10.5 O-L4 3).
-        await settleDeliveredIdentityAfterFinish(tx, session);
-        await retireSessionInboxGeneration(tx, sessionId);
-        // A wakeup filed onto a `bg-wake:` turn still queued goes with the drain below, unrun: dropped with
-        // the session it was to wake, and taken out of its loop's runs (runner-api/wake-turn-withdraw.ts).
-        await settleUnrunWakeTurns(tx, sessionId, { drained: true });
-        await tx.conversationTurn.updateMany({
-          where: { sessionId, status: { not: 'ANSWERED' } },
-          data: { status: 'ANSWERED', answeredAt: now },
-        });
-      } else {
-        await tx.session.update({
-          where: { id: sessionId },
-          data: {
-            ...lifecycleData,
-            ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
-            cancelRequestedAt: now,
-            endReason: reason,
-          },
-        });
-        // A `bg-wake:` turn queued here is one of the messages retired below: the wakeups filed onto it are
-        // dropped with the session that is ending, and taken out of their loop's runs
-        // (runner-api/wake-turn-withdraw.ts).
-        await settleUnrunWakeTurns(tx, sessionId, { drained: true });
-        // Retire queued messages in place. This prevents replay while preserving target FKs,
-        // attachments and clientTurnId receipts as durable audit evidence.
-        await tx.conversationTurn.updateMany({
-          where: { sessionId, kind: 'message', status: 'PENDING' },
-          data: { status: 'ANSWERED', answeredAt: now },
-        });
-        await this.insertTurnLocked(tx, sessionId, {
-          kind: 'end',
-          clientTurnId: randomUUID(),
         });
       }
       return {
-        changed: true,
+        changed: false,
         runnerId: session.assignedRunnerId,
-        status: session.status === RunStatus.PENDING ? RunStatus.CANCELLED : session.status,
+        status: session.status,
         lifecycleState,
         filingState,
-        endReason: reason,
+        endReason:
+          session.endReason == null ? null : (session.endReason as SessionEndReason),
         projectBound: false,
       };
-    }, loggedRetry(this.logger, 'sessions.transitionEnd'));
+    }
+    await terminalizePendingCurrentWorkSteers(tx, sessionId, {
+      code: CURRENT_WORK_SESSION_ENDED,
+      reason: 'CURRENT_WORK was not delivered because the session ended.',
+    });
+    // Both branches below retire every queued message, a Watch wake among them: its delivery
+    // stops reading DELIVERED first (watches/watch-wake-drain.ts).
+    await deadLetterQueuedWatchWakes(tx, sessionId, {
+      code: 'OBSERVER_SESSION_ENDED',
+      ending: `an end was requested: ${reason}`,
+    });
+    // An exception item queued for this project's coordinator goes back to being owed, and to the
+    // account owner: a conversation that is ending cannot read it (projects/project-open-item.ts).
+    await returnQueuedTurns(tx, sessionId, { code: 'SESSION_ENDED', ending: true });
+    // Outcomes queued back to this session as an asker are let go, to be held for it and written on
+    // its task. The requests queued here are left to the end itself: the status write below (or the
+    // finalize after it) closes them RECIPIENT_ENDED, which wins over UNDELIVERED (session-request.ts).
+    await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: false, retryArmed: false });
+    if (session.status === RunStatus.PENDING) {
+      await tx.session.update({
+        where: { id: sessionId },
+        data: {
+          ...lifecycleData,
+          ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
+          status: RunStatus.CANCELLED,
+          endReason: reason,
+          cancelRequestedAt: now,
+          finishedAt: now,
+          // A queued session can still be holding what its last run left running — a job parked
+          // with the session and never reaped — and CANCELLED is the end of the line for it
+          // (CLEARED_RUNNING_WORK). The runner is told to stop by the same cancelRequestedAt,
+          // and what its drain then reports is refused: this status has closed the door.
+          ...CLEARED_RUNNING_WORK,
+        },
+      });
+      // A session that ends before it ran is still a finish of the task's work, and may be the one
+      // a DONE task's identity was waiting for (§10.5 O-L4 3).
+      await settleDeliveredIdentityAfterFinish(tx, session);
+      await retireSessionInboxGeneration(tx, sessionId);
+      // A wakeup filed onto a `bg-wake:` turn still queued goes with the drain below, unrun: dropped with
+      // the session it was to wake, and taken out of its loop's runs (runner-api/wake-turn-withdraw.ts).
+      await settleUnrunWakeTurns(tx, sessionId, { drained: true });
+      await tx.conversationTurn.updateMany({
+        where: { sessionId, status: { not: 'ANSWERED' } },
+        data: { status: 'ANSWERED', answeredAt: now },
+      });
+    } else {
+      await tx.session.update({
+        where: { id: sessionId },
+        data: {
+          ...lifecycleData,
+          ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
+          cancelRequestedAt: now,
+          endReason: reason,
+        },
+      });
+      // A `bg-wake:` turn queued here is one of the messages retired below: the wakeups filed onto it are
+      // dropped with the session that is ending, and taken out of their loop's runs
+      // (runner-api/wake-turn-withdraw.ts).
+      await settleUnrunWakeTurns(tx, sessionId, { drained: true });
+      // Retire queued messages in place. This prevents replay while preserving target FKs,
+      // attachments and clientTurnId receipts as durable audit evidence.
+      await tx.conversationTurn.updateMany({
+        where: { sessionId, kind: 'message', status: 'PENDING' },
+        data: { status: 'ANSWERED', answeredAt: now },
+      });
+      await this.insertTurnLocked(tx, sessionId, {
+        kind: 'end',
+        clientTurnId: randomUUID(),
+      });
+    }
+    return {
+      changed: true,
+      runnerId: session.assignedRunnerId,
+      status: session.status === RunStatus.PENDING ? RunStatus.CANCELLED : session.status,
+      lifecycleState,
+      filingState,
+      endReason: reason,
+      projectBound: false,
+    };
   }
 
   /** Emit runner/control-plane effects for a newly persisted end intent. */
@@ -9452,6 +9482,57 @@ export class SessionsService {
       ended.lifecycleState,
     );
     return { ok: true };
+  }
+
+  /**
+   * A finished project's Complete (docs/session-list-projects-design.md §3.6): its coordinator and
+   * every member still in Open, in whichever workspace, moved to Completed in one transaction, each
+   * by the transition its own Complete makes, so one still running is ended the way Complete ends
+   * it. The members are the ones `GET /sessions?projectId=` lists in Open, read by the same SQL
+   * (session-project-membership.ts): never a LANDING container, and nothing already Completed or in
+   * Trash. Answers how many moved.
+   *
+   * Only a DONE or CANCELLED project: an OPEN one is refused 409 PROJECT_STILL_OPEN, and another
+   * owner's project, or none, is a 404. Both are decided before anything is locked, and the status
+   * again under the project row once the members are held (rank 30, then 40), so a Reopen cannot
+   * land between the check and the moves.
+   */
+  async completeProjectSessions(ownerId: string, projectId: string): Promise<{ completed: number }> {
+    const moved = await withTransactionRetry(this.prisma, async (tx) => {
+      refuseUnlessProjectFinished(await tx.project.findFirst({
+        where: { id: projectId, ownerId },
+        select: { status: true },
+      }));
+      const members = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT s.id FROM session s
+        WHERE s.owner_id = ${ownerId}::uuid
+          AND s.kind = 'CONVERSATION'
+          AND COALESCE(s.completed_at, s.archived_at) IS NULL AND s.deleted_at IS NULL
+          AND ${sessionInProjectSql('s', projectId)}
+        ORDER BY s.id
+        FOR UPDATE OF s`;
+      const [held] = await tx.$queryRaw<Array<{ status: string }>>`
+        SELECT "status"::text AS "status" FROM "project" WHERE "id" = ${projectId}::uuid FOR SHARE`;
+      refuseUnlessProjectFinished(held);
+      const ended = [];
+      for (const { id } of members) {
+        ended.push({
+          id,
+          end: await this.transitionEndLocked(tx, ownerId, id, SessionEndReason.COMPLETED, 'completedAt'),
+        });
+      }
+      return ended;
+    }, loggedRetry(this.logger, 'sessions.completeProjectSessions', {
+      // One member after another, each waiting for its row: a project with many still open can take
+      // longer than Prisma's 5 s interactive-transaction default.
+      transaction: { maxWait: 10_000, timeout: 30_000 },
+    }));
+    // What each one's own Complete sends, after the commit.
+    for (const { id, end } of moved) {
+      this.publishEndIntent(id, end);
+      this.realtime.publishSessionLifecycleChanged(id, end.status, end.endReason, end.lifecycleState);
+    }
+    return { completed: moved.length };
   }
 
   /**
