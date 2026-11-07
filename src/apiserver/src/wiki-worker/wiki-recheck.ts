@@ -224,7 +224,18 @@ export function wikiRecheckPrompt(entry: WikiRecheckEntry, material: WikiRecheck
   out.push('');
   out.push(`COMMITS THAT CHANGED THESE FILES SINCE THE BASE (${commits.length} of ${answer.commitsTotal ?? commits.length}, newest first; * marks one that changed how often a term occurs)`);
   if (commits.length === 0) out.push('(none)');
-  for (const commit of commits) out.push(`${commit.matched ? '*' : ' '} ${commit.sha.slice(0, 12)} ${shortDate(commit.date)} ${commit.subject}`);
+  // Where the entry was recorded falls between two commits: the ones below that line are the history it was written
+  // from, and a pitfall's own fix is usually among them.
+  const recorded = entry.recordedAt.getTime();
+  let marked = false;
+  for (const commit of commits) {
+    const at = Date.parse(commit.date);
+    if (!marked && Number.isFinite(at) && at < recorded) {
+      out.push(`--- the entry was recorded here, on ${entry.recordedAt.toISOString().slice(0, 10)}: the commits below came before it ---`);
+      marked = true;
+    }
+    out.push(`${commit.matched ? '*' : ' '} ${commit.sha.slice(0, 12)} ${shortDate(commit.date)} ${commit.subject}`);
+  }
   out.push('');
   out.push('HOW OFTEN ITS TERMS OCCUR IN THESE FILES (lines at the base -> lines now)');
   if (census.length === 0) out.push('(no terms)');
@@ -239,11 +250,16 @@ export function wikiRecheckPrompt(entry: WikiRecheckEntry, material: WikiRecheck
   out.push(answer.diff && answer.diff.length > 0 ? answer.diff : '(no difference)');
   out.push('');
   out.push('QUESTION');
-  out.push('Is what the entry says still true at the head commit?');
-  out.push('- "holds": still true; an agent who acts on it today would be right. If the identifiers it names are still there and used as it says, it holds.');
-  out.push('- "fixed": one of the commits listed above removed the problem the entry describes. Give that commit.');
-  out.push('- "obsolete": what the entry talks about is gone or was replaced, or the decision or convention no longer describes the code, without that being a fix of the problem. Give the commit that shows it, if one does.');
-  out.push('- "unsure": the material does not show either way.');
+  out.push('Is what the entry says true of the code at the head commit, so that an agent who reads it today and acts on it would be right?');
+  out.push('- "holds": yes, it is still true.');
+  out.push('- "fixed": no, because a change removed the problem the entry warns about: it can no longer happen as the entry describes, and an agent who believed the entry would be misled. Give the commit that did it.');
+  out.push('- "obsolete": no, because what the entry talks about is gone or was replaced, or the decision or convention no longer describes the code, without that being a fix of the problem. Give the commit that shows it, if one does.');
+  out.push('- "unsure": the material shows a change to what the entry describes, but not enough to tell.');
+  out.push('How to read the material:');
+  out.push('- If a term the entry names as present or broken occurs in none of its files now (see the counts), the entry describes code that is gone: answer fixed or obsolete, even when the entry itself records that change.');
+  out.push('- Otherwise, a pitfall that records its own fix (its fix field) holds while the code does what that fix says: the commit that applied it, usually one recorded before the entry, is not a reason to answer fixed. Answer fixed only when a change after the entry was recorded altered the behaviour it describes as current.');
+  out.push('- A decision or a convention is obsolete when a commit after it was recorded does what it says not to do, or replaces what it decided.');
+  out.push('- If nothing in the material changes what the entry describes, it holds.');
   out.push('Answer with exactly one JSON object: {"verdict": "holds" | "fixed" | "obsolete" | "unsure", "commit": "<the 12-character sha of a commit listed above, or null>", "reason": "<one sentence naming what in the material decides it>"}');
   return out.join('\n');
 }

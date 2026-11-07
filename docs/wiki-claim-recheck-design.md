@@ -131,12 +131,19 @@ One request per entry, step `recheck`, unit the entry's id, through the request 
 prompt is the entry (kind, title, summary, fields, recorded date), the base and head commits with their dates, and the
 operation's answer. The rules it states:
 
-- `holds`: what the entry says is still true at the head commit; an agent who acts on it would be right.
-- `fixed`: a listed commit removed the problem the entry describes; name it.
+- `holds`: what the entry says is still true at the head commit; an agent who acts on it today would be right.
+- `fixed`: a change removed the problem the entry warns about, so an agent who believed it would be misled; name the
+  commit.
 - `obsolete`: what the entry talks about is gone or was replaced, or a decision or convention no longer describes the
   code, without that being a fix of it; name the commit if one shows it.
-- `unsure`: the material does not show either way.
-- Judge only from the material; when the identifiers the entry names are still there and used as it says, it holds.
+- `unsure`: the material shows a change to what the entry describes, but not enough to tell.
+
+The commit list is split where the entry was recorded, and the prompt states how to read it (after round 1 of the
+measurement, §7): a term the entry names as present or broken that occurs in none of its files now means fixed or
+obsolete, even when the entry records that change; otherwise a pitfall whose own recorded fix is in the code holds —
+the commit that applied it is not a fix of the entry — and is fixed only when a change after its recording altered the
+behaviour it describes as current; a decision or convention is obsolete when a later commit does what it said not to
+do; and nothing in the material that changes what the entry describes means holds.
 
 The answer is one JSON object: `{"verdict": …, "commit": "<12-character sha from the list, or null>", "reason": "<one
 sentence>"}`. An answer that cannot be read, or that names a commit not in the list for `fixed`, counts as `unsure`.

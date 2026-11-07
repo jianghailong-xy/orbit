@@ -139,12 +139,23 @@ test('the question shows the entry, the commits, the census, the lines and the d
   assert.match(prompt, /^ENTRY \(a pitfall, recorded 2026-10-03\)\nTitle: session\.sum_cache_read/u);
   assert.match(prompt, /COMMITS THAT CHANGED THESE FILES SINCE THE BASE \(1 of 41, newest first;/u);
   assert.match(prompt, /^\* fdeea9d5163d 2026-10-02 fix: drop overflowing lifetime token sums from session$/mu);
+  // The entry's recording splits the commits: what came before is the history it was written from, its own fix among it.
+  assert.match(prompt, /^--- the entry was recorded here, on 2026-10-03: the commits below came before it ---\n\* fdeea9d5163d /mu);
+  assert.match(prompt, /occurs in none of its files now \(see the counts\), the entry describes code that is gone: answer fixed or obsolete/u);
+  assert.match(prompt, /a pitfall that records its own fix \(its fix field\) holds while the code does what that fix says/u);
+  assert.match(prompt, /If nothing in the material changes what the entry describes, it holds\./u);
   assert.match(prompt, /^- "sum_cache_read": 1 -> 0$/mu);
   assert.match(prompt, /Base: 1bfa9848b600 \(2026-10-02\), main as it was before the records this entry was written from\./u);
   assert.match(prompt, /Head: 29739d60aa51 \(2026-11-06\), main now\./u);
   assert.match(prompt, /LINES THAT HOLD A TERM NOW \(0 of 0\)\n\(none\)/u);
   assert.match(prompt, /-  sumCacheRead Int @map\("sum_cache_read"\)/u);
   assert.match(prompt, /"verdict": "holds" \| "fixed" \| "obsolete" \| "unsure"/u);
+  const later = wikiRecheckPrompt(SUM_CACHE_READ, {
+    paths: wikiClaimPaths(SUM_CACHE_READ), baseIs: 'check', head: { sha: '29739d60aa515f82732f6e64c701b2dce118594c', date: '2026-11-06T17:00:00+08:00' },
+    answer: { ...answer, commits: [{ sha: 'b4619320b294f164c7cf7af9ebfd0225f4d25c6f', date: '2026-11-05T16:55:46Z', subject: 'fix(runner-api): a report can no longer hold a turn', matched: false }] },
+  });
+  assert.doesNotMatch(later, /the entry was recorded here/u);
+  assert.match(later, /main as it was when this entry was last checked/u);
   assert.match(WIKI_RECHECK_SYSTEM_PROMPT, /Judge only from the material given/u);
   // The same entry and material ask the same bytes: the queue's identity is the request's.
   assert.equal(prompt, wikiRecheckPrompt(SUM_CACHE_READ, {
