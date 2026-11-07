@@ -42,6 +42,9 @@ final class QueuedTurnCardsTests: XCTestCase {
         ("sessionMessage", "sessionMessage", """
             {"fromSessionId": "s-sender", "fromTitle": "统一排队与已投递消息的卡片渲染", "fromAgentName": "orbit-develop"}
             """),
+        ("externalSender", "externalSender", """
+            {"source": "FEISHU", "name": "Li Lei"}
+            """),
         ("sessionReplies", "sessionReplies", """
             [{"requestId": "req1", "outcome": "REPLIED", "fromSessionId": "s-asked",
               "fromTitle": "分析 session 列表页性能", "requestPreview": "再跑一组只读探针", "replyText": "全部只读执行"}]
@@ -170,6 +173,7 @@ final class QueuedTurnCardsTests: XCTestCase {
             XCTAssertEqual(b.startedCard?.projectTitle, "统一排队与已投递消息的卡片渲染")
             XCTAssertEqual(b.startedCard?.criteriaCount, 4)
             XCTAssertEqual(b.sessionMessage?.fromSessionId, "s-sender")
+            XCTAssertEqual(b.externalSender, ExternalMessageFrom(name: "Li Lei"))
             XCTAssertEqual(b.sessionReplies?.map(\.requestId), ["req1"])
             XCTAssertEqual(b.sessionReplies?.first?.replyText, "全部只读执行")
             XCTAssertEqual(b.reviewRequest?.runSessionId, "s-run")

@@ -69,7 +69,7 @@ public struct SessionLine: Equatable, Sendable {
             // it is enqueued until a reply lands) rather than the previous turn's reply, which
             // would read as if this one had already been answered. Content, not status — the
             // spinner already conveys "working" — so it takes the muted preview tone.
-            if let u = s.lastUserText, !u.isEmpty { return sentLine(u, from: s.lastUserFrom) }
+            if let u = s.lastUserText, !u.isEmpty { return sentLine(u, from: s.lastUserFrom, external: s.lastUserFromExternal) }
             if let a = s.lastAssistantText, !a.isEmpty { return SessionLine(text: plainPreview(a), tone: .preview) }
             return SessionLine(text: "Running…", tone: .running)
         }
@@ -97,7 +97,7 @@ public struct SessionLine: Equatable, Sendable {
         // reply landed — outranks the previous turn's reply: it's the newer of the two, and it's
         // what the session is left waiting on. The server only keeps it while it stands
         // unanswered, so a non-empty value here always means exactly that.
-        if let u = s.lastUserText, !u.isEmpty { return sentLine(u, from: s.lastUserFrom) }
+        if let u = s.lastUserText, !u.isEmpty { return sentLine(u, from: s.lastUserFrom, external: s.lastUserFromExternal) }
         // The rolling recap (0418) takes the place of the reply preview it used to show: the sentence
         // the server wrote about the session, not the raw last reply flattened down to one line. Only
         // here — below every live line above — so a working session still says what it is doing (web
@@ -121,8 +121,9 @@ public struct SessionLine: Equatable, Sendable {
     /// reply to it read exactly alike, and "has it answered me yet?" is the one question the list has
     /// to answer while a turn is running. Same flattening as a reply — a sent message may be markdown
     /// too. Web parity: `sentLine` in WorkspaceView.tsx.
-    static func sentLine(_ text: String, from: SessionMessageFrom?) -> SessionLine {
-        SessionLine(text: "\(sender(from)): \(plainPreview(text))", tone: .preview)
+    static func sentLine(_ text: String, from: SessionMessageFrom?,
+                         external: ExternalMessageFrom? = nil) -> SessionLine {
+        SessionLine(text: "\(sender(from, external: external)): \(plainPreview(text))", tone: .preview)
     }
 
     /// The owner, as the sender of their own message (web `SENT_BY_YOU`).
@@ -133,8 +134,12 @@ public struct SessionLine: Equatable, Sendable {
     /// sent names that session (`lastUserFrom`) as the conversation's card names it: its title, or
     /// what an untitled one is called (`SessionMessageCard.untitled`; docs/session-list-projects-design.md
     /// §3.5, owner 2026-11-07). A coordinator's unanswered message is usually a task's report, which
-    /// "You:" put in the owner's mouth. Web parity: `sentBy`.
-    static func sender(_ from: SessionMessageFrom?) -> String {
+    /// "You:" put in the owner's mouth. Somebody outside Orbit — a member of a connected Feishu group
+    /// (`lastUserFromExternal`, docs/feishu-bot-design.md §8.2) — is named the way the conversation names
+    /// them over their words, `From Feishu · <name>`; one message has one sender, so that is asked
+    /// first. Web parity: `sentBy`.
+    static func sender(_ from: SessionMessageFrom?, external: ExternalMessageFrom? = nil) -> String {
+        if let external { return ExternalSender.label(external) }
         guard let from else { return you }
         let title = from.title.trimmingCharacters(in: .whitespacesAndNewlines)
         return title.isEmpty ? SessionMessageCard.untitled : title

@@ -18,6 +18,9 @@ public struct TurnCards: Equatable, Sendable {
     public var taskStart: TaskStart?
     public var startedCard: ProjectStarted?
     public var sessionMessage: SessionMessage?
+    /// Not a card that replaces the bubble — a line over it (`From Feishu · <name>`) — but recorded beside
+    /// the turn the same way, and listed on both views of the queue with the others (turn-cards.ts).
+    public var externalSender: ExternalMessageFrom?
     public var sessionReplies: [SessionReply]?
     public var reviewRequest: ConfirmationReviewRequestCard?
     public var reviewReturn: ConfirmationReturnCard?
@@ -25,6 +28,7 @@ public struct TurnCards: Equatable, Sendable {
     public init(itemCard: OpenItemDelivery? = nil, ownerAnswer: OwnerAnswer? = nil,
                 coordinatorDelivery: CoordinatorDelivery? = nil, taskStart: TaskStart? = nil,
                 startedCard: ProjectStarted? = nil, sessionMessage: SessionMessage? = nil,
+                externalSender: ExternalMessageFrom? = nil,
                 sessionReplies: [SessionReply]? = nil,
                 reviewRequest: ConfirmationReviewRequestCard? = nil,
                 reviewReturn: ConfirmationReturnCard? = nil) {
@@ -34,6 +38,7 @@ public struct TurnCards: Equatable, Sendable {
         self.taskStart = taskStart
         self.startedCard = startedCard
         self.sessionMessage = sessionMessage
+        self.externalSender = externalSender
         self.sessionReplies = sessionReplies
         self.reviewRequest = reviewRequest
         self.reviewReturn = reviewReturn
@@ -47,7 +52,8 @@ extension UserBubble {
         get {
             TurnCards(itemCard: itemCard, ownerAnswer: ownerAnswer, coordinatorDelivery: coordinatorDelivery,
                       taskStart: taskStart, startedCard: startedCard,
-                      sessionMessage: sessionMessage, sessionReplies: sessionReplies,
+                      sessionMessage: sessionMessage, externalSender: externalSender,
+                      sessionReplies: sessionReplies,
                       reviewRequest: reviewRequest, reviewReturn: reviewReturn)
         }
         set {
@@ -57,6 +63,7 @@ extension UserBubble {
             taskStart = newValue.taskStart
             startedCard = newValue.startedCard
             sessionMessage = newValue.sessionMessage
+            externalSender = newValue.externalSender
             sessionReplies = newValue.sessionReplies
             reviewRequest = newValue.reviewRequest
             reviewReturn = newValue.reviewReturn

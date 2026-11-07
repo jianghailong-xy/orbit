@@ -1394,6 +1394,9 @@ public struct TranscriptReducer: Sendable, Codable {
         // And who sent it, when it was another Orbit session (`sessionMessage`, `SessionMessage.parse`):
         // what the control plane recorded, never a reading of the words.
         let sessionMessage = SessionMessage.parse(ev.payload)
+        // And when somebody outside Orbit sent it — a Feishu group's member (`externalSender`,
+        // `ExternalSender.parse`), by the same rule.
+        let externalSender = ExternalSender.parse(ev.payload["externalSender"])
         // And the outcomes of this session's own requests a turn handed back (`sessionReplies`,
         // `SessionReply.parse`), by the same rule.
         let sessionReplies = SessionReply.parse(ev.payload)
@@ -1466,6 +1469,7 @@ public struct TranscriptReducer: Sendable, Codable {
                 b.taskStart = taskStart
                 b.startedCard = startedCard
                 b.sessionMessage = sessionMessage
+                b.externalSender = externalSender
                 b.sessionReplies = sessionReplies
                 b.reviewRequest = reviewRequest
                 b.reviewReturn = reviewReturn
@@ -1507,6 +1511,7 @@ public struct TranscriptReducer: Sendable, Codable {
                                 coordinatorDelivery: coordinatorDelivery, taskStart: taskStart,
                                 startedCard: startedCard,
                                 sessionMessage: sessionMessage,
+                                externalSender: externalSender,
                                 sessionReplies: sessionReplies,
                                 reviewRequest: reviewRequest,
                                 reviewReturn: reviewReturn)
