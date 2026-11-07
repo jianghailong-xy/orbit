@@ -80,8 +80,15 @@ internal class WikiClient(private val api: OrbitApi, private val handle: Session
     suspend fun leaveWorkspaceOut(spaceId: String, workspaceId: String) {
         raw(spacePath(spaceId, "workspaces", workspaceId), method = HttpMethod.DELETE)
     }
-    /** Delete a wiki and all it holds, for good. Refused to every session. */
-    suspend fun deleteSpace(id: String) { raw(spacePath(id), method = HttpMethod.DELETE) }
+    /** Move a wiki to Trash, where what it holds is kept 365 days (contract `space.trash`). Refused to every session, as
+     * the three below are. */
+    suspend fun moveToTrash(id: String) { raw(spacePath(id), method = HttpMethod.DELETE) }
+    /** Bring a wiki back from Trash; refused, with what to do, while a newer wiki holds its repository. */
+    suspend fun restoreSpace(id: String) { raw(spacePath(id, "restore"), method = HttpMethod.POST) }
+    /** Delete a wiki in Trash for good: it leaves Trash at once, and the server deletes what it holds in the background. */
+    suspend fun purgeSpace(id: String) { raw(spacePath(id, "purge"), method = HttpMethod.DELETE) }
+    /** `GET /wiki/trash`: the owner's wikis in Trash, the newest move first. */
+    suspend fun trash(): WikiTrash = get(listOf("wiki", "trash"), WikiTrash.serializer())
     suspend fun confirmEntry(id: String) { raw(listOf("wiki", "entries", id, "confirm"), method = HttpMethod.POST) }
     suspend fun rejectEntry(id: String, reason: String) {
         raw(listOf("wiki", "entries", id, "reject"), method = HttpMethod.POST, body = buildJsonObject { put("reason", reason) })

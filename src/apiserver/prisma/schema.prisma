@@ -1019,6 +1019,9 @@ model ApiserverProcess {
 /// (sessions/open-list-version.ts, migration 0484). Statement-level triggers are the only writer;
 /// the apiserver only reads the table, through `$queryRaw`. The counter can never lag a write, and
 /// may move when the list did not change — the one direction that version is allowed to be wrong.
+/// One row of an (owner, source) counter, keyed `<source>` or `<source>#<n>` (0487): the counter is
+/// the sum of its rows, and a bump takes one no other transaction holds (FOR UPDATE SKIP LOCKED),
+/// inserting the next only when all are held. `open_list_epoch_shard_seq` numbers those rows.
 model OpenListEpoch {
   ownerId String @map("owner_id") @db.Uuid
   source  String
@@ -7415,6 +7418,16 @@ model WikiSpace {
   settings      Json    @default("{}")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  /// The Trash (0486, contract `space.trash`): when the wiki was moved there; when it is due to be deleted for good,
+  /// 365 days later or the moment the owner asked; the purge holding it; and the slug and repository it had. A wiki in
+  /// Trash has a placeholder slug and no repository, so a new one can take both and nothing that finds a wiki by them
+  /// finds it. All NULL for a wiki in use. `wiki_space_trash_chk` holds them together, and the partial index
+  /// `wiki_space_purge_idx` (purge_at WHERE deleted_at IS NOT NULL) lives in the migration alone.
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(3)
+  purgeAt            DateTime? @map("purge_at") @db.Timestamptz(3)
+  purgeLeaseUntil    DateTime? @map("purge_lease_until") @db.Timestamptz(3)
+  trashedSlug        String?   @map("trashed_slug")
+  trashedRepoUrlNorm String?   @map("trashed_repo_url_norm")
 
   workspaces WikiSpaceWorkspace[]
   notes      WikiNote[]
@@ -7804,6 +7817,14 @@ model WikiChangesetOp {
   verificationEvidence    String?   @map("verification_evidence")
   /// The trail of every earlier verdict of an op that was reopened (0314), oldest first: a JSON array.
   verificationHistory     Json      @default("[]") @map("verification_history")
+
+  /// The pending challenge of the same entry an amend answers (0488, contract `reviewModes.challenge`): when the
+  /// amend takes effect, that challenge is recorded edited. A history reference with no foreign key, as
+  /// `verification_duplicate_of` is: it outlives the op it names. Set exactly on an amend.
+  answersChallenge String? @map("answers_challenge") @db.Uuid
+  /// Who closed a challenge: `owner` | `agent` | `research` (0488). NULL on every row recorded before it and on
+  /// every answer given in Review, which read as the owner's. Set exactly on a challenge.
+  answeredBy       String? @map("answered_by")
 
   @@unique([changesetId, seq], map: "wiki_changeset_op_changeset_seq_key")
   @@map("wiki_changeset_op")

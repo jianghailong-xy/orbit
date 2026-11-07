@@ -116,3 +116,45 @@ test('a field the fingerprint leaves out is not a change', () => {
   const answer = s.answer(OWNER, SCOPE, [{ ...a, seen: 2 }], cursor, fingerprint);
   assert.deepEqual(answer, { full: false, upserts: [], removedIds: [], cursor });
 });
+
+test('a cursor built at the version that still stands is unchanged, and at another is not', () => {
+  const s = store();
+  const cursor = s.answer(OWNER, SCOPE, [a, b], '', undefined, 'v1').cursor;
+  assert.equal(s.unchanged(OWNER, SCOPE, cursor, 'v1'), true);
+  assert.equal(s.unchanged(OWNER, SCOPE, cursor, 'v2'), false);
+});
+
+test('only a cursor held for this owner and scope, and built at a version, can be unchanged', () => {
+  const clock = { now: 0 };
+  const s = store(clock, { ttlMs: 1_000 });
+  const cursor = s.answer(OWNER, SCOPE, [a], '', undefined, 'v1').cursor;
+  assert.equal(s.unchanged(OWNER, SCOPE, 'not-a-cursor-this-held', 'v1'), false);
+  assert.equal(s.unchanged('owner-2', SCOPE, cursor, 'v1'), false);
+  assert.equal(s.unchanged(OWNER, '["runner",null,null,null]', cursor, 'v1'), false);
+  assert.equal(s.unchanged(OWNER, SCOPE, first(s, [b]), 'v1'), false);
+  clock.now = 1_001;
+  assert.equal(s.unchanged(OWNER, SCOPE, cursor, 'v1'), false);
+});
+
+test('an unchanged read keeps its cursor alive past the TTL', () => {
+  const clock = { now: 0 };
+  const s = store(clock, { ttlMs: 1_000 });
+  const cursor = s.answer(OWNER, SCOPE, [a], '', undefined, 'v1').cursor;
+  for (const now of [900, 1_800, 2_700]) {
+    clock.now = now;
+    assert.equal(s.unchanged(OWNER, SCOPE, cursor, 'v1'), true, `unchanged at ${now}`);
+  }
+  const answer = s.answer(OWNER, SCOPE, [a, b], cursor, undefined, 'v2');
+  assert.deepEqual(!answer.full && answer.upserts, [b]);
+});
+
+test('a rebuild that finds the same rows keeps the cursor and records the newer version', () => {
+  const s = store();
+  const cursor = s.answer(OWNER, SCOPE, [a], '', undefined, 'v1').cursor;
+  // The version moved (a runner's heartbeat, say) and the rows did not.
+  assert.deepEqual(s.answer(OWNER, SCOPE, [a], cursor, undefined, 'v2'), {
+    full: false, upserts: [], removedIds: [], cursor,
+  });
+  assert.equal(s.unchanged(OWNER, SCOPE, cursor, 'v2'), true);
+  assert.equal(s.unchanged(OWNER, SCOPE, cursor, 'v1'), false);
+});

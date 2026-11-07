@@ -18,6 +18,10 @@ import { RUNNER_OFFLINE_AFTER_MS, runnerIsOnline, runnerLastBeatSql } from '../r
  * table carries a per-owner counter (`open_list_epoch`, migration 0484), bumped by the table's own
  * statement-level triggers on every insert, update and delete: a counter cannot lag a write, and it
  * may move when the list did not change — the direction this version is allowed to be wrong in.
+ * A counter is spread over as many rows as it has concurrent writers (0487), and a bump takes one
+ * no other transaction holds: with a single row per counter every writer of the account queued
+ * behind the open transaction holding it, and two writers taking two counters in opposite orders
+ * deadlocked.
  *
  * The sources are every table `listRows` and the readers it calls reach (owner decisions,
  * request peers, confirmations under review, project membership, the queued-gate lateral). The
@@ -68,10 +72,14 @@ export async function readOpenListVersion(
     SELECT
       -- Every source table's counter in one read (migration 0484). It may move when the list did
       -- not; it cannot lag a write. A LANDING session is not one of them: the flat list excludes
-      -- those rows, and the read that can show them hashes its own body.
-      COALESCE((SELECT string_agg(source || '=' || epoch, ',' ORDER BY source)
-                  FROM open_list_epoch
-                 WHERE owner_id = ${o}), '') AS epochs,
+      -- those rows, and the read that can show them hashes its own body. A counter is the sum of
+      -- its rows, keyed '<source>' and '<source>#<n>' (0487): a bump adds one to whichever row no
+      -- other writer holds, so writers never queue on it.
+      COALESCE((SELECT string_agg(src || '=' || total, ',' ORDER BY src)
+                  FROM (SELECT split_part(source, '#', 1) AS src, sum(epoch) AS total
+                          FROM open_list_epoch
+                         WHERE owner_id = ${o}
+                         GROUP BY 1) counters), '') AS epochs,
       -- The queued gate counts every running turn on the runner a PENDING row waits for.
       ${rowsOf('x', Prisma.sql`FROM session x WHERE x.status = 'RUNNING' AND x.owner_id <> ${o}
         AND x.assigned_runner_id IN (SELECT assigned_runner_id FROM session
