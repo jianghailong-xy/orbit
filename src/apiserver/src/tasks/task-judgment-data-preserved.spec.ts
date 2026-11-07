@@ -2835,7 +2835,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved triggers/functions is
       // named, and no function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE
       // fence. No INSERT, UPDATE or DELETE.
-      '0501_feishu_outbox'],
+      '0501_feishu_outbox',
+      // 0502 adds three nullable columns and a CHECK to `conversation_turn` (`external_sender_*`: who outside Orbit sent
+      // the turn, a Feishu group's member — docs/feishu-bot-design.md §8.2, task F3-5) and two nullable columns and a
+      // CHECK to `session` (`last_user_from_external_*`, beside 0485's), in one DO statement that takes the locks in short
+      // tries, then validates both CHECKs. Neither is a preserved relation, no column any preserved trigger reads is
+      // touched, and no function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE
+      // fence. No INSERT, UPDATE or DELETE: every stored turn and session reads NULL in all five.
+      '0502_conversation_turn_external_sender'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

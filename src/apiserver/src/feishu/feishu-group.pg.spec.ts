@@ -17,7 +17,12 @@
  *       (write trap), whether top-level or inside the topic;
  *   (6) the owner is always allowed, though not on the list;
  *   (7) a route with an empty list takes anyone in the group;
- *   (8) a mention inside a topic no session owns is answered and starts nothing.
+ *   (8) a mention inside a topic no session owns is answered and starts nothing;
+ *   (9) sender attribution (§8.2, task F3-5): a member's turns — the opening one and one inside the topic — record
+ *       the outside sender (FEISHU, open_id, the name Feishu gives, null when it gives none), the owner's do not; the
+ *       session row carries `lastUserFromExternal` beside `lastUserText` on the list, the detail and the column, the
+ *       runner's inbox hands the sender over without the open_id, the echo is stored with it, and the reply clears
+ *       the row's with the text.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/feishu/feishu-group.pg.spec.ts
  */
@@ -26,6 +31,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
+import { JwtService } from '@nestjs/jwt';
 import { RunnerStatus, type PrismaClient } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
@@ -49,6 +55,7 @@ const SCALE = '20';
 process.env[FEISHU_TEST_TIME_SCALE_ENV] = SCALE;
 const RUN = randomBytes(4).toString('hex');
 const RUNNER_TOKEN = `feishu-group-runner-${randomUUID()}`;
+const JWT_SECRET = `feishu-group-${randomUUID()}`;
 
 const X = { platform: 'FEISHU' as const, appId: `cli_${randomBytes(8).toString('hex')}`, appSecret: `secret-${randomUUID()}`, botName: 'Orbit team bot' };
 const ALICE = 'ou_alice_group';
@@ -130,7 +137,11 @@ test('Feishu: a connected group sends work, one topic per request', {
     });
   }
 
-  server = await startApiserver(url, `feishu-group-${randomUUID()}`, { [FEISHU_TEST_OPEN_PLATFORM_ENV]: fakeUrl, [FEISHU_TEST_TIME_SCALE_ENV]: SCALE });
+  // Names as the tenant's contact directory gives them; Carol's is not given (the permission, or out of range).
+  fake.userNames.set(BOB, 'Bob Chen');
+  fake.userNames.set(ALICE, 'Alice');
+  const bearer = await new JwtService({ secret: JWT_SECRET }).signAsync({ sub: ownerId, email: `feishu-group-${RUN}@feishu-group.invalid` });
+  server = await startApiserver(url, JWT_SECRET, { [FEISHU_TEST_OPEN_PLATFORM_ENV]: fakeUrl, [FEISHU_TEST_TIME_SCALE_ENV]: SCALE });
   const said = () => server!.output().slice(-4000);
   const connection: FakeConnection = await until('X connected', () => fake.openConnections(X.appId)[0]).catch((error) => {
     throw new Error(`${(error as Error).message}; the apiserver said:\n${said()}`);
@@ -274,6 +285,10 @@ test('Feishu: a connected group sends work, one topic per request', {
     const recorded = (await feishuActivity()).slice(before.length);
     assert.deepEqual(recorded.map((a) => a.type), ['feishu.group.session.created']);
     assert.deepEqual(recorded[0]!.payload, { sessionId, workspaceId: team.id, chatId: TEAM, appId: X.appId, openId: BOB, messageId: m.messageId });
+    // (9) The opening turn is laid down with the session, saying who sent it.
+    const opening = await db.conversationTurn.findUniqueOrThrow({ where: { sessionId_clientTurnId: { sessionId, clientTurnId: `initial-${sessionId}` } } });
+    assert.deepEqual([opening.externalSenderSource, opening.externalSenderId, opening.externalSenderName, opening.content],
+      ['FEISHU', BOB, 'Bob Chen', 'Fix the flaky login test'], 'the opening turn names its sender');
     started = { ...m, sessionId, receiptId: receipt!.answeredWith! };
   });
 
@@ -347,6 +362,18 @@ test('Feishu: a connected group sends work, one topic per request', {
     const session = await db.session.findUniqueOrThrow({ where: { id: feishuDerivedUuid('feishu-group-session', X.appId, m.messageId) } });
     assert.deepEqual([session.workspaceId, session.permissionMode], [team.id, ROUTE_MODE]);
     assert.deepEqual(textsTo(m.messageId), [`Started · ${session.title}`]);
+    // (9) The owner's words in a group are the owner's: no outside sender, top-level or inside the topic.
+    const inTopic = await mention(TEAM, ALICE, 'And tag the release', { root: m.messageId });
+    const turn = await until('the owner\'s turn', () => db.conversationTurn.findFirst({
+      where: { sessionId: session.id, clientTurnId: feishuDerivedUuid('feishu-turn', X.appId, inTopic.eventId) },
+    }));
+    assert.deepEqual([turn.externalSenderSource, turn.externalSenderId, turn.externalSenderName], [null, null, null],
+      'the owner is named as nobody outside Orbit');
+    assert.equal(await db.conversationTurn.count({ where: { sessionId: session.id, externalSenderSource: { not: null } } }), 0,
+      'no turn of the owner\'s session, the opening one included, names an outside sender');
+    const row = (await sql.query(`SELECT "last_user_text" AS "text", "last_user_from_external_source" AS "source" FROM "session" WHERE "id" = $1::uuid`,
+      [session.id])).rows[0];
+    assert.deepEqual(row, { text: 'And tag the release', source: null }, 'the row says the owner\'s own words');
   });
 
   await t.test('(7) a route with no list takes anyone in the group', async () => {
@@ -355,6 +382,9 @@ test('Feishu: a connected group sends work, one topic per request', {
     const session = await db.session.findUniqueOrThrow({ where: { id: feishuDerivedUuid('feishu-group-session', X.appId, m.messageId) } });
     assert.deepEqual([session.ownerId, session.workspaceId, session.permissionMode], [ownerId, team.id, ROUTE_MODE]);
     assert.equal(bodyOf(repliesTo(m.messageId)[0]!).reply_in_thread, true);
+    // (9) Feishu gave no name for Carol: the sender is still recorded, nameless.
+    const opening = await db.conversationTurn.findFirstOrThrow({ where: { sessionId: session.id, clientTurnId: `initial-${session.id}` } });
+    assert.deepEqual([opening.externalSenderSource, opening.externalSenderId, opening.externalSenderName], ['FEISHU', CAROL, null]);
   });
 
   await t.test('(8) a mention inside a topic no session owns is answered and starts nothing', async () => {
@@ -363,5 +393,73 @@ test('Feishu: a connected group sends work, one topic per request', {
     await until('the answer', () => repliesTo(m.messageId).length > 0);
     assert.deepEqual(textsTo(m.messageId), [NOT_LINKED]);
     assert.equal(await sessionCount(), sessions);
+  });
+  await t.test('(9) a member\'s turn names them on the turn, the row, the inbox and the echo; the reply clears the row\'s', async () => {
+    const sessionId = started!.sessionId;
+    const m = await mention(TEAM, BOB, 'And open a PR when it passes', { root: started!.messageId });
+    const clientTurnId = feishuDerivedUuid('feishu-turn', X.appId, m.eventId);
+    const turn = await until('the turn', () => db.conversationTurn.findFirst({ where: { sessionId, clientTurnId } }));
+    assert.deepEqual([turn.externalSenderSource, turn.externalSenderId, turn.externalSenderName], ['FEISHU', BOB, 'Bob Chen'], 'the turn names its sender');
+
+    // The row, as the column holds it and as each read surface says it.
+    const columns = async () => (await sql.query(
+      `SELECT "last_user_text" AS "text", "last_user_from_external_source" AS "source", "last_user_from_external_name" AS "name",
+              "last_user_from_session_id" AS "fromSession" FROM "session" WHERE "id" = $1::uuid`, [sessionId])).rows[0];
+    assert.deepEqual(await columns(), { text: 'And open a PR when it passes', source: 'FEISHU', name: 'Bob Chen', fromSession: null });
+    const want = { source: 'FEISHU', name: 'Bob Chen' };
+    const detail = await call(server!, 'GET', `/api/sessions/${uuidToBase62(sessionId)}`, bearer);
+    assert.equal(detail.status, 200, detail.text);
+    assert.deepEqual(JSON.parse(detail.text).lastUserFromExternal, want, 'the detail');
+    const list = await call(server!, 'GET', `/api/sessions?workspaceId=${uuidToBase62(team.id)}`, bearer);
+    assert.equal(list.status, 200, list.text);
+    const listed = JSON.parse(list.text);
+    const row = (Array.isArray(listed) ? listed : listed.items ?? listed.sessions).find((r: { id: string }) => r.id === uuidToBase62(sessionId));
+    assert.ok(row, `the list has the session: ${list.text.slice(0, 300)}`);
+    assert.deepEqual(row.lastUserFromExternal, want, 'the list row');
+    assert.equal(JSON.stringify(row).includes(BOB), false, 'the list row does not carry the open_id');
+
+    // The runner's inbox hands it over with the sender, never the open_id.
+    const lease = { owner: randomUUID(), generation: randomUUID() };
+    leases.set(sessionId, lease);
+    await sql.query(`INSERT INTO "inbox_lease_generation" ("generation", "session_id", "lease_owner") VALUES ($1::uuid, $2::uuid, $3::uuid)`,
+      [lease.generation, sessionId, lease.owner]);
+    await sql.query('BEGIN');
+    await sql.query(`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`);
+    await sql.query(
+      `UPDATE "session" SET "status" = 'RUNNING', "assigned_runner_id" = $2::uuid, "inbox_lease_owner" = $3::uuid,
+              "inbox_lease_generation" = $4::uuid, "started_at" = coalesce("started_at", now()), "runtime_session_id" = coalesce("runtime_session_id", 'runtime')
+        WHERE "id" = $1::uuid`, [sessionId, runnerId, lease.owner, lease.generation]);
+    await sql.query('COMMIT');
+    const fetched = await runner('GET', runnerRoute(sessionId, `inbox?acceptsSteer=1&leaseGeneration=${lease.generation}`));
+    assert.equal(fetched.status, 200, fetched.text);
+    const handed = JSON.parse(fetched.text);
+    assert.equal(handed.turnId, turn.id, `the inbox handed out the member's turn: ${fetched.text.slice(0, 300)}`);
+    assert.deepEqual(handed.externalSender, want, 'the inbox says who sent it');
+    assert.equal(fetched.text.includes(BOB), false, 'the inbox does not carry the open_id');
+
+    // The runner's echo — the words, then the block it appended — is stored with the sender, and the block as the note.
+    const block = '\n\n<orbit-external-sender source="feishu" name="Bob Chen">\nThis message was sent by someone in a Feishu group, not by the account owner.\n</orbit-external-sender>';
+    const echoSeq = ++eventSeq;
+    const echoed = await runner('POST', runnerRoute(sessionId, 'events'), {
+      leaseOwner: lease.owner,
+      events: [{ seq: echoSeq, type: 'user', turnId: turn.id, ts: new Date().toISOString(), payload: { text: `And open a PR when it passes${block}` } }],
+    });
+    assert.equal(echoed.status, 202, echoed.text);
+    const event = await db.runEvent.findFirstOrThrow({ where: { sessionId, seq: echoSeq } });
+    const payload = event.payload as Record<string, unknown>;
+    assert.deepEqual(payload.externalSender, want, 'the echo is stored with its sender');
+    assert.equal(payload.controlPlaneNote, block, "the runner's block is the control plane's note, not the member's words");
+    assert.equal(JSON.stringify(payload).includes(BOB), false, 'the echo does not carry the open_id');
+    assert.deepEqual(await columns(), { text: 'And open a PR when it passes', source: 'FEISHU', name: 'Bob Chen', fromSession: null }, 'the echo keeps the row');
+
+    // The reply clears the sender with the text.
+    const answered = await runner('POST', runnerRoute(sessionId, 'events'), {
+      leaseOwner: lease.owner,
+      events: [{ seq: ++eventSeq, type: 'assistant', turnId: turn.id, ts: new Date().toISOString(), payload: { text: 'PR opened.' } }],
+    });
+    assert.equal(answered.status, 202, answered.text);
+    assert.deepEqual(await columns(), { text: null, source: null, name: null, fromSession: null }, 'the reply clears the sender with the text');
+    const after = JSON.parse((await call(server!, 'GET', `/api/sessions/${uuidToBase62(sessionId)}`, bearer)).text);
+    assert.equal(after.lastUserFromExternal, null, 'and the detail says so');
   });
 });

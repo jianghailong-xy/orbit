@@ -1876,6 +1876,11 @@ model Session {
   // ConversationTurn.senderSessionId is not one.
   lastUserFromSessionId String?  @map("last_user_from_session_id") @db.Uuid
   lastUserFromTitle     String?  @map("last_user_from_title")
+  // Who sent lastUserText, when somebody outside Orbit did: 'FEISHU' and the sender's name, as the turn's
+  // externalSender* columns record them (docs/feishu-bot-design.md §8.2). Both null for anybody else.
+  // Written and cleared in the same statements as lastUserText (0502).
+  lastUserFromExternalSource String? @map("last_user_from_external_source")
+  lastUserFromExternalName   String? @map("last_user_from_external_name")
   // Denormalized set of the agent's still-running background shells (Bash run_in_background):
   // the tool_use ids of launches that haven't yet reported a terminal `<task-notification>`.
   // Added on launch, removed on completion, cleared on (re)spawn/complete. Lets the list +
@@ -2685,6 +2690,13 @@ model ConversationTurn {
   /// hourly limit counts with (`conversation_turn_sender_session_id_idx`) lives in that migration,
   /// because schema.prisma cannot express a partial index.
   senderSessionId String?   @map("sender_session_id") @db.Uuid
+  /// Who outside Orbit sent this turn (docs/feishu-bot-design.md §8.2, migration 0502): 'FEISHU', the sender's
+  /// open_id and the name Feishu gave when the turn was written (null when it would not say). Null for every
+  /// other turn — the owner (also the bot owner's own words in a group), a session, the platform. Written only
+  /// by the Feishu group door, never from a request body.
+  externalSenderSource String? @map("external_sender_source")
+  externalSenderId     String? @map("external_sender_id")
+  externalSenderName   String? @map("external_sender_name")
   status          String    @default("PENDING") // PENDING | IN_FLIGHT | ANSWERED
   deliveredAt     DateTime? @map("delivered_at")
   leaseDeadlineAt DateTime? @map("lease_deadline_at")

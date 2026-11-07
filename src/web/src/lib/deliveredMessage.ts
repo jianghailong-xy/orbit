@@ -159,6 +159,8 @@ const TAG_LABEL: Record<string, string> = {
   'list-conditions': 'list conditions',
   'background-jobs': 'background jobs',
   'orbit-session-message': 'session message',
+  // The runner's note after a Feishu group member's message (runner-go external_sender.go).
+  'orbit-external-sender': 'sender note',
   'orbit-session-reply': 'session reply',
 };
 

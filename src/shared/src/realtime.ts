@@ -10,7 +10,7 @@ import {
 import type { SessionCapabilities } from './dto';
 import type { ConfirmationUnderReview } from './owner-confirmation-review';
 import type { SessionOwnerItem, SessionWaitingKind } from './project-progress';
-import type { SessionMessageFrom } from './session-message';
+import type { ExternalMessageFrom, SessionMessageFrom } from './session-message';
 import type { SessionRequestPeer } from './session-request';
 import type { SessionSourceRefusalDetail, SourceRefusalCode, SourceState } from './source';
 
@@ -271,6 +271,10 @@ export interface ControlSessionSummary {
    *  with `lastUserText` — a value, so a client folding this summary into a row drops the sender it
    *  held; only an absent key, from an older control plane, means "unchanged". */
   lastUserFrom?: SessionMessageFrom | null;
+  /** Who sent `lastUserText` when somebody outside Orbit did (`ExternalMessageFrom`, a Feishu group's member): the
+   *  row then says "From Feishu · <name>". Null for anybody else and cleared with `lastUserText` — a value, as
+   *  `lastUserFrom` is; only an absent key, from an older control plane, means "unchanged". */
+  lastUserFromExternal?: ExternalMessageFrom | null;
 }
 
 /** `data` for `session.ended`. */

@@ -165,6 +165,7 @@ import {
   CLAUDE_REGION_STOPPED_SUBTYPE,
   type ClaudeRegionCheckRequest,
   type ClaudeRegionCheckResponse,
+  type ExternalMessageFrom,
   type SessionMessageFrom,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
@@ -300,6 +301,7 @@ import {
 } from '../sessions/engine-session';
 import {
   appendSessionMessageContext,
+  externalSenderOf,
   pendingMessageColumns,
   readBriefSender,
 } from '../sessions/session-message';
@@ -345,6 +347,7 @@ import {
   withOwnerAnswer,
   withProjectStarted,
   withSessionMessage,
+  withExternalSender,
   withSessionReplies,
   withTaskStart,
 } from './control-plane-note';
@@ -824,6 +827,8 @@ const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 
   lastUserText: { column: 'last_user_text', type: 'text' },
   lastUserFromSessionId: { column: 'last_user_from_session_id', type: 'uuid' },
   lastUserFromTitle: { column: 'last_user_from_title', type: 'text' },
+  lastUserFromExternalSource: { column: 'last_user_from_external_source', type: 'text' },
+  lastUserFromExternalName: { column: 'last_user_from_external_name', type: 'text' },
   retryAt: { column: 'retry_at', type: 'timestamp' },
   retryAttempts: { column: 'retry_attempts', type: 'integer' },
   claudeAccount: { column: 'claude_account', type: 'text' },
@@ -912,6 +917,9 @@ interface HandedTurn {
   targetTurnId: string | null;
   coordinatorContextKey: string | null;
   senderSessionId: string | null;
+  /** Who outside Orbit sent it (migration 0502): what the runner's delivery says to the agent. */
+  externalSenderSource: string | null;
+  externalSenderName: string | null;
   /** A wiki chat's page and selection, as ids (migration 0476): what `appendWikiChatNotes` reads. */
   wikiContext: unknown;
 }
@@ -4818,6 +4826,8 @@ export class RunnerApiController {
                    "target_turn_id" AS "targetTurnId",
                    "coordinator_context_key" AS "coordinatorContextKey",
                    "sender_session_id" AS "senderSessionId",
+                   "external_sender_source" AS "externalSenderSource",
+                   "external_sender_name" AS "externalSenderName",
                    "wiki_context" AS "wikiContext"
             FROM "conversation_turn" turn
             WHERE turn.id = ${owned[0].inboxRequestTurnId}::uuid
@@ -5075,11 +5085,16 @@ export class RunnerApiController {
                   "target_turn_id" AS "targetTurnId",
                   "coordinator_context_key" AS "coordinatorContextKey",
                   "sender_session_id" AS "senderSessionId",
+                  "external_sender_source" AS "externalSenderSource",
+                  "external_sender_name" AS "externalSenderName",
                   "wiki_context" AS "wikiContext"
       `;
       if (rows.length === 0) return null;
       const t = rows[0];
       let attachments: TurnAttachment[] | undefined;
+      // Who outside Orbit sent it, on the first delivery of a message only: the runner says so to the agent after the
+      // words (docs/feishu-bot-design.md §8.2). A re-delivery's continuation is the platform's words, as below.
+      let externalSender: ExternalMessageFrom | undefined;
       let content = t.content ?? undefined;
       if (t.kind === 'message' || t.kind === 'steer') {
         // Context derived from the Session is expanded at delivery, never written over the text
@@ -5127,6 +5142,7 @@ export class RunnerApiController {
         if (runtimeStarted) {
           content = buildResumeContinuation(t.content);
         } else {
+          externalSender = externalSenderOf(t) ?? undefined;
           const atts = await tx.attachment.findMany({
             where: { turnId: t.id },
             select: { id: true, mimeType: true, fileName: true },
@@ -5346,6 +5362,7 @@ export class RunnerApiController {
         kind: t.kind as ConversationTurnKind,
         content,
         attachments,
+        ...(externalSender ? { externalSender } : {}),
         env: reload?.env,
         // Said on the delivery itself, because it is only ever true of THIS control plane and
         // is only needed while this one message is being answered for: a steer that provably
@@ -7996,7 +8013,10 @@ export class RunnerApiController {
       const userTurns = userTurnIds.length > 0
         ? await tx.conversationTurn.findMany({
             where: { sessionId, id: { in: userTurnIds } },
-            select: { id: true, content: true, clientTurnId: true, senderSessionId: true },
+            select: {
+              id: true, content: true, clientTurnId: true, senderSessionId: true,
+              externalSenderSource: true, externalSenderName: true,
+            },
           })
         : [];
       const authoredUserText = new Map(userTurns.map((turn) => [turn.id, turn.content]));
@@ -8028,6 +8048,7 @@ export class RunnerApiController {
         e.payload = withConfirmationReturn(e.payload, cards?.confirmationReturn ?? null);
         e.payload = withSessionMessage(e.payload, cards?.sessionMessage ?? null);
         e.payload = withSessionReplies(e.payload, cards?.sessionReplies ?? null);
+        e.payload = withExternalSender(e.payload, cards?.externalSender ?? null);
       }
       // A move between account-pool members is said on the first engine start after it — the first
       // event from a process holding the new member's key. It rides on the runner's own event
@@ -8163,6 +8184,8 @@ export class RunnerApiController {
       // name the same session the same way — and null for the owner's words, the platform's, or an
       // echo with no turn to read a sender from. Decided wherever pendingUserText is.
       let pendingUserFrom: SessionMessageFrom | null = null;
+      // And who outside Orbit sent it (a Feishu group's member, 0502), off the same turn's card.
+      let pendingUserExternal: ExternalMessageFrom | null = null;
       let currentWorkAcknowledged = 0;
       const acknowledgedTurnIds = acknowledgedRuntimeTurnIds(durable);
       if (acknowledgedTurnIds.length > 0) {
@@ -8219,9 +8242,11 @@ export class RunnerApiController {
           pendingUserText = text?.trim() || null;
           const card = e.turnId ? turnCards.get(e.turnId)?.sessionMessage : undefined;
           pendingUserFrom = card ? { sessionId: card.fromSessionId, title: card.fromTitle } : null;
+          pendingUserExternal = (e.turnId ? turnCards.get(e.turnId)?.externalSender : undefined) ?? null;
         } else if (ANSWERS_USER_TURN.has(e.type)) {
           pendingUserText = null;
           pendingUserFrom = null;
+          pendingUserExternal = null;
         }
         frontier = { seq: e.seq, tool };
       }
@@ -8291,7 +8316,7 @@ export class RunnerApiController {
         ...(enginePhaseSince !== undefined ? { enginePhaseSince } : {}),
         // undefined = nothing in this batch either asked or answered; keep the stored
         // message rather than writing null over it. Its sender is written with it, every time.
-        ...(pendingUserText !== undefined ? pendingMessageColumns(pendingUserText, pendingUserFrom) : {}),
+        ...(pendingUserText !== undefined ? pendingMessageColumns(pendingUserText, pendingUserFrom, pendingUserExternal) : {}),
         ...retry,
       });
 

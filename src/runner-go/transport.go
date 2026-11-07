@@ -595,6 +595,7 @@ func (t *Transport) inbox(ctx context.Context, sessionID, leaseGeneration string
 	if r.TurnID == "" {
 		return nil, nil
 	}
+	r.Content = withExternalSenderBlock(r.Kind, r.Content, r.ExternalSender)
 	return &r, nil
 }
 

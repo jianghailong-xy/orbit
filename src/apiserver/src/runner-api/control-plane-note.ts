@@ -2,6 +2,7 @@ import type {
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
   CoordinatorDeliveryCard,
+  ExternalMessageFrom,
   OpenItemDeliveryCard,
   OwnerAnswerCard,
   ProjectStartedCard,
@@ -169,6 +170,22 @@ export function withSessionMessage(
   const stored = { ...payload };
   delete stored.sessionMessage;
   if (card !== null) stored.sessionMessage = card;
+  return stored;
+}
+
+/**
+ * And for a turn somebody outside Orbit sent (`externalSender`, sessions/session-message.ts, a connected Feishu group's
+ * member): the source and the name the conversation draws "From Feishu · <name>" with, read off the turn when the
+ * echo is stored. Absent for every other turn, and one arriving from the runner is dropped for the reason above.
+ */
+export function withExternalSender(
+  payload: Record<string, unknown>,
+  card: ExternalMessageFrom | null,
+): Record<string, unknown> {
+  if (typeof payload?.text !== 'string') return payload;
+  const stored = { ...payload };
+  delete stored.externalSender;
+  if (card !== null) stored.externalSender = card;
   return stored;
 }
 

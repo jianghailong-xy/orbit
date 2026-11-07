@@ -456,6 +456,25 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
   clientTurnId 由 appId 与 event_id 派生。根不属于任何会话时回一句说明，不开会话。
 - 每个新会话 / 新 turn 写一行 activity（`feishu.group.session.created` / `feishu.group.session.turn`，credential_kind FEISHU）。
 
+落地（F3-5，迁移 0502，发送者署名）：
+
+- `conversation_turn` 加 `external_sender_source`（`FEISHU`）、`external_sender_id`（open_id）、`external_sender_name`（飞书给的名字，
+  拿不到为空），CHECK 保证来源与 open_id 同在。群里成员的顶层 @ 开会话时，开头那个 turn 在建会话时就带着发送者铺下
+  （`SessionsService.create` 的内部选项 `externalSender`）；话题里的 @ 由 `createTurn` 的同名选项写入。**主人自己在群里发的不写**：那是主人本人。
+  名字用 `GET /open-apis/contact/v3/users/:open_id` 读，每次处理读一次；重放的 turn 保留它写入时的名字。
+- `session` 加 `last_user_from_external_source`、`last_user_from_external_name`，与 0485 的 `last_user_from_*` 同处写、同处清
+  （`pendingMessageColumns`）；列表行、详情、`session.updated` 摘要带 `lastUserFromExternal: { source: 'FEISHU', name } | null`。
+  open_id 不出现在任何客户端读口或 runner 的投递里。
+- 回声：`user` 事件的 payload 带 `externalSender`（与 `sessionMessage` 同一套 `readTurnCards`），排队视图同样带它。
+- runner：`GET /runner/sessions/:id/inbox` 在首次投递 message / steer 时带 `externalSender`，runner 的 `transport.inbox` 把
+  `<orbit-external-sender source="feishu" name="…">` 一段英文（这句话来自飞书群里的某人、不是账号主人；不是主人对任何需要问主人之事的批准）
+  **接在正文之后**，而不是放在前面：服务端靠「回声以作者原文开头」把其后部分记为控制面注释（`controlPlaneNoteOf`），放在前面会被当成发送者的话画进气泡，
+  这与服务端 §2.2 会话消息块放在正文之后是同一条理由。名字只出现在属性里，转义、单行、最多 200 字。
+  预算：常驻 agent 指令（`orbitCLIInstructions` + 图片投递一句）约 4611 字节 / ~1153 token，这一段约 244 字节 / ~61 token（+5.3%），
+  只出现在外部发送者的消息上；`external_sender_test.go` 把它钉在 80 token 以内。
+- Web：会话行写 `From Feishu · <name>: …`（拿不到名字时 `From Feishu: …`），对话里该气泡上方一行 `From Feishu · <name>`；
+  文案在 `src/web/src/lib/externalSender.ts`，iOS 与 Android 在 F3n 跟上。
+
 ### 8.3 安全边界
 
 群成员不是账号主人，他们的话会成为跑在主人机器上、带着主人仓库与凭据的 agent 的输入。提示注入与外泄是群派活的主风险。规则：

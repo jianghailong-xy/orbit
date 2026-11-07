@@ -27,6 +27,7 @@ import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
 import { SessionSourceSnapshot } from './source';
 import type { WikiRepoOpCommand } from './wikiRepoOps';
 import type { ManagedRunnerSleepRequest, ManagedRunnerWorkload } from './managedRunner';
+import type { ExternalMessageFrom } from './session-message';
 
 /** Why an ended session cannot currently be resumed on its original runner. */
 export type SessionResumeBlockedReason =
@@ -2409,6 +2410,10 @@ export interface RunInboxResponse {
    *  runner-scoped `GET /runner/sessions/:id/attachments/:attId`, base64-encodes it, and
    *  adds an `image` content block alongside the text. Omitted for text-only/control turns. */
   attachments?: TurnAttachment[];
+  /** Somebody outside Orbit sent this message (a connected Feishu group's member, docs/feishu-bot-design.md §8.2):
+   *  the runner says so to the agent, after the words, so it does not take them as the account owner's. On the
+   *  first delivery of a `message` or `steer` only; absent for every other turn, and ignored by an older runner. */
+  externalSender?: ExternalMessageFrom;
   /** The process environment to re-spawn the engine with, present only on a `reload` that moved
    *  the session to another provider on the same runtime. It carries the new provider's decrypted
    *  key, so it is resolved here at delivery — the queued turn stores the provider's slug and
