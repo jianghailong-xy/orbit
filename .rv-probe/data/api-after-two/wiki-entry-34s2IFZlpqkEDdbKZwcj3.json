@@ -1,0 +1,57 @@
+{
+ "id": "34tET9mMkTx1nAiAnY9Da",
+ "spaceId": "34tET99H7xVwZYbswn2Kf",
+ "kind": "decision",
+ "status": "active",
+ "trust": "owner",
+ "currentRevision": 1,
+ "title": "Claims feature deferred to wiki-claims-replay branch",
+ "summary": "The wiki-memory claims feature failed its replay gates (G1, G2, G3) and was not merged to main; only the design doc landed, with code preserved on a feature branch.",
+ "fields": {
+  "context": "The feature to surface memory-written claims in the wiki dossier was replayed on 100 production sessions and all primary evidence gates failed: G1 47.6% (needed 60%), G2 10.8% (max 5%), G3 0.30 (min 0.9).",
+  "decision": "Land only the design document results in section 6.2 and keep the code on the feature branch wiki-claims-replay; do not start the 'claims live' rollout.",
+  "decidedAt": "2026-11-04",
+  "alternatives": [
+   {
+    "option": "Merge the claims code to main",
+    "whyRejected": "Evidence gates G1, G2 and G3 all failed the fixed thresholds."
+   }
+  ],
+  "consequences": "The claims feature remains off by default and inactive in production until the gates are re-evaluated."
+ },
+ "topics": [
+  "projects"
+ ],
+ "aliases": [],
+ "anchors": [
+  {
+   "path": "docs/wiki-memory-claims-design.md",
+   "type": "path"
+  },
+  {
+   "path": "src/apiserver/src/wiki/wiki-dossier.ts",
+   "type": "path"
+  }
+ ],
+ "anchorState": "unchecked",
+ "anchorCheckedRef": null,
+ "anchorCheckedAt": null,
+ "tainted": false,
+ "challenged": true,
+ "unsupported": false,
+ "pinned": false,
+ "supersedesId": null,
+ "supersededById": null,
+ "validFrom": "2026-11-07T03:14:16.638Z",
+ "validTo": null,
+ "recordedAt": "2026-11-07T03:14:16.638Z",
+ "retiredAt": null,
+ "changesetId": "34tET9lyVsrPAJ90F1ISZ",
+ "appliedByMode": null,
+ "verification": null,
+ "publicId": "34tET9mMkTx1nAiAnY9Da",
+ "supersededByPublicId": null,
+ "spacePublicId": "34tET99H7xVwZYbswn2Kf",
+ "changesetPublicId": "34tET9lyVsrPAJ90F1ISZ",
+ "supersedesPublicId": null
+}

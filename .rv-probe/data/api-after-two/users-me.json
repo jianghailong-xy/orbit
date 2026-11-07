@@ -1,0 +1,14 @@
+{
+ "id": "34tET8GIXKQNDlwJ4RybY",
+ "email": "owner@orbit.test",
+ "name": "wikova",
+ "createdAt": "2026-11-07T03:14:15.675Z",
+ "preferences": {},
+ "role": "ADMIN",
+ "avatarUpdatedAt": null,
+ "signInMethods": {
+  "password": true,
+  "google": null
+ },
+ "publicId": "34tET8GIXKQNDlwJ4RybY"
+}

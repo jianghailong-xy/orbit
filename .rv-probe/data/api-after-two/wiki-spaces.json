@@ -1,0 +1,47 @@
+[
+ {
+  "id": "34tET99H7xVwZYbswn2Kf",
+  "slug": "orbit",
+  "title": "orbit",
+  "repoUrlNorm": null,
+  "rootCommitSha": null,
+  "settings": {
+   "push": true,
+   "autoAcceptReinforce": true,
+   "reviewMode": "tiered",
+   "automaticSpotChecks": false,
+   "maintenance": {
+    "enabled": false,
+    "workspaceId": null,
+    "provider": "local-vllm",
+    "dailyRunLimit": 8,
+    "lookbackDays": 14,
+    "listId": null,
+    "workspacePublicId": null,
+    "listPublicId": null,
+    "agentId": null
+   },
+   "chat": {
+    "workspaceId": null,
+    "workspacePublicId": null,
+    "agentId": null
+   }
+  },
+  "createdAt": "2026-11-07T03:14:16.239Z",
+  "updatedAt": "2026-11-07T03:14:16.239Z",
+  "pendingOps": 2,
+  "planWaiting": 1,
+  "workspaceIds": [
+   "34tET8OaA3C6ZDFvdclBs"
+  ],
+  "docs": null,
+  "chatWaiting": 0,
+  "publicId": "34tET99H7xVwZYbswn2Kf",
+  "workspacePublicIds": [
+   "34tET8OaA3C6ZDFvdclBs"
+  ],
+  "agentIds": [
+   "34tET8OaA3C6ZDFvdclBs"
+  ]
+ }
+]

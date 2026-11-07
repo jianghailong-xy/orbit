@@ -1,0 +1,42 @@
+{
+ "id": "34tET9EjbYwX7laXtwrTg",
+ "spaceId": "34tET99H7xVwZYbswn2Kf",
+ "kind": "convention",
+ "status": "active",
+ "trust": "owner",
+ "currentRevision": 1,
+ "title": "部署生产走 orbit-prod 升级流程，无需所有者确认",
+ "summary": "把改动部署到生产时用 session_create 指定 agentName orbit-prod 执行仓库的 upgrade 流程，不需要所有者手动确认。",
+ "fields": {
+  "rule": "部署到生产统一用 session_create 起 agentName orbit-prod 会话执行仓库 upgrade 流程，无需所有者再次确认",
+  "scope": [
+   "把 apiserver 等改动部署到 orbitd.io 生产"
+  ]
+ },
+ "topics": [
+  "deploy-ops"
+ ],
+ "aliases": [],
+ "anchors": [],
+ "anchorState": "unchecked",
+ "anchorCheckedRef": null,
+ "anchorCheckedAt": null,
+ "tainted": false,
+ "challenged": true,
+ "unsupported": false,
+ "pinned": false,
+ "supersedesId": null,
+ "supersededById": null,
+ "validFrom": "2026-11-07T03:14:16.294Z",
+ "validTo": null,
+ "recordedAt": "2026-11-07T03:14:16.294Z",
+ "retiredAt": null,
+ "changesetId": "34tET9E9MoZN4e2hdDkuD",
+ "appliedByMode": null,
+ "verification": null,
+ "publicId": "34tET9EjbYwX7laXtwrTg",
+ "supersededByPublicId": null,
+ "spacePublicId": "34tET99H7xVwZYbswn2Kf",
+ "changesetPublicId": "34tET9E9MoZN4e2hdDkuD",
+ "supersedesPublicId": null
+}

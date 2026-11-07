@@ -1,0 +1,58 @@
+{
+ "id": "34tET9eT3M4Rq8I65iwj9",
+ "spaceId": "34tET99H7xVwZYbswn2Kf",
+ "kind": "pitfall",
+ "status": "active",
+ "trust": "owner",
+ "currentRevision": 1,
+ "title": "session.sum_cache_read 是 int4，大会话会溢出卡死 turn-complete",
+ "summary": "turn-complete 结算时累加 sum_cache_read，超过 2^31-1 时 Postgres 报 integer out of range，事务回滚导致 turn 永远 IN_FLIGHT，后续消息全部 queued。",
+ "fields": {
+  "fix": "代码侧：删除 4 个 session.sum_* 列（迁移 0347），token 明细在 usage 表用 sum() 现算；紧急解堵：UPDATE session SET sum_cache_read=0 WHERE 原值锁定",
+  "cause": "sum_cache_read 是 integer(int4) 上限 2147483647，长会话累积超限后整个 turn-complete 事务回滚",
+  "symptom": "会话消息持续 queued，turn 卡 IN_FLIGHT，引擎已完成但服务端不 ack，runner 无限重试 5xx",
+  "trigger": {
+   "paths": [
+    "src/apiserver/src/runner-api/runner-api.controller.ts",
+    "src/apiserver/prisma/schema.prisma"
+   ],
+   "commands": [],
+   "errorSignature": "integer out of range"
+  }
+ },
+ "topics": [
+  "database"
+ ],
+ "aliases": [],
+ "anchors": [
+  {
+   "path": "src/apiserver/src/runner-api/runner-api.controller.ts",
+   "type": "path"
+  },
+  {
+   "path": "src/apiserver/prisma/schema.prisma",
+   "type": "path"
+  }
+ ],
+ "anchorState": "unchecked",
+ "anchorCheckedRef": null,
+ "anchorCheckedAt": null,
+ "tainted": false,
+ "challenged": false,
+ "unsupported": false,
+ "pinned": false,
+ "supersedesId": null,
+ "supersededById": null,
+ "validFrom": "2026-11-07T03:14:16.558Z",
+ "validTo": null,
+ "recordedAt": "2026-11-07T03:14:16.558Z",
+ "retiredAt": null,
+ "changesetId": "34tET9e4yM70YByrpfT4L",
+ "appliedByMode": null,
+ "verification": null,
+ "publicId": "34tET9eT3M4Rq8I65iwj9",
+ "supersededByPublicId": null,
+ "spacePublicId": "34tET99H7xVwZYbswn2Kf",
+ "changesetPublicId": "34tET9e4yM70YByrpfT4L",
+ "supersedesPublicId": null
+}

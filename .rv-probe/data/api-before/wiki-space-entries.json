@@ -1,0 +1,204 @@
+[
+ {
+  "id": "34tET9mMkTx1nAiAnY9Da",
+  "spaceId": "34tET99H7xVwZYbswn2Kf",
+  "kind": "decision",
+  "status": "active",
+  "trust": "owner",
+  "currentRevision": 1,
+  "title": "Claims feature deferred to wiki-claims-replay branch",
+  "summary": "The wiki-memory claims feature failed its replay gates (G1, G2, G3) and was not merged to main; only the design doc landed, with code preserved on a feature branch.",
+  "fields": {
+   "context": "The feature to surface memory-written claims in the wiki dossier was replayed on 100 production sessions and all primary evidence gates failed: G1 47.6% (needed 60%), G2 10.8% (max 5%), G3 0.30 (min 0.9).",
+   "decision": "Land only the design document results in section 6.2 and keep the code on the feature branch wiki-claims-replay; do not start the 'claims live' rollout.",
+   "decidedAt": "2026-11-04",
+   "alternatives": [
+    {
+     "option": "Merge the claims code to main",
+     "whyRejected": "Evidence gates G1, G2 and G3 all failed the fixed thresholds."
+    }
+   ],
+   "consequences": "The claims feature remains off by default and inactive in production until the gates are re-evaluated."
+  },
+  "topics": [
+   "projects"
+  ],
+  "aliases": [],
+  "anchors": [
+   {
+    "path": "docs/wiki-memory-claims-design.md",
+    "type": "path"
+   },
+   {
+    "path": "src/apiserver/src/wiki/wiki-dossier.ts",
+    "type": "path"
+   }
+  ],
+  "anchorState": "unchecked",
+  "anchorCheckedRef": null,
+  "anchorCheckedAt": null,
+  "tainted": false,
+  "challenged": true,
+  "unsupported": false,
+  "pinned": false,
+  "supersedesId": null,
+  "supersededById": null,
+  "validFrom": "2026-11-07T03:14:16.638Z",
+  "validTo": null,
+  "recordedAt": "2026-11-07T03:14:16.638Z",
+  "retiredAt": null,
+  "publicId": "34tET9mMkTx1nAiAnY9Da",
+  "supersededByPublicId": null,
+  "spacePublicId": "34tET99H7xVwZYbswn2Kf",
+  "supersedesPublicId": null
+ },
+ {
+  "id": "34tET9jXOfPPMzGxWA6Sp",
+  "spaceId": "34tET99H7xVwZYbswn2Kf",
+  "kind": "pitfall",
+  "status": "active",
+  "trust": "owner",
+  "currentRevision": 1,
+  "title": "session sum_* 列是 int4，长会话 cache read 累加会溢出",
+  "summary": "长会话累积 cache read 超 21 亿时，turn-complete 结算累加 sumCacheRead 导致 Postgres integer out of range，事务回滚且 turn 卡 IN_FLIGHT。",
+  "fields": {
+   "fix": "已删列根治。紧急解堵：UPDATE session SET sum_cache_read = 0 WHERE 原值匹配，runner 重试即恢复",
+   "cause": "sumCacheRead 等 4 个 sum_* 列是 integer (int4, 上限 2147483647)，长会话多轮大上下文调用累加后超出上限，累加写入失败导致事务回滚",
+   "symptom": "turn-complete 上报失败，turn 一直 IN_FLIGHT，后续消息全部 queued，每分钟持续报溢出错误",
+   "trigger": {
+    "paths": [
+     "src/apiserver/src/runner-api/runner-api.controller.ts"
+    ],
+    "commands": [],
+    "errorSignature": "integer out of range"
+   }
+  },
+  "topics": [
+   "database"
+  ],
+  "aliases": [],
+  "anchors": [
+   {
+    "path": "src/apiserver/src/runner-api/runner-api.controller.ts",
+    "type": "path"
+   },
+   {
+    "path": "src/apiserver/prisma/schema.prisma",
+    "type": "path"
+   },
+   {
+    "sha": "fdeea9d5163d1e09b208cfbc60eaaf15933870cc",
+    "type": "commit"
+   }
+  ],
+  "anchorState": "unchecked",
+  "anchorCheckedRef": null,
+  "anchorCheckedAt": null,
+  "tainted": false,
+  "challenged": true,
+  "unsupported": false,
+  "pinned": false,
+  "supersedesId": null,
+  "supersededById": null,
+  "validFrom": "2026-11-07T03:14:16.609Z",
+  "validTo": null,
+  "recordedAt": "2026-11-07T03:14:16.609Z",
+  "retiredAt": null,
+  "publicId": "34tET9jXOfPPMzGxWA6Sp",
+  "supersededByPublicId": null,
+  "spacePublicId": "34tET99H7xVwZYbswn2Kf",
+  "supersedesPublicId": null
+ },
+ {
+  "id": "34tET9eT3M4Rq8I65iwj9",
+  "spaceId": "34tET99H7xVwZYbswn2Kf",
+  "kind": "pitfall",
+  "status": "active",
+  "trust": "owner",
+  "currentRevision": 1,
+  "title": "session.sum_cache_read 是 int4，大会话会溢出卡死 turn-complete",
+  "summary": "turn-complete 结算时累加 sum_cache_read，超过 2^31-1 时 Postgres 报 integer out of range，事务回滚导致 turn 永远 IN_FLIGHT，后续消息全部 queued。",
+  "fields": {
+   "fix": "代码侧：删除 4 个 session.sum_* 列（迁移 0347），token 明细在 usage 表用 sum() 现算；紧急解堵：UPDATE session SET sum_cache_read=0 WHERE 原值锁定",
+   "cause": "sum_cache_read 是 integer(int4) 上限 2147483647，长会话累积超限后整个 turn-complete 事务回滚",
+   "symptom": "会话消息持续 queued，turn 卡 IN_FLIGHT，引擎已完成但服务端不 ack，runner 无限重试 5xx",
+   "trigger": {
+    "paths": [
+     "src/apiserver/src/runner-api/runner-api.controller.ts",
+     "src/apiserver/prisma/schema.prisma"
+    ],
+    "commands": [],
+    "errorSignature": "integer out of range"
+   }
+  },
+  "topics": [
+   "database"
+  ],
+  "aliases": [],
+  "anchors": [
+   {
+    "path": "src/apiserver/src/runner-api/runner-api.controller.ts",
+    "type": "path"
+   },
+   {
+    "path": "src/apiserver/prisma/schema.prisma",
+    "type": "path"
+   }
+  ],
+  "anchorState": "unchecked",
+  "anchorCheckedRef": null,
+  "anchorCheckedAt": null,
+  "tainted": false,
+  "challenged": true,
+  "unsupported": false,
+  "pinned": false,
+  "supersedesId": null,
+  "supersededById": null,
+  "validFrom": "2026-11-07T03:14:16.558Z",
+  "validTo": null,
+  "recordedAt": "2026-11-07T03:14:16.558Z",
+  "retiredAt": null,
+  "publicId": "34tET9eT3M4Rq8I65iwj9",
+  "supersededByPublicId": null,
+  "spacePublicId": "34tET99H7xVwZYbswn2Kf",
+  "supersedesPublicId": null
+ },
+ {
+  "id": "34tET9EjbYwX7laXtwrTg",
+  "spaceId": "34tET99H7xVwZYbswn2Kf",
+  "kind": "convention",
+  "status": "active",
+  "trust": "owner",
+  "currentRevision": 1,
+  "title": "部署生产走 orbit-prod 升级流程，无需所有者确认",
+  "summary": "把改动部署到生产时用 session_create 指定 agentName orbit-prod 执行仓库的 upgrade 流程，不需要所有者手动确认。",
+  "fields": {
+   "rule": "部署到生产统一用 session_create 起 agentName orbit-prod 会话执行仓库 upgrade 流程，无需所有者再次确认",
+   "scope": [
+    "把 apiserver 等改动部署到 orbitd.io 生产"
+   ]
+  },
+  "topics": [
+   "deploy-ops"
+  ],
+  "aliases": [],
+  "anchors": [],
+  "anchorState": "unchecked",
+  "anchorCheckedRef": null,
+  "anchorCheckedAt": null,
+  "tainted": false,
+  "challenged": true,
+  "unsupported": false,
+  "pinned": false,
+  "supersedesId": null,
+  "supersededById": null,
+  "validFrom": "2026-11-07T03:14:16.294Z",
+  "validTo": null,
+  "recordedAt": "2026-11-07T03:14:16.294Z",
+  "retiredAt": null,
+  "publicId": "34tET9EjbYwX7laXtwrTg",
+  "supersededByPublicId": null,
+  "spacePublicId": "34tET99H7xVwZYbswn2Kf",
+  "supersedesPublicId": null
+ }
+]

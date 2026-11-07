@@ -1,0 +1,183 @@
+[
+ {
+  "id": "34tETABby3oHms8kNotUh",
+  "spaceId": "34tET99H7xVwZYbswn2Kf",
+  "origin": "agent",
+  "sessionId": "5vD9EcdOwXQIktLuv8GaOn",
+  "toolCallId": null,
+  "rationale": "Four active entries state as current what is not true on origin/main or contradicts the owner's rule, and were returned as verified/confirmed to working sessions (wiki_search review of 2026-11-06, task 34snwipJZpZ7fBMfDPhqH). Each challenge names what is wrong and the migration or commit that shows it, and proposes the answer.",
+  "status": "pending",
+  "createdAt": "2026-11-07T00:14:16.988Z",
+  "decidedAt": null,
+  "expiresAt": "2026-11-21T03:14:16.897Z",
+  "ops": [
+   {
+    "id": "34tETACCKqgGZVQcNH3B6",
+    "changesetId": "34tETABby3oHms8kNotUh",
+    "seq": 0,
+    "op": "challenge",
+    "entryId": "34tET9EjbYwX7laXtwrTg",
+    "baseRevision": null,
+    "payload": {
+     "op": "challenge",
+     "reason": "Wrong as a standing rule. Production deploys need the account owner's approval; this entry says the opposite and contradicts 34WhLfjm6eXNpWKzGWb1I (go-live is approved by the account owner only). Its only source is one task's own instruction, not a convention: step 4 of task 34arC4nkg2GFimsK7UmyF (filed 2026-10-05 by an agent session) let that one change be deployed without a manual confirmation, and the 2026-10-06 maintenance run generalized it. Tasks still state the rule today (task 34snwipJZpZ7fBMfDPhqH: no production writes, deploys or runner releases without the owner's approval). Proposed answer: Retire.",
+     "entryId": "34tET9EjbYwX7laXtwrTg",
+     "sources": [
+      {
+       "ref": "34arC4nkg2GFimsK7UmyF",
+       "kind": "task",
+       "quote": "部署不需要所有者手动确认"
+      },
+      {
+       "ref": "34snwipJZpZ7fBMfDPhqH",
+       "kind": "task",
+       "quote": "不写生产、不部署、不发 runner 版本，这些都要所有者批准"
+      }
+     ]
+    },
+    "similar": [],
+    "tainted": false,
+    "decision": "pending",
+    "decisionReason": null,
+    "decisionNote": null,
+    "resultEntryId": "34tET9EjbYwX7laXtwrTg",
+    "resultRevision": null,
+    "decidedAt": null,
+    "appliedByMode": null,
+    "spotCheck": false,
+    "verification": null,
+    "verificationHistory": [],
+    "entryTitle": "部署生产走 orbit-prod 升级流程，无需所有者确认",
+    "publicId": "34tETACCKqgGZVQcNH3B6",
+    "entryPublicId": "34tET9EjbYwX7laXtwrTg",
+    "changesetPublicId": "34tETABby3oHms8kNotUh",
+    "resultEntryPublicId": "34tET9EjbYwX7laXtwrTg"
+   },
+   {
+    "id": "34tETAEFEJ0VnQR6cLJ8y",
+    "changesetId": "34tETABby3oHms8kNotUh",
+    "seq": 1,
+    "op": "challenge",
+    "entryId": "34tET9eT3M4Rq8I65iwj9",
+    "baseRevision": null,
+    "payload": {
+     "op": "challenge",
+     "reason": "Already fixed when it was written, and fixed again since. The session.sum_* columns it describes were dropped on 2026-10-02 by migration 0347_drop_session_token_sums (commit fdeea9d5163d1e09b208cfbc60eaaf15933870cc), a day before this entry was recorded (2026-10-03 19:17Z); schema.prisma on origin/main (29739d60a) has no sum_cache_read. The same int4 overflow later hit usage's four token counts and was fixed by 0473_usage_token_counts_bigint (commit b4619320b294f164c7cf7af9ebfd0225f4d25c6f, 2026-11-05). Its anchors only say the two files exist, which is why it read verified, and later confirmed. Proposed answer: Retire (the contract retires a pitfall once its fix lands).",
+     "entryId": "34tET9eT3M4Rq8I65iwj9",
+     "sources": [
+      {
+       "ref": "toolu_01R7D9vx6BsYBFBUJ1CnJbE9",
+       "kind": "tool_call",
+       "quote": "fdeea9d5163d1e09b208cfbc60eaaf15933870cc 2026-10-02T06:15:47+02:00 fix: drop overflowing lifetime token sums from session"
+      },
+      {
+       "ref": "toolu_01R7D9vx6BsYBFBUJ1CnJbE9",
+       "kind": "tool_call",
+       "quote": "sum_cache_read lines in schema.prisma at origin/main: 0"
+      }
+     ]
+    },
+    "similar": [],
+    "tainted": false,
+    "decision": "pending",
+    "decisionReason": null,
+    "decisionNote": null,
+    "resultEntryId": "34tET9eT3M4Rq8I65iwj9",
+    "resultRevision": null,
+    "decidedAt": null,
+    "appliedByMode": null,
+    "spotCheck": false,
+    "verification": null,
+    "verificationHistory": [],
+    "entryTitle": "session.sum_cache_read 是 int4，大会话会溢出卡死 turn-complete",
+    "publicId": "34tETAEFEJ0VnQR6cLJ8y",
+    "entryPublicId": "34tET9eT3M4Rq8I65iwj9",
+    "changesetPublicId": "34tETABby3oHms8kNotUh",
+    "resultEntryPublicId": "34tET9eT3M4Rq8I65iwj9"
+   },
+   {
+    "id": "34tETAFDcqrRUzRiUVbX3",
+    "changesetId": "34tETABby3oHms8kNotUh",
+    "seq": 2,
+    "op": "challenge",
+    "entryId": "34tET9jXOfPPMzGxWA6Sp",
+    "baseRevision": null,
+    "payload": {
+     "op": "challenge",
+     "reason": "A duplicate of 34ZfFGATAFiBBi9qmqPF7 (same session, same minute) and stale for the same reason: the session.sum_* columns were dropped on 2026-10-02 by 0347_drop_session_token_sums (commit fdeea9d5163d1e09b208cfbc60eaaf15933870cc) before it was recorded; the later overflow of usage's token counts was fixed by 0473_usage_token_counts_bigint (commit b4619320b294f164c7cf7af9ebfd0225f4d25c6f). Proposed answer: Retire.",
+     "entryId": "34tET9jXOfPPMzGxWA6Sp",
+     "sources": [
+      {
+       "ref": "toolu_01R7D9vx6BsYBFBUJ1CnJbE9",
+       "kind": "tool_call",
+       "quote": "b4619320b294f164c7cf7af9ebfd0225f4d25c6f 2026-11-06T00:55:46+08:00 fix(runner-api): a report can no longer hold a turn's completion"
+      }
+     ]
+    },
+    "similar": [],
+    "tainted": false,
+    "decision": "pending",
+    "decisionReason": null,
+    "decisionNote": null,
+    "resultEntryId": "34tET9jXOfPPMzGxWA6Sp",
+    "resultRevision": null,
+    "decidedAt": null,
+    "appliedByMode": null,
+    "spotCheck": false,
+    "verification": null,
+    "verificationHistory": [],
+    "entryTitle": "session sum_* 列是 int4，长会话 cache read 累加会溢出",
+    "publicId": "34tETAFDcqrRUzRiUVbX3",
+    "entryPublicId": "34tET9jXOfPPMzGxWA6Sp",
+    "changesetPublicId": "34tETABby3oHms8kNotUh",
+    "resultEntryPublicId": "34tET9jXOfPPMzGxWA6Sp"
+   },
+   {
+    "id": "34tETAFhwLdBBl4N2VkhT",
+    "changesetId": "34tETABby3oHms8kNotUh",
+    "seq": 3,
+    "op": "challenge",
+    "entryId": "34tET9mMkTx1nAiAnY9Da",
+    "baseRevision": null,
+    "payload": {
+     "op": "challenge",
+     "reason": "No longer true since 2026-11-05. The second replay passed its gates (task 34s1GXpJQysYLUuW3J3XN) and the claims code landed on main, off by default: 3ad287932 (the maintenance run's pass over agents' notes) through 9c27b68fa at 05:58Z, then 3b43fa46f (wiki-backfill.cli.ts, wiki-dossier-claims.spec.ts) through ed358c61b at 07:14Z; both are ancestors of origin/main. At 17:30Z the entry was still returned as verified to the task running that backfill: its anchors only say the two files exist. A decision is superseded, never amended. Proposed answer: Retire (docs/wiki-memory-claims-design.md section 6.2 records both replays and the landing).",
+     "entryId": "34tET9mMkTx1nAiAnY9Da",
+     "sources": [
+      {
+       "ref": "toolu_01R7D9vx6BsYBFBUJ1CnJbE9",
+       "kind": "tool_call",
+       "quote": "3ad287932e8945cb0f8ed7844d22583cbf7c1b14 is an ancestor of origin/main"
+      },
+      {
+       "ref": "toolu_01R7D9vx6BsYBFBUJ1CnJbE9",
+       "kind": "tool_call",
+       "quote": "ed358c61be490347b7acd72d8bbd0598751a662f 2026-11-05T15:14:41+08:00 Merge refs/heads/project/34ronGIfMKgVckX2XJ5J6 into refs/heads/main"
+      }
+     ]
+    },
+    "similar": [],
+    "tainted": false,
+    "decision": "pending",
+    "decisionReason": null,
+    "decisionNote": null,
+    "resultEntryId": "34tET9mMkTx1nAiAnY9Da",
+    "resultRevision": null,
+    "decidedAt": null,
+    "appliedByMode": null,
+    "spotCheck": false,
+    "verification": null,
+    "verificationHistory": [],
+    "entryTitle": "Claims feature deferred to wiki-claims-replay branch",
+    "publicId": "34tETAFhwLdBBl4N2VkhT",
+    "entryPublicId": "34tET9mMkTx1nAiAnY9Da",
+    "changesetPublicId": "34tETABby3oHms8kNotUh",
+    "resultEntryPublicId": "34tET9mMkTx1nAiAnY9Da"
+   }
+  ],
+  "publicId": "34tETABby3oHms8kNotUh",
+  "sessionPublicId": "5vD9EcdOwXQIktLuv8GaOn",
+  "spacePublicId": "34tET99H7xVwZYbswn2Kf",
+  "toolCallPublicId": null
+ }
+]
