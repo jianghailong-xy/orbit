@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { COORDINATOR_DELIVERY_KINDS, type CoordinatorDeliveryCard } from '@orbit/shared';
+import { coordinatorDeliverySentence } from '../lib/coordinatorDelivery';
 import { SESSION_MESSAGE_UNTITLED } from '../lib/sessionMessage';
-import { SENT_BY_YOU, sessionLine, statusLabel } from './WorkspaceView';
+import { SENT_BY_ORBIT, SENT_BY_YOU, sessionLine, statusLabel } from './WorkspaceView';
 
 /**
  * The session row's second line. Kept in step with the native port
@@ -346,6 +348,91 @@ describe('sessionLine names who sent the message it previews', () => {
     expect(sessionLine({ status: 'AWAITING_INPUT', pendingApprovals: 1, lastUserText: report, lastUserFrom: from }, true))
       .toEqual({ text: 'Waiting for approval', tone: 'approval' });
     expect(sessionLine({ status: 'AWAITING_INPUT', lastAssistantText: 'On it.', lastUserFrom: from }, true))
+      .toEqual({ text: 'On it.', tone: 'preview' });
+  });
+});
+
+/**
+ * A message Orbit wrote itself (`lastUserFromOrbit`, docs/session-list-projects-design.md §3.5, owner
+ * 2026-11-07): the row says Orbit, never "You". A coordinator's notification says the sentence its line
+ * in the conversation says (`coordinatorDeliverySentence`); any other message of Orbit's says its first
+ * line. Kept in step with OrbitKit's `SessionLineOrbitTests` and Android's `SessionLineOrbitTest`.
+ */
+describe('sessionLine says Orbit for the message Orbit wrote', () => {
+  const evidence: CoordinatorDeliveryCard = {
+    kind: 'EVIDENCE_SUBMITTED',
+    task: { id: 'task-1', title: 'Write Orbit on the row' },
+    revision: 2,
+    count: null,
+    deliveredAt: '2026-11-07T07:30:00.000Z',
+    toCoordinator: true,
+  };
+  const notification = 'From Orbit · project “Rows” has a revision of completion evidence for you to decide\n\nTask “Write Orbit on the row” …';
+  const wake = 'Orbit Watch w-1 matched at generation 2: **CI** finished\n\nThis turn was queued by the watch, not typed by a person.';
+
+  it('says a notification’s own sentence, while the turn runs, after it stopped and in Trash', () => {
+    expect(SENT_BY_ORBIT).toBe('Orbit');
+    const told = { lastUserText: notification, lastUserFromOrbit: { coordinatorDelivery: evidence } };
+    const line = { text: 'Orbit: Evidence revision 2 submitted: Write Orbit on the row', tone: 'preview' };
+    expect(sessionLine({ status: 'RUNNING', lastAssistantText: 'previous reply', ...told }, true)).toEqual(line);
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastAssistantText: 'previous reply', ...told }, true)).toEqual(line);
+    expect(sessionLine({ status: 'INTERRUPTED', ...told }, true)).toEqual(line);
+    expect(sessionLine({ status: 'FAILED', ...told }, false)).toEqual(line);
+  });
+
+  it('says every kind of notification as its line in the conversation says it', () => {
+    const cards: CoordinatorDeliveryCard[] = COORDINATOR_DELIVERY_KINDS.map((kind) => ({
+      kind,
+      task: { id: 'task-1', title: 'Build the package' },
+      revision: 3,
+      count: 2,
+      deliveredAt: '2026-11-07T07:30:00.000Z',
+      toCoordinator: kind !== 'CRITERIA_REJECTED',
+    }));
+    for (const card of cards) {
+      expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: notification, lastUserFromOrbit: { coordinatorDelivery: card } }, true))
+        .toEqual({ text: `Orbit: ${coordinatorDeliverySentence(card)}`, tone: 'preview' });
+    }
+    // Spelled out for three of them, so a sentence that changed is read here as well as in the conversation.
+    const said = (card: Partial<CoordinatorDeliveryCard>) => sessionLine({
+      status: 'AWAITING_INPUT', lastUserText: notification, lastUserFromOrbit: { coordinatorDelivery: { ...evidence, ...card } },
+    }, true).text;
+    expect(said({ kind: 'CRITERION_UNLANDED', task: null, revision: null, count: 2 })).toBe('Orbit: Work not on main yet: 2 tasks');
+    expect(said({ kind: 'ACCEPTANCE_LANDED_DONE', task: null, revision: null, count: 1 })).toBe('Orbit: The only criterion landed, recorded Done');
+    expect(said({ kind: 'CRITERIA_APPROVED', task: null, revision: null })).toBe('Orbit: Criteria proposal approved');
+  });
+
+  it('says the first line of any other message of Orbit’s, flattened like a preview', () => {
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: wake, lastUserFromOrbit: { coordinatorDelivery: null } }, true))
+      .toEqual({ text: 'Orbit: Orbit Watch w-1 matched at generation 2: CI finished', tone: 'preview' });
+    // Blank lines before it are not its first line.
+    expect(sessionLine({ status: 'RUNNING', lastUserText: '\n  \nStart the task “Write Orbit on the row”.\n\nTask details:', lastUserFromOrbit: { coordinatorDelivery: null } }, true).text)
+      .toBe('Orbit: Start the task “Write Orbit on the row”.');
+    // A card this build cannot read is no card: the message's first line, and still Orbit's.
+    for (const coordinatorDelivery of [{ kind: 'A_KIND_FROM_A_LATER_SERVER', deliveredAt: '2026-11-07T07:30:00.000Z' }, { ...evidence, revision: null }, 'evidence']) {
+      expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: notification, lastUserFromOrbit: { coordinatorDelivery } }, true).text)
+        .toBe('Orbit: From Orbit · project “Rows” has a revision of completion evidence for you to decide');
+    }
+  });
+
+  it('says You only for the owner’s words, and names another session, as before', () => {
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: 'ship it', lastUserFrom: null, lastUserFromOrbit: null }, true).text)
+      .toBe('You: ship it');
+    // An older server sends no mark at all: every message reads as it did.
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: notification }, true).text)
+      .toBe('You: From Orbit · project “Rows” has a revision of completion evidence for you to decide Task “Write Orbit on the row” …');
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: 'ship it', lastUserFrom: { sessionId: 'session-1', title: 'Build the package' }, lastUserFromOrbit: null }, true).text)
+      .toBe('Build the package: ship it');
+    // A mark that is not an object is none.
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: 'ship it', lastUserFromOrbit: 'Orbit' }, true).text).toBe('You: ship it');
+  });
+
+  it('changes nothing above the message, and a mark with no message makes no line', () => {
+    const told = { lastUserText: notification, lastUserFromOrbit: { coordinatorDelivery: evidence } };
+    expect(sessionLine({ status: 'RUNNING', lastToolUse: 'Bash', ...told }, true)).toEqual({ text: 'Running Bash…', tone: 'running' });
+    expect(sessionLine({ status: 'AWAITING_INPUT', pendingApprovals: 1, ...told }, true))
+      .toEqual({ text: 'Waiting for approval', tone: 'approval' });
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastAssistantText: 'On it.', lastUserFromOrbit: { coordinatorDelivery: evidence } }, true))
       .toEqual({ text: 'On it.', tone: 'preview' });
   });
 });

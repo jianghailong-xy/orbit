@@ -69,7 +69,7 @@ public struct SessionLine: Equatable, Sendable {
             // it is enqueued until a reply lands) rather than the previous turn's reply, which
             // would read as if this one had already been answered. Content, not status — the
             // spinner already conveys "working" — so it takes the muted preview tone.
-            if let u = s.lastUserText, !u.isEmpty { return sentLine(u, from: s.lastUserFrom) }
+            if let u = s.lastUserText, !u.isEmpty { return orbitLine(u, s.lastUserFromOrbit) ?? sentLine(u, from: s.lastUserFrom) }
             if let a = s.lastAssistantText, !a.isEmpty { return SessionLine(text: plainPreview(a), tone: .preview) }
             return SessionLine(text: "Running…", tone: .running)
         }
@@ -97,7 +97,7 @@ public struct SessionLine: Equatable, Sendable {
         // reply landed — outranks the previous turn's reply: it's the newer of the two, and it's
         // what the session is left waiting on. The server only keeps it while it stands
         // unanswered, so a non-empty value here always means exactly that.
-        if let u = s.lastUserText, !u.isEmpty { return sentLine(u, from: s.lastUserFrom) }
+        if let u = s.lastUserText, !u.isEmpty { return orbitLine(u, s.lastUserFromOrbit) ?? sentLine(u, from: s.lastUserFrom) }
         // The rolling recap (0418) takes the place of the reply preview it used to show: the sentence
         // the server wrote about the session, not the raw last reply flattened down to one line. Only
         // here — below every live line above — so a working session still says what it is doing (web
@@ -138,6 +138,22 @@ public struct SessionLine: Equatable, Sendable {
         guard let from else { return you }
         let title = from.title.trimmingCharacters(in: .whitespacesAndNewlines)
         return title.isEmpty ? SessionMessageCard.untitled : title
+    }
+
+    /// Orbit, as the sender of its own messages (web `SENT_BY_ORBIT`).
+    static let orbit = "Orbit"
+
+    /// The line for a message Orbit wrote itself (`lastUserFromOrbit`; docs/session-list-projects-design.md
+    /// §3.5, owner 2026-11-07), or nil for anybody else's: Orbit says it, never "You", which put "You: From
+    /// Orbit · project …" on a coordinator's row while it read the notification. A notification the
+    /// conversation draws as a line says that line's own sentence (`CoordinatorDeliveryCard.sentence`);
+    /// any other says its first line, flattened like a preview — the rest is written for the agent. Web
+    /// parity: `orbitLine` in WorkspaceView.tsx.
+    static func orbitLine(_ text: String, _ mark: OrbitMessageFrom?) -> SessionLine? {
+        guard let mark else { return nil }
+        let said = mark.coordinatorDelivery.map(CoordinatorDeliveryCard.sentence)
+            ?? plainPreview(text.components(separatedBy: "\n").first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? "")
+        return SessionLine(text: "\(orbit): \(said)", tone: .preview)
     }
 
     /// Flatten an assistant reply into a single prose line: drop code blocks and the markdown
