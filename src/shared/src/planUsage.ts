@@ -58,12 +58,24 @@ function cursorWindows(snapshot: PlanUsageSnapshot): { limit?: PlanUsageWindow; 
   const length = mins ? { windowDurationMins: mins } : {};
   const resets = Date.parse(included.resetsAt ?? '');
   const reached = Date.parse(included.limitReachedAt ?? '');
-  const used = included.percentUsed;
+  // Dollar fields win when Cursor sent them: remaining/limit are the included allowance itself,
+  // including a true 0% used (full remaining) that totalPercentUsed's "above 0 only" rule would drop.
+  const allowance = included.limitCents;
+  const remaining = included.remainingCents;
+  const usedFromCents =
+    typeof allowance === 'number' &&
+    Number.isFinite(allowance) &&
+    allowance > 0 &&
+    typeof remaining === 'number' &&
+    Number.isFinite(remaining)
+      ? Math.max(0, Math.min(100, ((allowance - remaining) / allowance) * 100))
+      : undefined;
+  const used = usedFromCents ?? included.percentUsed;
   return {
     ...(Number.isNaN(reached) || reached < Date.parse(included.startsAt ?? '')
       ? {}
       : { limit: { utilization: EXHAUSTED_UTILIZATION, ...(resets > reached ? { resetsAt: included.resetsAt } : {}), ...length } }),
-    ...(typeof used === 'number' && Number.isFinite(used) && used > 0
+    ...(typeof used === 'number' && Number.isFinite(used) && (usedFromCents !== undefined || used > 0)
       ? { reading: { utilization: used, ...(Number.isNaN(resets) ? {} : { resetsAt: included.resetsAt }), ...length } }
       : {}),
   };
