@@ -61,7 +61,7 @@ sessions_table="$out/sessions.tsv"
 gateway="$project-link-gateway"
 count="${ORBIT_MASS_DISCONNECT_RUNNERS:-10}"
 cut="${ORBIT_MASS_DISCONNECT_CUT:-2}"
-outage="${ORBIT_MASS_DISCONNECT_SECONDS:-180}"
+outage="${ORBIT_MASS_DISCONNECT_SECONDS:-420}"
 sweep_after="${ORBIT_MASS_DISCONNECT_SWEEP_AFTER:-}"
 gateways="${ORBIT_MASS_DISCONNECT_GATEWAYS:-1}"
 handshake_rate="${ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE:-200}"
@@ -427,9 +427,10 @@ sample() {
 }
 
 # --- The reaper's sweeps against the crossings. -----------------------------------------------------------------------
-# A runner beats every 30 s from when it started and is past the offline line 90 s after its last beat; the reaper
-# sweeps every 30 s on a timer. As both keep time with the same period, where a sweep falls against a runner's crossing
-# is where it falls in the interval against the runner's beats: the same in every outage, whenever the cut comes.
+# A runner beats every 30 s from when it started and is past the offline line offline_after after its last beat; the
+# reaper sweeps every 30 s on a timer. As both keep time with the same period, where a sweep falls against a runner's
+# crossing is where it falls in the interval against the runner's beats: the same in every outage, whenever the cut
+# comes.
 #
 # aim_cut RUN: for ORBIT_MASS_DISCONNECT_SWEEP_AFTER, the runners the partition cuts off, and the moment, chosen so that
 # the reaper's first sweep after the first of them crosses the line falls that many seconds after the crossing. The
