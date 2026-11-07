@@ -1524,7 +1524,7 @@ export class SessionsService {
           attachmentsAlone,
         })
       : wikiChat
-        ? this.writeChat(dto.workspaceId!, dto.prompt, wikiChat, insertSession)
+        ? this.writeChat(dto.workspaceId!, dto.prompt, wikiChat, attachmentIds, insertSession)
         : this.writeFenced(opts?.fence, (client) => insertSession(client))
     ).catch(async (e: unknown) => {
       // The folder checked above was deleted before this INSERT reached it: the same 400 as naming
@@ -1543,8 +1543,9 @@ export class SessionsService {
     // Scope the compose-page uploads to this session now that it exists. They stay
     // turn-less until the runner seeds the first turn (queue.service links them to it),
     // and cascade-delete with the session. A session that made its workspace did this, and the
-    // two seeds below, inside that transaction (createInNewWorkspace).
-    if (attachmentIds.length > 0 && !newWorkspace) {
+    // two seeds below, inside that transaction (createInNewWorkspace); a wiki chat linked them to
+    // its first turn inside its own (writeChat).
+    if (attachmentIds.length > 0 && !newWorkspace && !wikiChat) {
       await this.prisma.attachment.updateMany({
         // `taskId: null` for the same reason the validator carries it, but here it is the
         // CONCURRENT case: an upload that became a task's input between that check and this write
@@ -1658,13 +1659,16 @@ export class SessionsService {
    * were written, under the client's UUID, with an explicit routing intent, so they are first-hand
    * (`reviewModes.tiered.auto.ownerWords`); and it carries the page and selection as ids, which delivery
    * reads (chat.notes). Neither seeder lays an opening turn down for a chat (`ensurePromptSeeded`,
-   * queue.buildSession): this one is it. Locks: the workspace (15) FOR SHARE, the session (30) it inserts,
-   * the turn (60).
+   * queue.buildSession): this one is it. The pictures and files sent with it (board 43) join it here too: uploads the
+   * caller made before any session existed (`assertScopableAttachments`), scoped to this session and linked to this
+   * turn in the same statement, so delivery hands them over with the words as it does a later message's. Locks: the
+   * workspace (15) FOR SHARE, the session (30) it inserts, the turn and the attachment rows it links (60).
    */
   private async writeChat<S extends { id: string }>(
     workspaceId: string,
     content: string,
     chat: { clientTurnId: string; wikiContext: WikiChatContext | null },
+    attachmentIds: readonly string[],
     insertSession: (tx: Prisma.TransactionClient) => PromiseLike<S>,
   ): Promise<S> {
     return withTransactionRetry(this.prisma, async (tx) => {
@@ -1675,13 +1679,20 @@ export class SessionsService {
       if (!workspace) throw new ForbiddenException('workspace not found');
       if (!workspace.enableWorktree) throw chatWorktreeRequired();
       const session = await insertSession(tx);
-      await this.insertTurnLocked(tx, session.id, {
+      const turn = await this.insertTurnLocked(tx, session.id, {
         kind: 'message',
         content,
         clientTurnId: chat.clientTurnId,
         sendIntent: 'NEXT_TURN',
         ...(chat.wikiContext ? { wikiContext: chat.wikiContext as unknown as Prisma.InputJsonValue } : {}),
       });
+      if (attachmentIds.length > 0) {
+        // Still unscoped, as `create` found them; one taken by a task or another session since is left where it went.
+        await tx.attachment.updateMany({
+          where: { id: { in: [...attachmentIds] }, sessionId: null, turnId: null, taskId: null },
+          data: { sessionId: session.id, turnId: turn.id },
+        });
+      }
       return session;
     }, loggedRetry(this.logger, 'sessions.writeChat'));
   }

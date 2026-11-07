@@ -1210,6 +1210,14 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
       body: { workspaceId: of.workspaceId, content: 'from the census', clientTurnId: CENSUS_CHAT_TURN },
     }),
   },
+  // A chat's first message sent with another account's upload (board 43): no such file for this one, as for a new
+  // session (SessionsService.assertScopableAttachments).
+  'POST /wiki/spaces/:id/chats body attachmentIds': {
+    request: (of, mine) => ({
+      params: { id: mine.wikiSpaceId },
+      body: { workspaceId: mine.workspaceId, content: 'from the census', clientTurnId: CENSUS_CHAT_TURN, attachmentIds: [of.attachmentId] },
+    }),
+  },
   // Where a space's chats run, set to another account's workspace: not one this space's chats may run in.
   'PATCH /wiki/spaces/:id body chat.workspaceId': {
     request: (of, mine) => ({ params: { id: mine.wikiSpaceId }, body: { chat: { workspaceId: of.workspaceId } } }),

@@ -41,7 +41,7 @@ export class WikiChatController {
   create(
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
-    @Body(PublicIdPipe.forFields('workspaceId')) body: unknown,
+    @Body(PublicIdPipe.forFields('workspaceId', 'attachmentIds')) body: unknown,
     @Req() request: { headers: Record<string, string | string[] | undefined> },
   ) {
     // The pipe hands a blank id through as it came; refused here, it never reaches a uuid column as "".

@@ -84,12 +84,17 @@ export class WikiChat {
 
   /**
    * `POST /api/wiki/spaces/:id/chats` (contract `chat.create`): `{ workspaceId?, content, clientTurnId, wikiContext?,
-   * engine?, model?, permissionMode? }`.
+   * attachmentIds?, engine?, model?, permissionMode?, effort?, fastMode? }`.
    *
    * The workspace is the one named — which must be one the space's chats may run in, and which the space then
    * remembers (Runs in) — or else the one the space remembers; with neither, 400 says to choose one. No default is
    * worked out (contract `chat.workspace.choose`): the workspace a space's sessions last ran in could carry the chat
    * onto a production machine. An offline machine is no reason to move: the chat is made and waits for its runner.
+   *
+   * The first message's pictures and files (board 43): `attachmentIds` are uploads of the owner's not yet used by any
+   * session (`POST /api/attachments` with none named), held to that as a new session's are; they join the first turn
+   * in the transaction that files it (`SessionsService.writeChat`). The model, effort, speed and mode are the ones the
+   * composer's toolbar shows, each defaulting as a session of that workspace does.
    */
   async create(
     ownerId: string,
@@ -106,10 +111,17 @@ export class WikiChat {
     if (typeof input.clientTurnId !== 'string' || !UUID.test(input.clientTurnId)) {
       throw new BadRequestException('clientTurnId must be a UUID the client made for this message');
     }
-    for (const field of ['workspaceId', 'engine', 'model', 'permissionMode'] as const) {
+    for (const field of ['workspaceId', 'engine', 'model', 'permissionMode', 'effort'] as const) {
       if (input[field] !== undefined && input[field] !== null && typeof input[field] !== 'string') {
         throw new BadRequestException(`${field} must be a string`);
       }
+    }
+    if (input.fastMode !== undefined && input.fastMode !== null && typeof input.fastMode !== 'boolean') {
+      throw new BadRequestException('fastMode must be true or false');
+    }
+    const attachmentIds = input.attachmentIds ?? [];
+    if (!Array.isArray(attachmentIds) || attachmentIds.some((id) => typeof id !== 'string' || id === '')) {
+      throw new BadRequestException('attachmentIds must be a list of the ids of files the owner uploaded');
     }
     const wikiContext = readWikiChatContext(input.wikiContext);
     const space = await this.requireSpace(ownerId, spaceId);
@@ -131,6 +143,9 @@ export class WikiChat {
       ...(typeof input.engine === 'string' ? { engine: input.engine } : {}),
       ...(typeof input.model === 'string' ? { model: input.model } : {}),
       ...(typeof input.permissionMode === 'string' ? { permissionMode: input.permissionMode } : {}),
+      ...(typeof input.effort === 'string' ? { effort: input.effort } : {}),
+      ...(typeof input.fastMode === 'boolean' ? { fastMode: input.fastMode } : {}),
+      ...(attachmentIds.length > 0 ? { attachmentIds: attachmentIds as string[] } : {}),
     } as CreateSessionDto;
     const session = await this.sessions.create(ownerId, dto, {
       credential,

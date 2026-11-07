@@ -1148,9 +1148,13 @@ export interface WikiChatCreateBody {
   content: string;
   clientTurnId: string;
   wikiContext?: WikiChatContext;
+  /** The first message's pictures and files (board 43): uploads of the owner's that no session has used yet. */
+  attachmentIds?: string[];
   engine?: string;
   model?: string;
   permissionMode?: string;
+  effort?: string;
+  fastMode?: boolean;
 }
 
 /** What creating a chat answers (contract `chat.create.answer`). */

@@ -3121,17 +3121,20 @@ C6（草稿与按压）、C8 与 C9（web）、C11（iOS）、C12（plan 卡）�
 - 全在用户门（JwtAuthGuard + WikiRolloutGuard），id 都是 public id；别的 owner 的 space、聊天、卡一律普通 404。带会话头（`X-Orbit-Session-Id`）的请求一律
   `WIKI_OWNER_CHANNEL_ONLY`，不论是什么会话：agent 建不了聊天、经这道门读不了卡、按不了任何东西。写只认 owner 的交互凭证（个人访问令牌回
   `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，同 §2 绑定的写），读收带 `wiki:read` 的令牌。
-- **建聊天**：`{ workspaceId?, content, clientTurnId, wikiContext?, engine?, model?, permissionMode? }`。`workspaceId` 给了就得合格，和记住的不同就替换它（Runs in）；
+- **建聊天**：`{ workspaceId?, content, clientTurnId, wikiContext?, attachmentIds?, engine?, model?, permissionMode?, effort?, fastMode? }`。`workspaceId` 给了就得合格，和记住的不同就替换它（Runs in）；
   没给就用记住的，都没有回 400，写明要先选。`content` 是 owner 的第一条话，一字不差；`clientTurnId` 是 UUID：turn 照会话消息门记 owner 原话的办法记（显式的路由意图、
-  客户端的 UUID），所以这句话是一手出处（`tiered.auto.ownerWords`），节可以引它（§29.3）。`wikiContext` 照 28.4 校验。引擎、模型、模式同 New session，缺省照这个
-  workspace 的会话。经 `SessionsService.create` 在一个事务里建：这个 workspace 的普通会话、`wiki_chat_space_id`、强制独立 worktree（这期间关了 worktree 的回 409，
-  什么都不建）、SOURCE 选择器、第一个 turn；第一次投递在原话后面接上 `<orbit_wiki_chat>` 和这个 turn 的页面、选区附注。回 `{ sessionId, chat }`。
+  客户端的 UUID），所以这句话是一手出处（`tiered.auto.ownerWords`），节可以引它（§29.3）。`wikiContext` 照 28.4 校验。`attachmentIds` 是第一条消息的图片与文件
+  （效果图 43）：owner 自己上传、还没被任何会话用过的（`POST /api/attachments` 不带会话），同 New session 的校验，不合格回 400，什么都不建。引擎、模型、模式、
+  思考强度与速度同 New session，缺省照这个 workspace 的会话。经 `SessionsService.create` 在一个事务里建：这个 workspace 的普通会话、`wiki_chat_space_id`、
+  强制独立 worktree（这期间关了 worktree 的回 409，什么都不建）、SOURCE 选择器、第一个 turn，附件归这场会话并挂到这个 turn 上；第一次投递在原话后面接上
+  `<orbit_wiki_chat>` 和这个 turn 的页面、选区附注，附件和之后的消息一样交给引擎。回 `{ sessionId, chat }`。
 - **列聊天**：`{ spaceId, workspace, choices, fab, chats }`。`workspace` 是记住的那个现在的样子 `{ id, name, runner, online, eligible }`，没记住是 null（name、runner 同
   §2 的 Workspaces 卡，online 用 runners 列表的同一条规则 `isRunnerOnline`）；`choices` 是全部合格的 `{ id, name, runner, online }`；`fab` 是 `{ needsYou, working, updated }`，
   按这个 space 不在 Trash 里的全部聊天算（28.7），客户端只凭这三个数画圆按钮；`chats` 新的在前，至多 50 场（`chat.rules.chatsListed`），每场
   `{ sessionId, title, status, open, createdAt, updatedAt, drafts, needsYou }`。点圆按钮：打开有卡等 owner 的那一场，否则最近还开着的一场，否则新开。
 - **之后的消息**走会话自己的消息门 `POST /api/sessions/:id/turns`（owner 的、显式路由意图、UUID 的 `clientTurnId`），聊天会话多收一个可选字段 `wikiContext`；
-  别的会话的消息带它回 400。turn 的 content 只有 owner 的原话，不论带了什么附件，所以聊天里 owner 的每个 turn 都是一手的。
+  别的会话的消息带它回 400。图片与文件照这道门的 `attachmentIds`，运行中插进这一轮还是排到下一轮也照这道门（同 session 页）。turn 的 content 只有 owner 的
+  原话，不论带了什么附件，所以聊天里 owner 的每个 turn 都是一手的。
 
 ### 28.4 附注
 
@@ -3265,9 +3268,11 @@ C6（草稿与按压）、C8 与 C9（web）、C11（iOS）、C12（plan 卡）�
 
 ### 28.11 面板（客户端，`chat.panel`）
 
-- **头**：标题（点开是这个 space 的聊天历史，即列聊天）、`+` 新开、`↗` 换成完整会话页（`#` 引用、模型切换、斜杠命令都在那边）、`✕` 收起（聊天不结束）。
-  标题下一行字一直写在哪跑：`workspace · 机器 · 引擎 · 模式`（图 42：`orbit-develop · HPC · Claude Opus 5.5 · Default`）。
-- **地址**带 `?chat=<session>`：翻页不关，刷新还在。**输入框**是精简版：文字、附件（28.4）、发送、Stop，别的交给 `↗`。
+- **头**：标题（点开是这个 space 的聊天历史，即列聊天）、`+` 新开、`↗` 换成完整会话页、`✕` 收起（聊天不结束）。新聊天时标题下一行是 `Runs in`，只放
+  workspace，发出第一句后收起；聊天开始以后不再显示 workspace（owner 11-07 定，效果图 43 ②）。
+- **地址**带 `?chat=<session>`：翻页不关，刷新还在。**输入框**就是 session 页的 composer，同一个组件（效果图 43 ②④⑤）：附件行（页面与选区在前，28.4，
+  然后是图片与文件，各带 ×）、输入框、工具栏（`+`、模式、模型与思考强度、用量、发送与 Stop）、斜杠菜单，运行中照 session 页插话或排队。新聊天的模型、
+  思考强度、速度与模式随建聊天发出，之后照 session 页改会话配置。换 provider 与账号只在完整会话页。
 - **归属**：一场聊天属于一个 space，换 space 看到的是那个 space 的聊天；它也在 workspace 的会话列表里，页头有来处标签 `From Wiki`。
 - **宽度**（设计 §4.1，做面板时按真页面校准）：
 
