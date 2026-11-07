@@ -869,27 +869,55 @@ describe('the composer: the session page’s own (board 43, plan A)', () => {
   });
 
   it('sends pictures and files with a new chat’s first message, and with a later one through the session’s own door', async () => {
-    await open('/wiki/orbit/d/session-runtime?chat=new');
-    await attach('runner.log', 'text/plain');
-    expect(composer()!.querySelector('.composer-attachments .composer-file:not(.wk-chat-chip) .composer-file-name')?.textContent).toBe('runner.log');
-    await type('The runner log from the night it went offline.');
-    await press(byLabel('Send'));
-    // Uploaded before any session exists, and named in the create, which links it to the chat's first turn.
-    expect(uploads).toEqual([{ scope: '', name: 'runner.log', type: 'text/plain', id: 'ATT1' }]);
-    expect(writes.find((write) => write.path === `/api/wiki/spaces/${SPACE_ID}/chats`)!.body).toMatchObject({
-      content: 'The runner log from the night it went offline.',
-      attachmentIds: ['ATT1'],
-    });
-    expect(stream.accepted).toEqual([
-      expect.objectContaining({ key: 'initial:S1chat', attachments: [{ id: 'ATT1', mime: 'text/plain', name: 'runner.log' }] }),
-    ]);
-    // The chat runs now: a later file is the session's own upload, and goes with the message through its door.
-    expect(composer()!.querySelector('.composer-attachments .composer-file:not(.wk-chat-chip)')).toBeNull();
-    await attach('heartbeats.csv', 'text/csv');
-    await type('And the heartbeats.');
-    await press(byLabel('Send'));
-    expect(uploads[1]).toEqual({ scope: 'sessionId=S1chat', name: 'heartbeats.csv', type: 'text/csv', id: 'ATT2' });
-    expect(turns().at(-1)!.body).toMatchObject({ content: 'And the heartbeats.', intent: 'NEXT_TURN', attachmentIds: ['ATT2'] });
-    expect(composer()!.querySelector('.composer-file:not(.wk-chat-chip)')).toBeNull();
+    // A picture is previewed from this tab's own bytes; jsdom makes no object URLs, so they are stood in for.
+    const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+    URL.createObjectURL = vi.fn(() => 'blob:preview');
+    URL.revokeObjectURL = vi.fn();
+    try {
+      await open('/wiki/orbit/d/session-runtime?chat=new');
+      await attach('lease-timeline.png', 'image/png', 'Image');
+      await attach('runner.log', 'text/plain');
+      // Staged after the page chip, each with its cross: the picture as a thumbnail, the file as a chip.
+      const staged = [...composer()!.querySelectorAll('.composer-attachments > :not(.wk-chat-chip)')];
+      expect(staged.map((chip) => [chip.className, chip.querySelector('button')?.getAttribute('aria-label')])).toEqual([
+        ['composer-pill composer-attach', 'Remove image'],
+        ['composer-pill composer-file', 'Remove file'],
+      ]);
+      await type('The timeline and the runner log from the night it went offline.');
+      await press(byLabel('Send'));
+      // Uploaded before any session exists, and named in the create, which links them to the chat's first turn.
+      expect(uploads).toEqual([
+        { scope: '', name: 'lease-timeline.png', type: 'image/png', id: 'ATT1' },
+        { scope: '', name: 'runner.log', type: 'text/plain', id: 'ATT2' },
+      ]);
+      expect(writes.find((write) => write.path === `/api/wiki/spaces/${SPACE_ID}/chats`)!.body).toMatchObject({
+        content: 'The timeline and the runner log from the night it went offline.',
+        attachmentIds: ['ATT1', 'ATT2'],
+      });
+      expect(stream.accepted).toEqual([
+        expect.objectContaining({
+          key: 'initial:S1chat',
+          attachments: [
+            { id: 'ATT1', mime: 'image/png', name: 'lease-timeline.png' },
+            { id: 'ATT2', mime: 'text/plain', name: 'runner.log' },
+          ],
+        }),
+      ]);
+      // The chat runs now: later files are the session's own uploads, and go with the message through its door.
+      expect(composer()!.querySelector('.composer-attachments > :not(.wk-chat-chip)')).toBeNull();
+      await attach('heartbeats.png', 'image/png', 'Image');
+      await attach('heartbeats.csv', 'text/csv');
+      await type('And the heartbeats.');
+      await press(byLabel('Send'));
+      expect(uploads.slice(2)).toEqual([
+        { scope: 'sessionId=S1chat', name: 'heartbeats.png', type: 'image/png', id: 'ATT3' },
+        { scope: 'sessionId=S1chat', name: 'heartbeats.csv', type: 'text/csv', id: 'ATT4' },
+      ]);
+      expect(turns().at(-1)!.body).toMatchObject({ content: 'And the heartbeats.', intent: 'NEXT_TURN', attachmentIds: ['ATT3', 'ATT4'] });
+      expect(composer()!.querySelector('.composer-attachments > :not(.wk-chat-chip)')).toBeNull();
+    } finally {
+      URL.createObjectURL = own.create;
+      URL.revokeObjectURL = own.revoke;
+    }
   });
 });
