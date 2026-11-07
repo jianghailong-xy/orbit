@@ -317,6 +317,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   },
   'POST /projects/:id/pause': { request: (of) => ({ params: { id: of.projectId } }) },
   'POST /projects/:id/resume': { request: (of) => ({ params: { id: of.projectId } }) },
+  'POST /projects/:id/sessions/complete': { request: (of) => ({ params: { id: of.projectId } }) },
   'GET /projects/:id/acceptance/criteria-decisions/pending': { request: (of) => ({ params: { id: of.projectId } }) },
   'POST /projects/:id/acceptance/criteria-decisions/:intentId': {
     request: (of) => ({

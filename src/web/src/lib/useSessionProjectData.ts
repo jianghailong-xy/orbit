@@ -41,7 +41,7 @@ export function useSessionProjectData(opts: {
   enabled: boolean;
   controlLive: boolean;
   needsYou: (session: SessionListItem) => boolean;
-}): { coordinators: SessionListItem[]; contentSessions: SessionListItem[] } {
+}): { coordinators: SessionListItem[]; contentSessions: SessionListItem[]; placing: boolean } {
   const requests = sessionProjectRequests(opts.sessions, opts);
   const query = (request: ProjectSessionRequest) => ({
     ...projectSessionsQuery(request),
@@ -59,8 +59,14 @@ export function useSessionProjectData(opts: {
   ).map((request) => ({ ...request, view: 'completed' as const }));
   const fallback = useQueries({ queries: completedFallbacks.map(query) });
   const rows = [...primary, ...fallback].flatMap((result) => result.data ?? []);
+  // Where a coordinator the list does not hold runs decides the list's shape: the project is a row here,
+  // or its members are rows of their own (owner 2026-11-07). Until its read answers, the shape may change.
+  const listed = new Set(opts.sessions.flatMap((session) =>
+    session.projectMembership?.role === 'COORDINATOR' ? [session.projectMembership.projectId] : []));
   return {
     coordinators: rows.filter((session) => session.projectMembership?.role === 'COORDINATOR'),
     contentSessions: primary.flatMap((result, index) => requests[index].view === opts.view ? result.data ?? [] : []),
+    placing: primary.some((result, index) => result.isPending && !listed.has(requests[index].projectId))
+      || fallback.some((result) => result.isPending),
   };
 }

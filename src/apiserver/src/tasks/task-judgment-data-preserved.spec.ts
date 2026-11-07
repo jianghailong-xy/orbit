@@ -2743,7 +2743,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `review_turn_at` alone: no preserved row or column is touched, none of the six preserved
       // triggers/functions is named or replaced, and no preserved object is dropped, so it is not
       // another writer of the DONE fence.
-      '0484_open_list_epoch'],
+      '0484_open_list_epoch',
+      // 0485 adds two nullable columns to `session` (`last_user_from_session_id`, `last_user_from_title`: who sent the
+      // message the row previews) in one DO statement that takes the table's lock in short tries, and nothing else.
+      // `session` is not a preserved relation, no column any preserved trigger reads is touched, and no function,
+      // trigger, type or constraint is created, replaced or dropped, so it is not another writer of the DONE fence. No
+      // INSERT, UPDATE or DELETE: every stored session reads NULL in both.
+      '0485_session_last_user_from'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

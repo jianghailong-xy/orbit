@@ -39,3 +39,17 @@ export interface SessionMessageCard {
    */
   requestId?: string;
 }
+
+/**
+ * Who sent the message a session row previews (`lastUserText`), when it was another Orbit session's
+ * — `session_send`, `project_send` or `session_interrupt` (docs/session-list-projects-design.md §3.5).
+ * The same two facts the conversation's card draws "From <title>" with (`SessionMessageCard`'s
+ * `fromSessionId` and `fromTitle`), read from the same place, as they stood when `lastUserText` was
+ * written. The rows carry it as `lastUserFrom`, null when the account owner (or the platform) wrote
+ * the message, and it is written and cleared together with `lastUserText`.
+ */
+export interface SessionMessageFrom {
+  /** The sending session, in the uuid spelling every other read of one uses. */
+  sessionId: string;
+  title: string;
+}

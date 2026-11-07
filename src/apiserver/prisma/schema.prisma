@@ -1849,6 +1849,13 @@ model Session {
   // turn end). Lets the list show the message you just sent while awaiting the reply, instead of
   // the now-stale previous reply. Only meaningful while RUNNING; display is status-gated.
   lastUserText         String?   @map("last_user_text")
+  // Who sent lastUserText, when another Orbit session did (session_send, project_send, session_interrupt —
+  // the turn's senderSessionId): that session's id, and its title as it stood when lastUserText was written,
+  // the title the conversation's "From <title>" card shows. Both null when the owner (or the platform) wrote
+  // it. Written and cleared in the same statements as lastUserText (0485). Not a relation, for the reason
+  // ConversationTurn.senderSessionId is not one.
+  lastUserFromSessionId String?  @map("last_user_from_session_id") @db.Uuid
+  lastUserFromTitle     String?  @map("last_user_from_title")
   // Denormalized set of the agent's still-running background shells (Bash run_in_background):
   // the tool_use ids of launches that haven't yet reported a terminal `<task-notification>`.
   // Added on launch, removed on completion, cleared on (re)spawn/complete. Lets the list +
