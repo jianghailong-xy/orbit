@@ -418,7 +418,12 @@ describe('wiki chat contract', () => {
     const { panel, fab, boundaries } = CONTRACT.chat;
     expect(panel.address).toContain('?chat=<session>');
     expect(DESIGN).toContain('带 `?chat=<session>`，翻页不关，刷新还在');
-    expect(panel.composer).toMatch(/text, the attachments \(notes\.wikiContext\), send and Stop/u);
+    // Board 43 (owner 11-07): the session page's composer, the page and the selection first in its attachment row.
+    expect(panel.composer).toMatch(/^The session page's composer, the same component/u);
+    expect(panel.composer).toMatch(/holds the page and the selection \(notes\.wikiContext\) first, each with its cross, beside the pictures and files/u);
+    expect(panel.header).toMatch(/Runs in, which holds only the workspace and folds once the first message goes/u);
+    expect(CONTRACT.chat.create.body).toContain('attachmentIds?');
+    expect(DESIGN).toContain('就是 session 页的 composer，是同一个组件');
     expect(keysOf(panel.widths)).toEqual(['atLeast1440', 'from1200', 'from640', 'below640']);
     expect(panel.widths.atLeast1440).toMatch(/400 wide by default, dragged between 320 and 560/u);
     for (const row of ['| ≥ 1440 | 右侧停靠，默认 400，可拖 320–560 | 照旧 |', '| 1200–1439 | 右侧停靠 |', '| 640–1199 | 从右滑出，盖住正文右侧，不加遮罩 |', '| < 640 | 底部 sheet，半屏与全屏两档 |']) {

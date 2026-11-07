@@ -364,12 +364,27 @@ JSON 的 `kinds.<kind>.fields` 与 TS 的 `KIND_SPECS[kind].fields` 用同一套
 - **`tool_call` 的 tool_use_id**（契约 `sourceInput.toolUseId`）：先当行 id 找；本 owner 没有这个 id 的行，再当 tool_use_id 找。
   先找调用方会话自己的调用；没有，再找本 owner 的其他会话，恰好一个会话带它才算数。同一会话里同一次调用被重复入库
   （线上有 324 个 tool_use_id 各存了 2–19 行，内容逐字节相同），算一次调用，取最早那一行；两个及以上会话都带它，或者谁都
-  没带，就是 `WIKI_SOURCE_UNRESOLVED`。存进 `wiki_source.ref` 的是行 id。决定（decide）和核实时，op 的出处从它的 payload 重读，
-  调用方同样是提议它的那个会话。调用方会话那一步是 `(session_id, tool_use_id)` 索引的一次探测；跨会话那一步要沿同一个索引
-  走遍 owner 的会话（10-06 线上 5.5k 个会话约 0.14 秒），只有引的不是自己会话的调用时才走到。
+  没带（下一条的待核实除外），就是 `WIKI_SOURCE_UNRESOLVED`。存进 `wiki_source.ref` 的是行 id。决定（decide）和核实时，
+  op 的出处从它的 payload 重读，调用方同样是提议它的那个会话。调用方会话那一步是 `(session_id, tool_use_id)` 索引的一次探测；
+  跨会话那一步要沿同一个索引走遍 owner 的会话（10-06 线上 5.5k 个会话约 0.14 秒），只有引的不是自己会话的调用时才走到。
+- **刚发生、还没入库的调用**（契约 `sourceInput.pending`，C14）：runner 按批送事件，会话可能在自己的调用入库前就引用它
+  （C10，11-06：`cat` 结束 24 毫秒后到的 wiki_propose 被拒）。本 owner 没有任何会话带的 tool_use_id（行 id 不算：只有入库的行
+  才有 id），由调用方会话在引擎正为它生成时引用（一轮正在跑：派发来的，或运行时自己起的，见 `common/session-generating.ts`；
+  两轮之间的会话，调用都已送达，照旧当场拒）——聊天里的 wiki_propose 任何 op 都行，其他会话除 challenge 以外的 op（challenge 的标记当场
+  写下，之后没有哪一步再核它的出处）——先记为**待核实**：引文不验，出处不落库；这条 op 不管效果策略和审阅模式本来怎么处理，
+  一律等 owner（卡片本来就等按键）。到 op 结算时再解析：卡片的 Apply / Edit，或 owner 在 Review 里的决定。那时它必须是调用方
+  会话自己的调用，引文当场核；别的会话的调用，只有在这条 op 最初记下之前（卡片或 changeset op，都是 uuid(7)，id 的先后就是
+  写入的先后）就已入库才算数。所以后来出现在别的会话、别的账户里，或者始终没出现的 tool_use_id，结算时一律
+  `WIKI_SOURCE_UNRESOLVED`，什么都不写。接受后，add / supersede 的第 1 版补上这条出处（存行 id）；amend、reinforce 接受时
+  本来就写全部出处。初见时，别的账户的调用和还没入库的调用分不出来，也不该分得出来。
 - **校验**（T3）：每个出处都要在本 owner 的行里解析出来，否则 `WIKI_SOURCE_UNRESOLVED`，`errors[]` 按 path 点名那条出处，
   消息里说这种 kind 的 ref 该填什么；引文做空白归一化后必须是原文子串，
   否则 `WIKI_QUOTE_NOT_FOUND`；非 owner 的 add / amend / supersede / reinforce 至少带一个出处，owner 自己写的可以不带。
+- **脱敏形式的引文**（契约 `sourceRules.quote`，C14）：共享脱敏器（带 owner 的 `workspace.env` 值）原样放过的引文——卡片和 op
+  存的引文脱敏后就是这样，按键和决定结算时读回来的也是它——也到按同样规则脱敏后的原文里找，找到算数，但记为未验证
+  （`quote_verified` 为 false：不是原文逐字）。C10 的卡片把 `ENROLLMENT_TOKEN_TTL_MS = 900_000` 存成 `… = [redacted]`，此前
+  每次 Apply 都是 `WIKI_QUOTE_NOT_FOUND`。还带着值的引文仍须逐字出自原文：原文没有的值，不会因为两边都读作 `[redacted]`
+  就被找到；脱敏器没拿掉东西的地方写 `[redacted]`，也找不到。
 - **存储**：出处行挂在它支撑的那一版上；reinforce 只往当前版追加出处行。`quote` 至多 300 字、先脱敏；`quote_sha256`
   与 `quote` 同在同缺。`url` 只给 assumption 用，并且一定标 `tainted`。
 - **删除即遗忘**：出处状态 `live → trashed → live | deleted`，`live → deleted`。会话进回收站时出处先标 `trashed`，条目退出推送但保留；
@@ -514,7 +529,9 @@ Confirm 时，模式对它生效过、还没人答的 op 变 `accepted`（§7.5�
   frontmatter 里用 `originSessionId` 指向本 owner 用过它们的会话。这个值是引擎自己的会话 id，按 `session.runtime_session_id` 查；
   没写或查不到的 note 不算污染。会话用 `wiki_note` 记的 note 带 `session_id`（§11），直接按这个会话判定。
   被污染的 op 按第三行处理，Review 卡上有 Web-derived 警示。
-- challenge 从任何来源都立即生效：它只打一个标，作用是让条目立刻退出推送，等 owner 在 Review 里 Re-confirm、Amend 或 Retire。
+- challenge 从任何来源都立即生效：它只打一个标，作用是让条目立刻退出推送，等一个答案：owner 在 Review 里 Re-confirm、Amend 或
+  Retire，或一次**显式回答它**的 amend（`answersChallenge` 指向同一 entry 上待决的 challenge，`reviewModes.challenge`）在生效时把它
+  记 `edited`。没点名 challenge 的 amend 不关任何 challenge。
 - `wiki.ts` 的 `WIKI_EFFECT_POLICY` 是这张表的数据形态，`wikiOpEffect()` 给出单个 op 的结论。
 - **决定**：`POST /api/wiki/changesets/:id/decide`，逐个 op 给 `accept` / `edit` / `reject`；只在 owner 通道（§11）。
 
@@ -732,6 +749,10 @@ Review 只列还有 op 等 owner 的变更集，时间线列的是 op、不说�
 | `supersede` | `entryId`，`baseRevision`，`entry`，`sources` | 新谱系取代旧的；生效时旧条目变 `superseded` | 必带 |
 | `retire` | `entryId`，`baseRevision`，`reason` | 条目从 active 变 retired | 必带 |
 | `challenge` | `entryId`，`reason` | 打 challenged，条目立刻退出推送 | 不带 |
+
+- `amend` 可带可选的 `answersChallenge`：同一 entry 上一条 `pending` challenge 的 id（`reviewModes.challenge`）。它只在这个 amend
+  **生效**时关闭 challenge（记 `edited`，`answered_by` 记 `agent` 或 `owner`），不改变 amend 自己按模式生效/待审的规则；跨条目、已决、
+  不存在或形状不对回 `WIKI_SCHEMA`，这个 op 什么都不写。不带它的 amend 不关任何 challenge。
 
 - **CAS 不可省**：amend / supersede / retire 带上写它时依据的版本号，只有它仍是当前版时才生效，否则
   `WIKI_REVISION_CONFLICT`，并返回当前版和 diff。故意不提供「当前是什么就按什么」的写法。库里的 CHECK 保证
@@ -1266,6 +1287,13 @@ JSON 里是 `anchorRules.verify`；实现在 `src/apiserver/src/wiki/wiki-anchor
   - `retire`：owner 自己的 retire（当前修订为 baseRevision），经唯一写入口记录，reason 取 owner 的附言，没有就取 challenge 的 reason；
     challenge 随条目离开 active 被 withdrawn。
   - challenge 指向的条目已不 active 时记 conflict、什么都不做。`accept` / `edit` / `reject` 对 challenge 保持原意。
+- **amend 也能回答 challenge**（`reviewModes.challenge`，迁移 `0488_wiki_op_answers_challenge`）：amend op 可带可选的
+  `answersChallenge`，只能指同一 entry 上 `pending` 的 challenge op；跨条目、已决、不存在或形状不对回 `WIKI_SCHEMA`，该 op 什么都不写。
+  amend 照常按模式生效——Tiered 直接生效、Automatic 等核实结论、Manual 与各条底线待审——**生效那一刻**才把指名的 challenge 记
+  `edited`、`answered_by` 记 `owner`（owner 自己的 amend）或 `agent`，再由 `recomputeFlags` 清 `challenged`，条目按 §12 的推送规则回推送。
+  challenge 已决或条目已不 active 时不动、也不报错：amend 照常成立。没点名 challenge 的 amend 不关任何 challenge，所以一次无关的错字修正
+  不会把一条内容质疑悄悄关掉。答案来源记在 `wiki_changeset_op.answered_by`（`owner` | `agent` | `research`；0488 之前的行与 Review 里的回答
+  都是 NULL，读作 owner；`research` 是 P2 调研作业的来源）。
 - **Tiered 读得到复验结果**：Tiered 的 pitfall 条件读 `anchor_state`；检查让一条 Tiered 以 unreviewed 生效的 pitfall（active、未污染、当前修订就是那次
   tiered op 写的）变成 verified，且 space 仍是 Tiered、那次 op 自己的出处跨 2 个以上独立会话时，同一事务里升为 auto 并开始推送。
 
@@ -3129,17 +3157,20 @@ C6（草稿与按压）、C8 与 C9（web）、C11（iOS）、C12（plan 卡）�
 - 全在用户门（JwtAuthGuard + WikiRolloutGuard），id 都是 public id；别的 owner 的 space、聊天、卡一律普通 404。带会话头（`X-Orbit-Session-Id`）的请求一律
   `WIKI_OWNER_CHANNEL_ONLY`，不论是什么会话：agent 建不了聊天、经这道门读不了卡、按不了任何东西。写只认 owner 的交互凭证（个人访问令牌回
   `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，同 §2 绑定的写），读收带 `wiki:read` 的令牌。
-- **建聊天**：`{ workspaceId?, content, clientTurnId, wikiContext?, engine?, model?, permissionMode? }`。`workspaceId` 给了就得合格，和记住的不同就替换它（Runs in）；
+- **建聊天**：`{ workspaceId?, content, clientTurnId, wikiContext?, attachmentIds?, engine?, model?, permissionMode?, effort?, fastMode? }`。`workspaceId` 给了就得合格，和记住的不同就替换它（Runs in）；
   没给就用记住的，都没有回 400，写明要先选。`content` 是 owner 的第一条话，一字不差；`clientTurnId` 是 UUID：turn 照会话消息门记 owner 原话的办法记（显式的路由意图、
-  客户端的 UUID），所以这句话是一手出处（`tiered.auto.ownerWords`），节可以引它（§29.3）。`wikiContext` 照 28.4 校验。引擎、模型、模式同 New session，缺省照这个
-  workspace 的会话。经 `SessionsService.create` 在一个事务里建：这个 workspace 的普通会话、`wiki_chat_space_id`、强制独立 worktree（这期间关了 worktree 的回 409，
-  什么都不建）、SOURCE 选择器、第一个 turn；第一次投递在原话后面接上 `<orbit_wiki_chat>` 和这个 turn 的页面、选区附注。回 `{ sessionId, chat }`。
+  客户端的 UUID），所以这句话是一手出处（`tiered.auto.ownerWords`），节可以引它（§29.3）。`wikiContext` 照 28.4 校验。`attachmentIds` 是第一条消息的图片与文件
+  （效果图 43）：owner 自己上传、还没被任何会话用过的（`POST /api/attachments` 不带会话），同 New session 的校验，不合格回 400，什么都不建。引擎、模型、模式、
+  思考强度与速度同 New session，缺省照这个 workspace 的会话。经 `SessionsService.create` 在一个事务里建：这个 workspace 的普通会话、`wiki_chat_space_id`、
+  强制独立 worktree（这期间关了 worktree 的回 409，什么都不建）、SOURCE 选择器、第一个 turn，附件归这场会话并挂到这个 turn 上；第一次投递在原话后面接上
+  `<orbit_wiki_chat>` 和这个 turn 的页面、选区附注，附件和之后的消息一样交给引擎。回 `{ sessionId, chat }`。
 - **列聊天**：`{ spaceId, workspace, choices, fab, chats }`。`workspace` 是记住的那个现在的样子 `{ id, name, runner, online, eligible }`，没记住是 null（name、runner 同
   §2 的 Workspaces 卡，online 用 runners 列表的同一条规则 `isRunnerOnline`）；`choices` 是全部合格的 `{ id, name, runner, online }`；`fab` 是 `{ needsYou, working, updated }`，
   按这个 space 不在 Trash 里的全部聊天算（28.7），客户端只凭这三个数画圆按钮；`chats` 新的在前，至多 50 场（`chat.rules.chatsListed`），每场
   `{ sessionId, title, status, open, createdAt, updatedAt, drafts, needsYou }`。点圆按钮：打开有卡等 owner 的那一场，否则最近还开着的一场，否则新开。
 - **之后的消息**走会话自己的消息门 `POST /api/sessions/:id/turns`（owner 的、显式路由意图、UUID 的 `clientTurnId`），聊天会话多收一个可选字段 `wikiContext`；
-  别的会话的消息带它回 400。turn 的 content 只有 owner 的原话，不论带了什么附件，所以聊天里 owner 的每个 turn 都是一手的。
+  别的会话的消息带它回 400。图片与文件照这道门的 `attachmentIds`，运行中插进这一轮还是排到下一轮也照这道门（同 session 页）。turn 的 content 只有 owner 的
+  原话，不论带了什么附件，所以聊天里 owner 的每个 turn 都是一手的。
 
 ### 28.4 附注
 
@@ -3282,9 +3313,11 @@ C6（草稿与按压）、C8 与 C9（web）、C11（iOS）、C12（plan 卡）�
 
 ### 28.11 面板（客户端，`chat.panel`）
 
-- **头**：标题（点开是这个 space 的聊天历史，即列聊天）、`+` 新开、`↗` 换成完整会话页（`#` 引用、模型切换、斜杠命令都在那边）、`✕` 收起（聊天不结束）。
-  标题下一行字一直写在哪跑：`workspace · 机器 · 引擎 · 模式`（图 42：`orbit-develop · HPC · Claude Opus 5.5 · Default`）。
-- **地址**带 `?chat=<session>`：翻页不关，刷新还在。**输入框**是精简版：文字、附件（28.4）、发送、Stop，别的交给 `↗`。
+- **头**：标题（点开是这个 space 的聊天历史，即列聊天）、`+` 新开、`↗` 换成完整会话页、`✕` 收起（聊天不结束）。新聊天时标题下一行是 `Runs in`，只放
+  workspace，发出第一句后收起；聊天开始以后不再显示 workspace（owner 11-07 定，效果图 43 ②）。
+- **地址**带 `?chat=<session>`：翻页不关，刷新还在。**输入框**就是 session 页的 composer，同一个组件（效果图 43 ②④⑤）：附件行（页面与选区在前，28.4，
+  然后是图片与文件，各带 ×）、输入框、工具栏（`+`、模式、模型与思考强度、用量、发送与 Stop）、斜杠菜单，运行中照 session 页插话或排队。新聊天的模型、
+  思考强度、速度与模式随建聊天发出，之后照 session 页改会话配置。换 provider 与账号只在完整会话页。
 - **归属**：一场聊天属于一个 space，换 space 看到的是那个 space 的聊天；它也在 workspace 的会话列表里，页头有来处标签 `From Wiki`。
 - **宽度**（设计 §4.1，做面板时按真页面校准）：
 

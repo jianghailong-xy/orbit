@@ -177,10 +177,11 @@ func handOffUnderSudo(args []string) bool {
 			fmt.Fprintf(os.Stderr, "note: root's home holds a runner's config too, %s, which this leaves as it is. For that runner: sudo -i env -u SUDO_USER orbit %s\n", config, args[0])
 		}
 	}
-	// main put this process's own engine directories first on PATH, for root's commands. They are
-	// nothing to the account, and where sudo keeps PATH (macOS, a sudoers with no secure_path) the
-	// account's register would bake them into its service's PATH.
-	_ = os.Setenv("PATH", withoutPathDirs(os.Getenv("PATH"), engineInstallerDirs(userHome())))
+	// main put this process's own engine directories first on PATH and its own Orbit ripgrep directory
+	// last (runnerEnginePath), for root's commands. They are nothing to the account, whose command puts
+	// its own there, and where sudo keeps PATH (macOS, a sudoers with no secure_path) the account's
+	// register would bake them into its service's PATH.
+	_ = os.Setenv("PATH", pathWithoutManagedRg(withoutPathDirs(os.Getenv("PATH"), engineInstallerDirs(userHome()))))
 	if err := execSudoHandOff(sudoHandOffArgv(sudo, account.Username, exe, args)); err != nil {
 		return fail("this could not switch to it: "+err.Error(), asAccount)
 	}

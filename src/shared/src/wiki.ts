@@ -145,6 +145,14 @@ export type WikiDecideAction = (typeof WIKI_DECIDE_ACTIONS)[number];
 export const WIKI_CHALLENGE_ANSWERS = ['reconfirm', 'amend', 'retire'] as const;
 export type WikiChallengeAnswer = (typeof WIKI_CHALLENGE_ANSWERS)[number];
 
+/**
+ * Who answered a challenge (contract `reviewModes.challenge`): the owner in Review, an agent's amend that
+ * named it in `answersChallenge`, or the server's research (phase 2). A row recorded before 0488 carries
+ * none, and reads as the owner's.
+ */
+export const WIKI_ANSWERED_BY = ['owner', 'agent', 'research'] as const;
+export type WikiAnsweredBy = (typeof WIKI_ANSWERED_BY)[number];
+
 /** A rejection names one of these; the labels are the words Review shows. */
 export const WIKI_REJECT_REASONS = ['not_true', 'not_useful', 'duplicate', 'too_specific'] as const;
 export type WikiRejectReason = (typeof WIKI_REJECT_REASONS)[number];
@@ -1001,7 +1009,16 @@ export interface WikiEntryChanges {
 export type WikiOpInput =
   | { op: 'add'; entry: WikiEntryDraft; sources?: WikiSourceInput[] }
   | { op: 'reinforce'; entryId: string; sources: WikiSourceInput[] }
-  | { op: 'amend'; entryId: string; baseRevision: number; changes: WikiEntryChanges; sources?: WikiSourceInput[] }
+  | {
+      op: 'amend';
+      entryId: string;
+      baseRevision: number;
+      changes: WikiEntryChanges;
+      sources?: WikiSourceInput[];
+      /** The pending challenge of this entry this amend answers (contract `reviewModes.challenge`): when the
+       *  amend takes effect, that challenge is closed `edited` and its `challenged` flag recomputed. */
+      answersChallenge?: string;
+    }
   | { op: 'supersede'; entryId: string; baseRevision: number; entry: WikiEntryDraft; sources?: WikiSourceInput[] }
   | { op: 'retire'; entryId: string; baseRevision: number; reason: string; sources?: WikiSourceInput[] }
   | { op: 'challenge'; entryId: string; reason: string; sources?: WikiSourceInput[] };

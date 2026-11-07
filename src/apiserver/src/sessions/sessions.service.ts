@@ -315,7 +315,7 @@ import {
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { returnQueuedTurns } from '../projects/project-open-item';
 import { OpenListDeltaStore } from './open-list-delta';
-import { readOpenListVersion } from './open-list-version';
+import { openListEtag, readOpenListVersion } from './open-list-version';
 import {
   SESSION_KIND_CONVERSATION,
   SESSION_KIND_LANDING,
@@ -1538,7 +1538,7 @@ export class SessionsService {
           attachmentsAlone,
         })
       : wikiChat
-        ? this.writeChat(dto.workspaceId!, dto.prompt, wikiChat, insertSession)
+        ? this.writeChat(dto.workspaceId!, dto.prompt, wikiChat, attachmentIds, insertSession)
         : this.writeFenced(opts?.fence, (client) => insertSession(client))
     ).catch(async (e: unknown) => {
       // The folder checked above was deleted before this INSERT reached it: the same 400 as naming
@@ -1557,8 +1557,9 @@ export class SessionsService {
     // Scope the compose-page uploads to this session now that it exists. They stay
     // turn-less until the runner seeds the first turn (queue.service links them to it),
     // and cascade-delete with the session. A session that made its workspace did this, and the
-    // two seeds below, inside that transaction (createInNewWorkspace).
-    if (attachmentIds.length > 0 && !newWorkspace) {
+    // two seeds below, inside that transaction (createInNewWorkspace); a wiki chat linked them to
+    // its first turn inside its own (writeChat).
+    if (attachmentIds.length > 0 && !newWorkspace && !wikiChat) {
       await this.prisma.attachment.updateMany({
         // `taskId: null` for the same reason the validator carries it, but here it is the
         // CONCURRENT case: an upload that became a task's input between that check and this write
@@ -1672,13 +1673,16 @@ export class SessionsService {
    * were written, under the client's UUID, with an explicit routing intent, so they are first-hand
    * (`reviewModes.tiered.auto.ownerWords`); and it carries the page and selection as ids, which delivery
    * reads (chat.notes). Neither seeder lays an opening turn down for a chat (`ensurePromptSeeded`,
-   * queue.buildSession): this one is it. Locks: the workspace (15) FOR SHARE, the session (30) it inserts,
-   * the turn (60).
+   * queue.buildSession): this one is it. The pictures and files sent with it (board 43) join it here too: uploads the
+   * caller made before any session existed (`assertScopableAttachments`), scoped to this session and linked to this
+   * turn in the same statement, so delivery hands them over with the words as it does a later message's. Locks: the
+   * workspace (15) FOR SHARE, the session (30) it inserts, the turn and the attachment rows it links (60).
    */
   private async writeChat<S extends { id: string }>(
     workspaceId: string,
     content: string,
     chat: { clientTurnId: string; wikiContext: WikiChatContext | null },
+    attachmentIds: readonly string[],
     insertSession: (tx: Prisma.TransactionClient) => PromiseLike<S>,
   ): Promise<S> {
     return withTransactionRetry(this.prisma, async (tx) => {
@@ -1689,13 +1693,20 @@ export class SessionsService {
       if (!workspace) throw new ForbiddenException('workspace not found');
       if (!workspace.enableWorktree) throw chatWorktreeRequired();
       const session = await insertSession(tx);
-      await this.insertTurnLocked(tx, session.id, {
+      const turn = await this.insertTurnLocked(tx, session.id, {
         kind: 'message',
         content,
         clientTurnId: chat.clientTurnId,
         sendIntent: 'NEXT_TURN',
         ...(chat.wikiContext ? { wikiContext: chat.wikiContext as unknown as Prisma.InputJsonValue } : {}),
       });
+      if (attachmentIds.length > 0) {
+        // Still unscoped, as `create` found them; one taken by a task or another session since is left where it went.
+        await tx.attachment.updateMany({
+          where: { id: { in: [...attachmentIds] }, sessionId: null, turnId: null, taskId: null },
+          data: { sessionId: session.id, turnId: turn.id },
+        });
+      }
       return session;
     }, loggedRetry(this.logger, 'sessions.writeChat'));
   }
@@ -3469,8 +3480,9 @@ export class SessionsService {
     return [...counts.values()];
   }
 
-  /** The Open list's data version; see open-list-version.ts. Only the flat list reads it — a
-   *  project read is built every time (see the controller's list handler). */
+  /** The Open list's data version; see open-list-version.ts. Only the flat list reads it, for the
+   *  plain read's 304 and `listOpenSince`'s empty delta — a project read is built every time (see
+   *  the controller's list handler). */
   openListVersion(ownerId: string): Promise<string> {
     return readOpenListVersion(this.prisma, ownerId, Date.now());
   }
@@ -3591,20 +3603,43 @@ export class SessionsService {
     },
     since: string | undefined,
   ) {
-    const rows = await this.list(ownerId, { ...filters, view: 'open' });
     // A cursor is only valid for the list that produced it: the same filters with and without
     // landings are two different lists, and one's cursor must not be read as the other's.
     const scope = JSON.stringify([
       filters.runnerId ?? null, filters.workspaceId ?? null, filters.tagId ?? null, filters.projectId ?? null,
       filters.includeLanding === true, filters.confinedTo ?? null,
     ]);
+    // The flat list is answered from its data version first, as its plain read's 304 is: if the
+    // cursor's snapshot was built at the version that stands now, the caller already holds the list
+    // as it reads now, so it gets an empty delta and nothing is built. The version is read before
+    // the build, so the one kept beside the rows can only lag them: a write between the two costs
+    // one more build, never an empty delta over a list that moved. Scoped to the cursor's filters,
+    // it equals the ETag the plain read sends for them. A project read reads no version and is built
+    // every time, as its plain read is: its rows are a few, and the LANDING rows of the
+    // landing-aware one are not sources of the version.
+    const version = filters.projectId === undefined
+      ? openListEtag(await this.openListVersion(ownerId), {
+          runnerId: filters.runnerId,
+          workspaceId: filters.workspaceId,
+          tagId: filters.tagId,
+          projectId: filters.projectId,
+          includeLanding: filters.includeLanding ? '1' : undefined,
+          confinedTo: filters.confinedTo?.join(','),
+        })
+      : undefined;
+    if (since && version !== undefined && this.openListDelta.unchanged(ownerId, scope, since, version)) {
+      return { full: false as const, upserts: [], removedIds: [], cursor: since };
+    }
+    const rows = await this.list(ownerId, { ...filters, view: 'open' });
     // A runner's heartbeat restamps every row it hosts every 30 seconds; with a few runners that
     // alone would resend most of the list on most polls. The clients that read this delta draw
     // nothing from the raw timestamp — what it decides (the queue gate, capabilities) are fields of
     // their own and still count — so it is left out of what counts as a change, and a row sent
     // here may carry an older heartbeat than the plain list would.
-    const delta = this.openListDelta.answer(ownerId, scope, rows, since, (row) =>
-      row.assignedRunner ? { ...row, assignedRunner: { ...row.assignedRunner, lastHeartbeatAt: null } } : row,
+    const delta = this.openListDelta.answer(
+      ownerId, scope, rows, since,
+      (row) => row.assignedRunner ? { ...row, assignedRunner: { ...row.assignedRunner, lastHeartbeatAt: null } } : row,
+      version,
     );
     if (delta.full) return delta;
     // Rows have their `id` rewritten to the public spelling on the way out; bare id lists are not

@@ -9,6 +9,7 @@ import {
   WIKI_ANCHOR_STATES,
   WIKI_ANCHOR_TYPES,
   WIKI_ANCHOR_RULES,
+  WIKI_ANSWERED_BY,
   WIKI_AUTHOR_KINDS,
   WIKI_CHALLENGE_ANSWERS,
   WIKI_CHANGESET_ORIGINS,
@@ -1259,6 +1260,20 @@ describe('wiki contract', () => {
     for (const answer of WIKI_CHALLENGE_ANSWERS) expect(WIKI_DECIDE_ACTIONS).toContain(answer);
     expect(CONTRACT.ops.challenge.does).toMatch(/Re-confirm, Amend or Retire/u);
     expect(CONTRACT.effectPolicy.decide.challengeAnswers).toMatch(/anchorRules\.verify\.answers/u);
+    // A challenge has a second answer since P1: an amend that names it, and only then (reviewModes.challenge).
+    const challenge = CONTRACT.reviewModes.challenge;
+    expect(keysOf(challenge)).toEqual(['answeredBy', 'answer', 'answersChallenge', 'readAsOwner']);
+    expect(challenge.answeredBy).toEqual([...WIKI_ANSWERED_BY]);
+    expect(challenge.answersChallenge).toMatch(/refused WIKI_SCHEMA/u);
+    expect(challenge.answer).toMatch(/an amend that names none leaves it pending/u);
+    // The field is an amend's alone, and it answers one challenge rather than any op.
+    expect(keysOf(CONTRACT.ops.amend.keys)).toContain('answersChallenge');
+    for (const op of WIKI_OPS.filter((one) => one !== 'amend')) {
+      expect(keysOf(CONTRACT.ops[op].keys), `${op} carries answersChallenge`).not.toContain('answersChallenge');
+    }
+    // And it is part of the op's row, with the same no-foreign-key rule as a verdict's trail.
+    expect(CONTRACT.storage.answersChallenge).toMatch(/no foreign key/u);
+    expect(existsSync(path.join(ROOT, CONTRACT.storage.answersChallengeMigration))).toBe(true);
     // Tiered's pitfall reads what a check writes.
     expect(CONTRACT.reviewModes.tiered.auto.machineVerified.pitfall).toMatch(/anchor_state verified/u);
     expect(verify.tiered).toMatch(/pitfallMinSessions/u);
@@ -1774,6 +1789,16 @@ describe('wiki contract', () => {
     expect(WIKI_SOURCE_ROW_ID_KINDS).not.toContain('commit');
     expect(WIKI_SOURCE_REFS.tool_call).toMatch(/tool_use_id/u);
     expect(CONTRACT.sourceInput.toolUseId).toMatch(/that two sessions carry, is unresolved/u);
+    // A call made a moment before is cited pending, and settled where its op is: the press, or the owner's decision (C14).
+    expect(CONTRACT.sourceInput.toolUseId).toMatch(/calling session's own call not stored yet \(pending\)/u);
+    expect(CONTRACT.sourceInput.pending).toMatch(/resolves pending: its quote is kept unverified, nothing is stored for it, and the op waits for the owner/u);
+    expect(CONTRACT.sourceInput.pending).toMatch(/cited by the calling session while the engine is generating for it/u);
+    expect(CONTRACT.sourceInput.pending).toMatch(/a session between turns has had all its calls delivered, and is refused at once as ever/u);
+    expect(CONTRACT.sourceInput.pending).toMatch(/must then be the calling session's own call/u);
+    expect(CONTRACT.sourceInput.pending).toMatch(/in another session, in another account's or nowhere is refused WIKI_SOURCE_UNRESOLVED/u);
+    // A quote kept in redacted form is found in the record redacted the same way; a quote with a value is held to the record's words.
+    expect(CONTRACT.sourceRules.quote).toMatch(/is also looked for in the record's text redacted the same way, and kept with quote_verified false/u);
+    expect(CONTRACT.sourceRules.quote).toMatch(/A quote that still carries a value is held to the record's own words/u);
 
     // A tool_use_id where a task's id goes is refused by its path, saying what goes there instead. As a
     // tool_call's ref it is a tool_use_id, which only the lookup can judge.

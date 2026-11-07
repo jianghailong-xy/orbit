@@ -118,8 +118,8 @@ func managedRgPath() (string, error) {
 }
 
 // pathWithManagedRgLast is path with Orbit's ripgrep directory as its last entry and nowhere else: the directory
-// of any version an earlier pin installed is dropped too, wherever it stood. Last, so every rg on path is found
-// before Orbit's. A platform Orbit has no build for gets path as it was.
+// of any version an earlier pin installed is dropped too, wherever it stood (pathWithoutManagedRg). Last, so every
+// rg on path is found before Orbit's. A platform Orbit has no build for gets path as it was.
 func pathWithManagedRgLast(path string) string {
 	if _, ok := managedRgBuildFor(); !ok {
 		return path
@@ -129,18 +129,25 @@ func pathWithManagedRgLast(path string) string {
 		// Relative to whatever directory a shell is in: never a PATH entry.
 		return path
 	}
-	if path == "" {
+	if path = pathWithoutManagedRg(path); path == "" {
 		return dir
 	}
-	root := filepath.Dir(dir)
-	kept := make([]string, 0, strings.Count(path, ":")+2)
+	return path + ":" + dir
+}
+
+// pathWithoutManagedRg is path without the directory of any version of this process's Orbit ripgrep, every entry
+// right under managedRgRoot, wherever it stood. Everything else stays as it was, another Orbit home's ripgrep
+// directory included: what a hand-off to another account leaves behind of root's (handOffUnderSudo).
+func pathWithoutManagedRg(path string) string {
+	root := managedRgRoot()
+	kept := make([]string, 0, strings.Count(path, ":")+1)
 	for _, entry := range strings.Split(path, ":") {
 		if entry != "" && filepath.Dir(filepath.Clean(entry)) == root {
 			continue
 		}
 		kept = append(kept, entry)
 	}
-	return strings.Join(append(kept, dir), ":")
+	return strings.Join(kept, ":")
 }
 
 // managedRgMu serialises this process's installs, so two callers never stage the same version at once.
