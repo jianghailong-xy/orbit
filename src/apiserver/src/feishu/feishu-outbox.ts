@@ -4,6 +4,7 @@ import { orbitUrl } from '../push/feishu-transport';
 import { ControlPlaneLeader } from '../realtime/control-plane-leader';
 import { renderSessionReply } from './cards/feishu-reply-cards';
 import { FeishuAppService } from './feishu-app.service';
+import { feishuDerivedUuid } from './feishu-direct.service';
 import { FeishuOutbound, feishuDedupeUuid, type FeishuSendResult } from './feishu-outbound';
 import { credentialsOf } from './feishu-owner.service';
 import { feishuTiming, type FeishuTiming } from './feishu-timing';
@@ -141,7 +142,10 @@ export class FeishuOutboxService implements OnApplicationBootstrap, OnModuleDest
         await this.settle(row, 'GAVE_UP', { error: app && !credentials ? 'The saved App Secret can no longer be decrypted' : 'The Feishu app is switched off' });
         return;
       }
-      const group = (await this.prisma.feishuChatRoute.count({ where: { appId: row.appId, ownerId: row.ownerId, chatId: row.chatId } })) > 0;
+      // A group's topic is known by its root as well as by its route: the topic a group mention opened has the session
+      // its message derived (feishu-group.service.ts), so a reply after the route was removed still carries no link (§8.3).
+      const group = row.sessionId === feishuDerivedUuid('feishu-group-session', row.appId, row.rootMessageId)
+        || (await this.prisma.feishuChatRoute.count({ where: { appId: row.appId, ownerId: row.ownerId, chatId: row.chatId } })) > 0;
       const body = renderSessionReply(row.text, group ? null : orbitUrl({ sessionId: row.sessionId }));
       const result = await this.outbound.reply(credentials, row.rootMessageId, body, {
         replyInThread: group,
