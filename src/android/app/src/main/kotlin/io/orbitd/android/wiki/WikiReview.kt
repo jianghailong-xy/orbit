@@ -44,6 +44,8 @@ internal class WikiReviewActions(
     val openSession: (String) -> Unit = {},
     /** A challenge's Amend: the owner's version of the entry it names. */
     val amend: (WikiLogic.ReviewCard) -> Unit = {},
+    /** A challenge's Retire…, confirmed in its dialog: the reason given there goes on the record. */
+    val retire: (WikiLogic.ReviewCard, String) -> Unit = { _, _ -> },
 )
 
 /** Review: every space's proposals waiting for the owner, one card at a time (iOS `WikiReviewView`). */
@@ -77,7 +79,8 @@ internal fun WikiReviewScreen(store: WikiStore, route: OrbitRoute, data: Directo
         decide = { card, action, reason -> scope.launch { finish(store.decide(card, action, reason), card, action) } },
         edit = { editing = it.id },
         openSession = nav::session,
-        amend = { amending = it.id })
+        amend = { amending = it.id },
+        retire = { card, note -> scope.launch { finish(store.decide(card, "retire", note = note), card, "retire") } })
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = {
         scope.launch { refreshing = true; try { store.loadReview() } finally { refreshing = false } }
     }, modifier = Modifier.fillMaxSize().testTag("wiki-review")) {
@@ -124,7 +127,7 @@ private fun entryChanges(title: String?, summary: String?, extra: JsonObjectBuil
 }
 
 /** A challenge's Amend: the owner's version of the entry it names, written as the owner's revision. Only what
- * changed is sent, and with nothing changed the answer waits: an Amend that changes nothing is a Re-confirm. */
+ * changed is sent, and with nothing changed the answer waits: an Amend that changes nothing is a Keep. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WikiChallengeAmendForm(entry: WikiEntry, close: () -> Unit, submit: suspend (JsonObject) -> Boolean) {
@@ -204,7 +207,15 @@ internal fun WikiReviewPage(cards: List<WikiLogic.ReviewCard>, entry: (String) -
     // Kept across a decision and a tab change, and clamped to the queue that is there, rather than sent back to the first card.
     var index by rememberSaveable { mutableIntStateOf(0) }
     val visible = WikiLogic.cards(cards, tab)
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).testTag("wiki-review-page"),
+    val at = WikiLogic.clampedIndex(index, visible.size)
+    val scroll = rememberScrollState()
+    // When the card shown changes — an answer took the last one away, or Previous, Next or a tab moved on — the new one is
+    // read from its head, not with its answers under the finger that just pressed one (owner, 2026-11-07: four presses in
+    // a row answered four challenges). The card the page opened on stays where the page put it.
+    val shown = at?.let { visible[it].id }
+    var lastShown by rememberSaveable { mutableStateOf(shown) }
+    LaunchedEffect(shown) { if (shown != lastShown) { lastShown = shown; scroll.scrollTo(0) } }
+    Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(16.dp).testTag("wiki-review-page"),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             WikiLogic.ReviewTab.entries.forEachIndexed { i, each ->
@@ -215,7 +226,6 @@ internal fun WikiReviewPage(cards: List<WikiLogic.ReviewCard>, entry: (String) -
                 }
             }
         }
-        val at = WikiLogic.clampedIndex(index, visible.size)
         if (at != null) {
             if (visible.size > 1) ReviewPager(at, visible.size) { index = it }
             key(visible[at].id) { WikiReviewCard(visible[at], visible[at].op.entryId?.let(entry), now, busy, actions) }
@@ -276,8 +286,10 @@ private fun AutoRow(title: String, note: String) {
 internal fun WikiReviewCard(card: WikiLogic.ReviewCard, entry: WikiEntry?, now: Instant, busy: Boolean, actions: WikiReviewActions) {
     val op = card.op
     val isRetire = op.op == "retire"
-    // A challenge is answered about the entry it names: Re-confirm, Amend or Retire.
+    // A challenge is answered about the entry it names: Keep, Amend… — never a decision's — or Retire…, which asks first.
     val isChallenge = op.op == "challenge"
+    val amendable = isChallenge && WikiLogic.amendable(card, entry)
+    var retiring by rememberSaveable(card.id) { mutableStateOf(false) }
     val tainted = op.tainted == true
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.035f), RoundedCornerShape(14.dp))
         .border(BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)), RoundedCornerShape(14.dp))
@@ -293,7 +305,9 @@ internal fun WikiReviewCard(card: WikiLogic.ReviewCard, entry: WikiEntry?, now: 
         Text(if (isRetire) "Retire “$title”" else title, Modifier.semantics { heading() }.testTag("wiki-review-card-title"),
             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold))
         if (isRetire) RetireFields(op) else CardContent(card, entry)
-        // The approval cards' stack: full width, the prominent answer on top.
+        if (isChallenge) ChallengeAfter(amendable)
+        // The approval cards' stack: full width, the prominent answer on top. A challenge's has none: none of its answers
+        // is "do what this card proposes".
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             when {
                 isRetire -> {
@@ -301,9 +315,9 @@ internal fun WikiReviewCard(card: WikiLogic.ReviewCard, entry: WikiEntry?, now: 
                     AnswerButton(WikiCopy.keep, "retire-keep", enabled = !busy) { actions.decide(card, "reject", "not_true") }
                 }
                 isChallenge -> {
-                    AnswerButton(WikiModeCopy.reconfirm, "reconfirm", prominent = true, enabled = !busy) { actions.decide(card, "reconfirm", null) }
-                    AnswerButton(WikiModeCopy.amend, "amend", enabled = !busy && entry != null) { actions.amend(card) }
-                    AnswerButton(WikiModeCopy.retire, "challenge-retire", enabled = !busy) { actions.decide(card, "retire", null) }
+                    AnswerButton(WikiModeCopy.reconfirm, "keep", enabled = !busy) { actions.decide(card, "reconfirm", null) }
+                    if (amendable) AnswerButton(WikiModeCopy.amendAnswer, "amend", enabled = !busy && entry != null) { actions.amend(card) }
+                    AnswerButton(WikiModeCopy.retireAnswer, "challenge-retire", danger = true, enabled = !busy) { retiring = true }
                 }
                 else -> {
                     AnswerButton(WikiCopy.accept, "accept", prominent = true, enabled = !busy) { actions.decide(card, "accept", null) }
@@ -315,13 +329,56 @@ internal fun WikiReviewCard(card: WikiLogic.ReviewCard, entry: WikiEntry?, now: 
         if (isChallenge) Text(WikiModeCopy.challengeWaits, style = WikiType.label, color = WikiPalette.secondary)
         else if (!isRetire) Text(if (tainted) WikiCopy.webDerivedNote else WikiCopy.acceptNote, style = WikiType.label, color = WikiPalette.secondary)
     }
+    if (retiring) ChallengeRetireDialog(op.payload["reason"].text() ?: "", close = { retiring = false }) { note -> actions.retire(card, note) }
 }
 
+/** [danger]: an answer that cannot be undone, outlined in the error colour. */
 @Composable
-private fun AnswerButton(label: String, tag: String, prominent: Boolean = false, enabled: Boolean, onClick: () -> Unit) {
+private fun AnswerButton(label: String, tag: String, prominent: Boolean = false, danger: Boolean = false, enabled: Boolean, onClick: () -> Unit) {
     val modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("wiki-review-$tag")
     if (prominent) Button(onClick = onClick, enabled = enabled, modifier = modifier) { Text(label) }
+    else if (danger) OutlinedButton(onClick = onClick, enabled = enabled, modifier = modifier,
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+        border = BorderStroke(1.dp, if (enabled) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))) { Text(label) }
     else OutlinedButton(onClick = onClick, enabled = enabled, modifier = modifier) { Text(label) }
+}
+
+/** A challenge's After row, right above its answers: what each answer shown does to the entry, its word first, and
+ * Retire's in the error colour — it cannot be undone. */
+@Composable
+private fun ChallengeAfter(amendable: Boolean) {
+    val danger = MaterialTheme.colorScheme.error
+    val lines = listOfNotNull(Triple(WikiModeCopy.reconfirm, WikiModeCopy.afterKeep, false),
+        Triple(WikiModeCopy.amend, WikiModeCopy.afterAmend, false).takeIf { amendable },
+        Triple(WikiModeCopy.retire, WikiModeCopy.afterRetire, true))
+    Column(Modifier.testTag("wiki-review-after"), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(WikiCopy.afterLabel, style = WikiType.label, color = WikiPalette.secondary)
+        lines.forEach { (word, after, red) ->
+            Text(buildAnnotatedString {
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = if (red) danger else Color.Unspecified)) { append(word) }
+                append(" · $after")
+            }, style = WikiType.prose)
+        }
+    }
+}
+
+/** A challenge's Retire…: the entry page's own dialog — what retiring does and that it is final, then the reason, which
+ * starts as the challenge's own and goes on the record. Retire, in red, takes a reason; Cancel leaves the card as it was. */
+@Composable
+private fun ChallengeRetireDialog(reason: String, close: () -> Unit, retire: (String) -> Unit) {
+    var why by rememberSaveable { mutableStateOf(reason) }
+    AlertDialog(onDismissRequest = close, title = { Text(WikiCopy.retire) },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(WikiCopy.retireNote)
+            // A long reason scrolls inside the field rather than pushing the buttons off the dialog.
+            OutlinedTextField(why, { why = it }, Modifier.fillMaxWidth().testTag("wiki-review-challenge-retire-reason"),
+                placeholder = { Text(WikiCopy.reasonPlaceholder) }, maxLines = 5)
+        } },
+        confirmButton = { TextButton(onClick = { close(); retire(why.trim()) }, enabled = why.isNotBlank(),
+            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            modifier = Modifier.testTag("wiki-review-challenge-retire-confirm")) { Text(WikiCopy.retireConfirm) } },
+        dismissButton = { TextButton(onClick = close, modifier = Modifier.testTag("wiki-review-challenge-retire-cancel")) { Text("Cancel") } },
+        modifier = Modifier.testTag("wiki-review-challenge-retire-dialog"))
 }
 
 /** Reject ▾: the four reasons, headed by where the reason goes. */

@@ -3,6 +3,8 @@ package io.orbitd.android.wiki
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.orbitd.android.MainActivity
@@ -12,6 +14,7 @@ import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.DirectoryData
 import io.orbitd.android.navigation.*
+import io.orbitd.android.toast.OrbitToasts
 import io.orbitd.android.ui.OrbitTheme
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CoroutineScope
@@ -39,6 +42,8 @@ class WikiScreensTest {
     /** The space's health and server runs, when a test wants them: the control plane before P9 answers 404. */
     private var healthRead: String? = null
     private var jobsRead: String? = null
+    /** The review queue, when a test wants its own in place of the fixture's. */
+    private var reviewRead: String? = null
 
     private fun respond(api: ApiRequest): ApiResponse {
         val path = api.path.joinToString("/")
@@ -67,7 +72,7 @@ class WikiScreensTest {
     }
     /** The fixture queue less what has been answered: the server lists only what still waits. */
     private fun reviewQueue(): String {
-        val queue = Wire.json.parseToJsonElement(WikiFixtures.review).jsonArray.map { changeset ->
+        val queue = Wire.json.parseToJsonElement(reviewRead ?: WikiFixtures.review).jsonArray.map { changeset ->
             val ops = changeset.jsonObject["ops"]!!.jsonArray.filter { it.jsonObject["id"]!!.jsonPrimitive.content !in decided }
             JsonObject(changeset.jsonObject + ("ops" to JsonArray(ops)))
         }
@@ -249,5 +254,45 @@ class WikiScreensTest {
         compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-review-card:34UDOpRetireWakeup002").fetchSemanticsNodes().isNotEmpty() }
         assertEquals(listOf("34UDOpAddPitfall00001"), decided)
         compose.waitUntil(60_000) { compose.onAllNodesWithText("1 of 2").fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    /** Two challenges of an entry an Amend can rewrite, over the store: Keep decides `reconfirm` and floats Kept with the
+     * entry's title, and the next challenge is shown from its head; its Retire… opens on that challenge's own reason, and
+     * Retire sends the reason as the decide's note and floats Retired (owner, 2026-11-07). */
+    @Test fun aChallengeKeptSaysKeptAndOneRetiredSendsItsReasonAsTheNote() {
+        OrbitToasts.clear()
+        fun challenge(id: String, seq: Int, reason: String) = """{"id":"$id","changesetId":"34UDCsChallenges00001","seq":$seq,
+            "op":"challenge","entryId":"${WikiFixtures.pitfallID}","payload":{"reason":"$reason"},"decision":"pending"}"""
+        reviewRead = """[{"id":"34UDCsChallenges00001","spaceId":"$space","origin":"maintenance","createdAt":"2026-09-25T12:00:00.000Z",
+            "ops":[${challenge("34UDOpChallengeKeep001", 0, "The anchored path moved.")},
+                   ${challenge("34UDOpChallengeRetire1", 1, "Wrong as a standing rule.")}]}]"""
+        val route = OrbitRoute(Destination.WIKI_REVIEW)
+        show(route) { WikiReviewScreen(it, route, DirectoryData(), nav) }
+        // Amend… waits for the entry it edits: once it can be pressed, the entry is read.
+        compose.waitUntil(60_000) { compose.onAllNodes(hasTestTag("wiki-review-amend") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        fun offset() = compose.onNodeWithTag("wiki-review-page").fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value()
+        fun decides() = sent.filter { it.first == "POST wiki/changesets/34UDCsChallenges00001/decide" }.map { Wire.json.parseToJsonElement(it.second) }
+        fun decision(opId: String, action: String, note: String? = null) = buildJsonObject { putJsonArray("decisions") { add(buildJsonObject {
+            put("opId", opId); put("action", action); note?.let { put("note", it) } }) } }
+        // The toast up now. Reading the tree first idles the main looper, which runs what the press started: a wait on the
+        // toast feed alone never does under Robolectric's paused looper.
+        fun toast(): String? { compose.onAllNodes(isRoot()).fetchSemanticsNodes(); return OrbitToasts.feed.value.transient?.message }
+
+        compose.onNodeWithTag("wiki-review-keep").performScrollTo()
+        assertTrue("Keep is pressed with the page scrolled to it", offset() > 0f)
+        compose.onNodeWithTag("wiki-review-keep").performClick()
+        compose.waitUntil(60_000) { toast() == "Kept" }
+        assertEquals("runner-go’s full suite inside a session reaches production", OrbitToasts.feed.value.transient?.subtitle)
+        assertEquals(listOf(decision("34UDOpChallengeKeep001", "reconfirm")), decides())
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-review-card:34UDOpChallengeRetire1").fetchSemanticsNodes().isNotEmpty() }
+        assertEquals("the next challenge is shown from its head", 0f, offset())
+
+        compose.onNodeWithTag("wiki-review-challenge-retire").performScrollTo().performClick()
+        assertEquals("Wrong as a standing rule.",
+            compose.onNodeWithTag("wiki-review-challenge-retire-reason").fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
+        compose.onNodeWithTag("wiki-review-challenge-retire-confirm").performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitUntil(60_000) { toast() == "Retired" }
+        assertEquals(decision("34UDOpChallengeRetire1", "retire", "Wrong as a standing rule."), decides().last())
+        assertEquals(2, decides().size)
     }
 }

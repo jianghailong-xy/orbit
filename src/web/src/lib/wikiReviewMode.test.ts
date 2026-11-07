@@ -16,12 +16,16 @@ import {
   type WikiReviewMode,
   type WikiSpaceSettings,
 } from '@orbit/shared';
-import { WIKI_REVIEW_REJECT } from './wiki';
+import { WIKI_RETIRE_NOTE, WIKI_REVIEW_REJECT } from './wiki';
 import {
   WIKI_AMEND,
+  WIKI_AMEND_ANSWER,
   WIKI_AMEND_NOTE,
   WIKI_CANCEL,
   WIKI_CHALLENGED,
+  WIKI_CHALLENGE_AFTER_AMEND,
+  WIKI_CHALLENGE_AFTER_KEEP,
+  WIKI_CHALLENGE_AFTER_RETIRE,
   WIKI_CHALLENGE_WAITS,
   WIKI_CONFIRM,
   WIKI_CONFIRMED,
@@ -45,6 +49,7 @@ import {
   WIKI_REJECTED,
   WIKI_REJECT_ON_RECORD,
   WIKI_RETIRE,
+  WIKI_RETIRE_ANSWER,
   WIKI_REVERTED,
   WIKI_REVERT_KEEPS,
   WIKI_REVERT_RUN,
@@ -206,7 +211,14 @@ interface Fixture {
     items: Array<{ opId: string; at: string; origin: string; changesetId?: string | null; changesetAppliedByMode?: string | null }>;
     rows: Array<{ run?: string; origin?: string; at?: string; items?: string[]; op?: string }>;
   }>;
-  challenge: { answers: string[]; waits: string; challenged: string; amendNote: string };
+  challenge: {
+    answers: string[];
+    after: { label: string; keep: string; amend: string; retire: string };
+    retireNote: string;
+    waits: string;
+    challenged: string;
+    amendNote: string;
+  };
   challenges: Array<{
     name: string;
     anchors: WikiAnchor[];
@@ -450,8 +462,18 @@ describe('a challenge', () => {
     }
   });
 
-  it('is answered Re-confirm, Amend or Retire', () => {
-    expect([WIKI_RECONFIRM, WIKI_AMEND, WIKI_RETIRE]).toEqual(shared.challenge.answers);
+  it('is answered Keep, Amend… or Retire…, each with what it does to the entry, in the words every client shares', () => {
+    expect([WIKI_RECONFIRM, WIKI_AMEND_ANSWER, WIKI_RETIRE_ANSWER]).toEqual(shared.challenge.answers);
+    // The bare words head the After row's lines and name the Amend form and the Retire dialog's button.
+    expect([WIKI_RECONFIRM, WIKI_AMEND, WIKI_RETIRE]).toEqual(['Keep', 'Amend', 'Retire']);
+    expect([WIKI_CHALLENGE_AFTER_KEEP, WIKI_CHALLENGE_AFTER_AMEND, WIKI_CHALLENGE_AFTER_RETIRE]).toEqual([
+      shared.challenge.after.keep,
+      shared.challenge.after.amend,
+      shared.challenge.after.retire,
+    ]);
+    expect(shared.challenge.after.label).toBe('After');
+    expect(shared.challenge.after.retire).toContain('This cannot be undone.');
+    expect(WIKI_RETIRE_NOTE).toBe(shared.challenge.retireNote);
     expect(WIKI_CHALLENGE_WAITS).toBe(shared.challenge.waits);
     expect(WIKI_CHALLENGED).toBe(shared.challenge.challenged);
     expect(WIKI_AMEND_NOTE).toBe(shared.challenge.amendNote);

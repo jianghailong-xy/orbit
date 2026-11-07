@@ -375,8 +375,9 @@ internal object WikiLogic {
     }
     fun oldestProposal(cards: List<ReviewCard>): String? = cards.mapNotNull { card ->
         card.changeset.createdAt?.let { at -> RelativeTime.parse(at)?.let { at to it } } }.minByOrNull { it.second }?.first
+    /** A challenge's Keep (`reconfirm`) says the button's word, so a press meant as Retire reads as what it did. */
     fun decidedToast(op: String?, action: String): String = when (action) {
-        "edit" -> WikiCopy.decidedEdited; "reconfirm" -> WikiCopy.decidedReconfirmed; "amend" -> WikiCopy.decidedAmended
+        "edit" -> WikiCopy.decidedEdited; "reconfirm" -> WikiCopy.decidedKept; "amend" -> WikiCopy.decidedAmended
         "retire" -> WikiCopy.retired
         "reject" -> if (op == "retire") WikiCopy.decidedKept else WikiCopy.rejected
         else -> if (op == "retire") WikiCopy.retired else WikiCopy.decidedAccepted
@@ -417,6 +418,9 @@ internal object WikiLogic {
     fun anchorInput(anchor: JsonElement): JsonElement =
         if (anchor is JsonObject) JsonObject(anchor.filterKeys { it in anchorInputKeys }) else anchor
     fun cardKind(card: ReviewCard, entry: WikiEntry?): String? = card.op.payload["entry"]["kind"].text() ?: entry?.kind
+    /** Whether a challenge's entry takes an Amend: a decision is superseded, never rewritten (contract
+     * `kinds.decision.amendable`), and the server refuses its amend WIKI_SCHEMA. */
+    fun amendable(card: ReviewCard, entry: WikiEntry?): Boolean = cardKind(card, entry) != "decision"
     fun cardChip(op: String?): String = if (op == "supersede") WikiCopy.opLabel("amend") else WikiCopy.opLabel(op)
     fun proposedBy(changeset: WikiChangeset): String {
         if (changeset.sessionId != null) {
