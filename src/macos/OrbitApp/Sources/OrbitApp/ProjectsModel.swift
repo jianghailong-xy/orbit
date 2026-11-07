@@ -8,7 +8,9 @@ import OrbitKit
 /// The list is refetched: when the section or the drawer appears, on pull-to-refresh, on a short
 /// coalesced nudge after a project changed or a member session or task moved (a task write
 /// is what moves a project's lanes), after every write this client makes, and every 15 seconds
-/// while loaded: integration jobs can move without changing a task or session.
+/// while loaded: integration jobs can move without changing a task or session. With the control
+/// stream live, the nudges carry the changes, and that floor is a minute's safety read
+/// (docs/list-freshness-design.md §4 R1).
 @MainActor
 @Observable
 final class ProjectsModel {
@@ -57,9 +59,9 @@ final class ProjectsModel {
     }
 
     /// Called by the app's existing polling task, which stops on sign-out.
-    func refreshIfDue(now: Date = Date()) async {
+    func refreshIfDue(now: Date = Date(), live: Bool = false) async {
         guard loadState.hasLoaded, now >= refreshNotBefore else { return }
-        refreshNotBefore = now.addingTimeInterval(15)
+        refreshNotBefore = now.addingTimeInterval(live ? PollSchedule.liveFallback : 15)
         await load()
         for detail in details.values where detail.isVisible { await detail.load(refreshGraph: false) }
     }

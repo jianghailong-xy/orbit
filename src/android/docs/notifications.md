@@ -107,7 +107,10 @@ routes to its bound coordinator. On tap, the existing reader/cards fetch their
 own current state and use existing authenticated business endpoints.
 
 Foreground/resume, reconnect, silent sync, and FCM deleted-message callbacks
-must reconcile again. REST `pendingApprovals` counts more kinds of decisions
+must reconcile again. An account event in the foreground reconciles too, but
+checks each notification against its own record and does not read the Open list
+a second time: the store reads it for the same event (docs/list-freshness-design.md
+§2.3 D2). REST `pendingApprovals` counts more kinds of decisions
 than native tool approvals; Swift's needs-you projection excludes a start-only
 wait and includes nonempty owner items. A fresh open-list row can confirm that a
 session still needs the owner, but a count alone cannot prove a specific approval

@@ -57,6 +57,8 @@ import io.orbitd.android.projects.StartProjectCopy
 import io.orbitd.android.projects.StartSheetLoad
 import io.orbitd.android.projects.failureReason
 import io.orbitd.android.reader.LandingSessionCopy
+import io.orbitd.android.realtime.PagePoll
+import io.orbitd.android.realtime.PagePolls
 import io.orbitd.android.taskprojects.canWrite
 import io.orbitd.android.taskprojects.writable
 import io.orbitd.android.ui.LocalOrbitColors
@@ -70,6 +72,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonObject
 
@@ -200,18 +204,22 @@ private class ProjectSessionsState(initial: List<DirectorySession>) {
 
 private enum class StartSheet { ASKED, OWN }
 
+/** How often the landing and the merge are read while the line has a job in flight: a running landing's own cadence (§2.7a). */
+private const val LANDING_READ_MS = 4_000L
+
 /**
  * A project's sessions (iOS `SessionProjectPage`, A05-7), pushed over the list it was opened from, or the root of the drawer's project
  * row: its progress — with the start while nobody has started the project — then the landing in flight as a card of its own (A11-11),
  * then the merge into main (A11-9) while there is one to show, then its coordinator, then the one Landings row that opens the project's
  * Landings window (owner 2026-10-27), then every other member by recency, Open and Completed together. No search and no Pinned: it
  * lists one project's sessions. A member opens over this page, and the workspace the page was entered from stays the one beneath it.
- * Members, the landing, the merge and the start are each read every 4 s; the progress comes from `GET /projects/sidebar`.
+ * Its reads follow the account stream as every page's do ([PagePoll]); the landing and the merge, which no event announces, are read
+ * every 4 s while the line has a job in flight. The progress comes from `GET /projects/sidebar`.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, data: DirectoryData, api: DirectoryApi,
-    revision: Long, open: (OrbitRoute) -> Unit) {
+    open: (OrbitRoute) -> Unit) {
     val projectId = route.id ?: return
     val projects = remember(handle) { ProjectApi(app.session, handle) { app.canWrite(handle) } }
     // A new page opens on what the app already holds of the project — every workspace's Open rows — and its read replaces them when
@@ -220,10 +228,14 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     val trashing = app.trashing
     val hidden by trashing.ids.collectAsState()
     val watches by remember(handle) { WatchStore.of(app.session, handle, app.processScope).state }.collectAsState()
-    val sidebar by rememberProjectSidebar(api, revision)
+    val sidebar by rememberProjectSidebar(app, handle, api)
     val project = sidebar.firstOrNull { it.text("id")?.let(SessionProjectGrouping::key) == SessionProjectGrouping.key(projectId) }
     val currentData by rememberUpdatedState(data)
     val currentProject by rememberUpdatedState(project)
+    // What the sidebar's row said — Open, and started — when the start and the ending were last read by it: a poll that ran before
+    // the row arrived read them by no row. Null until the first of those reads.
+    val gate = project?.let { it.text("status") to ProjectDoc.started(it) }
+    var gateRead by remember(handle, projectId) { mutableStateOf<List<Pair<String?, Boolean?>?>?>(null) }
     val scope = rememberCoroutineScope()
     var now by remember { mutableStateOf(Instant.now()) }
     var refreshing by remember { mutableStateOf(false) }
@@ -234,6 +246,8 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     val merge = remember(handle, projectId) { ProjectMergeModel(projects, projectId) }
     // Hosted here rather than by the card, so a poll redrawing it cannot dismiss what the owner is reading.
     var promotionReview by remember(projectId) { mutableStateOf<String?>(null) }
+    // One member poll at a time: the page's poll and the Open list landing can both ask for one.
+    val memberPolls = remember(handle, projectId) { Mutex() }
 
     // `includeLanding=1` (LS6): the page's read carries the project's LANDING rows beside its conversations, which is what the
     // Landings row counts. No other list asks for them, so no other list grows a row it cannot place.
@@ -261,7 +275,7 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     /** One poll that asks for neither list again unless something moved: the Open members are the app's Open list's, kept current by
      * its control stream; the Completed ones are read again when an Open member left that list, or a minute after the last read. A
      * Completed read that a release overlapped is dropped, and the next poll reads again. */
-    suspend fun pollMembers() {
+    suspend fun pollMembersLocked() {
         val readAt = state.readAt
         if (state.error != null || readAt == null || !currentData.ready) return loadMembers()
         val openList = currentData.sessions["open"].orEmpty()
@@ -283,6 +297,7 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
         } catch (cancel: CancellationException) { throw cancel }
         catch (failure: Exception) { state.error = CodexSignInText.sentence(failureReason(failure)) }
     }
+    suspend fun pollMembers() = memberPolls.withLock { pollMembersLocked() }
     /** The landing line's read; a read that fails keeps the last answer and says it is stale. */
     suspend fun loadIntegration() {
         val view = try { projects.integration(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
@@ -296,6 +311,7 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     /** The start row's read, while the sidebar says nobody has started the project. A read that fails keeps the last answer. */
     suspend fun loadStart() {
         val row = currentProject
+        gateRead = listOf(row?.let { it.text("status") to ProjectDoc.started(it) })
         if (row?.text("status") != "OPEN" || ProjectDoc.started(row) != false) { state.openItems = null; return }
         val items = try { projects.openItems(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
         if (items != null) state.openItems = items
@@ -323,13 +339,30 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
                 }
             }
         }
-        launch { loadMembers(); while (true) { delay(4_000); pollMembers() } }
-        launch { while (true) { loadIntegration(); delay(4_000) } }
-        launch { while (true) { merge.load(); delay(4_000) } }
-        launch { while (true) { loadStart(); delay(4_000) } }
-        launch { while (true) { loadDone(); delay(4_000) } }
         launch { while (true) { delay(1_000); now = Instant.now() } }
     }
+    // The page's reads follow the account stream (docs/list-freshness-design.md R6): a project's or its tasks' events and each connect
+    // read them, a minute without one reads them once, the stream being down reads them on a backoff, and a stopped Activity reads
+    // nothing. The members are read whole once; after that the Open ones are the app's Open list's and only Completed is read again.
+    PagePoll(app, handle, PagePolls.PROJECT_EVENTS, projectId) {
+        coroutineScope { launch { pollMembers() }; launch { loadStart() }; launch { loadDone() } }
+    }
+    // The row came after the page's read, or moved since: the start and the ending are read again by what it says now, once, rather
+    // than a minute later by the next poll.
+    LaunchedEffect(gate) {
+        val read = gateRead ?: return@LaunchedEffect
+        if (read.single() != gate) coroutineScope { launch { loadStart() }; launch { loadDone() } }
+    }
+    // The landing card and the merge into main. A landing publishes no event (§2.9 LS6): while the line says a job is in flight they
+    // are read every 4 s, as a running landing's page reads it (§2.7a); with none, as the rest of the page.
+    PagePoll(app, handle, PagePolls.PROJECT_EVENTS, projectId,
+        inFlightMs = { if (ProjectPage.landingInFlight(state.integration)) LANDING_READ_MS else null }) {
+        coroutineScope { launch { loadIntegration() }; launch { merge.load() } }
+    }
+    // Between the page's reads the Open members move with the app's Open list as the store reads it: no read of their own, but
+    // Completed's when one of them has left the list.
+    val openRows = data.sessions["open"]
+    LaunchedEffect(openRows) { if (state.readAt != null && state.error == null && data.ready) pollMembers() }
     fun refresh() = scope.launch {
         refreshing = true
         try { coroutineScope { launch { loadMembers() }; launch { loadIntegration() }; launch { merge.load(force = true) }; launch { loadStart() }; launch { loadDone() } } }

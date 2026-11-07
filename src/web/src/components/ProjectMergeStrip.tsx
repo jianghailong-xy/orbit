@@ -55,6 +55,7 @@ import {
   recheckPromotion,
 } from '../lib/projectMerge';
 import { projectIntegrationQuery, projectOpenItemsQuery, projectPromotionQuery } from '../lib/queries';
+import { integrationInFlight, pollWhileInFlight, promotionInFlight, streamPoll } from '../lib/listBudget';
 import { mainBranchName } from '../lib/projectStart';
 import { ago } from '../lib/watches';
 
@@ -98,15 +99,21 @@ export function ProjectMergeStrip({
   onOpenCoordinator: (() => void) | null;
 }): JSX.Element | null {
   const qc = useQueryClient();
-  const promotion = useQuery({ ...projectPromotionQuery(projectId), refetchInterval: 15_000 });
   const integration = useQuery(projectIntegrationQuery(projectId));
+  // No event says when a merge check or a landing ends, so while one runs the candidate is read on
+  // its own cadence; otherwise it follows the stream (listBudget).
+  const jobInFlight = integrationInFlight(integration.data);
+  const promotion = useQuery({
+    ...projectPromotionQuery(projectId),
+    refetchInterval: pollWhileInFlight(15_000, (query) => jobInFlight || promotionInFlight(query.state.data)),
+  });
   const current = asPromotion(promotion.data);
   const inFlight = integration.data && typeof integration.data === 'object' ? integration.data.inFlight ?? null : null;
   const shape = mergeCardShape(current, inFlight);
   const items = useQuery({
     ...projectOpenItemsQuery(projectId),
     enabled: shape === 'blocked',
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
   // How far the criteria have got, for the asking card's line — the project document's own words.
   const project = useQuery({

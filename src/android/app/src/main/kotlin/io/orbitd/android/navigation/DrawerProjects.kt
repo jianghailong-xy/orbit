@@ -22,6 +22,8 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import io.orbitd.android.OrbitApplication
+import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.directory.DirectoryApi
 import io.orbitd.android.directory.DirectoryData
@@ -32,12 +34,15 @@ import io.orbitd.android.directory.orderedWorkspaces
 import io.orbitd.android.projects.CoordinatorPulse
 import io.orbitd.android.projects.DrawerMark
 import io.orbitd.android.projects.ProjectAttention
+import io.orbitd.android.realtime.PagePoll
+import io.orbitd.android.realtime.PagePolls
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.*
 
-/** The drawer's open projects as `GET /projects?status=OPEN` last answered — read as the drawer is composed and again on every account
- * event ([revision]) — which the Projects row counts from and the project rows are drawn from (iOS `ProjectsModel`, behind both). */
+/** The drawer's open projects as `GET /projects?status=OPEN` last answered — read as the drawer is composed, then as a page's poll
+ * reads ([PagePolls]: on a project's or its tasks' events and each connect, a minute without one, never per session event) — which the
+ * Projects row counts from and the project rows are drawn from (iOS `ProjectsModel`, behind both). */
 @Stable
 class DrawerProjectsState {
     var projects by mutableStateOf<List<JsonObject>>(emptyList())
@@ -48,9 +53,9 @@ class DrawerProjectsState {
 }
 
 @Composable
-fun rememberDrawerProjects(api: DirectoryApi, revision: Long): DrawerProjectsState {
+fun rememberDrawerProjects(app: OrbitApplication, handle: SessionHandle, api: DirectoryApi): DrawerProjectsState {
     val state = remember { DrawerProjectsState() }
-    LaunchedEffect(api, revision, state.retry) {
+    PagePoll(app, handle, PagePolls.PROJECT_EVENTS, api, state.retry) {
         try {
             state.projects = api.read(listOf("projects"), JsonArray.serializer(), listOf("status" to "OPEN")).filterIsInstance<JsonObject>()
             state.error = null

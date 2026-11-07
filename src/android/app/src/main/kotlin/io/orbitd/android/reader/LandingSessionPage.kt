@@ -17,6 +17,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.core.auth.SessionHandle
@@ -486,14 +489,18 @@ private fun LandingLogBlock(selectors: LandingLogSelectors, onLog: suspend (Land
     LandingLogBody(page, failed, loading) { cursor -> scope.launch { load(cursor) } }
 }
 
-/** The check running now: its last few printed lines, polled with the page while it runs. */
+/** The check running now: its last few printed lines, polled with the page while it runs — no event announces them (§2.9 LS6) — and
+ * only while the Activity is started. */
 @Composable
 private fun LandingLiveCheck(selectors: LandingLogSelectors, title: String, onLog: suspend (LandingLogSelectors, String?) -> LandingLogPage?) {
     var text by remember(selectors) { mutableStateOf("") }
-    LaunchedEffect(selectors) {
-        while (isActive) {
-            onLog(selectors, null)?.let { page -> text = LandingSessionModel.tail(page.entries.joinToString("") { it.text }) }
-            delay(4_000)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(selectors, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (isActive) {
+                onLog(selectors, null)?.let { page -> text = LandingSessionModel.tail(page.entries.joinToString("") { it.text }) }
+                delay(4_000)
+            }
         }
     }
     Column(Modifier.padding(start = 24.dp).testTag("landing:live-check"), verticalArrangement = Arrangement.spacedBy(4.dp)) {

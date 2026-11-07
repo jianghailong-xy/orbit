@@ -50,7 +50,7 @@ final class WorktreeModel {
     /// Web uses the same two-second cadence and gives the runner eight chances to publish the
     /// freshly recomputed snapshot (about 16 seconds total).
     private static let diffRefreshPolls = 8
-    private static let diffRefreshInterval: UInt64 = 2_000_000_000
+    private static let diffRefreshInterval: TimeInterval = 2
 
     init(sessionID: String, api: APIClient) {
         self.sessionID = sessionID
@@ -89,10 +89,11 @@ final class WorktreeModel {
             guard pending || live || repairRunning || repairCheck else {
                 // Settled + terminal: nothing to fetch. Wait, then re-evaluate — an action that sets
                 // pending (below) will make the next pass enter the 3s outcome poll.
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                await VisibilityGate.app.pause(3)
                 continue
             }
-            try? await Task.sleep(nanoseconds: pending ? 3_000_000_000 : 5_000_000_000)
+            // Not while the app cannot be seen; shown again, it reads at once.
+            await VisibilityGate.app.pause(pending ? 3 : 5)
             if Task.isCancelled { break }
             await loadDetail()
         }
@@ -132,8 +133,8 @@ final class WorktreeModel {
         try? await api.refreshDiff(sessionID: sessionID)
 
         for _ in 0..<Self.diffRefreshPolls {
-            do { try await Task.sleep(nanoseconds: Self.diffRefreshInterval) }
-            catch { return }
+            await VisibilityGate.app.pause(Self.diffRefreshInterval)
+            if Task.isCancelled { return }
             // Fetch once even if the session just became terminal: turn completion may have
             // published the final committed patch while we were sleeping.
             guard ownsDiffLoad(generation) else { return }

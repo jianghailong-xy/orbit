@@ -1106,15 +1106,16 @@ describe('project-specific supplemental reads', { timeout: 60_000 }, () => {
       type: 'session.updated', sessionId,
       data: { id: sessionId, projectMembership: { projectId, role: 'TASK' } },
     }) });
+    // Past the stream's coalescing window (a second) each time.
     await act(async () => {
       publish(pid(830), LOOSE.id);
-      await new Promise((resolve) => setTimeout(resolve, 700));
+      await new Promise((resolve) => setTimeout(resolve, 1_200));
     });
     await settle();
     expect(projectQueryCalls()).toHaveLength(countBefore);
     await act(async () => {
       for (let i = 0; i < 5; i += 1) publish(PROJECT_ID, TASK.id);
-      await new Promise((resolve) => setTimeout(resolve, 700));
+      await new Promise((resolve) => setTimeout(resolve, 1_200));
     });
     await settle();
     expect(projectQueryCalls()).toHaveLength(countBefore + (surface === 'page' ? 2 : 1));
