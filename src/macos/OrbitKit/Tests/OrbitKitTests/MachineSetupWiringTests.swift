@@ -211,10 +211,9 @@ final class MachineSetupWiringTests: XCTestCase {
     /// The page reads the machine again while it is up, on both platforms.
     func testTheRunnerRowsStayCurrentOnEveryPlatform() throws {
         let model = try app("AppModel.swift")
-        let poll = try slice(model, from: "func startPolling() {", to: "self.refreshFocusedSessionDetailIfNeeded()")
-        XCTAssertTrue(poll.contains("await self.refreshRunnerSnapshotIfDue()"))
-        XCTAssertFalse(poll.contains("#if os(iOS)\n                    await self.refreshRunnerSnapshotIfDue()"),
-                       "a Mac's Set up row comes and goes too")
+        let poll = try slice(model, from: "private func pollFloors() async {", to: "refreshFocusedSessionDetailIfNeeded()")
+        XCTAssertTrue(poll.contains("await refreshRunnerSnapshotIfDue()"))
+        XCTAssertFalse(poll.contains("#if os(iOS)"), "a Mac's Set up row comes and goes too")
     }
 
     /// Reset with the account: what one owner left isn't the next one's.

@@ -130,8 +130,10 @@ final class LandingViewsWiringTests: XCTestCase {
         XCTAssertTrue(placing.contains("proxy.scrollTo(entry, anchor: .top)"))
         XCTAssertTrue(placing.contains("proxy.scrollTo(Self.bottom, anchor: .bottom)"))
         XCTAssertTrue(window.contains("try? await Task.sleep(nanoseconds: 1_500_000_000)"), "the outline lasts 1.5 s")
-        XCTAssertTrue(window.contains("window.now.contains { details[$0.sessionId]?.currentAttempt?.state == \"RUNNING\" } ? 4 : 15"),
-                      "§2.7a's cadence while a card is in hand")
+        XCTAssertTrue(window.contains("window.now.contains { details[$0.sessionId]?.currentAttempt?.state == \"RUNNING\" }"),
+                      "§2.7a: a card in hand that runs")
+        XCTAssertTrue(window.contains("await ViewPoll.run(app, every: 15, hints: { app.projectHints }, inFlight: { model.cardRunning ? 4 : nil }) {"),
+                      "4 s while a card runs and the window can be seen; otherwise the stream's hints, 15 s without it")
         XCTAssertTrue(window.contains("for card in cards { await read(card.sessionId) }"), "each card reads its own view")
         XCTAssertTrue(window.contains("if let sessionID = row.sessionId { await model.readOnce(sessionID) }"),
                       "a settled row reads its record once")

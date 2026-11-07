@@ -595,15 +595,18 @@ struct AgentPanes: View {
         // the identical payload on an independent timer. That duplicate mattered most exactly when
         // the list was busiest: with several sessions running, the two cadences interleaved into a
         // near-continuous stream of whole-list decodes and list diffs.
+        //
+        // Completed / Trash read the whole account's list, so their poll follows the control stream
+        // (`ViewPoll`): a row joining or moving in them is read a second later, otherwise once a
+        // minute while the stream is live; every 4 s while it is down; never while the app cannot be
+        // seen (docs/list-freshness-design.md §4 R6).
         .task(id: "\(agent.id)|\(view.rawValue)") {
             await agents.loadSessions(agentID: agent.id, view: view, reset: true)
             #if os(iOS)
             await app.projects?.load()
             #endif
             guard view != .open else { return }
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 4_000_000_000)
-                if Task.isCancelled { break }
+            await ViewPoll.run(app, every: 4, hints: { app.lifecycleHints }) {
                 await agents.loadSessions(agentID: agent.id, view: view)
             }
         }

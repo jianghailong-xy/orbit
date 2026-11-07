@@ -211,6 +211,17 @@ final class ConsoleRegistry {
         for model in models.values { model.reconnectNow() }
     }
 
+    /// A project's pending criteria decisions changed (`project.criteria_decisions.changed`): the
+    /// cached consoles of that project read their decision cards again — every project's when the
+    /// event names none. The read is the console's own door for those cards (`refreshRulerQuestions`).
+    func criteriaDecisionsChanged(projectID: String?) {
+        let key = projectID.map(PublicID.storageKey)
+        for model in models.values {
+            guard let own = model.projectID, key == nil || PublicID.storageKey(own) == key else { continue }
+            Task { await model.refreshRulerQuestions(force: true) }
+        }
+    }
+
     /// Drop all in-memory consoles after persisting them (sign-out). Disk snapshots remain for the
     /// next sign-in.
     func reset() {

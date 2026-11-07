@@ -346,6 +346,28 @@ final class AppModel {
     /// Invalidates async detail reads when logout or an instance switch replaces their scope.
     private var apiGeneration = 0
     private var pollTask: Task<Void, Never>?
+    /// What the poll reads when (`startPolling`); nil until it starts.
+    @ObservationIgnored private var appPoll: AppPoll?
+    /// The poll's sleep, cancelled to wake it early (`setAppVisible`).
+    @ObservationIgnored private var pollSleeper: Task<Void, Never>?
+    /// Whether the app can be seen (docs/list-freshness-design.md §4 R3). While it cannot — on macOS
+    /// hidden, minimized, covered by other windows or with its windows closed — no timed read is
+    /// made: neither the app's tick nor any page's poll (`ViewPoll`). Reads an event asks for go on,
+    /// so the menu-bar badge and the notifications stay current. See `setAppVisible`.
+    @ObservationIgnored private(set) var appVisible = true
+    /// Open-list reads in a row that failed (offline): what every page poll backs off by (§4 R2).
+    var pollFailures: Int { appPoll?.failures ?? 0 }
+    /// Bumped when a control event may have moved what a page polls for (§4 R6): a page re-reads on
+    /// its own hint, a burst merged into one read (`ViewPoll`). A reconnect bumps both — that is how
+    /// the pages on screen catch up after a gap (R4).
+    /// `lifecycleHints`: a row joined or moved within Completed / Trash.
+    @ObservationIgnored private(set) var lifecycleHints = 0
+    /// `projectHints`: a task, a project, an owner item or a member moved — project pages, Landings.
+    @ObservationIgnored private(set) var projectHints = 0
+    #if os(macOS)
+    /// AppKit's window notifications behind `appVisible` (`observeWindowVisibility`).
+    @ObservationIgnored private var windowObservers: [NSObjectProtocol] = []
+    #endif
     /// The 4s Open loop also keeps the Workspace navigation's Runner state fresh, but Runner
     /// heartbeats do not need that cadence. This gate yields an approximately 16s refresh on the
     /// existing tick (15s minimum) without starting another long-lived task. On both platforms: a
@@ -544,7 +566,11 @@ final class AppModel {
             return self.sessions
         }
         agents = agentsModel
-        runners = RunnersModel(baseURL: url, tokenStore: tokenStore)
+        let runnersModel = RunnersModel(baseURL: url, tokenStore: tokenStore)
+        // A runners page's read is the tick's runner snapshot too: one `/runners` while it polls,
+        // not one each.
+        runnersModel.onRead = { [weak self] rows in self?.adoptRunnerRows(rows) }
+        runners = runnersModel
         admin = AdminModel(baseURL: url, tokenStore: tokenStore)
         sharedLinks = SharedLinksModel(baseURL: url, tokenStore: tokenStore)
         accessTokens = AccessTokensModel(baseURL: url, tokenStore: tokenStore)
@@ -856,6 +882,7 @@ final class AppModel {
         defaultModelWrite = nil
         pollTask?.cancel()
         pollTask = nil
+        appPoll = nil
         controlTask?.cancel()
         controlTask = nil
         controlRefreshGeneration &+= 1
@@ -960,8 +987,50 @@ final class AppModel {
         // A Mac an older app enrolled runs a LaunchAgent that keeps its runner from updating
         // itself; rewrite it once, at launch.
         Task { await runnerControl?.migrateLaunchAgent() }
+        observeWindowVisibility()
         #endif
     }
+
+    /// The app can be seen again, or no longer can (§4 R3). Shown again, the poll wakes at once for
+    /// the one read it owes (`AppPoll`); every page poll checks this before each read (`ViewPoll`).
+    func setAppVisible(_ visible: Bool) {
+        guard visible != appVisible else { return }
+        appVisible = visible
+        if visible { pollSleeper?.cancel() }
+    }
+
+    #if os(macOS)
+    /// Follow whether any of the app's windows can be seen: hidden (⌘H), minimized, covered by other
+    /// windows, closed, or on a display that went to sleep all count as not. The menu-bar item's
+    /// window is not a `.normal`-level window, so it never counts: its glance reads what the control
+    /// stream keeps current. Installed once, at launch; a closing window is left out of the count.
+    private func observeWindowVisibility() {
+        guard windowObservers.isEmpty else { return }
+        let names: [Notification.Name] = [
+            NSApplication.didHideNotification, NSApplication.didUnhideNotification,
+            NSApplication.didChangeOcclusionStateNotification,
+            NSWindow.didMiniaturizeNotification, NSWindow.didDeminiaturizeNotification,
+            NSWindow.didChangeOcclusionStateNotification, NSWindow.didBecomeKeyNotification,
+            NSWindow.willCloseNotification,
+        ]
+        for name in names {
+            let observer = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                let closing = name == NSWindow.willCloseNotification
+                    ? (note.object as? NSWindow).map(ObjectIdentifier.init) : nil
+                Task { @MainActor in self?.setAppVisible(Self.anyWindowVisible(excluding: closing)) }
+            }
+            windowObservers.append(observer)
+        }
+    }
+
+    private static func anyWindowVisible(excluding closing: ObjectIdentifier?) -> Bool {
+        guard !NSApp.isHidden else { return false }
+        return NSApp.windows.contains { window in
+            ObjectIdentifier(window) != closing && window.level == .normal && window.isVisible
+                && !window.isMiniaturized && window.occlusionState.contains(.visible)
+        }
+    }
+    #endif
 
     /// Keep Open fresh. The control-plane stream (below) is the primary source of *latency* — a
     /// status or approval change lands on its row the moment the event arrives — but its payload is
@@ -977,44 +1046,79 @@ final class AppModel {
     ///
     /// Each tick also checkpoints the focused console to disk regardless, so a crash/quit loses
     /// at most a few seconds of the open transcript.
+    ///
+    /// When a tick reads is OrbitKit's `AppPoll` (docs/list-freshness-design.md §4): the Open list's
+    /// conditional read every 4 s and the floors behind it (`pollFloors`); nothing at all while the
+    /// app cannot be seen — the loop sleeps until `setAppVisible` wakes it, and the read it owes then
+    /// is the Open list alone; and while that read fails (offline), the floors wait too and the
+    /// ticks back off 4 → 8 → 16 → 30 s.
     func startPolling() {
         guard pollTask == nil else { return }
         startControlPlane()
         // The always-mounted drawer or sidebar performs the initial Workspace + Runner load. Start the
         // lightweight refresh one interval later instead of duplicating that request.
         runnerSnapshotRefreshNotBefore = Date().addingTimeInterval(Self.runnerSnapshotRefreshInterval)
+        let poll = AppPoll(readOpenList: { [weak self] in await self?.loadSessions() ?? false },
+                           readFloors: { [weak self] in await self?.pollFloors() })
+        appPoll = poll
         pollTask = Task { @MainActor [weak self] in
             // A restored-token launch sets `signedIn` in `init` without going through `login()`, so
             // `user` is nil or the launch snapshot's copy — read it once so the account footer shows
             // the real name and the preferences are this run's. A failed read keeps what is there.
             if let self, let me = try? await self.api?.me() { self.user = me }
             while !Task.isCancelled {
-                if let self { await self.loadSessions() }
-                if let self {
-                    await self.refreshRunnerSnapshotIfDue()
-                    // The control stream has no purge event, and a Completed / Trash cold route is
-                    // absent from Open by definition. Refresh only that one focused fallback so a
-                    // remote lifecycle change or permanent deletion cannot leave a ghost console.
-                    await self.refreshFocusedSessionDetailIfNeeded()
-                    self.consoleRegistry?.flush(self.focusedConsoleSessionID)
-                    await self.refreshWatchesIfDue()
-                    await self.projects?.refreshIfDue()
-                    await self.managedRunner?.refreshIfDue()
-                }
-                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                guard let self else { return }
+                await poll.tick(at: Date(), visible: self.appVisible, live: self.controlPlaneLive)
+                self.consoleRegistry?.flush(self.focusedConsoleSessionID)
+                await self.pollSleep(until: poll.nextWake(visible: self.appVisible, live: self.controlPlaneLive))
             }
         }
     }
 
-    /// The watch list's floor. No control event names a watch, so this is what brings in one an agent
-    /// just created, and the evaluator's newer looks behind every "Last evaluated".
+    /// The lists that ride the app's tick, behind the Open list's read: each keeps its own cadence.
+    private func pollFloors() async {
+        await refreshRunnerSnapshotIfDue()
+        // The control stream has no purge event, and a Completed / Trash cold route is
+        // absent from Open by definition. Refresh only that one focused fallback so a
+        // remote lifecycle change or permanent deletion cannot leave a ghost console.
+        await refreshFocusedSessionDetailIfNeeded()
+        await refreshWatchesIfDue()
+        await projects?.refreshIfDue(live: controlPlaneLive)
+        await managedRunner?.refreshIfDue()
+    }
+
+    /// Sleep until `wake`, or — with none, while the app cannot be seen — until `setAppVisible`
+    /// cancels the sleep. Cancelling the poll itself ends it as well.
+    private func pollSleep(until wake: Date?) async {
+        let seconds = wake.map { max(0, $0.timeIntervalSinceNow) } ?? 3_600
+        let sleeper = Task { try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)) }
+        pollSleeper = sleeper
+        await withTaskCancellationHandler {
+            await sleeper.value
+        } onCancel: {
+            sleeper.cancel()
+        }
+        pollSleeper = nil
+    }
+
+    /// The watch list's floor. `watch.changed` names a watch the moment it moves and the session and
+    /// task events nudge the list, so with the stream live this is the minute's safety read (§4 R1);
+    /// without the stream, every 30 s, as before.
     private var watchesRefreshNotBefore = Date.distantPast
     private static let watchesRefreshInterval: TimeInterval = 30
 
     private func refreshWatchesIfDue(now: Date = Date()) async {
         guard now >= watchesRefreshNotBefore, let watches else { return }
-        watchesRefreshNotBefore = now.addingTimeInterval(Self.watchesRefreshInterval)
+        watchesRefreshNotBefore = now.addingTimeInterval(
+            controlPlaneLive ? PollSchedule.liveFallback : Self.watchesRefreshInterval)
         await watches.load()
+    }
+
+    /// The runners a page just read (`RunnersModel.onRead`) are the tick's runner snapshot too, so the
+    /// tick's own read waits a whole interval after them.
+    private func adoptRunnerRows(_ rows: [Runner]) {
+        agents?.adoptRunnerSnapshot(rows)
+        runnerSnapshotRefreshNotBefore = Date().addingTimeInterval(Self.runnerSnapshotRefreshInterval)
     }
 
     /// Claim one Runner refresh when the shared poll reaches the 15s gate. The claim is recorded
@@ -1053,67 +1157,68 @@ final class AppModel {
     /// `loadSessions()` (200ms window). Reusing the snapshot path for event application keeps a
     /// single source of truth for row shape, grouping, badges AND the notification diff — a
     /// field-level upsert can come later if event volume ever warrants it.
+    ///
+    /// The reconnect rules are OrbitKit's `ControlPlaneLoop` (§4 R4): healthy only once a message
+    /// arrives, every wait jittered, and a 401 refreshes the session and connects again instead of
+    /// stopping the stream for good. A 404 — a server without the stream — leaves polling in charge.
     private func runControlPlane() async {
-        guard let baseURL else { return }
+        guard let baseURL, let api else { return }
         let stream = URLSessionControlStream(baseURL: baseURL,
                                              token: { [tokenStore] in tokenStore.token(for: baseURL) })
-        var policy = ReconnectPolicy()
-        while !Task.isCancelled {
-            do {
-                for try await item in stream.events() {
-                    policy.noteHealthy()
-                    switch item {
-                    case .connected:
-                        controlPlaneLive = true
-                        await loadSessions()   // rebuild from snapshot, then follow
-                        await refreshFocusedSessionDetailIfNeeded()
-                        // No replay on this stream, so reconcile the lists that only push can
-                        // keep fresh (they have no poll at all) alongside the session snapshot.
-                        scheduleLibraryRefresh(.agents)
-                        scheduleLibraryRefresh(.tasks)
-                        nudgeCreatedTasks()
-                        // No event carries a watch either: re-read the list the stream can't replay.
-                        if let watches { Task { await watches.load() } }
-                        // `wiki.changed` has no replay either, and nothing depends on it arriving:
-                        // re-read what the Wiki has loaded, the drawer's number with it.
-                        if let wiki { Task { await wiki.reloadLoaded() } }
-                        if let wikiChat { Task { await wikiChat.reloadLoaded() } }
-                        #if os(iOS)
-                        // Nor has `folder.changed`: re-read the folders the Move panel offers.
-                        Task { await loadSessionFolders() }
-                        #endif
-                        // Runners has neither push nor poll: a list that failed while offline
-                        // would otherwise stay on its error until someone pulls to refresh.
-                        if let runners, runners.loadState.lastLoadFailed {
-                            Task { await runners.load() }
-                        }
-                    case .event(let ev):
-                        apply(ev)
-                    }
-                }
-                // Clean close — reconnect after a beat.
-                controlPlaneLive = false
-                switch policy.next(after: .ended) {
-                case .stop: return
-                case .reconnect(let ms): if ms > 0 { await sleepMs(ms) }
-                }
-            } catch is CancellationError {
-                controlPlaneLive = false
-                return
-            } catch APIError.http(let status, _) where status == 404 || status == 401 {
-                // 404: an older server without /api/events — polling stays in charge for this
-                // sign-in. 401: the token died; the polling path handles the logout.
-                controlPlaneLive = false
-                return
-            } catch {
-                controlPlaneLive = false
-                switch policy.next(after: .failed) {
-                case .stop: return
-                case .reconnect(let ms): if ms > 0 { await sleepMs(ms) }
-                }
+        let loop = ControlPlaneLoop(stream: stream,
+                                    refreshSession: { await api.refreshSession() },
+                                    sleep: { [weak self] ms in await self?.sleepMs(ms) })
+        await loop.run { [weak self] signal in
+            guard let self else { return }
+            switch signal {
+            case .live:
+                self.controlPlaneLive = true
+                await self.reconcileOnConnect()
+            case .event(let ev):
+                self.apply(ev)
+            case .down:
+                self.controlPlaneLive = false
             }
         }
         controlPlaneLive = false
+    }
+
+    /// What a (re)connect reads (§4 R4). The stream has no replay, so whatever it missed while down
+    /// has to be read again — but only the Open list, by its conditional read, and what is on screen.
+    /// A connection used to re-read every library the app holds, 12–20 requests, and a proxy that
+    /// accepted and dropped the stream every second turned that into thousands a minute.
+    private func reconcileOnConnect() async {
+        await loadSessions()   // rebuild from snapshot, then follow
+        await refreshFocusedSessionDetailIfNeeded()
+        // The tasks the console on screen draws in its card.
+        nudgeCreatedTasks()
+        // The sidebar's workspaces and their machines; the whole library only when it never loaded
+        // (an offline launch, whose landing this reload then resolves).
+        if let agents, agents.loadState.hasLoaded, !agents.loadState.lastLoadFailed {
+            Task { await agents.reloadWorkspaces() }
+        } else {
+            scheduleLibraryRefresh(.agents)
+        }
+        // The drawer's task lists, and the Tasks page only while it is the one on screen
+        // (`TasksModel.refresh`).
+        scheduleLibraryRefresh(.tasks)
+        // `wiki.changed` has no replay either: re-read what the Wiki shows, while it is on screen.
+        if selectedSection == .wiki {
+            if let wiki { Task { await wiki.reloadLoaded() } }
+            if let wikiChat { Task { await wikiChat.reloadLoaded() } }
+        }
+        #if os(iOS)
+        // Nor has `folder.changed`: a workspace's list draws its folders, and the Move panel offers them.
+        Task { await loadSessionFolders() }
+        #endif
+        // Runners has neither push nor poll: a list that failed while offline
+        // would otherwise stay on its error until someone pulls to refresh.
+        if let runners, runners.loadState.lastLoadFailed {
+            Task { await runners.load() }
+        }
+        // Each page poll on screen reads once, for whatever the gap kept from it (`ViewPoll`).
+        lifecycleHints &+= 1
+        projectHints &+= 1
     }
 
     /// Route one control event to the cheapest thing that makes it visible.
@@ -1131,6 +1236,11 @@ final class AppModel {
     /// field-level upsert `ControlSessionSummary` was shaped for (decision Q2). Anything else still
     /// nudges the snapshot: either a row is leaving Open, or the field that changed isn't on the
     /// event. The 4s tick in `startPolling` remains the floor for those slim-payload gaps.
+    ///
+    /// Which list an event is about is OrbitKit's `ControlEventRoute` (docs/list-freshness-design.md
+    /// §4 R5): only the routes that say so read the Open list, and a type this client does not know
+    /// reads nothing — `watch.changed`, `project.criteria_decisions.changed` and the Mac's
+    /// `folder.changed` used to fall through to a whole Open-list read.
     private func apply(_ ev: ControlEvent) {
         switch ev.type {
         // A watch's target may have moved with this row, and no event names watches: refetch soon.
@@ -1153,14 +1263,14 @@ final class AppModel {
         // count, so a loaded index refetches shortly after either.
         switch ev.type {
         case .taskChanged, .taskListChanged, .approvalRequested, .approvalResolved:
-            projects?.nudge()
+            nudgeProjects()
         default:
             break
         }
-        switch ev.type {
+        switch ControlEventRoute.of(ev) {
         // A task event carries the changed row ids. Fold those exact rows into the loaded page;
         // only an explicit coarse invalidation (or an older/malformed payload) needs a snapshot.
-        case .taskChanged:
+        case .tasks:
             // The focused session may have just created the task, or one its card draws moved.
             nudgeCreatedTasks()
             guard let changed = ev.payload(ControlTaskChanged.self),
@@ -1179,41 +1289,54 @@ final class AppModel {
             scheduleTaskRefresh(ids)
         // List create/rename/delete is deliberately coarse and rare. It can invalidate the
         // selected scope as well as navigation, so reconcile those surfaces together once.
-        case .taskListChanged:
+        case .taskLists:
             scheduleLibraryRefresh(.tasks)
         // Workspace runner/enabled changes alter the server's Ready predicate for every assigned
         // task. Agent edits are low-frequency and do not carry that affected set, so reconcile the
         // task page once as well as the agent/session surfaces. A provider-default-only nudge from
         // ordinary session creation explicitly opts out; older servers omit the flag and retain
         // the conservative refresh behavior.
-        case .agentChanged:
+        case .agents:
             scheduleLibraryRefresh(.agents)
             if ev.payload(ControlAgentChanged.self)?.affectsTaskRows != false {
                 scheduleLibraryRefresh(.tasks)
                 scheduleControlRefresh()
             }
         // A project changed — including its title or progress — so refresh its summaries.
-        case .projectChanged:
-            projects?.nudge()
+        case .projects:
+            nudgeProjects()
+        // A loosening criteria edit was held for the owner, or the owner decided one. The event names
+        // the project: its conversations' decision cards are read again, and its summary with them.
+        // It moves no session row.
+        case .projectDecisions(let projectID):
+            consoleRegistry?.criteriaDecisionsChanged(projectID: projectID)
+            nudgeProjects()
+        // The server named a watch: made, edited, paused, resumed, stopped, matched, expired, ended,
+        // or a delivery of it delivered or dead-lettered (docs/watch-contract.md §8.1). The watch
+        // list is what moved, and the only thing read.
+        case .watches:
+            watches?.changed()
         // A wiki space changed — a proposal filed, ops decided, a binding moved. The event names the
         // space and nothing else, so the loaded Wiki re-reads what it shows (the drawer's number
         // included). It moves no session row: falling through to the snapshot below would be the web's
         // `groupsFor` default of `['sessions']`, a list refetch for an event about something else.
-        case .wikiChanged:
+        case .wiki:
             wiki?.nudge()
             // A card made, replaced or pressed, or its rewrite moving (contract `chat.realtime`).
             wikiChat?.nudge()
-        #if os(iOS)
         // A folder was created, renamed or deleted, here or on another device: re-read the library
         // the Move panel lists (docs/session-folders-move-design.md §5.6). The event names the folder
         // and nothing else, and a session moved between folders is a `session.updated` of its own,
-        // so this refetches no list — `default` below refetched Open and left the folders stale.
-        case .folderChanged:
+        // so this refetches no list. The Mac draws no folders, so there it reads nothing at all.
+        case .folders:
+            #if os(iOS)
             Task { await loadSessionFolders() }
-        #endif
+            #else
+            break
+            #endif
         // AgentsModel.load() fetches the provider catalog with the list; provider edits do not
         // change task-row membership or live overlays.
-        case .providerChanged:
+        case .providers:
             scheduleLibraryRefresh(.agents)
             scheduleControlRefresh()
             // A shared pool's people are told of every change to it — a key going in, a rule — so a
@@ -1225,13 +1348,18 @@ final class AppModel {
             if agents?.ownKeysState.hasLoaded == true {
                 Task { await agents?.loadOwnKeys() }
             }
-        case .sessionCreated, .sessionUpdated:
+        case .sessionRow:
             if let summary = ev.payload(ControlSessionSummary.self) {
                 // Progress comes from the sidebar read rather than the session summary. Include
                 // a former member too, so removing its relation refreshes that project at once.
                 if summary.projectMembership.flatMap({ $0 }) != nil
                     || sessions.contains(where: { $0.id == summary.id && $0.projectMembership != nil }) {
-                    projects?.nudge()
+                    nudgeProjects()
+                }
+                // A row the Completed / Trash list on screen holds moved — renamed, or brought back to
+                // Open — so that list reads again (`lifecycleHints`).
+                if agents?.agentSessions.contains(where: { $0.id == summary.id }) == true {
+                    lifecycleHints &+= 1
                 }
                 // Session state is the authority for a task row's running/queued overlays. The
                 // summary names that task on current servers, so starting, claiming and settling a
@@ -1243,7 +1371,7 @@ final class AppModel {
                 if mergeSessionSummary(summary) { return }
             }
             scheduleControlRefresh()
-        case .approvalRequested, .approvalResolved:
+        case .approvalRow:
             if let approval = ev.payload(ControlApproval.self),
                mergePendingApprovals(sessionID: ev.sessionId, pending: approval.pendingApprovals,
                                      waitingKind: approval.waitingKind) {
@@ -1255,16 +1383,28 @@ final class AppModel {
         // attributes to a hand filing is marked first, so the snapshot it brings back doesn't read
         // the row's absence as a run finishing (`SessionDelta.announcesFinish`). Without this, a
         // session completed in a browser announced itself as finished on every other client.
-        case .sessionEnded:
+        case .sessionLeft:
             if !SessionDelta.announcesFinish(endReason: ev.payload(ControlSessionEnded.self)?.endReason) {
                 filedSessions.insert(ev.sessionId)
             }
+            // It joins Completed or Trash: a list of those on screen reads again.
+            lifecycleHints &+= 1
             scheduleControlRefresh()
-        // session.error / background.task (fields the payload doesn't carry), tag.changed, and
-        // anything a newer server adds.
-        default:
+        // session.error / background.task (fields the payload doesn't carry), tag.changed (a tag's
+        // name and color are drawn from the rows).
+        case .openList:
             scheduleControlRefresh()
+        // The reserved `notification` channel, and any type this client does not know: nothing to read.
+        case .nothing:
+            break
         }
+    }
+
+    /// A project's summaries may have moved: the projects list refetches shortly (`ProjectsModel.nudge`),
+    /// and every page polling a project reads on its hint (`projectHints`).
+    private func nudgeProjects() {
+        projects?.nudge()
+        projectHints &+= 1
     }
 
     /// A row saying "Under review" stops saying it when its review's window runs out, which nothing on
@@ -2867,6 +3007,11 @@ final class AppModel {
             projectSessionsIntegrationReadFailed = true
         }
     }
+
+    /// Whether the page's landing card, or its merge card, has a job running — a progress no event
+    /// reports, so the page reads that card every 4 s while it shows one (`ViewPoll`'s exception).
+    var projectSessionsLandingRunning: Bool { ProjectPage.landingRunning(projectSessionsIntegration) }
+    var projectSessionsMergeRunning: Bool { ProjectPage.mergeRunning(projectSessionsMerge?.current) }
 
     /// Retry, on a landing job the server judged timed out, from the page's job list
     /// (`ProjectLandingJobsSheet`): its silent generation ends and the next one is queued. Throws

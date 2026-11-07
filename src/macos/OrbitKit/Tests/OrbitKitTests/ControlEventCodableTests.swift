@@ -241,6 +241,19 @@ final class ControlEventCodableTests: XCTestCase {
         }
     }
 
+    /// `watch.changed` and `project.criteria_decisions.changed` are the server's (realtime.ts); a client
+    /// that does not know them decodes `.unknown`, which this one used to answer with an Open-list read.
+    func testTheWatchAndCriteriaDecisionTypesAreKnown() throws {
+        for raw in ["watch.changed", "project.criteria_decisions.changed"] {
+            XCTAssertEqual(ControlEventType(rawValue: raw)?.rawValue, raw)
+            let ev = try decode("""
+            {"type":"\(raw)","sessionId":"","agentId":null,"ts":"t","data":{"id":"x1"}}
+            """)
+            XCTAssertNotEqual(ev.type, .unknown, raw)
+            XCTAssertEqual(ev.type.rawValue, raw)
+        }
+    }
+
     func testSSEDecodingDiscardsThePingKeepalive() {
         // The server's ~20s keepalive is a data frame `{"type":"ping"}` (Nest can't emit `:`
         // comments); it has no sessionId, so the decoder drops it — its bytes only feed the

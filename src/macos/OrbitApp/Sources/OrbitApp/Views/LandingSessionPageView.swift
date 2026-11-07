@@ -537,7 +537,9 @@ private struct LandingLiveCheckView: View {
         }
         .task {
             while !Task.isCancelled {
-                if let api, let page = try? await api.landingLog(sessionID: sessionID, selectors) {
+                // The live tail of a running step: read every 4 s while the app can be seen
+                // (docs/list-freshness-design.md §4 R3), as no event carries it.
+                if app.appVisible, let api, let page = try? await api.landingLog(sessionID: sessionID, selectors) {
                     text = tail(page.entries.map(\.text).joined())
                 }
                 do { try await Task.sleep(nanoseconds: 4_000_000_000) } catch { return }
