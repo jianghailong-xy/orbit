@@ -199,20 +199,20 @@ export class RunnerSessionsController {
 
   /**
    * `orbit session import`'s door: create a session by importing a Claude transcript that lives
-   * on THIS runner's disk. Headless-only by design — an agent already runs inside a workspace and
-   * has its own transcript continuity, so the only caller is a person's shell (or a bridge on a
-   * minted credential), which is also the only caller the machine credential's extra verb should
-   * reach.
+   * on THIS runner's disk. A person's shell asks with the machine's credential, a bridge with a
+   * minted one, and an agent asked to bring a terminal's conversation into Orbit as its session —
+   * through the orchestration gate, as create from a session does.
    *
-   * The machine's runner credential may import into any workspace it can resolve; a service token
-   * needs the session:create scope, and — that scope is only mintable pinned — may import into
-   * exactly its pinned workspace, resolved from the transcript's cwd or given explicitly.
+   * The machine's runner credential, and a session, may import into any workspace on this machine;
+   * a service token needs the session:create scope, and — that scope is only mintable pinned — may
+   * import into exactly its pinned workspace, resolved from the transcript's cwd or given explicitly.
    */
   @Post('sessions/import')
   async importSession(
     @CurrentRunner() runner: Runner,
     @CurrentServiceGrant() grant: ServiceTokenGrant | undefined,
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     // Inline type, as with create: `workspaceId` is exactly what a model copies out of an Orbit URL.
     @Body(PublicIdPipe.forFields('workspaceId'))
     dto: {
@@ -224,9 +224,8 @@ export class RunnerSessionsController {
     },
   ) {
     if (!isHeadlessCaller(callingSessionId)) {
-      throw new ForbiddenException(
-        'session import is a headless operation; run `orbit session import` from a shell',
-      );
+      this.assertNoServiceToken(grant);
+      await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     }
     let workspaceId = dto.workspaceId;
     if (grant) {

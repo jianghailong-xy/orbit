@@ -85,12 +85,20 @@ private func countNames(_ names: [String]) -> String {
 /// ends (`splitRecordedNote`), so nothing here decides what is shown as theirs. Delivery can append
 /// several blocks to one message, so each is named by its opening tag and skipped past its closing
 /// one; an opening that is not one of Orbit's blocks is still named, generically.
+///
+/// A wiki chat's blocks are named off their opening tag's attributes, as the web names them
+/// (`WikiChatLogic.noteLabel`, wiki contract `chat.notes`): "Wiki selection · 3.1 §3 · 1 sentence · 2
+/// sources". One whose tag lacks what its line needs is named generically, as any block this does not know.
 public func describeNote(_ note: String) -> String {
     var names: [String] = []
     var rest = note.trimmingCharacters(in: .whitespacesAndNewlines)
     while !rest.isEmpty {
         let tag = openingTag(rest)
-        names.append(blockName(tag))
+        if let tag, WikiChatLogic.noteTags.values.contains(tag) {
+            names.append(WikiChatLogic.parseNoteTag(rest).map(WikiChatLogic.noteLabel) ?? "context")
+        } else {
+            names.append(blockName(tag))
+        }
         guard let tag, let close = rest.range(of: "\n</\(tag)>") else { break }
         rest = rest[close.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
     }

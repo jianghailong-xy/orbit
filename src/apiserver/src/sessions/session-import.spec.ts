@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { SessionsService } from './sessions.service';
+import { importForkSessionId } from './import-fork';
 
 /**
  * `SessionsService.importSession` — the control-plane half of `orbit session import`.
@@ -21,9 +22,25 @@ const WORKSPACE_B = '00000000-0000-7000-8000-0000000000d2';
 const WORKSPACE_HOME = '00000000-0000-7000-8000-0000000000d3';
 const CLAUDE_ID = '4e453ab7-f37c-494d-8017-bb4e9beffeef';
 
-function makeService(opts: { claimed?: { id: string; title: string } } = {}) {
+type TestWorkspace = {
+  id: string;
+  name: string;
+  workDir: string;
+  runnerId: string | null;
+  enableWorktree: boolean;
+  enabled: boolean;
+};
+
+function makeService(
+  opts: {
+    claimed?: { id: string; title: string };
+    /** Answers the already-imported check only for these Claude ids, when given. */
+    claimedFor?: string[];
+    extraWorkspaces?: TestWorkspace[];
+  } = {},
+) {
   const creates: Array<Record<string, unknown>> = [];
-  const workspaces = [
+  const workspaces: TestWorkspace[] = [
     {
       id: WORKSPACE_A,
       name: 'outer',
@@ -49,12 +66,17 @@ function makeService(opts: { claimed?: { id: string; title: string } } = {}) {
       enableWorktree: false,
       enabled: true,
     },
+    ...(opts.extraWorkspaces ?? []),
   ];
   const tx = {
     // The import-claim serializer's advisory lock — a template tag on the real client.
     $executeRaw: async () => undefined,
     session: {
-      findFirst: async () => opts.claimed ?? null,
+      findFirst: async ({ where }: { where: { runtimeSessionId?: { in?: string[] } } }) => {
+        if (!opts.claimedFor) return opts.claimed ?? null;
+        const asked = where.runtimeSessionId?.in ?? [];
+        return asked.some((id) => opts.claimedFor!.includes(id)) ? opts.claimed ?? null : null;
+      },
       create: async ({ data }: { data: Record<string, unknown> }) => {
         creates.push(data);
         return {
@@ -318,4 +340,111 @@ test('a workspace bound to no runner is refused at create', async () => {
     (err: unknown) =>
       err instanceof BadRequestException && /runner/.test(String((err as Error).message)),
   );
+});
+
+// ── The machine the transcript is on ─────────────────────────────────────────────────────────────
+// On 2026-11-06 `orbit session import` on the production host matched the transcript's cwd,
+// /root/orbit, against the account's workspaces on every machine. Four had that path; the one the
+// rows happened to come back with first was on another machine, and the session ran on the
+// production host under that workspace's settings.
+
+const OTHER_MACHINE = '00000000-0000-7000-8000-0000000000e1';
+const TWIN = '00000000-0000-7000-8000-0000000000e2';
+
+test('from a runner, only that machine\'s workspaces hold the cwd', async () => {
+  // Tighter than anything on runner-1, so it would win if it were a candidate at all.
+  const { service, creates } = makeService({
+    extraWorkspaces: [
+      { id: OTHER_MACHINE, name: 'elsewhere', workDir: '/srv/work/project/src', runnerId: 'runner-2', enableWorktree: false, enabled: true },
+    ],
+  });
+  await service.importSession(
+    OWNER,
+    { claudeSessionId: CLAUDE_ID, sourceCwd: '/srv/work/project/src' },
+    { assignedRunnerId: 'runner-1' },
+  );
+  assert.equal(creates.length, 1);
+  assert.equal(creates[0].workspaceId, WORKSPACE_B, 'the same path on runner-2 is another directory');
+  assert.equal(creates[0].assignedRunnerId, 'runner-1');
+});
+
+test('two workspaces on the machine that hold the cwd equally are refused, both named', async () => {
+  const { service, creates } = makeService({
+    extraWorkspaces: [
+      { id: TWIN, name: 'nested-twin', workDir: '/srv/work/project', runnerId: 'runner-1', enableWorktree: true, enabled: true },
+    ],
+  });
+  await assert.rejects(
+    service.importSession(
+      OWNER,
+      { claudeSessionId: CLAUDE_ID, sourceCwd: '/srv/work/project' },
+      { assignedRunnerId: 'runner-1' },
+    ),
+    (err: unknown) => {
+      const message = String((err as Error).message);
+      return err instanceof BadRequestException
+        && message.includes('nested (') && message.includes('nested-twin (')
+        && /pass --workspace/.test(message);
+    },
+  );
+  assert.deepEqual(creates, [], 'never the order the rows come back in');
+});
+
+test('a disabled twin does not make the pick ambiguous', async () => {
+  const { service, creates } = makeService({
+    extraWorkspaces: [
+      { id: TWIN, name: 'nested-twin', workDir: '/srv/work/project', runnerId: 'runner-1', enableWorktree: true, enabled: false },
+    ],
+  });
+  await service.importSession(
+    OWNER,
+    { claudeSessionId: CLAUDE_ID, sourceCwd: '/srv/work/project' },
+    { assignedRunnerId: 'runner-1' },
+  );
+  assert.equal(creates[0].workspaceId, WORKSPACE_B);
+});
+
+test('a workspace named outright that is on another machine is refused', async () => {
+  const { service, creates } = makeService({
+    extraWorkspaces: [
+      { id: OTHER_MACHINE, name: 'elsewhere', workDir: '/srv/work', runnerId: 'runner-2', enableWorktree: false, enabled: true },
+    ],
+  });
+  await assert.rejects(
+    service.importSession(
+      OWNER,
+      { claudeSessionId: CLAUDE_ID, workspaceId: OTHER_MACHINE, sourceCwd: '/srv/work' },
+      { assignedRunnerId: 'runner-1' },
+    ),
+    (err: unknown) =>
+      err instanceof BadRequestException && /elsewhere is on another machine/.test(String((err as Error).message)),
+  );
+  assert.deepEqual(creates, []);
+});
+
+test('a transcript already imported as a fork is refused like one imported in place', async () => {
+  const claimed = { id: 'session-9', title: 'the forked import' };
+  const { service, creates } = makeService({ claimed, claimedFor: [importForkSessionId(CLAUDE_ID)] });
+  await assert.rejects(
+    service.importSession(OWNER, { claudeSessionId: CLAUDE_ID, workspaceId: WORKSPACE_A }),
+    (err: unknown) => err instanceof ConflictException && String(err.message).includes('session-9'),
+  );
+  assert.deepEqual(creates, []);
+});
+
+test('the answer names the workspace the import landed in', async () => {
+  const { service } = makeService();
+  const session = await service.importSession(OWNER, {
+    claudeSessionId: CLAUDE_ID,
+    sourceCwd: '/srv/work/project/src',
+  });
+  assert.deepEqual(session.workspace, { id: WORKSPACE_B, name: 'nested' });
+});
+
+// The runner derives the same id (transcript_import.go importForkSessionID) and pins the same
+// vectors, computed with Python's uuid.uuid5, the reference both are checked against.
+test('the fork id is the version-5 UUID the runner derives', () => {
+  assert.equal(importForkSessionId('0d8c31b9-db03-4aa7-8e3d-11fb96358552'), '65e78295-ae77-576c-86dc-427eaeceb83e');
+  assert.equal(importForkSessionId(CLAUDE_ID), '59373f01-c835-536d-9fba-7095cf012000');
+  assert.equal(importForkSessionId(CLAUDE_ID.toUpperCase()), '59373f01-c835-536d-9fba-7095cf012000');
 });

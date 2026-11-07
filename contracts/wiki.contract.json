@@ -2144,7 +2144,7 @@
         "draft": "Just drafted, nothing pressed: Draft · <label>.",
         "replaced": "A newer card of the chat replaced it.",
         "changed": "An entry it changes moved off the revision it was drafted against (baseRevision), or left active, or a section it rewrites was written since it was drafted: Changed since this draft. Redo sends copy.card.redoMessage as the owner's next message, and the agent drafts again.",
-        "applied": "Pressed Apply or Edit: Applied · Confirmed by you. Its rewrite stands under it (results).",
+        "applied": "Pressed Apply or Edit: Applied · Confirmed by you. Its rewrite stands under it (results). A card holding a challenge whose decision in the changeset its press recorded is still pending reads copy.card.appliedInReview instead, with copy.card.appliedInReviewNote linked to that entry's Review item (wikiChatAppliedInReview): its press raised the flag, which the owner answers in Review (re-confirms, amends or retires the entry), so nothing of it is confirmed yet.",
         "discarded": "Pressed Discard.",
         "not_applied": "Its chat ended, or went to Trash, with it unpressed.",
         "undone": "Applied, then undone (presses.undo)."
@@ -2260,6 +2260,8 @@
         "web": "Based on web content",
         "webNote": "Read before you apply.",
         "applied": "Applied · Confirmed by you",
+        "appliedInReview": "Applied · In Review",
+        "appliedInReviewNote": "Re-confirm, amend or retire the entry in Review.",
         "discarded": "Discarded",
         "notApplied": "Not applied",
         "undone": "Undone",

@@ -199,6 +199,13 @@ pg spec 用执行计划钉住了这一点。它声明为 IMMUTABLE（里面的 `
 3. 任一词：命中任一可用词就算，命中的词多的在前，同样多的按 `word_similarity` 与整句的相似度。可用词是不少于 `CONTENT_MIN_CHARS`（3）个字符的词，或正好两个字的 CJK 词；`to`、`5m` 不算。
    可用词不足 2 个的查询不问这一轮。这一轮只有 wiki 有，session 搜索不变。
 
+路径腿找到哪些条目，由 `searchMatches.path` 的三种前缀关系决定。顺序和权重在 `wiki-retrieval.ts` 的 `pathLeg`：
+
+- **分类。** 两边都去掉结尾的 `/` 再比。精确匹配排在所有目录前缀匹配之前：条目锚的或触发的就是被问的文件；不带目录的文件名比末段。前缀类依次是：条目路径在被问目录下；条目路径以被问的字符串开头，不以 `/` 为界；被问路径在条目的目录下；不以 `/` 为界的上级。
+- **轮流。** 同一类里按被问路径轮流取：先取每个路径的第 1 条，再取各自的第 2 条。同一轮里专指度高的在前。
+- **专指度（`pathSpecificity`）。** 这是一个类 IDF，取值 0 到 1。先数这次匹配覆盖的区域里有多少条目：精确时是同一路径，前缀类是被问目录下或条目的目录下。再乘上条目自己的路径数，按带路径的条目总数取对数归一。
+- **融合（`pathWeight`）。** 路径腿每条的 RRF 项乘一个权重：精确 0.75 到 1，前缀类 0.5 到 0.75。只有一条条目锚着的文件，仍和关键词第一名打平。不带路径的查询只有一条腿，顺序和分数都不变。
+
 ---
 
 ## 2. Space
@@ -3158,7 +3165,7 @@ C6（草稿与按压）、C8 与 C9（web）、C11（iOS）、C12（plan 卡）�
 
 | 状态 | 显示 | 条件 | 动作 |
 | --- | --- | --- | --- |
-| `applied` | `Applied · Confirmed by you` | 按过 Apply 或 Edit | Undo（可撤时）· Open entry（entry 卡）；重写的动作见 28.8 |
+| `applied` | `Applied · Confirmed by you`；卡里有 challenge、它在按压所记变更集里的决定还是 pending 时写 `Applied · In Review` · `Re-confirm, amend or retire the entry in Review.`，链到那条条目的 Review（`wikiChatAppliedInReview`：按下立起的标记要你在 Review 里答，没有确认任何东西） | 按过 Apply 或 Edit | Undo（可撤时）· Open entry（entry 卡）；重写的动作见 28.8 |
 | `undone` | `Undone` | 按过 Apply，又按了 Undo | — |
 | `discarded` | `Discarded` | 按过 Discard | — |
 | `replaced` | `Replaced` · `A newer draft took over.` | 这场聊天里有新卡替换了它 | — |

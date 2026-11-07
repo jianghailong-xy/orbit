@@ -30,6 +30,7 @@ import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
 import { deriveSessionCapabilities, type SessionCapabilityFields } from '../sessions/session-state';
 import { readWorktreeArtifactRequest, worktreeFileAnswerKey } from '../sessions/worktree-artifact';
+import { importForkSessionId } from '../sessions/import-fork';
 import { branchName } from '../projects/project-criterion-landing';
 import { TasksService } from '../tasks/tasks.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
@@ -9125,7 +9126,8 @@ export class RunnerApiController {
    * Settle a session's pending transcript import — the runner's import step, which is the whole
    * of the claim that carries it and spawns no engine after it. `ok` clears the
    * `importSourceCwd` marker (CAS, so a retried ok after a lost reply is a no-op), may carry the
-   * real title read out of the transcript, and parks the session: AWAITING_INPUT, or PENDING when
+   * real title read out of the transcript, moves the session to the fork the runner placed when it
+   * says it forked (sessions/import-fork.ts), and parks the session: AWAITING_INPUT, or PENDING when
    * a message is already queued, so the claim it was holding is released and the engine starts
    * with the first message instead. A failure moves the session to Trash (FAILED + deletedAt)
    * with the reason, and the runner reports that run end via /finalize as usual, whose LIVE
@@ -9136,7 +9138,7 @@ export class RunnerApiController {
   async importResult(
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
-    @Body() body: { leaseOwner?: string; ok?: boolean; error?: string; title?: string },
+    @Body() body: { leaseOwner?: string; ok?: boolean; error?: string; title?: string; forked?: boolean },
   ) {
     await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     // See turnComplete: the title is read out of the transcript file being imported, so it is
@@ -9165,6 +9167,15 @@ export class RunnerApiController {
         const pendingExecutable = await tx.conversationTurn.count({
           where: { sessionId, kind: { in: ['message', 'shell'] }, status: 'PENDING' },
         });
+        // A fork: resuming the transcript where it lay would have shared the file with the
+        // conversation it came from, so the runner placed a copy under importForkSessionId of
+        // this session's Claude id, and the session resumes that from now on. Derived, never
+        // taken from the request: the fork is the one id a runner may move a session to.
+        const resumed = dto.forked === true
+          ? (await tx.session.findUnique({ where: { id: sessionId }, select: { runtimeSessionId: true } }))
+            ?.runtimeSessionId ?? null
+          : null;
+        const fork = resumed ? importForkSessionId(resumed) : undefined;
         // CAS on the pending marker: a replayed ok (the runner crashed between this POST and its
         // reply) matches nothing and reports applied:false instead of applying twice. Same for a
         // row some other writer already finalized — the status guard keeps this from resurrecting
@@ -9175,11 +9186,20 @@ export class RunnerApiController {
             importSourceCwd: null,
             // The runner read a real title out of the transcript; it wins over the placeholder.
             ...(dto.title ? { title: dto.title } : {}),
+            ...(fork ? { runtimeSessionId: fork } : {}),
             status: pendingExecutable > 0 ? RunStatus.PENDING : RunStatus.AWAITING_INPUT,
           },
         });
         // Applied is what clients have to reconcile — the row's status moved, not just its title.
-        return { applied: res.count > 0, failed: false, announced: res.count > 0 };
+        // A fork is answered with the id the session resumes, so the runner keeps its copy only
+        // when it is the one read: the fork once written, or on a replay the id the first attempt
+        // wrote. A control plane that predates forks answers without it.
+        return {
+          applied: res.count > 0,
+          failed: false,
+          announced: res.count > 0,
+          ...(dto.forked === true ? { runtimeSessionId: res.count > 0 && fork ? fork : resumed } : {}),
+        };
       }
       // The transcript could not be read, verified or replayed. Unconditional: an import that
       // failed has no other state to write, and no second attempt is expected to succeed.

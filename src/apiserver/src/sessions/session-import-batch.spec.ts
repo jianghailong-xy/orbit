@@ -37,8 +37,9 @@ function makeService(opts: { claimed?: Set<string>; imported?: string[] } = {}) 
   const tx = {
     $executeRaw: async () => undefined,
     session: {
-      findFirst: async ({ where }: { where: { runtimeSessionId: string } }) =>
-        opts.claimed?.has(where.runtimeSessionId)
+      // Asked with the transcript's own id and the fork's (import-fork.ts): either one claims it.
+      findFirst: async ({ where }: { where: { runtimeSessionId: { in: string[] } } }) =>
+        where.runtimeSessionId.in.some((id) => opts.claimed?.has(id))
           ? { id: 'session-already', title: 'imported last week' }
           : null,
       create: async ({ data }: { data: Record<string, unknown> }) => {

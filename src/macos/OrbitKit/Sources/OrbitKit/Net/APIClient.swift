@@ -1365,6 +1365,41 @@ public final class APIClient: @unchecked Sendable {
         try await post("wiki/plan-proposals/\(id)/decide", body: req)
     }
 
+    // MARK: the wiki chat (contract `chat`) — the user door, JWT only
+
+    /// `GET /wiki/spaces/:id/chats`: the space's chats newest first, the round button's three counts, and where a
+    /// new chat runs — the remembered workspace as it stands and the ones it could be.
+    public func wikiChats(spaceID: String) async throws -> WikiChatList {
+        try await get("wiki/spaces/\(spaceID)/chats")
+    }
+    /// `POST /wiki/spaces/:id/chats`: a chat made with the owner's first words, word for word, its first turn filed
+    /// under the client's UUID; the page and the selection ride beside the words (`wikiContext`).
+    public func createWikiChat(spaceID: String, _ req: WikiChatCreateRequest) async throws -> WikiChatCreateAnswer {
+        try await post("wiki/spaces/\(spaceID)/chats", body: req)
+    }
+    /// `GET /wiki/chats/:id/drafts`: every card of a chat (its session id), oldest first.
+    public func wikiChatDrafts(sessionID: String) async throws -> WikiChatDrafts {
+        try await get("wiki/chats/\(sessionID)/drafts")
+    }
+    /// `GET /wiki/chat-drafts/:id`: one card, its state derived on the read.
+    public func wikiChatDraft(_ id: String) async throws -> WikiChatDraftView {
+        try await get("wiki/chat-drafts/\(id)")
+    }
+    /// `POST /wiki/chat-drafts/:id/<press>`: Apply, Discard, Undo, Try again (retry) or seen — the owner's presses,
+    /// which only the interactive credential makes. Edit carries a body: `editWikiChatDraft`.
+    public func pressWikiChatDraft(_ id: String, _ press: WikiChatPress) async throws -> WikiChatPressAnswer {
+        try await postEmpty("wiki/chat-drafts/\(id)/\(press.rawValue)")
+    }
+    /// `POST /wiki/chat-drafts/:id/edit`: the owner's version laid over the card's ops, applied as Review's Edit.
+    public func editWikiChatDraft(_ id: String, _ req: WikiChatEditRequest) async throws -> WikiChatPressAnswer {
+        try await post("wiki/chat-drafts/\(id)/edit", body: req)
+    }
+    /// `GET /wiki/spaces/:id/docs/:slug/sections/:key/versions`: the versions a section kept, newest first, each
+    /// compared sentence by sentence with the text that replaced it — what See changes draws.
+    public func wikiDocSectionVersions(spaceID: String, slug: String, key: String) async throws -> WikiDocSectionVersions {
+        try await get("wiki/spaces/\(spaceID)/docs/\(slug)/sections/\(key)/versions")
+    }
+
     /// Control-plane–configured model providers (GET /api/providers): enabled only, de-sensitized
     /// (no key/baseUrl). Merged into the composer and agent Runtime picker alongside built-ins.
     public func providers() async throws -> [ConfiguredProvider] { try await get("providers") }

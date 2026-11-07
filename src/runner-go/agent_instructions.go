@@ -343,11 +343,9 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 			rules = append(rules, "Bash("+command+" session "+action+" *)")
 		}
 		if allowOrchestration {
-			// The session family as advertised, minus `import`: it is the one session verb that
-			// refuses to run in a session at all (cliSessionImport), and the capability document
-			// withholds it from a running agent for the same reason (HeadlessOnly), so there is no
-			// reader here to pre-approve it for.
-			for _, action := range []string{"create", "list", "search", "get", "await", "send", "reply", "interrupt", "merge", "end", "complete", "delete"} {
+			// The session family as advertised, `import` included: it brings a conversation on this
+			// machine's disk into Orbit as a new session, behind the same gate as create.
+			for _, action := range []string{"create", "import", "list", "search", "get", "await", "send", "reply", "interrupt", "merge", "end", "complete", "delete"} {
 				rules = append(rules, "Bash("+command+" session "+action+" *)")
 			}
 			// The agent verbs ride the same gate and have no headless form: no service-token scope
