@@ -159,7 +159,7 @@ iOS 会话详情右上角使用 `⋯` 菜单：Share… / Copy Link；Rename… 
 ### 5.5 Runner（新能力 `session-move/v1`）
 
 1. **检出认仓库**：`setupWorktree` 复用 `worktreesDir()/<sessionId>` 下的旧检出之前，先核对它属于这次任务的仓库（`--git-common-dir`）且 HEAD 是这次的分支。不符就先退役旧检出：在它自己的仓库里 `worktree remove`，分支保留；有未提交改动就整个挪到旁边保存。然后新建检出。现在只看“是不是 git 目录”，同一台机器搬到另一个仓库时，agent 会悄悄继续改旧仓库，合并也会失败。
-2. **Claude 对话搬目录**：`ensureClaudeTranscript` 在重建之前加一步：从本会话上次的执行目录（记在 `runs/<id>/meta.json`）的位置，把对话记录原样复制到新目录的位置，并改写 `cwd`（`copyTranscriptRewritingCwd` + `copyClaudeConversationDir`）。只认上次的确切目录，不去全盘搜同 id 的文件，和现有注释的立场一致。复制不成再走现有的重建。
+2. **Claude 对话搬目录**：`ensureClaudeTranscript` 在重建之前加一步：从本会话上次的执行目录（记在 `runs/<id>/meta.json`）的位置，把对话记录原样复制到新目录的位置，并改写 `cwd`（`copyTranscriptForSession` + `copyClaudeConversationDir`）。只认上次的确切目录，不去全盘搜同 id 的文件，和现有注释的立场一致。复制不成再走现有的重建。
 3. 只有声明了这个能力的 runner 才会被列为可搬入的目标。
 
 ### 5.6 客户端要跟着改的地方

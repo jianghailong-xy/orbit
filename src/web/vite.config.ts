@@ -1,5 +1,7 @@
 /// <reference types="vitest/config" />
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
@@ -11,8 +13,23 @@ const APP_VERSION = JSON.parse(
   readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8'),
 ).version as string;
 
+// React Router 7 ships a development and a production build, but its exports map has no
+// `production` condition: `.` and `./dom` both resolve to `dist/development`, so a plain Vite build
+// puts the development build in the shipped bundle. That build has `ENABLE_DEV_WARNINGS = true`,
+// which is how warnings like "Matched leaf route ... does not have an element" end up in a
+// production console, and it carries the checks behind them. Point both public entry points at the
+// production files, located through the installed package so hoisting decides where it is. The two
+// entries share their chunks, so aliasing both keeps one router — and one Router context.
+const routerProduction = (entry: string) =>
+  join(
+    dirname(createRequire(import.meta.url).resolve('react-router/package.json')),
+    'dist',
+    'production',
+    entry,
+  );
+
 // Dev proxies /api (REST + SSE) to the control plane, so the browser stays same-origin.
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react()],
   // Public origin shown in the "Add a runner" install commands. Baked in at build time
   // from PUBLIC_ORIGIN (the web image's build arg, sourced from .env); falls back to the
@@ -22,12 +39,23 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(APP_VERSION),
   },
   resolve: {
-    alias: {
-      // Consume the shared workspace package from source so Vite compiles its TS
-      // directly — avoids rollup failing to trace named exports through its
-      // compiled CJS (`__exportStar`).
-      '@orbit/shared': fileURLToPath(new URL('../shared/src/index.ts', import.meta.url)),
-    },
+    alias: [
+      {
+        // Consume the shared workspace package from source so Vite compiles its TS
+        // directly — avoids rollup failing to trace named exports through its
+        // compiled CJS (`__exportStar`).
+        find: /^@orbit\/shared$/,
+        replacement: fileURLToPath(new URL('../shared/src/index.ts', import.meta.url)),
+      },
+      // The build is the artifact that ships. The dev server and tests keep the development build,
+      // whose warnings are useful where someone can act on them.
+      ...(command === 'build'
+        ? [
+            { find: /^react-router$/, replacement: routerProduction('index.mjs') },
+            { find: /^react-router\/dom$/, replacement: routerProduction('dom-export.mjs') },
+          ]
+        : []),
+    ],
   },
   server: {
     port: 5173,
@@ -63,4 +91,4 @@ export default defineConfig({
   test: {
     testTimeout: 30_000,
   },
-});
+}));

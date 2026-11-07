@@ -224,4 +224,25 @@ describe('what the page must not take over', { timeout: 60_000 }, () => {
       expect(container.textContent, path).toContain('the console');
     }
   });
+
+  // The console's addresses are answered by a layout route whose children name no element of their
+  // own (`element={null}` in App.tsx), because the layout draws the view from the address. React
+  // Router's development build — the one the dev server and these tests run — warns about a
+  // matched leaf with no element, so the routes say it deliberately. This pins the silence; the
+  // test above pins that they still draw the console.
+  it.each([
+    `/workspaces/${WORKSPACE.id}`,
+    `/workspaces/${WORKSPACE.id}/new`,
+    `/agents/${ID}`,
+    `/sessions/${ID}`,
+    `/runners/${ID}/new`,
+    `/projects/${ID}/landings`,
+  ])('signed in, %s draws the console without a leaf-route warning', async (path) => {
+    signIn();
+    const warn = vi.spyOn(console, 'warn');
+    await visit(path);
+    const warnings = warn.mock.calls.map((args) => args.map(String).join(' '));
+    warn.mockRestore();
+    expect(warnings.filter((line) => line.includes('Matched leaf route'))).toEqual([]);
+  });
 });

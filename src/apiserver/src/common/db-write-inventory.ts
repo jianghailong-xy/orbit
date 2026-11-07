@@ -920,7 +920,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     identity: 'The lease owner plus the ok/failure branch in the request; the ok branch is additionally keyed by the importSourceCwd CAS and the RUNNING status, which is what makes a retried ok a no-op rather than a re-applied title and a re-parked session.',
     isolation: '',
     attempts: 4,
-    replay: 'The ok branch reads one thing inside the closure — whether an executable turn is already queued, which decides whether the session parks at AWAITING_INPUT or goes back to PENDING for it. That is a fresh read under the row lock, so a re-run cannot apply a stale answer. The branch matches only a row that still carries the marker and is still RUNNING, so after a committed first attempt the re-run applies nothing; the failure branch re-writes the same FAILED + deletedAt shape, which the LIVE filter already excludes.',
+    replay: 'The ok branch reads inside the closure whether an executable turn is already queued, which decides whether the session parks at AWAITING_INPUT or goes back to PENDING for it, and for a fork the Claude id the fork is derived from. Both are fresh reads under the row lock, so a re-run cannot apply a stale answer. The branch matches only a row that still carries the marker and is still RUNNING, so after a committed first attempt the re-run applies nothing; the failure branch re-writes the same FAILED + deletedAt shape, which the LIVE filter already excludes.',
     effects: 'publishSessionUpdated is outside the loop — a retried attempt publishes once, after the attempt that committed.',
     answer: 'Typed 503; the runner re-posts the import result.',
   },

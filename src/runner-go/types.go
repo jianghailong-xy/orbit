@@ -998,12 +998,14 @@ type MergeCommand struct {
 
 // ImportResultRequest settles a session's pending transcript import: ok clears the
 // importSourceCwd marker (optionally carrying the real title read out of the transcript),
-// ok=false moves the session to Trash with the reason.
+// ok=false moves the session to Trash with the reason. Forked says the transcript was placed
+// under importForkSessionID of the session's Claude id, which the session resumes from then on.
 type ImportResultRequest struct {
 	LeaseOwner string `json:"leaseOwner,omitempty"`
 	Ok         bool   `json:"ok,omitempty"`
 	Error      string `json:"error,omitempty"`
 	Title      string `json:"title,omitempty"`
+	Forked     bool   `json:"forked,omitempty"`
 }
 
 // SessionNamingRequest reports the title an engine gave its session. Replaces is the title the
@@ -1015,12 +1017,15 @@ type SessionNamingRequest struct {
 }
 
 // ImportResultResponse is the control plane's receipt: applied=false on a replayed ok (the
-// CAS matched nothing), failed=true when the session went to Trash.
+// CAS matched nothing), failed=true when the session went to Trash. RuntimeSessionID answers a
+// forked ok with the Claude session id the session resumes; a control plane that predates forks
+// leaves it empty.
 type ImportResultResponse struct {
-	Ok        bool `json:"ok"`
-	Applied   bool `json:"applied"`
-	Failed    bool `json:"failed"`
-	Announced bool `json:"announced"`
+	Ok               bool   `json:"ok"`
+	Applied          bool   `json:"applied"`
+	Failed           bool   `json:"failed"`
+	Announced        bool   `json:"announced"`
+	RuntimeSessionID string `json:"runtimeSessionId,omitempty"`
 }
 
 // ClaudeHistoryCommand mirrors @orbit/shared ClaudeHistoryCommand: one working directory to report
