@@ -72,10 +72,10 @@ export class WikiChat {
     @Optional() private readonly realtime?: RealtimeService,
   ) {}
 
-  /** Another owner's space is the plain 404 every tenancy check answers (contract `refusalRules.notFound`). */
+  /** Another owner's space is the plain 404 every tenancy check answers (contract `refusalRules.notFound`), and one in Trash. */
   private async requireSpace(ownerId: string, spaceId: string) {
     const space = await this.prisma.wikiSpace.findFirst({
-      where: { id: spaceId, ownerId },
+      where: { id: spaceId, ownerId, deletedAt: null },
       select: { id: true, repoUrlNorm: true, rootCommitSha: true, settings: true },
     });
     if (!space) throw new NotFoundException('no such wiki space');

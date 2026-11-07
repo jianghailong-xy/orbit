@@ -23,6 +23,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /projects/:id/done',
   'POST /projects/:id/pause',
   'POST /projects/:id/resume',
+  // Complete on a finished project's row (session-list-projects-design §3.6): it refuses an acting
+  // session, as pause and resume do.
+  'POST /projects/:id/sessions/complete',
   'POST /projects/:id/done-requests/:itemId/decline',
   // These answer what was put to the owner, on a door no agent has: the commitToken that decides a
   // held criteria change, the fuse that stopped a coordinator, the items escalated to the owner.
@@ -58,6 +61,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /wiki/spaces/:id/workspaces',
   'DELETE /wiki/spaces/:id/workspaces/:workspaceId',
   'DELETE /wiki/spaces/:id',
+  'POST /wiki/spaces/:id/restore',
+  'DELETE /wiki/spaces/:id/purge',
+  'GET /wiki/trash',
   'GET /wiki/changesets/:id',
   'GET /wiki/spaces/:id/plan',
   'GET /wiki/spaces/:id/plan/versions',

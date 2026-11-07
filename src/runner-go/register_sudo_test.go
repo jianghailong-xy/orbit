@@ -271,6 +271,56 @@ func TestHandOffRunsTheSystemsSudoNotOneOnPath(t *testing.T) {
 	}
 }
 
+// What main put on PATH for root's own commands stays behind: root's engine directories, and Orbit's ripgrep
+// directory in root's runner home, an older pin's as well as the current one. Where sudo keeps PATH they would
+// reach the account's command, and its register would bake them into its service's PATH. Everything else goes
+// on in its order, the account's own engine and ripgrep directories included.
+func TestSudoHandOffLeavesRootsOwnDirectoriesBehind(t *testing.T) {
+	rootHome, accountHome, system := t.TempDir(), t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(system, "sudo"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	account := &user.User{Uid: "4242", Gid: "4242", Username: "c2b", HomeDir: accountHome}
+	prevEUID, prevLookup, prevExec, prevDirs, prevCanRun := processEUID, lookupUser, execSudoHandOff, sudoSearchDirs, accountCanRun
+	t.Cleanup(func() {
+		processEUID, lookupUser, execSudoHandOff, sudoSearchDirs, accountCanRun = prevEUID, prevLookup, prevExec, prevDirs, prevCanRun
+	})
+	processEUID = func() int { return 0 }
+	lookupUser = func(name string) (*user.User, error) {
+		if name == "root" {
+			return &user.User{Uid: "0", Username: "root", HomeDir: rootHome}, nil
+		}
+		return account, nil
+	}
+	accountCanRun = func(*user.User, string) (bool, error) { return true, nil }
+	sudoSearchDirs = []string{system}
+	var handed string
+	execSudoHandOff = func([]string) error { handed = envValue(sudoHandOffEnviron(), "PATH"); return nil }
+
+	// Root under `sudo -i`, from a shell of the account's own runner whose PATH sudo kept.
+	t.Setenv("SUDO_USER", "c2b")
+	t.Setenv("HOME", rootHome)
+	t.Setenv("ORBIT_HOME", "")
+	os.Unsetenv("ORBIT_HOME")
+	accounts := []string{
+		filepath.Join(accountHome, ".local", "bin"), "/usr/bin", "/bin",
+		filepath.Join(accountHome, ".orbit", "tools", "ripgrep", managedRgVersion),
+	}
+	rootRg := filepath.Join(rootHome, ".orbit", "tools", "ripgrep")
+	path := append(engineInstallerDirs(rootHome), filepath.Join(rootRg, "14.1.1"))
+	path = append(append(path, accounts...), filepath.Join(rootRg, managedRgVersion))
+	t.Setenv("PATH", strings.Join(path, ":"))
+
+	captureServiceOutput(t, func() {
+		if !handOffUnderSudo([]string{"register", "--name", "c2b-load-2"}) {
+			t.Error("register under sudo was not handed off")
+		}
+	})
+	if want := strings.Join(accounts, ":"); handed != want {
+		t.Fatalf("the hand-off gave the account PATH=%s\nwant PATH=%s", handed, want)
+	}
+}
+
 // `sudo -i` leaves a handed-off register in /root, which the account cannot enter and its runner's
 // directory probe would still report as a folder that exists: such a directory is not said at all.
 func TestRegisterCwdLeavesOutADirectoryThisAccountCannotEnter(t *testing.T) {

@@ -143,7 +143,7 @@ final class AgentsStackWiringTests: XCTestCase {
         let actions = try XCTUnwrap(push.firstIndex(
             of: ".sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s },"),
             "the compact row attaches its own actions")
-        XCTAssertEqual(push.dropFirst(actions + 1).first, "onMove: { movingSession = s })")
+        XCTAssertEqual(push.dropFirst(actions + 1).first, "onMove: { movingSession = s }, onSessions: onSessions)")
         XCTAssertGreaterThan(actions, 0)
         XCTAssertTrue(push[actions - 1].hasSuffix("}"),
                       "attached to the row from outside the `Button`'s label, not nested inside it")

@@ -45,6 +45,10 @@ function makeController(
     runningBgJobs?: string[];
     runningSubagents?: string[];
     turnContents?: Record<string, string | null>;
+    /** Which session sent each turn (`conversation_turn.sender_session_id`), by turn id. */
+    turnSenders?: Record<string, string>;
+    /** The sessions a sender is read from (session-message.ts, owner-scoped): each one's owner and title. */
+    senders?: Record<string, { ownerId: string; title: string }>;
     coordinatorContextEpoch?: number;
     retryAttempts?: number;
   } = {},
@@ -120,10 +124,11 @@ function makeController(
       findMany: async (args: { where: { sessionId: string; id: { in: string[] } } }) =>
         Object.entries(stored.turnContents ?? {})
           .filter(([id]) => args.where.sessionId === 'session-1' && args.where.id.in.includes(id))
-          .map(([id, content]) => ({ id, content })),
+          .map(([id, content]) => ({ id, content, senderSessionId: stored.turnSenders?.[id] ?? null })),
     },
     session: {
       findUniqueOrThrow: async () => ({
+        ownerId: 'owner-1',
         status,
         runtimeSessionId,
         cancelRequestedAt: null,
@@ -143,6 +148,15 @@ function makeController(
         poolSwitchNotice: null,
         workspace: { env: null, codexAccount: null, claudeAccount: null },
       }),
+      // A turn's sender, as the card reads it: only a session of the same owner is one.
+      findFirst: async (args: { where: { id: string; ownerId: string } }) => {
+        const sender = stored.senders?.[args.where.id];
+        if (!sender || sender.ownerId !== args.where.ownerId) return null;
+        return {
+          id: args.where.id, title: sender.title, taskId: null, workspace: { name: 'orbit-worker' },
+          permissionMode: null, engine: null, owner: { preferences: null },
+        };
+      },
       updateMany: async (args: any) => {
         calls.updateMany.push(args);
         return { count: 1 };
@@ -963,6 +977,90 @@ test('a batch with no user turn and no answer never writes lastUserText', async 
     !('lastUserText' in previewUpdate(calls)),
     'no event decided either way, so the column is left alone',
   );
+});
+
+/**
+ * Another session's message names that session on the row (`lastUserFrom`,
+ * docs/session-list-projects-design.md §3.5): the sender the card stored with this very echo names,
+ * in the same write as the text — never a sender read out of the words.
+ */
+test('another session’s message is previewed with the session its card names', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING, 'runtime-1', {
+    turnContents: { 'turn-1': 'criterion 3 is ready' },
+    turnSenders: { 'turn-1': 'sender-1' },
+    senders: { 'sender-1': { ownerId: 'owner-1', title: 'Worker: criterion 3' } },
+  });
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [{
+      seq: 1,
+      type: RunEventType.USER,
+      ts: '2026-11-07T01:21:58.000Z',
+      turnId: 'turn-1',
+      payload: { text: 'criterion 3 is ready\n\n<orbit-session-message from-session="x">\n</orbit-session-message>' },
+    }],
+  });
+
+  const preview = previewUpdate(calls);
+  assert.equal(preview.lastUserText, 'criterion 3 is ready');
+  assert.equal(preview.lastUserFromSessionId, 'sender-1');
+  assert.equal(preview.lastUserFromTitle, 'Worker: criterion 3');
+  const [echo] = calls.createMany[0].data as Array<{ payload: { sessionMessage?: Record<string, unknown> } }>;
+  assert.equal(echo.payload.sessionMessage?.fromSessionId, preview.lastUserFromSessionId, 'the row and the card name different sessions');
+  assert.equal(echo.payload.sessionMessage?.fromTitle, preview.lastUserFromTitle);
+});
+
+test('the owner’s message, and a sender of another account, are previewed with no sender', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING, 'runtime-1', {
+    turnContents: { 'turn-1': 'mine', 'turn-2': 'from a session of another account' },
+    turnSenders: { 'turn-2': 'stranger-1' },
+    senders: { 'stranger-1': { ownerId: 'owner-2', title: 'Not yours' } },
+  });
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [{ seq: 1, type: RunEventType.USER, ts: '2026-11-07T01:21:58.000Z', turnId: 'turn-1', payload: { text: 'mine' } }],
+  });
+  const mine = previewUpdate(calls);
+  assert.deepEqual([mine.lastUserText, mine.lastUserFromSessionId, mine.lastUserFromTitle], ['mine', null, null]);
+
+  calls.update.length = 0;
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [{ seq: 2, type: RunEventType.USER, ts: '2026-11-07T01:22:58.000Z', turnId: 'turn-2', payload: { text: 'from a session of another account' } }],
+  });
+  const preview = previewUpdate(calls);
+  assert.equal(preview.lastUserFromSessionId, null, 'another account’s session was named');
+  assert.equal(preview.lastUserFromTitle, null);
+});
+
+test('a reply clears the sender together with the message', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING, 'runtime-1', {
+    turnContents: { 'turn-1': 'criterion 3 is ready' },
+    turnSenders: { 'turn-1': 'sender-1' },
+    senders: { 'sender-1': { ownerId: 'owner-1', title: 'Worker: criterion 3' } },
+  });
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 1, type: RunEventType.USER, ts: '2026-11-07T01:21:58.000Z', turnId: 'turn-1', payload: { text: 'criterion 3 is ready' } },
+      { seq: 2, type: RunEventType.ASSISTANT, ts: '2026-11-07T01:22:20.000Z', turnId: 'turn-1', payload: { text: 'Thanks, reviewing it.' } },
+    ],
+  });
+
+  const preview = previewUpdate(calls);
+  assert.equal(preview.lastUserText, null);
+  assert.equal(preview.lastUserFromSessionId, null, 'the sender outlived the message it named');
+  assert.equal(preview.lastUserFromTitle, null);
+});
+
+test('a batch that neither asks nor answers leaves the sender alone', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING);
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [{ seq: 9, type: RunEventType.SYSTEM, ts: '2026-11-07T01:23:00.000Z', turnId: 'turn-2', payload: { subtype: 'status' } }],
+  });
+
+  const preview = previewUpdate(calls);
+  assert.ok(!('lastUserFromSessionId' in preview) && !('lastUserFromTitle' in preview));
 });
 
 test('terminal sessions reject durable events before any write or publish', async () => {

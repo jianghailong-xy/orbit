@@ -25,6 +25,8 @@ struct WikiHomeActions {
     var search: (String) async -> [WikiSearchHit] = { _ in [] }
     /// The space's Wiki settings: the gear in the bar (mock 12 ①) and Manage spaces.
     var openSettings: () -> Void = {}
+    /// Trash, from the space menu under Manage spaces (docs/mocks/wiki-trash).
+    var openTrash: () -> Void = {}
     /// The Contents sheet — the directory — from the list button in the bar (mock 30 ③).
     var openContents: () -> Void = {}
     /// Activity, from the bar's history mark (design §12.3.2).
@@ -78,6 +80,8 @@ struct WikiHomePage: View {
     var waiting = 0
     /// The space has a public link open: the bar's globe is green.
     var shareLive = false
+    /// How many wikis are in Trash: the space menu offers it while any is.
+    var trashed = 0
     /// Drawn beside the directory column: no head, no Contents in the bar, no foot.
     var besideContents = false
     var actions = WikiHomeActions()
@@ -179,7 +183,8 @@ struct WikiHomePage: View {
                 .font(.largeTitle.bold())
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
-            WikiSpacePicker(space: space, spaces: spaces, pick: actions.pickSpace, manage: actions.openSettings)
+            WikiSpacePicker(space: space, spaces: spaces, pick: actions.pickSpace, manage: actions.openSettings,
+                            trashed: trashed, openTrash: actions.openTrash)
         }
         .padding(.top, 4)
     }
@@ -565,9 +570,12 @@ private struct WikiStartMark: View {
     }
 }
 
-/// The Wiki of an account with no wiki (mock 41 ⑧): the title, then the setup card, whose first step makes one.
+/// The Wiki of an account with no wiki (mock 41 ⑧): the title, then the setup card, whose first step makes one — and,
+/// while Trash holds a wiki, how many it holds and Open Trash under the card (docs/mocks/wiki-trash).
 struct WikiFirstStartPage: View {
     let card: WikiStartLogic.Card
+    var trashed = 0
+    var openTrash: () -> Void = {}
     var act: (WikiStartLogic.ActionTo) -> Void = { _ in }
 
     var body: some View {
@@ -580,6 +588,14 @@ struct WikiFirstStartPage: View {
                     .wikiHomeOnBackground()
             }
             WikiStartSection(card: card, act: act)
+            if trashed > 0 {
+                Section {
+                    Button(WikiModeCopy.trashOpenTrash, action: openTrash)
+                } header: {
+                    Text(WikiModeCopy.trashHoldsWhenEmpty(trashed))
+                        .textCase(nil)
+                }
+            }
         }
         .wikiHomeListStyle()
         .environment(\.defaultMinListRowHeight, 0)
@@ -594,12 +610,16 @@ struct WikiFirstStartPage: View {
 /// on a phone, the directory column's beside it. With one space it is a grey label and no control: no chevron,
 /// no menu. With several, a menu of every space, the current one ticked — a toggle per space, whose tick a menu
 /// draws in its own column, its name the title and the repository and documents the line under it — what waits
-/// in each in the row's icon cell, and Manage spaces at the foot, into Wiki settings.
+/// in each in the row's icon cell, and Manage spaces at the foot, into Wiki settings, with Trash under it while Trash
+/// holds a wiki (docs/mocks/wiki-trash).
 struct WikiSpacePicker: View {
     let space: WikiSpace
     let spaces: [WikiSpace]
     var pick: (String) -> Void = { _ in }
     var manage: () -> Void = {}
+    /// How many wikis are in Trash.
+    var trashed = 0
+    var openTrash: () -> Void = {}
 
     var body: some View {
         let names = WikiSpaceLogic.names(spaces)
@@ -632,6 +652,11 @@ struct WikiSpacePicker: View {
                 Divider()
                 Button(action: manage) {
                     Label(WikiCopy.manageSpaces, systemImage: "gearshape")
+                }
+                if trashed > 0 {
+                    Button(action: openTrash) {
+                        Label(WikiModeCopy.trashPickerItem, systemImage: "trash")
+                    }
                 }
             } label: {
                 HStack(spacing: 4) {

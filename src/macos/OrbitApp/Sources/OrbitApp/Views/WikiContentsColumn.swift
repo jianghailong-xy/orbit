@@ -52,7 +52,8 @@ struct WikiContentsColumn: View {
                                 model.nav.popToRoot()
                                 wiki.selectedSlug = slug
                             },
-                            manage: { open(.wikiSettings) })
+                            manage: { open(.wikiSettings) },
+                            trashed: wiki.trash.count, openTrash: { open(.wikiTrash) })
             Spacer(minLength: 0)
         }
         .padding(.vertical, 4)
