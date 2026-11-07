@@ -424,20 +424,18 @@ export class SessionsController {
     // It is only set, not ended: Nest calls `res.send()` once this handler returns, and that call
     // sends the 304. Had the response already ended, that call would throw ERR_HTTP_HEADERS_SENT
     // (`send` removes headers from every 304), and ExceptionsHandler would log it on each poll.
-    // Other views keep Express's body-hash ETag. A landing-aware read is a different list, so it
-    // has its own version scope: an insert or a settlement moves that one and leaves the plain
-    // list's where it was.
-    // A plain project read (`projectId` without `includeLanding`) is built every time instead: a
-    // workspace list sends one for each project it shows, every 4 s while its stream is down, and
-    // the version reads the whole account (~230 ms on 6.7k sessions) to spare a few rows that take
-    // milliseconds — one such tab was most of production's database time on 2026-10-20.
-    if (res && isOpenListView(view) && (projectId === undefined || withLanding)) {
-      const etag = openListEtag(await this.sessions.openListVersion(user.userId, withLanding), {
+    // Other views keep Express's body-hash ETag.
+    // A project read is built every time instead, landing-aware or not: a workspace list sends one
+    // for each project it shows, every 4 s while its stream is down, and the version reads the whole
+    // account (~230 ms on 6.7k sessions) to spare a few rows that take milliseconds — one such tab
+    // was most of production's database time on 2026-10-20. The landing-aware read (the project
+    // page's own) is a few rows too: the account-wide version answered only ~5% of its polls with
+    // 304, so it now keeps Express's body-hash ETag like the plain one, and pays no version at all.
+    if (res && isOpenListView(view) && projectId === undefined) {
+      const etag = openListEtag(await this.sessions.openListVersion(user.userId), {
         runnerId: filters.runnerId,
         workspaceId: filters.workspaceId,
         tagId,
-        projectId,
-        includeLanding: withLanding ? 1 : undefined,
         confinedTo: confinedTo?.join(','),
         limit: filters.limit,
       });

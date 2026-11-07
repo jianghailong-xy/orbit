@@ -344,7 +344,7 @@ test('every counter source has its table triggers', { skip }, async (t) => {
   const actual = new Set(rows.map(({ tbl, def }) => {
     const table = tbl.replace(/^public\./, '');
     const source = /open_list_bump_(?:owner|via_project|via_session)\('([^']+)'\)/.exec(def)?.[1];
-    return `${table}:${source ?? (table === 'session' ? 'session|landing' : '?')}`;
+    return `${table}:${source ?? (table === 'session' ? 'session' : '?')}`;
   }));
   const expected = new Set([
     'approval:approval',
@@ -356,14 +356,13 @@ test('every counter source has its table triggers', { skip }, async (t) => {
     'project_criteria_authorship:criteria_authorship',
     'project_criteria_decision:criteria_decision',
     'project_integration_job:integration_job',
-    'project_landing:landing',
     'project_open_item:project_open_item',
     'project_promotion:promotion',
     'project_ratified_action_commit:ratified_commit',
     'project_ratified_action_intent:ratified_intent',
     'project_standard_set_confirmation:standard_set_confirmation',
     'project_task_status_count:task_status_count',
-    'session:session|landing',
+    'session:session',
     'session_merge_receipt:merge_receipt',
     'session_request:session_request',
     'session_tag:session_tag',
@@ -399,10 +398,11 @@ test("another account's writes leave this account's version alone", { skip }, as
 
 /**
  * A LANDING row is in no flat list (contract §2.9 LS6), so only the project grouping's
- * `includeLanding=1` read can show it: the subject and its container moving must invalidate that
- * read's ETag and leave the plain list's exactly where it was.
+ * `includeLanding=1` read can show it. That read is built every time — its rows are a few — and
+ * takes Express's body-hash ETag, while the flat Open list must not move for a change it never
+ * shows: a landing insert or settlement leaves its version (and ETag) exactly where it was.
  */
-test('a landing insert and its settlement move only the landing-aware ETag', { skip }, async (t) => {
+test('a landing insert and its settlement leave the flat Open list alone', { skip }, async (t) => {
   const f = await fixture(t);
   const { db } = f;
   const project = await db.project.create({ data: { ownerId: f.ownerId, title: 'olv landing project' } });
@@ -422,8 +422,8 @@ test('a landing insert and its settlement move only the landing-aware ETag', { s
   const scope = { projectId: project.id, includeLanding: true };
   const plain = await poll(f);
   const landing = await poll(f, undefined, scope);
-  // A different list, a different ETag, whatever the version is.
-  assert.notEqual(landing.etag, plain.etag);
+  // A project read never consults the account-wide version: there is no version-derived ETag.
+  assert.equal(landing.etag, undefined);
   assert.deepEqual(landing.body, []);
   const landingListBefore = await openList(f, scope);
 
@@ -445,9 +445,6 @@ test('a landing insert and its settlement move only the landing-aware ETag', { s
   });
   assert.notEqual(await openList(f, scope), landingListBefore, 'the insert did not reach the landing-aware list');
   assert.ok((await openList(f, scope)).includes(sessionId), 'the landing row is not in its list');
-  const inserted = await poll(f, landing.etag, scope);
-  assert.equal(inserted.status, 200, 'a landing insert left the landing-aware ETag alone');
-  assert.notEqual(inserted.etag, landing.etag);
   const plainAfterInsert = await poll(f, plain.etag);
   assert.equal(plainAfterInsert.status, 304, 'a landing insert moved the plain list');
   assert.equal(plainAfterInsert.etag, plain.etag);
@@ -459,11 +456,7 @@ test('a landing insert and its settlement move only the landing-aware ETag', { s
     where: { sessionId }, data: { settledAt: new Date(), settledAs: 'LANDED' },
   });
   await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.SUCCEEDED, completedAt: new Date() } });
-  const settled = await poll(f, inserted.etag, scope);
-  assert.equal(settled.status, 200, 'a settlement left the landing-aware ETag alone');
-  assert.notEqual(settled.etag, inserted.etag);
   const plainAfterSettlement = await poll(f, plain.etag);
   assert.equal(plainAfterSettlement.status, 304, 'a settlement moved the plain list');
   assert.equal(plainAfterSettlement.etag, plain.etag);
-  assert.equal((await poll(f, settled.etag, scope)).status, 304);
 });

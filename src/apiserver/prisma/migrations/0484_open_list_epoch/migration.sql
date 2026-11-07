@@ -10,7 +10,7 @@
 --   open_list_bump_owner()   bump from a row's own owner_id            (most tables)
 --   open_list_bump_via_project()  owner through project_id              (three project facts)
 --   open_list_bump_via_session()  owner through session_id              (approval, tag links, turns)
---   open_list_bump_session()      'session' for CONVERSATION rows, 'landing' for every other kind
+--   open_list_bump_session()      the session counter, for CONVERSATION rows only
 --
 --   Three triggers per table (INSERT / UPDATE / DELETE) because transition tables cannot be
 --   specified for a trigger with more than one event. They are statement-level: a bulk write
@@ -115,24 +115,22 @@ BEGIN
   RETURN NULL;
 END $$;
 
--- A session's own row: the plain list counts only CONVERSATION rows, so any other kind (LANDING)
--- belongs to the landing-aware read's source and leaves the plain list's version where it was.
+-- A session's own row: the flat list counts only CONVERSATION rows. Any other kind (LANDING) is
+-- visible only to a project read, which hashes its own body and consults no counter.
 CREATE FUNCTION open_list_bump_session() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
   IF TG_OP IN ('INSERT', 'UPDATE') THEN
     EXECUTE $q$INSERT INTO open_list_epoch(owner_id, source, epoch)
-                 SELECT DISTINCT owner_id,
-                        CASE WHEN kind = 'CONVERSATION' THEN 'session' ELSE 'landing' END, 1
-                   FROM new_rows
+                 SELECT DISTINCT owner_id, 'session', 1
+                   FROM new_rows WHERE kind = 'CONVERSATION'
                  ON CONFLICT (owner_id, source)
                  DO UPDATE SET epoch = open_list_epoch.epoch + 1$q$;
   END IF;
   IF TG_OP IN ('UPDATE', 'DELETE') THEN
     EXECUTE $q$INSERT INTO open_list_epoch(owner_id, source, epoch)
-                 SELECT DISTINCT owner_id,
-                        CASE WHEN kind = 'CONVERSATION' THEN 'session' ELSE 'landing' END, 1
-                   FROM old_rows
+                 SELECT DISTINCT owner_id, 'session', 1
+                   FROM old_rows WHERE kind = 'CONVERSATION'
                  ON CONFLICT (owner_id, source)
                  DO UPDATE SET epoch = open_list_epoch.epoch + 1$q$;
   END IF;
@@ -405,18 +403,6 @@ CREATE TRIGGER "session_tag_open_list_epoch_update" AFTER UPDATE ON "session_tag
 CREATE TRIGGER "session_tag_open_list_epoch_delete" AFTER DELETE ON "session_tag"
   REFERENCING OLD TABLE AS old_rows
   FOR EACH STATEMENT EXECUTE FUNCTION open_list_bump_owner('session_tag');
-
-CREATE TRIGGER "project_landing_open_list_epoch_insert" AFTER INSERT ON "project_landing"
-  REFERENCING NEW TABLE AS new_rows
-  FOR EACH STATEMENT EXECUTE FUNCTION open_list_bump_owner('landing');
-
-CREATE TRIGGER "project_landing_open_list_epoch_update" AFTER UPDATE ON "project_landing"
-  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
-  FOR EACH STATEMENT EXECUTE FUNCTION open_list_bump_owner('landing');
-
-CREATE TRIGGER "project_landing_open_list_epoch_delete" AFTER DELETE ON "project_landing"
-  REFERENCING OLD TABLE AS old_rows
-  FOR EACH STATEMENT EXECUTE FUNCTION open_list_bump_owner('landing');
 
 -- Tables whose owner is the project they belong to.
 

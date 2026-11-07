@@ -26,12 +26,10 @@ import { RUNNER_OFFLINE_AFTER_MS, runnerIsOnline, runnerLastBeatSql } from '../r
  * Anyone adding a source to the list row must add it here and give its table triggers
  * (`open-list-version.pg.spec.ts` pins the sources the row shows and the triggers each one has).
  *
- * `includeLanding` is the one source that is not always read: only the project grouping's
- * landing-aware list can see a LANDING row (contract §2.9 LS6), so `project_landing` writes and
- * sessions that are not CONVERSATION rows move the `landing` counter, and the version carries it
- * only when that flag is on. An insert or a settlement then moves the landing-aware ETag and
- * leaves the plain list's exactly where it was; the other landing facts a row shows (its OPEN
- * integration items, its BLOCKED candidate) are sources already.
+ * It answers for the flat Open list only. A project read — landing-aware included — is built every
+ * time and keeps Express's body-hash ETag (sessions.controller.ts), so the LANDING rows only that
+ * read can show (contract §2.9 LS6) are not a source here: an insert or a settlement leaves this
+ * version exactly where it was.
  *
  * The rest of the list is a fact about the clock, not the rows: a runner going offline, a job going
  * quiet, a share link expiring, a fence going stale, a review window or an escalation passing.
@@ -47,7 +45,6 @@ export async function readOpenListVersion(
   prisma: PrismaService,
   ownerId: string,
   nowMs: number = Date.now(),
-  includeLanding: boolean = false,
 ): Promise<string> {
   const o = Prisma.sql`${ownerId}::uuid`;
   // How many row versions, and an order-free fingerprint of which (only the few live sources use it).
@@ -70,13 +67,11 @@ export async function readOpenListVersion(
     )
     SELECT
       -- Every source table's counter in one read (migration 0484). It may move when the list did
-      -- not; it cannot lag a write. "landing" is the landing-aware read's own source: project
-      -- landings and sessions that are not CONVERSATION rows. The plain list leaves it out, so a
-      -- settlement moves that list's ETag and leaves this one where it was (contract §2.9 LS6).
+      -- not; it cannot lag a write. A LANDING session is not one of them: the flat list excludes
+      -- those rows, and the read that can show them hashes its own body.
       COALESCE((SELECT string_agg(source || '=' || epoch, ',' ORDER BY source)
                   FROM open_list_epoch
-                 WHERE owner_id = ${o}
-                   AND (source <> 'landing' OR ${includeLanding ? Prisma.sql`TRUE` : Prisma.sql`FALSE`})), '') AS epochs,
+                 WHERE owner_id = ${o}), '') AS epochs,
       -- The queued gate counts every running turn on the runner a PENDING row waits for.
       ${rowsOf('x', Prisma.sql`FROM session x WHERE x.status = 'RUNNING' AND x.owner_id <> ${o}
         AND x.assigned_runner_id IN (SELECT assigned_runner_id FROM session
