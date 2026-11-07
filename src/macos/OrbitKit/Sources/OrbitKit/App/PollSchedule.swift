@@ -96,51 +96,112 @@ public struct PollSchedule: Equatable, Sendable {
     }
 }
 
-/// The app's own poll (`AppModel.startPolling`): one tick reads the Open list conditionally when it is
-/// due, then the floors — the lists that ride the same tick (runners, watches, projects, the managed
-/// runner, the focused console's exact detail). Kept here, apart from the app, so what a tick asks
-/// for is tested against a clock and a record of requests.
+/// The app's own poll (`AppModel.startPolling`): when the Open list is read, conditionally, and when
+/// the floors are — the lists that ride the same loop (runners, watches, projects, the managed
+/// runner, the focused console's exact detail), each behind its own gate. Kept here, apart from the
+/// app, so what the loop asks for is tested against a clock and a record of requests.
 ///
-///  - The app cannot be seen (macOS: hidden, minimized, covered, closed): no tick reads anything,
-///    however long; the loop sleeps until it is shown.
-///  - Shown again after missing a read: one conditional read of the Open list, at once, and nothing
-///    else in that tick — the floors follow at the next.
-///  - A failing Open read (offline): the floors are skipped, and the wait backs off 4 → 8 → 16 →
-///    30 s until a read gets through.
+///  - The stream is live (docs/list-freshness-design.md §4 R1): no timed Open read. A
+///    `sessions.list_changed` hint (`hint`) is one read for a burst, a second after its first hint;
+///    otherwise one conditional read a minute, the safety read for a hint that never came.
+///  - The stream is down (R2): every 4 s, then 8, 16 and 30 s between reads — whether or not they
+///    get through — until the stream is live again.
+///  - Reads failing (offline): the floors wait too, and the wait backs off the same way.
+///  - The app cannot be seen (R3: macOS hidden, minimized, covered, closed): no read at all, however
+///    long, hints included; the loop sleeps until it is shown. Shown again after missing a read: one
+///    conditional read of the Open list at once, and the floors follow at their next wake.
 @MainActor
 public final class AppPoll {
+    /// The Open list's schedule.
     public private(set) var schedule: PollSchedule
+    /// When the floors are next looked at; each floor keeps its own cadence behind it.
+    private var floors: PollSchedule
     /// Open-list reads in a row that failed; what every page poll backs off by too (R2).
     public private(set) var failures = 0
+    /// Open-list reads made since the stream went down: the first waits `interval`, each after it
+    /// twice as long, up to 30 s (R2).
+    public private(set) var downReads = 0
+    /// The version of the last hint taken, on this connection. A hint naming it again moves nothing.
+    private var hintVersion: String?
     private let readOpenList: () async -> Bool
     private let readFloors: () async -> Void
     private let jitter: () -> Double
 
     /// `readOpenList` answers whether the read got through (an unchanged list counts).
-    public init(interval: TimeInterval = 4, liveInterval: TimeInterval = 4,
+    public init(interval: TimeInterval = 4, liveInterval: TimeInterval = PollSchedule.liveFallback,
+                floorInterval: TimeInterval = 4,
                 readOpenList: @escaping () async -> Bool,
                 readFloors: @escaping () async -> Void,
                 jitter: @escaping () -> Double = { Double.random(in: 0..<1) }) {
         schedule = PollSchedule(interval: interval, liveInterval: liveInterval)
+        floors = PollSchedule(interval: floorInterval, liveInterval: floorInterval)
         self.readOpenList = readOpenList
         self.readFloors = readFloors
         self.jitter = jitter
     }
 
+    /// How many doublings the Open read's wait takes: a failing read's, or the stream being down.
+    private func steps(live: Bool) -> Int {
+        live ? failures : max(failures, downReads - 1)
+    }
+
     /// One pass at `now`.
     public func tick(at now: Date, visible: Bool, live: Bool) async {
-        guard schedule.isDue(at: now, live: live, visible: visible, failures: failures) else { return }
-        let catchUp = schedule.isCatchUp(at: now, live: live, failures: failures)
-        schedule.noteRead(at: now, jitter: jitter())
-        let ok = await readOpenList()
-        failures = ok ? 0 : failures + 1
-        guard ok, !catchUp else { return }
+        guard visible else { return }
+        if live { downReads = 0 }
+        let steps = steps(live: live)
+        if schedule.isDue(at: now, live: live, visible: true, failures: steps) {
+            let catchUp = schedule.isCatchUp(at: now, live: live, failures: steps)
+            schedule.noteRead(at: now, jitter: jitter())
+            if !live { downReads += 1 }
+            let ok = await readOpenList()
+            failures = ok ? 0 : failures + 1
+            guard ok else { return }
+            if catchUp {
+                // The read owed for the time the app could not be seen goes alone; the floors follow
+                // at their next wake.
+                floors.noteRead(at: now)
+                return
+            }
+        } else if failures > 0 {
+            return
+        }
+        guard floors.isDue(at: now, live: false, visible: true) else { return }
+        floors.noteRead(at: now)
         await readFloors()
+    }
+
+    /// A `sessions.list_changed` hint at `now` (`version` its payload's): the Open list is read once
+    /// for a burst, a second after the first. False — nothing moved — for the version last taken on
+    /// this connection.
+    @discardableResult
+    public func hint(version: String?, at now: Date) -> Bool {
+        if let version {
+            guard version != hintVersion else { return false }
+            hintVersion = version
+        }
+        schedule.hint(at: now)
+        return true
+    }
+
+    /// The stream connected or dropped: the next connection tells its own versions, and the first
+    /// hint it sends is always read (docs/realtime-control-plane-stream.md §4.8).
+    public func streamChanged() {
+        hintVersion = nil
+    }
+
+    /// The Open list was read at `now` outside the tick (an event that needs it, a reconnect): that
+    /// read answers every hint before it, and the minute's safety read counts from it.
+    public func noteOpenRead(at now: Date) {
+        schedule.noteRead(at: now, jitter: jitter())
     }
 
     /// When the loop should wake for the next tick; nil while the app cannot be seen (it waits to
     /// be shown, which wakes it).
     public func nextWake(visible: Bool, live: Bool) -> Date? {
-        schedule.nextRead(live: live, visible: visible, failures: failures)
+        guard visible else { return nil }
+        let open = schedule.nextRead(live: live, visible: true, failures: steps(live: live))
+        guard failures == 0, let floor = floors.nextRead(live: false, visible: true) else { return open }
+        return open.map { min($0, floor) } ?? floor
     }
 }

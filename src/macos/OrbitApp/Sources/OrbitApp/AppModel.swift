@@ -368,7 +368,7 @@ final class AppModel {
     /// AppKit's window notifications behind `appVisible` (`observeWindowVisibility`).
     @ObservationIgnored private var windowObservers: [NSObjectProtocol] = []
     #endif
-    /// The 4s Open loop also keeps the Workspace navigation's Runner state fresh, but Runner
+    /// The poll's floors also keep the Workspace navigation's Runner state fresh, but Runner
     /// heartbeats do not need that cadence. This gate yields an approximately 16s refresh on the
     /// existing tick (15s minimum) without starting another long-lived task. On both platforms: a
     /// machine's Set up row comes and goes with it (`AgentsModel.machinesToSetUp`).
@@ -419,9 +419,10 @@ final class AppModel {
     /// While live it owns list *latency*: a status / approval event updates its row in place the
     /// moment it lands (see `apply`), and the events it can't apply that way trigger a coalesced
     /// snapshot refresh. It does NOT own list *completeness* — the slim event payload carries no
-    /// preview line, tag, pin or background count — so the 4s tick keeps fetching underneath it as
-    /// the floor for those fields, and as the fallback for any gap (reconnect backoff, an older
-    /// server without the endpoint). See `runControlPlane` / `startPolling`.
+    /// preview line, tag, pin or background count — so the poll reads the list on the stream's
+    /// `sessions.list_changed` hint and once a minute behind it, and on its own ramp while the
+    /// stream is down (reconnect backoff, an older server without the endpoint). See
+    /// `runControlPlane` / `startPolling`.
     private var controlTask: Task<Void, Never>?
     private(set) var controlPlaneLive = false
     private var controlRefreshPending = false
@@ -996,6 +997,8 @@ final class AppModel {
     func setAppVisible(_ visible: Bool) {
         guard visible != appVisible else { return }
         appVisible = visible
+        // The console, Wiki and sign-in loops pause on this one (`VisibilityGate.pause`).
+        VisibilityGate.app.set(visible)
         if visible { pollSleeper?.cancel() }
     }
 
@@ -1035,23 +1038,23 @@ final class AppModel {
     /// Keep Open fresh. The control-plane stream (below) is the primary source of *latency* — a
     /// status or approval change lands on its row the moment the event arrives — but its payload is
     /// a slim summary, so the fields only the list query returns (the preview line, tags, pin,
-    /// background count) still need a periodic snapshot. This tick is that floor, and it runs
-    /// whether or not the stream is live.
+    /// background count) come from the list's conditional delta read (`OpenListReader`).
     ///
-    /// It used to skip its fetch while the stream was connected, which made those fields ride on
-    /// event-driven refreshes instead — and because EVERY event triggered a full refetch, several
-    /// sessions running at once pinned the app to one whole-list fetch + re-render every 200ms.
-    /// Events now upsert their row in place (see `apply`), leaving this 4s tick as the only
-    /// unconditional whole-list fetch.
+    /// That read used to run every 4 s whatever the stream said, because no event covered those
+    /// fields. The stream now declares the `list_changed` hint (`ControlStreamURL`), and the server
+    /// sends `sessions.list_changed` whenever anything the Open list draws may have moved
+    /// (docs/realtime-control-plane-stream.md §4.8), so with the stream live the list is read on a
+    /// hint and otherwise once a minute, the safety read for a hint that was lost.
     ///
     /// Each tick also checkpoints the focused console to disk regardless, so a crash/quit loses
     /// at most a few seconds of the open transcript.
     ///
-    /// When a tick reads is OrbitKit's `AppPoll` (docs/list-freshness-design.md §4): the Open list's
-    /// conditional read every 4 s and the floors behind it (`pollFloors`); nothing at all while the
-    /// app cannot be seen — the loop sleeps until `setAppVisible` wakes it, and the read it owes then
-    /// is the Open list alone; and while that read fails (offline), the floors wait too and the
-    /// ticks back off 4 → 8 → 16 → 30 s.
+    /// When a tick reads is OrbitKit's `AppPoll` (docs/list-freshness-design.md §4): with the stream
+    /// live, a hint's read (a burst merged into one, a second after its first hint) and a minute's
+    /// safety read; with it down, 4 → 8 → 16 → 30 s between reads; the floors behind it every 4 s,
+    /// each behind its own gate (`pollFloors`); nothing at all while the app cannot be seen — the
+    /// loop sleeps until `setAppVisible` wakes it, and the read it owes then is the Open list alone;
+    /// and while that read fails (offline), the floors wait too.
     func startPolling() {
         guard pollTask == nil else { return }
         startControlPlane()
@@ -1173,11 +1176,15 @@ final class AppModel {
             switch signal {
             case .live:
                 self.controlPlaneLive = true
+                self.appPoll?.streamChanged()
                 await self.reconcileOnConnect()
             case .event(let ev):
                 self.apply(ev)
             case .down:
                 self.controlPlaneLive = false
+                self.appPoll?.streamChanged()
+                // Down, the Open list is read on the stream-down ramp rather than the minute's.
+                self.pollSleeper?.cancel()
             }
         }
         controlPlaneLive = false
@@ -1188,6 +1195,7 @@ final class AppModel {
     /// A connection used to re-read every library the app holds, 12–20 requests, and a proxy that
     /// accepted and dropped the stream every second turned that into thousands a minute.
     private func reconcileOnConnect() async {
+        appPoll?.noteOpenRead(at: Date())
         await loadSessions()   // rebuild from snapshot, then follow
         await refreshFocusedSessionDetailIfNeeded()
         // The tasks the console on screen draws in its card.
@@ -1238,7 +1246,8 @@ final class AppModel {
     /// authoritative row state in their payload, so they're applied in place — this is the
     /// field-level upsert `ControlSessionSummary` was shaped for (decision Q2). Anything else still
     /// nudges the snapshot: either a row is leaving Open, or the field that changed isn't on the
-    /// event. The 4s tick in `startPolling` remains the floor for those slim-payload gaps.
+    /// event. The `sessions.list_changed` hint, read by the poll in `startPolling`, covers those
+    /// slim-payload gaps, with the poll's minute read behind it.
     ///
     /// Which list an event is about is OrbitKit's `ControlEventRoute` (docs/list-freshness-design.md
     /// §4 R5): only the routes that say so read the Open list, and a type this client does not know
@@ -1393,9 +1402,17 @@ final class AppModel {
             // It joins Completed or Trash: a list of those on screen reads again.
             lifecycleHints &+= 1
             scheduleControlRefresh()
-        // session.error / background.task (fields the payload doesn't carry), tag.changed (a tag's
-        // name and color are drawn from the rows).
+        // session.error / background.task (fields the payload doesn't carry).
         case .openList:
+            scheduleControlRefresh()
+        // The Open list may read differently: the poll reads it once for a burst, a second after the
+        // first hint, and wakes for it now. A version this connection already told moves nothing.
+        case .listHint(let version):
+            if appPoll?.hint(version: version, at: Date()) == true { pollSleeper?.cancel() }
+        // A tag was made, renamed, recolored or deleted: the library the picker and the chips read,
+        // and the Open list, whose rows draw a tag's name and color.
+        case .tags:
+            Task { await loadSessionTags() }
             scheduleControlRefresh()
         // The reserved `notification` channel, and any type this client does not know: nothing to read.
         case .nothing:
@@ -1542,6 +1559,8 @@ final class AppModel {
                 catch { break }
                 guard self.controlRefreshGeneration == generation else { break }
                 self.controlRefreshPending = false
+                // This read answers the hints before it, and the poll's minute read counts from it.
+                self.appPoll?.noteOpenRead(at: Date())
                 await self.loadSessions()
                 guard self.controlRefreshGeneration == generation else { break }
                 // A missing Open row is ambiguous: it may be the same stable Completed detail, or

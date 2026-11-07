@@ -19,8 +19,14 @@ public enum ControlEventRoute: Equatable, Sendable {
     /// `session.ended`: the row leaves Open, and membership is the list's to say.
     case sessionLeft
     /// A field only the list query returns: a run error's line (`session.error`), a background count
-    /// (`background.task`), a tag's name and color on the rows that carry it (`tag.changed`).
+    /// (`background.task`).
     case openList
+    /// `sessions.list_changed`: the Open list may read differently — a hint for the app's poll
+    /// (`AppPoll.hint`), which makes one conditional delta read for a burst. `version` is the
+    /// hint's, nil on a payload without one.
+    case listHint(version: String?)
+    /// `tag.changed`: the tag library, and the Open list, whose rows draw a tag's name and color.
+    case tags
     /// `task.changed`: the rows it names, or the whole task page for a coarse change.
     case tasks
     /// `task.list.changed`.
@@ -48,7 +54,10 @@ public enum ControlEventRoute: Equatable, Sendable {
         case .sessionCreated, .sessionUpdated: return .sessionRow
         case .approvalRequested, .approvalResolved: return .approvalRow
         case .sessionEnded: return .sessionLeft
-        case .sessionError, .backgroundTask, .tagChanged: return .openList
+        case .sessionError, .backgroundTask: return .openList
+        case .sessionsListChanged:
+            return .listHint(version: event.payload(ControlListChanged.self)?.version)
+        case .tagChanged: return .tags
         case .taskChanged: return .tasks
         case .taskListChanged: return .taskLists
         case .agentChanged: return .agents
@@ -68,7 +77,7 @@ public enum ControlEventRoute: Equatable, Sendable {
     /// when their row cannot take the event, which the app decides with the row in hand.
     public var readsOpenList: Bool {
         switch self {
-        case .openList, .sessionLeft: return true
+        case .openList, .sessionLeft, .tags: return true
         default: return false
         }
     }

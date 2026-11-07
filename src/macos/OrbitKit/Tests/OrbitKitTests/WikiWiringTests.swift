@@ -383,7 +383,7 @@ final class WikiWiringTests: XCTestCase {
         assertOrder(screen, ["TimelineView(.periodic(from: .now, by: wiki.jobsUnderWay ? 5 : 60)) { context in",
                              "seen: seen, jobs: wiki.currentJobs, now: context.date, actions: actions(wiki))",
                              "await wiki.loadOtherPlans()", "await wiki.loadJobs()",
-                             "while !Task.isCancelled, wiki.jobsUnderWay {", "try? await Task.sleep(for: .seconds(5))",
+                             "while !Task.isCancelled, wiki.jobsUnderWay {", "await VisibilityGate.app.pause(5)",
                              ".refreshable {"], "Activity's runs, read and read again")
         XCTAssertTrue(view.contains("openJob: { id in model.push(.wikiJob(jobID: id)) }"), "a run's row opens its page")
         let header = try slice(page, from: "private var runsHeader: some View {", to: "private var newRows: Int")

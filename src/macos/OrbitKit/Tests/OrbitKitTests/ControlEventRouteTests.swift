@@ -10,10 +10,10 @@ private func event(_ type: String, data: String = "{}") -> ControlEvent {
 /// Where each control event goes (docs/list-freshness-design.md §4 R5): the one list it is about,
 /// and no read at all for a type this client does not know. `AppModel.apply` switches on this route.
 final class ControlEventRouteTests: XCTestCase {
-    /// A type this client does not know — the hint P2 adds, anything later — reads nothing. It used to
-    /// fall through to a whole Open-list read, once per event.
+    /// A type this client does not know reads nothing. It used to fall through to a whole Open-list
+    /// read, once per event.
     func testAnUnknownTypeReadsNothing() {
-        for type in ["sessions.list_changed", "landing.updated", "some.type.from.a.newer.server"] {
+        for type in ["landing.updated", "some.type.from.a.newer.server"] {
             let route = ControlEventRoute.of(event(type))
             XCTAssertEqual(route, .nothing, type)
             XCTAssertFalse(route.readsOpenList, type)
@@ -50,9 +50,10 @@ final class ControlEventRouteTests: XCTestCase {
     /// fields only the list query carries.
     func testOnlyTheListFieldsAndADepartureAlwaysReadTheOpenList() {
         XCTAssertEqual(ControlEventRoute.of(event("session.ended")), .sessionLeft)
-        for type in ["session.error", "background.task", "tag.changed"] {
+        for type in ["session.error", "background.task"] {
             XCTAssertEqual(ControlEventRoute.of(event(type)), .openList, type)
         }
+        XCTAssertEqual(ControlEventRoute.of(event("tag.changed")), .tags)
         let always = ["session.ended", "session.error", "background.task", "tag.changed"]
         for type in ["session.created", "session.updated", "approval.requested", "approval.resolved", "task.changed",
                      "task.list.changed", "agent.changed", "provider.changed", "project.changed",
@@ -74,6 +75,25 @@ final class ControlEventRouteTests: XCTestCase {
         XCTAssertEqual(ControlEventRoute.of(event("provider.changed")), .providers)
         XCTAssertEqual(ControlEventRoute.of(event("project.changed")), .projects)
         XCTAssertEqual(ControlEventRoute.of(event("wiki.changed")), .wiki)
+    }
+
+    /// `sessions.list_changed` (docs/realtime-control-plane-stream.md §4.8) is known: a hint for the
+    /// app's poll carrying the list's version, never a read of its own.
+    func testTheListHintIsKnownAndCarriesItsVersion() {
+        let hint = event("sessions.list_changed", data: #"{"version":"ab12"}"#)
+        XCTAssertEqual(hint.type, .sessionsListChanged)
+        XCTAssertEqual(hint.payload(ControlListChanged.self), ControlListChanged(version: "ab12"))
+        XCTAssertEqual(ControlEventRoute.of(hint), .listHint(version: "ab12"))
+        XCTAssertFalse(ControlEventRoute.of(hint).readsOpenList, "the poll reads for it, a burst merged into one")
+        XCTAssertEqual(ControlEventRoute.of(event("sessions.list_changed")), .listHint(version: nil))
+    }
+
+    /// `tag.changed` re-reads the tag library (the picker, the chips) and the Open list, whose rows draw
+    /// a tag's name and color.
+    func testTagChangedReadsTheTagLibrary() {
+        let route = ControlEventRoute.of(event("tag.changed", data: #"{"id":"t1"}"#))
+        XCTAssertEqual(route, .tags)
+        XCTAssertTrue(route.readsOpenList)
     }
 
     /// The two types the server has sent for a while and this client did not know — they decoded to

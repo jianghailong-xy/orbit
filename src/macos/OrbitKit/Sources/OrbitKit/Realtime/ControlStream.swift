@@ -66,6 +66,18 @@ public enum ControlStreamError: Error, Equatable {
     case watchdogTimeout
 }
 
+/// Where the control-plane stream connects.
+public enum ControlStreamURL {
+    /// `GET /api/events`, declaring the hints this client follows: `list_changed`, without which the
+    /// server never sends `sessions.list_changed` (docs/realtime-control-plane-stream.md §4.8).
+    public static func events(_ baseURL: URL) -> URL {
+        let events = baseURL.appendingPathComponent("api/events")
+        guard var parts = URLComponents(url: events, resolvingAgainstBaseURL: false) else { return events }
+        parts.queryItems = (parts.queryItems ?? []) + [URLQueryItem(name: "hints", value: "list_changed")]
+        return parts.url ?? events
+    }
+}
+
 #if os(macOS) || os(iOS)
 /// Live SSE transport for `GET /api/events` over `URLSession.bytes`, with the `Authorization`
 /// header (native clients never put the token in the URL) and a byte watchdog: the server
@@ -90,7 +102,7 @@ public struct URLSessionControlStream: ControlPlaneStreaming {
             let clock = ByteClock()
             let reader = Task {
                 do {
-                    var req = URLRequest(url: baseURL.appendingPathComponent("api/events"))
+                    var req = URLRequest(url: ControlStreamURL.events(baseURL))
                     req.timeoutInterval = 3600
                     req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
                     if let t = token() { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }

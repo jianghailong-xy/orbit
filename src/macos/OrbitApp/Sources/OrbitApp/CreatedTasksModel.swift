@@ -26,7 +26,7 @@ final class CreatedTasksModel {
     /// the next tick asks again even with no live row to watch.
     @ObservationIgnored private var retryDue = false
 
-    private static let pollInterval: UInt64 = 15_000_000_000
+    private static let pollInterval: TimeInterval = 15
     /// One read for a burst of task events, the same window the watches and projects use.
     private static let nudgeDelay: UInt64 = 2_000_000_000
 
@@ -58,7 +58,7 @@ final class CreatedTasksModel {
     func startPolling() async {
         await load()
         while !Task.isCancelled {
-            try? await Task.sleep(nanoseconds: Self.pollInterval)
+            await VisibilityGate.app.pause(Self.pollInterval)   // not while the app cannot be seen
             if Task.isCancelled { break }
             if retryDue || snapshot?.hasLiveRows == true { await load() }
         }
