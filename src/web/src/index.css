@@ -26776,9 +26776,8 @@ button.agent-progress-agent:hover {
   .wk-chat-composer .composer-toolbar .composer-usage-pct { display: none; }
   .wk-chat-composer .composer-toolbar .composer-usage { padding-right: 3px; }
 }
-/* The page and the selection lead the composer's attachment row, drawn as its file chips are (board 43 ④); the quote
-   opens with the selection's amber bar. */
-.wk-chat-composer .wk-chat-chip { min-width: 0; max-width: 100%; box-sizing: border-box; }
+/* The page and the selection lead the composer's attachment row, drawn as its file chips are — no wider, the quote's
+   first sentence giving way to its counts (board 43 ④) — and the quote opens with the selection's amber bar. */
 .wk-chat-composer .wk-chat-chip.q::before { content: ""; flex: none; align-self: stretch; width: 3px; margin: 1px 2px 1px 0; border-radius: 2px;
                                             background: #f2c14e; }
 .wk-chat-failed { margin: 0 6px 6px; font-size: 12px; color: var(--error); }
