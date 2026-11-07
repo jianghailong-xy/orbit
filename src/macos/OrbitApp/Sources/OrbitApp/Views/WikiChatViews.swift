@@ -971,8 +971,8 @@ struct WikiDraftCardSlot: View {
             guard let entry = card.ops.compactMap({ $0.entryId ?? $0.entry?["id"]?.stringValue }).first else { return }
             leave { go(.wikiEntry(entryID: entry)) }
         case .openInPlan:
-            // A plan card opens its document on the plan page (C12); a card that names none, the plan.
-            let node: NavNode = card.change.map { .wikiPlanDoc(slug: $0.doc.slug, version: nil) } ?? .wikiPlan(version: nil)
+            // A plan card opens its first document on the plan page (C12, C17); a card that names none, the plan.
+            let node: NavNode = card.change?.docs.first.map { .wikiPlanDoc(slug: $0.slug, version: nil) } ?? .wikiPlan(version: nil)
             leave { go(node) }
         case .settings:
             leave { go(.wikiSettings) }
@@ -1157,7 +1157,9 @@ struct WikiDraftCardView: View {
                 if !card.rewrites.isEmpty {
                     GridRow {
                         label(WikiChatCopy.cardRewrites)
-                        links(card.rewrites.map { ($0.place, WikiDraftCardTarget.section(doc: $0.doc, key: $0.key)) })
+                        // A link each section; a plan card's rebuild over several documents, a link each document (C17).
+                        links(WikiChatLogic.rewriteLinks(kind: card.kind, rewrites: card.rewrites)
+                            .map { ($0.label, WikiDraftCardTarget.section(doc: $0.doc, key: $0.key)) })
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }

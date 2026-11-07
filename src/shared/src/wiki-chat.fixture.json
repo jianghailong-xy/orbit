@@ -4,7 +4,8 @@
     "§28–§30; docs/wiki-chat-design.md §3–§8): what a card shows and offers in each state, the line under an applied card,",
     "the round button's look, what adds to the Wiki's waiting count, why a follow job waits, which two jobs of a space may",
     "run at once, which sections a card rewrites, the sentence-level comparison See changes draws, what an attachment line",
-    "says, what a message's wikiContext may hold, the Docs rows of Activity, and what a plan card's face says (planFaces).",
+    "says, what a message's wikiContext may hold, the Docs rows of Activity, what a plan card's face says (planFaces), and",
+    "how a card's Rewrites row links its sections (rewriteLinks).",
     "",
     "src/shared/src/wikiChatContract.spec.ts runs every case through src/shared/src/wikiChat.ts, the functions the server",
     "computes its states and counts with. OrbitKit mirrors the client half (the card, the line, the button, the counts,",
@@ -209,6 +210,45 @@
       "needsYou": false
     },
     {
+      "name": "a plan card applied: Undo while the plan stands where its press left it, and Open in Plan (C17)",
+      "facts": { "decision": "applied", "undone": false, "replaced": false, "chatOpen": true, "baseMoved": false },
+      "kind": "plan",
+      "ops": [],
+      "undoable": true,
+      "state": "applied",
+      "label": "Plan change",
+      "title": "Applied · Confirmed by you",
+      "actions": ["undo", "open_in_plan"],
+      "note": null,
+      "needsYou": false
+    },
+    {
+      "name": "a plan card applied, the plan changed since: no Undo, and the card says why (C17)",
+      "facts": { "decision": "applied", "undone": false, "replaced": false, "chatOpen": true, "baseMoved": false },
+      "kind": "plan",
+      "ops": [],
+      "undoable": false,
+      "state": "applied",
+      "label": "Plan change",
+      "title": "Applied · Confirmed by you",
+      "actions": ["open_in_plan"],
+      "note": "The plan has changed since, so this can no longer be undone.",
+      "needsYou": false
+    },
+    {
+      "name": "a plan card undone (C17)",
+      "facts": { "decision": "applied", "undone": true, "replaced": false, "chatOpen": true, "baseMoved": false },
+      "kind": "plan",
+      "ops": [],
+      "undoable": false,
+      "state": "undone",
+      "label": "Plan change",
+      "title": "Undone",
+      "actions": [],
+      "note": null,
+      "needsYou": false
+    },
+    {
       "name": "applied, then undone",
       "facts": { "decision": "applied", "undone": true, "replaced": false, "chatOpen": true, "baseMoved": false },
       "kind": "entry",
@@ -235,22 +275,22 @@
   ],
   "results": [
     {
-      "name": "a plan card's rebuild that failed (C12): Try again asks for the build again, and there is no Undo",
-      "card": { "kind": "plan", "state": "applied", "undoable": false,
+      "name": "a plan card's rebuild that failed: Try again asks for the build again, beside Undo and Open in Plan (C12, C17)",
+      "card": { "kind": "plan", "state": "applied", "undoable": true,
         "rewrite": { "result": "failed", "reason": null, "sha": "7f3e2a1c9b8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f", "seen": false,
           "sections": [{ "where": "3.1 §2", "result": "failed" }] } },
       "line": "Rewrite failed",
-      "actions": ["try_again"],
+      "actions": ["undo", "open_in_plan", "try_again"],
       "waits": true,
       "needsYou": true
     },
     {
-      "name": "a plan card's rebuild held: the maintenance names no workspace (C12)",
+      "name": "a plan card's rebuild held: the maintenance names no workspace; the plan changed since, so no Undo (C12, C17)",
       "card": { "kind": "plan", "state": "applied", "undoable": false,
         "rewrite": { "result": "waiting", "reason": "no_workspace", "sha": null, "seen": false,
           "sections": [{ "where": "3.1 §2", "result": null }] } },
       "line": "Rewrite waiting · Maintenance has no workspace",
-      "actions": ["settings"],
+      "actions": ["open_in_plan", "settings"],
       "waits": true,
       "needsYou": true
     },
@@ -737,12 +777,14 @@
       "name": "a writing requirement on one section's covers (design §6, third row)",
       "change": {
         "baseVersion": 4, "version": null,
-        "doc": { "slug": "sessions-runtime", "title": "Sessions runtime", "number": "3.1" },
-        "category": { "key": "runtime", "title": "Runtime", "opens": false },
-        "fields": [],
-        "sections": [
-          { "key": "turn-delivery", "title": "Turn delivery", "number": 2, "edit": "changed", "fields": ["covers"], "covers": "How a turn reaches the runner, for a first-time reader: the model first, no parameters." }
-        ]
+        "docs": [
+          { "slug": "sessions-runtime", "title": "Sessions runtime", "number": "3.1", "added": false,
+            "category": { "key": "runtime", "title": "Runtime", "opens": false }, "fields": [],
+            "sections": [
+              { "key": "turn-delivery", "title": "Turn delivery", "number": 2, "edit": "changed", "fields": ["covers"], "covers": "How a turn reaches the runner, for a first-time reader: the model first, no parameters." }
+            ] }
+        ],
+        "moves": []
       },
       "heading": "3.1 Sessions runtime",
       "rows": [
@@ -754,14 +796,16 @@
       "name": "the document's own fields, a section added and one removed",
       "change": {
         "baseVersion": 4, "version": 5,
-        "doc": { "slug": "sessions-runtime", "title": "How a session runs", "number": "3.1" },
-        "category": { "key": "runtime", "title": "Runtime", "opens": false },
-        "fields": ["title", "audience", "scopeIn"],
-        "sections": [
-          { "key": "s4", "title": "Delivery and heartbeats", "number": 3, "edit": "added", "fields": [], "covers": "How a turn is delivered and kept alive." },
-          { "key": "leases", "title": "Leases", "number": 4, "edit": "changed", "fields": ["title", "kind", "sources"], "covers": null },
-          { "key": "old-inbox", "title": "The old inbox poll", "number": 5, "edit": "removed", "fields": [], "covers": null }
-        ]
+        "docs": [
+          { "slug": "sessions-runtime", "title": "How a session runs", "number": "3.1", "added": false,
+            "category": { "key": "runtime", "title": "Runtime", "opens": false }, "fields": ["title", "audience", "scopeIn"],
+            "sections": [
+              { "key": "s4", "title": "Delivery and heartbeats", "number": 3, "edit": "added", "fields": [], "covers": "How a turn is delivered and kept alive." },
+              { "key": "leases", "title": "Leases", "number": 4, "edit": "changed", "fields": ["title", "kind", "sources"], "covers": null },
+              { "key": "old-inbox", "title": "The old inbox poll", "number": 5, "edit": "removed", "fields": [], "covers": null }
+            ] }
+        ],
+        "moves": []
       },
       "heading": "3.1 How a session runs",
       "rows": [
@@ -773,18 +817,20 @@
       ]
     },
     {
-      "name": "a new document in a category the plan has",
+      "name": "a new document in a category the plan has, numbered where the change puts it",
       "change": {
         "baseVersion": 4, "version": null,
-        "doc": { "slug": "turn-delivery", "title": "Turn delivery", "number": null },
-        "category": { "key": "runtime", "title": "Runtime", "opens": false },
-        "fields": [],
-        "sections": [
-          { "key": "s1", "title": "Overview", "number": 1, "edit": "added", "fields": [], "covers": "What this document covers." },
-          { "key": "s2", "title": "Heartbeats", "number": 2, "edit": "added", "fields": [], "covers": "How the runner keeps a turn." }
-        ]
+        "docs": [
+          { "slug": "turn-delivery", "title": "Turn delivery", "number": "3.5", "added": true,
+            "category": { "key": "runtime", "title": "Runtime", "opens": false }, "fields": [],
+            "sections": [
+              { "key": "s1", "title": "Overview", "number": 1, "edit": "added", "fields": [], "covers": "What this document covers." },
+              { "key": "s2", "title": "Heartbeats", "number": 2, "edit": "added", "fields": [], "covers": "How the runner keeps a turn." }
+            ] }
+        ],
+        "moves": []
       },
-      "heading": "Turn delivery",
+      "heading": "3.5 Turn delivery",
       "rows": [
         { "label": "Document", "value": "New document in Runtime" },
         { "label": "Adds", "value": "§1 Overview · §2 Heartbeats" },
@@ -796,18 +842,145 @@
       "name": "a new document that opens a category",
       "change": {
         "baseVersion": 4, "version": null,
-        "doc": { "slug": "runbooks", "title": "Runbooks", "number": null },
-        "category": { "key": "operations", "title": "Operations", "opens": true },
-        "fields": [],
-        "sections": [
-          { "key": "s1", "title": "Restarting the runner", "number": 1, "edit": "added", "fields": [], "covers": "The steps, in order." }
-        ]
+        "docs": [
+          { "slug": "runbooks", "title": "Runbooks", "number": "4.1", "added": true,
+            "category": { "key": "operations", "title": "Operations", "opens": true }, "fields": [],
+            "sections": [
+              { "key": "s1", "title": "Restarting the runner", "number": 1, "edit": "added", "fields": [], "covers": "The steps, in order." }
+            ] }
+        ],
+        "moves": []
       },
-      "heading": "Runbooks",
+      "heading": "4.1 Runbooks",
       "rows": [
         { "label": "Document", "value": "New document in a new category, Operations" },
         { "label": "Adds", "value": "§1 Restarting the runner" },
         { "label": "Covers", "value": "§1 Restarting the runner: The steps, in order." }
+      ]
+    },
+    {
+      "name": "one document split in two: a section moved into a new one, and the old one written for a first-time reader (board 42 ③)",
+      "change": {
+        "baseVersion": 4, "version": null,
+        "docs": [
+          { "slug": "sessions-runtime", "title": "Sessions runtime", "number": "3.1", "added": false,
+            "category": { "key": "runtime", "title": "Runtime", "opens": false }, "fields": [],
+            "sections": [
+              { "key": "s1", "title": "Overview", "number": 1, "edit": "changed", "fields": ["covers"], "covers": "For a first-time reader: the model first, then the parameters." }
+            ] },
+          { "slug": "delivery-and-heartbeats", "title": "Delivery and heartbeats", "number": "3.5", "added": true,
+            "category": { "key": "runtime", "title": "Runtime", "opens": false }, "fields": [], "sections": [] }
+        ],
+        "moves": [
+          { "title": "Delivery and heartbeats", "from": { "doc": "sessions-runtime", "number": "3.1", "key": "s3", "section": 3 },
+            "to": { "doc": "delivery-and-heartbeats", "number": "3.5", "key": "s3", "section": 1 }, "fields": [], "covers": null }
+        ]
+      },
+      "heading": "3.1 Sessions runtime · 3.5 Delivery and heartbeats",
+      "rows": [
+        { "label": "Moves", "value": "3.1 §3 Delivery and heartbeats → new document 3.5" },
+        { "label": "Changes", "value": "3.1 §1 Overview (covers)" },
+        { "label": "Covers", "value": "3.1 §1 Overview: For a first-time reader: the model first, then the parameters." },
+        { "label": "Document", "value": "3.5 · New document in Runtime" }
+      ]
+    },
+    {
+      "name": "a section moved into a document the plan has, its covers changed on the way",
+      "change": {
+        "baseVersion": 4, "version": 6,
+        "docs": [
+          { "slug": "sessions-runtime", "title": "Sessions runtime", "number": "3.1", "added": false,
+            "category": { "key": "runtime", "title": "Runtime", "opens": false }, "fields": [], "sections": [] },
+          { "slug": "leases", "title": "Leases", "number": "3.2", "added": false,
+            "category": { "key": "runtime", "title": "Runtime", "opens": false }, "fields": ["scopeIn"], "sections": [] }
+        ],
+        "moves": [
+          { "title": "Heartbeats", "from": { "doc": "sessions-runtime", "number": "3.1", "key": "heartbeats", "section": 4 },
+            "to": { "doc": "leases", "number": "3.2", "key": "heartbeats", "section": 2 }, "fields": ["covers"], "covers": "How a lease is kept alive by heartbeats." }
+        ]
+      },
+      "heading": "3.1 Sessions runtime · 3.2 Leases",
+      "rows": [
+        { "label": "Moves", "value": "3.1 §4 Heartbeats → 3.2 (covers)" },
+        { "label": "Document", "value": "3.2 · Changes its scope" },
+        { "label": "Covers", "value": "3.2 §2 Heartbeats: How a lease is kept alive by heartbeats." }
+      ]
+    },
+    {
+      "name": "two documents and no move: a section removed from one, a new document that opens a category",
+      "change": {
+        "baseVersion": 4, "version": null,
+        "docs": [
+          { "slug": "sessions-runtime", "title": "Sessions runtime", "number": "3.1", "added": false,
+            "category": { "key": "runtime", "title": "Runtime", "opens": false }, "fields": [],
+            "sections": [
+              { "key": "old-inbox", "title": "The old inbox poll", "number": 5, "edit": "removed", "fields": [], "covers": null }
+            ] },
+          { "slug": "runbooks", "title": "Runbooks", "number": "4.1", "added": true,
+            "category": { "key": "operations", "title": "Operations", "opens": true }, "fields": [],
+            "sections": [
+              { "key": "s1", "title": "Restarting the runner", "number": 1, "edit": "added", "fields": [], "covers": "The steps, in order." }
+            ] }
+        ],
+        "moves": []
+      },
+      "heading": "3.1 Sessions runtime · 4.1 Runbooks",
+      "rows": [
+        { "label": "Removes", "value": "3.1 §5 The old inbox poll" },
+        { "label": "Document", "value": "4.1 · New document in a new category, Operations" },
+        { "label": "Adds", "value": "4.1 §1 Restarting the runner" },
+        { "label": "Covers", "value": "4.1 §1 Restarting the runner: The steps, in order." }
+      ]
+    }
+  ],
+  "rewriteLinks": [
+    {
+      "name": "an entry card's sections, a link each (board 42 ②)",
+      "kind": "entry",
+      "rewrites": [
+        { "doc": "sessions-runtime", "key": "turn-delivery", "where": "3.1 §3", "title": "Turn delivery" },
+        { "doc": "runner-presence", "key": "offline", "where": "7.1 §2", "title": "Going offline" }
+      ],
+      "links": [
+        { "label": "3.1 §3", "doc": "sessions-runtime", "key": "turn-delivery" },
+        { "label": "7.1 §2", "doc": "runner-presence", "key": "offline" }
+      ]
+    },
+    {
+      "name": "a rewrite card over two documents: still a link each section",
+      "kind": "rewrite",
+      "rewrites": [
+        { "doc": "sessions-runtime", "key": "turn-delivery", "where": "3.1 §3", "title": "Turn delivery" },
+        { "doc": "runner-presence", "key": "offline", "where": "7.1 §2", "title": "Going offline" }
+      ],
+      "links": [
+        { "label": "3.1 §3", "doc": "sessions-runtime", "key": "turn-delivery" },
+        { "label": "7.1 §2", "doc": "runner-presence", "key": "offline" }
+      ]
+    },
+    {
+      "name": "a plan card within one document: a link each section",
+      "kind": "plan",
+      "rewrites": [
+        { "doc": "sessions-runtime", "key": "recovery", "where": "1.1 §2", "title": "Recovery" },
+        { "doc": "sessions-runtime", "key": "contract", "where": "1.1 §3", "title": "The session contract" }
+      ],
+      "links": [
+        { "label": "1.1 §2", "doc": "sessions-runtime", "key": "recovery" },
+        { "label": "1.1 §3", "doc": "sessions-runtime", "key": "contract" }
+      ]
+    },
+    {
+      "name": "a plan card that splits a document: a link each document, at its first section (board 42 ③: 3.1 · 3.5)",
+      "kind": "plan",
+      "rewrites": [
+        { "doc": "sessions-runtime", "key": "s1", "where": "3.1 §1", "title": "Overview" },
+        { "doc": "delivery-and-heartbeats", "key": "s3", "where": "3.5 §1", "title": "Delivery and heartbeats" },
+        { "doc": "delivery-and-heartbeats", "key": "s4", "where": "3.5 §2", "title": "Heartbeats" }
+      ],
+      "links": [
+        { "label": "3.1", "doc": "sessions-runtime", "key": "s1" },
+        { "label": "3.5", "doc": "delivery-and-heartbeats", "key": "s3" }
       ]
     }
   ],

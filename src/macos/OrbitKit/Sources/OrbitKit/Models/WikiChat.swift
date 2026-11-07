@@ -540,16 +540,10 @@ public struct WikiChatDraftRewrite: Codable, Equatable, Sendable {
     }
 }
 
-/// A plan card's change (contract `chat.drafts.read`, change; C12): the document it puts into the plan against the
-/// version it was drafted on, the document's own fields that change, and each section it adds, changes or removes.
+/// A plan card's change (contract `chat.drafts.read`, change; C12, C17): the documents it puts into the plan — each one
+/// of the plan's by its slug, or a new one — in the plan's new order, and the sections it moves between them, against
+/// the confirmed version it was drafted on, with the version its press made.
 public struct WikiChatPlanChange: Codable, Equatable, Sendable {
-    public struct Doc: Codable, Equatable, Sendable {
-        public let slug: String
-        public let title: String
-        /// Where the version it was drafted on numbers it ("3.1"); nil for a new one.
-        public let number: String?
-    }
-
     public struct Category: Codable, Equatable, Sendable {
         public let key: String
         public let title: String
@@ -557,6 +551,7 @@ public struct WikiChatPlanChange: Codable, Equatable, Sendable {
         public let opens: Bool
     }
 
+    /// One section a plan card adds, changes or removes in one of its documents.
     public struct Section: Codable, Equatable, Sendable {
         public let key: String
         public let title: String
@@ -570,12 +565,77 @@ public struct WikiChatPlanChange: Codable, Equatable, Sendable {
         public let covers: String?
     }
 
+    /// One document the card puts into the plan.
+    public struct Doc: Codable, Equatable, Sendable {
+        public let slug: String
+        public let title: String
+        /// "3.1": where the version the card was drafted on numbers it — a new one's, where the change puts it.
+        public let number: String
+        /// A document the plan did not have.
+        public let added: Bool
+        /// The category it is filed under, and whether the change opens it.
+        public let category: Category
+        /// Its own fields that change, in the schema's order (none for a new one).
+        public let fields: [String]
+        /// The sections it adds or changes, in its new order, then the ones it removes; a section moved in or out is a
+        /// move, not here.
+        public let sections: [Section]
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            slug = try c.decode(String.self, forKey: .slug)
+            title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+            number = try c.decodeIfPresent(String.self, forKey: .number) ?? ""
+            added = try c.decodeIfPresent(Bool.self, forKey: .added) ?? false
+            category = try c.decode(Category.self, forKey: .category)
+            fields = try c.decodeIfPresent([String].self, forKey: .fields) ?? []
+            sections = try c.decodeIfPresent([Section].self, forKey: .sections) ?? []
+        }
+    }
+
+    /// Where a moved section was, or where the change puts it: its document, that document's number, its key and its
+    /// place (3 for `§3`).
+    public struct Place: Codable, Equatable, Sendable {
+        public let doc: String
+        public let number: String
+        public let key: String
+        public let section: Int
+    }
+
+    /// A section a plan card moves from one of its documents to another.
+    public struct Move: Codable, Equatable, Sendable {
+        public let title: String
+        public let from: Place
+        public let to: Place
+        /// Its fields that change besides its place, in the schema's order.
+        public let fields: [String]
+        /// Its covers as the change has them, when the move changes them.
+        public let covers: String?
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+            from = try c.decode(Place.self, forKey: .from)
+            to = try c.decode(Place.self, forKey: .to)
+            fields = try c.decodeIfPresent([String].self, forKey: .fields) ?? []
+            covers = try c.decodeIfPresent(String.self, forKey: .covers)
+        }
+    }
+
+    /// The confirmed version the card was drafted on.
     public let baseVersion: Int
+    /// The version its press made and confirmed; nil until it is pressed.
     public let version: Int?
-    public let doc: Doc
-    public let category: Category
-    public let fields: [String]
-    public let sections: [Section]
+    public let docs: [Doc]
+    public let moves: [Move]
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        baseVersion = try c.decodeIfPresent(Int.self, forKey: .baseVersion) ?? 0
+        version = try c.decodeIfPresent(Int.self, forKey: .version)
+        docs = try c.decodeIfPresent([Doc].self, forKey: .docs) ?? []
+        moves = try c.decodeIfPresent([Move].self, forKey: .moves) ?? []
+    }
 }
 
 /// A card as the owner's door serves it (contract `chat.drafts.read`).

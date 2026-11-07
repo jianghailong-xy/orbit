@@ -26,6 +26,7 @@ import {
   type WikiChatDraftOp,
   type WikiChatFabChat,
   type WikiChatNote,
+  type WikiChatDraftSectionView,
   type WikiChatPlanChangeView,
   type WikiChatRewritesInput,
   type WikiDocChange,
@@ -41,6 +42,8 @@ import {
   wikiChatFabState,
   wikiChatNoteLabel,
   wikiChatPlanFace,
+  wikiChatPlanMovedNote,
+  wikiChatRewriteLinks,
   wikiChatResultLine,
   wikiChatRewrites,
   wikiChatRewriteWaits,
@@ -182,8 +185,12 @@ describe('wiki chat contract', () => {
     // The plan kind opened with the plan card (C12): gated as a proposal is, its errors back to the agent that wrote it.
     expect(draft.plan).toMatch(/opened with the plan card \(C12/u);
     for (const said of ['WIKI_PLAN_GATE', 'WIKI_PLAN_UNCONFIRMED', 'WIKI_PLAN_STALE', 'plan.gate.author', 'covers']) expect(draft.plan).toContain(said);
-    expect(draft.params.change).toMatch(/\{ doc, category\? \}/u);
-    expect(draft.params.change).toMatch(/a writing requirement goes into the covers of the sections it is for/u);
+    // One card, several documents (C17): { docs, categories? }, a split's two documents in one edit; a proposal's shape is one.
+    expect(draft.params.change).toMatch(/\{ docs, categories\? \}/u);
+    expect(draft.params.change).toMatch(/A plan proposal's \{ doc, category\? \} is taken as one document/u);
+    expect(draft.params.change).toMatch(/A writing requirement goes into the covers of the sections it is for/u);
+    expect(draft.plan).toMatch(/gated once/u);
+    expect(draft.plan).toContain('change.docs[1].sections[2].covers');
     expect(draft.description).toMatch(/Works only in a wiki chat\.$/u);
     expect(draft.description).toMatch(/never call a draft applied/u);
     for (const tool of [draft.tool, ...surface.tools]) expect(tool).not.toMatch(/accept|confirm|decide|delete|doc/u);
@@ -226,10 +233,19 @@ describe('wiki chat contract', () => {
     expect(chat.presses.undo).toMatch(/revert:<changeset id>/u);
     expect(chat.presses.undo).toMatch(/docs\.versions\.restore/u);
     expect(chat.presses.undo).toMatch(/every op is an add or an amend/u);
-    // A plan card's press (C12): the plan's own edit, confirmation and build, all or nothing, and no Undo.
+    // A plan card's press (C12): the plan's own edit, confirmation and build, all or nothing — every document of it at once (C17).
     for (const door of ['plan.routes.edit', 'plan.routes.confirm', 'plan.jobs.request', 'plan.proposals.accept']) expect(chat.presses.apply).toContain(door);
     expect(chat.presses.apply).toMatch(/nothing is written — no version, no confirmation, no build and no press/u);
-    expect(chat.presses.undo).toMatch(/A plan card never is/u);
+    expect(chat.presses.apply).toMatch(/every error, of every document/u);
+    // A plan card's Undo (C17): the plan back as a new confirmed version of the owner's, the sections its builds wrote
+    // restored with no model asked, and refused once the plan moved on.
+    expect(chat.presses.undo).not.toMatch(/A plan card never is/u);
+    for (const said of ['WIKI_REVISION_CONFLICT', "plan.routes.edit's storeIn", "plan.routes.confirm's confirmIn", 'docs.versions.restore', 'no model asked', 'reason restore', 'plan.jobs.request']) {
+      expect(chat.presses.undo).toContain(said);
+    }
+    expect(chat.drafts.states.applied).toContain('copy.card.planMovedNote');
+    expect(chat.drafts.actions).toMatch(/Open in Plan for a plan card/u);
+    expect(CONTRACT.docs.versions.kept).toMatch(/A write that drops a section/u);
     expect(chat.presses.retry).toMatch(/plan\.jobs\.rebuild/u);
     expect(chat.drafts.read).toContain('changesetId, rewrite, change, createdAt');
     expect(chat.drafts.results.plan).toMatch(/kind build, of the version the press confirmed/u);
@@ -442,7 +458,7 @@ describe('wiki chat contract', () => {
 
 describe('wiki chat vectors', () => {
   it('names every case once, and covers every state, result, look, reason and note', () => {
-    for (const group of ['cards', 'results', 'fab', 'waiting', 'followWaiting', 'rewrites', 'sentenceDiff', 'notes', 'contexts', 'changes', 'planFaces']) {
+    for (const group of ['cards', 'results', 'fab', 'waiting', 'followWaiting', 'rewrites', 'sentenceDiff', 'notes', 'contexts', 'changes', 'planFaces', 'rewriteLinks']) {
       const cases = FIXTURE[group] as Array<{ name: string }>;
       expect(cases.length, group).toBeGreaterThan(0);
       expect(new Set(names(cases)).size, `${group} names a case twice`).toBe(cases.length);
@@ -461,7 +477,7 @@ describe('wiki chat vectors', () => {
   it.each(cases('cards'))('card: %s', (_name, vector) => {
     const v = vector as {
       facts: WikiChatDraftFacts; kind: WikiChatDraftKind; ops: Array<WikiChatDraftOp & { decision?: string }>; undoable: boolean; state: string;
-      label: string; title: string; actions: string[]; needsYou: boolean;
+      label: string; title: string; actions: string[]; needsYou: boolean; note?: string | null;
     };
     const state = wikiChatDraftState(v.facts);
     expect(state).toBe(v.state);
@@ -470,6 +486,8 @@ describe('wiki chat vectors', () => {
     const card: WikiChatCard = { kind: v.kind, state, undoable: v.undoable, rewrite: null };
     expect(wikiChatCardActions(card)).toEqual(v.actions);
     expect(wikiChatCardNeedsYou(card)).toBe(v.needsYou);
+    // The line an applied plan card that can no longer be undone carries (C17); every other card carries none of it.
+    expect(wikiChatPlanMovedNote(card)).toBe(v.note ?? null);
   });
 
   it.each(cases('results'))('result: %s', (_name, vector) => {
@@ -523,6 +541,11 @@ describe('wiki chat vectors', () => {
   it.each(cases('planFaces'))('plan card face: %s', (_name, vector) => {
     const v = vector as { change: WikiChatPlanChangeView; heading: string; rows: unknown[] };
     expect(wikiChatPlanFace(v.change)).toEqual({ heading: v.heading, rows: v.rows });
+  });
+
+  it.each(cases('rewriteLinks'))('Rewrites row: %s', (_name, vector) => {
+    const v = vector as { kind: WikiChatDraftKind; rewrites: WikiChatDraftSectionView[]; links: unknown[] };
+    expect(wikiChatRewriteLinks(v.kind, v.rewrites)).toEqual(v.links);
   });
 
   it.each(cases('changes'))('Docs row: %s', (_name, vector) => {

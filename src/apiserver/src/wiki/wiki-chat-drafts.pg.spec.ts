@@ -628,10 +628,11 @@ test('a wiki chat drafts cards, and only the owner presses them', { skip: !URL_,
     assert.deepEqual([excluded.status, excluded.json.code], [403, 'WIKI_SESSION_EXCLUDED'], excluded.text);
     assert.match(excluded.json.message, /works only in a wiki chat/u);
     const chat = await newChat(null);
-    // The plan kind is open (C12, wiki-chat-plan-card.pg.spec.ts holds it): a change of no proposal's shape is refused by the plan's gate.
+    // The plan kind is open (C12, wiki-chat-plan-card.pg.spec.ts holds it): a change of no shape the plan card takes is refused
+    // by the plan's gate — { docs, categories? } since one card changes several documents (C17, wiki-chat-plan-split.pg.spec.ts).
     const plan = await draft(chat, { kind: 'plan', change: { op: 'edit' }, reason: 'r', idempotencyKey: `plan-${RUN}` });
     assert.deepEqual([plan.status, plan.json.code], [422, 'WIKI_PLAN_GATE'], plan.text);
-    assert.deepEqual(plan.json.errors.map((e: { path: string }) => e.path).sort(), ['change.doc', 'change.op']);
+    assert.deepEqual(plan.json.errors.map((e: { path: string }) => e.path).sort(), ['change.docs', 'change.op']);
     const unknown = await draft(chat, { ...body, sections: [{ doc: 'sessions-runtime', section: 'overview' }], idempotencyKey: `rw-x-${RUN}` });
     assert.deepEqual([unknown.status, unknown.json.code, unknown.json.errors[0].path], [400, 'WIKI_SCHEMA', 'sections[0]'], 'a section not written yet');
     const blank = await draft(chat, { ...body, replaces: '  ', idempotencyKey: `rw-b-${RUN}` });

@@ -128,6 +128,8 @@ public enum WikiChatLogic {
             var actions: [WikiChatAction] = []
             if card.undoable { actions.append(.undo) }
             if card.kind == .entry { actions.append(.openEntry) }
+            // The plan page holds every version: where the owner changes the plan again, or sees why Undo is off (C17).
+            if card.kind == .plan { actions.append(.openInPlan) }
             if let rewrite = card.rewrite {
                 if rewrite.result == .waiting, let reason = rewrite.reason, settingsReasons.contains(reason) { actions.append(.settings) }
                 if rewrite.result == .failed { actions.append(.tryAgain) }
@@ -137,6 +139,14 @@ public enum WikiChatLogic {
         default:
             return []
         }
+    }
+
+    /// What an applied plan card that can no longer be undone says under its title (`wikiChatPlanMovedNote`, contract
+    /// `chat.drafts.states.applied`, C17): the plan moved on since its press, so Undo is off and Open in Plan is where
+    /// the plan changes again. Nil for any other card: an applied plan card is undoable exactly while the plan stands
+    /// where its press left it.
+    public static func planMovedNote(_ card: WikiChatCard) -> String? {
+        card.kind == .plan && card.state == .applied && !card.undoable ? WikiChatCopy.cardPlanMovedNote : nil
     }
 
     /// Whether an applied card's rewrite waits on the owner — what it adds to the Wiki's waiting count W (contract
@@ -678,8 +688,8 @@ public enum WikiChatLogic {
         public let tone: Tone
         /// A settled card is drawn flat (board 42 ③ ④'s quiet cards).
         public let quiet: Bool
-        /// The line under the title a state carries: `A newer draft took over.`, the In Review note, or an undone
-        /// rewrite's (`cardUndoneRewriteNote`).
+        /// The line under the title a state carries: `A newer draft took over.`, the In Review note, an undone
+        /// rewrite's (`cardUndoneRewriteNote`), or an applied plan card's that can no longer be undone (`planMovedNote`).
         public let note: String?
         /// Applied with a challenge still waiting in Review: its note opens that item.
         public let inReview: Bool
@@ -706,12 +716,13 @@ public enum WikiChatLogic {
     }
 
     /// The line under a card's title a state carries (design §7.3, §8.4; the web's `cardNote`): an undone Rewrite from
-    /// main says the next maintenance run writes the section from main again when main has changed its files.
+    /// main says the next maintenance run writes the section from main again when main has changed its files, and an
+    /// applied plan card the plan moved on from says why it can no longer be undone (`planMovedNote`, C17).
     static func cardNote(_ card: WikiChatDraftView, inReview: Bool) -> String? {
         if inReview { return WikiChatCopy.cardAppliedInReviewNote }
         if card.state == .replaced { return WikiChatCopy.cardReplacedNote }
         if card.state == .undone && card.kind == .rewrite { return WikiChatCopy.cardUndoneRewriteNote }
-        return nil
+        return planMovedNote(card.card)
     }
 
     /// The tone of the line under an applied card (`wikiChatResultLook`).
@@ -806,7 +817,7 @@ public enum WikiChatLogic {
         var sources: [String] = []
         var heading: String?
         if card.kind == .plan, let change = card.change {
-            // A plan card says what its change does to the document (`wikiChatPlanFace`, board 42 ④ ③), then why.
+            // A plan card says what its change does to its documents (`wikiChatPlanFace`, board 42 ④ ③), then why.
             let plan = planFace(change)
             rows = plan.rows
             if let why = card.rationale?.trimmingCharacters(in: .whitespacesAndNewlines), !why.isEmpty {
@@ -856,36 +867,87 @@ public enum WikiChatLogic {
         return CardFace(heading: heading, rows: rows, diff: diff, sources: sources)
     }
 
-    /// What a plan card says on its face (`wikiChatPlanFace`, C12): the document as its heading, then a row for a new
-    /// document, one for the document's own fields that change, one each for the sections it adds, changes and removes,
-    /// and one for each section whose covers it writes — where a writing requirement goes (design §6, third row).
+    /// What a plan card says on its face (`wikiChatPlanFace`, board 42 ④ ③; C12, C17): its documents as its heading —
+    /// `3.1 Sessions runtime · 3.5 Delivery and heartbeats` — then a row for the sections it moves between them (board
+    /// 42 ③'s Move: `3.1 §3 Delivery and heartbeats → new document 3.5`), and then document by document: a row for a new
+    /// document or for the document's own fields that change, one each for the sections it adds, changes and removes,
+    /// and one for each section whose covers it writes — where a writing requirement goes (design §6, third row). On a
+    /// card of one document a section is `§2 Turn delivery`, as the heading names the document; on a card of several it
+    /// is `3.1 §2 Turn delivery`, and a document's row starts with its number.
     public static func planFace(_ change: WikiChatPlanChange) -> (heading: String, rows: [CardFace.Row]) {
         func fields(_ names: [String]) -> String { listed(names.map { WikiChatCopy.planFields[$0] ?? $0 }) }
-        func section(_ one: WikiChatPlanChange.Section) -> String { "§\(one.number) \(one.title)" }
+        let several = change.docs.count > 1
+        func named(_ doc: String, _ n: Int, _ title: String) -> String { (several ? "\(doc) " : "") + "§\(n) \(title)" }
         var rows: [CardFace.Row] = []
-        if change.doc.number == nil {
-            let template = change.category.opens ? WikiChatCopy.cardPlanNewCategory : WikiChatCopy.cardPlanNewDoc
-            rows.append(.init(label: WikiChatCopy.cardPlanDocument, value: fill(template, ["category": change.category.title])))
-        } else if !change.fields.isEmpty {
-            rows.append(.init(label: WikiChatCopy.cardPlanDocument, value: fill(WikiChatCopy.cardPlanDocFields, ["fields": fields(change.fields)])))
+        if !change.moves.isEmpty {
+            let moves = change.moves.map { move -> String in
+                let intoNew = change.docs.first(where: { $0.slug == move.to.doc })?.added == true
+                let into = intoNew ? fill(WikiChatCopy.cardPlanNewDocRef, ["doc": move.to.number]) : move.to.number
+                let moved = fill(WikiChatCopy.cardPlanMove, ["section": "\(move.from.number) §\(move.from.section) \(move.title)", "doc": into])
+                if move.fields.isEmpty { return moved }
+                return fill(WikiChatCopy.cardPlanSectionFields, ["section": moved, "fields": fields(move.fields)])
+            }
+            rows.append(.init(label: WikiChatCopy.cardPlanMoves, value: moves.joined(separator: " · ")))
         }
-        func of(_ edit: String) -> [WikiChatPlanChange.Section] { change.sections.filter { $0.edit == edit } }
-        if !of("added").isEmpty {
-            rows.append(.init(label: WikiChatCopy.cardPlanAdds, value: of("added").map(section).joined(separator: " · ")))
+        for doc in change.docs {
+            let lead = several ? "\(doc.number) · " : ""
+            func section(_ one: WikiChatPlanChange.Section) -> String { named(doc.number, one.number, one.title) }
+            if doc.added {
+                let template = doc.category.opens ? WikiChatCopy.cardPlanNewCategory : WikiChatCopy.cardPlanNewDoc
+                rows.append(.init(label: WikiChatCopy.cardPlanDocument, value: lead + fill(template, ["category": doc.category.title])))
+            } else if !doc.fields.isEmpty {
+                rows.append(.init(label: WikiChatCopy.cardPlanDocument, value: lead + fill(WikiChatCopy.cardPlanDocFields, ["fields": fields(doc.fields)])))
+            }
+            func of(_ edit: String) -> [WikiChatPlanChange.Section] { doc.sections.filter { $0.edit == edit } }
+            if !of("added").isEmpty {
+                rows.append(.init(label: WikiChatCopy.cardPlanAdds, value: of("added").map(section).joined(separator: " · ")))
+            }
+            if !of("changed").isEmpty {
+                let changed = of("changed").map { fill(WikiChatCopy.cardPlanSectionFields, ["section": section($0), "fields": fields($0.fields)]) }
+                rows.append(.init(label: WikiChatCopy.cardPlanChanges, value: changed.joined(separator: " · ")))
+            }
+            if !of("removed").isEmpty {
+                rows.append(.init(label: WikiChatCopy.cardPlanRemoves, value: of("removed").map(section).joined(separator: " · ")))
+            }
+            for one in doc.sections where one.edit != "removed" {
+                guard let covers = one.covers else { continue }
+                rows.append(.init(label: WikiChatCopy.cardPlanCovers, value: fill(WikiChatCopy.cardPlanSectionCovers, ["section": section(one), "covers": covers])))
+            }
+            // A section moved into this document whose covers the move changes: where a requirement for it goes now.
+            for move in change.moves where move.to.doc == doc.slug {
+                guard let covers = move.covers else { continue }
+                let at = named(doc.number, move.to.section, move.title)
+                rows.append(.init(label: WikiChatCopy.cardPlanCovers, value: fill(WikiChatCopy.cardPlanSectionCovers, ["section": at, "covers": covers])))
+            }
         }
-        if !of("changed").isEmpty {
-            let changed = of("changed").map { fill(WikiChatCopy.cardPlanSectionFields, ["section": section($0), "fields": fields($0.fields)]) }
-            rows.append(.init(label: WikiChatCopy.cardPlanChanges, value: changed.joined(separator: " · ")))
+        return (change.docs.map { "\($0.number) \($0.title)" }.joined(separator: " · "), rows)
+    }
+
+    /// One link of a card's Rewrites row (`WikiChatRewriteLink`): what it says, and the section it opens beside the chat.
+    public struct RewriteLink: Equatable, Sendable {
+        public let label: String
+        public let doc: String
+        public let key: String
+    }
+
+    /// A card's Rewrites row (`wikiChatRewriteLinks`, board 42 ② ③ ④): a link each section — `3.1 §3` — save a plan
+    /// card whose rebuild spans more than one document, which links each document once by its number — board 42 ③'s
+    /// `3.1 · 3.5` — opening its first section: a split writes its new document whole. The order is the card's.
+    public static func rewriteLinks(kind: WikiChatDraftKind, rewrites: [WikiChatDraftSection]) -> [RewriteLink] {
+        // Each document's first section, in the card's order.
+        var firsts: [WikiChatDraftSection] = []
+        for section in rewrites where !firsts.contains(where: { $0.doc == section.doc }) { firsts.append(section) }
+        guard kind == .plan, firsts.count > 1 else {
+            return rewrites.map { RewriteLink(label: $0.place, doc: $0.doc, key: $0.key) }
         }
-        if !of("removed").isEmpty {
-            rows.append(.init(label: WikiChatCopy.cardPlanRemoves, value: of("removed").map(section).joined(separator: " · ")))
+        return firsts.map { first in
+            // `3.1 §1` → `3.1`: the document's number.
+            var label = first.place
+            if let at = first.place.range(of: " §", options: .backwards)?.lowerBound, at > first.place.startIndex {
+                label = String(first.place[..<at])
+            }
+            return RewriteLink(label: label, doc: first.doc, key: first.key)
         }
-        for one in change.sections where one.edit != "removed" {
-            guard let covers = one.covers else { continue }
-            rows.append(.init(label: WikiChatCopy.cardPlanCovers, value: fill(WikiChatCopy.cardPlanSectionCovers, ["section": section(one), "covers": covers])))
-        }
-        let heading = change.doc.number.map { "\($0) \(change.doc.title)" } ?? change.doc.title
-        return (heading, rows)
     }
 
     /// A source as the card's Sources row names it: the chat's own words first-hand, else its kind and where it points

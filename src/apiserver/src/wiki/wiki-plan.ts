@@ -48,6 +48,8 @@ import {
   type WikiPlanVersionSummary,
   type WikiSupportSpaces,
   type WikiChatPlanChangeView,
+  type WikiChatPlanMove,
+  type WikiChatPlanSectionChange,
 } from '@orbit/shared';
 import { redactSecrets } from '../common/secret-redaction';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -934,18 +936,20 @@ type PlanReader = Pick<Prisma.TransactionClient, 'wikiPlan'>;
 type ReferenceReader = Pick<Prisma.TransactionClient, 'project' | 'wikiTopic' | '$queryRaw'>;
 
 /**
- * A chat's plan card's change as the card keeps it (contract `agentSurface.chat.draft.plan`, `chat.drafts.kinds.plan`):
- * shaped as a proposal's change — the document as gated, each section keyed as the press will key it and every project
- * by its id, and the category it opens or null — with the confirmed version it was drafted against, and once pressed
- * the version the press made.
+ * A chat's plan card's change as the card keeps it (contract `agentSurface.chat.draft.plan`, `chat.drafts.kinds.plan`;
+ * C17): the documents as gated — each section keyed as the press will key it and every project by its id — in the
+ * order the change gave them, and the categories it opens, with the confirmed version it was drafted against; once
+ * pressed, the version the press made; once undone, the version the Undo made.
  */
 export interface WikiPlanCardChange {
   baseVersion: number;
   version: number | null;
-  doc: WikiPlanDocInput;
-  category: WikiPlanCategory | null;
+  docs: WikiPlanDocInput[];
+  categories: WikiPlanCategory[];
   /** The build its press — or its Try again — asked for (a `wiki_plan_job` of kind build), once asked. */
   build?: string | null;
+  /** The version its Undo stored and confirmed: the one it was drafted on, again (contract `chat.presses.undo`). */
+  undoVersion?: number | null;
 }
 
 /**
@@ -1842,12 +1846,13 @@ export class WikiPlans {
     }
     const row = await this.prisma.wikiPlan.findFirstOrThrow({ where: { id: confirmed.id }, select: VERSION_SELECT });
     const gated = await this.gateCardChange(this.prisma, ownerId, spaceId, row, value, 'The plan change');
-    return { baseVersion: confirmed.version, version: null, doc: docInputOf(gated.doc), category: gated.category };
+    return { baseVersion: confirmed.version, version: null, docs: gated.docs.map(docInputOf), categories: gated.categories };
   }
 
   /**
    * A plan card's press (contract `chat.presses.apply`), in the press's own transaction once it holds the card: under the
-   * space row's lock the plan must still stand at the version the card was drafted on — another stored since is
+   * space row's lock (`lockSpaceInUse` — a wiki moved to Trash since the card was held is the plain 404, and nothing is
+   * written) the plan must still stand at the version the card was drafted on — another stored since is
    * WIKI_REVISION_CONFLICT; the change is applied to it and gated again, as an accepted proposal is
    * (`plan.proposals.accept`); the result is stored as a new version of origin owner, as the owner's edit is, and
    * confirmed, the version in force superseded. A refusal throws, and the caller's transaction writes nothing. Answers
@@ -1855,8 +1860,7 @@ export class WikiPlans {
    */
   async applyCardChangeIn(tx: Prisma.TransactionClient, card: { ownerId: string; spaceId: string; change: WikiPlanCardChange }): Promise<{ version: number }> {
     const { ownerId, spaceId, change } = card;
-    await tx.$queryRaw(Prisma.sql`
-      SELECT "id" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`);
+    await lockSpaceInUse(tx, ownerId, spaceId);
     const base = await this.latest(tx, ownerId, spaceId);
     if (!base || base.status !== 'confirmed' || base.version !== change.baseVersion) {
       throw new WikiRefusalError({
@@ -1866,7 +1870,7 @@ export class WikiPlans {
           + 'the plan as it is (Redo).',
       });
     }
-    const gated = await this.gateCardChange(tx, ownerId, spaceId, base, { doc: change.doc, ...(change.category ? { category: change.category } : {}) },
+    const gated = await this.gateCardChange(tx, ownerId, spaceId, base, { docs: change.docs, ...(change.categories.length > 0 ? { categories: change.categories } : {}) },
       `This plan change, applied to version ${base.version},`);
     const { version } = await this.storeIn(tx, ownerId, spaceId, base.version, {
       origin: 'owner',
@@ -1876,6 +1880,46 @@ export class WikiPlans {
       target: gated.target,
       gate: report(gated.plan, gated.target, true, notesOf(base.gate)),
       repoCheck: carriedRepoCheck(base.repoCheck as unknown as WikiPlanRepoCheck | null, gated.base, gated.plan),
+      model: null,
+      authorSessionId: null,
+      authorUserId: ownerId,
+    });
+    await this.confirmIn(tx, ownerId, spaceId, version);
+    return { version };
+  }
+
+  /**
+   * A plan card's Undo (contract `chat.presses.undo`; C17), in the Undo's own transaction once it holds the card: under the
+   * space row's lock (`lockSpaceInUse` — a wiki moved to Trash since the card was held is the plain 404, and nothing is
+   * written) the plan must still stand at the version the card's press made — the newest, and confirmed — or the Undo is
+   * refused WIKI_REVISION_CONFLICT. The version the card was drafted on is stored again word for word — its
+   * categories, documents, sections and their keys, new fields, target, gate report and repository check: what the owner
+   * had before the press, whose written sections the caller restores by their keys — as a new version of origin owner,
+   * and confirmed. Nothing is gated again: it is a version this plan held, and the press's gate held the plan only to the
+   * card's change. Answers the version made: its build is the caller's to ask for once that transaction commits.
+   */
+  async undoCardChangeIn(tx: Prisma.TransactionClient, card: { ownerId: string; spaceId: string; change: WikiPlanCardChange }): Promise<{ version: number }> {
+    const { ownerId, spaceId, change } = card;
+    await lockSpaceInUse(tx, ownerId, spaceId);
+    const latest = await this.latest(tx, ownerId, spaceId);
+    if (change.version === null || !latest || latest.status !== 'confirmed' || latest.version !== change.version) {
+      throw new WikiRefusalError({
+        code: 'WIKI_REVISION_CONFLICT',
+        message: `the plan moved on since this card's press made version ${change.version ?? '(none)'}: it stands at `
+          + `${latest ? `version ${latest.version} (${latest.status})` : 'no version'} now, so nothing was undone. Change the plan on the `
+          + 'Plan page (Open in Plan).',
+      });
+    }
+    const base = await tx.wikiPlan.findFirst({ where: { ownerId, spaceId, version: change.baseVersion }, select: VERSION_SELECT });
+    if (!base) throw new ConflictException(`version ${change.baseVersion} of the plan, which this card was drafted on, is gone: nothing was undone`);
+    const { version } = await this.storeIn(tx, ownerId, spaceId, latest.version, {
+      origin: 'owner',
+      baseVersion: latest.version,
+      proposalId: null,
+      plan: contentOf(base),
+      target: { min: base.docsMin, max: base.docsMax },
+      gate: base.gate as unknown as WikiPlanGateReport,
+      repoCheck: base.repoCheck as unknown as WikiPlanRepoCheck | null,
       model: null,
       authorSessionId: null,
       authorUserId: ownerId,
@@ -1915,9 +1959,10 @@ export class WikiPlans {
   }
 
   /**
-   * A plan card's change walked against a version, as a proposal's is (`plan.proposals.accept`): schema, the plan's own
-   * references and the ones a session condition names (read through `db`), the document count and protection, and the
-   * sections keyed as the version they change keys them. Refused WIKI_PLAN_GATE with every error.
+   * A plan card's change walked against a version, as a proposal's is (`plan.proposals.accept`) — every document of it
+   * put in, and the plan they make gated once (C17): schema, the plan's own references and the ones a session condition
+   * names (read through `db`), the document count and protection, and the sections keyed as the version they change keys
+   * them. Refused WIKI_PLAN_GATE with every error, of every document.
    */
   private async gateCardChange(
     db: ReferenceReader,
@@ -1926,18 +1971,19 @@ export class WikiPlans {
     row: VersionRow,
     value: unknown,
     what: string,
-  ): Promise<{ doc: PlanDoc; category: PlanCategory | null; plan: PlanContent; base: PlanContent; target: { min: number; max: number } }> {
+  ): Promise<{ docs: PlanDoc[]; categories: PlanCategory[]; plan: PlanContent; base: PlanContent; target: { min: number; max: number } }> {
     const base = contentOf(row);
     const walk = new Walk(declaredOf(base.newFields));
-    const { doc, category, plan } = walkChange(walk, base, value);
+    const { docs, categories, plan } = walkCardChange(walk, base, value);
     checkWhole(walk, plan, 'plan.');
     await this.resolve(walk, ownerId, spaceId, plan, db);
     const target = { min: row.docsMin, max: row.docsMax };
     checkDocCount(walk, plan, base.docs.length, target, 'plan.docs');
     checkProtected(walk, plan, base, 'plan.');
-    if (walk.errors.length > 0 || !doc) throw gateRefusal(walk.errors, what);
+    if (walk.errors.length > 0 || docs.length === 0) throw gateRefusal(walk.errors, what);
     assignKeys(plan, base);
-    return { doc, category, plan, base, target };
+    // Each document as the plan holds it, keyed: putting in a later document copies the ones before it.
+    return { docs: docs.map((doc) => plan.docs.find((one) => one.slug === doc.slug) ?? doc), categories, plan, base, target };
   }
 
   // ── The plan's jobs (contract `plan.jobs`) ────────────────────────────────────────────────────
@@ -2214,8 +2260,56 @@ function walkChange(walk: Walk, base: PlanContent, value: unknown): { doc: PlanD
   return { doc, category: opens ? category : null, plan: doc ? applyChange(base, doc, opens ? category : null) : base };
 }
 
+/**
+ * A plan card's change (contract `agentSurface.chat.draft.params.change`; C17): `{ docs, categories? }` — the documents
+ * as they should read, each one of the plan's by its slug or a new one, and the categories the change opens, each with a
+ * document of the change filed under it — or a proposal's `{ doc, category? }`, which is one document (`walkChange`).
+ * Walked against `base` into the plan the documents make together, put in one after another as an accepted proposal
+ * puts its one (`applyChange`), so a split's new document and the one it leaves are one edit. Everything wrong goes into
+ * the walk, at paths from `change` (`change.docs[1].sections[2].covers`).
+ */
+function walkCardChange(walk: Walk, base: PlanContent, value: unknown): { docs: PlanDoc[]; categories: PlanCategory[]; plan: PlanContent } {
+  const change = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+  if (change && ('doc' in change || 'category' in change) && !('docs' in change) && !('categories' in change)) {
+    const one = walkChange(walk, base, value);
+    return { docs: one.doc ? [one.doc] : [], categories: one.category ? [one.category] : [], plan: one.plan };
+  }
+  if (!change) walk.fail('schema', 'change', 'must be an object: { docs, categories? }');
+  for (const key of Object.keys(change ?? {})) {
+    if (!['docs', 'categories'].includes(key)) walk.fail('schema', `change.${key}`, `${quoted(key)} is not a field of a change: docs, categories`);
+  }
+  const docs: PlanDoc[] = [];
+  (change ? walk.list(change.docs, 'change.docs', 1) : []).forEach((item, i) => {
+    const doc = walk.doc(item, `change.docs[${i}]`);
+    if (!doc) return;
+    if (doc.slug !== '' && docs.some((one) => one.slug === doc.slug)) {
+      walk.fail('schema', `change.docs[${i}].slug`, `${quoted(doc.slug)} is the slug of an earlier document of this change: send each document once`);
+      return;
+    }
+    docs.push(doc);
+  });
+  const categories: PlanCategory[] = [];
+  (change ? walk.list(change.categories, 'change.categories') : []).forEach((item, i) => {
+    const category = walk.category(item, `change.categories[${i}]`);
+    if (!category) return;
+    const at = `change.categories[${i}]`;
+    if (base.categories.some((one) => one.key === category.key)) {
+      walk.fail('schema', `${at}.key`, `${quoted(category.key)} is already a category of the plan: leave it out, and file the document under it`);
+    } else if (categories.some((one) => one.key === category.key)) {
+      walk.fail('schema', `${at}.key`, `${quoted(category.key)} is the key of an earlier category of this change`);
+    } else if (!docs.some((doc) => doc.category === category.key)) {
+      walk.fail('schema', at, `no document of this change is filed under ${quoted(category.key)}: open a category for a document that goes in it`);
+    } else {
+      categories.push(category);
+    }
+  });
+  let plan: PlanContent = { categories: [...base.categories, ...categories], docs: base.docs, newFields: base.newFields };
+  for (const doc of docs) plan = applyChange(plan, doc, null);
+  return { docs, categories, plan };
+}
+
 /** A document's number in a plan, as the documents read numbers it (`numbering` in wiki-docs.ts): "3.1"; null when it has none. */
-function docNumberIn(plan: Pick<PlanContent, 'categories' | 'docs'>, slug: string): string | null {
+function docNumberIn(plan: { categories: ReadonlyArray<{ key: string }>; docs: ReadonlyArray<{ slug: string; category: string }> }, slug: string): string | null {
   const at = plan.docs.findIndex((doc) => doc.slug === slug);
   if (at < 0) return null;
   const { category } = plan.docs[at];
@@ -2228,44 +2322,103 @@ const DOC_FIELDS = ['category', 'title', 'question', 'audience', 'scopeIn', 'sco
 const SECTION_FIELDS = ['title', 'kind', 'covers', 'length', 'sources'] as const;
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(canonical(a ?? null)) === JSON.stringify(canonical(b ?? null));
 
+/** A document of a plan card's change as the card keeps it (`docInputOf`): what the view below reads of it. */
+type CardDoc = { slug: string; title: string; category: string; sections: Array<{ key?: string; title: string } & Record<string, unknown>> } & Record<string, unknown>;
+
 /**
- * What a plan card's change does to the version it was drafted on (contract `chat.drafts.read`, change): the document's
- * own fields that change, and each section it adds, changes — with the fields that change — or removes, matched by key,
- * in the document's new order and the removed ones after; a section's covers with it when it is added or its covers
- * change. Both sides are read as the gate reads them (`contentOf`, `docInputOf`), so a section the change copies as it
- * was is no change.
+ * What a plan card's change does to the version it was drafted on (contract `chat.drafts.read`, change; C17): each of
+ * its documents in the plan's new order — numbered where that version numbers it, a new one where the change puts it —
+ * with its own fields that change and each section it adds, changes (with the fields that change) or removes, matched
+ * by key, in its new order and the removed ones after, a section's covers with it when it is added or its covers change;
+ * and the sections it moves between its documents: one it takes out of a document, and one of the same title another
+ * of its documents gains, each taken once, in the order the documents and their sections come. Both sides are read as
+ * the gate reads them (`contentOf`, `docInputOf`), so a section the change copies as it was is no change.
  */
 export function wikiPlanCardChangeOf(base: { categories: unknown; docs: VersionRow['docs'] } | null, change: WikiPlanCardChange): WikiChatPlanChangeView {
   const plan = base ? contentOf({ categories: base.categories, newFields: [], docs: base.docs } as unknown as VersionRow) : { categories: [], docs: [], newFields: [] };
-  const before = plan.docs.find((doc) => doc.slug === change.doc.slug) ?? null;
-  const next = change.doc as unknown as { slug: string; title: string; category: string; sections: Array<{ key?: string; title: string } & Record<string, unknown>> } & Record<string, unknown>;
-  const fields = before ? DOC_FIELDS.filter((field) => !same((before as unknown as Record<string, unknown>)[field], next[field])) : [];
-  const sections: WikiChatPlanChangeView['sections'] = [];
-  next.sections.forEach((section, i) => {
-    const key = section.key ?? `s${i + 1}`;
-    const was = before?.sections.find((one) => one.key === key) ?? null;
-    if (!was) {
-      sections.push({ key, title: section.title, number: i + 1, edit: 'added', fields: [], covers: String(section.covers ?? '') });
-      return;
+  const nexts = change.docs as unknown as CardDoc[];
+  // The documents' places once the change is in, as numbering reads them: each in place of its slug's, or after its category's last.
+  const order = plan.docs.map((doc) => ({ slug: doc.slug, category: doc.category }));
+  for (const next of nexts) {
+    const at = order.findIndex((one) => one.slug === next.slug);
+    if (at >= 0) {
+      order[at] = { slug: next.slug, category: next.category };
+    } else {
+      const last = order.map((one) => one.category).lastIndexOf(next.category);
+      order.splice(last < 0 ? order.length : last + 1, 0, { slug: next.slug, category: next.category });
     }
-    const changed = SECTION_FIELDS.filter((field) => !same((was as unknown as Record<string, unknown>)[field], section[field]));
-    if (changed.length > 0) {
-      sections.push({ key, title: section.title, number: i + 1, edit: 'changed', fields: changed, covers: changed.includes('covers') ? String(section.covers ?? '') : null });
+  }
+  const categories = [...plan.categories, ...change.categories];
+  const after = { categories, docs: order };
+  const docs = [...nexts]
+    .sort((a, b) => order.findIndex((one) => one.slug === a.slug) - order.findIndex((one) => one.slug === b.slug))
+    .map((next) => {
+      const before = plan.docs.find((doc) => doc.slug === next.slug) ?? null;
+      const fields = before ? DOC_FIELDS.filter((field) => !same((before as unknown as Record<string, unknown>)[field], next[field])) : [];
+      const sections: WikiChatPlanSectionChange[] = [];
+      next.sections.forEach((section, i) => {
+        const key = section.key ?? `s${i + 1}`;
+        const was = before?.sections.find((one) => one.key === key) ?? null;
+        if (!was) {
+          sections.push({ key, title: section.title, number: i + 1, edit: 'added', fields: [], covers: String(section.covers ?? '') });
+          return;
+        }
+        const changed = SECTION_FIELDS.filter((field) => !same((was as unknown as Record<string, unknown>)[field], section[field]));
+        if (changed.length > 0) {
+          sections.push({ key, title: section.title, number: i + 1, edit: 'changed', fields: changed, covers: changed.includes('covers') ? String(section.covers ?? '') : null });
+        }
+      });
+      const kept = new Set(next.sections.map((section, i) => section.key ?? `s${i + 1}`));
+      before?.sections.forEach((section, i) => {
+        if (section.key !== null && !kept.has(section.key)) sections.push({ key: section.key, title: section.title, number: i + 1, edit: 'removed', fields: [], covers: null });
+      });
+      return {
+        slug: next.slug,
+        title: next.title,
+        number: (before ? docNumberIn(plan, next.slug) : docNumberIn(after, next.slug)) ?? next.slug,
+        added: before === null,
+        category: {
+          key: next.category,
+          title: categories.find((one) => one.key === next.category)?.title ?? next.category,
+          opens: change.categories.some((one) => one.key === next.category),
+        },
+        fields,
+        sections,
+      };
+    });
+  // A section one document lets go of and another gains under the same title is a move, not a removal and an addition.
+  const moves: WikiChatPlanMove[] = [];
+  for (const from of docs) {
+    for (const gone of from.sections.filter((one) => one.edit === 'removed')) {
+      const into = docs.find((doc) => doc !== from && doc.sections.some((one) => one.edit === 'added' && one.title.trim() === gone.title.trim()));
+      if (!into) continue;
+      const arrived = into.sections.find((one) => one.edit === 'added' && one.title.trim() === gone.title.trim())!;
+      const was = plan.docs.find((doc) => doc.slug === from.slug)!.sections.find((one) => one.key === gone.key)!;
+      const now = nexts.find((doc) => doc.slug === into.slug)!.sections[arrived.number - 1]!;
+      const changed = SECTION_FIELDS.filter((field) => field !== 'title' && !same((was as unknown as Record<string, unknown>)[field], now[field]));
+      moves.push({
+        title: arrived.title,
+        from: { doc: from.slug, number: from.number, key: gone.key, section: gone.number },
+        to: { doc: into.slug, number: into.number, key: arrived.key, section: arrived.number },
+        fields: changed,
+        covers: changed.includes('covers') ? String(now.covers ?? '') : null,
+      });
+      from.sections.splice(from.sections.indexOf(gone), 1);
+      into.sections.splice(into.sections.indexOf(arrived), 1);
     }
-  });
-  const kept = new Set(next.sections.map((section, i) => section.key ?? `s${i + 1}`));
-  before?.sections.forEach((section, i) => {
-    if (section.key !== null && !kept.has(section.key)) sections.push({ key: section.key, title: section.title, number: i + 1, edit: 'removed', fields: [], covers: null });
-  });
-  const category = plan.categories.find((one) => one.key === next.category);
-  return {
-    baseVersion: change.baseVersion,
-    version: change.version,
-    doc: { slug: next.slug, title: next.title, number: before ? docNumberIn(plan, next.slug) : null },
-    category: { key: next.category, title: category?.title ?? change.category?.title ?? next.category, opens: change.category !== null },
-    fields,
-    sections,
-  };
+  }
+  return { baseVersion: change.baseVersion, version: change.version, docs, moves };
+}
+
+/**
+ * The sections a plan card's press has its rebuild write (contract `chat.drafts.kinds.plan`; C17): in each of its
+ * documents, in the plan's new order, the sections the change adds, changes or moves in, in the document's order.
+ */
+export function wikiPlanCardSections(view: WikiChatPlanChangeView): Array<{ doc: string; key: string }> {
+  return view.docs.flatMap((doc) => [
+    ...doc.sections.filter((one) => one.edit !== 'removed').map((one) => ({ key: one.key, number: one.number })),
+    ...view.moves.filter((move) => move.to.doc === doc.slug).map((move) => ({ key: move.to.key, number: move.to.section })),
+  ].sort((a, b) => a.number - b.number).map((one) => ({ doc: doc.slug, key: one.key })));
 }
 
 /** The version a plan card was drafted on, as `wikiPlanCardChangeOf` reads it; null for one that is gone. */

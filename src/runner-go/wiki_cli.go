@@ -154,9 +154,10 @@ Options:
   --reason TEXT            Why, in a sentence or two; the card shows it. Required
   --idempotency-key KEY    Required: the same key with the same request answers with the card it made
   --replaces ID            The open card of this chat that this one replaces
-  --change JSON            plan: the change, a JSON object shaped as a plan proposal's: { doc, category? },
-                           the whole document as it should read. A writing requirement goes into the
-                           covers of the sections it is for
+  --change JSON            plan: the change, a JSON object { docs, categories? }: the documents as they
+                           should read, several in one card (a split sends the document without the
+                           sections that move, and a new document holding them). A writing requirement
+                           goes into the covers of the sections it is for
   --json
 
 ` + wikiDraftDescription + `
@@ -249,7 +250,7 @@ var wikiCLICapabilities = []cliCapabilitySpec{
 			"--reason <text> (required)",
 			"--idempotency-key <key> (required)",
 			"--replaces <card id>",
-			"--change <json> (plan: the change, { doc, category? })",
+			"--change <json> (plan: the change, { docs, categories? })",
 			"--json",
 		},
 		Mutates:     true,
@@ -473,7 +474,7 @@ func cliWikiDraft(args []string, out io.Writer, ctx cliOrchestrationContext) err
 	if strings.TrimSpace(*change) != "" {
 		var parsed map[string]interface{}
 		if err := json.Unmarshal([]byte(strings.TrimSpace(*change)), &parsed); err != nil || parsed == nil {
-			return fmt.Errorf("--change must be a JSON object, shaped as a plan proposal's change")
+			return fmt.Errorf("--change must be a JSON object: { docs, categories? }")
 		}
 		toolArgs["change"] = parsed
 	}

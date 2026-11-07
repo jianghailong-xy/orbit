@@ -47,6 +47,8 @@ final class WikiChatContractTests: XCTestCase {
         let title: String
         let actions: [WikiChatAction]
         let needsYou: Bool
+        /// The line an applied plan card that can no longer be undone carries (C17); absent or null on every other.
+        let note: String?
     }
 
     private struct ResultCase: Decodable {
@@ -86,13 +88,22 @@ final class WikiChatContractTests: XCTestCase {
         let heading: String?
     }
 
-    /// A plan card's face (C12): its change as the card read serves it, and the heading and rows it says.
+    /// A plan card's face (C12, C17): its change as the card read serves it, and the heading and rows it says.
     private struct PlanFaceCase: Decodable {
         struct Row: Decodable, Equatable { let label: String; let value: String }
         let name: String
         let change: WikiChatPlanChange
         let heading: String
         let rows: [Row]
+    }
+
+    /// A card's Rewrites row (C17): its kind and the sections its press rewrites, and the links the row draws.
+    private struct RewriteLinksCase: Decodable {
+        struct Link: Decodable, Equatable { let label: String; let doc: String; let key: String }
+        let name: String
+        let kind: WikiChatDraftKind
+        let rewrites: [WikiChatDraftSection]
+        let links: [Link]
     }
 
     private struct Fixture: Decodable {
@@ -103,6 +114,7 @@ final class WikiChatContractTests: XCTestCase {
         let notes: [NoteCase]
         let changes: [ChangeCase]
         let planFaces: [PlanFaceCase]
+        let rewriteLinks: [RewriteLinksCase]
     }
 
     private func fixture() throws -> Fixture {
@@ -202,6 +214,14 @@ final class WikiChatContractTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(cases.notes.count, 6)
         XCTAssertGreaterThanOrEqual(cases.changes.count, 5)
         XCTAssertGreaterThanOrEqual(cases.planFaces.count, 3)
+        XCTAssertGreaterThanOrEqual(cases.rewriteLinks.count, 3)
+        // A plan card over several documents, moving a section between them (C17), has a face and a Rewrites row.
+        XCTAssertTrue(cases.planFaces.contains { $0.change.docs.count > 1 && !$0.change.moves.isEmpty },
+                      "the fixture lost its plan card that moves a section between two documents")
+        XCTAssertTrue(cases.rewriteLinks.contains { $0.kind == .plan && Set($0.rewrites.map(\.doc)).count > 1 },
+                      "the fixture lost its plan card whose rebuild spans two documents")
+        // And an applied plan card that can no longer be undone says why.
+        XCTAssertTrue(cases.cards.contains { $0.note != nil }, "the fixture lost its applied plan card with the moved note")
         // Every state a card can be in has a case.
         XCTAssertEqual(Set(cases.cards.map(\.state)), Set(WikiChatDraftState.allCases.filter { $0 != .unknown }))
         // Every rewrite result an applied card can show has a case.
@@ -212,7 +232,8 @@ final class WikiChatContractTests: XCTestCase {
     }
 
     /// A card in each state: its state from its facts, its label, its status line — an applied card whose challenge
-    /// still waits in Review is not confirmed — its buttons, and whether the round button counts it.
+    /// still waits in Review is not confirmed — its buttons, whether the round button counts it, and the line an
+    /// applied plan card that can no longer be undone carries (C17).
     func testEveryCardIsTheFixtures() throws {
         let cards = try fixture().cards
         XCTAssertTrue(cards.contains { WikiChatLogic.appliedInReview($0.state, ops: $0.ops) },
@@ -225,6 +246,7 @@ final class WikiChatContractTests: XCTestCase {
             let card = WikiChatCard(kind: test.kind, state: test.state, undoable: test.undoable)
             XCTAssertEqual(WikiChatLogic.cardActions(card), test.actions, test.name)
             XCTAssertEqual(WikiChatLogic.cardNeedsYou(card), test.needsYou, test.name)
+            XCTAssertEqual(WikiChatLogic.planMovedNote(card), test.note, test.name)
         }
     }
 
@@ -293,13 +315,22 @@ final class WikiChatContractTests: XCTestCase {
         XCTAssertEqual(describeNote("\n\n\(rules)"), "")
     }
 
-    /// A plan card's face (C12, `wikiChatPlanFace`): the document, what of it changes, and the covers it writes — the
-    /// same heading and rows the web draws from the same change.
+    /// A plan card's face (C12, C17, `wikiChatPlanFace`): its documents, the sections it moves between them, what of each
+    /// changes, and the covers it writes — the same heading and rows the web draws from the same change.
     func testEveryPlanCardFaceIsTheFixtures() throws {
         for test in try fixture().planFaces {
             let face = WikiChatLogic.planFace(test.change)
             XCTAssertEqual(face.heading, test.heading, test.name)
             XCTAssertEqual(face.rows.map { PlanFaceCase.Row(label: $0.label, value: $0.value) }, test.rows, test.name)
+        }
+    }
+
+    /// A card's Rewrites row (C17, `wikiChatRewriteLinks`): a link each section, save a plan card whose rebuild spans
+    /// several documents, which links each document once at its first section — the links the web draws.
+    func testEveryRewritesRowIsTheFixtures() throws {
+        for test in try fixture().rewriteLinks {
+            let links = WikiChatLogic.rewriteLinks(kind: test.kind, rewrites: test.rewrites)
+            XCTAssertEqual(links.map { RewriteLinksCase.Link(label: $0.label, doc: $0.doc, key: $0.key) }, test.links, test.name)
         }
     }
 
