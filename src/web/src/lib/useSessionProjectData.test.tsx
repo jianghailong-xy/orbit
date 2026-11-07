@@ -103,7 +103,39 @@ describe('targeted supplemental project sessions', () => {
   it('does not read another workspace when the coordinator and waiting target are already local', async () => {
     await mount(opts([coordinator(), member('waiting', 'P1', 'TASK', { pendingApprovals: 1 })]));
     expect(calls).toEqual([]);
-    expect(result).toEqual({ coordinators: [], contentSessions: [] });
+    expect(result).toEqual({ coordinators: [], contentSessions: [], placing: false });
+  });
+
+  // Owner 2026-11-07: where a coordinator the list does not hold runs decides whether its project is a row
+  // there, so the list is still being placed until that read (and a Completed one after it) answers.
+  it('is placing only while it looks for a coordinator the list does not hold', async () => {
+    let answer = (): void => {};
+    const held = new Promise<void>((resolve) => { answer = resolve; });
+    const fixture = vi.mocked(api).getMockImplementation()!;
+    vi.mocked(api).mockImplementation(async (...args) => {
+      await held;
+      return fixture(...args);
+    });
+    rows = [{ ...coordinator(), lifecycleState: 'COMPLETED' }];
+    await mount(opts([member('local')]));
+    expect(result?.placing).toBe(true);
+    await act(async () => answer());
+    await advance();
+    await advance();
+    expect(calls).toEqual(['/sessions?projectId=P1&view=open', '/sessions?projectId=P1&view=completed']);
+    expect(result?.coordinators.map((session) => session.id)).toEqual(['CP1']);
+    expect(result?.placing).toBe(false);
+  });
+
+  it('is not placing while it reads only another workspace’s waiting member', async () => {
+    const fixture = vi.mocked(api).getMockImplementation()!;
+    vi.mocked(api).mockImplementation(((...args: Parameters<typeof fixture>) => {
+      void fixture(...args);
+      return new Promise(() => {});
+    }) as typeof fixture);
+    await mount(opts([coordinator(), member('local')]));
+    expect(calls).toEqual(['/sessions?projectId=P1&view=open']);
+    expect(result?.placing).toBe(false);
   });
 
   it('reads just visible projects missing a coordinator or a waiting member', async () => {
