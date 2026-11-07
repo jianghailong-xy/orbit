@@ -359,7 +359,7 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
 - 回复成功不另发回执（与 iOS 横幅的 Reply 一样），会话的回答由 §7.5 回传；`createTurn` 拒绝时（会话已结束、在废纸篓）回
   `Orbit didn't send this to the session: <原因>.`。回复一条不属于任何会话的消息，回一句说明，不开新会话。
 - 选默认 workspace 的卡片点完只写 `defaultWorkspaceId`、把卡改成终态，提示主人把消息再发一次；那条消息本身不补开会话。
-- 幂等：turn 的 clientTurnId 由 appId 与 event_id 派生，新会话的 id 由 appId 与 message_id 派生，同一事件再处理找到第一次写的行；
+- 幂等：turn 的 clientTurnId 由 appId 与 event_id 派生（`feishuTurnKey`：`feishu:` 前缀加派生 UUID；裸的派生 UUID 是 Orbit 自己写的 turn 的键，见 orbit-authored-turn.ts），新会话的 id 由 appId 与 message_id 派生，同一事件再处理找到第一次写的行；
   回执的飞书 uuid 由被回复的 message_id 与用途派生。每个新 turn / 新会话写一行 `activity`（`credential_kind = FEISHU`，
   payload 带 appId、open_id、message_id），0499 把 `activity_credential_chk` 放宽到 FEISHU。
 

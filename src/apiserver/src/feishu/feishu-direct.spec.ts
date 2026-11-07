@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { DEFAULT_WORKSPACE_ACTION, renderStatusCard, renderWorkspaceChosenCard, renderWorkspacePickerCard } from './cards/feishu-direct-cards';
-import { FEISHU_DIRECT_REPLIES, directCommandOf, directMessageOf, feishuDerivedUuid } from './feishu-direct.service';
+import { isOrbitAuthoredTurn } from '../sessions/orbit-authored-turn';
+import { FEISHU_DIRECT_REPLIES, directCommandOf, directMessageOf, feishuDerivedUuid, feishuTurnKey } from './feishu-direct.service';
 
 // The pieces of the owner's direct messages that need no database (docs/feishu-bot-design.md §7.3, task F2-3): how a
 // message is read, which words are commands, the ids derived from an event, and the cards. The routing itself, with
@@ -73,4 +74,14 @@ test('status lists each waiting session with its owner items and Open in Orbit; 
   const empty = renderStatusCard([]);
   assert.equal(empty.header.title.content, 'Nothing is waiting on you');
   assert.ok(!JSON.stringify(empty).includes('"button"'));
+});
+
+test('a Feishu turn\'s key is the same for the same event, and never reads as a turn Orbit wrote itself', () => {
+  const key = feishuTurnKey('cli_a', 'ev-1');
+  assert.equal(key, feishuTurnKey('cli_a', 'ev-1'));
+  assert.notEqual(feishuTurnKey('cli_a', 'ev-2'), key);
+  assert.notEqual(feishuTurnKey('cli_b', 'ev-1'), key);
+  // A bare derived UUID is the platform's own key; a Feishu turn is a person's words.
+  assert.equal(isOrbitAuthoredTurn(feishuDerivedUuid('feishu-turn', 'cli_a', 'ev-1')), true);
+  assert.equal(isOrbitAuthoredTurn(key), false);
 });

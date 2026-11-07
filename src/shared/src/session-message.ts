@@ -1,3 +1,5 @@
+import type { CoordinatorDeliveryCard } from './project-progress';
+
 /**
  * What a `user` event carries beside its text when the turn is another Orbit session's message —
  * `session_send` or `project_send` (docs/session-request-reply-contract.md §2.3).
@@ -46,12 +48,32 @@ export interface SessionMessageCard {
  * The same two facts the conversation's card draws "From <title>" with (`SessionMessageCard`'s
  * `fromSessionId` and `fromTitle`), read from the same place, as they stood when `lastUserText` was
  * written. The rows carry it as `lastUserFrom`, null when the account owner (or the platform) wrote
- * the message, and it is written and cleared together with `lastUserText`.
+ * the message, and it is written and cleared together with `lastUserText`. A message the platform
+ * wrote is said by `OrbitMessageFrom` instead.
  */
 export interface SessionMessageFrom {
   /** The sending session, in the uuid spelling every other read of one uses. */
   sessionId: string;
   title: string;
+}
+
+/**
+ * That the message a session row previews (`lastUserText`) is Orbit's own: a turn the control plane
+ * wrote itself rather than one somebody sent (docs/session-list-projects-design.md §3.5, owner
+ * 2026-11-07) — a coordinator told of a fact, the answer to a criteria proposal, a watch's or a
+ * due wakeup's wake, the owner's answer handed to a coordinator, an exception item's delivery, a
+ * project's start, a task run's brief, a confirmation's review. The rows carry it as
+ * `lastUserFromOrbit` beside `lastUserFrom`, null for every message Orbit did not write, and it is
+ * written and cleared together with `lastUserText`. The row then says `Orbit: …` instead of `You: …`.
+ */
+export interface OrbitMessageFrom {
+  /**
+   * The card the conversation draws this message as, when it is a fact told to a coordinator or the
+   * answer to a criteria proposal (`CoordinatorDeliveryCard`, as the runner's echo stores it): the
+   * row says the line's own sentence, written from these fields by the client that writes the line.
+   * Null for every other message Orbit writes, whose row says the message's first line.
+   */
+  coordinatorDelivery: CoordinatorDeliveryCard | null;
 }
 
 /**

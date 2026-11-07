@@ -10,8 +10,10 @@ import { BACKGROUND_WAKE_TURN_PREFIX } from '../runner-api/background-job-wake';
 import { ownerSendBackClientTurnId } from '../tasks/task-owner-confirmation';
 import { TASK_ACCEPTANCE_CLIENT_TURN_PREFIX } from '../tasks/executable-acceptance-round';
 import { taskRunResumeTurnId } from '../tasks/task-run-identity';
-import { isOrbitAuthoredTurn } from './orbit-authored-turn';
-import { WATCH_TURN_KEY_PREFIX } from './watch-turn-key';
+import { manualRetryTurnKey } from './auto-retry.service';
+import { isOrbitAuthoredTurn, isOrbitAuthoredTurnOf } from './orbit-authored-turn';
+import { SessionsService } from './sessions.service';
+import { AUTO_RETRY_ORBIT_TURN_KEY_PREFIX, AUTO_RETRY_TURN_KEY_PREFIX, WATCH_TURN_KEY_PREFIX } from './watch-turn-key';
 
 /**
  * Which queued turns a client may hand back to the composer is decided here, by the key a turn was
@@ -58,4 +60,28 @@ test('the derived-id shape is the one derivedUuid writes, and only that', () => 
   for (let i = 0; i < 200; i++) assert.equal(isDerivedUuid(derivedUuid(`name-${i}`)), true);
   for (let i = 0; i < 200; i++) assert.equal(isDerivedUuid(randomUUID()), false);
   assert.equal(isDerivedUuid(derivedUuid('name').toUpperCase()), false, 'derivedUuid never writes uppercase');
+});
+
+test('a re-send is Orbit’s where the message it re-sends was, and the owner’s otherwise', () => {
+  // The sweep's key and the failure card's Retry's, for a message Orbit wrote and for one the owner did.
+  assert.equal(isOrbitAuthoredTurn(`${AUTO_RETRY_ORBIT_TURN_KEY_PREFIX}${ID}`), true, 'the sweep, Orbit’s words');
+  assert.equal(isOrbitAuthoredTurn(manualRetryTurnKey({ turnId: ID, content: 'x', orbit: true })), true, 'Retry, Orbit’s words');
+  assert.equal(isOrbitAuthoredTurn(`${AUTO_RETRY_TURN_KEY_PREFIX}${ID}`), false, 'the sweep, the owner’s words');
+  assert.equal(isOrbitAuthoredTurn(manualRetryTurnKey({ turnId: ID, content: 'x' })), false, 'Retry, the owner’s words');
+  // Both presses over one failure derive one key, Orbit's or not.
+  assert.equal(
+    manualRetryTurnKey({ turnId: ID, content: 'x', orbit: true }),
+    manualRetryTurnKey({ turnId: ID, content: 'y', orbit: true }),
+  );
+});
+
+test('a session’s opening is Orbit’s only when the platform wrote its prompt', () => {
+  const opening = SessionsService.initialTurnClientId(SESSION);
+  assert.equal(isOrbitAuthoredTurnOf({ id: SESSION, promptByOrbit: true }, opening), true, 'the platform’s opening');
+  assert.equal(isOrbitAuthoredTurnOf({ id: SESSION, promptByOrbit: false }, opening), false, 'a person’s opening');
+  // Only its own opening: another session's key, or a later message of its own, is not made Orbit's.
+  assert.equal(isOrbitAuthoredTurnOf({ id: SESSION, promptByOrbit: true }, SessionsService.initialTurnClientId(ID)), false);
+  assert.equal(isOrbitAuthoredTurnOf({ id: SESSION, promptByOrbit: true }, randomUUID()), false);
+  // The rest of the rule is unchanged by the column.
+  assert.equal(isOrbitAuthoredTurnOf({ id: SESSION, promptByOrbit: false }, `${WATCH_TURN_KEY_PREFIX}${ID}:1`), true);
 });

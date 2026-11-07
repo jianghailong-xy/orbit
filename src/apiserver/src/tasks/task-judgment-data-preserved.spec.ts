@@ -2777,6 +2777,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it is not another
       // writer of the DONE fence. No INSERT, UPDATE or DELETE: both tables start empty.
       '0489_feishu_app',
+      // 0491 adds one nullable JSONB column to `session` (`last_user_from_orbit`: that Orbit wrote the message the row
+      // previews, with the notification card its line is written from) in one DO statement that takes the table's lock
+      // in short tries, and nothing else. `session` is not a preserved relation, no column any preserved trigger reads
+      // is touched, and no function, trigger, type or constraint is created, replaced or dropped, so it is not another
+      // writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored session reads NULL.
+      '0491_session_last_user_from_orbit',
       // 0492 is two new tables for the Feishu bot integration (docs/feishu-bot-design.md §4.4, §7.1): `feishu_inbound_event`,
       // the inbound inbox, unique on (app_id, event_id), and `feishu_link`, each replica's connection of each app, keyed
       // (app_id, replica_id); both reference `feishu_app` (app_id) ON DELETE CASCADE, with CHECKs and one partial index.
@@ -2784,6 +2790,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // six preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so
       // it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: both tables start empty.
       '0492_feishu_inbound_event',
+      // 0493 adds one BOOLEAN NOT NULL DEFAULT false column to `session` (`prompt_by_orbit`: that the platform wrote
+      // the session's opening prompt) in one DO statement that takes the table's lock in short tries, and nothing
+      // else. `session` is not a preserved relation, no column any preserved trigger reads is touched, and no
+      // function, trigger, type or constraint is created, replaced or dropped, so it is not another writer of the
+      // DONE fence. No INSERT, UPDATE or DELETE: a constant default is a catalog change, every stored session reads
+      // false.
+      '0493_session_prompt_by_orbit',
       // 0494 is one new table for the Feishu bot integration (docs/feishu-bot-design.md §5.1): `feishu_connect_code`, the
       // owner-identity codes, with its primary key, a unique index on code_hash, indexes on owner_id and expires_at, one
       // CHECK, and a foreign key to `user` (ON DELETE CASCADE). It is not a preserved relation, no `task`, `session`,

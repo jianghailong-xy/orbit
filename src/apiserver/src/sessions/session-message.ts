@@ -1,8 +1,10 @@
 import { ConflictException } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import {
   uuidToBase62,
+  type CoordinatorDeliveryCard,
   type ExternalMessageFrom,
+  type OrbitMessageFrom,
   type SessionMessageCard,
   type SessionMessageFrom,
   type SessionReplyOption,
@@ -395,29 +397,38 @@ export async function readSessionMessageFrom(
 
 /**
  * The message a session row previews while it waits for an answer, and who sent it, as the one write
- * of the three columns: every writer of `lastUserText` writes it through this, so the sender cannot be
+ * of the four columns: every writer of `lastUserText` writes it through this, so the sender cannot be
  * left behind when the text moves on. `from` is the sending session (`readSessionMessageFrom`, or the
- * card the echo is stored with); null is the owner's words, or the platform's. A null text clears all
- * three, which is what an answer does.
+ * card the echo is stored with); `orbit` says the platform wrote it (orbit-message.ts), with the card
+ * its line is written from when it is a coordinator's notification. Both null is the owner's words. A
+ * null text clears all four, which is what an answer does.
  */
 export function pendingMessageColumns(
   text: string | null,
   from: SessionMessageFrom | null,
+  orbit: OrbitMessageFrom | null,
   /** Who outside Orbit sent it (a Feishu group's member, docs/feishu-bot-design.md §8.2); null for anybody else. */
   external: ExternalMessageFrom | null = null,
 ): {
   lastUserText: string | null;
   lastUserFromSessionId: string | null;
   lastUserFromTitle: string | null;
+  lastUserFromOrbit: Prisma.InputJsonValue | typeof Prisma.DbNull;
   lastUserFromExternalSource: string | null;
   lastUserFromExternalName: string | null;
 } {
   const sender = text === null ? null : from;
-  const outsider = text === null ? null : external;
+  // A message has one sender: a session's own message is that session's, whatever key it chose.
+  const platform = text === null || sender !== null ? null : orbit;
+  // Nor is a message another session or Orbit wrote also an outsider's.
+  const outsider = text === null || sender !== null || platform !== null ? null : external;
   return {
     lastUserText: text,
     lastUserFromSessionId: sender?.sessionId ?? null,
     lastUserFromTitle: sender?.title ?? null,
+    lastUserFromOrbit: platform === null
+      ? Prisma.DbNull
+      : { coordinatorDelivery: platform.coordinatorDelivery as unknown as Prisma.InputJsonObject | null },
     lastUserFromExternalSource: outsider?.source ?? null,
     lastUserFromExternalName: outsider?.name ?? null,
   };
@@ -471,4 +482,21 @@ export function lastUserFromOf(row: {
   return row.lastUserFromSessionId === null
     ? null
     : { sessionId: row.lastUserFromSessionId, title: row.lastUserFromTitle ?? '' };
+}
+
+/**
+ * A session row's `lastUserFromOrbit`, read back from the column `pendingMessageColumns` writes. Here
+ * rather than beside the reading of a turn (orbit-message.ts), because the realtime summary reads it
+ * too, and that module's imports reach the sessions service: loaded from the realtime service, they
+ * left `SessionsService` built before `RealtimeService` existed, with no class to inject.
+ */
+export function lastUserFromOrbitOf(row: { lastUserFromOrbit: Prisma.JsonValue | null }): OrbitMessageFrom | null {
+  const stored = row.lastUserFromOrbit;
+  if (stored === null || typeof stored !== 'object' || Array.isArray(stored)) return null;
+  const card = (stored as { coordinatorDelivery?: unknown }).coordinatorDelivery;
+  return {
+    coordinatorDelivery: card !== null && typeof card === 'object' && !Array.isArray(card)
+      ? card as unknown as CoordinatorDeliveryCard
+      : null,
+  };
 }

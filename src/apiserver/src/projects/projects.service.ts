@@ -4468,7 +4468,8 @@ export class ProjectsService {
             modelRoutingEnabled(project.owner),
           ),
         },
-        { source: 'user', titleManagedByProject: true },
+        // The opening is the platform's own words, not the owner's (0493, design §3.5).
+        { source: 'user', titleManagedByProject: true, promptByOrbit: true },
       );
     } catch (e) {
       if (fixed && (e instanceof ForbiddenException || e instanceof BadRequestException)) {

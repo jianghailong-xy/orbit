@@ -8,6 +8,7 @@ import io.orbitd.android.watch.WatchFixture
 import io.orbitd.android.watch.WatchSessionSummary
 import io.orbitd.android.watch.watchKey
 import java.time.Instant
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
@@ -48,10 +49,10 @@ class SessionProjectsTest {
 
     private fun listing(sessions: List<DirectorySession>, view: SessionView = SessionView.OPEN, byTag: Boolean = false, searching: Boolean = false,
         folderId: String? = null, offline: Boolean = false, projects: List<JsonObject>? = null, folders: List<Folder> = emptyList(),
-        coordinators: List<DirectorySession> = emptyList(), content: List<DirectorySession>? = null,
+        workspace: String? = null, coordinators: List<DirectorySession> = emptyList(), content: List<DirectorySession>? = null,
         watching: Map<String, WatchSessionSummary> = emptyMap(), line: ((DirectorySession) -> SessionLine)? = null) =
         SessionProjectGrouping.listing(sessions, folders, projects ?: listOf(project()), view, byTag, searching, folderId, offline, now,
-            coordinators, content, watching, line = line)
+            coordinators, content, watching, workspaceId = workspace, line = line)
     private fun make(s: DirectorySession, watching: WatchSessionSummary? = null) = SessionLine.make(s, true, watching, now = now)
     private fun counted(listing: SessionProjectListing, folder: String) = listing.assigned.filter { it.folderId == folder }
 
@@ -345,6 +346,155 @@ class SessionProjectsTest {
         assertEquals(2, row.members.size)
         assertEquals("Project summary", row.title)
         assertEquals(ObjectId.toPublic(uuid), row.projectId)
+    }
+
+    // A project outside its coordinator's workspace (owner 2026-11-07, option A): OrbitKit's SessionProjectGroupingTests, case for case.
+    // A project is a row only in the workspace its coordinator runs in; elsewhere its members are that workspace's own rows, each marked
+    // with the project (docs/mocks/project-rows-by-workspace). Web: sessionProjects.test.ts › "a project outside its coordinator’s workspace".
+
+    private val mark = SessionProjectMark("p1", "Project summary", "OPEN", ProjectTaskCounts(3, 1, 8), 2)
+
+    /** The coordinator, running in another workspace than the list's own (`w1`). */
+    private fun remote(folder: String? = null, lastTurnAt: String? = "2026-10-04T09:40:00Z") =
+        session("coordinator", role = "COORDINATOR", workspace = "w2", folder = folder, lastTurnAt = lastTurnAt)
+
+    @Test fun aProjectWhoseCoordinatorRunsElsewhereHasNoRowAndItsMembersHereAreMarked() {
+        val sessions = listOf(session("check", lastTurnAt = ago(22)), session("cert", role = null, lastTurnAt = ago(15)),
+            session("deploy", lastTurnAt = ago(41)), session("coordinator-2", role = "COORDINATOR", projectId = "p2", lastTurnAt = ago(30)))
+        val out = listing(sessions, workspace = "w1", coordinators = listOf(remote()))
+        assertEquals("a project whose coordinator runs here keeps its row", listOf("p2"), out.projects.map { it.projectId })
+        assertEquals(listOf("cert", "check", "p2", "deploy"), out.entries.map { it.id })
+        assertEquals(mapOf("check" to mark, "deploy" to mark), out.marks)
+        assertEquals(listOf("check", "cert", "deploy"), out.sessions.map { it.id })
+    }
+
+    @Test fun membersAreMarkedWhenNoProjectHasARowHere() {
+        val check = session("check"); val cert = session("cert", role = null)
+        val out = listing(listOf(check, cert), workspace = "w1", coordinators = listOf(remote()))
+        assertTrue(out.projects.isEmpty())
+        assertEquals(listOf(SessionProjectEntry.Session(check), SessionProjectEntry.Session(cert)), out.entries)
+        assertEquals(mapOf("check" to mark), out.marks)
+    }
+
+    @Test fun theRowStaysWhereTheCoordinatorRunsAndWhereTheListNamesNoWorkspace() {
+        val home = listing(listOf(coordinator(), session("worker")), workspace = "w1")
+        assertEquals(listOf(listOf("coordinator", "worker")), home.projects.map { row -> row.members.map { it.id } })
+        assertEquals(listOf("p1"), home.entries.map { it.id })
+        assertTrue(home.marks.isEmpty())
+        // The coordinator's workspace still words its row from members that run elsewhere.
+        val remoteWorker = session("remote-worker", workspace = "w2", title = "Quota retry", approvals = 1, waitingKind = "OWNER_CONFIRMATION",
+            since = listOf(ago(30)))
+        val named = listing(listOf(coordinator()), workspace = "w1", content = listOf(coordinator(), remoteWorker))
+        assertEquals(SessionLine("Waiting for your confirmation · Quota retry", Tone.APPROVAL), named.projects.first().line)
+        // No workspace to compare: the project's row, as before.
+        val unscoped = listing(listOf(session("worker")), coordinators = listOf(remote()))
+        assertEquals("coordinator", unscoped.projects.first().coordinator?.id)
+        assertTrue(unscoped.marks.isEmpty())
+    }
+
+    /** The workspace the coordinator runs in is grouped exactly as before: the same rows, folder counts and entries as a list that names
+     * no workspace. */
+    @Test fun theCoordinatorsOwnWorkspaceIsUnchanged() {
+        val folders = listOf(folder("f1", "Release"), folder("f2", "Tasks"))
+        val sessions = listOf(coordinator(folder = "f1"), session("worker", folder = "f2", state = "RUNNING"), session("waiting", approvals = 1),
+            session("ordinary", role = null))
+        for (view in listOf(SessionView.OPEN, SessionView.COMPLETED)) for (folderId in listOf(null, "f1", "f2")) {
+            assertEquals(listing(sessions, view = view, folderId = folderId, folders = folders),
+                listing(sessions, view = view, folderId = folderId, folders = folders, workspace = "w1"))
+        }
+    }
+
+    @Test fun aMemberThereIsFiledByItsOwnFolderInsideAFoldersPageToo() {
+        val folders = listOf(folder("f1", "Prod checks"), folder("f2", "Release"))
+        val sessions = listOf(session("check", folder = "f1", state = "RUNNING"), session("deploy", approvals = 1), session("ordinary", role = null))
+        // The coordinator is filed in a folder of its own workspace, which is no folder here.
+        val coordinators = listOf(remote(folder = "g1"))
+        val out = listing(sessions, folders = folders, workspace = "w1", coordinators = coordinators)
+        // Android draws its folder rows from what the listing assigns them: f1 holds its own running member, and nothing more.
+        assertEquals(listOf(1, 0), listOf("f1", "f2").map { counted(out, it).size })
+        assertTrue(counted(out, "f1").single().isRunning())
+        assertEquals(listOf("deploy", "ordinary"), out.entries.map { it.id })
+        assertEquals(mapOf("deploy" to mark), out.marks)
+        val inside = listing(sessions, folderId = "f1", folders = folders, workspace = "w1", coordinators = coordinators)
+        assertEquals(listOf(SessionProjectEntry.Session(sessions[0])), inside.entries)
+        assertEquals(mapOf("check" to mark), inside.marks)
+        // Where the coordinator runs, its folder still holds every member, whatever folder each is filed in.
+        val home = listing(listOf(coordinator(folder = "f2")) + sessions, folders = folders, workspace = "w1")
+        assertEquals(listOf(0, 3), listOf("f1", "f2").map { counted(home, it).size })
+        assertEquals(listOf("ordinary"), home.entries.map { it.id })
+        assertTrue(home.marks.isEmpty())
+    }
+
+    @Test fun aMemberThereIsPinnedByItsOwnPinAndInItsOwnTimeSection() {
+        val pinned = session("pinned", pinnedAt = ago(5), lastTurnAt = ago(10_000))
+        val out = listing(listOf(pinned, session("older", lastTurnAt = ago(1_440)), session("ordinary", role = null, lastTurnAt = ago(1))),
+            workspace = "w1", coordinators = listOf(remote(lastTurnAt = ago(1))))
+        val sections = directoryGroups(out.entries.map { it.groupingSession }, SessionView.OPEN, Grouping.RECENCY, now, ZoneOffset.UTC)
+        assertEquals(listOf("Pinned", "Today", "Yesterday"), sections.map { it.title })
+        assertEquals(listOf(listOf("pinned"), listOf("ordinary"), listOf("older")), sections.map { section -> section.sessions.map { it.id } })
+        assertEquals(setOf("pinned", "older"), out.marks.keys)
+    }
+
+    @Test fun completedFollowsTheSameRuleDecidedByACoordinatorStillOpen() {
+        val t6 = session("t6", lastTurnAt = ago(60))
+        val ordinary = session("ordinary", role = null)
+        val elsewhere = listing(listOf(t6, ordinary), view = SessionView.COMPLETED, workspace = "w1", coordinators = listOf(remote()))
+        assertTrue(elsewhere.projects.isEmpty())
+        assertEquals(listOf(SessionProjectEntry.Session(t6), SessionProjectEntry.Session(ordinary)), elsewhere.entries)
+        assertEquals(mapOf("t6" to mark), elsewhere.marks)
+        val home = listing(listOf(t6), view = SessionView.COMPLETED, workspace = "w1", coordinators = listOf(coordinator()))
+        assertEquals("coordinator", home.projects.first().coordinator?.id)
+        assertEquals(listOf(t6), home.projects.first().members)
+        assertTrue(home.marks.isEmpty())
+    }
+
+    @Test fun aProjectWithNoCoordinatorIsARowInEachWorkspaceItHasMembersIn() {
+        for (workspace in listOf("w1", "w2")) {
+            val out = listing(listOf(session("worker-$workspace", workspace = workspace), session("ordinary", role = null, workspace = workspace)),
+                workspace = workspace)
+            assertEquals(1, out.projects.size)
+            assertNull(out.projects.first().coordinator)
+            assertEquals(SessionLine("No coordinator", Tone.PREVIEW), out.projects.first().line)
+            assertEquals(Target.Project("p1"), out.projects.first().target)
+            assertTrue(out.marks.isEmpty())
+        }
+    }
+
+    @Test fun aMemberOfAProjectTheSidebarDoesNotListIsMarkedWithItsStatus() {
+        val check = session("check", projectStatus = "DONE")
+        val out = listing(listOf(check), projects = emptyList(), workspace = "w1",
+            coordinators = listOf(session("coordinator", role = "COORDINATOR", projectStatus = "DONE", workspace = "w2")))
+        assertEquals(listOf(SessionProjectEntry.Session(check)), out.entries)
+        assertEquals(mapOf("check" to SessionProjectMark("p1", "Project one", "DONE", null, 0)), out.marks)
+    }
+
+    @Test fun trashTagsAndSearchLeaveMembersThereFlatAndUnmarked() {
+        val check = session("check")
+        for ((view, byTag, searching) in listOf(Triple(SessionView.TRASH, false, false), Triple(SessionView.OPEN, true, false),
+            Triple(SessionView.OPEN, false, true))) {
+            val out = listing(listOf(check), view = view, byTag = byTag, searching = searching, workspace = "w1", coordinators = listOf(remote()))
+            assertEquals(listOf(SessionProjectEntry.Session(check)), out.entries)
+            assertTrue(out.marks.isEmpty())
+        }
+    }
+
+    /** Where the coordinator runs is read as the list reads a session's workspace (`DirectorySession.workspace`, which DirectoryScreen
+     * picks its rows by), the nested workspace included, and in either spelling of its id. A coordinator whose workspace nobody can
+     * tell keeps the project's row, as a list that names no workspace does. */
+    @Test fun theCoordinatorsWorkspaceIsReadAsTheListReadsIt() {
+        val nested = session("coordinator", role = "COORDINATOR").copy(agentId = null, agent = WorkspaceRef("w2", "Develop"))
+        assertEquals("w2", nested.workspace)
+        assertEquals(mapOf("check" to mark), listing(listOf(session("check")), workspace = "w1", coordinators = listOf(nested)).marks)
+        val nowhere = session("coordinator", role = "COORDINATOR").copy(agentId = null)
+        val out = listing(listOf(session("check")), workspace = "w1", coordinators = listOf(nowhere))
+        assertEquals("coordinator", out.projects.first().coordinator?.id)
+        assertTrue(out.marks.isEmpty())
+        // The list's own workspace in its other spelling is still this one: the project keeps its row.
+        val uuid = "0f8fad5b-d9cb-469f-a165-70867728950e"
+        val spelled = listing(listOf(session("check", workspace = ObjectId.toPublic(uuid))), workspace = ObjectId.toPublic(uuid),
+            coordinators = listOf(session("coordinator", role = "COORDINATOR", workspace = uuid)))
+        assertEquals("coordinator", spelled.projects.single().coordinator?.id)
+        assertTrue(spelled.marks.isEmpty())
     }
 
     // SessionProjectLandingLineTests

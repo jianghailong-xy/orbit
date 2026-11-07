@@ -543,6 +543,42 @@ describe('project entry status and second line', { timeout: 60_000 }, () => {
       .toBe('Plan the release: Which branch should I use?');
   });
 
+  // Orbit's own notification to the coordinator says Orbit and the sentence its line in the
+  // conversation says; any other message of Orbit's, its first line (§3.5, owner 11-07).
+  it('says Orbit for the notification the coordinator has not answered yet', async () => {
+    const card = {
+      kind: 'EVIDENCE_SUBMITTED', task: { id: TASK.id, title: 'Build the package' }, revision: 2, count: null,
+      deliveredAt: '2026-11-07T07:30:00.000Z', toCoordinator: true,
+    };
+    rows = [
+      LOOSE,
+      {
+        ...COORDINATOR,
+        lastUserText: 'From Orbit · project “Release” has a revision of completion evidence for you to decide\n\nTask “Build the package” …',
+        lastUserFrom: null,
+        lastUserFromOrbit: { coordinatorDelivery: card },
+      },
+      TASK,
+    ];
+    await mount();
+    expect(preview()?.textContent).toBe('Orbit: Evidence revision 2 submitted: Build the package');
+    expect(preview()?.classList.contains('tone-approval')).toBe(false);
+  });
+
+  it('says Orbit and the first line for a message of Orbit’s with no notification card', async () => {
+    rows = [
+      LOOSE,
+      {
+        ...COORDINATOR,
+        lastUserText: 'Orbit Watch w-1 matched at generation 1: the build finished\n\nThis turn was queued by the watch, not typed by a person.',
+        lastUserFromOrbit: { coordinatorDelivery: null },
+      },
+      TASK,
+    ];
+    await mount();
+    expect(preview()?.textContent).toBe('Orbit: Orbit Watch w-1 matched at generation 1: the build finished');
+  });
+
   it.each([
     ['the owner sent it', { lastUserFrom: null }],
     ['an older server names no sender', {}],

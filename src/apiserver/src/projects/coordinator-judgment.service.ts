@@ -242,6 +242,8 @@ export class CoordinatorJudgmentService {
           // person, and the pair 0122 always wrote together.
           dispatchOrigin: SessionDispatchOrigin.PROJECT_COORDINATOR,
           runSource: SessionRunSource.PROJECT_COORDINATOR,
+          // The opening is the fact as the platform tells it (0493, design §3.5).
+          promptByOrbit: true,
           ...(plannedSessionId ? { id: plannedSessionId } : {}),
         },
       );

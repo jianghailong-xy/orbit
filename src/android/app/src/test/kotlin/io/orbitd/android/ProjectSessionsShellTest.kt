@@ -221,6 +221,20 @@ class ProjectSessionsShellTest {
         compose.onNodeWithContentDescription("Back").assertExists()
     }
 
+    /** Design §4.3 (owner 2026-11-07): a finished project's row leads its menu with Complete and a divider; the press is one call on
+     * the server's project door, never the coordinator's own Complete, and the row leaves Open for Completed. */
+    @Test fun aDoneProjectsRowLeadsWithCompleteWhichMovesItsSessionsToCompleted() {
+        ProjectShell.done = true
+        signIn(); openAlpha()
+        rowMenu()
+        assertEquals(listOf("Complete", "Open Session", "Sessions", "Open Project", "Pin", "Move…", "Close"), dialogButtons())
+        compose.onNode(hasText("Complete") and hasAnyAncestor(isDialog())).performClick()
+        await { ProjectShell.calls.any { it == "POST projects/${ProjectShell.LAUNCH}/sessions/complete" } }
+        assertFalse(ProjectShell.calls.any { it == "POST sessions/${ProjectShell.COORD}/complete" })
+        await { !exists(hasTestTag("project-row:${ProjectShell.LAUNCH}")) }
+        await { exists(hasRowMenu("Options for Plain notes")) }
+    }
+
     /** Pin and Move act on the coordinator; its pin is a write on the coordinator's session. */
     @Test fun pinFromTheRowPinsTheCoordinator() {
         signIn(); openAlpha()

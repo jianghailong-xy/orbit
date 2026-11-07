@@ -148,7 +148,9 @@ final class SessionProjectPageWiringTests: XCTestCase {
             XCTAssertTrue(row.contains("app.openProjectMember(session, push: rowNavigation == .push)"))
             XCTAssertTrue(row.contains("case .project: app.openProjectSessions("))
             XCTAssertTrue(row.contains("onSessions: { app.openProjectSessions("))
-            XCTAssertTrue(row.contains(".sessionProjectRowActions(row, onOpen: onOpen,"),
+            XCTAssertTrue(row.contains(".sessionProjectRowActions(row, view: "),
+                          "the menu knows which list it is in, for Complete")
+            XCTAssertTrue(row.contains("onOpen: onOpen,"),
                           "the Open Session menu keeps the grouping target")
             XCTAssertTrue(row.contains("app.openProject(row.projectId)"))
             XCTAssertTrue(row.contains("movingSession = coordinator"))
@@ -266,7 +268,20 @@ final class SessionProjectPageWiringTests: XCTestCase {
     func testTheProjectRowHasExactlyTheAllowedMenuAndSwipeActions() throws {
         let source = code(try appSource("Views/SessionProjectPage.swift"))
         let actions = try slice(source, from: "private struct SessionProjectRowActions: ViewModifier {", to: "\n}\n")
-        let menu = try slice(actions, from: "private var menu: some View {", to: "\n    }")
+        let full = try slice(actions, from: "private var menu: some View {", to: "\n    }")
+        // A finished project's row leads with Complete and a divider (§4.3, owner 2026-11-07); the rest
+        // of the menu is every project row's.
+        let complete = try slice(full, from: "if row.offersComplete(in: view) {", to: "\n        }")
+        let completeOrder = try [
+            XCTUnwrap(complete.range(of: "app.completeProjectSessions(row)")?.lowerBound),
+            XCTUnwrap(complete.range(of: "SessionProjectCopy.complete")?.lowerBound),
+            XCTUnwrap(complete.range(of: "Divider()")?.lowerBound),
+        ]
+        XCTAssertEqual(completeOrder, completeOrder.sorted())
+        XCTAssertLessThan(try XCTUnwrap(full.range(of: complete)?.lowerBound),
+                          try XCTUnwrap(full.range(of: "SessionProjectCopy.openSession")?.lowerBound),
+                          "Complete is the menu's first item")
+        let menu = full.replacingOccurrences(of: complete, with: "")
         let order = try [
             XCTUnwrap(menu.range(of: "SessionProjectCopy.openSession")?.lowerBound),
             XCTUnwrap(menu.range(of: "SessionProjectCopy.sessions")?.lowerBound),
@@ -283,8 +298,9 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let canOpen = try slice(actions, from: "private var canOpenSession: Bool {", to: "\n    }")
         XCTAssertTrue(canOpen.contains("if case .session = row.target { return true }"))
         XCTAssertTrue(canOpen.contains("return false"), "a project-page fallback is not an openable session")
+        let outsideComplete = actions.replacingOccurrences(of: complete, with: "")
         for forbidden in ["Complete", "Share", "Delete", "Approve", "Answer", "Respond"] {
-            XCTAssertFalse(actions.contains(forbidden), "project entries cannot offer `\(forbidden)`")
+            XCTAssertFalse(outsideComplete.contains(forbidden), "project entries cannot offer `\(forbidden)`")
         }
         XCTAssertTrue(actions.contains("leading: leadingActions"))
         XCTAssertTrue(actions.contains("trailing: trailingActions"))
@@ -297,6 +313,17 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let pin = try slice(actions, from: "private var pinAction: RowSwipeAction {", to: "\n    }")
         XCTAssertTrue(pin.contains("SessionProjectCopy.unpin : SessionProjectCopy.pin"))
         XCTAssertTrue(pin.contains("app.setPinned(coordinator, pinned: !pinned)"))
+    }
+
+    /// Complete on a finished project's row asks the server to move the whole project (§3.6), never
+    /// the coordinator alone, and reads the lists again so the row leaves Open.
+    func testCompleteOnAProjectRowCallsTheServersProjectDoor() throws {
+        let model = code(try appSource("AppModel.swift"))
+        let complete = try slice(model, from: "func completeProjectSessions(_ row: SessionProjectRow) {", to: "\n    }\n")
+        XCTAssertTrue(complete.contains("api.completeProjectSessions(row.projectId)"))
+        XCTAssertFalse(complete.contains("api.completeSession("))
+        XCTAssertTrue(complete.contains("dropIfOpen(id)"))
+        XCTAssertTrue(complete.contains("await reloadSessionLists()"))
     }
 
     func testTheProjectSessionsLoadAvoidsAsyncLets() throws {
