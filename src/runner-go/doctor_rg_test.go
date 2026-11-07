@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -197,5 +198,54 @@ func TestCodexAllowsLoginShellReadsTheTopLevelKey(t *testing.T) {
 		if got := codexAllowsLoginShell(); got != want {
 			t.Errorf("config %q: allows login shells = %v, want %v", config, got, want)
 		}
+	}
+}
+
+// Where nothing else on the runner's PATH has rg, an engine's shell finds Orbit's own, last on that PATH, and doctor's
+// line names it so; an rg the host has comes first, and its line names the host's. A login shell that resets PATH, as
+// Debian's /etc/profile does, loses Orbit's directory with the rest, and doctor says so for a Codex that cannot put
+// its own rg back.
+func TestDoctorNamesOrbitsOwnRg(t *testing.T) {
+	t.Setenv("SHELL", "/bin/bash")
+	t.Setenv("CODEX_HOME", t.TempDir())
+	archive := fakeRgArchive(t, "echo 'ripgrep "+managedRgVersion+"'")
+	newManagedRgRig(t, archive, archive)
+	system := t.TempDir()
+	servicePath := runnerEnginePath(t.TempDir(), system)
+	kimi := installedEngine(t, providerKimi, "/opt/kimi/bin/kimi")
+	kimi.rg = checkEngineRg(kimi, servicePath)
+	out := captureRunnerStdout(t, func() { printEngineRg([]engineHealth{kimi}) })
+	if !strings.Contains(out, "✗ Kimi Code — rg not found") || !strings.Contains(out, "Orbit's own ripgrep, which goes last on every engine's PATH, is not installed here") {
+		t.Fatalf("before Orbit's rg is installed doctor printed:\n%s", out)
+	}
+
+	managed, err := installManagedRg(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, bin := range []string{providerKimi, providerOpenCode, providerClaude} {
+		h := installedEngine(t, bin, "/opt/"+bin)
+		h.rg = checkEngineRg(h, servicePath)
+		if want := "✓ " + h.spec.name + " — " + managed + " (Orbit's own)"; formatEngineRgLine(h) != want {
+			t.Fatalf("line = %q, want %q", formatEngineRgLine(h), want)
+		}
+	}
+	codex := installedEngine(t, providerCodex, fakeNpmCodex(t, "0.160.0", false))
+	fakeLoginShell(t, `[ "$1" = "-l" ] && shift
+[ "$1" = "-c" ] && exec /bin/sh -c "$2"`)
+	if codex.rg = checkEngineRg(codex, servicePath); codex.rg.path != managed || codex.rg.source != "Orbit's own" {
+		t.Fatalf("a login shell that keeps the PATH found %+v, want Orbit's rg", codex.rg)
+	}
+	pathResettingLoginShell(t, t.TempDir())
+	codex.rg = checkEngineRg(codex, servicePath)
+	out = captureRunnerStdout(t, func() { printEngineRg([]engineHealth{codex}) })
+	if !strings.Contains(out, "✗ Codex — rg not found in "+os.Getenv("SHELL")+" -l (a login shell)") || strings.Contains(out, "is not installed here") {
+		t.Fatalf("with Orbit's rg installed and a login shell that resets PATH doctor printed:\n%s", out)
+	}
+
+	systemRg := writeFakeBin(t, system, "rg", "exit 0")
+	kimi.rg = checkEngineRg(kimi, servicePath)
+	if got := formatEngineRgLine(kimi); got != "✓ Kimi Code — "+systemRg {
+		t.Fatalf("with an rg of the host's on the PATH the line = %q", got)
 	}
 }
