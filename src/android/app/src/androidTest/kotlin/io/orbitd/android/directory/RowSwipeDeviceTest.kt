@@ -576,11 +576,17 @@ class RowSwipeDeviceTest {
      * not its bounds, which are clipped to the window and so read 0 off screen too. */
     private fun drawerOpen() = compose.onAllNodes(hasText("Tasks")).fetchSemanticsNodes().any { it.positionInWindow.x >= 0f }
     private fun toastShows(text: String) = exists(hasText(text) and hasAnyAncestor(hasTestTag("toast")))
+    /** A toast's dwell is a delay on the composition's clock, which the test rule drives: a loaded device turns a real-time wait into a
+     * fraction of the toast's own time, so the clock is moved on instead. */
     private fun dismissToasts() {
         val dismiss = hasContentDescription("Dismiss") and hasAnyAncestor(hasTestTag("toast"))
-        compose.waitUntil(20_000) { !exists(hasTestTag("toast")) || exists(dismiss) }
-        if (exists(dismiss)) compose.onAllNodes(dismiss).onFirst().performClick()
-        compose.waitUntil(20_000) { !exists(hasTestTag("toast")) }
+        repeat(20) {
+            if (!exists(hasTestTag("toast"))) return
+            if (exists(dismiss)) compose.onAllNodes(dismiss).onFirst().performClick()
+            compose.mainClock.advanceTimeBy(2_000)
+            compose.waitForIdle()
+        }
+        assertFalse("the toasts went", exists(hasTestTag("toast")))
     }
     private fun window(): Pair<Int, Int> { var size = 0 to 0; scenario.onActivity { size = it.window.decorView.width to it.window.decorView.height }; return size }
     private fun gestureInsets(): Pair<Int, Int> {
