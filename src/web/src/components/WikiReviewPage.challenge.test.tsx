@@ -9,11 +9,16 @@ import { WikiReviewPage } from './WikiReviewPage';
 
 /**
  * A challenge card in Review (contract `anchorRules.verify.answers`): the same card, with its answers
- * swapped for Re-confirm, Amend and Retire, and the line that says which anchor broke — path, symbol
+ * swapped for Keep, Amend… and Retire…, and the line that says which anchor broke — path, symbol
  * or commit, changed or missing — and on which commit of main it was checked.
  *
+ * The answers say what becomes of the entry, none of them is filled, an After row says what each does
+ * and that Retire cannot be undone, and Retire… asks first in the entry page's own dialog (owner,
+ * 2026-11-07, docs/mocks/wiki-challenge-answers): the owner had answered four challenges whose reasons
+ * proposed Retire with the filled Re-confirm.
+ *
  * The answers are read off the wire: `POST /api/wiki/changesets/:id/decide` with `reconfirm`,
- * `amend` (and the keys the owner changed) or `retire`.
+ * `amend` (and the keys the owner changed) or `retire` (and its reason as `note`).
  */
 
 const ENTRY_ID = '0196b600-0000-7000-8000-00000000eeee';
@@ -46,6 +51,10 @@ const ENTRY = {
   exposure: [],
 };
 
+/** The kind the entry is served as: a decision is never amended, so its card offers no Amend…. */
+let entryKind = 'pitfall';
+const REASON = `Anchor re-verification on origin/main at ${MAIN}: symbol wikiAnchorMark in src/web/src/lib/wiki.ts has changed.`;
+
 function queue(): WikiChangeset[] {
   const op = {
     id: OP_ID,
@@ -54,7 +63,7 @@ function queue(): WikiChangeset[] {
     op: 'challenge',
     entryId: ENTRY_ID,
     baseRevision: null,
-    payload: { reason: `Anchor re-verification on origin/main at ${MAIN}: symbol wikiAnchorMark in src/web/src/lib/wiki.ts has changed.` },
+    payload: { reason: REASON },
     similar: [],
     tainted: false,
     decision: 'pending',
@@ -95,7 +104,7 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
   }
   if (url.startsWith('/api/wiki/review')) return reply(200, queue());
   if (url.startsWith('/api/wiki/spaces')) return reply(200, []);
-  if (url.startsWith(`/api/wiki/entries/${ENTRY_ID}`)) return reply(200, ENTRY);
+  if (url.startsWith(`/api/wiki/entries/${ENTRY_ID}`)) return reply(200, { ...ENTRY, kind: entryKind });
   return reply(404, { message: `${url} is not in this fixture` });
 }
 
@@ -112,6 +121,7 @@ beforeEach(() => {
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
   vi.stubGlobal('fetch', vi.fn(serve));
   decides = [];
+  entryKind = 'pitfall';
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -160,26 +170,103 @@ describe('a challenge card', () => {
     );
   });
 
-  it('is answered Re-confirm, Amend or Retire — not Accept, Edit or Reject', async () => {
+  it('is answered Keep, Amend… or Retire… — not Accept, Edit or Reject — and none of them is filled', async () => {
     const card = await mount();
-    const answers = [...card.querySelectorAll('.card-actions .card-action')].map((node) => node.textContent);
-    expect(answers).toEqual(['Re-confirm', 'Amend', 'Retire']);
+    const answers = [...card.querySelectorAll('.card-actions .card-action')];
+    expect(answers.map((node) => node.textContent)).toEqual(['Keep', 'Amend…', 'Retire…']);
+    // Review's filled answer means "do what this card proposes"; a challenge has no such answer.
+    expect(card.querySelector('.card-actions .card-action--primary')).toBeNull();
+    expect(answers.map((node) => node.className)).toEqual([
+      'card-action card-action--secondary',
+      'card-action card-action--secondary',
+      'card-action card-action--danger',
+    ]);
     expect(card.querySelector('.card-actions .note')?.textContent).toBe('Agents stop getting this entry until you answer.');
-    await act(async () => button('Re-confirm', card).click());
+    await act(async () => button('Keep', card).click());
     await settle();
     expect(decides).toEqual([[{ opId: OP_ID, action: 'reconfirm' }]]);
   });
 
-  it('retires the entry it names', async () => {
+  it('says above its answers what each does to the entry, and that Retire cannot be undone', async () => {
     const card = await mount();
-    await act(async () => button('Retire', card).click());
+    const keys = [...card.querySelectorAll('.wk-pkv > .k')].map((node) => node.textContent);
+    expect(keys[keys.length - 1]).toBe('After');
+    const lines = [...card.querySelectorAll('.wk-challenge-after > div')].map((node) => node.textContent);
+    expect(lines).toEqual([
+      'Keep · Agents get this entry again. You can still retire it later.',
+      'Amend · Agents get your version, and its anchors are checked again.',
+      'Retire · Agents stop getting it. This cannot be undone.',
+    ]);
+    expect(card.querySelector('.wk-challenge-after .wk-danger')?.textContent).toBe('Retire');
+  });
+
+  it('asks before it retires: the entry page’s dialog, the challenge’s reason in it, Cancel first', async () => {
+    const card = await mount();
+    await act(async () => button('Retire…', card).click());
     await settle();
-    expect(decides).toEqual([[{ opId: OP_ID, action: 'retire' }]]);
+    expect(decides).toEqual([]);
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dialog.querySelector('.orbit-overlay-title')?.textContent).toBe('Retire…');
+    expect(dialog.textContent).toContain(
+      'Agents stop getting this entry. It stays in History, struck through, and the reason goes on the record. This cannot be undone.',
+    );
+    expect(dialog.querySelector<HTMLTextAreaElement>('textarea')!.value).toBe(REASON);
+    await vi.waitFor(() => expect(document.activeElement?.textContent).toBe('Cancel'), { timeout: 10_000 });
+    await act(async () => button('Retire', dialog).click());
+    await settle();
+    expect(decides).toEqual([[{ opId: OP_ID, action: 'retire', note: REASON }]]);
+  });
+
+  it('records the reason as the owner leaves it, and retires nothing without one', async () => {
+    const card = await mount();
+    await act(async () => button('Retire…', card).click());
+    await settle();
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const area = dialog.querySelector<HTMLTextAreaElement>('textarea')!;
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setter.call(area, '   ');
+      area.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle();
+    expect(button('Retire', dialog).disabled).toBe(true);
+    await act(async () => {
+      setter.call(area, '  The symbol moved to wikiMarks.ts and the rule went with it.  ');
+      area.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle();
+    await act(async () => button('Retire', dialog).click());
+    await settle();
+    expect(decides).toEqual([
+      [{ opId: OP_ID, action: 'retire', note: 'The symbol moved to wikiMarks.ts and the rule went with it.' }],
+    ]);
+  });
+
+  it('Cancel in the dialog sends nothing', async () => {
+    const card = await mount();
+    await act(async () => button('Retire…', card).click());
+    await settle();
+    await act(async () => button('Cancel', document.querySelector<HTMLElement>('[role="dialog"]')!).click());
+    await settle();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(decides).toEqual([]);
+  });
+
+  it('offers a decision no Amend…: a decision is only ever superseded, and the server refuses its amend', async () => {
+    entryKind = 'decision';
+    const card = await mount();
+    await vi.waitFor(() =>
+      expect([...card.querySelectorAll('.card-actions .card-action')].map((node) => node.textContent)).toEqual(['Keep', 'Retire…']),
+    { timeout: 10_000 });
+    expect([...card.querySelectorAll('.wk-challenge-after > div')].map((node) => node.textContent)).toEqual([
+      'Keep · Agents get this entry again. You can still retire it later.',
+      'Retire · Agents stop getting it. This cannot be undone.',
+    ]);
   });
 
   it('amends it with the keys the owner changed, and no others', async () => {
     const card = await mount();
-    await act(async () => button('Amend', card).click());
+    await act(async () => button('Amend…', card).click());
     await settle();
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(dialog.textContent).toContain('Your version replaces the entry, and its anchors are checked again.');
@@ -195,5 +282,53 @@ describe('a challenge card', () => {
     expect(decides).toEqual([
       [{ opId: OP_ID, action: 'amend', edited: { summary: 'A verified anchor shows the short ref it was checked at.' } }],
     ]);
+  });
+});
+
+describe('a phone, one card at a time', () => {
+  const SECOND_OP = '0196b600-0000-7000-8000-0000000000ac';
+
+  it('shows the next card from its top after an answer, not with its answers under the finger', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(max-width: 600px)', media: query, onchange: null, addListener: () => {}, removeListener: () => {},
+      addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
+    }));
+    // Two challenges; a decided one leaves the queue on the next read, as the server's own Review does.
+    const answered = new Set<string>();
+    const twoCards = (): WikiChangeset[] => {
+      const [changeset] = queue();
+      const first = changeset.ops[0];
+      const second = { ...first, id: SECOND_OP, seq: 1 } as WikiChangesetOp;
+      return [{ ...changeset, ops: [first, second].filter((op) => !answered.has(op.id)) }];
+    };
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST' && url === `/api/wiki/changesets/${CHANGESET_ID}/decide`) {
+        const decisions = (JSON.parse(String(init.body)) as { decisions: Array<{ opId: string }> }).decisions;
+        decides.push(decisions);
+        for (const decision of decisions) answered.add(decision.opId);
+        return reply(200, {});
+      }
+      if (url.startsWith('/api/wiki/review')) return reply(200, twoCards());
+      return serve(url, init);
+    }));
+    const scrolled: Element[] = [];
+    const scrollIntoView = vi.fn(function (this: Element) {
+      scrolled.push(this);
+    });
+    (Element.prototype as unknown as { scrollIntoView: unknown }).scrollIntoView = scrollIntoView;
+    try {
+      const card = await mount();
+      await vi.waitFor(() => expect(container.querySelector('.wk-pager .pos')?.textContent).toBe('1 of 2'), { timeout: 10_000 });
+      expect(scrolled).toEqual([]);
+      await act(async () => button('Keep', card).click());
+      await settle();
+      await vi.waitFor(() => expect(container.querySelector('.wk-pager')).toBeNull(), { timeout: 10_000 });
+      expect(decides).toEqual([[{ opId: OP_ID, action: 'reconfirm' }]]);
+      // The second card is on screen, and the list it heads was brought to the top of the view.
+      await vi.waitFor(() => expect(scrolled.map((node) => node.className)).toContain('rv-list'), { timeout: 10_000 });
+      expect(scrollIntoView).toHaveBeenLastCalledWith({ block: 'start' });
+    } finally {
+      delete (Element.prototype as unknown as { scrollIntoView?: unknown }).scrollIntoView;
+    }
   });
 });

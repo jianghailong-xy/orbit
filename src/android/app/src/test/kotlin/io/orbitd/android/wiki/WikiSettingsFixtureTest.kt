@@ -161,4 +161,20 @@ class WikiSettingsFixtureTest {
         runBlocking { rig.store().client.updateSpace("SP", wikiReviewModeUpdate("manual")) }
         assertEquals("PATCH /api/wiki/spaces/:id", rig.line(rig.requests.single()).replace("SP", ":id"))
     }
+
+    /** A challenge on Review in the fixture's words (OrbitKit's challenge half, web `lib/wikiReviewMode.test.ts`): Keep,
+     * Amend… and Retire… in that order, the After row's line for each, and Retire…'s note, which says it cannot be undone. */
+    @Test fun aChallengeSaysTheFixturesWords() {
+        val challenge = WikiSharedFiles.reviewMode.fobj("challenge")
+        assertEquals(challenge.fstrings("answers"), listOf(WikiModeCopy.reconfirm, WikiModeCopy.amendAnswer, WikiModeCopy.retireAnswer))
+        val after = challenge.fobj("after")
+        assertEquals(after.fstr("label"), WikiCopy.afterLabel)
+        assertEquals(after.fstr("keep"), WikiModeCopy.afterKeep)
+        assertEquals(after.fstr("amend"), WikiModeCopy.afterAmend)
+        assertEquals(after.fstr("retire"), WikiModeCopy.afterRetire)
+        assertEquals(challenge.fstr("retireNote"), WikiCopy.retireNote)
+        assertEquals(challenge.fstr("waits"), WikiModeCopy.challengeWaits)
+        assertEquals(challenge.fstr("challenged"), WikiModeCopy.challenged)
+        assertEquals(challenge.fstr("amendNote"), WikiModeCopy.amendNote)
+    }
 }

@@ -26,6 +26,18 @@ class WikiContractTest {
         at("ops").jsonObject.keys.forEach { assertTrue("op $it has no chip", WikiCopy.opLabel(it).isNotEmpty()) }
     }
 
+    /** A challenge's Amend… is offered on every kind the contract calls amendable and on no kind it calls not: a decision
+     * is superseded, never amended, and the server refuses its amend WIKI_SCHEMA. A kind that says neither (a later
+     * phase's) keeps the answer, as the web does. */
+    @Test fun amendIsOfferedOnTheKindsTheContractCallsAmendable() {
+        val card = WikiLogic.ReviewCard(WikiChangeset("c"), WikiChangesetOp("o", op = "challenge", entryId = "e"))
+        val declared = at("kinds").jsonObject.mapNotNull { (kind, spec) -> spec.jsonObject["amendable"]?.let { kind to it.jsonPrimitive.boolean } }
+        assertTrue(declared.size >= 6)
+        declared.forEach { (kind, amendable) -> assertEquals(kind, amendable, WikiLogic.amendable(card, WikiEntry("e", kind = kind))) }
+        assertEquals(listOf("decision"), declared.filter { !it.second }.map { it.first })
+        assertTrue("a kind not read yet", WikiLogic.amendable(card, null))
+    }
+
     @Test fun theRejectReasonsAreTheContractsInItsOrderAndWords() {
         val reasons = at("rejectReasons").jsonObject
         assertEquals(reasons.keys.toList(), WikiCopy.rejectReasons)

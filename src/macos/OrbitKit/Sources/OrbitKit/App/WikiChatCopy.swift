@@ -58,7 +58,7 @@ public enum WikiChatCopy {
     public static let cardApplied = "Applied · Confirmed by you"
     /// An applied card whose challenge still waits in Review (`wikiChatAppliedInReview`): not confirmed yet.
     public static let cardAppliedInReview = "Applied · In Review"
-    public static let cardAppliedInReviewNote = "Re-confirm, amend or retire the entry in Review."
+    public static let cardAppliedInReviewNote = "Keep, amend or retire the entry in Review."
     public static let cardDiscarded = "Discarded"
     public static let cardNotApplied = "Not applied"
     public static let cardUndone = "Undone"

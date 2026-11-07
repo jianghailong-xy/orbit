@@ -491,9 +491,20 @@ export function wikiRecentRows<T extends WikiRecentItem>(items: readonly T[]): A
 
 // ── A challenge's answers (contract `anchorRules.verify.answers`) ──────────────────────────────
 
-export const WIKI_RECONFIRM = 'Re-confirm';
+// The answers say what becomes of the entry (owner, 2026-11-07, docs/mocks/wiki-challenge-answers): Keep is
+// `reconfirm` — the word Review's Retire card already uses for "the entry stays" — and the two that ask first end
+// in an ellipsis. None of them is the card's filled answer: Review's filled button means "do what this card
+// proposes", and a challenge has no such answer. WIKI_AMEND and WIKI_RETIRE stay the words of the form and the
+// dialog the two open.
+export const WIKI_RECONFIRM = 'Keep';
 export const WIKI_AMEND = 'Amend';
+export const WIKI_AMEND_ANSWER = 'Amend…';
 export const WIKI_RETIRE = 'Retire';
+export const WIKI_RETIRE_ANSWER = 'Retire…';
+/** The After row above the answers: what each one does to the entry, and that Retire cannot be undone. */
+export const WIKI_CHALLENGE_AFTER_KEEP = 'Agents get this entry again. You can still retire it later.';
+export const WIKI_CHALLENGE_AFTER_AMEND = 'Agents get your version, and its anchors are checked again.';
+export const WIKI_CHALLENGE_AFTER_RETIRE = 'Agents stop getting it. This cannot be undone.';
 export const WIKI_CHALLENGE_WAITS = 'Agents stop getting this entry until you answer.';
 export const WIKI_CHALLENGED = 'Challenged';
 export const WIKI_AMEND_NOTE = 'Your version replaces the entry, and its anchors are checked again.';

@@ -38,6 +38,8 @@ import {
   WIKI_LINK_COPIED,
   WIKI_NO_ENTRY_SELECTED,
   WIKI_NO_USE_YET,
+  WIKI_RETIRE_NOTE,
+  WIKI_RETIRE_REASON_PLACEHOLDER,
   WIKI_SECTION_ANCHORS,
   WIKI_SECTION_DETAILS,
   WIKI_SECTION_HISTORY,
@@ -474,15 +476,12 @@ function EntryEditor({
     >
       {mode === 'retire' ? (
         <>
-          <p className="wk-modal-note">
-            Agents stop getting this entry. It stays in History, struck through, and the reason goes on
-            the record.
-          </p>
+          <p className="wk-modal-note">{WIKI_RETIRE_NOTE}</p>
           <Textarea
             rows={3}
             value={reason}
             onChange={(event) => setReason(event.target.value)}
-            placeholder="Why it no longer holds"
+            placeholder={WIKI_RETIRE_REASON_PLACEHOLDER}
           />
         </>
       ) : (
