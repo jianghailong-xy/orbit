@@ -42,6 +42,7 @@ import {
   STEER_WITHDRAW_WAIT_MS,
 } from './steer-withdraw';
 import { readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql } from './session-project-membership';
+import { lastUserFromOf, pendingMessageColumns, readSessionMessageFrom } from './session-message';
 import {
   closeRequestsTheRetryWillNotResend,
   isSessionReplyTurn,
@@ -803,6 +804,19 @@ interface AccountSwitchWrite {
   kimiAccountPinned?: boolean;
   cursorAccount?: string;
   cursorAccountPinned?: boolean;
+}
+
+/** completeProjectSessions' gate: the owner's project, and one that is DONE or CANCELLED. */
+function refuseUnlessProjectFinished(project: { status: string } | null | undefined): void {
+  if (!project) throw new NotFoundException('project not found');
+  if (project.status !== 'DONE' && project.status !== 'CANCELLED') {
+    throw new ConflictException({
+      code: 'PROJECT_STILL_OPEN',
+      message:
+        `This project is ${project.status}: its sessions move to Completed together only once it is `
+        + 'DONE or CANCELLED. Nothing was moved.',
+    });
+  }
 }
 
 @Injectable()
@@ -3455,10 +3469,10 @@ export class SessionsService {
     return [...counts.values()];
   }
 
-  /** The Open list's data version; see open-list-version.ts. `includeLanding` widens it to the
-   *  landing source, which only a project-scoped read that asks for landings can see. */
-  openListVersion(ownerId: string, includeLanding = false): Promise<string> {
-    return readOpenListVersion(this.prisma, ownerId, Date.now(), includeLanding);
+  /** The Open list's data version; see open-list-version.ts. Only the flat list reads it — a
+   *  project read is built every time (see the controller's list handler). */
+  openListVersion(ownerId: string): Promise<string> {
+    return readOpenListVersion(this.prisma, ownerId, Date.now());
   }
 
   async list(
@@ -3667,6 +3681,8 @@ export class SessionsService {
       lastAssistantText: string | null;
       lastToolUse: string | null;
       lastUserText: string | null;
+      lastUserFromSessionId: string | null;
+      lastUserFromTitle: string | null;
       // The rolling recap and when it was written (0418): the line the list prefers to the raw
       // last reply. Both null on a session no pass has recapped yet.
       recapText: string | null;
@@ -3759,6 +3775,9 @@ export class SessionsService {
         left(s.last_assistant_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastAssistantText",
         s.last_tool_use   AS "lastToolUse",
         left(s.last_user_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastUserText",
+        -- Who sent it, when another session did (0485): the row names that session, not "You".
+        s.last_user_from_session_id AS "lastUserFromSessionId",
+        s.last_user_from_title AS "lastUserFromTitle",
         -- The rolling recap (0418), clipped like the previews above. A session with no recap yet
         -- answers nulls, which is what the row falls back from to lastAssistantText.
         left(s.recap_text, ${SessionsService.PREVIEW_LEN}::int) AS "recapText",
@@ -3972,6 +3991,8 @@ export class SessionsService {
         lastAssistantText: r.lastAssistantText,
         lastToolUse: r.lastToolUse,
         lastUserText: r.lastUserText,
+        // `{ sessionId, title }` of the session that sent lastUserText, null for the owner's own.
+        lastUserFrom: lastUserFromOf(r),
         recapText: r.recapText,
         recapAt: r.recapAt,
         mergeStatus: r.mergeStatus,
@@ -4250,6 +4271,9 @@ export class SessionsService {
       // OpenAI's own id of the ChatGPT account a login-pool session runs on (migration 0324): no response
       // names an account but by its email and masked form (providers/codex-login.ts).
       poolCodexAccountId: _poolCodexAccountId,
+      // Read, never spread: answered as one `lastUserFrom`, the shape the list row and the summary carry.
+      lastUserFromSessionId,
+      lastUserFromTitle,
       ...rest
     } = projected;
     const tags = tagLinks
@@ -4328,6 +4352,8 @@ export class SessionsService {
       projectTitle: coordinatorForProject?.title ?? null,
       projectIntegrationRef: integrationRef ? branchName(integrationRef) : null,
       projectMembership: await readSessionProjectMembership(this.prisma, session.id),
+      // Who sent lastUserText, when another session did — the list row's and the summary's key.
+      lastUserFrom: lastUserFromOf({ lastUserFromSessionId, lastUserFromTitle }),
       sourceLanding,
       ...(landing ? { landing } : {}),
       shareToken: shareLinks?.[0]?.token ?? null,
@@ -6372,6 +6398,12 @@ export class SessionsService {
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
       await opts?.onTurnWritten?.(tx, turn);
+      // Who the row names beside that message when another session sent it: the session its card
+      // will name (session-message.ts). A plain read of the sender's row, never a lock on it — the
+      // one a foreign key would take is what 0349 and 0485 avoid.
+      const sentBy = dto.content && opts?.senderSessionId
+        ? await readSessionMessageFrom(tx, ownerId, opts.senderSessionId)
+        : null;
       const nextStatus = statusAfterTurnEnqueued(session.status);
       await tx.session.update({
         where: { id },
@@ -6384,8 +6416,9 @@ export class SessionsService {
           // rest of that turn — and throughout it the row previewed the PREVIOUS reply, which is
           // the one thing that reads as "already answered". The runner's own `user` event rewrites
           // the same value; only a reply clears it (ANSWERS_USER_TURN). An attachment-only send
-          // carries no text to preview and so leaves the column as it found it.
-          ...(dto.content ? { lastUserText: dto.content } : {}),
+          // carries no text to preview and so leaves the column as it found it. Its sender goes
+          // with it (`lastUserFrom`), null for the owner's own words.
+          ...(dto.content ? pendingMessageColumns(dto.content, sentBy) : {}),
           // A message on this session disarms any auto-retry waiting on it — whether it
           // came from the user (they took over; sending their own message again behind
           // their back would be a second, unasked-for turn) or from the sweeper itself
@@ -6683,6 +6716,10 @@ export class SessionsService {
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
+      // Its sender, read as createTurn reads one.
+      const sentBy = content && opts?.senderSessionId
+        ? await readSessionMessageFrom(tx, ownerId, opts.senderSessionId)
+        : null;
       const nextStatus = statusAfterTurnEnqueued(session.status);
       await tx.session.update({
         where: { id },
@@ -6690,8 +6727,8 @@ export class SessionsService {
           status: nextStatus,
           lastTurnAt: new Date(),
           // The redirected message is what the session is waiting on now — previewed from here
-          // exactly as in createTurn.
-          ...(content ? { lastUserText: content } : {}),
+          // exactly as in createTurn, with who sent it.
+          ...(content ? pendingMessageColumns(content, sentBy) : {}),
           // The person took over: an auto-retry waiting on this session must not fire a
           // second, unasked-for turn behind the one they just redirected to. A claim the sweep had
           // in flight ends for the same reason (migration 0354) — this turn is not its.
@@ -8087,6 +8124,27 @@ export class SessionsService {
     reason: SessionEndReason,
     lifecycle?: 'completedAt' | 'deletedAt',
     requireNoProjectBinding = false,
+  ) {
+    // Retried whole. Every terminal transition is decided from the Session row under its lock, so a
+    // re-run sees whichever end actually committed rather than re-applying one that did not.
+    return withTransactionRetry(
+      this.prisma,
+      (tx) => this.transitionEndLocked(tx, ownerId, sessionId, reason, lifecycle, requireNoProjectBinding),
+      loggedRetry(this.logger, 'sessions.transitionEnd'),
+    );
+  }
+
+  /**
+   * transitionEnd's work, inside the caller's transaction: it takes the Session row lock itself, and a
+   * caller ending several sessions in one transaction (completeProjectSessions) holds them already.
+   */
+  private async transitionEndLocked(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    sessionId: string,
+    reason: SessionEndReason,
+    lifecycle?: 'completedAt' | 'deletedAt',
+    requireNoProjectBinding = false,
   ): Promise<{
     changed: boolean;
     runnerId: string | null;
@@ -8097,174 +8155,170 @@ export class SessionsService {
     endReason: SessionEndReason | null;
     projectBound: boolean;
   }> {
-    // Retried whole. Every terminal transition is decided from the Session row under its lock, so a
-    // re-run sees whichever end actually committed rather than re-applying one that did not.
-    return withTransactionRetry(this.prisma, async (tx) => {
-      const locked = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT id FROM "session"
-        WHERE id = ${sessionId}::uuid AND "owner_id" = ${ownerId}::uuid
-        FOR UPDATE`;
-      if (locked.length === 0) throw new NotFoundException('session not found');
-      const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId } });
-      // End and Trash both land here; the platform's landing container is not a person's to close or
-      // throw away (§2.9 LS6).
-      assertEngineSessionRow(session);
-      if (requireNoProjectBinding) {
-        // Every Project binding path takes this same Session lock first. A non-locking lookup made
-        // after acquiring it therefore decides a stable fact: an existing adopter is preserved,
-        // while a future adopter cannot pass the deleted_at guard until this transaction commits.
-        const project = await tx.project.findFirst({
-          where: { coordinatorSessionId: sessionId },
-          select: { id: true },
-        });
-        if (project) {
-          return {
-            changed: false,
-            runnerId: session.assignedRunnerId,
-            status: session.status,
-            lifecycleState: deriveSessionLifecycleState(session),
-            filingState: deriveSessionFilingState(session),
-            endReason:
-              session.endReason == null ? null : (session.endReason as SessionEndReason),
-            projectBound: true,
-          };
-        }
-      }
-      if (lifecycle === 'completedAt' && session.deletedAt != null) {
-        throw new ConflictException(
-          'a session in Trash must be moved to Open before it can be completed',
-        );
-      }
-      const now = new Date();
-      // Keep the first filing timestamp stable across retries. This matters especially
-      // for deletedAt, which starts the Trash retention clock.
-      const lifecycleData: {
-        completedAt?: Date;
-        /** @deprecated Rolling-version compatibility mirror. */
-        archivedAt?: Date;
-        deletedAt?: Date;
-      } = {};
-      let finalCompletedAt = session.completedAt ?? session.archivedAt;
-      let finalDeletedAt = session.deletedAt;
-      if (lifecycle === 'completedAt' && finalCompletedAt == null) {
-        lifecycleData.completedAt = now;
-        // Keep old replicas and clients coherent during the compatibility window.
-        lifecycleData.archivedAt = now;
-        finalCompletedAt = now;
-      }
-      if (lifecycle === 'deletedAt' && session.deletedAt == null) {
-        lifecycleData.deletedAt = now;
-        finalDeletedAt = now;
-      }
-      const lifecycleState = deriveSessionLifecycleState({
-        completedAt: finalCompletedAt,
-        deletedAt: finalDeletedAt,
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM "session"
+      WHERE id = ${sessionId}::uuid AND "owner_id" = ${ownerId}::uuid
+      FOR UPDATE`;
+    if (locked.length === 0) throw new NotFoundException('session not found');
+    const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId } });
+    // End and Trash both land here; the platform's landing container is not a person's to close or
+    // throw away (§2.9 LS6).
+    assertEngineSessionRow(session);
+    if (requireNoProjectBinding) {
+      // Every Project binding path takes this same Session lock first. A non-locking lookup made
+      // after acquiring it therefore decides a stable fact: an existing adopter is preserved,
+      // while a future adopter cannot pass the deleted_at guard until this transaction commits.
+      const project = await tx.project.findFirst({
+        where: { coordinatorSessionId: sessionId },
+        select: { id: true },
       });
-      const filingState = deriveSessionFilingState({
-        completedAt: finalCompletedAt,
-        deletedAt: finalDeletedAt,
-      });
-      if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
-        if (Object.keys(lifecycleData).length > 0 || requireNoProjectBinding) {
-          await tx.session.update({
-            where: { id: sessionId },
-            data: {
-              ...lifecycleData,
-              ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
-            },
-          });
-        }
+      if (project) {
         return {
           changed: false,
           runnerId: session.assignedRunnerId,
           status: session.status,
-          lifecycleState,
-          filingState,
+          lifecycleState: deriveSessionLifecycleState(session),
+          filingState: deriveSessionFilingState(session),
           endReason:
             session.endReason == null ? null : (session.endReason as SessionEndReason),
-          projectBound: false,
+          projectBound: true,
         };
       }
-      await terminalizePendingCurrentWorkSteers(tx, sessionId, {
-        code: CURRENT_WORK_SESSION_ENDED,
-        reason: 'CURRENT_WORK was not delivered because the session ended.',
-      });
-      // Both branches below retire every queued message, a Watch wake among them: its delivery
-      // stops reading DELIVERED first (watches/watch-wake-drain.ts).
-      await deadLetterQueuedWatchWakes(tx, sessionId, {
-        code: 'OBSERVER_SESSION_ENDED',
-        ending: `an end was requested: ${reason}`,
-      });
-      // An exception item queued for this project's coordinator goes back to being owed, and to the
-      // account owner: a conversation that is ending cannot read it (projects/project-open-item.ts).
-      await returnQueuedTurns(tx, sessionId, { code: 'SESSION_ENDED', ending: true });
-      // Outcomes queued back to this session as an asker are let go, to be held for it and written on
-      // its task. The requests queued here are left to the end itself: the status write below (or the
-      // finalize after it) closes them RECIPIENT_ENDED, which wins over UNDELIVERED (session-request.ts).
-      await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: false, retryArmed: false });
-      if (session.status === RunStatus.PENDING) {
+    }
+    if (lifecycle === 'completedAt' && session.deletedAt != null) {
+      throw new ConflictException(
+        'a session in Trash must be moved to Open before it can be completed',
+      );
+    }
+    const now = new Date();
+    // Keep the first filing timestamp stable across retries. This matters especially
+    // for deletedAt, which starts the Trash retention clock.
+    const lifecycleData: {
+      completedAt?: Date;
+      /** @deprecated Rolling-version compatibility mirror. */
+      archivedAt?: Date;
+      deletedAt?: Date;
+    } = {};
+    let finalCompletedAt = session.completedAt ?? session.archivedAt;
+    let finalDeletedAt = session.deletedAt;
+    if (lifecycle === 'completedAt' && finalCompletedAt == null) {
+      lifecycleData.completedAt = now;
+      // Keep old replicas and clients coherent during the compatibility window.
+      lifecycleData.archivedAt = now;
+      finalCompletedAt = now;
+    }
+    if (lifecycle === 'deletedAt' && session.deletedAt == null) {
+      lifecycleData.deletedAt = now;
+      finalDeletedAt = now;
+    }
+    const lifecycleState = deriveSessionLifecycleState({
+      completedAt: finalCompletedAt,
+      deletedAt: finalDeletedAt,
+    });
+    const filingState = deriveSessionFilingState({
+      completedAt: finalCompletedAt,
+      deletedAt: finalDeletedAt,
+    });
+    if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+      if (Object.keys(lifecycleData).length > 0 || requireNoProjectBinding) {
         await tx.session.update({
           where: { id: sessionId },
           data: {
             ...lifecycleData,
             ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
-            status: RunStatus.CANCELLED,
-            endReason: reason,
-            cancelRequestedAt: now,
-            finishedAt: now,
-            // A queued session can still be holding what its last run left running — a job parked
-            // with the session and never reaped — and CANCELLED is the end of the line for it
-            // (CLEARED_RUNNING_WORK). The runner is told to stop by the same cancelRequestedAt,
-            // and what its drain then reports is refused: this status has closed the door.
-            ...CLEARED_RUNNING_WORK,
           },
-        });
-        // A session that ends before it ran is still a finish of the task's work, and may be the one
-        // a DONE task's identity was waiting for (§10.5 O-L4 3).
-        await settleDeliveredIdentityAfterFinish(tx, session);
-        await retireSessionInboxGeneration(tx, sessionId);
-        // A wakeup filed onto a `bg-wake:` turn still queued goes with the drain below, unrun: dropped with
-        // the session it was to wake, and taken out of its loop's runs (runner-api/wake-turn-withdraw.ts).
-        await settleUnrunWakeTurns(tx, sessionId, { drained: true });
-        await tx.conversationTurn.updateMany({
-          where: { sessionId, status: { not: 'ANSWERED' } },
-          data: { status: 'ANSWERED', answeredAt: now },
-        });
-      } else {
-        await tx.session.update({
-          where: { id: sessionId },
-          data: {
-            ...lifecycleData,
-            ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
-            cancelRequestedAt: now,
-            endReason: reason,
-          },
-        });
-        // A `bg-wake:` turn queued here is one of the messages retired below: the wakeups filed onto it are
-        // dropped with the session that is ending, and taken out of their loop's runs
-        // (runner-api/wake-turn-withdraw.ts).
-        await settleUnrunWakeTurns(tx, sessionId, { drained: true });
-        // Retire queued messages in place. This prevents replay while preserving target FKs,
-        // attachments and clientTurnId receipts as durable audit evidence.
-        await tx.conversationTurn.updateMany({
-          where: { sessionId, kind: 'message', status: 'PENDING' },
-          data: { status: 'ANSWERED', answeredAt: now },
-        });
-        await this.insertTurnLocked(tx, sessionId, {
-          kind: 'end',
-          clientTurnId: randomUUID(),
         });
       }
       return {
-        changed: true,
+        changed: false,
         runnerId: session.assignedRunnerId,
-        status: session.status === RunStatus.PENDING ? RunStatus.CANCELLED : session.status,
+        status: session.status,
         lifecycleState,
         filingState,
-        endReason: reason,
+        endReason:
+          session.endReason == null ? null : (session.endReason as SessionEndReason),
         projectBound: false,
       };
-    }, loggedRetry(this.logger, 'sessions.transitionEnd'));
+    }
+    await terminalizePendingCurrentWorkSteers(tx, sessionId, {
+      code: CURRENT_WORK_SESSION_ENDED,
+      reason: 'CURRENT_WORK was not delivered because the session ended.',
+    });
+    // Both branches below retire every queued message, a Watch wake among them: its delivery
+    // stops reading DELIVERED first (watches/watch-wake-drain.ts).
+    await deadLetterQueuedWatchWakes(tx, sessionId, {
+      code: 'OBSERVER_SESSION_ENDED',
+      ending: `an end was requested: ${reason}`,
+    });
+    // An exception item queued for this project's coordinator goes back to being owed, and to the
+    // account owner: a conversation that is ending cannot read it (projects/project-open-item.ts).
+    await returnQueuedTurns(tx, sessionId, { code: 'SESSION_ENDED', ending: true });
+    // Outcomes queued back to this session as an asker are let go, to be held for it and written on
+    // its task. The requests queued here are left to the end itself: the status write below (or the
+    // finalize after it) closes them RECIPIENT_ENDED, which wins over UNDELIVERED (session-request.ts).
+    await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: false, retryArmed: false });
+    if (session.status === RunStatus.PENDING) {
+      await tx.session.update({
+        where: { id: sessionId },
+        data: {
+          ...lifecycleData,
+          ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
+          status: RunStatus.CANCELLED,
+          endReason: reason,
+          cancelRequestedAt: now,
+          finishedAt: now,
+          // A queued session can still be holding what its last run left running — a job parked
+          // with the session and never reaped — and CANCELLED is the end of the line for it
+          // (CLEARED_RUNNING_WORK). The runner is told to stop by the same cancelRequestedAt,
+          // and what its drain then reports is refused: this status has closed the door.
+          ...CLEARED_RUNNING_WORK,
+        },
+      });
+      // A session that ends before it ran is still a finish of the task's work, and may be the one
+      // a DONE task's identity was waiting for (§10.5 O-L4 3).
+      await settleDeliveredIdentityAfterFinish(tx, session);
+      await retireSessionInboxGeneration(tx, sessionId);
+      // A wakeup filed onto a `bg-wake:` turn still queued goes with the drain below, unrun: dropped with
+      // the session it was to wake, and taken out of its loop's runs (runner-api/wake-turn-withdraw.ts).
+      await settleUnrunWakeTurns(tx, sessionId, { drained: true });
+      await tx.conversationTurn.updateMany({
+        where: { sessionId, status: { not: 'ANSWERED' } },
+        data: { status: 'ANSWERED', answeredAt: now },
+      });
+    } else {
+      await tx.session.update({
+        where: { id: sessionId },
+        data: {
+          ...lifecycleData,
+          ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
+          cancelRequestedAt: now,
+          endReason: reason,
+        },
+      });
+      // A `bg-wake:` turn queued here is one of the messages retired below: the wakeups filed onto it are
+      // dropped with the session that is ending, and taken out of their loop's runs
+      // (runner-api/wake-turn-withdraw.ts).
+      await settleUnrunWakeTurns(tx, sessionId, { drained: true });
+      // Retire queued messages in place. This prevents replay while preserving target FKs,
+      // attachments and clientTurnId receipts as durable audit evidence.
+      await tx.conversationTurn.updateMany({
+        where: { sessionId, kind: 'message', status: 'PENDING' },
+        data: { status: 'ANSWERED', answeredAt: now },
+      });
+      await this.insertTurnLocked(tx, sessionId, {
+        kind: 'end',
+        clientTurnId: randomUUID(),
+      });
+    }
+    return {
+      changed: true,
+      runnerId: session.assignedRunnerId,
+      status: session.status === RunStatus.PENDING ? RunStatus.CANCELLED : session.status,
+      lifecycleState,
+      filingState,
+      endReason: reason,
+      projectBound: false,
+    };
   }
 
   /** Emit runner/control-plane effects for a newly persisted end intent. */
@@ -9258,6 +9312,10 @@ export class SessionsService {
       // and the claim builds one from it — so the only question is whether the value is true, and
       // the claim polices it against whatever model this revive resolves to.
       const normalizedFastMode = dto.fastMode !== undefined ? dto.fastMode === true : undefined;
+      // Its sender, read as createTurn reads one.
+      const sentBy = dto.content && opts?.senderSessionId
+        ? await readSessionMessageFrom(tx, ownerId, opts.senderSessionId)
+        : null;
       await tx.session.update({
         where: { id },
         data: {
@@ -9274,8 +9332,9 @@ export class SessionsService {
           result: null,
           lastTurnAt: new Date(),
           // Previewed from enqueue, as in createTurn: a revive waits for a slot like any other
-          // turn, and until the runner reports it the row would show the reply from before.
-          ...(dto.content ? { lastUserText: dto.content } : {}),
+          // turn, and until the runner reports it the row would show the reply from before. With
+          // its sender, as there.
+          ...(dto.content ? pendingMessageColumns(dto.content, sentBy) : {}),
           mergeStatus: null,
           mergeOperationId: null,
           mergeOperationOwner: null,
@@ -9452,6 +9511,57 @@ export class SessionsService {
       ended.lifecycleState,
     );
     return { ok: true };
+  }
+
+  /**
+   * A finished project's Complete (docs/session-list-projects-design.md §3.6): its coordinator and
+   * every member still in Open, in whichever workspace, moved to Completed in one transaction, each
+   * by the transition its own Complete makes, so one still running is ended the way Complete ends
+   * it. The members are the ones `GET /sessions?projectId=` lists in Open, read by the same SQL
+   * (session-project-membership.ts): never a LANDING container, and nothing already Completed or in
+   * Trash. Answers how many moved.
+   *
+   * Only a DONE or CANCELLED project: an OPEN one is refused 409 PROJECT_STILL_OPEN, and another
+   * owner's project, or none, is a 404. Both are decided before anything is locked, and the status
+   * again under the project row once the members are held (rank 30, then 40), so a Reopen cannot
+   * land between the check and the moves.
+   */
+  async completeProjectSessions(ownerId: string, projectId: string): Promise<{ completed: number }> {
+    const moved = await withTransactionRetry(this.prisma, async (tx) => {
+      refuseUnlessProjectFinished(await tx.project.findFirst({
+        where: { id: projectId, ownerId },
+        select: { status: true },
+      }));
+      const members = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT s.id FROM session s
+        WHERE s.owner_id = ${ownerId}::uuid
+          AND s.kind = 'CONVERSATION'
+          AND COALESCE(s.completed_at, s.archived_at) IS NULL AND s.deleted_at IS NULL
+          AND ${sessionInProjectSql('s', projectId)}
+        ORDER BY s.id
+        FOR UPDATE OF s`;
+      const [held] = await tx.$queryRaw<Array<{ status: string }>>`
+        SELECT "status"::text AS "status" FROM "project" WHERE "id" = ${projectId}::uuid FOR SHARE`;
+      refuseUnlessProjectFinished(held);
+      const ended = [];
+      for (const { id } of members) {
+        ended.push({
+          id,
+          end: await this.transitionEndLocked(tx, ownerId, id, SessionEndReason.COMPLETED, 'completedAt'),
+        });
+      }
+      return ended;
+    }, loggedRetry(this.logger, 'sessions.completeProjectSessions', {
+      // One member after another, each waiting for its row: a project with many still open can take
+      // longer than Prisma's 5 s interactive-transaction default.
+      transaction: { maxWait: 10_000, timeout: 30_000 },
+    }));
+    // What each one's own Complete sends, after the commit.
+    for (const { id, end } of moved) {
+      this.publishEndIntent(id, end);
+      this.realtime.publishSessionLifecycleChanged(id, end.status, end.endReason, end.lifecycleState);
+    }
+    return { completed: moved.length };
   }
 
   /**

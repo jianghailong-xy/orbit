@@ -1056,6 +1056,18 @@ function draftIdempotency(spaceId: string, key: string, raw: Record<string, unkn
 }
 
 /**
+ * The space's row, held FOR NO KEY UPDATE as every write of its plan takes it, or the plain 404 for a space no longer in
+ * use: one moved to Trash (contract `space.trash`) while the write was on its way finds nothing here and writes nothing.
+ */
+async function lockSpaceInUse(tx: Prisma.TransactionClient, ownerId: string, spaceId: string): Promise<void> {
+  const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT "id" FROM "wiki_space"
+     WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid AND "deleted_at" IS NULL
+     FOR NO KEY UPDATE`);
+  if (locked.length === 0) throw new NotFoundException('no such wiki space');
+}
+
+/**
  * The version the same draft stored under this key, or null when the key stored none: a replay is
  * answered with it and writes nothing. The key with another request is WIKI_IDEMPOTENCY_KEY_REUSED.
  */
@@ -1089,9 +1101,9 @@ export class WikiPlans {
 
   // ── Who asks ──────────────────────────────────────────────────────────────────────────────────
 
-  /** Another owner's space is the plain 404 every tenancy check answers (contract `refusalRules.notFound`). */
+  /** Another owner's space is the plain 404 every tenancy check answers (contract `refusalRules.notFound`), and one in Trash. */
   private async requireSpace(ownerId: string, spaceId: string): Promise<void> {
-    const space = await this.prisma.wikiSpace.findFirst({ where: { id: spaceId, ownerId }, select: { id: true } });
+    const space = await this.prisma.wikiSpace.findFirst({ where: { id: spaceId, ownerId, deletedAt: null }, select: { id: true } });
     if (!space) throw new NotFoundException('no such wiki space');
   }
 
@@ -1354,8 +1366,7 @@ export class WikiPlans {
     next: NewVersion,
     after?: (tx: Prisma.TransactionClient, version: number) => Promise<void>,
   ): Promise<{ version: number; replayed: boolean }> {
-    await tx.$queryRaw(Prisma.sql`
-      SELECT "id" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`);
+    await lockSpaceInUse(tx, ownerId, spaceId);
     if (next.idempotency) {
       const earlier = await storedUnder(tx, ownerId, next.idempotency);
       if (earlier !== null) return { version: earlier, replayed: true };
@@ -1606,8 +1617,7 @@ export class WikiPlans {
 
   /** `confirm`'s writes, in a transaction the caller holds: a plan card's press confirms the version it stored. */
   private async confirmIn(tx: Prisma.TransactionClient, ownerId: string, spaceId: string, version: number): Promise<void> {
-    await tx.$queryRaw(Prisma.sql`
-      SELECT "id" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`);
+    await lockSpaceInUse(tx, ownerId, spaceId);
     const row = await tx.wikiPlan.findFirst({ where: { ownerId, spaceId, version }, select: { id: true, status: true } });
     if (!row) throw new NotFoundException('no such version of this plan');
     if (row.status !== 'draft') {
@@ -1753,7 +1763,7 @@ export class WikiPlans {
     if (!(WIKI_PLAN_PROPOSAL_ACTIONS as readonly unknown[]).includes(action)) walk.fail('schema', 'action', `must be one of ${WIKI_PLAN_PROPOSAL_ACTIONS.join(', ')}`);
     const note = raw.note === undefined || raw.note === null ? null : walk.text(raw.note, 'note', WIKI_PLAN_RULES.reasonMaxChars, false) || null;
     if (walk.errors.length > 0) throw gateRefusal(walk.errors, 'The decision');
-    const proposal = await this.prisma.wikiPlanProposal.findFirst({ where: { id: proposalId, ownerId }, select: PROPOSAL_SELECT });
+    const proposal = await this.prisma.wikiPlanProposal.findFirst({ where: { id: proposalId, ownerId, space: { deletedAt: null } }, select: PROPOSAL_SELECT });
     if (!proposal) throw new NotFoundException('no such plan proposal');
     const spaceId = proposal.spaceId;
     if (proposal.status !== 'pending') throw stale(`this proposal was already ${proposal.status}`);
@@ -1769,8 +1779,7 @@ export class WikiPlans {
       await withTransactionRetry(
         this.prisma,
         async (tx) => {
-          await tx.$queryRaw(Prisma.sql`
-            SELECT "id" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`);
+          await lockSpaceInUse(tx, ownerId, spaceId);
           await settle(tx, 'rejected', null);
         },
         loggedRetry(this.logger, 'wiki.rejectPlanProposal'),
@@ -2047,7 +2056,7 @@ export class WikiPlans {
    */
   async requestBuildForSupport(administratorId: string, spaceId: string, body: unknown): Promise<WikiPlanSupportBuildResult> {
     const reason = supportReasonOf(body);
-    const space = await this.prisma.wikiSpace.findFirst({ where: { id: spaceId }, select: { ownerId: true } });
+    const space = await this.prisma.wikiSpace.findFirst({ where: { id: spaceId, deletedAt: null }, select: { ownerId: true } });
     if (!space) throw new NotFoundException('no such wiki space');
     const rollout = currentWikiRollout();
     if (!wikiOnFor(rollout, space.ownerId)) throw wikiDisabledError(rollout);
@@ -2072,7 +2081,7 @@ export class WikiPlans {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
     if (!user) throw new NotFoundException('user not found');
     const spaces = await this.prisma.wikiSpace.findMany({
-      where: { ownerId: userId },
+      where: { ownerId: userId, deletedAt: null },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       select: { id: true, title: true },
     });

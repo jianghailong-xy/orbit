@@ -1015,6 +1015,22 @@ model ApiserverProcess {
   @@map("apiserver_process")
 }
 
+/// Per-owner, per-source counters the Open list's data version reads in place of scanning a table
+/// (sessions/open-list-version.ts, migration 0484). Statement-level triggers are the only writer;
+/// the apiserver only reads the table, through `$queryRaw`. The counter can never lag a write, and
+/// may move when the list did not change — the one direction that version is allowed to be wrong.
+/// One row of an (owner, source) counter, keyed `<source>` or `<source>#<n>` (0487): the counter is
+/// the sum of its rows, and a bump takes one no other transaction holds (FOR UPDATE SKIP LOCKED),
+/// inserting the next only when all are held. `open_list_epoch_shard_seq` numbers those rows.
+model OpenListEpoch {
+  ownerId String @map("owner_id") @db.Uuid
+  source  String
+  epoch   BigInt @default(0)
+
+  @@id([ownerId, source])
+  @@map("open_list_epoch")
+}
+
 // A long-lived credential for a HEADLESS process on one machine — a launchd/cron bridge that
 // belongs to no session, so it can hold none of the session-bound proofs orchestration uses.
 //
@@ -1836,6 +1852,13 @@ model Session {
   // turn end). Lets the list show the message you just sent while awaiting the reply, instead of
   // the now-stale previous reply. Only meaningful while RUNNING; display is status-gated.
   lastUserText         String?   @map("last_user_text")
+  // Who sent lastUserText, when another Orbit session did (session_send, project_send, session_interrupt —
+  // the turn's senderSessionId): that session's id, and its title as it stood when lastUserText was written,
+  // the title the conversation's "From <title>" card shows. Both null when the owner (or the platform) wrote
+  // it. Written and cleared in the same statements as lastUserText (0485). Not a relation, for the reason
+  // ConversationTurn.senderSessionId is not one.
+  lastUserFromSessionId String?  @map("last_user_from_session_id") @db.Uuid
+  lastUserFromTitle     String?  @map("last_user_from_title")
   // Denormalized set of the agent's still-running background shells (Bash run_in_background):
   // the tool_use ids of launches that haven't yet reported a terminal `<task-notification>`.
   // Added on launch, removed on completion, cleared on (re)spawn/complete. Lets the list +
@@ -5729,6 +5752,10 @@ model TaskCompletionEvidence {
   actorType  CreatorType @map("actor_type")
   actorId    String      @map("actor_id") @db.Uuid
   submittedAt DateTime   @default(now()) @map("submitted_at")
+  /// The moment the evidence-review turn was delivered, copied from that turn by a trigger
+  /// (migration 0484) so the Open list's data version can read the review-window deadline
+  /// without joining the turn and its dispatching session on every poll. Null until delivered.
+  reviewTurnAt DateTime? @map("review_turn_at")
 
   sourceSessionId String  @map("source_session_id") @db.Uuid
   sourceAttemptId String? @map("source_attempt_id") @db.Uuid
@@ -7391,6 +7418,16 @@ model WikiSpace {
   settings      Json    @default("{}")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  /// The Trash (0486, contract `space.trash`): when the wiki was moved there; when it is due to be deleted for good,
+  /// 365 days later or the moment the owner asked; the purge holding it; and the slug and repository it had. A wiki in
+  /// Trash has a placeholder slug and no repository, so a new one can take both and nothing that finds a wiki by them
+  /// finds it. All NULL for a wiki in use. `wiki_space_trash_chk` holds them together, and the partial index
+  /// `wiki_space_purge_idx` (purge_at WHERE deleted_at IS NOT NULL) lives in the migration alone.
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(3)
+  purgeAt            DateTime? @map("purge_at") @db.Timestamptz(3)
+  purgeLeaseUntil    DateTime? @map("purge_lease_until") @db.Timestamptz(3)
+  trashedSlug        String?   @map("trashed_slug")
+  trashedRepoUrlNorm String?   @map("trashed_repo_url_norm")
 
   workspaces WikiSpaceWorkspace[]
   notes      WikiNote[]

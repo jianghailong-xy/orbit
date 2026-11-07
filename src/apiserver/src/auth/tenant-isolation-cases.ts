@@ -145,6 +145,8 @@ export interface Tenant {
     folderId: string;
     sessionId: string;
     purgedSessionId: string;
+    /** A wiki of the owner's in Trash, which the permanent delete takes (contract `space.trash.purge`). */
+    trashedWikiSpaceId: string;
     tagId: string;
     shareLinkId: string;
     listId: string;
@@ -322,6 +324,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   },
   'POST /projects/:id/pause': { request: (of) => ({ params: { id: of.projectId } }) },
   'POST /projects/:id/resume': { request: (of) => ({ params: { id: of.projectId } }) },
+  'POST /projects/:id/sessions/complete': { request: (of) => ({ params: { id: of.projectId } }) },
   'GET /projects/:id/acceptance/criteria-decisions/pending': { request: (of) => ({ params: { id: of.projectId } }) },
   'POST /projects/:id/acceptance/criteria-decisions/:intentId': {
     request: (of) => ({
@@ -718,6 +721,10 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     request: (of, mine) => ({ params: { id: of.wikiSpaceId, workspaceId: mine.workspaceId } }),
   },
   'DELETE /wiki/spaces/:id': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
+  // The Trash (contract `space.trash`): a restore of a wiki in use answers it as it is, and the permanent delete takes the
+  // owner's spare wiki in Trash.
+  'POST /wiki/spaces/:id/restore': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
+  'DELETE /wiki/spaces/:id/purge': { request: (of) => ({ params: { id: of.spare.trashedWikiSpaceId } }) },
   // A space's wiki chats (contract `chat.routes`): another account's space is the plain 404 before anything is read.
   'GET /wiki/spaces/:id/chats': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'POST /wiki/spaces/:id/chats': {

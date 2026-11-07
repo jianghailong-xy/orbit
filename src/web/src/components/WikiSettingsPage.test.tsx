@@ -45,9 +45,11 @@ function space(settings: Partial<WikiSpaceSettings> = {}): WikiSpaceRow {
 }
 
 let patches: Array<Record<string, unknown>> = [];
-/** Every `DELETE /api/wiki/spaces/:id` the page sent; a refusal when `deleteRefused` is set. */
+/** Every `DELETE /api/wiki/spaces/:id` (Move to Trash) the page sent; a refusal when `deleteRefused` is set. */
 let deletes: string[] = [];
 let deleteRefused: string | null = null;
+/** What `GET /api/wiki/trash` answers. */
+let trash: Array<{ id: string; slug: string; title: string; repoUrlNorm: string | null; deletedAt: string; purgeAt: string; entries: number }> = [];
 let pathname = '';
 /** What `GET /api/wiki/spaces/:id/workspaces` answers, and the writes the Workspaces card made. */
 let members: WikiSpaceWorkspaces = { workspaces: [], addable: [] };
@@ -103,6 +105,7 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
   reads.push(url);
   if (url === `/api/wiki/spaces/${SPACE_ID}/health`) return reply(200, { entries: 2606, maintenance: { look: 'off' } });
   if (url === '/api/wiki/spaces') return reply(200, [space()]);
+  if (url === '/api/wiki/trash') return reply(200, { spaces: trash });
   const members_ = `/api/wiki/spaces/${SPACE_ID}/workspaces`;
   if (url === members_ && (init?.method ?? 'GET') === 'GET') return reply(200, members);
   if (url.startsWith(members_)) {
@@ -136,6 +139,7 @@ beforeEach(() => {
   patches = [];
   deletes = [];
   deleteRefused = null;
+  trash = [];
   members = { workspaces: [], addable: [] };
   memberWrites = [];
   reads = [];
@@ -211,13 +215,13 @@ function button(label: string, scope: ParentNode = document.body): HTMLButtonEle
 }
 
 describe('Wiki settings', () => {
-  it('draws Review mode, Workspaces, Maintenance, then Delete, the three modes in order with Tiered the default', async () => {
+  it('draws Review mode, Workspaces, Maintenance, then Move to Trash, the three modes in order with Tiered the default', async () => {
     await mount(space({ reviewMode: 'tiered' }));
     const page = text();
     expect(page).toContain('Wiki settings');
     expect(page).toContain('orbit · github.com/jianghailong-xy/orbit');
     const titles = [...container.querySelectorAll('.orbit-card-title')].map((node) => node.textContent);
-    expect(titles).toEqual(['Review mode', 'Workspaces', 'Maintenance', 'Delete this wiki']);
+    expect(titles).toEqual(['Review mode', 'Workspaces', 'Maintenance', 'Move to Trash']);
     expect(page).toContain('Only you can switch it');
     const modes = [...container.querySelectorAll('.wk-mode .wk-mode-t')].map((node) => node.textContent);
     expect(modes).toEqual(['Manual', 'Tiered', 'Automatic']);
@@ -394,18 +398,19 @@ describe('The Workspaces card (mock 38)', () => {
   });
 });
 
-describe('Delete this wiki (docs/mocks/wiki-delete)', () => {
+describe('Move to Trash (docs/mocks/wiki-trash)', () => {
   const dialog = () => document.body.querySelector<HTMLElement>('[role="alertdialog"]');
 
-  it('says what goes, and asks before it deletes anything', async () => {
+  it('says Trash keeps it, and asks before it moves anything', async () => {
     await mount(space());
-    expect(text()).toContain('Delete this wiki');
-    expect(text()).toContain('Its entries, documents and history are permanently deleted.');
-    await press(button('Delete wiki…'));
+    expect(text()).toContain('Move to Trash');
+    expect(text()).toContain('It stays in Trash for 365 days and can be restored until then.');
+    await press(button('Move to Trash…'));
     const asked = dialog()!;
-    expect(asked.textContent).toContain('Delete wiki “orbit”?');
-    expect(asked.textContent).toContain('Its 2,606 entries and their history will be permanently deleted. This cannot be undone.');
-    expect(asked.textContent).toContain('The next session on github.com/jianghailong-xy/orbit to use the wiki starts a new, empty one.');
+    expect(asked.textContent).toContain('Move wiki “orbit” to Trash?');
+    expect(asked.textContent).toContain('It leaves your wikis now, and sessions stop reading it.');
+    expect(asked.textContent).toContain('Its 2,606 entries stay in Trash for 365 days: restore it any time until then. After that it is deleted for good.');
+    expect(asked.textContent).toContain('Until you restore it, the next session on github.com/jianghailong-xy/orbit to use the wiki starts a new, empty one.');
     expect(asked.textContent).toContain('Workspaces and sessions are kept.');
     expect(deletes).toEqual([]);
 
@@ -415,26 +420,44 @@ describe('Delete this wiki (docs/mocks/wiki-delete)', () => {
     expect(pathname).toBe('/wiki/orbit/settings');
   });
 
-  it('does not say a wiki with no repository comes back', async () => {
+  it('does not say a new wiki is made for a wiki with no repository', async () => {
     await mount({ ...space(), repoUrlNorm: null, title: 'orbit · vLLM preview' });
-    await press(button('Delete wiki…'));
-    expect(dialog()!.textContent).not.toContain('The next session');
+    await press(button('Move to Trash…'));
+    expect(dialog()!.textContent).not.toContain('the next session');
   });
 
-  it('deletes through the owner’s door and leaves for the wiki `/wiki` opens', async () => {
+  it('moves it through the owner’s door and leaves for the wiki `/wiki` opens', async () => {
     await mount(space());
-    await press(button('Delete wiki…'));
-    await press(button('Delete wiki', dialog()!));
+    await press(button('Move to Trash…'));
+    await press(button('Move to Trash', dialog()!));
     expect(deletes).toEqual([`/api/wiki/spaces/${SPACE_ID}`]);
     expect(pathname).toBe('/wiki');
   });
 
   it('says a refusal in the dialog, and stays on the page', async () => {
-    deleteRefused = 'Couldn’t reach the server. Nothing was deleted. Try again.';
+    deleteRefused = 'Couldn’t reach the server. Nothing was moved. Try again.';
     await mount(space());
-    await press(button('Delete wiki…'));
-    await press(button('Delete wiki', dialog()!));
+    await press(button('Move to Trash…'));
+    await press(button('Move to Trash', dialog()!));
     expect(dialog()!.querySelector('[role="alert"]')?.textContent).toBe(deleteRefused);
+    expect(pathname).toBe('/wiki/orbit/settings');
+  });
+
+  it('leads to nothing under the card while Trash is empty', async () => {
+    await mount(space());
+    expect(text()).not.toContain('Open Trash');
+  });
+
+  it('leads to Trash under the card while anything is in it, and opens it where the reader is', async () => {
+    trash = [{
+      id: 'gone', slug: 'gone', title: 'gone', repoUrlNorm: null,
+      deletedAt: '2026-11-07T12:00:00.000Z', purgeAt: '2027-11-07T12:00:00.000Z', entries: 3,
+    }];
+    await mount(space());
+    expect(text()).toContain('Trash holds 1 wiki. Open Trash');
+    await press(button('Open Trash'));
+    const opened = document.body.querySelector<HTMLElement>('.wk-trash-dialog')!;
+    expect(opened.textContent).toContain('Moved to Trash Nov 7, 2026 · 3 entries · deleted for good Nov 7, 2027');
     expect(pathname).toBe('/wiki/orbit/settings');
   });
 });

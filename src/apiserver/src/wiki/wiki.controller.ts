@@ -147,17 +147,48 @@ export class WikiController {
   }
 
   /**
-   * Delete this space and all it holds, for good (contract `space.delete`). The owner's alone, as who is in a space is:
-   * a session header is refused WIKI_OWNER_CHANNEL_ONLY and a personal access token at the guard.
+   * Move this space to Trash (contract `space.trash`): it leaves every list and door at once, and what it holds is kept
+   * for 365 days. The owner's alone, as who is in a space is: a session header is refused WIKI_OWNER_CHANNEL_ONLY and a
+   * personal access token at the guard. So are the restore, the permanent delete and the Trash's list below.
    */
   @PatForbidden('OWNER_INTERACTIVE')
   @Delete('spaces/:id')
-  deleteSpace(
+  moveSpaceToTrash(
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Req() request: { headers: Record<string, string | string[] | undefined> },
   ) {
-    return this.wiki.deleteSpace(user.userId, id, actingSession(request.headers));
+    return this.wiki.moveSpaceToTrash(user.userId, id, actingSession(request.headers));
+  }
+
+  /** Bring this space back from Trash (contract `space.trash.restore`). Answers the space, as GET /spaces/:id does. */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Post('spaces/:id/restore')
+  @HttpCode(HttpStatus.OK)
+  restoreSpace(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.wiki.restoreSpace(user.userId, id, actingSession(request.headers));
+  }
+
+  /** Delete this space in Trash for good (contract `space.trash.purge`): at once from Trash, in the background from the database. */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Delete('spaces/:id/purge')
+  purgeSpace(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.wiki.purgeSpace(user.userId, id, actingSession(request.headers));
+  }
+
+  /** The owner's wikis in Trash, the newest move first (contract `space.trash.list`). */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Get('trash')
+  listTrash(@CurrentUser() user: AuthUser) {
+    return this.wiki.listTrash(user.userId);
   }
 
   /** Who is in this space and who can be added: the Workspaces card of Wiki settings (contract `space.workspaces`). */

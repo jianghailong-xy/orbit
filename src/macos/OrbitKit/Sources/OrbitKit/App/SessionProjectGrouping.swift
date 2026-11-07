@@ -28,6 +28,18 @@ public struct SessionProjectRow: Identifiable, Equatable, Sendable {
     public var id: String { projectId }
 }
 
+/// The project an ordinary row belongs to where that project has no row: a member in a workspace its
+/// coordinator does not run in (owner 2026-11-07, docs/mocks/project-rows-by-workspace, option A).
+/// Web: `SessionProjectMark`.
+public struct SessionProjectMark: Equatable, Sendable {
+    public let projectId: String
+    public let title: String
+    public let status: ProjectStatus
+    /// Nil for a project the sidebar does not list (a DONE one, an older server): the mark is its status.
+    public let taskCounts: ProjectSidebarTaskCounts?
+    public let runningCount: Int
+}
+
 public enum SessionProjectEntry: Identifiable, Equatable, Sendable {
     case session(Session)
     case project(SessionProjectRow)
@@ -63,6 +75,9 @@ public struct SessionProjectListing: Equatable, Sendable {
     public let projects: [SessionProjectRow]
     public let sessions: [Session]
     public let entries: [SessionProjectEntry]
+    /// The members among `sessions` that are rows of their own here, by session id: their project's
+    /// row is in the workspace its coordinator runs in, not this one.
+    public let marks: [String: SessionProjectMark]
 }
 
 /// Port of `src/web/src/lib/sessionProjects.ts` (design §4, §6, §7), after folder grouping.
@@ -71,32 +86,46 @@ public enum SessionProjectGrouping {
         view != .trash && !byTag && !searching
     }
 
+    /// A project is a row only in the workspace its coordinator runs in. Anywhere else its members are
+    /// that workspace's own rows, filed by their own folders and each marked with the project (owner
+    /// 2026-11-07, docs/mocks/project-rows-by-workspace, option A). A project with no coordinator is a
+    /// row wherever it has members, as before. Without a `workspaceID`, every project with members
+    /// here is a row.
     public static func listing(_ sessions: [Session], folders: [SessionFolder], projects: [ProjectSummary],
                                view: SessionView, byTag: Bool, searching: Bool = false,
-                               folderID: String? = nil, runnerOffline: Bool = false,
+                               folderID: String? = nil, workspaceID: String? = nil,
+                               runnerOffline: Bool = false,
                                now: Date = Date(), coordinators: [Session] = [],
                                contentSessions: [Session]? = nil,
                                watching: [String: WatchSessionSummary] = [:],
                                line: ((Session) -> SessionLine)? = nil) -> SessionProjectListing {
         guard listShowsProjects(view: view, byTag: byTag, searching: searching) else {
             return SessionProjectListing(folders: [], projects: [], sessions: sessions,
-                                         entries: sessions.map(SessionProjectEntry.session))
+                                         entries: sessions.map(SessionProjectEntry.session), marks: [:])
         }
         let sessionLine = line ?? { SessionLine.make(for: $0, live: true, watching: watching[$0.id]) }
         var coordinatorByProject: [String: Session] = [:]
         for session in coordinators + sessions where session.projectMembership?.role == .coordinator {
             coordinatorByProject[session.projectMembership!.projectId] = session
         }
+        // The project whose row holds this session here: none for a session in no project, or for a
+        // member whose coordinator runs in another workspace.
+        func heldBy(_ session: Session) -> String? {
+            guard let id = session.projectMembership?.projectId else { return nil }
+            guard let workspaceID, let coordinator = coordinatorByProject[id],
+                  let home = coordinator.agent?.id ?? coordinator.agentId else { return id }
+            return home == workspaceID ? id : nil
+        }
         var groups: [String: [Session]] = [:]
         var projectIDs: [String] = []
         for session in sessions {
-            guard let id = session.projectMembership?.projectId else { continue }
+            guard let id = heldBy(session) else { continue }
             if groups[id] == nil { projectIDs.append(id) }
             groups[id, default: []].append(session)
         }
         // Folder rows count all local sessions under the coordinator's folder, ignoring member moves.
         let assigned = sessions.map { session -> Session in
-            guard let id = session.projectMembership?.projectId else { return session }
+            guard let id = heldBy(session) else { return session }
             return session.settingFolder(coordinatorByProject[id]?.folderId)
         }
         let folderListing = SessionFolderGrouping.listing(assigned, folders: folders, view: view,
@@ -108,11 +137,20 @@ public enum SessionProjectGrouping {
             guard let id else { return true }
             return !knownFolders.contains(id)
         }
-        let loose = sessions.filter { $0.projectMembership == nil && inScope($0.folderId) }
+        let loose = sessions.filter { heldBy($0) == nil && inScope($0.folderId) }
+        var marks: [String: SessionProjectMark] = [:]
+        for session in loose {
+            guard let membership = session.projectMembership else { continue }
+            let summary = projects.first { $0.id == membership.projectId }
+            marks[session.id] = SessionProjectMark(
+                projectId: membership.projectId, title: summary?.title ?? membership.projectTitle,
+                status: summary?.status ?? membership.projectStatus, taskCounts: summary?.taskCounts,
+                runningCount: summary?.buckets.running ?? 0)
+        }
         if projectIDs.isEmpty {
             return SessionProjectListing(folders: folderID == nil ? folderListing.folders : [],
                                          projects: [], sessions: loose,
-                                         entries: loose.map(SessionProjectEntry.session))
+                                         entries: loose.map(SessionProjectEntry.session), marks: marks)
         }
         // Each project's share of the content list, split once rather than filtered out of the
         // whole list per project.
@@ -217,7 +255,7 @@ public enum SessionProjectGrouping {
             }
             .map(\.0)
         return SessionProjectListing(folders: folderID == nil ? folderListing.folders : [],
-                                     projects: rows, sessions: loose, entries: entries)
+                                     projects: rows, sessions: loose, entries: entries, marks: marks)
     }
 
     private static func instant(_ iso: String?) -> TimeInterval {

@@ -73,7 +73,7 @@
 
 - 会话列表行（`GET /sessions` 各口子）、详情（`GET /sessions/:id`）和 `session.updated` 推送的摘要（`buildSessionSummary`）都加 `lastUserFrom: { sessionId, title } | null`：`lastUserText` 来自别的会话时，记下发送会话的 id 和那一刻的标题；owner 发的为 `null`。和 `lastUserText` 在同一处写、同一处清。
 - 写 `lastUserText` 的几处（`sessions.service.ts` 里带 `senderSessionId` 的那几处）同时写它；发送方的记法与对话里「From <会话名>」卡片（`sessionMessage`）同源，不从正文猜。
-- 客户端：有 `lastUserFrom` 时，行上写 `<title>: <消息>`；没有时照旧 `You: <消息>`（§6）。老服务器不给这个字段，照旧。
+- 客户端：有 `lastUserFrom` 时，行上写 `<title>: <消息>`；没有时照旧 `You: <消息>`（§6）。老服务器不给这个字段，照旧。发送会话的标题为空或全是空白时写 `Untitled session: <消息>`，和对话里 From 卡片对没有标题的会话的叫法同一句（web `SESSION_MESSAGE_UNTITLED`、OrbitKit `SessionMessageCard.untitled`、Android `TaskDetailCopy.untitledSession`；coordinator 11-07）：`You:` 只在 `lastUserFrom` 为 null 时用。
 
 ### 3.6 做完的项目一起完成（owner 11-07）
 
@@ -153,7 +153,7 @@
 | 别处成员行的进度小标签悬停（Web，11-07） | `Part of <项目名> · open its sessions` |
 | 别处成员行的长按菜单（iOS、Android，11-07） | `Sessions`（进项目会话页） |
 | 做完的项目条目菜单（11-07） | `Complete` |
-| 会话行里别的会话发来、还没回的消息（三端，11-07） | `<会话标题>: <消息>`；你自己发的仍是 `You: <消息>` |
+| 会话行里别的会话发来、还没回的消息（三端，11-07） | `<会话标题>: <消息>`，发送会话没有标题时 `Untitled session: <消息>`；你自己发的仍是 `You: <消息>` |
 | 条目菜单（owner 10-04 的决定） | `Open Session`、`Sessions`、`Open Project`、`Pin`、`Unpin`、`Move…` |
 | 项目会话页页头按钮（iOS，owner 10-06 的决定） | `Open Project` |
 | 项目会话页 | `Project · <n> sessions`、`Coordinator`（节名）、`<done>/<total> done · <m> running` |

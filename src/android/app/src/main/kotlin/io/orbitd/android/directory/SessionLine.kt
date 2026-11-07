@@ -7,6 +7,7 @@ import io.orbitd.android.projects.ProjectDone
 import io.orbitd.android.projects.ProjectTime
 import io.orbitd.android.projects.StartProjectCopy
 import io.orbitd.android.tasks.OwnerConfirmationCopy
+import io.orbitd.android.tasks.TaskDetailCopy
 import io.orbitd.android.watch.WatchSessionSummary
 import java.time.Instant
 import kotlinx.serialization.json.JsonObject
@@ -56,8 +57,8 @@ data class SessionLine(val text: String, val tone: Tone) {
                 s.lastToolUse?.takeIf { it.isNotEmpty() }?.let { return SessionLine(SessionLineCopy.runningTool(fmtTool(it)), Tone.RUNNING) }
                 // A sub-agent or workflow in flight: its launch cleared the tool line at once.
                 s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.subagentRunning(it)), Tone.RUNNING) }
-                // The agent hasn't answered yet: the message you sent, not the previous turn's reply.
-                s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return sentLine(it) }
+                // The agent hasn't answered yet: the message it was sent, not the previous turn's reply.
+                s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return sentLine(it, s.lastUserFrom) }
                 s.lastAssistantText?.takeIf { it.isNotEmpty() }?.let { return SessionLine(plainPreview(it), Tone.PREVIEW) }
                 return SessionLine(SessionLineCopy.running, Tone.RUNNING)
             }
@@ -69,7 +70,7 @@ data class SessionLine(val text: String, val tone: Tone) {
             // Parked, with a background process still up: not idle, not the agent working either.
             if (live) s.runningBgCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.bgRunning(it)), Tone.BACKGROUND) }
             // A message that never got an answer is newer than the reply before it, and what the session waits on.
-            s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return sentLine(it) }
+            s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return sentLine(it, s.lastUserFrom) }
             // The rolling recap (0418) takes the place of the reply preview it used to show, below every live line above and
             // above the raw reply. Off with the account's Session recaps switch, the line falls through to the reply exactly
             // as it did before the recap existed. Unlabelled (the owner, 2026-10-22): the whole line is the sentence, and when
@@ -80,7 +81,14 @@ data class SessionLine(val text: String, val tone: Tone) {
             return SessionLine(SessionHeader.statusWord(s, now = now), Tone.PREVIEW)
         }
 
-        private fun sentLine(text: String) = SessionLine(SessionLineCopy.sent(plainPreview(text)), Tone.PREVIEW)
+        private fun sentLine(text: String, from: SessionMessageFrom?) = SessionLine(SessionLineCopy.sent(sender(from), plainPreview(text)), Tone.PREVIEW)
+
+        /** Who sent a message the agent hasn't answered (OrbitKit `SessionLine.sender`, web `sentBy`): [SessionLineCopy.you] only for the
+         * owner's own words — and for every message from an older server, which names no sender. A message another Orbit session sent
+         * names that session as the conversation's card names it: its title, or what an untitled one is called (design §3.5, owner
+         * 2026-11-07). A coordinator's unanswered message is usually a task's report, which "You:" put in the owner's mouth. */
+        internal fun sender(from: SessionMessageFrom?): String =
+            if (from == null) SessionLineCopy.you else from.title?.trim()?.takeIf { it.isNotEmpty() } ?: TaskDetailCopy.untitledSession
     }
 }
 
@@ -92,8 +100,10 @@ internal object SessionLineCopy {
     const val running = "Running…"
     const val queued = "Queued"
     fun runningTool(tool: String) = "Running $tool…"
-    /** A message of yours the agent hasn't answered yet: marked, since the line is otherwise the agent's voice. */
-    fun sent(text: String) = "You: $text"
+    /** A message the agent hasn't answered yet, marked with who sent it ([SessionLine.sender]), since the line is otherwise the agent's voice. */
+    fun sent(sender: String, text: String) = "$sender: $text"
+    /** The owner, as the sender of their own message (web `SENT_BY_YOU`). */
+    const val you = "You"
     /** Work still under way, as the line says it: the label and an ellipsis ("Running Agent…"). */
     fun ongoing(label: String) = "$label…"
     /** The runtime's own sub-agents and workflows (web `subagentRunningLabel`). */

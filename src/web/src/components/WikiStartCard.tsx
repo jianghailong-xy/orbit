@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { CheckOutlined } from '@ant-design/icons';
@@ -12,15 +12,29 @@ import { wikiSpaceSettings } from '@orbit/shared';
 import type { WikiSpaceRow } from '../lib/wiki';
 import { WIKI_PLAN_REDRAFT_ALREADY, WIKI_PLAN_REDRAFT_ASKED, WIKI_PLAN_WRITING_NOW, wikiPlanPath } from '../lib/wikiPlan';
 import { wikiStartCard, wikiStartFirstCard, type WikiStartActionTo, type WikiStartCard as Card } from '../lib/wikiStart';
+import { wikiTrashHoldsWhenEmpty } from '../lib/wikiReviewMode';
 import { redraftWikiPlan, useWikiWrite } from '../lib/wikiWrites';
+import { WikiTrashLink } from './WikiTrashDialog';
 
 /** The card itself (mock 41): three steps, wide or stacked by its own width, and at most one primary button. */
-function WikiStartSteps({ card, busy, onAction }: { card: Card; busy: boolean; onAction: (to: WikiStartActionTo) => void }) {
+function WikiStartSteps({
+  card,
+  busy,
+  onAction,
+  underLead,
+}: {
+  card: Card;
+  busy: boolean;
+  onAction: (to: WikiStartActionTo) => void;
+  /** What the first-wiki card says under its lead: the way to the wikis in Trash (docs/mocks/wiki-trash). */
+  underLead?: ReactNode;
+}) {
   return (
     <section className="wk-start" aria-label={card.title}>
       <div className="wk-start-h">
         <b>{card.title}</b>
         <span>{card.lead}</span>
+        {underLead}
       </div>
       <ol className="wk-start-steps">
         {card.steps.map((step, index) => (
@@ -121,7 +135,12 @@ export function WikiFirstStartCard() {
   const card = wikiStartFirstCard(!read || choices.some((choice) => choice.repository !== null));
   return (
     <>
-      <WikiStartSteps card={card} busy={false} onAction={() => setCreating(true)} />
+      <WikiStartSteps
+        card={card}
+        busy={false}
+        onAction={() => setCreating(true)}
+        underLead={<WikiTrashLink sentence={wikiTrashHoldsWhenEmpty} className="wk-trash-link-start" />}
+      />
       {creating && <WikiCreateDialog onClose={() => setCreating(false)} />}
     </>
   );

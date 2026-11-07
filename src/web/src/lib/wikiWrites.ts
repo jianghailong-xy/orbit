@@ -202,9 +202,19 @@ export function leaveWikiWorkspaceOut(spaceId: string, workspaceId: string): Pro
   return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/workspaces/${encodeURIComponent(workspaceId)}`, { method: 'DELETE' });
 }
 
-/** `DELETE /api/wiki/spaces/:id` — delete a wiki and all it holds, for good (contract `space.delete`). */
-export function deleteWikiSpace(spaceId: string): Promise<unknown> {
+/** `DELETE /api/wiki/spaces/:id` — move a wiki to Trash, where it is kept 365 days (contract `space.trash`). */
+export function moveWikiSpaceToTrash(spaceId: string): Promise<unknown> {
   return api(`/wiki/spaces/${encodeURIComponent(spaceId)}`, { method: 'DELETE' });
+}
+
+/** `POST /api/wiki/spaces/:id/restore` — bring a wiki back from Trash (contract `space.trash.restore`). */
+export function restoreWikiSpace(spaceId: string): Promise<unknown> {
+  return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/restore`, { method: 'POST' });
+}
+
+/** `DELETE /api/wiki/spaces/:id/purge` — delete a wiki in Trash for good (contract `space.trash.purge`). */
+export function purgeWikiSpace(spaceId: string): Promise<unknown> {
+  return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/purge`, { method: 'DELETE' });
 }
 
 // ── The plan's writes (contract `plan.routes`), the owner's door only ───────────────────────────

@@ -101,10 +101,14 @@ const LINK_SELECT = {
   task: { select: { id: true, title: true, status: true } },
   project: { select: { id: true, title: true, status: true } },
   // The address is read to name the space by its repository's last part, never written out.
-  wikiSpace: { select: { id: true, slug: true, title: true, repoUrlNorm: true } },
+  // `deletedAt`: a wiki in Trash pauses its link, as a session in Trash does (contract `space.trash`).
+  wikiSpace: { select: { id: true, slug: true, title: true, repoUrlNorm: true, deletedAt: true } },
 } satisfies Prisma.ShareLinkSelect;
 
 type LinkRow = Prisma.ShareLinkGetPayload<{ select: typeof LINK_SELECT }>;
+
+/** Whether a link's root is in Trash: a session, or a wiki (contract `space.trash`). Its link is paused until it is restored. */
+const rootInTrash = (row: LinkRow): boolean => row.session?.deletedAt != null || row.wikiSpace?.deletedAt != null;
 
 /** A token is 32 characters; anything much longer is not one, and is not worth an index probe. */
 const MAX_TOKEN_LENGTH = 256;
@@ -331,7 +335,7 @@ export class ShareLinksService {
     if (!token || token.length > MAX_TOKEN_LENGTH) throw linkNotFound();
     const row = await this.prisma.shareLink.findUnique({ where: { token }, select: LINK_SELECT });
     if (!row) throw linkNotFound();
-    if (linkState(row, row.session?.deletedAt != null, new Date()).state !== 'ACTIVE') throw linkNotFound();
+    if (linkState(row, rootInTrash(row), new Date()).state !== 'ACTIVE') throw linkNotFound();
     const kind = kindOf(row);
     // A wiki its owner does not have on this server (ORBIT_WIKI) is read by nobody, a visitor included.
     if (kind === 'WIKI' && !wikiOnFor(currentWikiRollout(), row.ownerId)) throw linkNotFound();
@@ -465,7 +469,7 @@ export class ShareLinksService {
     if (kind === 'WIKI') {
       const rollout = currentWikiRollout();
       if (!wikiOnFor(rollout, ownerId)) throw wikiDisabledError(rollout);
-      const space = await this.prisma.wikiSpace.findFirst({ where: { id, ownerId }, select: { id: true } });
+      const space = await this.prisma.wikiSpace.findFirst({ where: { id, ownerId, deletedAt: null }, select: { id: true } });
       if (!space) throw new NotFoundException('no such wiki space');
       return { inTrash: false };
     }
@@ -549,7 +553,7 @@ export class ShareLinksService {
 
   private view(row: LinkRow, now: Date): ShareLinkView {
     const kind = kindOf(row);
-    const { state, reason } = linkState(row, row.session?.deletedAt != null, now);
+    const { state, reason } = linkState(row, rootInTrash(row), now);
     return {
       id: row.id,
       kind,

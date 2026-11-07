@@ -28,21 +28,6 @@ class WikiSettingsFixtureTest {
         assertEquals(workspaces.fstr("empty"), WikiModeCopy.workspacesEmpty)
         assertEquals(workspaces.fstr("add"), WikiModeCopy.addWorkspace)
         assertEquals(workspaces.fstr("addGroup"), WikiModeCopy.addWorkspaceGroup)
-        val delete = settings.fobj("delete")
-        assertEquals(delete.fstr("note"), WikiModeCopy.deleteNote)
-        assertEquals(delete.fstr("open"), WikiModeCopy.deleteOpen)
-        assertEquals(delete.fstr("confirm"), WikiModeCopy.deleteConfirm)
-        assertEquals(delete.fstr("kept"), WikiModeCopy.deleteKept)
-        assertEquals(delete.fstr("failedNative"), WikiModeCopy.deleteFailed)
-        assertEquals(delete.fobj("question").fstr("text"), WikiModeCopy.deleteQuestion(delete.fobj("question").fstr("name")))
-        assertEquals(delete.fobj("deleted").fstr("text"), WikiModeCopy.deleted(delete.fobj("deleted").fstr("name")))
-        assertEquals(delete.fobj("comesBack").fstr("text"), WikiModeCopy.deleteComesBack(delete.fobj("comesBack").fstr("repository")))
-        val bodies = delete.farr("bodies").map { it.jsonObject }
-        assertTrue(bodies.isNotEmpty())
-        bodies.forEach { assertEquals(it.fstr("text"), WikiModeCopy.deleteBody(it["entries"]?.jsonPrimitive?.intOrNull, it.fint("documents"))) }
-        assertEquals(listOf(WikiModeCopy.deleteBody(null, 0), delete.fobj("comesBack").fstr("text"), delete.fstr("kept")).joinToString("\n\n"),
-            WikiModeCopy.deleteMessage(null, 0, delete.fobj("comesBack").fstr("repository")))
-        assertEquals(listOf(WikiModeCopy.deleteBody(2606, 0), delete.fstr("kept")).joinToString("\n\n"), WikiModeCopy.deleteMessage(2606, 0, null))
         assertEquals(settings.fstr("reviewModeHint"), WikiModeCopy.reviewModeHint)
         assertEquals(settings.fstr("lead"), WikiModeCopy.reviewModeLead)
         assertEquals(settings.fstr("defaultTag"), WikiModeCopy.modeDefault)
@@ -93,6 +78,91 @@ class WikiSettingsFixtureTest {
             val workspace = row.fobj("workspace")
             val runner = (workspace["runner"] as? JsonObject)?.let { it["displayName"].text() ?: it["name"].text() }
             assertEquals(row.fstr("says"), WikiModeLogic.workspaceLabel(workspace["name"].text(), runner))
+        }
+    }
+
+    /** Move to Trash and Trash itself (docs/mocks/wiki-trash), every case of `settings.trash`. Of its words three are another
+     * client's alone, and Android draws none of them: `counts[].settings` is the web's line under its settings card (Android
+     * has the Trash row, `counts[].row`), `page.deleteSwipe` iOS's swipe action and `page.close` the web dialog's button. */
+    @Test fun moveToTrashAndTrashSayTheFixturesWords() {
+        val trash = settings.fobj("trash")
+        assertEquals(settings.fstrings("sections").last(), trash.fstr("title"))
+        assertEquals(trash.fstr("title"), WikiModeCopy.trashTitle)
+        assertEquals(trash.fstr("open"), WikiModeCopy.trashOpen)
+        assertEquals(trash.fstr("confirm"), WikiModeCopy.trashConfirm)
+        assertEquals(trash.fstr("note"), WikiModeCopy.trashNote)
+        assertEquals(trash.fstr("leaves"), WikiModeCopy.trashLeaves)
+        assertEquals(trash.fstr("kept"), WikiModeCopy.trashKept)
+        assertEquals(trash.fstr("failedNative"), WikiModeCopy.trashFailed)
+        assertEquals(trash.fobj("question").fstr("text"), WikiModeCopy.trashQuestion(trash.fobj("question").fstr("name")))
+        assertEquals(trash.fobj("moved").fstr("text"), WikiModeCopy.movedToTrash(trash.fobj("moved").fstr("name")))
+        val comesBack = trash.fobj("comesBack")
+        assertEquals(comesBack.fstr("text"), WikiModeCopy.trashComesBack(comesBack.fstr("repository")))
+        val bodies = trash.farr("bodies").map { it.jsonObject }
+        assertTrue(bodies.isNotEmpty())
+        bodies.forEach { assertEquals(it.fstr("text"), WikiModeCopy.trashBody(it["entries"]?.jsonPrimitive?.intOrNull, it.fint("documents"))) }
+        // The question's message: that it leaves now, what Trash keeps, what a repository's wiki does meanwhile, what stays.
+        assertEquals(listOf(trash.fstr("leaves"), WikiModeCopy.trashBody(null, 0), comesBack.fstr("text"), trash.fstr("kept")).joinToString("\n\n"),
+            WikiModeCopy.trashMessage(null, 0, comesBack.fstr("repository")))
+        assertEquals(listOf(trash.fstr("leaves"), bodies.first().fstr("text"), trash.fstr("kept")).joinToString("\n\n"),
+            WikiModeCopy.trashMessage(bodies.first().fint("entries"), bodies.first().fint("documents"), null))
+
+        // The ways to Trash: the settings page's row, the first-wiki card's line and the picker's item.
+        assertEquals(trash.fstr("openTrash"), WikiModeCopy.openTrash)
+        val counts = trash.farr("counts").map { it.jsonObject }
+        assertTrue(counts.isNotEmpty())
+        counts.forEach { count ->
+            assertEquals(count.fstr("row"), WikiModeCopy.trashRowCount(count.fint("wikis")))
+            assertEquals(count.fstr("empty"), WikiModeCopy.trashHoldsWhenEmpty(count.fint("wikis")))
+        }
+        assertEquals(trash.fstr("pickerItem"), WikiModeCopy.trash)
+
+        // Trash itself.
+        val page = trash.fobj("page")
+        assertEquals(page.fstr("title"), WikiModeCopy.trash)
+        assertEquals(page.fstr("lead"), WikiModeCopy.trashLead)
+        assertEquals(page.fstr("empty"), WikiModeCopy.trashEmpty)
+        assertEquals(page.fstr("restore"), WikiModeCopy.restore)
+        assertEquals(page.fstr("deletePermanently"), WikiModeCopy.deletePermanently)
+        assertEquals(page.fobj("restored").fstr("text"), WikiModeCopy.restored(page.fobj("restored").fstr("name")))
+        assertEquals(page.fstr("restoreFailedNative"), WikiModeCopy.restoreFailed)
+        val rows = page.farr("rows").map { it.jsonObject }
+        assertTrue(rows.isNotEmpty())
+        // The fixture's instants are at noon UTC: the same day from UTC-11 to UTC+11, the host's +0800 and CI's UTC among them.
+        listOf("UTC", "Asia/Shanghai", "America/Los_Angeles").map(ZoneId::of).forEach { zone ->
+            rows.forEach { row ->
+                assertEquals("$zone", row.fstr("text"), WikiModeCopy.trashRowLine(row.fstr("deletedAt"), row.fstr("purgeAt"), row.fint("entries"), zone))
+            }
+        }
+        val purge = page.fobj("purge")
+        assertEquals(purge.fstr("question"), WikiModeCopy.purgeQuestion)
+        assertEquals(purge.fstr("confirm"), WikiModeCopy.purgeConfirm)
+        assertEquals(purge.fstr("failedNative"), WikiModeCopy.purgeFailed)
+        val purgeBodies = purge.farr("bodies").map { it.jsonObject }
+        assertTrue(purgeBodies.isNotEmpty())
+        purgeBodies.forEach { assertEquals(it.fstr("text"), WikiModeCopy.purgeBody(it.fint("entries"))) }
+    }
+
+    /** Trash's list as the server answers it, and the client's four requests, each the route the contract gives it
+     * (`space.trash`: the move, `restore`, `purge` and `list`). */
+    @Test fun trashsReadAndWritesAreTheContractsRoutes() {
+        val rig = WikiTestRig { request ->
+            if (request.path == listOf("wiki", "trash")) 200 to """{"spaces":[{"id":"sp9","slug":"orbit-vllm-preview","title":"orbit · vLLM preview",
+                "repoUrlNorm":null,"deletedAt":"2026-11-07T12:00:00.000Z","purgeAt":"2027-11-07T12:00:00.000Z","entries":11138}]}"""
+            else 200 to "{}"
+        }
+        val client = rig.store().client
+        val read = runBlocking { client.trash() }
+        assertEquals(listOf(WikiTrashRow("sp9", "orbit-vllm-preview", "orbit · vLLM preview", null, "2026-11-07T12:00:00.000Z",
+            "2027-11-07T12:00:00.000Z", 11138)), read.spaces)
+        assertEquals("orbit · vLLM preview", read.spaces.single().name)
+        runBlocking { client.moveToTrash("SP"); client.restoreSpace("SP"); client.purgeSpace("SP") }
+        val sent = rig.requests.map { rig.line(it).replace("SP", ":id") }
+        assertEquals(listOf("GET /api/wiki/trash", "DELETE /api/wiki/spaces/:id", "POST /api/wiki/spaces/:id/restore", "DELETE /api/wiki/spaces/:id/purge"), sent)
+        val trash = WikiSharedFiles.contract.fobj("space").fobj("trash")
+        assertEquals(trash.fstr("route"), sent[1])
+        listOf("list" to sent[0], "restore" to sent[2], "purge" to sent[3]).forEach { (key, line) ->
+            assertTrue("$line is not `space.trash.$key`'s route", trash.fstr(key).startsWith("$line "))
         }
     }
 
