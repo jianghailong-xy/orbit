@@ -1,0 +1,71 @@
+{
+ "name": "a16-cap-plain",
+ "udid": "FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC",
+ "videoAsked": 1794039348384,
+ "videoLines": [
+  [
+   1794039351729,
+   "Note: No display specified. Defaulting to display: 5B9E4FFE-2F7D-4954-BC4C-264D94692585 (screenID: 1, name: LCD)"
+  ],
+  [
+   1794039351817,
+   "Recording started"
+  ],
+  [
+   1794039365910,
+   "Recording completed. Writing to disk."
+  ],
+  [
+   1794039365910,
+   ""
+  ],
+  [
+   1794039365910,
+   "Wrote video to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/video-a16-cap-plain.mp4"
+  ]
+ ],
+ "videoStopAsked": 1794039365037,
+ "videoExit": 0,
+ "frames": [
+  {
+   "i": 0,
+   "file": "f000.png",
+   "start": 1794039351851,
+   "end": 1794039352409,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 5B9E4FFE-2F7D-4954-BC4C-264D94692585 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-a16-cap-plain/f000.png"
+  },
+  {
+   "i": 1,
+   "file": "f001.png",
+   "start": 1794039352409,
+   "end": 1794039353622,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 5B9E4FFE-2F7D-4954-BC4C-264D94692585 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-a16-cap-plain/f001.png"
+  },
+  {
+   "i": 2,
+   "file": "f002.png",
+   "start": 1794039353622,
+   "end": 1794039356333,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 5B9E4FFE-2F7D-4954-BC4C-264D94692585 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-a16-cap-plain/f002.png"
+  },
+  {
+   "i": 3,
+   "file": "f003.png",
+   "start": 1794039356333,
+   "end": 1794039359461,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 5B9E4FFE-2F7D-4954-BC4C-264D94692585 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-a16-cap-plain/f003.png"
+  },
+  {
+   "i": 4,
+   "file": "f004.png",
+   "start": 1794039359461,
+   "end": 1794039365037,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 5B9E4FFE-2F7D-4954-BC4C-264D94692585 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-a16-cap-plain/f004.png"
+  }
+ ]
+}

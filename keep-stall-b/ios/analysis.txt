@@ -1,0 +1,736 @@
+trial                     capture dialog  tap ms   gap s  main late max  watchdog held  stall?
+b01-cap-plain             on      false     2021   0.857        712 ms              1  
+b02-nocap-dialog          off     true     12415  12.205      10927 ms              1  STALL
+b03-nocap-plain           off     false    18466   0.090      17742 ms              0  
+b04-cap-dialog            on      true       893   0.937        770 ms              1  
+b05-nocap-plain           off     false      972   0.949        276 ms              0  
+b06-cap-dialog            on      true       955   1.568        609 ms              1  
+b07-cap-plain             on      false     1040   0.066        333 ms              0  
+b08-nocap-dialog          off     true       935   0.736        416 ms              0  
+b09-cap-dialog            on      true       840   0.552        300 ms              0  
+b10-nocap-plain           off     false      676   0.031        169 ms              0  
+b11-nocap-dialog          off     true      1352   0.955        475 ms              0  
+b12-cap-plain             on      false      934   0.670        548 ms              0  
+b13-nocap-dialog          off     true      3154   2.558       2301 ms              0  
+b14-cap-plain             on      false     1449   0.900        472 ms              0  
+b15-cap-dialog            on      true      1363   0.913        560 ms              0  
+b16-nocap-plain           off     false      990   0.539        522 ms              0  
+b17-cap-plain             on      false     1152   0.673        565 ms              0  
+b18-nocap-dialog          off     true       701   0.181        342 ms              0  
+b19-nocap-plain           off     false     1123   0.798        414 ms              0  
+b20-cap-dialog            on      true      1114   1.131        859 ms              0  
+
+capture off dialog false:  5 presses, 0 over 3 s, gaps 0.03 0.09 0.54 0.80 0.95
+capture off dialog true :  5 presses, 1 over 3 s, gaps 0.18 0.74 0.95 2.56 12.21
+capture on  dialog false:  5 presses, 0 over 3 s, gaps 0.07 0.67 0.67 0.86 0.90
+capture on  dialog true :  5 presses, 0 over 3 s, gaps 0.55 0.91 0.94 1.13 1.57
+
+== b01-cap-plain (gap 0.857 s)
+  +2562 ms STALL BEGIN main queue late by 263 ms (ping 2538 of 2549)
+  +3079 ms STALL END after about 766 ms, 5 main samples
+  +7024 ms STALL BEGIN main queue late by 264 ms (ping 2739 of 2751)
+  +7284 ms STALL END after about 510 ms, 2 main samples
+  +9094 ms STALL BEGIN main queue late by 259 ms (ping 2835 of 2847)
+  +9114 ms STALL END after about 271 ms, 0 main samples
+  +10554 ms STALL BEGIN main queue late by 260 ms (ping 2901 of 2913)
+  +10575 ms STALL END after about 271 ms, 0 main samples
+  +11408 ms STALL BEGIN main queue late by 260 ms (ping 2940 of 2952)
+  +11431 ms STALL END after about 273 ms, 1 main samples
+  +17479 ms STALL BEGIN main queue late by 264 ms (ping 3219 of 3231)
+  +17500 ms STALL END after about 272 ms, 0 main samples
+  +1543 ms HELD the watchdog itself did not run for 1364 ms
+
+== b02-nocap-dialog (gap 12.205 s)
+  +1334 ms STALL BEGIN main queue late by 266 ms (ping 3240 of 3252)
+  +12036 ms STALL END after about 10952 ms, 97 main samples
+  +13190 ms STALL BEGIN main queue late by 257 ms (ping 3770 of 3782)
+  +13276 ms STALL END after about 335 ms, 1 main samples
+  +14861 ms STALL BEGIN main queue late by 262 ms (ping 3846 of 3858)
+  +15329 ms STALL END after about 718 ms, 4 main samples
+  +15844 ms STALL BEGIN main queue late by 260 ms (ping 3891 of 3903)
+  +16299 ms STALL END after about 704 ms, 4 main samples
+  +16670 ms STALL BEGIN main queue late by 262 ms (ping 3929 of 3941)
+  +16990 ms STALL END after about 569 ms, 3 main samples
+  +17309 ms STALL BEGIN main queue late by 255 ms (ping 3959 of 3971)
+  +17499 ms STALL END after about 439 ms, 2 main samples
+  +17824 ms STALL BEGIN main queue late by 259 ms (ping 3983 of 3995)
+  +18147 ms STALL END after about 573 ms, 3 main samples
+  +18514 ms STALL BEGIN main queue late by 258 ms (ping 4015 of 4027)
+  +18751 ms STALL END after about 488 ms, 2 main samples
+  +19075 ms STALL BEGIN main queue late by 259 ms (ping 4040 of 4052)
+  +19249 ms STALL END after about 424 ms, 1 main samples
+  +19749 ms STALL BEGIN main queue late by 262 ms (ping 4071 of 4083)
+  +19963 ms STALL END after about 465 ms, 2 main samples
+  +20293 ms STALL BEGIN main queue late by 262 ms (ping 4096 of 4108)
+  +21122 ms STALL END after about 1079 ms, 8 main samples
+  +21711 ms STALL BEGIN main queue late by 262 ms (ping 4161 of 4173)
+  +21733 ms STALL END after about 272 ms, 0 main samples
+  +1068 ms HELD the watchdog itself did not run for 614 ms
+  main thread's commonest stack while more than 1 s late (34 of 91 samples):
+  #0 0x18050cd30 CoreFoundation+0x17dd30 findCFBurstTrieMappedLevel+96
+  #1 0x18050bad8 CoreFoundation+0x17cad7 traverseCFBurstTrieWithCursor+175
+  #2 0x18050bad8 CoreFoundation+0x17cad7 traverseCFBurstTrieWithCursor+175
+  #3 0x18050b6ec CoreFoundation+0x17c6eb CFBurstTrieContainsUTF8String+255
+  #4 0x18050b598 CoreFoundation+0x17c597 CFBurstTrieContains+215
+  #5 0x18050ed3c CoreFoundation+0x17fd3b _CFHyphenationGetHyphenationLocations+903
+  #6 0x18050f92c CoreFoundation+0x18092b CFStringGetHyphenationLocationBeforeIndex+191
+  #7 0x18517f294 UIFoundation+0x54293 -[NSAttributedString(NSAttributedStringUIFoundationAdditions) lineBreakByHyphenatingBeforeIndex:withinRange:]+171
+  #8 0x1851975d4 UIFoundation+0x6c5d3 -[NSParagraphArbitrator _firstFitLineBreakContextBeforeIndex:lineFragmentWidth:range:]+867
+  #9 0x1851c0b0c UIFoundation+0x95b0b -[NSCoreTypesetter _createLineRefForParentLineRef:range:availableWidth:offset:paragraphArbitrator:lineBreakMode:hyphenated:forcedClusterBreak:]+643
+  #10 0x1851c3138 UIFoundation+0x98137 -[NSCoreTypesetter _stringDrawingCoreTextEngineWithOriginalString:rect:padding:graphicsContext:forceClipping:attributes:stringDrawingOptions:drawingContext:stringDrawingInterface:]+7115
+  #11 0x109ec9718 UIKit+0x31717 -[NSCoreTypesetterAccessibility__UIKit__UIFoundation _stringDrawingCoreTextEngineWithOriginalString:rect:padding:graphicsContext:forceClipping:attributes:stringDrawingOptions:drawingContext:stringDrawingInterface:]+291
+  #12 0x1851bbdd0 UIFoundation+0x90dcf __NSStringDrawingEngine+1735
+  #13 0x1851bce24 UIFoundation+0x91e23 -[NSAttributedString(NSExtendedStringDrawing) boundingRectWithSize:options:context:]+647
+  #14 0x1d3df7f80 SwiftUICore+0x53df7f NSAttributedString.MetricsCache.metrics(requestedSize:layoutMargins:wantsNumberOfLineFragments:context:)+1175
+  #15 0x1d3df8a24 SwiftUICore+0x53ea23 ResolvedStyledText.StringDrawing.sizeThatFits(_:)+175
+  #16 0x1d3c4b570 SwiftUICore+0x39156f StyledTextLayoutEngine.sizeThatFits(_:)+243
+  #17 0x1d418fa80 SwiftUICore+0x8d5a7f LayoutEngineBox.sizeThatFits(_:)+75
+  #18 0x1d3bc0e10 SwiftUICore+0x306e0f LayoutProxy.size(in:)+223
+  #19 0x1d3ad8ab4 SwiftUICore+0x21eab3 _PaddingLayout.sizeThatFits(in:context:child:)+203
+  #20 0x1d3ad94e8 SwiftUICore+0x21f4e7 protocol witness for UnaryLayout.sizeThatFits(in:context:child:) in conformance _PaddingLayout+39
+  #21 0x1d3d9e7d4 SwiftUICore+0x4e47d3 UnaryLayoutEngine.sizeThatFits(_:)+943
+  #22 0x1d3d9e400 SwiftUICore+0x4e43ff protocol witness for LayoutEngine.spacing() in conformance UnaryLayoutEngine<A>+15
+  #23 0x1d418fa80 SwiftUICore+0x8d5a7f LayoutEngineBox.sizeThatFits(_:)+75
+  #24 0x1d3bc0e10 SwiftUICore+0x306e0f LayoutProxy.size(in:)+223
+  #25 0x1d3ad8ab4 SwiftUICore+0x21eab3 _PaddingLayout.sizeThatFits(in:context:child:)+203
+  #26 0x1d3ad94e8 SwiftUICore+0x21f4e7 protocol witness for UnaryLayout.sizeThatFits(in:context:child:) in conformance _PaddingLayout+39
+  #27 0x1d3d9e7d4 SwiftUICore+0x4e47d3 UnaryLayoutEngine.sizeThatFits(_:)+943
+
+== b03-nocap-plain (gap 0.090 s)
+  +-439 ms STALL END after about 607 ms, 4 main samples
+  +314 ms STALL BEGIN main queue late by 265 ms (ping 2183 of 2195)
+  +557 ms STALL END after about 493 ms, 3 main samples
+  +1495 ms STALL BEGIN main queue late by 270 ms (ping 2234 of 2246)
+  +19079 ms STALL END after about 17834 ms, 159 main samples
+  +19613 ms STALL BEGIN main queue late by 264 ms (ping 3041 of 3053)
+  +20469 ms STALL END after about 1106 ms, 8 main samples
+  +20803 ms STALL BEGIN main queue late by 268 ms (ping 3093 of 3105)
+  +20868 ms STALL END after about 314 ms, 0 main samples
+  +21179 ms STALL BEGIN main queue late by 266 ms (ping 3110 of 3122)
+  +21312 ms STALL END after about 383 ms, 1 main samples
+  main thread's commonest stack while more than 1 s late (48 of 153 samples):
+  #0 0x197a19b14 CoreUI+0xafb14 BOMStorageSizeOfBlock+68
+  #1 0x197a1dbdc CoreUI+0xb3bdb _findIndexForKey+147
+  #2 0x197a1dbdc CoreUI+0xb3bdb _findIndexForKey+147
+  #3 0x197a1fdf8 CoreUI+0xb5df7 _findPagesForKey+115
+  #4 0x197a1e210 CoreUI+0xb420f BOMTreeGetValueSize+87
+  #5 0x1979cd05c CoreUI+0x6305b -[CUICommonAssetStorage _renditionKeyForName:hotSpot:]+115
+  #6 0x1979ccfc4 CoreUI+0x62fc3 -[CUICommonAssetStorage renditionKeyForName:hotSpot:]+51
+  #7 0x1979d9f6c CoreUI+0x6ff6b -[CUIStructuredThemeStore renditionKeyForName:cursorHotSpot:]+203
+  #8 0x197a010c8 CoreUI+0x970c7 -[CUICatalog namedVectorGlyphWithName:scaleFactor:deviceIdiom:layoutDirection:glyphContinuousSize:glyphContinuousWeight:glyphPointSize:appearanceName:locale:]+151
+  #9 0x1d3e0e040 SwiftUICore+0x55403f closure #1 in NamedImage.VectorKey.loadVectorInfo(from:idiom:)+239
+  #10 0x1d3e07e3c SwiftUICore+0x54de3b NamedImage.VectorKey.loadVectorInfo(from:idiom:)+495
+  #11 0x1d3e07b90 SwiftUICore+0x54db8f NamedImage.Cache.subscript.getter+419
+  #12 0x1d3e0bbb0 SwiftUICore+0x551baf Image.NamedImageProvider.vectorInfo(in:from:at:)+3015
+  #13 0x1d3e0a78c SwiftUICore+0x55078b Image.NamedImageProvider.resolve(in:)+419
+  #14 0x1d4360778 SwiftUICore+0xaa6777 ImageProviderBox.resolve(in:)+35
+  #15 0x1d435ffec SwiftUICore+0xaa5feb Image.ImageViewChild.updateValue()+803
+  #16 0x1d3a882d4 SwiftUICore+0x1ce2d3 partial apply for implicit closure #1 in closure #1 in closure #1 in Attribute.init<A>(_:)+27
+  #17 0x1c42cb6c0 AttributeGraph+0xb6bf _ZN2AG5Graph11UpdateStack6updateEv+487
+  #18 0x1c42cbda8 AttributeGraph+0xbda7 _ZN2AG5Graph16update_attributeENS_4data3ptrINS_4NodeEEEj+351
+  #19 0x1c42d3438 AttributeGraph+0x13437 _ZN2AG5Graph20input_value_ref_slowENS_4data3ptrINS_4NodeEEENS_11AttributeIDEjjPK15AGSwiftMetadataRhl+675
+  #20 0x1c42eaaa4 AttributeGraph+0x2aaa3 AGGraphGetValue+235
+  #21 0x1d404e9b4 SwiftUICore+0x7949b3 specialized implicit closure #1 in closure #1 in closure #1 in Attribute.init<A>(_:)+39
+  #22 0x1c42cb6c0 AttributeGraph+0xb6bf _ZN2AG5Graph11UpdateStack6updateEv+487
+  #23 0x1c42cbda8 AttributeGraph+0xbda7 _ZN2AG5Graph16update_attributeENS_4data3ptrINS_4NodeEEEj+351
+  #24 0x1c42d3438 AttributeGraph+0x13437 _ZN2AG5Graph20input_value_ref_slowENS_4data3ptrINS_4NodeEEENS_11AttributeIDEjjPK15AGSwiftMetadataRhl+675
+  #25 0x1c42ea860 AttributeGraph+0x2a85f AGGraphGetInputValue+247
+  #26 0x1d424a9f8 SwiftUICore+0x9909f7 StackLayout.makeChildren()+919
+  #27 0x1d402f2f4 SwiftUICore+0x7752f3 specialized ViewLayoutEngine.init(layout:context:children:)+547
+
+== b04-cap-dialog (gap 0.937 s)
+  +1241 ms STALL BEGIN main queue late by 260 ms (ping 2978 of 2989)
+  +1795 ms STALL END after about 804 ms, 5 main samples
+  +2366 ms STALL BEGIN main queue late by 263 ms (ping 3027 of 3039)
+  +2410 ms STALL END after about 294 ms, 0 main samples
+  +10306 ms STALL BEGIN main queue late by 263 ms (ping 3280 of 3292)
+  +10630 ms STALL END after about 574 ms, 3 main samples
+  +13770 ms STALL BEGIN main queue late by 264 ms (ping 3437 of 3449)
+  +13792 ms STALL END after about 271 ms, 0 main samples
+  +14097 ms STALL BEGIN main queue late by 261 ms (ping 3452 of 3464)
+  +14160 ms STALL END after about 313 ms, 0 main samples
+  +14911 ms STALL BEGIN main queue late by 259 ms (ping 3490 of 3502)
+  +14999 ms STALL END after about 338 ms, 1 main samples
+  +15582 ms STALL BEGIN main queue late by 259 ms (ping 3521 of 3533)
+  +15625 ms STALL END after about 293 ms, 1 main samples
+  +15904 ms STALL BEGIN main queue late by 258 ms (ping 3536 of 3548)
+  +15947 ms STALL END after about 293 ms, 1 main samples
+  +16226 ms STALL BEGIN main queue late by 258 ms (ping 3551 of 3563)
+  +16312 ms STALL END after about 336 ms, 1 main samples
+  +16612 ms STALL BEGIN main queue late by 257 ms (ping 3569 of 3581)
+  +16653 ms STALL END after about 291 ms, 0 main samples
+  +16954 ms STALL BEGIN main queue late by 257 ms (ping 3585 of 3597)
+  +17105 ms STALL END after about 400 ms, 2 main samples
+  +19068 ms STALL BEGIN main queue late by 260 ms (ping 3682 of 3694)
+  +19132 ms STALL END after about 314 ms, 0 main samples
+  +9146 ms HELD the watchdog itself did not run for 2350 ms
+
+== b05-nocap-plain (gap 0.949 s)
+  +863 ms STALL BEGIN main queue late by 254 ms (ping 1776 of 1786)
+  +974 ms STALL END after about 361 ms, 1 main samples
+  +8056 ms STALL BEGIN main queue late by 265 ms (ping 2098 of 2110)
+  +8143 ms STALL END after about 337 ms, 1 main samples
+  +8407 ms STALL BEGIN main queue late by 264 ms (ping 2114 of 2126)
+  +8452 ms STALL END after about 294 ms, 0 main samples
+
+== b06-cap-dialog (gap 1.568 s)
+  +329 ms STALL BEGIN main queue late by 264 ms (ping 3482 of 3494)
+  +1840 ms STALL END after about 1760 ms, 1 main samples
+  +2107 ms STALL BEGIN main queue late by 268 ms (ping 3495 of 3505)
+  +2418 ms STALL END after about 561 ms, 3 main samples
+  +2965 ms STALL BEGIN main queue late by 260 ms (ping 3532 of 3544)
+  +3206 ms STALL END after about 492 ms, 2 main samples
+  +6865 ms STALL BEGIN main queue late by 259 ms (ping 3709 of 3720)
+  +7099 ms STALL END after about 483 ms, 2 main samples
+  +7360 ms STALL BEGIN main queue late by 262 ms (ping 3731 of 3743)
+  +7424 ms STALL END after about 313 ms, 0 main samples
+  +7724 ms STALL BEGIN main queue late by 262 ms (ping 3747 of 3759)
+  +7811 ms STALL END after about 337 ms, 1 main samples
+  +8091 ms STALL BEGIN main queue late by 258 ms (ping 3764 of 3776)
+  +8113 ms STALL END after about 272 ms, 0 main samples
+  +8864 ms STALL BEGIN main queue late by 257 ms (ping 3800 of 3812)
+  +8928 ms STALL END after about 314 ms, 0 main samples
+  +9212 ms STALL BEGIN main queue late by 263 ms (ping 3816 of 3828)
+  +9385 ms STALL END after about 423 ms, 2 main samples
+  +9775 ms STALL BEGIN main queue late by 260 ms (ping 3842 of 3854)
+  +10169 ms STALL END after about 644 ms, 4 main samples
+  +10475 ms STALL BEGIN main queue late by 262 ms (ping 3874 of 3886)
+  +10648 ms STALL END after about 423 ms, 1 main samples
+  +10932 ms STALL BEGIN main queue late by 263 ms (ping 3895 of 3907)
+  +11020 ms STALL END after about 339 ms, 1 main samples
+  +12683 ms STALL BEGIN main queue late by 259 ms (ping 3975 of 3987)
+  +12705 ms STALL END after about 272 ms, 0 main samples
+  +12959 ms STALL BEGIN main queue late by 255 ms (ping 3988 of 3999)
+  +13047 ms STALL END after about 337 ms, 0 main samples
+  +14038 ms STALL BEGIN main queue late by 261 ms (ping 4037 of 4049)
+  +14060 ms STALL END after about 272 ms, 0 main samples
+  +15844 ms STALL BEGIN main queue late by 258 ms (ping 4121 of 4133)
+  +15953 ms STALL END after about 358 ms, 1 main samples
+  +16278 ms STALL BEGIN main queue late by 260 ms (ping 4141 of 4153)
+  +16299 ms STALL END after about 271 ms, 1 main samples
+  +1840 ms HELD the watchdog itself did not run for 1510 ms
+
+== b07-cap-plain (gap 0.066 s)
+  +898 ms STALL BEGIN main queue late by 251 ms (ping 1981 of 1992)
+  +1024 ms STALL END after about 376 ms, 1 main samples
+  +8764 ms STALL BEGIN main queue late by 262 ms (ping 2341 of 2353)
+  +8842 ms STALL END after about 329 ms, 1 main samples
+  +10793 ms STALL BEGIN main queue late by 268 ms (ping 2431 of 2443)
+  +10945 ms STALL END after about 402 ms, 1 main samples
+
+== b08-nocap-dialog (gap 0.736 s)
+  +717 ms STALL BEGIN main queue late by 262 ms (ping 2693 of 2704)
+  +937 ms STALL END after about 471 ms, 2 main samples
+  +6814 ms STALL BEGIN main queue late by 264 ms (ping 2970 of 2982)
+  +6879 ms STALL END after about 315 ms, 1 main samples
+  +9662 ms STALL BEGIN main queue late by 263 ms (ping 3099 of 3111)
+  +9706 ms STALL END after about 294 ms, 0 main samples
+  +13688 ms STALL BEGIN main queue late by 264 ms (ping 3283 of 3295)
+  +13708 ms STALL END after about 270 ms, 0 main samples
+
+== b09-cap-dialog (gap 0.552 s)
+  +764 ms STALL BEGIN main queue late by 254 ms (ping 2278 of 2289)
+  +848 ms STALL END after about 335 ms, 0 main samples
+  +9391 ms STALL BEGIN main queue late by 264 ms (ping 2669 of 2681)
+  +9500 ms STALL END after about 359 ms, 1 main samples
+  +9789 ms STALL BEGIN main queue late by 267 ms (ping 2687 of 2699)
+  +9810 ms STALL END after about 270 ms, 0 main samples
+  +10109 ms STALL BEGIN main queue late by 257 ms (ping 2702 of 2714)
+  +10217 ms STALL END after about 357 ms, 1 main samples
+  +10501 ms STALL BEGIN main queue late by 262 ms (ping 2720 of 2732)
+  +10565 ms STALL END after about 314 ms, 0 main samples
+  +13146 ms STALL BEGIN main queue late by 258 ms (ping 2841 of 2853)
+  +13167 ms STALL END after about 271 ms, 0 main samples
+
+== b10-nocap-plain (gap 0.031 s)
+  +622 ms STALL BEGIN main queue late by 256 ms (ping 1548 of 1559)
+  +645 ms STALL END after about 272 ms, 0 main samples
+
+== b11-nocap-dialog (gap 0.955 s)
+  +895 ms STALL BEGIN main queue late by 277 ms (ping 2753 of 2764)
+  +1202 ms STALL END after about 558 ms, 2 main samples
+  +8373 ms STALL BEGIN main queue late by 265 ms (ping 3088 of 3100)
+  +8446 ms STALL END after about 322 ms, 1 main samples
+  +9180 ms STALL BEGIN main queue late by 258 ms (ping 3125 of 3137)
+  +9203 ms STALL END after about 272 ms, 0 main samples
+  +9482 ms STALL BEGIN main queue late by 257 ms (ping 3139 of 3151)
+  +9546 ms STALL END after about 314 ms, 0 main samples
+  +15006 ms STALL BEGIN main queue late by 261 ms (ping 3395 of 3406)
+  +15115 ms STALL END after about 358 ms, 1 main samples
+  +15438 ms STALL BEGIN main queue late by 259 ms (ping 3414 of 3426)
+  +15480 ms STALL END after about 292 ms, 0 main samples
+  +15787 ms STALL BEGIN main queue late by 263 ms (ping 3430 of 3442)
+  +15892 ms STALL END after about 355 ms, 1 main samples
+  +16194 ms STALL BEGIN main queue late by 261 ms (ping 3449 of 3461)
+  +16305 ms STALL END after about 360 ms, 1 main samples
+  +16607 ms STALL BEGIN main queue late by 259 ms (ping 3468 of 3480)
+  +16650 ms STALL END after about 293 ms, 0 main samples
+  +19123 ms STALL BEGIN main queue late by 263 ms (ping 3584 of 3596)
+  +19145 ms STALL END after about 272 ms, 0 main samples
+
+== b12-cap-plain (gap 0.670 s)
+  +351 ms STALL BEGIN main queue late by 264 ms (ping 2146 of 2158)
+  +394 ms STALL END after about 293 ms, 0 main samples
+  +1240 ms STALL BEGIN main queue late by 266 ms (ping 2184 of 2194)
+  +1589 ms STALL END after about 599 ms, 3 main samples
+  +6907 ms STALL BEGIN main queue late by 264 ms (ping 2439 of 2450)
+  +6927 ms STALL END after about 271 ms, 1 main samples
+  +14865 ms STALL BEGIN main queue late by 262 ms (ping 2807 of 2819)
+  +14973 ms STALL END after about 358 ms, 1 main samples
+
+== b13-nocap-dialog (gap 2.558 s)
+  +927 ms STALL BEGIN main queue late by 271 ms (ping 2580 of 2592)
+  +3066 ms STALL END after about 2390 ms, 19 main samples
+  +3708 ms STALL BEGIN main queue late by 267 ms (ping 2703 of 2715)
+  +3753 ms STALL END after about 294 ms, 1 main samples
+  +7059 ms STALL BEGIN main queue late by 259 ms (ping 2853 of 2865)
+  +7613 ms STALL END after about 805 ms, 5 main samples
+  +7942 ms STALL BEGIN main queue late by 262 ms (ping 2893 of 2905)
+  +8392 ms STALL END after about 701 ms, 4 main samples
+  +8698 ms STALL BEGIN main queue late by 264 ms (ping 2927 of 2939)
+  +9512 ms STALL END after about 1063 ms, 8 main samples
+  +11254 ms STALL BEGIN main queue late by 259 ms (ping 3044 of 3056)
+  +11403 ms STALL END after about 400 ms, 1 main samples
+  +13865 ms STALL BEGIN main queue late by 259 ms (ping 3164 of 3176)
+  +14041 ms STALL END after about 425 ms, 2 main samples
+  +14368 ms STALL BEGIN main queue late by 261 ms (ping 3187 of 3199)
+  +14626 ms STALL END after about 508 ms, 2 main samples
+  +15191 ms STALL BEGIN main queue late by 262 ms (ping 3225 of 3237)
+  +15235 ms STALL END after about 295 ms, 1 main samples
+  +15539 ms STALL BEGIN main queue late by 260 ms (ping 3241 of 3253)
+  +15563 ms STALL END after about 274 ms, 1 main samples
+  +17544 ms STALL BEGIN main queue late by 256 ms (ping 3333 of 3345)
+  +17566 ms STALL END after about 272 ms, 0 main samples
+  +17848 ms STALL BEGIN main queue late by 261 ms (ping 3347 of 3359)
+  +17870 ms STALL END after about 271 ms, 0 main samples
+  +18439 ms STALL BEGIN main queue late by 263 ms (ping 3374 of 3386)
+  +18460 ms STALL END after about 271 ms, 0 main samples
+  +18747 ms STALL BEGIN main queue late by 264 ms (ping 3388 of 3400)
+  +18769 ms STALL END after about 273 ms, 0 main samples
+  +19051 ms STALL BEGIN main queue late by 260 ms (ping 3402 of 3414)
+  +19095 ms STALL END after about 293 ms, 0 main samples
+  +19395 ms STALL BEGIN main queue late by 258 ms (ping 3418 of 3430)
+  +19480 ms STALL END after about 336 ms, 1 main samples
+  +19781 ms STALL BEGIN main queue late by 259 ms (ping 3436 of 3448)
+  +19803 ms STALL END after about 272 ms, 1 main samples
+  +20090 ms STALL BEGIN main queue late by 265 ms (ping 3450 of 3462)
+  +20286 ms STALL END after about 445 ms, 2 main samples
+  +20569 ms STALL BEGIN main queue late by 261 ms (ping 3472 of 3484)
+  +20679 ms STALL END after about 361 ms, 1 main samples
+  +20944 ms STALL BEGIN main queue late by 265 ms (ping 3489 of 3501)
+  +21094 ms STALL END after about 400 ms, 1 main samples
+  +21368 ms STALL BEGIN main queue late by 254 ms (ping 3509 of 3521)
+  +21433 ms STALL END after about 315 ms, 1 main samples
+  +21715 ms STALL BEGIN main queue late by 260 ms (ping 3525 of 3537)
+  +21780 ms STALL END after about 316 ms, 1 main samples
+  main thread's commonest stack while more than 1 s late (5 of 13 samples):
+  #0 0x100b9b2d4 libsystem_platform.dylib+0x32d4 _platform_memmove+548
+  #1 0x197a1dd5c CoreUI+0xb3d5b _findIndexForKey+531
+  #2 0x197a1e348 CoreUI+0xb4347 BOMTreeValueExists+115
+  #3 0x1979cc22c CoreUI+0x6222b -[CUICommonAssetStorage assetExistsForKeyData:length:]+71
+  #4 0x1979d8a18 CoreUI+0x6ea17 -[CUIStructuredThemeStore assetExistsForKey:]+163
+  #5 0x1979d9e30 CoreUI+0x6fe2f -[CUIStructuredThemeStore canGetRenditionWithKey:]+359
+  #6 0x197a28f88 CoreUI+0xbef87 -[CUICatalog _private_resolvedRenditionKeyFromThemeRef:withBaseKey:scaleFactor:deviceIdiom:deviceSubtype:displayGamut:layoutDirection:sizeClassHorizontal:sizeClassVertical:memoryClass:graphicsClass:graphicsFallBackOrder:deviceSubtypeFallBackOrder:localizationIdentifier:adjustRenditionKeyWithBlock:]+1503
+  #7 0x197a013bc CoreUI+0x973bb -[CUICatalog namedVectorGlyphWithName:scaleFactor:deviceIdiom:layoutDirection:glyphContinuousSize:glyphContinuousWeight:glyphPointSize:appearanceName:locale:]+907
+  #8 0x1d3e0e040 SwiftUICore+0x55403f closure #1 in NamedImage.VectorKey.loadVectorInfo(from:idiom:)+239
+  #9 0x1d3e07e3c SwiftUICore+0x54de3b NamedImage.VectorKey.loadVectorInfo(from:idiom:)+495
+  #10 0x1d3e07b90 SwiftUICore+0x54db8f NamedImage.Cache.subscript.getter+419
+  #11 0x1d3e0bbb0 SwiftUICore+0x551baf Image.NamedImageProvider.vectorInfo(in:from:at:)+3015
+  #12 0x1d3e0a78c SwiftUICore+0x55078b Image.NamedImageProvider.resolve(in:)+419
+  #13 0x1d4360778 SwiftUICore+0xaa6777 ImageProviderBox.resolve(in:)+35
+  #14 0x1d435ffec SwiftUICore+0xaa5feb Image.ImageViewChild.updateValue()+803
+  #15 0x1d3a882d4 SwiftUICore+0x1ce2d3 partial apply for implicit closure #1 in closure #1 in closure #1 in Attribute.init<A>(_:)+27
+  #16 0x1c42cb6c0 AttributeGraph+0xb6bf _ZN2AG5Graph11UpdateStack6updateEv+487
+  #17 0x1c42cbda8 AttributeGraph+0xbda7 _ZN2AG5Graph16update_attributeENS_4data3ptrINS_4NodeEEEj+351
+  #18 0x1c42d3438 AttributeGraph+0x13437 _ZN2AG5Graph20input_value_ref_slowENS_4data3ptrINS_4NodeEEENS_11AttributeIDEjjPK15AGSwiftMetadataRhl+675
+  #19 0x1c42eaaa4 AttributeGraph+0x2aaa3 AGGraphGetValue+235
+  #20 0x1d404e9b4 SwiftUICore+0x7949b3 specialized implicit closure #1 in closure #1 in closure #1 in Attribute.init<A>(_:)+39
+  #21 0x1c42cb6c0 AttributeGraph+0xb6bf _ZN2AG5Graph11UpdateStack6updateEv+487
+  #22 0x1c42cbda8 AttributeGraph+0xbda7 _ZN2AG5Graph16update_attributeENS_4data3ptrINS_4NodeEEEj+351
+  #23 0x1c42d3438 AttributeGraph+0x13437 _ZN2AG5Graph20input_value_ref_slowENS_4data3ptrINS_4NodeEEENS_11AttributeIDEjjPK15AGSwiftMetadataRhl+675
+  #24 0x1c42ea860 AttributeGraph+0x2a85f AGGraphGetInputValue+247
+  #25 0x1d424a9f8 SwiftUICore+0x9909f7 StackLayout.makeChildren()+919
+  #26 0x1d402f2f4 SwiftUICore+0x7752f3 specialized ViewLayoutEngine.init(layout:context:children:)+547
+  #27 0x1d402bfb4 SwiftUICore+0x771fb3 specialized Layout.updateLayoutComputer<A>(rule:layoutContext:children:)+423
+
+== b14-cap-plain (gap 0.900 s)
+  +368 ms STALL BEGIN main queue late by 255 ms (ping 2046 of 2058)
+  +489 ms STALL END after about 371 ms, 1 main samples
+  +1209 ms STALL BEGIN main queue late by 252 ms (ping 2083 of 2094)
+  +1451 ms STALL END after about 492 ms, 2 main samples
+  +2109 ms STALL BEGIN main queue late by 261 ms (ping 2123 of 2134)
+  +2153 ms STALL END after about 294 ms, 0 main samples
+  +6908 ms STALL BEGIN main queue late by 260 ms (ping 2339 of 2351)
+  +7018 ms STALL END after about 361 ms, 1 main samples
+  +7297 ms STALL BEGIN main queue late by 257 ms (ping 2357 of 2369)
+  +7472 ms STALL END after about 425 ms, 1 main samples
+  +7778 ms STALL BEGIN main queue late by 262 ms (ping 2379 of 2391)
+  +7851 ms STALL END after about 322 ms, 1 main samples
+  +8132 ms STALL BEGIN main queue late by 259 ms (ping 2395 of 2407)
+  +8260 ms STALL END after about 379 ms, 1 main samples
+  +8547 ms STALL BEGIN main queue late by 263 ms (ping 2414 of 2426)
+  +8613 ms STALL END after about 315 ms, 1 main samples
+  +9181 ms STALL BEGIN main queue late by 265 ms (ping 2443 of 2455)
+  +9246 ms STALL END after about 314 ms, 0 main samples
+  +9571 ms STALL BEGIN main queue late by 261 ms (ping 2461 of 2473)
+  +9594 ms STALL END after about 272 ms, 1 main samples
+  +9897 ms STALL BEGIN main queue late by 259 ms (ping 2476 of 2488)
+  +10132 ms STALL END after about 484 ms, 3 main samples
+  +10408 ms STALL BEGIN main queue late by 255 ms (ping 2500 of 2512)
+  +10580 ms STALL END after about 423 ms, 2 main samples
+  +11151 ms STALL BEGIN main queue late by 265 ms (ping 2534 of 2546)
+  +11301 ms STALL END after about 401 ms, 1 main samples
+  +11857 ms STALL BEGIN main queue late by 256 ms (ping 2567 of 2579)
+  +11900 ms STALL END after about 294 ms, 0 main samples
+  +13014 ms STALL BEGIN main queue late by 253 ms (ping 2621 of 2633)
+  +13057 ms STALL END after about 293 ms, 1 main samples
+  +13322 ms STALL BEGIN main queue late by 265 ms (ping 2635 of 2647)
+  +13492 ms STALL END after about 420 ms, 2 main samples
+  +18551 ms STALL BEGIN main queue late by 266 ms (ping 2874 of 2886)
+  +18573 ms STALL END after about 272 ms, 0 main samples
+  +21161 ms STALL BEGIN main queue late by 264 ms (ping 2993 of 3005)
+  +21203 ms STALL END after about 293 ms, 0 main samples
+  +21490 ms STALL BEGIN main queue late by 265 ms (ping 3008 of 3020)
+  +21512 ms STALL END after about 272 ms, 0 main samples
+
+== b15-cap-dialog (gap 0.913 s)
+  +1047 ms STALL BEGIN main queue late by 251 ms (ping 3314 of 3324)
+  +1355 ms STALL END after about 558 ms, 3 main samples
+  +6947 ms STALL BEGIN main queue late by 264 ms (ping 3579 of 3591)
+  +7124 ms STALL END after about 427 ms, 1 main samples
+  +7431 ms STALL BEGIN main queue late by 262 ms (ping 3601 of 3613)
+  +7496 ms STALL END after about 315 ms, 1 main samples
+  +9341 ms STALL BEGIN main queue late by 255 ms (ping 3689 of 3701)
+  +9494 ms STALL END after about 403 ms, 1 main samples
+  +9774 ms STALL BEGIN main queue late by 260 ms (ping 3709 of 3721)
+  +9796 ms STALL END after about 272 ms, 0 main samples
+  +10057 ms STALL BEGIN main queue late by 261 ms (ping 3722 of 3734)
+  +10079 ms STALL END after about 272 ms, 1 main samples
+  +10402 ms STALL BEGIN main queue late by 258 ms (ping 3738 of 3750)
+  +10792 ms STALL END after about 639 ms, 3 main samples
+  +11355 ms STALL BEGIN main queue late by 258 ms (ping 3782 of 3794)
+  +11397 ms STALL END after about 293 ms, 1 main samples
+  +12571 ms STALL BEGIN main queue late by 259 ms (ping 3838 of 3850)
+  +12711 ms STALL END after about 389 ms, 1 main samples
+  +12992 ms STALL BEGIN main queue late by 261 ms (ping 3857 of 3869)
+  +13211 ms STALL END after about 468 ms, 2 main samples
+  +13474 ms STALL BEGIN main queue late by 264 ms (ping 3879 of 3891)
+  +13692 ms STALL END after about 468 ms, 2 main samples
+  +14304 ms STALL BEGIN main queue late by 260 ms (ping 3917 of 3929)
+  +14369 ms STALL END after about 315 ms, 1 main samples
+  +14648 ms STALL BEGIN main queue late by 258 ms (ping 3933 of 3945)
+  +14736 ms STALL END after about 339 ms, 0 main samples
+  +15015 ms STALL BEGIN main queue late by 258 ms (ping 3950 of 3962)
+  +15081 ms STALL END after about 316 ms, 1 main samples
+  +15369 ms STALL BEGIN main queue late by 265 ms (ping 3966 of 3978)
+  +15478 ms STALL END after about 359 ms, 1 main samples
+  +15781 ms STALL BEGIN main queue late by 261 ms (ping 3985 of 3997)
+  +15866 ms STALL END after about 334 ms, 1 main samples
+  +16168 ms STALL BEGIN main queue late by 259 ms (ping 4003 of 4015)
+  +16254 ms STALL END after about 336 ms, 0 main samples
+  +16840 ms STALL BEGIN main queue late by 260 ms (ping 4034 of 4046)
+  +17013 ms STALL END after about 422 ms, 1 main samples
+  +17296 ms STALL BEGIN main queue late by 262 ms (ping 4055 of 4067)
+  +17384 ms STALL END after about 339 ms, 1 main samples
+  +17687 ms STALL BEGIN main queue late by 260 ms (ping 4073 of 4085)
+  +17708 ms STALL END after about 271 ms, 0 main samples
+  +17993 ms STALL BEGIN main queue late by 262 ms (ping 4087 of 4099)
+  +18087 ms STALL END after about 345 ms, 1 main samples
+  +18394 ms STALL BEGIN main queue late by 263 ms (ping 4105 of 4117)
+  +18459 ms STALL END after about 314 ms, 1 main samples
+  +18744 ms STALL BEGIN main queue late by 263 ms (ping 4121 of 4133)
+  +18898 ms STALL END after about 404 ms, 2 main samples
+  +19176 ms STALL BEGIN main queue late by 256 ms (ping 4141 of 4153)
+  +19282 ms STALL END after about 356 ms, 1 main samples
+  +19603 ms STALL BEGIN main queue late by 258 ms (ping 4161 of 4173)
+  +19773 ms STALL END after about 419 ms, 2 main samples
+  +20054 ms STALL BEGIN main queue late by 259 ms (ping 4182 of 4194)
+  +20075 ms STALL END after about 271 ms, 1 main samples
+  +20858 ms STALL BEGIN main queue late by 259 ms (ping 4219 of 4231)
+  +20902 ms STALL END after about 293 ms, 0 main samples
+
+== b16-nocap-plain (gap 0.539 s)
+  +932 ms STALL BEGIN main queue late by 253 ms (ping 1801 of 1812)
+  +996 ms STALL END after about 315 ms, 1 main samples
+  +7882 ms STALL BEGIN main queue late by 262 ms (ping 2114 of 2126)
+  +7902 ms STALL END after about 271 ms, 0 main samples
+  +8204 ms STALL BEGIN main queue late by 260 ms (ping 2129 of 2141)
+  +8224 ms STALL END after about 270 ms, 0 main samples
+  +8805 ms STALL BEGIN main queue late by 256 ms (ping 2157 of 2169)
+  +8891 ms STALL END after about 337 ms, 1 main samples
+  +9237 ms STALL BEGIN main queue late by 259 ms (ping 2177 of 2189)
+  +9478 ms STALL END after about 491 ms, 2 main samples
+  +9758 ms STALL BEGIN main queue late by 260 ms (ping 2201 of 2213)
+  +9890 ms STALL END after about 381 ms, 1 main samples
+  +10172 ms STALL BEGIN main queue late by 262 ms (ping 2220 of 2232)
+  +10259 ms STALL END after about 336 ms, 1 main samples
+  +10559 ms STALL BEGIN main queue late by 258 ms (ping 2238 of 2250)
+  +10631 ms STALL END after about 323 ms, 1 main samples
+  +10905 ms STALL BEGIN main queue late by 254 ms (ping 2254 of 2266)
+  +10994 ms STALL END after about 338 ms, 1 main samples
+  +11283 ms STALL BEGIN main queue late by 267 ms (ping 2271 of 2283)
+  +11521 ms STALL END after about 487 ms, 2 main samples
+  +11825 ms STALL BEGIN main queue late by 260 ms (ping 2296 of 2308)
+  +11957 ms STALL END after about 382 ms, 1 main samples
+  +12547 ms STALL BEGIN main queue late by 263 ms (ping 2329 of 2341)
+  +12632 ms STALL END after about 334 ms, 1 main samples
+  +12958 ms STALL BEGIN main queue late by 260 ms (ping 2348 of 2360)
+  +13215 ms STALL END after about 506 ms, 2 main samples
+  +13517 ms STALL BEGIN main queue late by 258 ms (ping 2374 of 2386)
+  +13732 ms STALL END after about 464 ms, 2 main samples
+  +14010 ms STALL BEGIN main queue late by 256 ms (ping 2397 of 2409)
+  +14052 ms STALL END after about 293 ms, 0 main samples
+  +14338 ms STALL BEGIN main queue late by 264 ms (ping 2412 of 2424)
+  +14447 ms STALL END after about 359 ms, 1 main samples
+  +14731 ms STALL BEGIN main queue late by 262 ms (ping 2430 of 2442)
+  +14904 ms STALL END after about 423 ms, 2 main samples
+  +15187 ms STALL BEGIN main queue late by 261 ms (ping 2451 of 2463)
+  +15230 ms STALL END after about 294 ms, 0 main samples
+  +16113 ms STALL BEGIN main queue late by 256 ms (ping 2494 of 2506)
+  +16200 ms STALL END after about 337 ms, 1 main samples
+  +16499 ms STALL BEGIN main queue late by 256 ms (ping 2512 of 2524)
+  +16521 ms STALL END after about 272 ms, 0 main samples
+  +16845 ms STALL BEGIN main queue late by 260 ms (ping 2528 of 2540)
+  +17131 ms STALL END after about 535 ms, 3 main samples
+  +17407 ms STALL BEGIN main queue late by 256 ms (ping 2554 of 2566)
+  +17452 ms STALL END after about 294 ms, 1 main samples
+  +17773 ms STALL BEGIN main queue late by 256 ms (ping 2571 of 2583)
+  +17795 ms STALL END after about 271 ms, 0 main samples
+  +18079 ms STALL BEGIN main queue late by 263 ms (ping 2585 of 2597)
+  +18145 ms STALL END after about 316 ms, 1 main samples
+  +18429 ms STALL BEGIN main queue late by 261 ms (ping 2601 of 2613)
+  +18472 ms STALL END after about 294 ms, 0 main samples
+  +18775 ms STALL BEGIN main queue late by 259 ms (ping 2617 of 2629)
+  +18840 ms STALL END after about 315 ms, 0 main samples
+  +19120 ms STALL BEGIN main queue late by 258 ms (ping 2633 of 2645)
+  +19249 ms STALL END after about 379 ms, 1 main samples
+  +19529 ms STALL BEGIN main queue late by 258 ms (ping 2652 of 2664)
+  +19593 ms STALL END after about 315 ms, 0 main samples
+  +19921 ms STALL BEGIN main queue late by 262 ms (ping 2670 of 2682)
+  +19964 ms STALL END after about 293 ms, 1 main samples
+  +20226 ms STALL BEGIN main queue late by 262 ms (ping 2684 of 2696)
+  +20293 ms STALL END after about 316 ms, 1 main samples
+  +21369 ms STALL BEGIN main queue late by 263 ms (ping 2736 of 2748)
+  +21391 ms STALL END after about 271 ms, 0 main samples
+  +21697 ms STALL BEGIN main queue late by 263 ms (ping 2751 of 2763)
+  +21763 ms STALL END after about 316 ms, 0 main samples
+
+== b17-cap-plain (gap 0.673 s)
+  +1053 ms STALL BEGIN main queue late by 261 ms (ping 1946 of 1957)
+  +1162 ms STALL END after about 358 ms, 1 main samples
+  +1857 ms STALL BEGIN main queue late by 261 ms (ping 1981 of 1993)
+  +2105 ms STALL END after about 497 ms, 2 main samples
+  +6828 ms STALL BEGIN main queue late by 261 ms (ping 2207 of 2219)
+  +6850 ms STALL END after about 272 ms, 1 main samples
+  +8227 ms STALL BEGIN main queue late by 257 ms (ping 2272 of 2284)
+  +8306 ms STALL END after about 330 ms, 1 main samples
+  +8592 ms STALL BEGIN main queue late by 264 ms (ping 2288 of 2300)
+  +8677 ms STALL END after about 335 ms, 1 main samples
+  +9289 ms STALL BEGIN main queue late by 263 ms (ping 2320 of 2332)
+  +9480 ms STALL END after about 442 ms, 2 main samples
+  +9740 ms STALL BEGIN main queue late by 260 ms (ping 2341 of 2353)
+  +9785 ms STALL END after about 294 ms, 1 main samples
+  +10068 ms STALL BEGIN main queue late by 262 ms (ping 2356 of 2368)
+  +10134 ms STALL END after about 316 ms, 1 main samples
+  +10420 ms STALL BEGIN main queue late by 263 ms (ping 2372 of 2384)
+  +10442 ms STALL END after about 273 ms, 0 main samples
+  +11041 ms STALL BEGIN main queue late by 269 ms (ping 2400 of 2412)
+  +11246 ms STALL END after about 455 ms, 2 main samples
+  +12366 ms STALL BEGIN main queue late by 259 ms (ping 2461 of 2473)
+  +12654 ms STALL END after about 537 ms, 3 main samples
+  +12936 ms STALL BEGIN main queue late by 260 ms (ping 2487 of 2499)
+  +13261 ms STALL END after about 575 ms, 3 main samples
+  +13537 ms STALL BEGIN main queue late by 256 ms (ping 2515 of 2527)
+  +13603 ms STALL END after about 316 ms, 1 main samples
+  +13869 ms STALL BEGIN main queue late by 266 ms (ping 2530 of 2542)
+  +14106 ms STALL END after about 488 ms, 2 main samples
+  +14411 ms STALL BEGIN main queue late by 264 ms (ping 2555 of 2567)
+  +14456 ms STALL END after about 294 ms, 1 main samples
+  +14758 ms STALL BEGIN main queue late by 258 ms (ping 2571 of 2583)
+  +14780 ms STALL END after about 272 ms, 1 main samples
+  +15125 ms STALL BEGIN main queue late by 256 ms (ping 2588 of 2600)
+  +15209 ms STALL END after about 335 ms, 1 main samples
+  +15493 ms STALL BEGIN main queue late by 262 ms (ping 2605 of 2617)
+  +15538 ms STALL END after about 294 ms, 1 main samples
+  +15817 ms STALL BEGIN main queue late by 257 ms (ping 2620 of 2632)
+  +15838 ms STALL END after about 271 ms, 0 main samples
+  +16137 ms STALL BEGIN main queue late by 255 ms (ping 2635 of 2647)
+  +16158 ms STALL END after about 271 ms, 0 main samples
+  +16459 ms STALL BEGIN main queue late by 258 ms (ping 2650 of 2662)
+  +16524 ms STALL END after about 314 ms, 1 main samples
+  +20864 ms STALL BEGIN main queue late by 252 ms (ping 2851 of 2862)
+  +21086 ms STALL END after about 472 ms, 2 main samples
+  +21419 ms STALL BEGIN main queue late by 260 ms (ping 2875 of 2887)
+  +21617 ms STALL END after about 449 ms, 2 main samples
+
+== b18-nocap-dialog (gap 0.181 s)
+  +6916 ms STALL BEGIN main queue late by 257 ms (ping 3120 of 3132)
+  +7003 ms STALL END after about 337 ms, 1 main samples
+  +7286 ms STALL BEGIN main queue late by 261 ms (ping 3137 of 3149)
+  +7352 ms STALL END after about 315 ms, 1 main samples
+  +7631 ms STALL BEGIN main queue late by 256 ms (ping 3153 of 3165)
+  +7738 ms STALL END after about 358 ms, 1 main samples
+  +8040 ms STALL BEGIN main queue late by 257 ms (ping 3172 of 3184)
+  +8087 ms STALL END after about 298 ms, 1 main samples
+  +8415 ms STALL BEGIN main queue late by 261 ms (ping 3189 of 3201)
+  +8458 ms STALL END after about 293 ms, 0 main samples
+  +9493 ms STALL BEGIN main queue late by 260 ms (ping 3239 of 3251)
+  +9559 ms STALL END after about 315 ms, 0 main samples
+  +10302 ms STALL BEGIN main queue late by 263 ms (ping 3276 of 3288)
+  +10324 ms STALL END after about 272 ms, 0 main samples
+  +10896 ms STALL BEGIN main queue late by 259 ms (ping 3303 of 3315)
+  +10917 ms STALL END after about 272 ms, 0 main samples
+  +11970 ms STALL BEGIN main queue late by 259 ms (ping 3353 of 3365)
+  +12034 ms STALL END after about 313 ms, 0 main samples
+  +12295 ms STALL BEGIN main queue late by 261 ms (ping 3368 of 3380)
+  +12379 ms STALL END after about 334 ms, 0 main samples
+  +12657 ms STALL BEGIN main queue late by 258 ms (ping 3385 of 3397)
+  +12701 ms STALL END after about 293 ms, 0 main samples
+  +12978 ms STALL BEGIN main queue late by 256 ms (ping 3400 of 3412)
+  +13000 ms STALL END after about 272 ms, 0 main samples
+  +15678 ms STALL BEGIN main queue late by 258 ms (ping 3525 of 3537)
+  +15721 ms STALL END after about 294 ms, 0 main samples
+  +16514 ms STALL BEGIN main queue late by 269 ms (ping 3563 of 3575)
+  +16580 ms STALL END after about 315 ms, 0 main samples
+  +18596 ms STALL BEGIN main queue late by 258 ms (ping 3659 of 3671)
+  +18618 ms STALL END after about 272 ms, 0 main samples
+  +18902 ms STALL BEGIN main queue late by 263 ms (ping 3673 of 3685)
+  +18925 ms STALL END after about 272 ms, 0 main samples
+
+== b19-nocap-plain (gap 0.798 s)
+  +343 ms STALL BEGIN main queue late by 261 ms (ping 1823 of 1835)
+  +408 ms STALL END after about 314 ms, 1 main samples
+  +999 ms STALL BEGIN main queue late by 253 ms (ping 1852 of 1863)
+  +1132 ms STALL END after about 382 ms, 1 main samples
+  +8594 ms STALL BEGIN main queue late by 265 ms (ping 2193 of 2205)
+  +8667 ms STALL END after about 323 ms, 1 main samples
+  +8951 ms STALL BEGIN main queue late by 262 ms (ping 2209 of 2221)
+  +8973 ms STALL END after about 271 ms, 0 main samples
+  +9556 ms STALL BEGIN main queue late by 258 ms (ping 2237 of 2249)
+  +9707 ms STALL END after about 401 ms, 1 main samples
+  +9988 ms STALL BEGIN main queue late by 259 ms (ping 2257 of 2269)
+  +10164 ms STALL END after about 426 ms, 1 main samples
+  +10470 ms STALL BEGIN main queue late by 263 ms (ping 2279 of 2291)
+  +10490 ms STALL END after about 270 ms, 0 main samples
+  +10774 ms STALL BEGIN main queue late by 261 ms (ping 2293 of 2305)
+  +10816 ms STALL END after about 292 ms, 0 main samples
+  +11098 ms STALL BEGIN main queue late by 260 ms (ping 2308 of 2320)
+  +11139 ms STALL END after about 290 ms, 0 main samples
+  +11421 ms STALL BEGIN main queue late by 260 ms (ping 2323 of 2335)
+  +11487 ms STALL END after about 317 ms, 1 main samples
+  +11766 ms STALL BEGIN main queue late by 256 ms (ping 2339 of 2351)
+  +12003 ms STALL END after about 488 ms, 2 main samples
+  +12284 ms STALL BEGIN main queue late by 259 ms (ping 2363 of 2375)
+  +12476 ms STALL END after about 441 ms, 2 main samples
+  +12735 ms STALL BEGIN main queue late by 260 ms (ping 2384 of 2396)
+  +12779 ms STALL END after about 294 ms, 1 main samples
+  +13038 ms STALL BEGIN main queue late by 258 ms (ping 2398 of 2410)
+  +13082 ms STALL END after about 294 ms, 0 main samples
+  +13707 ms STALL BEGIN main queue late by 259 ms (ping 2429 of 2441)
+  +13729 ms STALL END after about 272 ms, 0 main samples
+  +14309 ms STALL BEGIN main queue late by 267 ms (ping 2456 of 2468)
+  +14331 ms STALL END after about 273 ms, 0 main samples
+  +14635 ms STALL BEGIN main queue late by 259 ms (ping 2471 of 2483)
+  +14677 ms STALL END after about 292 ms, 0 main samples
+  +15258 ms STALL BEGIN main queue late by 256 ms (ping 2500 of 2512)
+  +15343 ms STALL END after about 335 ms, 1 main samples
+  +15619 ms STALL BEGIN main queue late by 255 ms (ping 2517 of 2529)
+  +15686 ms STALL END after about 316 ms, 0 main samples
+  +15995 ms STALL BEGIN main queue late by 264 ms (ping 2534 of 2546)
+  +16017 ms STALL END after about 272 ms, 0 main samples
+  +16299 ms STALL BEGIN main queue late by 261 ms (ping 2548 of 2560)
+  +16559 ms STALL END after about 509 ms, 2 main samples
+  +20342 ms STALL BEGIN main queue late by 259 ms (ping 2736 of 2748)
+  +20385 ms STALL END after about 292 ms, 0 main samples
+  +21118 ms STALL BEGIN main queue late by 257 ms (ping 2772 of 2784)
+  +21159 ms STALL END after about 291 ms, 0 main samples
+  +21948 ms STALL BEGIN main queue late by 264 ms (ping 2810 of 2822)
+  +21970 ms STALL END after about 272 ms, 1 main samples
+
+== b20-cap-dialog (gap 1.131 s)
+  +326 ms STALL BEGIN main queue late by 267 ms (ping 3234 of 3246)
+  +459 ms STALL END after about 382 ms, 2 main samples
+  +1476 ms STALL BEGIN main queue late by 259 ms (ping 3284 of 3290)
+  +2143 ms STALL END after about 917 ms, 6 main samples
+  +2912 ms STALL BEGIN main queue late by 266 ms (ping 3341 of 3353)
+  +3314 ms STALL END after about 651 ms, 4 main samples
+  +7083 ms STALL BEGIN main queue late by 272 ms (ping 3527 of 3539)
+  +7294 ms STALL END after about 461 ms, 2 main samples
+  +7577 ms STALL BEGIN main queue late by 260 ms (ping 3550 of 3562)
+  +7750 ms STALL END after about 423 ms, 2 main samples
+  +8027 ms STALL BEGIN main queue late by 256 ms (ping 3571 of 3583)
+  +8224 ms STALL END after about 446 ms, 1 main samples
+  +8551 ms STALL BEGIN main queue late by 263 ms (ping 3595 of 3607)
+  +8725 ms STALL END after about 424 ms, 2 main samples
+  +9050 ms STALL BEGIN main queue late by 262 ms (ping 3618 of 3630)
+  +9383 ms STALL END after about 582 ms, 3 main samples
+  +9666 ms STALL BEGIN main queue late by 262 ms (ping 3645 of 3657)
+  +9776 ms STALL END after about 359 ms, 1 main samples
+  +10101 ms STALL BEGIN main queue late by 260 ms (ping 3665 of 3677)
+  +10234 ms STALL END after about 382 ms, 1 main samples
+  +10546 ms STALL BEGIN main queue late by 268 ms (ping 3685 of 3697)
+  +10720 ms STALL END after about 424 ms, 1 main samples
+  +11159 ms STALL BEGIN main queue late by 256 ms (ping 3713 of 3725)
+  +11508 ms STALL END after about 600 ms, 3 main samples
+  +11799 ms STALL BEGIN main queue late by 264 ms (ping 3742 of 3754)
+  +11972 ms STALL END after about 424 ms, 2 main samples
+  +12253 ms STALL BEGIN main queue late by 258 ms (ping 3763 of 3775)
+  +12324 ms STALL END after about 321 ms, 1 main samples
+  +12608 ms STALL BEGIN main queue late by 263 ms (ping 3779 of 3791)
+  +12894 ms STALL END after about 536 ms, 3 main samples
+  +13223 ms STALL BEGIN main queue late by 265 ms (ping 3807 of 3819)
+  +13245 ms STALL END after about 272 ms, 0 main samples
+  +13535 ms STALL BEGIN main queue late by 267 ms (ping 3821 of 3833)
+  +13730 ms STALL END after about 445 ms, 2 main samples
+  +14099 ms STALL BEGIN main queue late by 260 ms (ping 3847 of 3859)
+  +14426 ms STALL END after about 576 ms, 3 main samples
+  +14708 ms STALL BEGIN main queue late by 261 ms (ping 3875 of 3887)
+  +14837 ms STALL END after about 380 ms, 1 main samples
+  +15121 ms STALL BEGIN main queue late by 262 ms (ping 3894 of 3906)
+  +15186 ms STALL END after about 315 ms, 1 main samples
+  +15493 ms STALL BEGIN main queue late by 264 ms (ping 3911 of 3923)
+  +15827 ms STALL END after about 583 ms, 3 main samples
+  +16088 ms STALL BEGIN main queue late by 262 ms (ping 3938 of 3950)
+  +16349 ms STALL END after about 511 ms, 3 main samples
+  +16632 ms STALL BEGIN main queue late by 263 ms (ping 3963 of 3975)
+  +16739 ms STALL END after about 357 ms, 1 main samples
+  +17019 ms STALL BEGIN main queue late by 260 ms (ping 3981 of 3993)
+  +17084 ms STALL END after about 314 ms, 0 main samples
+  +17385 ms STALL BEGIN main queue late by 258 ms (ping 3998 of 4010)
+  +17450 ms STALL END after about 314 ms, 1 main samples
+  +17746 ms STALL BEGIN main queue late by 252 ms (ping 4015 of 4026)
+  +17812 ms STALL END after about 315 ms, 1 main samples
+  +18145 ms STALL BEGIN main queue late by 269 ms (ping 4032 of 4044)
+  +18235 ms STALL END after about 339 ms, 1 main samples
+  +18515 ms STALL BEGIN main queue late by 258 ms (ping 4049 of 4061)
+  +18626 ms STALL END after about 362 ms, 1 main samples
+  +18929 ms STALL BEGIN main queue late by 259 ms (ping 4068 of 4080)
+  +18994 ms STALL END after about 315 ms, 1 main samples
+  +19273 ms STALL BEGIN main queue late by 259 ms (ping 4084 of 4096)
+  +19428 ms STALL END after about 404 ms, 2 main samples
+  +19756 ms STALL BEGIN main queue late by 261 ms (ping 4106 of 4118)
+  +19908 ms STALL END after about 403 ms, 1 main samples
+  +20171 ms STALL BEGIN main queue late by 262 ms (ping 4125 of 4137)
+  +20192 ms STALL END after about 271 ms, 0 main samples
+
+every decide in requests.log (answer -> the app's next request):
+  1794037528588 gap 0.857 s  07:45:29.445 [1794037529445] "GET /api/wiki/spaces HTTP/1.1" 200 -
+  1794037628485 gap 12.205 s  07:47:20.690 [1794037640690] "GET /api/wiki/spaces HTTP/1.1" 200 -
+  1794037722998 gap 0.09 s  07:48:43.088 [1794037723088] "GET /api/wiki/spaces HTTP/1.1" 200 -
+  1794037837225 gap 0.937 s  07:50:38.162 [1794037838162] "GET /api/wiki/spaces HTTP/1.1" 200 -
+  1794037902872 gap 0.949 s  07:51:43.821 [1794037903821] "GET /api/sessions?view=open HTTP/1.1" 200 -
+  1794038000594 gap 1.568 s  07:53:22.162 [1794038002162] "GET /api/wiki/spaces HTTP/1.1" 200 -
+  1794038072236 gap 0.066 s  07:54:32.302 [1794038072302] "GET /api/wiki/spaces HTTP/1.1" 200 -
+  1794038157799 gap 0.736 s  07:55:58.535 [1794038158535] "GET /api/wiki/spaces HTTP/1.1" 200 -
+  1794038229482 gap 0.552 s  07:57:10.034 [1794038230034] "GET /api/wiki/spaces HTTP/1.1" 200 -
+  1794038288426 gap 0.031 s  07:58:08.457 [1794038288457] "GET /api/wiki/spaces HTTP/1.1" 200 -
+  1794038371478 gap 0.955 s  07:59:32.433 [1794038372433] "GET /api/wiki/spaces HTTP/1.1" 200 -
+  1794038446093 gap 0.67 s  08:00:46.763 [1794038446763] "GET /api/wiki/spaces HTTP/1.1" 200 -
+  1794038526825 gap 2.558 s  08:02:09.383 [1794038529383] "GET /api/wiki/spaces HTTP/1.1" 200 -
+  1794038609696 gap 0.9 s  08:03:30.596 [1794038610596] "GET /api/wiki/spaces HTTP/1.1" 200 -
+  1794038713976 gap 0.913 s  08:05:14.889 [1794038714889] "GET /api/wiki/spaces HTTP/1.1" 200 -
+  1794038786142 gap 0.539 s  08:06:26.681 [1794038786681] "GET /api/wiki/spaces HTTP/1.1" 200 -
+  1794038859969 gap 0.673 s  08:07:40.642 [1794038860642] "GET /api/wiki/spaces HTTP/1.1" 200 -
+  1794038952722 gap 0.181 s  08:09:12.903 [1794038952903] "GET /api/wiki/spaces HTTP/1.1" 200 -
+  1794039021275 gap 0.798 s  08:10:22.073 [1794039022073] "GET /api/wiki/spaces HTTP/1.1" 200 -
+  1794039122893 gap 1.131 s  08:12:04.024 [1794039124024] "GET /api/wiki/spaces HTTP/1.1" 200 -

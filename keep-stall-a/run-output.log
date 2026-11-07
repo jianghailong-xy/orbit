@@ -1,0 +1,235 @@
+==> iPhone FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC: iPhone 17 Pro (FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC) (Shutdown) 
+==> stub ready on 127.0.0.1:8765 (pid 5135, after 3s)
+==> ios (lane a, RvProbeUITests/KeepStallTests)
+Test Case '-[RvProbeUITests.KeepStallTests test01]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test01]' passed (84.545 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test02]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test02]' passed (115.979 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test03]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test03]' passed (134.091 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test04]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test04]' passed (133.379 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test05]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test05]' passed (117.188 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test06]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test06]' passed (122.981 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test07]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test07]' passed (79.473 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test08]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test08]' passed (116.069 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test09]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test09]' passed (136.717 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test10]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test10]' passed (88.445 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test11]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test11]' passed (132.552 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test12]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test12]' passed (78.215 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test13]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test13]' passed (112.101 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test14]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test14]' passed (77.340 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test15]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test15]' passed (115.022 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test16]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test16]' passed (79.594 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test17]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test17]' passed (72.825 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test18]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test18]' passed (101.295 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test19]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test19]' passed (84.702 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test20]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test20]' passed (127.398 seconds).
+	 Executed 20 tests, with 0 failures (0 unexpected) in 2109.910 (2109.945) seconds
+	 Executed 20 tests, with 0 failures (0 unexpected) in 2109.910 (2109.949) seconds
+	 Executed 20 tests, with 0 failures (0 unexpected) in 2109.910 (2109.951) seconds
+** TEST SUCCEEDED **
+==> waiting for the sentinel's spindumps
+==> mac pass skipped (PASSES=ios)
+.rv-probe/run.sh: line 107:  5418 Terminated: 15          ( while true; do
+    echo "$(date +%s) $(sysctl -n vm.loadavg)"; sleep 5;
+done ) > "$OUT/ios/loadavg.log" 2>&1
+.rv-probe/run.sh: line 111:  5135 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+trial                     capture dialog  tap ms   gap s  main late max  watchdog held  stall?
+a01-nocap-plain           off     false     1045   0.623        493 ms              1  
+a02-cap-dialog            on      true       780   1.300        662 ms              1  
+a03-cap-plain             on      false      920   2.350       2434 ms              0  
+a04-nocap-dialog          off     true      2968   1.427       1173 ms              1  
+a05-cap-plain             on      false     1307   0.043       1274 ms              0  
+a06-nocap-dialog          off     true      1454   0.878       2073 ms              0  
+a07-nocap-plain           off     false     1262   0.648        498 ms              0  
+a08-cap-dialog            on      true      1526   1.146       1259 ms              0  
+a09-nocap-dialog          off     true      1324   0.872        607 ms              0  
+a10-cap-plain             on      false     1099   0.916        759 ms              0  
+a11-cap-dialog            on      true      1709   0.943        643 ms              0  
+a12-nocap-plain           off     false     1135   0.641        444 ms              0  
+a13-cap-dialog            on      true      1604   0.056        705 ms              1  
+a14-nocap-plain           off     false     1118   0.061        502 ms              0  
+a15-nocap-dialog          off     true      1118   0.729        675 ms              0  
+a16-cap-plain             on      false     1194   0.995        581 ms              0  
+a17-nocap-plain           off     false      689   0.572        467 ms              0  
+a18-cap-dialog            on      true      1104   0.703        593 ms              0  
+a19-cap-plain             on      false     1195   0.936        624 ms              0  
+a20-nocap-dialog          off     true      1257   1.211        865 ms              0  
+
+capture off dialog false:  5 presses, 0 over 3 s, gaps 0.06 0.57 0.62 0.64 0.65
+capture off dialog true :  5 presses, 0 over 3 s, gaps 0.73 0.87 0.88 1.21 1.43
+capture on  dialog false:  5 presses, 0 over 3 s, gaps 0.04 0.92 0.94 0.99 2.35
+capture on  dialog true :  5 presses, 0 over 3 s, gaps 0.06 0.70 0.94 1.15 1.30
+
+== a01-nocap-plain (gap 0.623 s)
+  +374 ms STALL BEGIN main queue late by 262 ms (ping 2274 of 2286)
+  +484 ms STALL END after about 359 ms, 1 main samples
+  +1344 ms STALL BEGIN main queue late by 251 ms (ping 2315 of 2325)
+  +1622 ms STALL END after about 528 ms, 3 main samples
+  +16275 ms HELD the watchdog itself did not run for 8292 ms
+
+== a02-cap-dialog (gap 1.300 s)
+  +1543 ms STALL BEGIN main queue late by 268 ms (ping 3660 of 3667)
+  +2001 ms STALL END after about 708 ms, 4 main samples
+  +8053 ms STALL BEGIN main queue late by 265 ms (ping 3947 of 3959)
+  +8075 ms STALL END after about 272 ms, 0 main samples
+  +8638 ms STALL BEGIN main queue late by 264 ms (ping 3973 of 3985)
+  +8661 ms STALL END after about 272 ms, 0 main samples
+  +9421 ms STALL BEGIN main queue late by 264 ms (ping 4008 of 4020)
+  +9489 ms STALL END after about 318 ms, 1 main samples
+  +10280 ms STALL BEGIN main queue late by 265 ms (ping 4047 of 4059)
+  +10303 ms STALL END after about 274 ms, 0 main samples
+  +10586 ms STALL BEGIN main queue late by 260 ms (ping 4061 of 4073)
+  +10651 ms STALL END after about 315 ms, 0 main samples
+  +11230 ms STALL BEGIN main queue late by 258 ms (ping 4091 of 4103)
+  +11316 ms STALL END after about 336 ms, 0 main samples
+  +11571 ms STALL BEGIN main queue late by 255 ms (ping 4107 of 4119)
+  +11636 ms STALL END after about 315 ms, 0 main samples
+  +14220 ms STALL BEGIN main queue late by 264 ms (ping 4229 of 4241)
+  +14243 ms STALL END after about 272 ms, 0 main samples
+  +14851 ms STALL BEGIN main queue late by 264 ms (ping 4258 of 4270)
+  +14896 ms STALL END after about 294 ms, 0 main samples
+  +15170 ms STALL BEGIN main queue late by 254 ms (ping 4273 of 4284)
+  +15300 ms STALL END after about 379 ms, 1 main samples
+  +15818 ms STALL BEGIN main queue late by 259 ms (ping 4302 of 4314)
+  +15840 ms STALL END after about 273 ms, 0 main samples
+  +16126 ms STALL BEGIN main queue late by 265 ms (ping 4316 of 4328)
+ 63M	/Users/runner/work/orbit/orbit/.rv-probe/shots
+ 63M	/Users/runner/work/orbit/orbit/.rv-probe/shots/ios
+total 128736
+drwxr-xr-x  150 runner  staff      4800 Nov  7 08:24 .
+drwxr-xr-x    4 runner  staff       128 Nov  7 07:35 ..
+-rw-r--r--    1 runner  staff         0 Nov  7 08:24 .pass-done
+-rw-r--r--    1 runner  staff    430875 Nov  7 07:48 a01-nocap-plain-06-9-after.png
+-rw-r--r--    1 runner  staff    430875 Nov  7 07:50 a02-cap-dialog-06-9-after.png
+-rw-r--r--    1 runner  staff    430875 Nov  7 07:53 a03-cap-plain-06-9-after.png
+-rw-r--r--    1 runner  staff    430875 Nov  7 07:55 a04-nocap-dialog-06-9-after.png
+-rw-r--r--    1 runner  staff    430875 Nov  7 07:57 a05-cap-plain-06-9-after.png
+-rw-r--r--    1 runner  staff    430875 Nov  7 07:59 a06-nocap-dialog-06-9-after.png
+-rw-r--r--    1 runner  staff    430875 Nov  7 08:00 a07-nocap-plain-06-9-after.png
+-rw-r--r--    1 runner  staff    430875 Nov  7 08:02 a08-cap-dialog-06-9-after.png
+-rw-r--r--    1 runner  staff    430875 Nov  7 08:04 a09-nocap-dialog-06-9-after.png
+-rw-r--r--    1 runner  staff    430875 Nov  7 08:06 a10-cap-plain-06-9-after.png
+-rw-r--r--    1 runner  staff    430875 Nov  7 08:08 a11-cap-dialog-06-9-after.png
+-rw-r--r--    1 runner  staff    430875 Nov  7 08:09 a12-nocap-plain-06-9-after.png
+-rw-r--r--    1 runner  staff    430875 Nov  7 08:11 a13-cap-dialog-06-9-after.png
+-rw-r--r--    1 runner  staff    430875 Nov  7 08:13 a14-nocap-plain-06-9-after.png
+-rw-r--r--    1 runner  staff    431457 Nov  7 08:14 a15-nocap-dialog-06-9-after.png
+-rw-r--r--    1 runner  staff    431457 Nov  7 08:16 a16-cap-plain-06-9-after.png
+-rw-r--r--    1 runner  staff    431457 Nov  7 08:17 a17-nocap-plain-06-9-after.png
+-rw-r--r--    1 runner  staff    431457 Nov  7 08:19 a18-cap-dialog-06-9-after.png
+-rw-r--r--    1 runner  staff    431457 Nov  7 08:20 a19-cap-plain-06-9-after.png
+-rw-r--r--    1 runner  staff    431457 Nov  7 08:22 a20-nocap-dialog-06-9-after.png
+-rw-r--r--    1 runner  staff     91989 Nov  7 08:24 analysis.json
+-rw-r--r--    1 runner  staff     80092 Nov  7 08:24 analysis.txt
+-rw-r--r--    1 runner  staff      4138 Nov  7 08:24 analyze.out
+drwxr-xr-x   43 runner  staff      1376 Nov  7 08:24 attachments
+-rw-r--r--    1 runner  staff        13 Nov  7 07:50 capture-a02-cap-dialog.done
+-rw-r--r--@   1 runner  staff        13 Nov  7 07:50 capture-a02-cap-dialog.req.taken
+-rw-r--r--    1 runner  staff        13 Nov  7 07:50 capture-a02-cap-dialog.started
+-rw-r--r--    1 runner  staff        13 Nov  7 07:52 capture-a03-cap-plain.done
+-rw-r--r--@   1 runner  staff        13 Nov  7 07:51 capture-a03-cap-plain.req.taken
+-rw-r--r--    1 runner  staff        13 Nov  7 07:51 capture-a03-cap-plain.started
+-rw-r--r--    1 runner  staff        13 Nov  7 07:56 capture-a05-cap-plain.done
+-rw-r--r--@   1 runner  staff        13 Nov  7 07:56 capture-a05-cap-plain.req.taken
+-rw-r--r--    1 runner  staff        13 Nov  7 07:56 capture-a05-cap-plain.started
+-rw-r--r--    1 runner  staff        13 Nov  7 08:02 capture-a08-cap-dialog.done
+-rw-r--r--@   1 runner  staff        13 Nov  7 08:01 capture-a08-cap-dialog.req.taken
+-rw-r--r--    1 runner  staff        13 Nov  7 08:02 capture-a08-cap-dialog.started
+-rw-r--r--    1 runner  staff        13 Nov  7 08:06 capture-a10-cap-plain.done
+-rw-r--r--@   1 runner  staff        13 Nov  7 08:05 capture-a10-cap-plain.req.taken
+-rw-r--r--    1 runner  staff        13 Nov  7 08:05 capture-a10-cap-plain.started
+-rw-r--r--    1 runner  staff        13 Nov  7 08:08 capture-a11-cap-dialog.done
+-rw-r--r--@   1 runner  staff        13 Nov  7 08:08 capture-a11-cap-dialog.req.taken
+-rw-r--r--    1 runner  staff        13 Nov  7 08:08 capture-a11-cap-dialog.started
+-rw-r--r--    1 runner  staff        13 Nov  7 08:11 capture-a13-cap-dialog.done
+-rw-r--r--@   1 runner  staff        13 Nov  7 08:11 capture-a13-cap-dialog.req.taken
+-rw-r--r--    1 runner  staff        13 Nov  7 08:11 capture-a13-cap-dialog.started
+-rw-r--r--    1 runner  staff        13 Nov  7 08:16 capture-a16-cap-plain.done
+-rw-r--r--@   1 runner  staff        13 Nov  7 08:15 capture-a16-cap-plain.req.taken
+-rw-r--r--    1 runner  staff        13 Nov  7 08:15 capture-a16-cap-plain.started
+-rw-r--r--    1 runner  staff        13 Nov  7 08:19 capture-a18-cap-dialog.done
+-rw-r--r--@   1 runner  staff        13 Nov  7 08:18 capture-a18-cap-dialog.req.taken
+-rw-r--r--    1 runner  staff        13 Nov  7 08:18 capture-a18-cap-dialog.started
+-rw-r--r--    1 runner  staff        13 Nov  7 08:20 capture-a19-cap-plain.done
+-rw-r--r--@   1 runner  staff        13 Nov  7 08:20 capture-a19-cap-plain.req.taken
+-rw-r--r--    1 runner  staff        13 Nov  7 08:20 capture-a19-cap-plain.started
+-rw-r--r--    1 runner  staff      2327 Nov  7 08:24 capture.log
+-rw-r--r--    1 runner  staff         0 Nov  7 07:38 capture.out
+-rw-r--r--    1 runner  staff      5910 Nov  7 08:23 compiled-ios.txt
+-rw-r--r--    1 runner  staff        60 Nov  7 07:35 device.txt
+drwxr-xr-x    3 runner  staff        96 Nov  7 08:24 frames-a02-cap-dialog
+drwxr-xr-x    3 runner  staff        96 Nov  7 08:24 frames-a03-cap-plain
+drwxr-xr-x    3 runner  staff        96 Nov  7 08:24 frames-a05-cap-plain
+drwxr-xr-x    3 runner  staff        96 Nov  7 08:24 frames-a08-cap-dialog
+drwxr-xr-x    3 runner  staff        96 Nov  7 08:24 frames-a10-cap-plain
+drwxr-xr-x    3 runner  staff        96 Nov  7 08:24 frames-a11-cap-dialog
+drwxr-xr-x    3 runner  staff        96 Nov  7 08:24 frames-a13-cap-dialog
+drwxr-xr-x    3 runner  staff        96 Nov  7 08:24 frames-a16-cap-plain
+drwxr-xr-x    3 runner  staff        96 Nov  7 08:24 frames-a18-cap-dialog
+drwxr-xr-x    3 runner  staff        96 Nov  7 08:24 frames-a19-cap-plain
+-rw-r--r--    1 runner  staff        98 Nov  7 07:35 host.txt
+-rw-r--r--@   1 runner  staff      2990 Nov  7 07:48 KeepStallTeststest01-notes.txt
+-rw-r--r--@   1 runner  staff      5308 Nov  7 07:50 KeepStallTeststest02-notes.txt
+-rw-r--r--@   1 runner  staff      2917 Nov  7 07:53 KeepStallTeststest03-notes.txt
+-rw-r--r--@   1 runner  staff      5275 Nov  7 07:55 KeepStallTeststest04-notes.txt
+-rw-r--r--@   1 runner  staff      2931 Nov  7 07:57 KeepStallTeststest05-notes.txt
+-rw-r--r--@   1 runner  staff      5275 Nov  7 07:59 KeepStallTeststest06-notes.txt
+-rw-r--r--@   1 runner  staff      2967 Nov  7 08:00 KeepStallTeststest07-notes.txt
+-rw-r--r--@   1 runner  staff      5309 Nov  7 08:02 KeepStallTeststest08-notes.txt
+-rw-r--r--@   1 runner  staff      5275 Nov  7 08:04 KeepStallTeststest09-notes.txt
+-rw-r--r--@   1 runner  staff      3021 Nov  7 08:06 KeepStallTeststest10-notes.txt
+-rw-r--r--@   1 runner  staff      5309 Nov  7 08:08 KeepStallTeststest11-notes.txt
+-rw-r--r--@   1 runner  staff      2967 Nov  7 08:09 KeepStallTeststest12-notes.txt
+-rw-r--r--@   1 runner  staff      5309 Nov  7 08:11 KeepStallTeststest13-notes.txt
+-rw-r--r--@   1 runner  staff      2967 Nov  7 08:13 KeepStallTeststest14-notes.txt
+-rw-r--r--@   1 runner  staff      5275 Nov  7 08:14 KeepStallTeststest15-notes.txt
+-rw-r--r--@   1 runner  staff      3021 Nov  7 08:16 KeepStallTeststest16-notes.txt
+-rw-r--r--@   1 runner  staff      2966 Nov  7 08:17 KeepStallTeststest17-notes.txt
+-rw-r--r--@   1 runner  staff      5309 Nov  7 08:19 KeepStallTeststest18-notes.txt
+-rw-r--r--@   1 runner  staff      3021 Nov  7 08:20 KeepStallTeststest19-notes.txt
+-rw-r--r--@   1 runner  staff      5275 Nov  7 08:22 KeepStallTeststest20-notes.txt
+-rw-r--r--    1 runner  staff     18460 Nov  7 08:24 loadavg.log
+-rw-r--r--    1 runner  staff       622 Nov  7 08:24 not-served.txt
+-rw-r--r--    1 runner  staff      3907 Nov  7 07:52 ps-3.log
+-rw-r--r--    1 runner  staff    161813 Nov  7 08:22 requests.log
+-rw-r--r--    1 runner  staff        93 Nov  7 07:38 requests.log.out
+-rw-r--r--    1 runner  staff      5797 Nov  7 08:24 sentinel.json
+-rw-r--r--    1 runner  staff       577 Nov  7 08:24 sentinel.log
+-rw-r--r--    1 runner  staff         0 Nov  7 07:38 sentinel.out
+-rw-r--r--    1 runner  staff  32958287 Nov  7 08:24 simlog-app.txt.gz
+-rw-r--r--    1 runner  staff   2980389 Nov  7 08:24 simlog-system.txt.gz
+-rw-r--r--    1 runner  staff       458 Nov  7 07:58 spindump-3.out
+-rw-r--r--    1 root    staff  11709706 Nov  7 07:58 spindump-3.txt
+-rw-r--r--    1 runner  staff    839625 Nov  7 08:24 stallwatch-a01-nocap-plain.log
+-rw-r--r--    1 runner  staff    131427 Nov  7 08:24 stallwatch-a02-cap-dialog.log.gz
+-rw-r--r--    1 runner  staff    163504 Nov  7 08:24 stallwatch-a03-cap-plain.log.gz
+-rw-r--r--    1 runner  staff    207413 Nov  7 08:24 stallwatch-a04-nocap-dialog.log.gz
+-rw-r--r--    1 runner  staff    157277 Nov  7 08:24 stallwatch-a05-cap-plain.log.gz
+-rw-r--r--    1 runner  staff    186850 Nov  7 08:24 stallwatch-a06-nocap-dialog.log.gz
+-rw-r--r--    1 runner  staff    146219 Nov  7 08:24 stallwatch-a07-nocap-plain.log.gz
+-rw-r--r--    1 runner  staff    171391 Nov  7 08:24 stallwatch-a08-cap-dialog.log.gz
+-rw-r--r--    1 runner  staff    198034 Nov  7 08:24 stallwatch-a09-nocap-dialog.log.gz
+-rw-r--r--    1 runner  staff    145302 Nov  7 08:24 stallwatch-a10-cap-plain.log.gz
+-rw-r--r--    1 runner  staff    183200 Nov  7 08:24 stallwatch-a11-cap-dialog.log.gz
+-rw-r--r--    1 runner  staff    148057 Nov  7 08:24 stallwatch-a12-nocap-plain.log.gz
+-rw-r--r--    1 runner  staff    152908 Nov  7 08:24 stallwatch-a13-cap-dialog.log.gz
+-rw-r--r--    1 runner  staff    118679 Nov  7 08:24 stallwatch-a14-nocap-plain.log.gz
+-rw-r--r--    1 runner  staff    158076 Nov  7 08:24 stallwatch-a15-nocap-dialog.log.gz

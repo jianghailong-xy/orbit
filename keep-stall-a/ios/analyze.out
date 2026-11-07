@@ -1,0 +1,60 @@
+trial                     capture dialog  tap ms   gap s  main late max  watchdog held  stall?
+a01-nocap-plain           off     false     1045   0.623        493 ms              1  
+a02-cap-dialog            on      true       780   1.300        662 ms              1  
+a03-cap-plain             on      false      920   2.350       2434 ms              0  
+a04-nocap-dialog          off     true      2968   1.427       1173 ms              1  
+a05-cap-plain             on      false     1307   0.043       1274 ms              0  
+a06-nocap-dialog          off     true      1454   0.878       2073 ms              0  
+a07-nocap-plain           off     false     1262   0.648        498 ms              0  
+a08-cap-dialog            on      true      1526   1.146       1259 ms              0  
+a09-nocap-dialog          off     true      1324   0.872        607 ms              0  
+a10-cap-plain             on      false     1099   0.916        759 ms              0  
+a11-cap-dialog            on      true      1709   0.943        643 ms              0  
+a12-nocap-plain           off     false     1135   0.641        444 ms              0  
+a13-cap-dialog            on      true      1604   0.056        705 ms              1  
+a14-nocap-plain           off     false     1118   0.061        502 ms              0  
+a15-nocap-dialog          off     true      1118   0.729        675 ms              0  
+a16-cap-plain             on      false     1194   0.995        581 ms              0  
+a17-nocap-plain           off     false      689   0.572        467 ms              0  
+a18-cap-dialog            on      true      1104   0.703        593 ms              0  
+a19-cap-plain             on      false     1195   0.936        624 ms              0  
+a20-nocap-dialog          off     true      1257   1.211        865 ms              0  
+
+capture off dialog false:  5 presses, 0 over 3 s, gaps 0.06 0.57 0.62 0.64 0.65
+capture off dialog true :  5 presses, 0 over 3 s, gaps 0.73 0.87 0.88 1.21 1.43
+capture on  dialog false:  5 presses, 0 over 3 s, gaps 0.04 0.92 0.94 0.99 2.35
+capture on  dialog true :  5 presses, 0 over 3 s, gaps 0.06 0.70 0.94 1.15 1.30
+
+== a01-nocap-plain (gap 0.623 s)
+  +374 ms STALL BEGIN main queue late by 262 ms (ping 2274 of 2286)
+  +484 ms STALL END after about 359 ms, 1 main samples
+  +1344 ms STALL BEGIN main queue late by 251 ms (ping 2315 of 2325)
+  +1622 ms STALL END after about 528 ms, 3 main samples
+  +16275 ms HELD the watchdog itself did not run for 8292 ms
+
+== a02-cap-dialog (gap 1.300 s)
+  +1543 ms STALL BEGIN main queue late by 268 ms (ping 3660 of 3667)
+  +2001 ms STALL END after about 708 ms, 4 main samples
+  +8053 ms STALL BEGIN main queue late by 265 ms (ping 3947 of 3959)
+  +8075 ms STALL END after about 272 ms, 0 main samples
+  +8638 ms STALL BEGIN main queue late by 264 ms (ping 3973 of 3985)
+  +8661 ms STALL END after about 272 ms, 0 main samples
+  +9421 ms STALL BEGIN main queue late by 264 ms (ping 4008 of 4020)
+  +9489 ms STALL END after about 318 ms, 1 main samples
+  +10280 ms STALL BEGIN main queue late by 265 ms (ping 4047 of 4059)
+  +10303 ms STALL END after about 274 ms, 0 main samples
+  +10586 ms STALL BEGIN main queue late by 260 ms (ping 4061 of 4073)
+  +10651 ms STALL END after about 315 ms, 0 main samples
+  +11230 ms STALL BEGIN main queue late by 258 ms (ping 4091 of 4103)
+  +11316 ms STALL END after about 336 ms, 0 main samples
+  +11571 ms STALL BEGIN main queue late by 255 ms (ping 4107 of 4119)
+  +11636 ms STALL END after about 315 ms, 0 main samples
+  +14220 ms STALL BEGIN main queue late by 264 ms (ping 4229 of 4241)
+  +14243 ms STALL END after about 272 ms, 0 main samples
+  +14851 ms STALL BEGIN main queue late by 264 ms (ping 4258 of 4270)
+  +14896 ms STALL END after about 294 ms, 0 main samples
+  +15170 ms STALL BEGIN main queue late by 254 ms (ping 4273 of 4284)
+  +15300 ms STALL END after about 379 ms, 1 main samples
+  +15818 ms STALL BEGIN main queue late by 259 ms (ping 4302 of 4314)
+  +15840 ms STALL END after about 273 ms, 0 main samples
+  +16126 ms STALL BEGIN main queue late by 265 ms (ping 4316 of 4328)

@@ -1,0 +1,9 @@
+1794037069300 following /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/requests.log
+1794037630871 stall 2: decide answered at 1794037628485, nothing from the app for 2385 ms; app pid 24850
+1794037631241 stall 2: sudo -n spindump 24850 4 10 -file /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/spindump-2.txt
+1794037640728 stall 2 ended: the app's next request at 1794037640690 (gap 12.205 s): 07:47:20.690 [1794037640690] "GET /api/wiki/spaces HTTP/1.1" 200 -
+1794038530467 stall 13: decide answered at 1794038526825, nothing from the app for 3640 ms; app pid 65985
+1794038531486 stall 13: sudo -n spindump 65985 4 10 -file /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/spindump-13.txt
+1794038531771 stall 13 ended: the app's next request at 1794038529383 (gap 2.558 s): 08:02:09.383 [1794038529383] "GET /api/wiki/spaces HTTP/1.1" 200 -
+1794039204214 pass done; waiting for 4 child process(es)
+1794039204346 wrote sentinel.json: 20 decides

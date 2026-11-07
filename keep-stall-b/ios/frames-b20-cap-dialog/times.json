@@ -1,0 +1,71 @@
+{
+ "name": "b20-cap-dialog",
+ "udid": "F0C70C77-E423-4478-B648-3D25045B311B",
+ "videoAsked": 1794039116146,
+ "videoLines": [
+  [
+   1794039120899,
+   "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)"
+  ],
+  [
+   1794039120977,
+   "Recording started"
+  ],
+  [
+   1794039136069,
+   "Recording completed. Writing to disk."
+  ],
+  [
+   1794039136069,
+   ""
+  ],
+  [
+   1794039136069,
+   "Wrote video to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/video-b20-cap-dialog.mp4"
+  ]
+ ],
+ "videoStopAsked": 1794039135601,
+ "videoExit": 0,
+ "frames": [
+  {
+   "i": 0,
+   "file": "f000.png",
+   "start": 1794039121055,
+   "end": 1794039126282,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b20-cap-dialog/f000.png"
+  },
+  {
+   "i": 1,
+   "file": "f001.png",
+   "start": 1794039126282,
+   "end": 1794039128699,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b20-cap-dialog/f001.png"
+  },
+  {
+   "i": 2,
+   "file": "f002.png",
+   "start": 1794039128699,
+   "end": 1794039130095,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b20-cap-dialog/f002.png"
+  },
+  {
+   "i": 3,
+   "file": "f003.png",
+   "start": 1794039130095,
+   "end": 1794039131585,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b20-cap-dialog/f003.png"
+  },
+  {
+   "i": 4,
+   "file": "f004.png",
+   "start": 1794039131585,
+   "end": 1794039135601,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b20-cap-dialog/f004.png"
+  }
+ ]
+}

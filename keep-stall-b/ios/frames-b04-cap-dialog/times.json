@@ -1,0 +1,39 @@
+{
+ "name": "b04-cap-dialog",
+ "udid": "F0C70C77-E423-4478-B648-3D25045B311B",
+ "videoAsked": 1794037831648,
+ "videoLines": [
+  [
+   1794037835278,
+   "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)"
+  ],
+  [
+   1794037835557,
+   "Recording started"
+  ],
+  [
+   1794037847362,
+   "Recording completed. Writing to disk."
+  ],
+  [
+   1794037847362,
+   ""
+  ],
+  [
+   1794037847362,
+   "Wrote video to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/video-b04-cap-dialog.mp4"
+  ]
+ ],
+ "videoStopAsked": 1794037847177,
+ "videoExit": 0,
+ "frames": [
+  {
+   "i": 0,
+   "file": "f000.png",
+   "start": 1794037835742,
+   "end": 1794037847177,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b04-cap-dialog/f000.png"
+  }
+ ]
+}

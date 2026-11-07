@@ -1,0 +1,9 @@
+ 124 "GET /api/projects/sidebar HTTP/1.1" 404 -
+  40 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 404 -
+  23 "GET /api/wiki/spaces/34tET99H7xVwZYbswn2Kf/plan/versions HTTP/1.1" 404 -
+  23 "GET /api/wiki/spaces/34tET99H7xVwZYbswn2Kf/plan HTTP/1.1" 404 -
+  20 "GET /api/wiki/spaces/34tET99H7xVwZYbswn2Kf/share HTTP/1.1" 404 -
+  20 "GET /api/wiki/spaces/34tET99H7xVwZYbswn2Kf/docs HTTP/1.1" 404 -
+  20 "GET /api/wiki/spaces/34tET99H7xVwZYbswn2Kf/chats HTTP/1.1" 404 -
+  20 "GET /api/wiki/spaces/34tET99H7xVwZYbswn2Kf/articles HTTP/1.1" 404 -
+  20 "GET /api/auth/capabilities HTTP/1.1" 404 -

@@ -1,0 +1,44 @@
+Test Case '-[RvProbeUITests.KeepStallTests test01]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test01]' passed (84.545 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test02]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test02]' passed (115.979 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test03]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test03]' passed (134.091 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test04]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test04]' passed (133.379 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test05]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test05]' passed (117.188 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test06]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test06]' passed (122.981 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test07]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test07]' passed (79.473 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test08]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test08]' passed (116.069 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test09]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test09]' passed (136.717 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test10]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test10]' passed (88.445 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test11]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test11]' passed (132.552 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test12]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test12]' passed (78.215 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test13]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test13]' passed (112.101 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test14]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test14]' passed (77.340 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test15]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test15]' passed (115.022 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test16]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test16]' passed (79.594 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test17]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test17]' passed (72.825 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test18]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test18]' passed (101.295 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test19]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test19]' passed (84.702 seconds).
+Test Case '-[RvProbeUITests.KeepStallTests test20]' started.
+Test Case '-[RvProbeUITests.KeepStallTests test20]' passed (127.398 seconds).
+	 Executed 20 tests, with 0 failures (0 unexpected) in 2109.910 (2109.945) seconds
+	 Executed 20 tests, with 0 failures (0 unexpected) in 2109.910 (2109.949) seconds
+	 Executed 20 tests, with 0 failures (0 unexpected) in 2109.910 (2109.951) seconds
+** TEST SUCCEEDED **

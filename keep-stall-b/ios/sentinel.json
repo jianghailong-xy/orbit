@@ -1,0 +1,168 @@
+[
+ {
+  "answered": 1794037528588,
+  "line": "07:45:28.588 [1794037528588] \"POST /api/wiki/changesets/34tETABby3oHms8kNotUh/decide HTTP/1.1\" 200 -",
+  "next": 1794037529445,
+  "nextLine": "07:45:29.445 [1794037529445] \"GET /api/wiki/spaces HTTP/1.1\" 200 -",
+  "gap": 0.857
+ },
+ {
+  "answered": 1794037628485,
+  "line": "07:47:08.485 [1794037628485] \"POST /api/wiki/changesets/34tETABby3oHms8kNotUh/decide HTTP/1.1\" 200 -",
+  "pid": "24850",
+  "fired": 1794037630871,
+  "dump": [
+   "sudo",
+   "-n",
+   "spindump",
+   "24850",
+   "4",
+   "10",
+   "-file",
+   "/Users/runner/work/orbit/orbit/.rv-probe/shots/ios/spindump-2.txt"
+  ],
+  "next": 1794037640690,
+  "nextLine": "07:47:20.690 [1794037640690] \"GET /api/wiki/spaces HTTP/1.1\" 200 -",
+  "gap": 12.205,
+  "ended": 1794037640699
+ },
+ {
+  "answered": 1794037722998,
+  "line": "07:48:42.998 [1794037722998] \"POST /api/wiki/changesets/34tETABby3oHms8kNotUh/decide HTTP/1.1\" 200 -",
+  "next": 1794037723088,
+  "nextLine": "07:48:43.088 [1794037723088] \"GET /api/wiki/spaces HTTP/1.1\" 200 -",
+  "gap": 0.09
+ },
+ {
+  "answered": 1794037837225,
+  "line": "07:50:37.225 [1794037837225] \"POST /api/wiki/changesets/34tETABby3oHms8kNotUh/decide HTTP/1.1\" 200 -",
+  "next": 1794037838162,
+  "nextLine": "07:50:38.162 [1794037838162] \"GET /api/wiki/spaces HTTP/1.1\" 200 -",
+  "gap": 0.937
+ },
+ {
+  "answered": 1794037902872,
+  "line": "07:51:42.872 [1794037902872] \"POST /api/wiki/changesets/34tETABby3oHms8kNotUh/decide HTTP/1.1\" 200 -",
+  "next": 1794037903821,
+  "nextLine": "07:51:43.821 [1794037903821] \"GET /api/sessions?view=open HTTP/1.1\" 200 -",
+  "gap": 0.949
+ },
+ {
+  "answered": 1794038000594,
+  "line": "07:53:20.594 [1794038000594] \"POST /api/wiki/changesets/34tETABby3oHms8kNotUh/decide HTTP/1.1\" 200 -",
+  "next": 1794038002162,
+  "nextLine": "07:53:22.162 [1794038002162] \"GET /api/wiki/spaces HTTP/1.1\" 200 -",
+  "gap": 1.568
+ },
+ {
+  "answered": 1794038072236,
+  "line": "07:54:32.236 [1794038072236] \"POST /api/wiki/changesets/34tETABby3oHms8kNotUh/decide HTTP/1.1\" 200 -",
+  "next": 1794038072302,
+  "nextLine": "07:54:32.302 [1794038072302] \"GET /api/wiki/spaces HTTP/1.1\" 200 -",
+  "gap": 0.066
+ },
+ {
+  "answered": 1794038157799,
+  "line": "07:55:57.799 [1794038157799] \"POST /api/wiki/changesets/34tETABby3oHms8kNotUh/decide HTTP/1.1\" 200 -",
+  "next": 1794038158535,
+  "nextLine": "07:55:58.535 [1794038158535] \"GET /api/wiki/spaces HTTP/1.1\" 200 -",
+  "gap": 0.736
+ },
+ {
+  "answered": 1794038229482,
+  "line": "07:57:09.482 [1794038229482] \"POST /api/wiki/changesets/34tETABby3oHms8kNotUh/decide HTTP/1.1\" 200 -",
+  "next": 1794038230034,
+  "nextLine": "07:57:10.034 [1794038230034] \"GET /api/wiki/spaces HTTP/1.1\" 200 -",
+  "gap": 0.552
+ },
+ {
+  "answered": 1794038288426,
+  "line": "07:58:08.426 [1794038288426] \"POST /api/wiki/changesets/34tETABby3oHms8kNotUh/decide HTTP/1.1\" 200 -",
+  "next": 1794038288457,
+  "nextLine": "07:58:08.457 [1794038288457] \"GET /api/wiki/spaces HTTP/1.1\" 200 -",
+  "gap": 0.031
+ },
+ {
+  "answered": 1794038371478,
+  "line": "07:59:31.478 [1794038371478] \"POST /api/wiki/changesets/34tETABby3oHms8kNotUh/decide HTTP/1.1\" 200 -",
+  "next": 1794038372433,
+  "nextLine": "07:59:32.433 [1794038372433] \"GET /api/wiki/spaces HTTP/1.1\" 200 -",
+  "gap": 0.955
+ },
+ {
+  "answered": 1794038446093,
+  "line": "08:00:46.093 [1794038446093] \"POST /api/wiki/changesets/34tETABby3oHms8kNotUh/decide HTTP/1.1\" 200 -",
+  "next": 1794038446763,
+  "nextLine": "08:00:46.763 [1794038446763] \"GET /api/wiki/spaces HTTP/1.1\" 200 -",
+  "gap": 0.67
+ },
+ {
+  "answered": 1794038526825,
+  "line": "08:02:06.825 [1794038526825] \"POST /api/wiki/changesets/34tETABby3oHms8kNotUh/decide HTTP/1.1\" 200 -",
+  "pid": "65985",
+  "fired": 1794038530469,
+  "dump": [
+   "sudo",
+   "-n",
+   "spindump",
+   "65985",
+   "4",
+   "10",
+   "-file",
+   "/Users/runner/work/orbit/orbit/.rv-probe/shots/ios/spindump-13.txt"
+  ],
+  "next": 1794038529383,
+  "nextLine": "08:02:09.383 [1794038529383] \"GET /api/wiki/spaces HTTP/1.1\" 200 -",
+  "gap": 2.558,
+  "ended": 1794038531751
+ },
+ {
+  "answered": 1794038609696,
+  "line": "08:03:29.696 [1794038609696] \"POST /api/wiki/changesets/34tETABby3oHms8kNotUh/decide HTTP/1.1\" 200 -",
+  "next": 1794038610596,
+  "nextLine": "08:03:30.596 [1794038610596] \"GET /api/wiki/spaces HTTP/1.1\" 200 -",
+  "gap": 0.9
+ },
+ {
+  "answered": 1794038713976,
+  "line": "08:05:13.976 [1794038713976] \"POST /api/wiki/changesets/34tETABby3oHms8kNotUh/decide HTTP/1.1\" 200 -",
+  "next": 1794038714889,
+  "nextLine": "08:05:14.889 [1794038714889] \"GET /api/wiki/spaces HTTP/1.1\" 200 -",
+  "gap": 0.913
+ },
+ {
+  "answered": 1794038786142,
+  "line": "08:06:26.142 [1794038786142] \"POST /api/wiki/changesets/34tETABby3oHms8kNotUh/decide HTTP/1.1\" 200 -",
+  "next": 1794038786681,
+  "nextLine": "08:06:26.681 [1794038786681] \"GET /api/wiki/spaces HTTP/1.1\" 200 -",
+  "gap": 0.539
+ },
+ {
+  "answered": 1794038859969,
+  "line": "08:07:39.969 [1794038859969] \"POST /api/wiki/changesets/34tETABby3oHms8kNotUh/decide HTTP/1.1\" 200 -",
+  "next": 1794038860642,
+  "nextLine": "08:07:40.642 [1794038860642] \"GET /api/wiki/spaces HTTP/1.1\" 200 -",
+  "gap": 0.673
+ },
+ {
+  "answered": 1794038952722,
+  "line": "08:09:12.722 [1794038952722] \"POST /api/wiki/changesets/34tETABby3oHms8kNotUh/decide HTTP/1.1\" 200 -",
+  "next": 1794038952903,
+  "nextLine": "08:09:12.903 [1794038952903] \"GET /api/wiki/spaces HTTP/1.1\" 200 -",
+  "gap": 0.181
+ },
+ {
+  "answered": 1794039021275,
+  "line": "08:10:21.275 [1794039021275] \"POST /api/wiki/changesets/34tETABby3oHms8kNotUh/decide HTTP/1.1\" 200 -",
+  "next": 1794039022073,
+  "nextLine": "08:10:22.073 [1794039022073] \"GET /api/wiki/spaces HTTP/1.1\" 200 -",
+  "gap": 0.798
+ },
+ {
+  "answered": 1794039122893,
+  "line": "08:12:02.893 [1794039122893] \"POST /api/wiki/changesets/34tETABby3oHms8kNotUh/decide HTTP/1.1\" 200 -",
+  "next": 1794039124024,
+  "nextLine": "08:12:04.024 [1794039124024] \"GET /api/wiki/spaces HTTP/1.1\" 200 -",
+  "gap": 1.131
+ }
+]

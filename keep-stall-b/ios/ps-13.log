@@ -1,0 +1,28 @@
+1794038530571 app 65985 Ss    35.2   0:25.93 -
+1794038531215 busy 5480 Ss    43.1 /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/usr/libexec/diagnosticd
+1794038531215 busy 65985 Ss    33.6 /Users/runner/Library/Developer/CoreSimulator/Devices/F0C70C77-E423-4478-B648-3D25045B311B/data/Containers/Bundle/Application/F92425EC-83CA-482F-B4F4-08C67F865911/RvProbe.app/RvProbe
+1794038531215 busy 7323 Rs    21.2 log
+1794038531215 busy 5485 Ss    20.1 /usr/libexec/diagnosticd
+1794038531215 busy 7241 R<    17.1 /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/xcodebuild
+1794038531215 busy 20095 Ss    11.8 /Users/runner/Library/Developer/CoreSimulator/Devices/F0C70C77-E423-4478-B648-3D25045B311B/data/Containers/Bundle/Application/4711078F-CAE4-491D-9600-28A6B77A3300/RvProbeUITests-Runner.app/RvProbeUITests-Runner
+1794038531215 busy 69073 R     11.4 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mdworker_shared
+1794038531215 busy 5488 Ss    10.7 /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/ApplePushService.framework/apsd
+1794038531571 app 65985 Ss     4.6   0:26.06 -
+1794038531736 busy 19431 Rs    66.3 /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/usr/libexec/testmanagerd
+1794038531736 busy 69078 R<    51.0 top
+1794038531736 busy 5480 Ss    21.6 /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/usr/libexec/diagnosticd
+1794038531736 busy 5485 Ss    11.6 /usr/libexec/diagnosticd
+1794038531736 busy 5488 Ss    11.2 /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/ApplePushService.framework/apsd
+1794038531736 busy 5432 Ss     5.4 /Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/Resources/SimRenderingServices.simdeviceio/Contents/XPCServices/SimMetalHost.xpc/Contents/MacOS/SimMetalHost
+1794038531736 busy 69077 U      5.1 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mdworker_shared
+1794038531736 busy 65985 Ss     4.6 /Users/runner/Library/Developer/CoreSimulator/Devices/F0C70C77-E423-4478-B648-3D25045B311B/data/Containers/Bundle/Application/F92425EC-83CA-482F-B4F4-08C67F865911/RvProbe.app/RvProbe
+1794038532040 app 65985 Ss     1.8   0:26.07 -
+1794038532784 app 65985 Ss    32.1   0:26.27 -
+1794038533894 busy 19431 Ss    54.1 /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/usr/libexec/testmanagerd
+1794038533894 busy 5480 Ss    34.3 /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/usr/libexec/diagnosticd
+1794038533894 busy 69091 R<    25.9 spindump
+1794038533894 busy 5485 Ss    18.8 /usr/libexec/diagnosticd
+1794038533894 busy 65985 Ss    14.8 /Users/runner/Library/Developer/CoreSimulator/Devices/F0C70C77-E423-4478-B648-3D25045B311B/data/Containers/Bundle/Application/F92425EC-83CA-482F-B4F4-08C67F865911/RvProbe.app/RvProbe
+1794038533894 busy 5488 Ss    13.0 /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/PrivateFrameworks/ApplePushService.framework/apsd
+1794038533894 busy 69078 R<     7.5 top
+1794038533894 busy 7241 S<     7.3 /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/xcodebuild

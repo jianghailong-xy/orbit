@@ -1,0 +1,6 @@
+1794037132564 following /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/requests.log
+1794037924935 stall 3: decide answered at 1794037919874, nothing from the app for 5041 ms; app pid 28342
+1794037927910 stall 3: sudo -n spindump 28342 4 10 -file /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/spindump-3.txt
+1794037928171 stall 3 ended: the app's next request at 1794037922224 (gap 2.350 s): 07:52:02.224 [1794037922224] "GET /api/sessions?view=open HTTP/1.1" 200 -
+1794039843558 pass done; waiting for 2 child process(es)
+1794039843713 wrote sentinel.json: 20 decides

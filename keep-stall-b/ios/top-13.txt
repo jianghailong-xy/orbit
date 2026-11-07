@@ -1,0 +1,64 @@
+Processes: 822 total, 120 running, 15 stuck, 687 sleeping, 2766 threads 
+2026/11/07 08:02:11
+Load Avg: 184.14, 174.50, 158.38 
+CPU usage: 49.34% user, 50.65% sys, 0.0% idle 
+SharedLibs: 101M resident, 27M data, 130M linkedit.
+MemRegions: 91588 total, 598M resident, 90M private, 955M shared.
+PhysMem: 6995M used (2070M wired, 2993M compressor), 157M unused.
+VM: 326T vsize, 6144M framework vsize, 15870(0) swapins, 53960(0) swapouts.
+Networks: packets: 1593965/2027M in, 171656/32M out.
+Disks: 1901344/51G read, 303388/17G written.
+
+PID    COMMAND          %CPU STATE    TIME     #TH
+69078  top              0.0  running  00:00.37 1/1
+69077  mdworker_shared  0.0  stuck    00:00.07 4  
+69076  mdworker_shared  0.0  stuck    00:00.06 4  
+69075  mdworker_shared  0.0  stuck    00:00.06 4  
+69074  mdworker_shared  0.0  stuck    00:00.06 4  
+69073  mdworker_shared  0.0  stuck    00:00.07 4  
+69072  mdworker_shared  0.0  running  00:00.07 4/1
+69071  mdworker_shared  0.0  stuck    00:00.08 4  
+69067  xpcproxy         0.0  stuck    00:00.01 1  
+69066  mdworker_shared  0.0  stuck    00:00.07 5  
+69065  mdworker_shared  0.0  running  00:00.07 4/2
+69064  mdworker_shared  0.0  stuck    00:00.08 4  
+69063  mdworker_shared  0.0  running  00:00.07 4/1
+69062  mdworker_shared  0.0  sleeping 00:00.07 4  
+69061  mdworker_shared  0.0  running  00:00.07 4/1
+69056  mdworker_shared  0.0  stuck    00:00.07 5  
+69049  mdworker_shared  0.0  stuck    00:00.11 6  
+69047  mdworker_shared  0.0  stuck    00:00.12 5  
+65985  RvProbe          0.0  sleeping 00:26.06 13 
+55724  ScopedBookmarkAg 0.0  sleeping 00:00.14 3  
+Processes: 825 total, 135 running, 689 sleeping, 1 unknown, 2756 threads 
+2026/11/07 08:02:14
+Load Avg: 184.14, 174.50, 158.38 
+CPU usage: 39.23% user, 60.65% sys, 0.11% idle 
+SharedLibs: 101M resident, 27M data, 130M linkedit.
+MemRegions: 321 total, 80M resident, 90M private, 955M shared.
+PhysMem: 6997M used (2071M wired, 3039M compressor), 151M unused.
+VM: 327T vsize, 6144M framework vsize, 15878(8) swapins, 58956(4996) swapouts.
+Networks: packets: 1594170/2027M in, 171841/32M out.
+Disks: 1901984/51G read, 305117/17G written.
+
+PID    COMMAND          %CPU      STATE    TIME     #TH  
+69067  xpcproxy         172493885 unknown  00:00.00 1    
+19431  testmanagerd     44.7      sleeping 00:48.54 4    
+0      kernel_task      30.4      running  03:35.52 193/4
+5480   diagnosticd      19.7      sleeping 08:02.97 15   
+65985  RvProbe          18.2      sleeping 00:26.45 13   
+5488   apsd             11.5      sleeping 02:59.94 45   
+5485   diagnosticd      10.3      sleeping 04:14.98 2    
+1      launchd          8.9       running  00:32.04 5/1  
+5461   backboardd       8.1       sleeping 00:52.69 10   
+5432   SimMetalHost     7.8       sleeping 00:38.44 6    
+69078  top              7.7       running  00:00.54 1/1  
+5399   SimRenderServer  6.6       sleeping 00:46.44 35   
+7241   xcodebuild       3.6       running  02:04.78 13/1 
+7323   log              3.6       sleeping 02:14.64 3    
+7758   trustd           1.8       running  00:23.12 4/1  
+20095  RvProbeUITests-R 1.7       sleeping 00:49.91 7    
+7486   VTEncoderXPCServ 1.7       running  00:13.39 6/3  
+7239   Python           0.9       sleeping 00:02.29 2    
+154    tccd             0.9       sleeping 00:01.92 4    
+5477   notifyd          0.8       running  01:16.46 4/1  

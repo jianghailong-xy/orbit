@@ -1,0 +1,7 @@
+Sampling all processes for 4 seconds with 10 milliseconds of run time between samples
+Focusing on RvProbe [24850]
+Unable to process samples fast enough, throttling sampling rate to avoid bloating memory. Use -noThrottle to avoid this.
+Sampling completed, processing symbols...
+spindump-stuck: Spindump has taken over a minute to process samples and may be stuck, try using -noIPC
+spindump-stuck: Wrote stackshot to /var/tmp/spindump-stuck-stackshot.2026-11-07-07:48:21.27642.buf
+Spindump analysis written to file /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/spindump-2.txt

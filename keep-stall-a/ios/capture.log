@@ -1,0 +1,37 @@
+1794037134861 warm-up screenshot: rc 0 in 2275 ms
+1794037136730 warm-up video: recording after 1859 ms
+1794037142060 warm-up screenshot 2: rc 0 in 1483 ms
+1794037142901 warm-up screenshot 3: rc 0 in 833 ms
+1794037146350 warm-up screenshot 4: rc 0 in 3449 ms
+1794037146352 watching /Users/runner/work/orbit/orbit/.rv-probe/shots/ios for capture requests (udid FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC)
+1794037813997 request a02-cap-dialog
+1794037826123 a02-cap-dialog: video recording ([[1794037826029, 'Recording started']])
+1794037837944 a02-cap-dialog: 10 frames, video exit 0, 2309574 bytes
+1794037915349 request a03-cap-plain
+1794037918392 a03-cap-plain: video recording ([[1794037918284, 'Recording started']])
+1794037962633 a03-cap-plain: 3 frames, video exit 0, 1824099 bytes
+1794038189534 request a05-cap-plain
+1794038194051 a05-cap-plain: video recording ([[1794038194029, 'Recording started']])
+1794038214791 a05-cap-plain: 2 frames, video exit 0, 2299937 bytes
+1794038517559 request a08-cap-dialog
+1794038521767 a08-cap-dialog: video recording ([[1794038521710, 'Recording started']])
+1794038554887 a08-cap-dialog: 9 frames, video exit 0, 1743576 bytes
+1794038748809 request a10-cap-plain
+1794038753930 a10-cap-plain: video recording ([[1794038753915, 'Recording started']])
+1794038773034 a10-cap-plain: 9 frames, video exit 0, 1946278 bytes
+1794038882839 request a11-cap-dialog
+1794038886807 a11-cap-dialog: video recording ([[1794038886736, 'Recording started']])
+1794038899046 a11-cap-dialog: 9 frames, video exit 0, 1916524 bytes
+1794039068102 request a13-cap-dialog
+1794039072058 a13-cap-dialog: video recording ([[1794039071903, 'Recording started']])
+1794039084058 a13-cap-dialog: 5 frames, video exit 0, 2472474 bytes
+1794039348383 request a16-cap-plain
+1794039351828 a16-cap-plain: video recording ([[1794039351817, 'Recording started']])
+1794039365914 a16-cap-plain: 5 frames, video exit 0, 2188863 bytes
+1794039513519 request a18-cap-dialog
+1794039517614 a18-cap-dialog: video recording ([[1794039517553, 'Recording started']])
+1794039548612 a18-cap-dialog: 6 frames, video exit 0, 1769292 bytes
+1794039602187 request a19-cap-plain
+1794039604997 a19-cap-plain: video recording ([[1794039604810, 'Recording started']])
+1794039617635 a19-cap-plain: 7 frames, video exit 0, 2282044 bytes
+1794039843541 pass done

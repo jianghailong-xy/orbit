@@ -1,0 +1,64 @@
+Processes: 784 total, 179 running, 3 stuck, 602 sleeping, 2765 threads 
+2026/11/07 07:52:13
+Load Avg: 272.99, 244.59, 183.00 
+CPU usage: 42.0% user, 58.0% sys, 0.0% idle 
+SharedLibs: 187M resident, 46M data, 67M linkedit.
+MemRegions: 86135 total, 381M resident, 54M private, 632M shared.
+PhysMem: 7063M used (2127M wired, 3002M compressor), 86M unused.
+VM: 311T vsize, 6144M framework vsize, 208(0) swapins, 7612(0) swapouts.
+Networks: packets: 1560036/2013M in, 147723/27M out.
+Disks: 1167019/31G read, 244120/11G written.
+
+PID    COMMAND          %CPU STATE    TIME     #TH
+30432  top              0.0  running  00:00.46 1/1
+30409  simctl           0.0  sleeping 00:00.44 6  
+30245  simctl           0.0  sleeping 00:00.35 3  
+30235  PnROnDeviceWorke 0.0  sleeping 00:00.04 3  
+30225  MessagesAnalytic 0.0  sleeping 00:00.04 2  
+30146  MessagesBlastDoo 0.0  running  00:00.83 3/1
+29849  businessservices 0.0  running  00:00.39 3/1
+29664  ODDIPoirotExperi 0.0  sleeping 00:00.10 2  
+29497  DeviceProperties 0.0  sleeping 00:00.22 2  
+29488  AppleIntelligenc 0.0  running  00:00.16 3/1
+28464  SiriUploadWorker 0.0  sleeping 00:00.06 2  
+28342  RvProbe          0.0  sleeping 00:26.41 11 
+28323  UnilogTelemetryW 0.0  sleeping 00:00.09 3  
+27583  SiriSuggestionsL 0.0  sleeping 00:00.29 2  
+26838  CloudWorker      0.0  sleeping 00:00.09 2  
+26040  nanosystemsettin 0.0  running  00:00.98 7/5
+26037  InputUI          0.0  running  00:01.59 6/1
+26035  kbd              0.0  running  00:01.56 7/3
+25820  TelemetryAggrega 0.0  sleeping 00:00.08 2  
+24947  finhealthd       0.0  sleeping 00:00.33 2  
+Processes: 789 total, 174 running, 3 stuck, 612 sleeping, 2718 threads 
+2026/11/07 07:52:14
+Load Avg: 272.99, 244.59, 183.00 
+CPU usage: 53.52% user, 46.47% sys, 0.0% idle 
+SharedLibs: 187M resident, 46M data, 67M linkedit.
+MemRegions: 391 total, 94M resident, 54M private, 632M shared.
+PhysMem: 7078M used (2095M wired, 2995M compressor), 78M unused.
+VM: 313T vsize, 6144M framework vsize, 208(0) swapins, 7612(0) swapouts.
+Networks: packets: 1560332/2013M in, 148008/28M out.
+Disks: 1167205/31G read, 244136/11G written.
+
+PID    COMMAND          %CPU STATE    TIME     #TH  
+0      kernel_task      43.0 running  02:28.26 194/4
+3280   diagnosticd      27.1 sleeping 05:08.24 10   
+3286   apsd             15.6 sleeping 02:36.52 43   
+3287   diagnosticd      14.9 sleeping 02:51.80 3    
+28342  RvProbe          5.3  sleeping 00:26.88 11   
+979    provjobd22465142 5.3  running  00:51.59 11/3 
+5493   log              4.4  sleeping 00:27.83 2    
+3269   notifyd          2.7  sleeping 00:19.93 2    
+5424   xcodebuild       2.6  running  00:36.39 11/1 
+3199   SimRenderServer  1.9  sleeping 00:17.10 12   
+30432  top              1.7  running  00:00.62 1/1  
+3304   securityd        1.4  sleeping 00:12.91 4    
+1151   Runner.Listener  1.0  running  00:04.42 19/3 
+3232   logd             0.9  sleeping 00:10.78 6    
+3097   com.apple.CoreSi 0.8  sleeping 00:07.01 7    
+4513   trustd           0.8  running  00:19.91 5/2  
+3285   cfprefsd         0.8  sleeping 00:11.13 4    
+3248   identityservices 0.7  sleeping 00:08.79 5    
+216    mDNSResponder    0.6  sleeping 00:05.80 5    
+3111   diskimagesiod    0.4  running  01:28.74 6/3  

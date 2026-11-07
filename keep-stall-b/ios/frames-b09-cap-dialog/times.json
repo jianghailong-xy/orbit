@@ -1,0 +1,191 @@
+{
+ "name": "b09-cap-dialog",
+ "udid": "F0C70C77-E423-4478-B648-3D25045B311B",
+ "videoAsked": 1794038226538,
+ "videoLines": [
+  [
+   1794038228194,
+   "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)"
+  ],
+  [
+   1794038228298,
+   "Recording started"
+  ],
+  [
+   1794038240003,
+   "Recording completed. Writing to disk."
+  ],
+  [
+   1794038240003,
+   ""
+  ],
+  [
+   1794038240003,
+   "Wrote video to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/video-b09-cap-dialog.mp4"
+  ]
+ ],
+ "videoStopAsked": 1794038239942,
+ "videoExit": 0,
+ "frames": [
+  {
+   "i": 0,
+   "file": "f000.png",
+   "start": 1794038228404,
+   "end": 1794038228757,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b09-cap-dialog/f000.png"
+  },
+  {
+   "i": 1,
+   "file": "f001.png",
+   "start": 1794038228757,
+   "end": 1794038228977,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b09-cap-dialog/f001.png"
+  },
+  {
+   "i": 2,
+   "file": "f002.png",
+   "start": 1794038228977,
+   "end": 1794038229543,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b09-cap-dialog/f002.png"
+  },
+  {
+   "i": 3,
+   "file": "f003.png",
+   "start": 1794038229543,
+   "end": 1794038230734,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b09-cap-dialog/f003.png"
+  },
+  {
+   "i": 4,
+   "file": "f004.png",
+   "start": 1794038230734,
+   "end": 1794038231082,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b09-cap-dialog/f004.png"
+  },
+  {
+   "i": 5,
+   "file": "f005.png",
+   "start": 1794038231082,
+   "end": 1794038231361,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b09-cap-dialog/f005.png"
+  },
+  {
+   "i": 6,
+   "file": "f006.png",
+   "start": 1794038231361,
+   "end": 1794038231672,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b09-cap-dialog/f006.png"
+  },
+  {
+   "i": 7,
+   "file": "f007.png",
+   "start": 1794038231672,
+   "end": 1794038232069,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b09-cap-dialog/f007.png"
+  },
+  {
+   "i": 8,
+   "file": "f008.png",
+   "start": 1794038232069,
+   "end": 1794038232511,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b09-cap-dialog/f008.png"
+  },
+  {
+   "i": 9,
+   "file": "f009.png",
+   "start": 1794038232511,
+   "end": 1794038232839,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b09-cap-dialog/f009.png"
+  },
+  {
+   "i": 10,
+   "file": "f010.png",
+   "start": 1794038232839,
+   "end": 1794038233363,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b09-cap-dialog/f010.png"
+  },
+  {
+   "i": 11,
+   "file": "f011.png",
+   "start": 1794038233363,
+   "end": 1794038234593,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b09-cap-dialog/f011.png"
+  },
+  {
+   "i": 12,
+   "file": "f012.png",
+   "start": 1794038234593,
+   "end": 1794038235046,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b09-cap-dialog/f012.png"
+  },
+  {
+   "i": 13,
+   "file": "f013.png",
+   "start": 1794038235046,
+   "end": 1794038235333,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b09-cap-dialog/f013.png"
+  },
+  {
+   "i": 14,
+   "file": "f014.png",
+   "start": 1794038235333,
+   "end": 1794038235657,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b09-cap-dialog/f014.png"
+  },
+  {
+   "i": 15,
+   "file": "f015.png",
+   "start": 1794038235657,
+   "end": 1794038236342,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b09-cap-dialog/f015.png"
+  },
+  {
+   "i": 16,
+   "file": "f016.png",
+   "start": 1794038236342,
+   "end": 1794038237069,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b09-cap-dialog/f016.png"
+  },
+  {
+   "i": 17,
+   "file": "f017.png",
+   "start": 1794038237069,
+   "end": 1794038237877,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b09-cap-dialog/f017.png"
+  },
+  {
+   "i": 18,
+   "file": "f018.png",
+   "start": 1794038237877,
+   "end": 1794038239029,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b09-cap-dialog/f018.png"
+  },
+  {
+   "i": 19,
+   "file": "f019.png",
+   "start": 1794038239029,
+   "end": 1794038239942,
+   "rc": 0,
+   "err": "Note: No display specified. Defaulting to display: 08CB45C3-BBE9-4C58-9B77-35CBA5A58325 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/frames-b09-cap-dialog/f019.png"
+  }
+ ]
+}

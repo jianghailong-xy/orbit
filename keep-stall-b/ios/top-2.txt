@@ -1,0 +1,64 @@
+Processes: 812 total, 38 running, 111 stuck, 663 sleeping, 2768 threads 
+2026/11/07 07:47:11
+Load Avg: 247.73, 211.56, 134.81 
+CPU usage: 32.71% user, 66.54% sys, 0.74% idle 
+SharedLibs: 207M resident, 48M data, 41M linkedit.
+MemRegions: 84034 total, 722M resident, 135M private, 503M shared.
+PhysMem: 7028M used (1957M wired, 2790M compressor), 126M unused.
+VM: 322T vsize, 6144M framework vsize, 11707(0) swapins, 21856(0) swapouts.
+Networks: packets: 1495117/1983M in, 80531/14M out.
+Disks: 1142550/30G read, 255059/11G written.
+
+PID    COMMAND          %CPU STATE    TIME     #TH
+27618  top              0.0  running  00:00.38 1/1
+27568  mdworker_shared  0.0  stuck    00:00.05 4  
+27562  sleep            0.0  sleeping 00:00.00 1  
+27512  bash             0.0  sleeping 00:00.03 1  
+27511  mdworker_shared  0.0  stuck    00:00.08 5  
+27510  mdworker_shared  0.0  stuck    00:00.04 4  
+27509  mdworker_shared  0.0  stuck    00:00.06 4  
+27407  mdworker_shared  0.0  sleeping 00:00.08 4  
+27402  mdworker_shared  0.0  stuck    00:00.07 4  
+27401  mdworker_shared  0.0  stuck    00:00.09 3  
+27400  mdworker_shared  0.0  stuck    00:00.08 4  
+27399  mdworker_shared  0.0  stuck    00:00.07 3  
+27397  mdworker_shared  0.0  stuck    00:00.09 3  
+27396  mdworker_shared  0.0  stuck    00:00.06 3  
+27395  mdworker_shared  0.0  sleeping 00:00.07 5  
+27394  mdworker_shared  0.0  stuck    00:00.08 3  
+27213  mdworker_shared  0.0  stuck    00:00.17 3  
+27204  mdworker_shared  0.0  stuck    00:00.17 3  
+27198  mdworker_shared  0.0  sleeping 00:00.09 3  
+26750  nanosystemsettin 0.0  stuck    00:01.22 4  
+Processes: 815 total, 41 running, 107 stuck, 667 sleeping, 2761 threads 
+2026/11/07 07:47:13
+Load Avg: 247.73, 211.56, 134.81 
+CPU usage: 35.66% user, 64.33% sys, 0.0% idle 
+SharedLibs: 207M resident, 48M data, 41M linkedit.
+MemRegions: 268 total, 61M resident, 135M private, 504M shared.
+PhysMem: 7035M used (1950M wired, 2850M compressor), 116M unused.
+VM: 324T vsize, 6144M framework vsize, 11731(24) swapins, 21856(0) swapouts.
+Networks: packets: 1495231/1983M in, 80633/14M out.
+Disks: 1143316/30G read, 255372/11G written.
+
+PID    COMMAND          %CPU STATE    TIME     #TH  
+0      kernel_task      37.6 running  01:53.57 193/5
+5480   diagnosticd      20.2 sleeping 02:32.07 10   
+5488   apsd             13.5 sleeping 01:02.66 32   
+240    storagekitd      13.3 sleeping 00:14.12 11   
+5485   diagnosticd      10.6 sleeping 01:24.03 2    
+1      launchd          8.6  sleeping 00:16.32 4    
+27618  top              6.5  running  00:00.52 1/1  
+117    diskarbitrationd 5.9  sleeping 00:06.03 2    
+193    authd            2.8  sleeping 00:02.91 5    
+5160   diskimagesiod    2.7  stuck    01:15.86 8    
+7758   trustd           2.1  running  00:08.14 4/1  
+162    trustd           1.4  sleeping 00:10.23 2    
+5499   securityd        1.2  sleeping 00:05.52 4    
+155    cfprefsd         1.0  sleeping 00:03.04 5    
+165    WindowServer     0.9  sleeping 00:03.19 8    
+86     logd             0.7  sleeping 00:04.16 4    
+5450   healthd          0.7  stuck    00:06.81 14   
+994    provjobd28810594 0.7  sleeping 00:41.00 11   
+7239   Python           0.7  sleeping 00:00.83 2    
+148    notifyd          0.7  sleeping 00:02.22 2    

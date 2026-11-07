@@ -1,0 +1,20 @@
+b01-cap-plain lane=b capture=on dialog=false t0=1794037526303 t1=1794037528324 tapMs=2021 answered=1794037528588 next=1794037529445 gap=0.857
+b02-nocap-dialog lane=b capture=off dialog=true t0=1794037627585 t1=1794037640000 tapMs=12415 answered=1794037628485 next=1794037640690 gap=12.205 STALL
+b03-nocap-plain lane=b capture=off dialog=false t0=1794037721850 t1=1794037740316 tapMs=18466 answered=1794037722998 next=1794037723088 gap=0.090
+b04-cap-dialog lane=b capture=on dialog=true t0=1794037836361 t1=1794037837254 tapMs=893 answered=1794037837225 next=1794037838162 gap=0.937
+b05-nocap-plain lane=b capture=off dialog=false t0=1794037902302 t1=1794037903274 tapMs=972 answered=1794037902872 next=1794037903821 gap=0.949
+b06-cap-dialog lane=b capture=on dialog=true t0=1794037999622 t1=1794038000577 tapMs=955 answered=1794038000594 next=1794038002162 gap=1.568
+b07-cap-plain lane=b capture=on dialog=false t0=1794038071656 t1=1794038072696 tapMs=1040 answered=1794038072236 next=1794038072302 gap=0.066
+b08-nocap-dialog lane=b capture=off dialog=true t0=1794038157356 t1=1794038158291 tapMs=935 answered=1794038157799 next=1794038158535 gap=0.736
+b09-cap-dialog lane=b capture=on dialog=true t0=1794038228993 t1=1794038229833 tapMs=840 answered=1794038229482 next=1794038230034 gap=0.552
+b10-nocap-plain lane=b capture=off dialog=false t0=1794038288090 t1=1794038288766 tapMs=676 answered=1794038288426 next=1794038288457 gap=0.031
+b11-nocap-dialog lane=b capture=off dialog=true t0=1794038370883 t1=1794038372235 tapMs=1352 answered=1794038371478 next=1794038372433 gap=0.955
+b12-cap-plain lane=b capture=on dialog=false t0=1794038445184 t1=1794038446118 tapMs=934 answered=1794038446093 next=1794038446763 gap=0.670
+b13-nocap-dialog lane=b capture=off dialog=true t0=1794038526185 t1=1794038529339 tapMs=3154 answered=1794038526825 next=1794038529383 gap=2.558
+b14-cap-plain lane=b capture=on dialog=false t0=1794038608753 t1=1794038610202 tapMs=1449 answered=1794038609696 next=1794038610596 gap=0.900
+b15-cap-dialog lane=b capture=on dialog=true t0=1794038713200 t1=1794038714563 tapMs=1363 answered=1794038713976 next=1794038714889 gap=0.913
+b16-nocap-plain lane=b capture=off dialog=false t0=1794038785487 t1=1794038786477 tapMs=990 answered=1794038786142 next=1794038786681 gap=0.539
+b17-cap-plain lane=b capture=on dialog=false t0=1794038859195 t1=1794038860347 tapMs=1152 answered=1794038859969 next=1794038860642 gap=0.673
+b18-nocap-dialog lane=b capture=off dialog=true t0=1794038952016 t1=1794038952717 tapMs=701 answered=1794038952722 next=1794038952903 gap=0.181
+b19-nocap-plain lane=b capture=off dialog=false t0=1794039020582 t1=1794039021705 tapMs=1123 answered=1794039021275 next=1794039022073 gap=0.798
+b20-cap-dialog lane=b capture=on dialog=true t0=1794039121716 t1=1794039122830 tapMs=1114 answered=1794039122893 next=1794039124024 gap=1.131

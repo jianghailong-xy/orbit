@@ -1,0 +1,6 @@
+Sampling all processes for 4 seconds with 10 milliseconds of run time between samples
+Focusing on RvProbe [28342]
+Sampling completed, processing symbols...
+spindump-stuck: Spindump has taken over a minute to process samples and may be stuck, try using -noIPC
+spindump-stuck: Wrote stackshot to /var/tmp/spindump-stuck-stackshot.2026-11-07-07:53:18.30513.buf
+Spindump analysis written to file /Users/runner/work/orbit/orbit/.rv-probe/shots/ios/spindump-3.txt
