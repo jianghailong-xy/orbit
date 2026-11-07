@@ -1062,9 +1062,11 @@ describe('project-specific supplemental reads', { timeout: 60_000 }, () => {
     })).toBe(false);
   });
 
+  // In the coordinator's workspace, the one place its project has a row (owner 11-07): the member waiting
+  // in another workspace is read through the project.
   it('only supplements projects in the current list that lack a coordinator or waiting member', async () => {
-    rows = [LOOSE, TASK];
-    remoteRows = [{ ...COORDINATOR, workspaceId: OTHER_WORKSPACE_ID, workspace: { id: OTHER_WORKSPACE_ID, name: 'other workspace' } }, remote(828, 'Remote waiting question', { pendingApprovals: 1, waitingKind: 'OWNER_CONFIRMATION' })];
+    rows = [LOOSE, COORDINATOR, TASK];
+    remoteRows = [remote(828, 'Remote waiting question', { pendingApprovals: 1, waitingKind: 'OWNER_CONFIRMATION' })];
     await mount();
     await until(() => expect(preview()?.textContent).toContain('Remote waiting question'));
     expect(projectQueryCalls().length).toBeGreaterThan(0);
@@ -1090,8 +1092,8 @@ describe('project-specific supplemental reads', { timeout: 60_000 }, () => {
 
   it.each(['entry', 'page'])('keeps the %s query stable on unrelated events and debounces project-member updates', async (surface) => {
     withControlPlane = true;
-    rows = [LOOSE, TASK];
-    remoteRows = [{ ...COORDINATOR, workspaceId: OTHER_WORKSPACE_ID, workspace: { id: OTHER_WORKSPACE_ID, name: 'other workspace' } }, remote(829, 'Remote waiting question', { pendingApprovals: 1, waitingKind: 'OWNER_CONFIRMATION' })];
+    rows = [LOOSE, COORDINATOR, TASK];
+    remoteRows = [remote(829, 'Remote waiting question', { pendingApprovals: 1, waitingKind: 'OWNER_CONFIRMATION' })];
     await mount();
     await until(() => expect(preview()?.textContent).toContain('Remote waiting question'));
     if (surface === 'page') await openSessions();

@@ -2325,7 +2325,9 @@ export function WorkspaceView({
   const rowView = projectView ?? view;
   const sessionRowView = useCallback((session: SessionListItem): SessionView => openProjectId
     ? sessionLifecycleStateOf(session).toLowerCase() as SessionView : rowView, [openProjectId, rowView]);
-  const onRowTouchStart = (e: ReactTouchEvent, session: any, canFullSwipe: boolean, projectId?: string): void => {
+  const onRowTouchStart = (
+    e: ReactTouchEvent, session: any, canFullSwipe: boolean, projectId?: string, movable = sessionMovable(session),
+  ): void => {
     if (!isMobile) return;
     const t = e.touches[0];
     // Clear any guard left set by a prior swipe that fired no trailing click, so the next
@@ -2336,7 +2338,7 @@ export function WorkspaceView({
     const rect = e.currentTarget.getBoundingClientRect();
     const geometry = projectId
       ? { leadingWidth: SWIPE_ACTION_WIDTH, trailingWidth: SWIPE_ACTION_WIDTH, fullSwipeAt: null, maxOffset: SWIPE_ACTION_WIDTH + 20 }
-      : swipeGeometry(sessionRowView(session), rect.width, canFullSwipe, sessionMovable(session));
+      : swipeGeometry(sessionRowView(session), rect.width, canFullSwipe, movable);
     swipeRef.current = {
       session,
       id,
@@ -2916,9 +2918,10 @@ export function WorkspaceView({
     return list;
   }, [sessions, resolvedWorkspaceId, tagFilter]);
   // Other workspaces may contain only workers. Read the project's words across workspaces,
-  // keeping this view's activity and folder count scoped to its own members.
+  // keeping this view's activity and folder count scoped to its own members. From the list's first
+  // frame, not a render later when `projectsShown` catches up: the landing waits on these reads.
   const projectData = useSessionProjectData({
-    sessions: visibleSessions, view: effectiveView, enabled: projectsShown && !openProjectId,
+    sessions: visibleSessions, view: effectiveView, enabled: listShowsProjects(effectiveView, listByTag) && !openProjectId,
     controlLive, needsYou: (s) => sessionLine(s, true, sessionWatching(watchingBySession, s.id)).tone === 'approval',
   });
   // `includeLanding`: the page's Landings group lists the project's LANDING sessions, and no other
@@ -3047,6 +3050,7 @@ export function WorkspaceView({
       byTag: listByTag,
       folderId: openFolder?.id,
       coordinators: projectData.coordinators,
+      workspaceId: resolvedWorkspaceId,
       contentSessions: projectData.contentSessions,
       runnerOffline: runner.online === false,
       needsYou: sessionNeedsYou,
@@ -3055,23 +3059,15 @@ export function WorkspaceView({
         effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled, machineName(runner)),
     }),
     [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
-      effectiveView, listByTag, runner.online, runner.name, runner.displayName, watchingBySession, selectedSession, recapsEnabled],
+      effectiveView, listByTag, runner.online, runner.name, runner.displayName, watchingBySession, selectedSession, recapsEnabled,
+      resolvedWorkspaceId],
   );
-  // A project's entry stands for its coordinator only in the workspace the coordinator runs in.
-  // Elsewhere it holds that workspace's own members, as a folder row holds its sessions: the arrow keys
-  // pass over it and a landing never picks it, because opening the coordinator would swap this list for
-  // the coordinator's workspace. A click still opens the project's sessions page (owner 10-17,
-  // docs/mocks/project-row-other-workspace).
-  const entrySession = useCallback(
-    (entry: { coordinator: SessionListItem | null }): SessionListItem[] =>
-      entry.coordinator && (!resolvedWorkspaceId || entry.coordinator.workspace?.id === resolvedWorkspaceId)
-        ? [entry.coordinator] : [],
-    [resolvedWorkspaceId],
-  );
+  // A project's entry is in the list only where its coordinator runs (owner 2026-11-07), so it stands
+  // for the coordinator; one with no coordinator is passed over, as a folder row is.
   const listedSessions = useMemo(
     () => openProjectId ? projectMembers : folderListing.entries.flatMap((entry) => entry.kind === 'project'
-      ? entrySession(entry) : [entry]),
-    [folderListing, openProjectId, projectMembers, entrySession],
+      ? entry.coordinator ? [entry.coordinator] : [] : [entry]),
+    [folderListing, openProjectId, projectMembers],
   );
   // Where a session opened from this list lives. On a folder's page the page goes along, so the
   // list stays on it while the conversations it lists are opened one after another.
@@ -3177,8 +3173,8 @@ export function WorkspaceView({
   // and tag grouping regroups outright — so anything that moves the cursor by a row (Up/Down,
   // "open the next one after completing") has to walk this, not the pre-section list.
   const orderedSessions = useMemo(() => sections.flatMap((s) => s.sessions.flatMap((entry) =>
-    entry.kind === 'project' ? entrySession(entry) : [entry],
-  )), [sections, entrySession]);
+    entry.kind === 'project' ? entry.coordinator ? [entry.coordinator] : [] : [entry],
+  )), [sections]);
 
   // Right-pane mode. A real session (/sessions/<id>) shows its conversation; with
   // none selected we're composing a new session — explicitly (/workspaces/<id>/new),
@@ -3224,6 +3220,9 @@ export function WorkspaceView({
     // session filed in a folder could be picked from under it. A server without folders answers
     // with an error, which is known too.
     if (foldersQ.isPending) return;
+    // Nor before each project's coordinator is found: where it runs decides whether the project's members
+    // here are rows of their own or held in its row (owner 2026-11-07).
+    if (projectData.placing) return;
     const remembered = scopeWorkspaceId ? lastSessionByWorkspace.get(scopeWorkspaceId) : undefined;
     const target = listedSessions.find((s) => s.id === remembered) ?? listedSessions[0];
     if (target) navigate(sessionItemPath(target), { replace: true });
@@ -3236,6 +3235,7 @@ export function WorkspaceView({
     view,
     sessionsQ.isSuccess,
     foldersQ.isPending,
+    projectData.placing,
     listedSessions,
     scopeWorkspaceId,
     navigate,
@@ -9488,7 +9488,10 @@ export function WorkspaceView({
                 }
                 const actionSession = selectedSession?.id === s.id ? selectedSession : s;
                 const memberView = sessionRowView(actionSession);
-                const movable = sessionMovable(s);
+                // A member whose project has no row here is a row of its own, filed by its own folder
+                // (owner 2026-11-07).
+                const mark = s.projectMark;
+                const movable = sessionMovable(s) || !!mark;
                 const swipeActions = sessionSwipeActions(memberView, movable);
                 const swipeSizes = swipeWidths(memberView, movable);
                 const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);
@@ -9588,7 +9591,7 @@ export function WorkspaceView({
                           navigate(sessionItemPath(actionSession), { state: stampFromList() }),
                         );
                     }}
-                    onTouchStart={(e) => { if (!renaming) onRowTouchStart(e, actionSession, canFullSwipe); }}
+                    onTouchStart={(e) => { if (!renaming) onRowTouchStart(e, actionSession, canFullSwipe, undefined, movable); }}
                     onTouchMove={onRowTouchMove}
                     onTouchEnd={onRowTouchEnd}
                     onTouchCancel={onRowTouchCancel}
@@ -9657,6 +9660,34 @@ export function WorkspaceView({
                                 or waiting on, else its recap (sessionLine). Tags are filed and
                                 filtered by, not drawn on the row (the owner, 2026-10-22). */}
                             <div className="session-sub">
+                              {/* A member whose project has no row in this workspace: the project's
+                                  progress, which opens its sessions page (owner 2026-11-07). */}
+                              {mark && (
+                                <button
+                                  type="button"
+                                  className={`session-project-progress${mark.status === 'DONE' ? ' done' : ''}`}
+                                  title={SESSION_PROJECT_COPY.markHint(mark.title)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (swipeClickGuard.current) {
+                                      swipeClickGuard.current = false;
+                                      return;
+                                    }
+                                    if (swipeOpen) {
+                                      setSwipeOpen(null);
+                                      return;
+                                    }
+                                    enterProjectSessions(mark.projectId);
+                                  }}
+                                >
+                                  {mark.taskCounts ? (
+                                    <>
+                                      <SessionProjectProgressBar counts={mark.taskCounts} runningCount={mark.runningCount} />
+                                      {SESSION_PROJECT_COPY.progress(mark.taskCounts.done, mark.taskCounts.total)}
+                                    </>
+                                  ) : mark.status}
+                                </button>
+                              )}
                               <div
                                 className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
                               >

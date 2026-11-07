@@ -507,6 +507,26 @@ export class ProjectsController {
   }
 
   /**
+   * Complete on a finished project's row (docs/session-list-projects-design.md §3.6): its coordinator
+   * and its members still in Open, in every workspace, moved to Completed together; the answer is
+   * `{ completed }`, how many moved (`ProjectsService.completeSessions`). A DONE or CANCELLED project
+   * only — an OPEN one is 409 PROJECT_STILL_OPEN — and another owner's project is a 404.
+   *
+   * The owner's press, on the start door's rule: the header an agent's request carries,
+   * `X-Orbit-Session-Id`, is handed on so a request made from a session is refused 403
+   * PROJECT_SESSIONS_COMPLETE_OWNER_ONLY whatever credential came with it.
+   */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Post(':id/sessions/complete')
+  completeSessions(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Headers('x-orbit-session-id') actingSessionId: string | undefined,
+  ) {
+    return this.projects.completeSessions(user.userId, id, actingSessionId);
+  }
+
+  /**
    * Which held criteria proposals this project's owner is being asked to decide — and, on each
    * row, the `commitToken` that answers it.
    *
