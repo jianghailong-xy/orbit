@@ -31,7 +31,7 @@ import { freshRunningBgJobs } from './background-job-activity';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
-import { isOrbitAuthoredTurn } from './orbit-authored-turn';
+import { isOrbitAuthoredTurn, isOrbitAuthoredTurnOf, openingTurnKey } from './orbit-authored-turn';
 import { importForkSessionId } from './import-fork';
 import { assertMayMoveRuns, assertSessionMayReach, type SessionAct } from './session-reach';
 import {
@@ -1005,6 +1005,13 @@ export class SessionsService {
        */
       titleManagedByProject?: boolean;
       /**
+       * The platform wrote `dto.prompt`, not a person (0493): set by the doors that open a session with
+       * a prompt of their own — a project's coordinator, a judgment, a task list's dispatch console, an
+       * @-mention's reply. Its opening turn is then Orbit's on the row and the queue
+       * (`isOrbitAuthoredTurnOf`). Internal: public session creation cannot claim it.
+       */
+      promptByOrbit?: boolean;
+      /**
        * The HTTP create door's credential. A personal access token may not choose `permissionMode`
        * at all, to any value, for the reason `updateConfig` refuses it one (§5.1 of
        * docs/personal-access-token-design.md): a session opened in a mode that runs without asking
@@ -1461,6 +1468,7 @@ export class SessionsService {
         title,
         titleManagedByProject: opts?.titleManagedByProject ?? false,
         titleBeforeProjectManagement: null,
+        promptByOrbit: opts?.promptByOrbit ?? false,
         branch,
         prompt: dto.prompt,
         status: RunStatus.PENDING,
@@ -1611,6 +1619,8 @@ export class SessionsService {
     const {
       titleManagedByProject: _titleManagedByProject,
       titleBeforeProjectManagement: _titleBeforeProjectManagement,
+      // Read where the row is (orbit-authored-turn.ts); the row already says it as `lastUserFromOrbit`.
+      promptByOrbit: _promptByOrbit,
       ...publicSession
     } = session;
     return withSessionState(publicSession);
@@ -4295,6 +4305,8 @@ export class SessionsService {
       sharedAt: _retiredSharedAt,
       titleManagedByProject: _titleManagedByProject,
       titleBeforeProjectManagement: _titleBeforeProjectManagement,
+      // Internal, as in `create`: the row says it as `lastUserFromOrbit`, the queue as `authoredByOrbit`.
+      promptByOrbit: _promptByOrbit,
       // Read, never spread: it is the input to the count below, and a client that wants to know
       // which jobs are moving asks the count, not the per-job instants behind it.
       runningBgJobActivity,
@@ -5737,7 +5749,7 @@ export class SessionsService {
    *  / queue.service.buildSession. It's a real PENDING message turn but isn't a withdrawable
    *  queued follow-up, so the queued-turn list/cancel paths exclude it. */
   static initialTurnClientId(sessionId: string): string {
-    return `initial-${sessionId}`;
+    return openingTurnKey(sessionId);
   }
 
   /** Allocate a turn while the caller holds the Session row lock. */
@@ -6843,7 +6855,8 @@ export class SessionsService {
       where: { id, ownerId },
       // What the cards are read against (turn-cards.ts): whose rows they may name, and the task a
       // run's brief was built from. And whether it is a wiki chat, whose opening turn is its prompt.
-      select: { id: true, ownerId: true, taskId: true, runSource: true, wikiChatSpaceId: true },
+      // And whether the platform wrote that prompt (0493), which makes the opening Orbit's.
+      select: { id: true, ownerId: true, taskId: true, runSource: true, wikiChatSpaceId: true, promptByOrbit: true },
     });
     if (!session) throw new NotFoundException('session not found');
     const turns = await this.prisma.conversationTurn.findMany({
@@ -6928,7 +6941,7 @@ export class SessionsService {
             mimeType: attachment.mimeType,
           })),
           ...cards.get(turn.id),
-          ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
+          ...(isOrbitAuthoredTurnOf(session, turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
         };
       });
     }
@@ -6997,7 +7010,7 @@ export class SessionsService {
               }
             : {}),
           ...cards.get(turn.id),
-          ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
+          ...(isOrbitAuthoredTurnOf(session, turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
           content,
           createdAt: turn.createdAt.toISOString(),
           attachments: turn.attachments.map((attachment) => ({

@@ -1,7 +1,7 @@
 import type { CoordinatorDeliveryCard, OrbitMessageFrom } from '@orbit/shared';
 
 import { readCoordinatorDeliveryCards } from '../projects/coordinator-delivery-card';
-import { isOrbitAuthoredTurn } from './orbit-authored-turn';
+import { isOrbitAuthoredTurn, isOrbitAuthoredTurnOf } from './orbit-authored-turn';
 import type { TurnCards } from './turn-cards';
 
 /**
@@ -17,11 +17,17 @@ import type { TurnCards } from './turn-cards';
  * confirmation's review…), or a turn the conversation draws as one of the platform's own cards. The
  * second adds a task run's brief on the turn that opened its session: every session's prompt is
  * filed under the same `initial-<id>` key, and the brief is told from a person's opening only by its
- * card (`readTaskStartCard`).
+ * card (`readTaskStartCard`). The opening of a session the platform opened with a prompt of its own
+ * and no card — a coordinator, a judgment, a dispatch console, an @-mention's reply — is told by the
+ * session's own column instead (`isOrbitAuthoredTurnOf`, `session.prompt_by_orbit`).
+ *
+ * The same reading decides whether a failed turn's re-send is Orbit's (auto-retry.service.ts), so a
+ * message is Orbit's on its re-send exactly where it was before it failed.
  */
 export function orbitMessageOf(
   turn: { clientTurnId: string | null; senderSessionId: string | null },
   cards: TurnCards | undefined,
+  session: { id: string; promptByOrbit: boolean },
 ): OrbitMessageFrom | null {
   if (turn.senderSessionId) return null;
   const platformCard = cards !== undefined && (
@@ -33,7 +39,7 @@ export function orbitMessageOf(
     || cards.confirmationReviewRequest !== undefined
     || cards.confirmationReturn !== undefined
   );
-  if (!platformCard && !isOrbitAuthoredTurn(turn.clientTurnId)) return null;
+  if (!platformCard && !isOrbitAuthoredTurnOf(session, turn.clientTurnId)) return null;
   return { coordinatorDelivery: cards?.coordinatorDelivery ?? null };
 }
 

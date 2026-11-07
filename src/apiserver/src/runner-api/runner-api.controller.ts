@@ -597,6 +597,9 @@ const INGEST_SESSION_SELECT = {
   // this batch is the one that delivers the task's brief (`readTurnCards`).
   taskId: true,
   runSource: true,
+  // That the platform wrote this session's opening prompt (0493): its opening turn's echo is then
+  // Orbit's message on the row (`orbitMessageOf`), not the owner's.
+  promptByOrbit: true,
   // The line an account-pool member switch owes the transcript, taken by the first
   // engine start a batch carries (QueueService.resolvePoolMember writes it).
   poolSwitchNotice: true,
@@ -8225,7 +8228,9 @@ export class RunnerApiController {
           const card = cards?.sessionMessage;
           pendingUserFrom = card ? { sessionId: card.fromSessionId, title: card.fromTitle } : null;
           const turn = e.turnId ? userTurnById.get(e.turnId) : undefined;
-          pendingUserOrbit = turn ? orbitMessageOf(turn, cards) : null;
+          pendingUserOrbit = turn
+            ? orbitMessageOf(turn, cards, { id: sessionId, promptByOrbit: session.promptByOrbit })
+            : null;
         } else if (ANSWERS_USER_TURN.has(e.type)) {
           pendingUserText = null;
           pendingUserFrom = null;

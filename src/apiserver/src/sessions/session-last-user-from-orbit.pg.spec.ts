@@ -16,6 +16,16 @@
  *   4. The reply that clears `lastUserText` clears the mark with it, in the same write.
  *   5. The list (`GET /sessions`, its project read and its delta read), the detail (`GET /sessions/:id`)
  *      and the `session.updated` summary say the same thing.
+ *   6. A failed message re-sent — by the auto-retry sweep, or by the failure card's Retry — is Orbit's
+ *      where the message was: Orbit's words go out again under `auto-retry:orbit:`, so the row says
+ *      Orbit with their first line and the queue lists the re-send `authoredByOrbit` (a client hands
+ *      none of it back to the composer, and it cannot be sent into the current turn); the owner's own
+ *      message is re-sent under the bare `auto-retry:` key and is the owner's; another session's keeps
+ *      its sender.
+ *   7. The opening of a session the platform opened with a prompt of its own — a project's coordinator,
+ *      a judgment, a task list's dispatch console, an @-mention's reply — is Orbit's from its echo
+ *      (`session.prompt_by_orbit`, 0493), and so is its re-send; a person's own opening, made by the same
+ *      create, is the owner's.
  *
  * The doors are the real services and runner controllers; the inbox, the event ingest and the owner's
  * reads are reached over real HTTP, through their guards and the public-id interceptor main.ts installs;
@@ -57,6 +67,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
 import { CoordinatorDeliveryService, coordinatorDeliveryTurnId } from '../projects/coordinator-delivery.service';
+import { CoordinatorJudgmentService } from '../projects/coordinator-judgment.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
@@ -81,6 +92,7 @@ import { ScheduledWakeupWorker } from '../runner-api/scheduled-wakeup.worker';
 import type { ScheduledWakeupDto } from '../runner-api/scheduled-wakeup';
 import { SessionTagsService } from '../session-tags/session-tags.service';
 import { ListEventsService } from '../task-lists/list-events.service';
+import { TaskListsService } from '../task-lists/task-lists.service';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { buildTaskExecutionPrompt } from '../tasks/task-execution-prompt';
 import { ownerSendBackClientTurnId } from '../tasks/task-owner-confirmation';
@@ -96,6 +108,8 @@ import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
 import {
+  AUTO_RETRY_ORBIT_TURN_KEY_PREFIX,
+  AUTO_RETRY_TURN_KEY_PREFIX,
   CONFIRMATION_RETURN_TURN_KEY_PREFIX,
   EVIDENCE_SEND_BACK_TURN_KEY_PREFIX,
   OWNER_CONFIRMATION_ANSWERS_TURN_KEY_PREFIX,
@@ -375,7 +389,9 @@ test('a session row says when the message it previews is Orbit’s own', {
   async function claimToMessage(sessionId: string): Promise<Answer> {
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
-      await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+      // The runner here sends no process identity with its events, as a runner from before takeover
+      // does: they are written while the row names none, and a revive (a retry's re-send) installs one.
+      await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING, inboxLeaseOwner: null } });
     });
     for (let i = 0; i < 3; i++) {
       const delivered = await asRunner('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox?leaseGeneration=${await sessionLease(prisma, sessionId)}`);
@@ -768,5 +784,245 @@ test('a session row says when the message it previews is Orbit’s own', {
     const told = await turnKeyed(coordinator, coordinatorDeliveryTurnId(wakeIdempotencyKey(fact)));
     const card = await queuedCard(coordinator, told.id);
     await assertEverywhere(coordinator, { text: told.content, from: null, orbit: { coordinatorDelivery: card! } }, 'Orbit’s, behind the worker’s', projectId);
+  });
+
+  // ── 4. a failed message, re-sent ──────────────────────────────────────────────────────────────
+
+  const autoRetry = new AutoRetryService(db, sessions, silent() as never);
+  // The sweep reads every armed session there is. It is run with a `now` of its own, decades back, so it
+  // can only pick up the rows armed for it below.
+  let armedAt = new Date('1999-01-01T00:00:00.000Z');
+
+  /**
+   * The runner took the session's next turn and echoed it, then the provider killed it: the turn settled
+   * and the session parked FAILED with a retry armed, as ingest's provider-error branch leaves it. Answers
+   * the instant to sweep at.
+   */
+  async function failAfterEcho(sessionId: string): Promise<Date> {
+    await echo(sessionId, await claimToMessage(sessionId));
+    await prisma.conversationTurn.updateMany({
+      where: { sessionId, status: 'IN_FLIGHT' },
+      data: { status: 'ANSWERED', answeredAt: new Date() },
+    });
+    armedAt = new Date(armedAt.getTime() + 60_000);
+    await prisma.session.update({
+      where: { id: sessionId },
+      data: {
+        status: RunStatus.FAILED, retryAt: armedAt, retryAttempts: 0,
+        cancelRequestedAt: new Date(), finishedAt: new Date(),
+      },
+    });
+    // A resume refuses a runner that has not been heard from in 90s, and this file runs for minutes.
+    await prisma.runner.update({ where: { id: runnerId }, data: { lastHeartbeatAt: new Date() } });
+    return new Date(armedAt.getTime() + 1_000);
+  }
+
+  /** The one re-send on a session: the turn under the re-send namespace. */
+  async function resendOf(sessionId: string) {
+    return turnKeyed(sessionId, AUTO_RETRY_TURN_KEY_PREFIX);
+  }
+
+  /**
+   * How the queue lists a waiting turn: whether it is `authoredByOrbit` on each view that lists it — the
+   * active view always, being the queue's head, and the narrow one where it lists it at all. That flag is
+   * what a client reads before handing a turn taken off the queue unrun back to the composer (web
+   * `restorableQueuedText`, OrbitKit `ComposerLogic.restorableText`). And what the door that sends a
+   * queued turn into the current one answers.
+   */
+  async function queuedAsOrbit(sessionId: string, turnId: string, orbit: boolean, label: string) {
+    const active = (await sessions.listQueuedTurns(ownerId, sessionId, 'active')).find((row) => row.turnId === turnId);
+    assert.ok(active, `${label}: the active queue view does not list the re-send`);
+    const narrow = (await sessions.listQueuedTurns(ownerId, sessionId)).find((row) => row.turnId === turnId);
+    for (const row of narrow ? [active, narrow] : [active]) {
+      assert.equal((row as { authoredByOrbit?: true }).authoredByOrbit, orbit ? true : undefined, `${label}: authoredByOrbit`);
+    }
+    // Sent into the current turn: refused as a message nobody typed, or refused only for want of one.
+    await assert.rejects(sessions.steerQueuedTurn(ownerId, sessionId, turnId), (error: Error) => {
+      assert.equal(/Only a message you typed/.test(error.message), orbit, `${label}: ${error.message}`);
+      return true;
+    });
+  }
+
+  await t.test('a fact told to a coordinator, re-sent by the failure card’s Retry, is Orbit’s again, with its first line', async () => {
+    const { projectId, coordinator } = await coordinatedProject('the project whose notification the quota killed');
+    const ready = await task('Re-send it as Orbit’s', { projectId });
+    const fact = dependentReadyFact({ projectId, taskId: ready, title: 'Re-send it as Orbit’s', dispatchEpoch: 1 });
+    assert.equal((await deliveries.queue(fact, allow)).outcome, 'DELIVERED');
+    const told = await turnKeyed(coordinator, coordinatorDeliveryTurnId(wakeIdempotencyKey(fact)));
+    await failAfterEcho(coordinator);
+
+    const resent = await autoRetry.resendRetryMessage(ownerId, coordinator);
+    const turn = await resendOf(coordinator);
+    assert.equal(turn.id, resent.turnId);
+    assert.ok(turn.clientTurnId.startsWith(`${AUTO_RETRY_ORBIT_TURN_KEY_PREFIX}retry-message:`), turn.clientTurnId);
+    assert.equal(turn.content, told.content);
+    // No notification card is read under the re-send's key, so the row says the message's first line.
+    await assertEverywhere(coordinator, { text: told.content, from: null, orbit: ORBIT }, 'the notification, re-sent', projectId);
+    await queuedAsOrbit(coordinator, turn.id, true, 'the notification, re-sent');
+
+    const delivered = await claimToMessage(coordinator);
+    assert.equal(delivered.json.turnId, turn.id);
+    await echo(coordinator, delivered);
+    await assertEverywhere(coordinator, { text: told.content, from: null, orbit: ORBIT }, 'the notification, re-sent, echoed', projectId);
+    await reply(coordinator, delivered);
+    await assertEverywhere(coordinator, { text: null, from: null, orbit: null }, 'the notification, re-sent, answered', projectId);
+  });
+
+  await t.test('a message under a key of Orbit’s, re-sent by the sweep, is Orbit’s under auto-retry:orbit:', async () => {
+    const run = await session('a run whose send-back note the provider dropped');
+    const note = 'a send-back’s note handed to the run\n\nThe column is still missing.';
+    await sessions.createTurn(ownerId, run, { clientTurnId: `${EVIDENCE_SEND_BACK_TURN_KEY_PREFIX}${randomUUID()}`, content: note } as never);
+    await autoRetry.sweep(await failAfterEcho(run));
+
+    const turn = await resendOf(run);
+    assert.ok(turn.clientTurnId.startsWith(AUTO_RETRY_ORBIT_TURN_KEY_PREFIX), turn.clientTurnId);
+    assert.ok(!turn.clientTurnId.startsWith(`${AUTO_RETRY_ORBIT_TURN_KEY_PREFIX}retry-message:`), 'the sweep wrote a press’s key');
+    await assertEverywhere(run, { text: note, from: null, orbit: ORBIT }, 'the note, re-sent by the sweep');
+    await queuedAsOrbit(run, turn.id, true, 'the note, re-sent by the sweep');
+    await echo(run, await claimToMessage(run));
+    await assertEverywhere(run, { text: note, from: null, orbit: ORBIT }, 'the note, re-sent, echoed');
+  });
+
+  await t.test('the owner’s own message, re-sent by the sweep or by Retry, is still the owner’s', async () => {
+    const swept = await session('the owner’s conversation the quota killed');
+    await ownerSays(swept, 'rename the column, please');
+    await autoRetry.sweep(await failAfterEcho(swept));
+    const bySweep = await resendOf(swept);
+    assert.ok(!bySweep.clientTurnId.startsWith(AUTO_RETRY_ORBIT_TURN_KEY_PREFIX), bySweep.clientTurnId);
+    await assertEverywhere(swept, { text: 'rename the column, please', from: null, orbit: null }, 'the owner’s, re-sent by the sweep');
+    await queuedAsOrbit(swept, bySweep.id, false, 'the owner’s, re-sent by the sweep');
+
+    const pressed = await session('the owner’s conversation the provider dropped');
+    await ownerSays(pressed, 'and drop the old index');
+    await failAfterEcho(pressed);
+    await autoRetry.resendRetryMessage(ownerId, pressed);
+    const byPress = await resendOf(pressed);
+    assert.ok(byPress.clientTurnId.startsWith(`${AUTO_RETRY_TURN_KEY_PREFIX}retry-message:`), byPress.clientTurnId);
+    await assertEverywhere(pressed, { text: 'and drop the old index', from: null, orbit: null }, 'the owner’s, re-sent by Retry');
+    await queuedAsOrbit(pressed, byPress.id, false, 'the owner’s, re-sent by Retry');
+    await echo(pressed, await claimToMessage(pressed));
+    await assertEverywhere(pressed, { text: 'and drop the old index', from: null, orbit: null }, 'the owner’s, re-sent, echoed');
+  });
+
+  await t.test('another session’s message, re-sent by Retry, still names that session and is not Orbit’s', async () => {
+    const worker = await session('Worker: asks again');
+    const recipient = await session('the conversation whose turn the provider dropped');
+    await sessionSend(worker, recipient, 'please look at the failing test');
+    await failAfterEcho(recipient);
+    await autoRetry.resendRetryMessage(ownerId, recipient);
+    const turn = await resendOf(recipient);
+    assert.ok(!turn.clientTurnId.startsWith(AUTO_RETRY_ORBIT_TURN_KEY_PREFIX), turn.clientTurnId);
+    assert.equal(turn.senderSessionId, worker);
+    const sender = { sessionId: worker, title: 'Worker: asks again' };
+    await assertEverywhere(recipient, { text: 'please look at the failing test', from: sender, orbit: null }, 'the worker’s, re-sent');
+  });
+
+  // ── 5. the opening of a session the platform opened with its own prompt ───────────────────────
+
+  /**
+   * What the runner's claim does to a fresh session (QueueService.buildSession): its prompt laid down as
+   * the opening turn, under the key every session's prompt has. Answers the prompt.
+   */
+  async function seedOpening(sessionId: string): Promise<string> {
+    const row = await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: { prompt: true } });
+    await prisma.conversationTurn.create({
+      data: {
+        sessionId, seq: 1, clientTurnId: SessionsService.initialTurnClientId(sessionId),
+        kind: 'message', content: row.prompt, status: 'PENDING',
+      },
+    });
+    // A session just made is waiting for a runner; the claim starts it, and a resume and the inbox read it
+    // parked.
+    await prisma.session.update({
+      where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT, numTurns: 0, startedAt: new Date() },
+    });
+    return row.prompt;
+  }
+
+  /** Its opening turn echoed, the row then read everywhere as `orbit` says, then answered. */
+  async function openingReads(sessionId: string, orbit: boolean, label: string, projectId?: string) {
+    const prompt = await seedOpening(sessionId);
+    await assertEverywhere(sessionId, { text: null, from: null, orbit: null }, `${label}: not yet echoed`, projectId);
+    const delivered = await claimToMessage(sessionId);
+    await echo(sessionId, delivered);
+    await assertEverywhere(sessionId, { text: prompt, from: null, orbit: orbit ? ORBIT : null }, `${label}: echoed`, projectId);
+    await reply(sessionId, delivered);
+    await assertEverywhere(sessionId, { text: null, from: null, orbit: null }, `${label}: answered`, projectId);
+  }
+
+  const promptByOrbit = async (sessionId: string) =>
+    (await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: { promptByOrbit: true } })).promptByOrbit;
+
+  await t.test('a coordinator’s opening is Orbit’s, and so is its re-send after the provider killed it', async () => {
+    const projectId = randomUUID();
+    await prisma.project.create({ data: { id: projectId, ownerId, title: 'the project whose coordinator opens', coordinatorEnabled: true } });
+    const opened = await projects.coordinator(ownerId, projectId, workspaceId);
+    assert.equal(opened.created, true);
+    assert.equal(await promptByOrbit(opened.sessionId), true);
+    await openingReads(opened.sessionId, true, 'the coordinator’s opening', projectId);
+
+    // A second coordinator's opening fails before it is answered: the Retry re-sends it as Orbit's.
+    const againId = randomUUID();
+    await prisma.project.create({ data: { id: againId, ownerId, title: 'the project whose coordinator’s opening failed', coordinatorEnabled: true } });
+    const again = await projects.coordinator(ownerId, againId, workspaceId);
+    const prompt = await seedOpening(again.sessionId);
+    await failAfterEcho(again.sessionId);
+    await autoRetry.resendRetryMessage(ownerId, again.sessionId);
+    const turn = await resendOf(again.sessionId);
+    assert.ok(turn.clientTurnId.startsWith(`${AUTO_RETRY_ORBIT_TURN_KEY_PREFIX}retry-message:`), turn.clientTurnId);
+    assert.equal(turn.content, prompt);
+    await assertEverywhere(again.sessionId, { text: prompt, from: null, orbit: ORBIT }, 'the coordinator’s opening, re-sent', againId);
+    await queuedAsOrbit(again.sessionId, turn.id, true, 'the coordinator’s opening, re-sent');
+  });
+
+  await t.test('a judgment session’s opening is Orbit’s', async () => {
+    const projectId = randomUUID();
+    await prisma.project.create({
+      data: { id: projectId, ownerId, title: 'the project a fact wakes a judgment for', coordinatorEnabled: true, coordinatorWorkspaceId: workspaceId },
+    });
+    const ready = await task('Judge whether it can start', { projectId });
+    const judgments = new CoordinatorJudgmentService(db, new CoordinatorWakeService(db), sessions);
+    const outcome = await judgments.wake(
+      dependentReadyFact({ projectId, taskId: ready, title: 'Judge whether it can start', dispatchEpoch: 1 }), allow,
+    );
+    assert.equal(outcome.outcome, 'OPENED', JSON.stringify(outcome));
+    const judged = (outcome as { sessionId: string }).sessionId;
+    assert.equal(await promptByOrbit(judged), true);
+    await openingReads(judged, true, 'the judgment’s opening');
+  });
+
+  await t.test('a task list’s dispatch console’s opening is Orbit’s', async () => {
+    const list = await prisma.taskList.create({ data: { ownerId, title: 'the list with a console' }, select: { id: true } });
+    const lists = new TaskListsService(db, silent() as never, sessions);
+    const opened = await lists.console(ownerId, list.id, workspaceId);
+    assert.equal(opened.created, true);
+    assert.equal(await promptByOrbit(opened.sessionId), true);
+    await openingReads(opened.sessionId, true, 'the console’s opening');
+  });
+
+  await t.test('the reply session an @-mention opens is Orbit’s', async () => {
+    const about = await task('the task somebody mentions the agent on');
+    const comment = await prisma.taskComment.create({
+      data: {
+        taskId: about, authorType: 'USER', authorId: ownerId, body: 'have a look at the row, please',
+        mentions: [workspaceId], mentionDeliveryVersion: 1,
+      },
+      select: { id: true },
+    });
+    await tasks.deliverMentions();
+    const delivery = await prisma.taskCommentMentionDelivery.findFirstOrThrow({
+      where: { commentId: comment.id }, select: { status: true, errorCode: true, targetSessionId: true },
+    });
+    assert.equal(delivery.errorCode, null);
+    assert.equal(delivery.status, 'SESSION_CREATED');
+    assert.ok(delivery.targetSessionId);
+    assert.equal(await promptByOrbit(delivery.targetSessionId), true);
+    await openingReads(delivery.targetSessionId, true, 'the mention’s reply session');
+  });
+
+  await t.test('a session a person opens through the same create is the owner’s', async () => {
+    const mine = await sessions.create(ownerId, { workspaceId, prompt: 'look at the flaky test' } as never, { source: 'user' });
+    assert.equal(await promptByOrbit(mine.id), false);
+    await openingReads(mine.id, false, 'a person’s opening');
   });
 });

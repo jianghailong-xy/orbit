@@ -2774,7 +2774,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // in short tries, and nothing else. `session` is not a preserved relation, no column any preserved trigger reads
       // is touched, and no function, trigger, type or constraint is created, replaced or dropped, so it is not another
       // writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored session reads NULL.
-      '0491_session_last_user_from_orbit'],
+      '0491_session_last_user_from_orbit',
+      // 0493 adds one BOOLEAN NOT NULL DEFAULT false column to `session` (`prompt_by_orbit`: that the platform wrote
+      // the session's opening prompt) in one DO statement that takes the table's lock in short tries, and nothing
+      // else. `session` is not a preserved relation, no column any preserved trigger reads is touched, and no
+      // function, trigger, type or constraint is created, replaced or dropped, so it is not another writer of the
+      // DONE fence. No INSERT, UPDATE or DELETE: a constant default is a catalog change, every stored session reads
+      // false.
+      '0493_session_prompt_by_orbit'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
