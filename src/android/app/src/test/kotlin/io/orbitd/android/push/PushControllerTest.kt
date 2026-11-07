@@ -139,7 +139,7 @@ class PushControllerTest {
         withTimeout(30_000) { while (fixture.active().isNotEmpty()) delay(20) }
         fixture.quiet()
         val after = fixture.requests.drop(before).map { it.path.joinToString("/") + it.query.joinToString("&", "?") { (k, v) -> "$k=$v" } }
-        assertEquals("the store's read, and no other: $after", 1, after.count { it == "sessions?view=open" })
+        assertEquals("the store's read, and no other: $after", 1, after.count { it.substringBefore("&since=") == "sessions?view=open" })
         assertTrue("the notification was checked against its own record: $after", "sessions/$sid/approvals?status=PENDING" in after)
     }
 

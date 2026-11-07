@@ -104,10 +104,10 @@ class ProjectPagePollShellTest {
         ProjectShell.event("session.updated", ProjectShell.LAUNCH)
         // The store's window (half a second) and its read.
         advance(1_500)
-        await { ProjectShell.calls.drop(before).any { it == "GET sessions?view=open" } }
+        await { ProjectShell.calls.drop(before).any { it.substringBefore("&since=") == "GET sessions?view=open" } }
         advance(3_000)
         val after = ProjectShell.calls.drop(before)
-        assertEquals(after.toString(), 1, after.count { it == "GET sessions?view=open" })
+        assertEquals(after.toString(), 1, after.count { it.substringBefore("&since=") == "GET sessions?view=open" })
         assertEquals(after.toString(), emptyList<String>(), after.filter {
             it == "GET projects?status=OPEN" || it == "GET users/me" || it == "GET projects/sidebar" ||
                 it in setOf("GET workspaces", "GET session-folders", "GET session-tags", "GET runners")

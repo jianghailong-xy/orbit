@@ -213,16 +213,39 @@ class RealtimeStore(
         // The account events of the window open now, by type: a burst is one read of what it moved, [EVENT_WINDOW_MS] after its first
         // event (R1), and one invalidation of what the pages read.
         val held = MutableStateFlow<Set<String>>(emptySet())
+        // Whether one of the window's events concerns the open conversation ([concerns]): only then are its snapshot and cards read.
+        val touched = MutableStateFlow(false)
+        // This connection has had a [LIST_CHANGED] hint: the server sends one about a second after connecting, so it has the delta read
+        // and the hint, and from then on the Open list is read on hints and the fallback alone — not on every session event.
+        var hinted = false
         val window = Channel<Unit>(Channel.CONFLATED)
         launch {
             for (ignored in window) {
                 delay(EVENT_WINDOW_MS)
                 window.tryReceive() // The burst's later events are this window's.
                 val types = held.getAndUpdate { emptySet() }
+                val concerned = touched.getAndUpdate { false }
                 if (types.isEmpty()) continue
-                want(types.flatMapTo(mutableSetOf(), ::directoryListsMovedBy))
-                if (types.any { it in INVALIDATING_EVENTS }) invalidate(handle)
+                val lists = types.flatMapTo(mutableSetOf(), ::directoryListsMovedBy)
+                if (hinted) lists -= DirectoryList.OPEN
+                want(lists)
+                if (types.any { it in INVALIDATING_EVENTS }) invalidate(handle, session = concerned)
             }
+        }
+        // A hint reads the Open list at once, and the hints of the second after it are one read behind it (R1).
+        val hints = Channel<Unit>(Channel.CONFLATED)
+        launch {
+            for (ignored in hints) {
+                want(setOf(DirectoryList.OPEN))
+                delay(HINT_WINDOW_MS)
+            }
+        }
+        // R1's slow safety read: with the stream up, the Open list is read [OPEN_FALLBACK_MS] after its last read landed, which on a
+        // server with the delta read costs one version probe when nothing moved. Offline or in the background nothing is read (R2, R3).
+        val openLanded = MutableStateFlow(0L)
+        launch {
+            combine(state.map { it.controlConnection == ConnectionState.CONNECTED }.distinctUntilChanged(), openLanded) { up, _ -> up }
+                .collectLatest { up -> if (up) { delay(OPEN_FALLBACK_MS); want(setOf(DirectoryList.OPEN)) } }
         }
         launch { directoryRevision.collect { refresh.trySend(Unit) } }
         launch {
@@ -254,6 +277,7 @@ class RealtimeStore(
                             directoryFresh = current, directoryError = null)
                     }
                     directoryLanded.update { maxOf(it, revision) }
+                    if (DirectoryList.OPEN in lists) openLanded.update { it + 1 }
                     retry.healthy()
                 } catch (cancelled: CancellationException) { throw cancelled }
                 catch (error: Exception) {
@@ -271,11 +295,14 @@ class RealtimeStore(
             publish(handle) { it.copy(controlConnection = ConnectionState.CONNECTING) }
             var failed = false
             try {
-                auth.stream(handle, ApiRequest(listOf("events")), onOpen = {
+                // The hint is declared: an undeclared stream never receives it (docs/realtime-control-plane-stream.md §4.8).
+                auth.stream(handle, ApiRequest(listOf("events"), query = listOf("hints" to LIST_CHANGED_HINT)), onOpen = {
                     if (!active(handle, path)) throw CancellationException()
                     publish(handle) { it.copy(controlConnects = it.controlConnects + 1, directoryFresh = false) }
                     // Nothing is replayed: every list is read now, which also answers whatever the open window held.
                     held.value = emptySet()
+                    touched.value = false
+                    hinted = false
                     want(DirectoryList.ALL)
                     invalidate(handle)
                     publish(handle) { it.copy(controlConnection = ConnectionState.CONNECTED, controlError = null) }
@@ -286,8 +313,14 @@ class RealtimeStore(
                     if (event.type != "ping") {
                         publish(handle) { it.copy(accountEvents = it.accountEvents + (event.type to (it.accountEvents[event.type] ?: 0L) + 1)) }
                         if (witness?.enabled == true) witness.account(event.type, event.sessionId)
-                        held.update { it + event.type }
-                        window.trySend(Unit)
+                        if (event.type == LIST_CHANGED) {
+                            hinted = true
+                            hints.trySend(Unit)
+                        } else {
+                            if (event.concerns(state.value.session)) touched.value = true
+                            held.update { it + event.type }
+                            window.trySend(Unit)
+                        }
                     }
                 })
             } catch (cancelled: CancellationException) { throw cancelled }
@@ -300,10 +333,12 @@ class RealtimeStore(
         }
     }
 
-    /** The pages and the open conversation's cards read again: after a connect, and once for a window of account events. */
-    private fun invalidate(handle: SessionHandle) {
-        publish(handle) { it.copy(invalidationRevision = it.invalidationRevision + 1, session = it.session?.copy(fresh = false)) }
-        refreshSession()
+    /** The pages read again: after a connect, and once for a window of account events. The open conversation's snapshot and cards
+     * with them only when [session]: on a connect, or for a window holding an event that concerns it. */
+    private fun invalidate(handle: SessionHandle, session: Boolean = true) {
+        publish(handle) { it.copy(invalidationRevision = it.invalidationRevision + 1,
+            session = if (session) it.session?.copy(fresh = false) else it.session) }
+        if (session) refreshSession()
     }
 
     private fun updateSession(handle: SessionHandle, focus: Selection, change: (SessionState) -> SessionState) {
@@ -343,7 +378,8 @@ class RealtimeStore(
                     check()
                     if (revision != sessionRevision.value) { refresh.trySend(Unit); continue }
                     val wasDenied = state.value.session?.accessDenied == true
-                    updateSession(handle, focus) { it.copy(snapshot = snapshot, fresh = true, error = null, accessDenied = false) }
+                    updateSession(handle, focus) { it.copy(snapshot = snapshot, fresh = true, error = null, accessDenied = false,
+                        snapshotReads = it.snapshotReads + 1) }
                     if (wasDenied) {
                         val tail = rest.page(handle, id)
                         check()
@@ -369,9 +405,9 @@ class RealtimeStore(
                 }
             }
         }
-        // Standing review deadlines can expire without a push. This refresh exists only while
-        // the session is foregrounded; reconnect always performs its own unthrottled read.
-        launch { while (isActive) { delay(30_000); refreshSession() } }
+        // Standing review deadlines can expire without a push, and a task of the project no event names can move a card. This
+        // refresh exists only while the session is foregrounded; reconnect always performs its own unthrottled read.
+        launch { while (isActive) { delay(SESSION_FALLBACK_MS); refreshSession() } }
         fun land(page: EventPage) {
             check()
             val before = state.value.session?.transcript
@@ -466,6 +502,12 @@ class RealtimeStore(
         /** How long a burst of account events is gathered for, from its first event, before the lists it moved are read once
          * (docs/list-freshness-design.md §4 R1). */
         const val EVENT_WINDOW_MS = 500L
+        /** How long the [LIST_CHANGED] hints after one that was read are gathered into one more read (§4 R1: at least a second). */
+        const val HINT_WINDOW_MS = 1_000L
+        /** With the stream up, the Open list's safety read after its last read (§3 point 5, R1). */
+        const val OPEN_FALLBACK_MS = 60_000L
+        /** The open conversation's snapshot and cards, read again with no event that concerns them. */
+        const val SESSION_FALLBACK_MS = 60_000L
         /** Five 200-event pages: the server's SSE_GAP_CAP, past which it answers a cursor with resync. */
         private const val CATCH_UP_PAGES = 5
         private val SNAPSHOT_EVENTS = setOf("approval_request", "approval_resolved", "queued_turns_changed",

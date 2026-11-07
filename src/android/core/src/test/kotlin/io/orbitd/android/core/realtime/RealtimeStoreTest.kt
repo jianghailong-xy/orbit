@@ -63,13 +63,20 @@ class RealtimeStoreTest {
         /** The query the store sends for the page past [after]. */
         fun page(after: Long) = mapOf("maxPayload" to "2048", "after" to "$after", "limit" to "200")
         /** The directory's list reads in `reads[from until]`, in order: `sessions?view=open`, `workspaces`, `session-folders`,
-         * `session-tags`, `runners`. A session's own reads (`sessions/s1/…`) are not lists. */
+         * `session-tags`, `runners`. A session's own reads (`sessions/s1/…`) are not lists. The Open list's `since=` cursor is left
+         * out: [openReads] has it. */
         fun lists(from: Int) = reads.subList(from, reads.size).map { it.api }.filter { it.path.size == 1 && it.path[0] in directoryPaths }
-            .map { api -> api.path[0] + api.query.joinToString("&", prefix = if (api.query.isEmpty()) "" else "?") { (k, v) -> "$k=$v" } }
+            .map { api -> api.query.filter { it.first != "since" }.let { query ->
+                api.path[0] + query.joinToString("&", prefix = if (query.isEmpty()) "" else "?") { (k, v) -> "$k=$v" } } }
+        /** The Open list's reads in `reads[from until]`, by the `since=` cursor each asked against (null: none). */
+        fun openReads(from: Int) = reads.subList(from, reads.size).map { it.api }
+            .filter { it.path == listOf("sessions") && it.query.toMap()["view"] == "open" }.map { it.query.toMap()["since"] }
+        /** The open conversation's snapshot reads in `reads[from until]`: its detail, `sessions/<id>`. */
+        fun snapshots(from: Int, id: String = "s1") = reads.subList(from, reads.size).count { it.api.path == listOf("sessions", id) }
         private val directoryPaths = setOf("sessions", "workspaces", "session-folders", "session-tags", "runners")
         /** One account event of [type] on the account stream, and the store's turn to take it. */
-        suspend fun event(type: String, sessionId: String = "s2") {
-            streams.control().emit("""{"type":"$type","sessionId":"$sessionId","data":{}}""")
+        suspend fun event(type: String, sessionId: String = "s2", data: String = "{}") {
+            streams.control().emit("""{"type":"$type","sessionId":"$sessionId","data":$data}""")
             scope.runCurrent()
         }
         fun client(dispatcher: CoroutineDispatcher = StandardTestDispatcher(scope.testScheduler)) = AuthSession(HttpTransport { request ->
@@ -650,7 +657,8 @@ class RealtimeStoreTest {
         advanceTimeBy(1); runCurrent()
         assertEquals(listOf("sessions?view=open"), rig.lists(start))
         assertEquals("the pages are asked once", revision + 1, store.state.value.invalidationRevision)
-        advanceTimeBy(60_000); runCurrent()
+        // Short of the minute's safety read (OPEN_FALLBACK_MS).
+        advanceTimeBy(59_000); runCurrent()
         assertEquals("and nothing more", listOf("sessions?view=open"), rig.lists(start))
     }
 
@@ -688,7 +696,7 @@ class RealtimeStoreTest {
      * wiki's only the wiki, and a type this build does not know asks for nothing at all. */
     @Test fun anEventThatMovesNoListOfTheStoresReadsNone() = runTest {
         for ((type, invalidates) in listOf("task.changed" to true, "project.changed" to true, "watch.changed" to true,
-            "wiki.changed" to false, "sessions.list_changed" to false, "made.up" to false)) {
+            "wiki.changed" to false, "made.up" to false)) {
             val rig = Rig(this)
             val (_, store) = rig.start()
             val start = rig.reads.size
@@ -729,6 +737,106 @@ class RealtimeStoreTest {
         assertEquals(2L, store.state.value.controlConnects)
         assertEquals(setOf("workspaces", "session-folders", "session-tags", "runners", "sessions?view=open"), rig.lists(start).toSet())
         assertEquals(5, rig.lists(start).size)
+    }
+
+    /** docs/realtime-control-plane-stream.md §4.8: the account stream declares the hint, and a `sessions.list_changed` is one
+     * conditional read of the Open list, asked against its cursor — no other list, and no page asked to read again. */
+    @Test fun aListChangedHintIsOneSinceReadOfTheOpenListAndNothingElse() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        assertEquals("the stream declares the hint", listOf("hints" to "list_changed"), rig.streams.control().request.api.query)
+        val start = rig.reads.size
+        val revision = store.state.value.invalidationRevision
+        rig.event("sessions.list_changed", "", """{"version":"v2"}""")
+        advanceTimeBy(5_000); runCurrent()
+        assertEquals(listOf("sessions?view=open"), rig.lists(start))
+        assertEquals("asked as a delta", 1, rig.openReads(start).count { it != null })
+        assertEquals("a hint asks the pages nothing", revision, store.state.value.invalidationRevision)
+        assertEquals(0, rig.snapshots(start))
+        assertEquals(1L, store.state.value.accountEvents["sessions.list_changed"])
+    }
+
+    /** R1: hints are gathered for at least a second — the first is read at once, the ones of the second after it are one read behind. */
+    @Test fun theHintsOfASecondAreOneReadBehindTheFirst() = runTest {
+        val rig = Rig(this)
+        rig.start()
+        val start = rig.reads.size
+        listOf(0L, 200L, 300L, 400L).forEach { wait ->
+            advanceTimeBy(wait); rig.event("sessions.list_changed", "", """{"version":"v$wait"}""")
+        }
+        assertEquals("the first, at once", 1, rig.openReads(start).size)
+        advanceTimeBy(100); runCurrent()
+        assertEquals("then the rest of its second, once", 2, rig.openReads(start).size)
+        advanceTimeBy(5_000); runCurrent()
+        assertEquals(2, rig.openReads(start).size)
+    }
+
+    /** Once the connection has had a hint, a session's event moves its row on the next hint, not by a read of its own: the pages are
+     * still asked, the Open list is not read. */
+    @Test fun aHintedStreamsSessionEventsDoNotReadTheOpenList() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        rig.event("sessions.list_changed", "", """{"version":"v1"}""")
+        advanceTimeBy(2_000); runCurrent()
+        val start = rig.reads.size
+        val revision = store.state.value.invalidationRevision
+        rig.event("session.updated")
+        advanceTimeBy(WINDOW_MS); runCurrent()
+        advanceTimeBy(5_000); runCurrent()
+        assertEquals(emptyList<String>(), rig.lists(start))
+        assertEquals(revision + 1, store.state.value.invalidationRevision)
+    }
+
+    /** R1's safety read: the stream up and no hint, the Open list is read at most once a minute — and it is read. */
+    @Test fun withTheStreamUpAndNoHintTheOpenListIsReadAtMostOnceAMinute() = runTest {
+        val rig = Rig(this)
+        rig.start()
+        val start = rig.reads.size
+        advanceTimeBy(59_999); runCurrent()
+        assertEquals("nothing within the minute", 0, rig.openReads(start).size)
+        advanceTimeBy(1); runCurrent()
+        assertEquals("the safety read, by its cursor", listOf(true), rig.openReads(start).map { it != null })
+        advanceTimeBy(59_999); runCurrent()
+        assertEquals(1, rig.openReads(start).size)
+        advanceTimeBy(3 * 60_000L); runCurrent()
+        assertEquals("four minutes, four reads", 4, rig.openReads(start).size)
+        assertEquals("and no other list", rig.lists(start).toSet(), setOf("sessions?view=open"))
+    }
+
+    /** Offline or in the background there is no safety read (R2, R3). */
+    @Test fun theSafetyReadNeedsTheStreamUp() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        store.setForeground(false); runCurrent()
+        val start = rig.reads.size
+        advanceTimeBy(5 * 60_000L); runCurrent()
+        assertEquals(0, rig.openReads(start).size)
+    }
+
+    /** D1 left the open conversation's snapshot (and the reader's cards behind it) read on every account event. An event about
+     * another session, or another project, reads neither; one about this session or its project reads the snapshot exactly once. */
+    @Test fun anEventAboutAnotherSessionDoesNotReadTheOpenConversationsSnapshot() = runTest {
+        val rig = Rig(this)
+        rig.project = true
+        val (_, store) = rig.start()
+        val start = rig.reads.size
+        rig.event("session.updated", "s2")
+        rig.event("approval.requested", "s2")
+        rig.event("background.task", "s2")
+        rig.event("project.changed", "", """{"id":"p9"}""")
+        rig.event("task.changed", "s3", """{"taskId":"t9","taskIds":["t9"],"resync":false}""")
+        advanceTimeBy(WINDOW_MS); runCurrent()
+        advanceTimeBy(5_000); runCurrent()
+        assertEquals("no snapshot read, so no card read behind one", 0, rig.snapshots(start))
+        assertTrue(store.state.value.session!!.fresh)
+        for ((type, session, data) in listOf(Triple("session.updated", "s1", "{}"), Triple("project.changed", "", """{"id":"p1"}"""),
+            Triple("task.changed", "s3", """{"taskId":"t1","taskIds":["t1"],"resync":false}"""))) {
+            val before = rig.reads.size
+            rig.event(type, session, data)
+            advanceTimeBy(WINDOW_MS); runCurrent()
+            advanceTimeBy(5_000); runCurrent()
+            assertEquals(type, 1, rig.snapshots(before))
+        }
     }
 
     @Test fun emptySessionIdNudgesRefetchAndDirectoryErrorRetainsRows() = runTest {
