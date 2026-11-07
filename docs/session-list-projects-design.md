@@ -75,6 +75,14 @@
 - 写 `lastUserText` 的几处（`sessions.service.ts` 里带 `senderSessionId` 的那几处）同时写它；发送方的记法与对话里「From <会话名>」卡片（`sessionMessage`）同源，不从正文猜。
 - 客户端：有 `lastUserFrom` 时，行上写 `<title>: <消息>`；没有时照旧 `You: <消息>`（§6）。老服务器不给这个字段，照旧。发送会话的标题为空或全是空白时写 `Untitled session: <消息>`，和对话里 From 卡片对没有标题的会话的叫法同一句（web `SESSION_MESSAGE_UNTITLED`、OrbitKit `SessionMessageCard.untitled`、Android `TaskDetailCopy.untitledSession`；coordinator 11-07）：`You:` 只在 `lastUserFrom` 为 null 时用。
 
+**Orbit 自己发进会话的消息**（owner 11-07 拍板，问题 34tGg4je5fQXFyKY4m4AU：「改：写 Orbit: 加那条通知的一句话」）。`lastUserFrom` 只记别的会话；平台自己写进会话的消息过去记的发送方是空，行上写成 `You: From Orbit · project … has a revision of completion evidence…`，coordinator 处理通知的那几分钟最常见。
+
+- 来源：三处读口同时带 `lastUserFromOrbit: { coordinatorDelivery: <卡片> | null } | null`（迁移 0491，`session.last_user_from_orbit`），与 `lastUserText`、`lastUserFrom` 同处写、同处清（`pendingMessageColumns`）；不是 Orbit 写的为 `null`，老客户端不认这个字段，照旧写 `You:`。`lastUserFrom` 不变，一条消息只有一个发送方：别的会话发的，不管它的 key 选了什么，都是那个会话的。
+- 哪些算 Orbit 的：消息的 key 在平台自己的命名空间里（`isOrbitAuthoredTurn`：给 coordinator 的事实通知、criteria 提议的答复、watch 匹配的唤醒、owner 的回答转给 coordinator、例外条目的投递、项目开始、交给暂停中的运行的任务 brief、确认复核与退回、证据退回的说明），或对话里把这条画成平台自己的卡片——这一条补上任务运行开场的 brief：它和人开的会话同用 `initial-<id>`，只能靠 `taskStart` 卡片分开。后台作业唤醒和定时唤醒不带正文，不写 `lastUserText`，行上没有这一行。
+- 通知卡片：给 coordinator 的事实通知与 criteria 提议的答复带 `coordinatorDelivery`（对话里画成一行的那张卡片，`coordinator-delivery-card.ts`）。排队时就一起记下（同一事务里 wake 先绑到这条消息），runner 回显时按回显存下的卡片再写一次，两次是同一张；老的投递路径先写消息、后绑 wake，排队时还没有卡片，先按第一行写，回显时补上。
+- 客户端：有 `lastUserFromOrbit` 时写 `Orbit: <一句话>`（§6）。有卡片时这一句就是对话里那条通知的英文句子（web `coordinatorDeliverySentence`、OrbitKit `CoordinatorDeliveryCard.sentence`、Android `CoordinatorDeliveryLine.sentence`，卡片按对话的读法读）；没有卡片、或卡片这个版本读不出（后来的服务器新加的 kind）时，用消息的第一行（第一条非空行，按预览去掉 markdown）。owner 自己发的仍写 `You: …`，别的会话发来的仍写会话名。`Orbit` 这个词三端一字不差（web `SENT_BY_ORBIT`、OrbitKit `SessionLine.orbit`、Android `SessionLineCopy.orbit`），对照测试缺项会红。
+- 还没覆盖（11-07，另立任务）：自动重试和失败卡片上的 Retry 重发一条失败的消息时用 `auto-retry:` 开头的 key，`isOrbitAuthoredTurn` 有意不算它是平台写的（重发 owner 的话仍是 owner 的），于是重发的平台消息在行上仍写 `You:`，对话里也画成 owner 的气泡；平台用自己写的开场 prompt 开的会话（coordinator 开场、判断会话、清单控制台、@ 提及回复）没有卡片，和人开的会话同用 `initial-<id>`，行上也仍写 `You:`。
+
 ### 3.6 做完的项目一起完成（owner 11-07）
 
 项目 DONE 或 CANCELLED 后，项目条目菜单的 `Complete`（§4.3）把 coordinator 和这个项目还在 Open 的成员会话（含别的 Workspace 的）一起移进 Completed。
@@ -104,7 +112,7 @@
 3. **coordinator 在处理例外**（`/projects/sidebar` 的 `attention.coordinatorItems`）：项目页那个蓝标签的话去掉 `Coordinator ·` 前缀、首字母大写，如 `Resolving a merge conflict · 18m`，蓝字。
 4. **coordinator 正在跑一轮**（转圈，runner 在线）：coordinator 会话行的原话（`Running …` 蓝字）。
 5. **平台有在途的落地**（19555f614，本条此前漏写）：项目列表 / 侧栏的 `integration.inFlight` 描述的那个作业，选法同项目页的 landing 行（运行中优先，再按最早领取或入队）：`Merge to main · queued · 13m`、`Landing · checking · 4m · <task>`（几条同时在途时种类后写 `<n> jobs`，不带任务名）。运行中且心跳不超过 10 分钟用 `running` 语气（同 `Running …`），排队或心跳更旧用 `queued` 语气。旧服务端只给 `activeJobCount` 时写 `Landing · <n> job(s)`。web `sessionProjectLandingLine`，OrbitKit 同一文案。
-6. **其余**：coordinator 会话行的其他原话（`You: …` 或 `<会话标题>: …`、最后一条回复预览）。`You:` 只给你自己发的消息；别的会话发来的写那个会话的标题（§3.5，owner 11-07）。
+6. **其余**：coordinator 会话行的其他原话（`You: …`、`<会话标题>: …` 或 `Orbit: …`、最后一条回复预览）。`You:` 只给你自己发的消息；别的会话发来的写那个会话的标题，Orbit 自己发的写 `Orbit:`（§3.5，owner 11-07）。
 7. **没有 coordinator**（从没开过、在回收站或已清除）：`No coordinator`，灰字。
 
 ### 4.3 点击
@@ -154,6 +162,7 @@
 | 别处成员行的长按菜单（iOS、Android，11-07） | `Sessions`（进项目会话页） |
 | 做完的项目条目菜单（11-07） | `Complete` |
 | 会话行里别的会话发来、还没回的消息（三端，11-07） | `<会话标题>: <消息>`，发送会话没有标题时 `Untitled session: <消息>`；你自己发的仍是 `You: <消息>` |
+| 会话行里 Orbit 自己发进会话、还没回的消息（三端，owner 11-07） | `Orbit: <一句话>`：有通知卡片时是对话里那条通知的句子（`COORDINATOR_DELIVERY_SENTENCES`），如 `Orbit: Evidence revision 2 submitted: <任务名>`、`Orbit: Criteria proposal approved`；没有卡片时是消息的第一行，如 `Orbit: Orbit Watch <id> matched at generation 1: <原因>`、`Orbit: Start the task “<任务名>”.` |
 | 条目菜单（owner 10-04 的决定） | `Open Session`、`Sessions`、`Open Project`、`Pin`、`Unpin`、`Move…` |
 | 项目会话页页头按钮（iOS，owner 10-06 的决定） | `Open Project` |
 | 项目会话页 | `Project · <n> sessions`、`Coordinator`（节名）、`<done>/<total> done · <m> running` |
@@ -198,3 +207,4 @@
 6. 服务端：§3.6 的一起完成。
 7. 三端：§4.3 做完的项目条目的 `Complete`，依赖 6。
 8. Owner 在部署后的 Web、TestFlight 和 Android 构建上对照效果图确认，依赖以上全部。
+9. 服务端 + 三端：§3.5 的 Orbit 消息（`lastUserFromOrbit`，行上写 `Orbit: <一句话>`），依赖 5；8 也依赖它。

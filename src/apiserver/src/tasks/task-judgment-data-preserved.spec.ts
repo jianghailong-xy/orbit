@@ -2768,7 +2768,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // object nor any of the six preserved triggers/functions is named, and no function, trigger or type is
       // created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
       // DELETE: every stored op reads NULL in both columns and satisfies the CHECKs as it stands.
-      '0488_wiki_op_answers_challenge'],
+      '0488_wiki_op_answers_challenge',
+      // 0491 adds one nullable JSONB column to `session` (`last_user_from_orbit`: that Orbit wrote the message the row
+      // previews, with the notification card its line is written from) in one DO statement that takes the table's lock
+      // in short tries, and nothing else. `session` is not a preserved relation, no column any preserved trigger reads
+      // is touched, and no function, trigger, type or constraint is created, replaced or dropped, so it is not another
+      // writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored session reads NULL.
+      '0491_session_last_user_from_orbit'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

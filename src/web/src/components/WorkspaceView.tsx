@@ -497,6 +497,7 @@ import { backgroundWorkIsActive, isSessionTurnActive, outlivingSessionWork } fro
 import type { OutlivingWork } from '../lib/sessionActivity';
 import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
 import { SESSION_MESSAGE_UNTITLED } from '../lib/sessionMessage';
+import { coordinatorDeliverySentence, parseCoordinatorDelivery } from '../lib/coordinatorDelivery';
 import { trashNoteWhen } from '../lib/trashNote';
 import { transcriptPlaceholder } from '../lib/transcriptPaint';
 import { useDelayedFlag } from '../lib/useDelayedFlag';
@@ -1066,6 +1067,23 @@ const sentBy = (s: any): string => {
   if (!from || typeof from !== 'object') return SENT_BY_YOU;
   return (typeof from.title === 'string' ? from.title.trim() : '') || SESSION_MESSAGE_UNTITLED;
 };
+// Keep this literal declaration: native parity tests read the web source directly.
+export const SENT_BY_ORBIT = 'Orbit';
+// The line for a message Orbit wrote itself (`lastUserFromOrbit`, docs/session-list-projects-design.md
+// §3.5, owner 2026-11-07), or null for anybody else's: Orbit says it, never "You", which put "You: From
+// Orbit · project …" on a coordinator's row while it read the notification. A notification the
+// conversation draws as a line says that line's own sentence, from the card the server read it with
+// (`coordinatorDeliverySentence`); any other says its first line, flattened like a preview — the rest is
+// written for the agent. An older server sends no mark, and every message reads as before.
+const orbitLine = (s: any): SessionLine | null => {
+  const orbit = s.lastUserFromOrbit;
+  if (!orbit || typeof orbit !== 'object') return null;
+  const card = parseCoordinatorDelivery(orbit);
+  const said = card
+    ? coordinatorDeliverySentence(card)
+    : plainPreview(String(s.lastUserText).split('\n').find((line) => line.trim() !== '') ?? '');
+  return { text: `${SENT_BY_ORBIT}: ${said}`, tone: 'preview' };
+};
 
 // The five owner items, one word each: no project and no count, because a row is one line and the
 // project it is about is the conversation the row already names (contract §7.6 V13). The native
@@ -1181,7 +1199,7 @@ export const sessionLine = (
     // from the moment it is enqueued until a reply lands) instead of the previous turn's reply,
     // which would read as if this one had already been answered. It's content, not status — the
     // spinner already carries "working" — so it takes the muted preview tone, not blue.
-    if (s.lastUserText) return sentLine(s.lastUserText, sentBy(s));
+    if (s.lastUserText) return orbitLine(s) ?? sentLine(s.lastUserText, sentBy(s));
     if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
     return { text: 'Running…', tone: 'running' };
   }
@@ -1200,7 +1218,7 @@ export const sessionLine = (
   // A message that never got an answer — the turn was interrupted, or failed, before any reply
   // landed — outranks the previous turn's reply: it's the newer of the two, and it's what the
   // session is left waiting on. The server only keeps lastUserText while it stands unanswered.
-  if (s.lastUserText) return sentLine(s.lastUserText, sentBy(s));
+  if (s.lastUserText) return orbitLine(s) ?? sentLine(s.lastUserText, sentBy(s));
   // The rolling recap (0418) takes the place of the reply preview it used to show: the sentence
   // the server wrote about the session, not the raw last reply flattened down to one line. Only
   // here — below every live line above — so a working session still says what it is doing. Off
