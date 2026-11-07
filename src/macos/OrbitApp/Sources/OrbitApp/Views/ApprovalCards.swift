@@ -884,12 +884,6 @@ private struct AnsweredOptionRow: View {
 /// is re-derived from the console's read on every body pass, which is what makes a disabled button
 /// honest rather than a guess. Every word it shows comes from `EvidenceDecisions`, so macOS, iOS and
 /// the browser cannot come apart on it.
-///
-/// It is also the one card a version keeps while its project's coordinator is paused
-/// (`docs/evidence-waits-for-coordinator-design.md`): folded while the version waits for the
-/// coordinator (`QueuedEvidenceCard`), whose Decide it myself opens this card in the review sheet;
-/// one line once it is handed over (`SentToCoordinatorLine`); this card if it becomes the reader's
-/// question after all — in the same place throughout.
 private struct EvidenceDecisionCard: View {
     @Environment(\.inApprovalReview) private var inReview
     @Environment(\.dismissApprovalReview) private var dismissReview
@@ -907,8 +901,6 @@ private struct EvidenceDecisionCard: View {
         switch standing.state {
         case .sent(let sent) where !inReview:
             SentToCoordinatorLine(sent: sent)
-        case .waiting(let row) where !inReview:
-            QueuedEvidenceCard(console: console, row: row)
         default:
             if inReview { review(standing) } else { card(standing) }
         }
@@ -924,7 +916,6 @@ private struct EvidenceDecisionCard: View {
             Text(CriteriaDecisions.provenanceLabel)
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-
             facts(standing)
 
             ApprovalActions {
@@ -940,40 +931,13 @@ private struct EvidenceDecisionCard: View {
         .approvalChrome(.blue)
     }
 
-    /// The same card in the review sheet the folded card's Decide it myself opens
-    /// (`phone-sheet.png`): scrolling, with its two answers pinned under it, and — while the version
-    /// still waits for the coordinator — why, and what deciding here means, above everything else.
-    /// Whatever becomes of the version while the sheet is open, the sheet says it in the card's own
-    /// words: the question it became, the line it left once handed over, or why it is gone.
     private func review(_ standing: EvidenceDecisionStanding) -> some View {
-        ApprovalReviewLayout(title: standing.waitsForCoordinator ? EvidenceDecisions.queuedHeading
-                                                                 : EvidenceDecisions.heading(standing),
+        ApprovalReviewLayout(title: EvidenceDecisions.heading(standing),
                              symbol: "checkmark.seal.fill", tone: .blue,
                              summary: EvidenceDecisions.heading(standing)) {
             Text(CriteriaDecisions.provenanceLabel)
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if standing.waitsForCoordinator {
-                VStack(alignment: .leading, spacing: 4) {
-                    CoordinatorPauseStatus(pause: console.coordinatorPause)
-                    Text(EvidenceDecisions.queuedOpenNote)
-                        .font(.orbitLabel).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.horizontal, 10).padding(.vertical, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.orange.opacity(0.10),
-                            in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
-                .overlay {
-                    RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius)
-                        .strokeBorder(Color.orange.opacity(0.28))
-                }
-                // The question itself, under why it is not the coordinator's answer yet: the
-                // sheet's title is the folded card's.
-                Text(EvidenceDecisions.heading(standing))
-                    .font(.orbitProse.bold())
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
             facts(standing)
             if case .sent(let sent) = standing.state {
                 SentToCoordinatorLine(sent: sent)
@@ -1250,92 +1214,6 @@ private struct DisclosureToggle: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(.isButton)
-    }
-}
-
-// MARK: - while the coordinator is paused
-
-/// A version waiting for this conversation's coordinator, folded
-/// (`docs/mocks/evidence-waits-for-coordinator/phone-queued.png`): the heading and when the version
-/// was submitted, the task, why the coordinator does not have it, what that means, and Decide it
-/// myself — which opens the evidence card in the review sheet, pressed as that card is. Web's
-/// `QueuedEvidenceCard`, in its words (`EvidenceDecisionCopyParityTests`).
-///
-/// Grey, because nobody is being asked anything yet: the bar over the transcript does not count it
-/// (`EvidenceDecisions.isOpen`), and the folded card has no answer of its own to press.
-private struct QueuedEvidenceCard: View {
-    @Environment(\.approvalReviewTarget) private var target
-    @Environment(\.openApprovalReview) private var openReview
-    let console: ConsoleModel
-    let row: EvidenceDecisionRow
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
-            HStack(spacing: 8) {
-                Image(systemName: "hourglass")
-                    .font(.orbitMeta)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 22, height: 22)
-                    .background(Color.secondary.opacity(0.16), in: RoundedRectangle(cornerRadius: 6))
-                Text(EvidenceDecisions.queuedHeading)
-                    .font(.orbitProse.bold())
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .layoutPriority(1)
-                Spacer(minLength: 4)
-                if let submitted = row.submittedAt {
-                    Text(EvidenceDecisions.receiptTime(submitted))
-                        .font(.orbitLabel).foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            Text(row.title)
-                .font(.orbitProse.bold())
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            VStack(alignment: .leading, spacing: 4) {
-                CoordinatorPauseStatus(pause: console.coordinatorPause)
-                Text(EvidenceDecisions.queuedNote)
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            Divider()
-            Button {
-                PlatformHaptics.tap()
-                console.openedEvidence(row.taskId, row.evidenceRevision)
-                if let target { openReview(target) }
-            } label: {
-                HStack {
-                    Text(EvidenceDecisions.decideMyselfAction)
-                    Spacer(minLength: 8)
-                    Image(systemName: "chevron.right").accessibilityHidden(true)
-                }
-                .font(.orbitLabel.weight(.semibold))
-                .foregroundStyle(Color.accentColor)
-                .frame(maxWidth: .infinity, minHeight: ApprovalMetrics.rowMinHeight, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-        }
-        .approvalChrome(.gray)
-    }
-}
-
-/// Why a version waits: amber while the coordinator is paused, quiet once it is back — the line
-/// under the folded card's title, and the first line of the card it opens into (web's
-/// `CoordinatorPauseStatus`).
-private struct CoordinatorPauseStatus: View {
-    let pause: CoordinatorPause
-
-    var body: some View {
-        let paused = pause != .back
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: paused ? "pause.circle" : "clock").accessibilityHidden(true)
-            Text(EvidenceDecisions.pauseLine(pause))
-        }
-        .font(.orbitLabel)
-        .foregroundStyle(paused ? Color.orange : Color.secondary)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

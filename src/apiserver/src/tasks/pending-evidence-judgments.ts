@@ -65,8 +65,7 @@ import { taskOfRunBehind } from './verifier-write-authority';
  * AND WHILE THAT COORDINATOR IS PAUSED, IT WAITS FOR IT (2026-10-09)
  * ------------------------------------------------------------------
  * A coordinator whose run failed on a usage limit, a 429 or a sign-in, or that is parked on a retry,
- * has not ended. A revision owed to it is not the owner's question either: it is listed for the
- * coordinator's conversation in `waitingOnCoordinator`, counted nowhere, and delivered to it once it
+ * has not ended. A revision owed to it is hidden from owner queues and counts, and delivered once it
  * is back (`projects/coordinator-evidence-queue.ts` says which revisions are owed;
  * `CoordinatorEvidenceQueueService` delivers them). One that was delivered after waiting is listed in
  * `sentToCoordinator` while the coordinator holds it, so the owner sees it went.
@@ -201,11 +200,10 @@ export interface PendingEvidenceJudgment {
  *    further down: a reader chasing the stalled population wants the report of stalled tasks, not
  *    a notice pinned to every screen in the account.
  *
- * Two more groups are read for the conversation an Automatic project is coordinated from, and for no
- * other reader: the revisions waiting for that coordinator (`waitingOnCoordinator`), and the ones
- * that waited and have since been handed to it (`sentToCoordinator`). Neither is a question this
- * reader is asked, so neither is counted; both are where the owner's own card for the revision is
- * drawn, because "Decide it myself" is still the owner's at any moment.
+ * `waitingOnCoordinator` remains empty for compatibility with released clients. Revisions that
+ * waited and have since been handed to this coordinator are listed in `sentToCoordinator` while
+ * held, without contributing to pending or counts. Queued turns start no escalation window until
+ * their `deliveredAt` is written.
  */
 export interface PendingEvidenceJudgmentQueue {
   readAt: Date;
@@ -219,11 +217,7 @@ export interface PendingEvidenceJudgmentQueue {
   pending: PendingEvidenceJudgment[];
   /** Rows waiting on a revision THIS session is the one to file. */
   waitingOnYou: PendingEvidenceJudgment[];
-  /**
-   * Revisions of the project THIS session coordinates that are waiting for it — it is paused, or it
-   * has not been handed them yet — oldest submission first, each shaped as a `pending` row. Read for
-   * the project's coordinator conversation only; empty for every other reader.
-   */
+  /** Compatibility field for released clients; always empty. */
   waitingOnCoordinator: PendingEvidenceJudgment[];
   /** Revisions that waited and have since been delivered to THIS session, which still holds them:
    *  neither decided nor replaced by a later revision. Earliest delivery first. */
@@ -526,16 +520,11 @@ export async function readPendingEvidenceJudgments(
       continue;
     }
     // A row of another project's task is that project's to decide, and is not asked of this reader.
-    // One its project's coordinator holds, or that waits for it, is asked of nobody; the
-    // conversation that coordinator IS is shown which of the two it is, and nobody else.
+    // One its project's coordinator holds, or that waits for it, is asked of nobody. A delivery
+    // receipt is shown only to the coordinator it reached.
     if (standing === null) {
       if (disqualification === null && elsewhere === null && asARun === null && !heldByCoordinator) pending.push(row);
       else if (
-        coordinatorPlace?.place === 'WAITING'
-        && coordinatorPlace.coordinatorSessionId === decidingSession.id
-      ) {
-        waitingOnCoordinator.push(row);
-      } else if (
         coordinatorPlace?.place === 'HELD'
         && coordinatorPlace.waited
         && coordinatorPlace.sessionId === decidingSession.id
@@ -562,8 +551,6 @@ export async function readPendingEvidenceJudgments(
   );
   pending.sort(oldestFirst);
   waitingOnYou.sort(oldestFirst);
-  // Submission order is the order they are delivered in, too (`CoordinatorEvidenceQueueService`).
-  waitingOnCoordinator.sort(oldestFirst);
   sentToCoordinator.sort((left, right) => (
     left.deliveredAt.getTime() - right.deliveredAt.getTime() || left.taskId.localeCompare(right.taskId)
   ));
@@ -655,8 +642,8 @@ export interface EvidenceWaitingForCoordinator {
 
 /**
  * The revisions of one project that wait for its coordinator, oldest submission first — the order
- * they are handed to it in (`CoordinatorEvidenceQueueService`). The same reading the pending read
- * lists in `waitingOnCoordinator`, so what the owner is shown waiting is exactly what is delivered.
+ * they are handed to it in (`CoordinatorEvidenceQueueService`). Read directly from `coordinatorPlace`;
+ * the public `waitingOnCoordinator` compatibility field is always empty and does not drive redelivery.
  */
 export async function readEvidenceWaitingForCoordinator(
   tx: PrismaTypes.TransactionClient,

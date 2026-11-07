@@ -1,3 +1,4 @@
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -157,9 +158,11 @@ async function failedItem(stack: Stack, w: World, label: string) {
   });
   await stack.tasks.update(w.ownerId, task.id, { status: DeclaredTaskStatus.FAILED });
   await stack.openItems.deliverForTasks([task.id]);
-  return stack.db.projectOpenItem.findFirstOrThrow({
+  const item = await stack.db.projectOpenItem.findFirstOrThrow({
     where: { projectId: w.projectId, taskId: task.id, kind: 'TASK_FAILED', state: 'OPEN' },
   });
+  await receiveOpenItem(stack.db, item.id);
+  return item;
 }
 
 async function refusal(run: () => Promise<unknown>): Promise<{ code?: string; status: number }> {
@@ -195,6 +198,7 @@ async function ageItem(stack: Stack, itemId: string, ms: number): Promise<void> 
        SET "created_at" = "created_at" - ${interval},
            "returned_at" = "returned_at" - ${interval}
      WHERE "item_id" = ${itemId}::uuid`);
+  await receiveOpenItem(stack.db, itemId);
 }
 
 test('fix links validate every authority and are visible as handledBy', { skip, timeout: 180_000 }, async () => {

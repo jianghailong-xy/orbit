@@ -17,12 +17,9 @@ import io.orbitd.android.R
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.management.RunnerCopy
 import io.orbitd.android.management.RunnerPage
-import io.orbitd.android.reader.EngineErrors
 import io.orbitd.android.text.*
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.serialization.json.*
-import java.time.Instant
-import java.time.ZoneId
 
 /** [recorded]: drawn in a review as the record this window's press made of it — what the press made past is left out. */
 @Composable
@@ -92,8 +89,6 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
         }
         CardFamily.EVIDENCE -> {
             Text(row.text("title") ?: "", style = MaterialTheme.typography.titleSmall)
-            // Opened by Decide it myself: still saying what it waits for, and that deciding here is the owner's choice.
-            if (CoordinatorQueue.isDecidingMyself(card)) { CoordinatorPausedLine(card); CoordinatorNote(card, CoordinatorQueue.decideHere) }
             Text("Evidence revision ${row.text("evidenceRevision") ?: ""}", style = MaterialTheme.typography.labelMedium)
             Field("Criterion", row.obj("criterion")?.get("text"), open)
             // What the evidence is, right under what it is measured against, and only when this version cites a file (§2.6).
@@ -159,12 +154,7 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
         CardFamily.WIKI -> CardFields(row, listOf("op", "entryId", "baseRevision", "payload", "similar", "tainted", "decision", "reason", "change", "facts", "version", "categories", "docs", "gate", "sources", "summary", "fields", "trust", "revert"), open)
         CardFamily.BACKGROUND -> CardFields(row, listOf("state", "predicate", "targets", "matches", "expiryDeliveries", "expiresAt"), open)
         CardFamily.REVIEW, CardFamily.SESSION_REQUEST -> CardFields(row, row.keys.filterNot { it.endsWith("Token") }, open)
-        // A revision waiting for its paused coordinator (`CoordinatorQueue`); one sent to it is a line of the rail (`SessionCards`).
-        CardFamily.COORDINATOR_QUEUE -> if (!CoordinatorQueue.isSent(card)) {
-            Text(row.text("title") ?: "", style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            CoordinatorPausedLine(card)
-            CoordinatorNote(card, CoordinatorQueue.explanation)
-        }
+        CardFamily.COORDINATOR_QUEUE -> Unit
     }
 }
 
@@ -227,29 +217,6 @@ private fun WorkspaceWriteCardBody(write: WorkspaceWriteCard) {
     }
     Text(WorkspaceWriteCards.note, style = small, color = muted)
 }
-
-/**
- * Why a revision waits for its coordinator (project 34cygPTQe5LPUT7tdUAzG), read off the coordinator's own session: the quota
- * window it ran out of — judged as the conversation's own quota row judges it (`EngineErrors`), from what its failed run said, else
- * from its last reply, since a usage limit can park a retry without failing the run — and when that resets (its `retryAt`); for any
- * other failure, when it retries. A coordinator no longer paused gets the revision when its current turn ends.
- */
-internal fun coordinatorPauseLine(coordinator: JsonObject, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String {
-    if (!CoordinatorQueue.isPaused(coordinator)) return CoordinatorQueue.back
-    val failed = (coordinator.text("runState") ?: coordinator.text("status")) == "FAILED"
-    val said = coordinator.text("error")?.takeIf { failed && it.isNotBlank() } ?: coordinator.text("lastAssistantText")
-    val window = said?.takeIf(EngineErrors::isUsageLimitErrorText)?.let(EngineErrors::quotaWindow)
-    return CoordinatorQueue.pausedLine(window, coordinator.text("retryAt")?.let { OwnerReview.receiptTime(it, now, zone) })
-}
-
-@Composable
-private fun CoordinatorPausedLine(card: InteractionCard) = Text(coordinatorPauseLine(card.context.obj("coordinator") ?: JsonObject(emptyMap())),
-    Modifier.testTag("${card.key}:paused"), style = MaterialTheme.typography.bodySmall, color = LocalOrbitColors.current.needsYou)
-
-/** The line under the paused one: that the owner may still decide, or — once they chose to — that it is theirs to choose. */
-@Composable
-private fun CoordinatorNote(card: InteractionCard, text: String) = Text(text, Modifier.testTag("${card.key}:note"),
-    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
 @Composable
 internal fun CardFields(source: JsonObject, fields: List<String>, open: (String) -> Unit) {
