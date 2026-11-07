@@ -1341,8 +1341,9 @@ model ManagedRunner {
   /// receipt may advance it, which this version never does.
   generation         Int                          @default(1)
   /// Compare-and-set counter: every manager and owner write of this row is `WHERE revision = <read>`
-  /// and bumps it. Two writes of their own columns are predicate writes instead and leave it: demand
-  /// (`demandRevision`, `lastDemandAt`, RUNNING desired) and a drained instance's `stopAcknowledgedAt`.
+  /// and bumps it. Three writes of their own columns are predicate writes instead and leave it: demand
+  /// (`demandRevision`, `lastDemandAt`, RUNNING desired), a drained instance's `stopAcknowledgedAt`,
+  /// and the manager's `volumeMeasurement`.
   revision           Int                          @default(1)
   /// The run backend that made this mapping's volume and instances, and alone drives them
   /// (managed-runner-backend.ts): `kubernetes` — every mapping before migration 0430 — or `docker`.
@@ -1368,6 +1369,12 @@ model ManagedRunner {
   /// migration 0413): storage while its volume exists, compute from admission until its instance is
   /// proven stopped. Written only together with `managed_runner_capacity`, in one transaction.
   reservation        Json?
+  /// The data volume as its backend last measured it (Docker: the channel's `limitBytes` and
+  /// `usageBytes`), `{limitBytes, usageBytes, measuredAt}`, which the runner's heartbeat relays as its
+  /// storage budget (managed-runner-storage.ts, migration 0480). Written by the manager under its
+  /// lease when the figures change; `measuredAt` is when it first read them, never before the
+  /// backend took them. Null until a measurement is read, and always on Kubernetes.
+  volumeMeasurement  Json?                        @map("volume_measurement")
   /// Demand: bumped by every piece of work addressed to this runner while the switch is on
   /// (managed-runner-demand.ts), whatever the state. Sleep compares it before it stops anything.
   demandRevision     Int                          @default(0) @map("demand_revision")
@@ -1950,6 +1957,12 @@ model Session {
   /// that cannot be written down becomes a run that started from somewhere nobody chose.
   sourceRefusalCode        String?   @map("source_refusal_code")
   sourceRefusalDetail      Json?     @map("source_refusal_detail")
+  /// The wiki space this session is a chat of (migration 0476, wiki contract `chat.binding`): a session
+  /// is a chat exactly when it is set. Written by the chat's create in this row's own INSERT and never
+  /// afterwards (a trigger refuses the UPDATE), so a session is a chat for its whole life or never. No
+  /// foreign key: a deleted space leaves its chats as sessions. Its partial index over
+  /// (wiki_chat_space_id, created_at) is the migration's alone, as schema.prisma cannot spell one.
+  wikiChatSpaceId          String?   @map("wiki_chat_space_id") @db.Uuid
   // ── Per-session git worktree isolation ──────────────────────────────────────
   // When the agent's workDir is a git repo, the runner runs this session in its own
   // git worktree on `branch`, forked from `baseSha` (the workDir HEAD at claim time).
@@ -2634,6 +2647,10 @@ model ConversationTurn {
   /// Coordinator-context digest attached to this delivery. It is acknowledged onto Session only
   /// when this exact top-level turn succeeds under the same engine generation and compaction epoch.
   coordinatorContextKey String? @map("coordinator_context_key") @db.Char(64)
+  /// A wiki chat's message: the page and selection it carried (`{ page?, selection? }`, wiki contract
+  /// `chat.notes.wikiContext`, migration 0476), as ids. Delivery reads what they name and appends it as
+  /// the control plane's note, so `content` stays the owner's words. Null for every other turn.
+  wikiContext     Json?     @map("wiki_context")
   answeredAt      DateTime? @map("answered_at")
   createdAt       DateTime  @default(now()) @map("created_at")
 
@@ -7400,6 +7417,8 @@ model WikiSpace {
   docs            WikiDoc[]
   /// The sections its documents' writes replaced, as they stood (0475).
   docVersions     WikiDocSectionVersion[]
+  /// The cards its chats' agents drafted, and what the owner pressed (0483).
+  chatDrafts      WikiChatDraft[]
   /// Its public links, live and ended (0403).
   shareLinks      ShareLink[]
 
@@ -8280,6 +8299,51 @@ model WikiDocSectionVersion {
   @@map("wiki_doc_section_version")
 }
 
+/// One card a wiki chat's agent drafted (migration 0483, contract `chat.drafts`; docs/wiki-contract.md §28.5): never a
+/// changeset, so it takes no place in Review or its quotas. Its state is derived on read (`wikiChatDraftState`), never
+/// stored; the press is the owner's (`chat.presses`).
+model WikiChatDraft {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  ownerId        String    @map("owner_id") @db.Uuid
+  spaceId        String    @map("space_id") @db.Uuid
+  space          WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_chat_draft_space_fkey")
+  /// The chat it was drafted in. A history reference with no foreign key.
+  sessionId      String    @map("session_id") @db.Uuid
+  /// `entry` | `rewrite` | `plan`.
+  kind           String
+  rationale      String
+  /// entry: `[{ seq, op, entryId, baseRevision, payload, similar, tainted }, …]`, as checked and redacted.
+  ops            Json      @default("[]")
+  /// rewrite: `[{ doc, key }, …]`.
+  sections       Json      @default("[]")
+  /// plan: the change, shaped as a plan proposal's.
+  change         Json?
+  /// `[{ doc, key }, …]`: what its press rewrites, worked out when it was drafted.
+  rewrites       Json      @default("[]")
+  tainted        Boolean   @default(false)
+  /// The open card of the same chat it replaced. A history reference with no foreign key.
+  replacesId     String?   @map("replaces_id") @db.Uuid
+  idempotencyKey String?   @map("idempotency_key")
+  requestSha256  String?   @map("request_sha256") @db.Char(64)
+  /// `applied` | `edited` | `discarded`, set with `decidedAt`.
+  decision       String?
+  decidedAt      DateTime? @map("decided_at") @db.Timestamptz(3)
+  /// The changeset an entry card's Apply or Edit recorded. A history reference with no foreign key.
+  changesetId    String?   @map("changeset_id") @db.Uuid
+  /// `{ "<entry id>": "<trust>" }`: what each entry an amend of the card changed was trusted as before the press.
+  trustBefore    Json?     @map("trust_before")
+  undoneAt       DateTime? @map("undone_at") @db.Timestamptz(3)
+  seenAt         DateTime? @map("seen_at") @db.Timestamptz(3)
+  /// When the agent was last told of its press, with the owner's next message (`chat.notes.drafts`).
+  toldAt         DateTime? @map("told_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([id, ownerId], map: "wiki_chat_draft_id_owner_id_key")
+  @@index([sessionId, createdAt], map: "wiki_chat_draft_session_idx")
+  @@index([spaceId, createdAt], map: "wiki_chat_draft_space_idx")
+  @@map("wiki_chat_draft")
+}
+
 /// The System model as the wiki-worker last found it, and the worker's heartbeat (migration 0400, contract
 /// `systemModel.status`; docs/wiki-server-execution-design.md §5.3). Exactly one row, id 1: the worker writes
 /// it, the apiserver only reads it. No column holds the endpoint's address or its key.
@@ -8306,15 +8370,15 @@ model WikiModelStatus {
 /// docs/wiki-server-execution-design.md §5.1). The wiki-worker claims it the way the Watch delivery
 /// worker claims a delivery — `UPDATE … FROM (SELECT … FOR UPDATE SKIP LOCKED)`, a fresh lease
 /// generation per claim, every later write a compare-and-set on that generation — holds one space's
-/// single running job at a time (a partial unique index over `space_id`), and ends it with what it
-/// reported. At most one kind runs today (`smoke`, the queue's own end-to-end probe); the pipeline
-/// kinds arrive with the phases that implement them.
+/// single running job at a time (partial unique indexes over `space_id`), with one exception since
+/// 0477: a `docs_follow` job runs beside a job of its space that writes no document (contract
+/// `jobs.onePerSpace`) — and ends it with what it reported.
 model WikiJob {
   id      String    @id @default(uuid(7)) @db.Uuid
   ownerId String    @map("owner_id") @db.Uuid
   spaceId String    @map("space_id") @db.Uuid
   space   WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_job_space_fkey")
-  /// `verify` | `articles` | `import` | `plan_draft` | `plan_revise` | `docs_build` | `maintain` | `smoke`.
+  /// `verify` | `articles` | `import` | `plan_draft` | `plan_revise` | `docs_build` | `maintain` | `smoke` | `docs_follow`.
   kind  String
   /// The job's own material: what to verify, draft, build — never the model's address or key.
   input Json   @default("{}")
@@ -8348,9 +8412,10 @@ model WikiJob {
   @@index([priority(sort: Desc), createdAt, id], map: "wiki_job_claim_idx")
   /// The lease-expiry sweep, as the migration creates it: partial over running rows.
   @@index([leaseDeadlineAt], map: "wiki_job_lease_expiry_idx")
-  /// One running job per space: what the claim skips a busy space by, and what holds it anyway —
-  /// a partial unique index the migration creates (`wiki_job_space_running_key`), which Prisma's own
-  /// index syntax cannot express, so it lives in the SQL and nowhere else.
+  /// One running job per space, the follow job's exception aside: what the claim skips a busy space by,
+  /// and what holds it anyway — two partial unique indexes 0477 creates (`wiki_job_space_running_other_key`,
+  /// `wiki_job_space_running_writer_key`, in place of 0401's `wiki_job_space_running_key`), which Prisma's
+  /// own index syntax cannot express, so they live in the SQL and nowhere else.
   @@map("wiki_job")
 }
 
@@ -8378,6 +8443,9 @@ model WikiModelRequest {
   /// `{ system, prompt, maxTokens }` and its sha256, so a replay proves it is the same call.
   request       Json   @map("request")
   requestSha256 String @map("request_sha256") @db.Char(64)
+  /// What the call was made from, for a replay to read its answer against (0482, contract `modelQueue.material`): the
+  /// maintain job's case file of a session's first question; null on every other call.
+  material Json? @map("material")
   /// `queued` | `running` | `succeeded` | `failed` | `cancelled`.
   state String @default("queued")
   /// The lease: the three together exactly while running, cleared by every settle (a CHECK holds both ways).

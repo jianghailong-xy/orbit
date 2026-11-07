@@ -6,6 +6,7 @@
 // the same words, and wikiChatContract.spec.ts holds all of it to the contract JSON and to the vectors of
 // src/shared/src/wiki-chat.fixture.json, which OrbitKit reads too.
 
+import type { WikiRefusal, WikiSimilar } from './wiki';
 import type { WikiJobKind } from './wikiJobs';
 import type { WikiRepoLook } from './wikiRepoOps';
 import type { WikiSystemModelReadState } from './wikiSystemModel';
@@ -167,6 +168,8 @@ export const WIKI_CHAT_COPY = {
     web: 'Based on web content',
     webNote: 'Read before you apply.',
     applied: 'Applied · Confirmed by you',
+    appliedInReview: 'Applied · In Review',
+    appliedInReviewNote: 'Re-confirm, amend or retire the entry in Review.',
     discarded: 'Discarded',
     notApplied: 'Not applied',
     undone: 'Undone',
@@ -298,8 +301,26 @@ export function wikiChatDraftLabel(kind: WikiChatDraftKind, ops: readonly WikiCh
   return WIKI_CHAT_COPY.card[only!.op];
 }
 
-/** The card's status line (design §7.3's first column): `Draft · <label>` while it is open, its state after. */
-export function wikiChatCardTitle(state: WikiChatDraftState, label: string): string {
+/** One op of a card as its title reads it: what it does, and — once pressed — its decision in the changeset the press recorded. */
+export interface WikiChatPressedOp {
+  op: string;
+  decision?: string | null;
+}
+
+/**
+ * Whether an applied card still waits in Review (contract `chat.drafts.states.applied`): it holds a challenge whose
+ * decision is pending. Its press raised the flag on the entry, and the owner answers that flag in Review — re-confirms,
+ * amends or retires the entry — so the card is not confirmed and says `Applied · In Review` instead.
+ */
+export function wikiChatAppliedInReview(state: WikiChatDraftState, ops: readonly WikiChatPressedOp[]): boolean {
+  return state === 'applied' && ops.some((op) => op.op === 'challenge' && op.decision === 'pending');
+}
+
+/**
+ * The card's status line (design §7.3's first column): `Draft · <label>` while it is open, its state after — an applied
+ * card still waiting in Review (`wikiChatAppliedInReview`) says so rather than that it is confirmed.
+ */
+export function wikiChatCardTitle(state: WikiChatDraftState, label: string, inReview = false): string {
   const { card } = WIKI_CHAT_COPY;
   switch (state) {
     case 'draft':
@@ -309,7 +330,7 @@ export function wikiChatCardTitle(state: WikiChatDraftState, label: string): str
     case 'changed':
       return card.changed;
     case 'applied':
-      return card.applied;
+      return inReview ? card.appliedInReview : card.applied;
     case 'discarded':
       return card.discarded;
     case 'not_applied':
@@ -393,6 +414,117 @@ export function wikiChatCardNeedsYou(card: WikiChatCard): boolean {
 /** A space's cards that add to W, one each (contract `space.list.chatWaiting`). */
 export function wikiChatWaiting(cards: readonly WikiChatCard[]): number {
   return cards.filter(wikiChatRewriteWaits).length;
+}
+
+/**
+ * Whether Undo can take a card back (contract `chat.presses.undo`): an applied entry card every op of which is an add or
+ * an amend — the two a revert takes back; a supersede and a retire end a lineage, and a reinforce or a challenge is
+ * answered as any other, the challenge in Review — and an applied rewrite card. A plan card's is C12's.
+ */
+export function wikiChatDraftUndoable(kind: WikiChatDraftKind, state: WikiChatDraftState, ops: readonly WikiChatDraftOp[]): boolean {
+  if (state !== 'applied') return false;
+  if (kind === 'rewrite') return true;
+  if (kind !== 'entry') return false;
+  return ops.length > 0 && ops.every((op) => op.op === 'add' || op.op === 'amend');
+}
+
+// ── A card as the user door and the drafting tools serve it ─────────────────────────────────────
+
+/** One op of an entry card (contract `chat.drafts.read`, ops): as checked, with its entry as it stands now. */
+export interface WikiChatDraftOpView {
+  seq: number;
+  op: WikiChatDraftOp['op'];
+  /** The entry the op is about; for an applied add or supersede, the entry it wrote. */
+  entryId: string | null;
+  baseRevision: number | null;
+  /** The op as checked and redacted: what Apply records. */
+  payload: Record<string, unknown>;
+  similar: WikiSimilar[];
+  tainted: boolean;
+  /** That entry as it stands now (entryView), or null when there is none. */
+  entry: Record<string, unknown> | null;
+  /** Once pressed, the op's decision in the changeset the press recorded: accepted, edited, or pending for a challenge Review answers. */
+  decision: string | null;
+}
+
+/** A section a card names (contract `chat.drafts.read`, rewrites and sections): its document's number, its own and its title. */
+export interface WikiChatDraftSectionView {
+  doc: string;
+  key: string;
+  /** "3.1 §3" (wikiChatWhere), or `slug §key` for a section the confirmed plan no longer numbers. */
+  where: string;
+  title: string | null;
+}
+
+/** An applied card's rewrite (contract `chat.drafts.read`, rewrite). */
+export interface WikiChatDraftRewriteView {
+  jobId: string;
+  result: WikiChatRewriteResult;
+  reason: WikiDocsFollowWaiting | null;
+  sha: string | null;
+  sections: Array<{ doc: string; key: string; where: string; result: WikiChatSectionResult['result']; changed: number | null; versionId: string | null }>;
+  seen: boolean;
+  settledAt: string | null;
+}
+
+/** `GET /api/wiki/chat-drafts/:id`, and each card of `GET /api/wiki/chats/:id/drafts` (contract `chat.drafts.read`). */
+export interface WikiChatDraftView {
+  id: string;
+  sessionId: string;
+  kind: WikiChatDraftKind;
+  state: WikiChatDraftState;
+  label: string;
+  rationale: string;
+  ops: WikiChatDraftOpView[];
+  sections: WikiChatDraftSectionView[];
+  rewrites: WikiChatDraftSectionView[];
+  /** The entries the card's adds and supersedes resemble, each once, best first: shown before the press (design §10). */
+  similar: WikiSimilar[];
+  tainted: boolean;
+  replaces: string | null;
+  replacedBy: string | null;
+  decision: 'applied' | 'edited' | 'discarded' | null;
+  decidedAt: string | null;
+  undoneAt: string | null;
+  undoable: boolean;
+  changesetId: string | null;
+  rewrite: WikiChatDraftRewriteView | null;
+  createdAt: string;
+}
+
+/** One op of a drafting call's answer in a chat (contract `agentSurface.chat.propose`): drafted, or why not. */
+export type WikiChatDraftOpOutcome =
+  | { seq: number; status: 'draft'; entryId: string | null; similar?: WikiSimilar[] }
+  | {
+      seq: number;
+      status: 'conflict';
+      entryId: string;
+      baseRevision: number;
+      currentRevision: number;
+      current: Record<string, unknown>;
+      diff: string;
+    }
+  | { seq: number; status: 'refused'; reasons: WikiRefusal[] };
+
+/** What wiki_propose answers in a chat (contract `agentSurface.chat.propose`); a request none of whose ops passed answers as ever. */
+export interface WikiChatProposeAnswer {
+  status: 'draft';
+  /** Null for a dry run, which makes nothing. */
+  draftId: string | null;
+  replayed: boolean;
+  dryRun?: true;
+  ops: WikiChatDraftOpOutcome[];
+  similar: WikiSimilar[];
+  rewrites: WikiChatDraftSectionView[];
+}
+
+/** What wiki_draft answers (contract `agentSurface.chat.draft.returns`). */
+export interface WikiChatDraftToolAnswer {
+  status: 'draft';
+  draftId: string;
+  kind: WikiChatDraftKind;
+  replayed: boolean;
+  rewrites: WikiChatDraftSectionView[];
 }
 
 // ── The round button ─────────────────────────────────────────────────────────────────────────────
@@ -537,6 +669,93 @@ export function wikiDocsFollowWaiting(facts: WikiDocsFollowFacts): WikiDocsFollo
   }
   if (facts.writerRunning && WRITER_REASON[facts.writerRunning]) return WRITER_REASON[facts.writerRunning]!;
   return MODEL_REASON[facts.model] ?? REPO_REASON[facts.repo] ?? null;
+}
+
+/**
+ * A fact a follow job carries (contract `docs.follow.triggers`): a chat's press, with the card's sections and the
+ * entries it wrote; or a change that reached main — a session's merge, or a landing line's — with the range of
+ * commits it put there. A job carries every fact that joined it while it was queued (`docs.follow.queue`).
+ */
+export type WikiDocsFollowFact =
+  | {
+    kind: 'press';
+    /** The card pressed (`wiki_chat_draft`) and the chat it was drafted in (its session). */
+    draftId: string;
+    chatId: string;
+    /** The chat's title, as the version a written section keeps names it: `after chat <title>`. */
+    title: string;
+    /** The card's Rewrites, written whatever their fingerprint. */
+    sections: WikiChatSectionRef[];
+    /** The entries the card wrote, handed to each of its sections with their live sources. */
+    entryIds: string[];
+    at: string;
+  }
+  | {
+    kind: 'merge' | 'landing';
+    /** The session_merge_receipt that recorded it. */
+    receiptId: string;
+    /** The session's title for a merge, the task's or project's for a landing: `after <title> merged` / `landed`. */
+    title: string;
+    /** main before it and the commit it put there: the files the range changed are what it touched. */
+    from: string;
+    sha: string;
+    /** The merge was a chat's (`priorities.chatMerge`). */
+    chat: boolean;
+    at: string;
+  };
+
+/** A follow job's input: the facts it carries, in the order they came. */
+export interface WikiDocsFollowInput {
+  facts: WikiDocsFollowFact[];
+}
+
+/** What became of a section a follow job took up (contract `docs.follow.outcomes`). */
+export const WIKI_DOCS_FOLLOW_OUTCOMES = ['written', 'unchanged', 'gone', 'failed'] as const;
+export type WikiDocsFollowOutcome = (typeof WIKI_DOCS_FOLLOW_OUTCOMES)[number];
+
+/** One section of a follow job's report (contract `docs.follow.report`). */
+export interface WikiDocsFollowReportSection {
+  doc: string;
+  key: string;
+  outcome: WikiDocsFollowOutcome;
+  /** Sentences the write changed against the version it replaced (`wikiDocSentenceDiff`); null when none was kept. */
+  changed: number | null;
+  /** The version the write kept of what it replaced (`docs.versions`), or null. */
+  versionId: string | null;
+  /** A press asked for it: written whatever its fingerprint. */
+  forced: boolean;
+  /** The cards whose press asked for it. */
+  draftIds: string[];
+  /** Why a failed section was left unwritten. */
+  why?: string;
+}
+
+/** A follow job's report (contract `docs.follow.report`), on the job's row once it ends. */
+export interface WikiDocsFollowReport {
+  kind: 'docs_follow';
+  /** The origin/main commit it wrote from; '' when it read none. */
+  sha: string;
+  sections: WikiDocsFollowReportSection[];
+  /** The sections merges and landings asked for that the day's budget left for the next maintenance run. */
+  left: number;
+  usage: { inputTokens: number; outputTokens: number; calls: number };
+}
+
+/**
+ * How one of a card's sections came out once its follow job ended (contract `chat.drafts.results`): written with a
+ * sentence changed — or written for the first time, with nothing before it to compare — is updated, written with none
+ * changed is same; a section left as it was reads the same too; gone and failed are themselves.
+ */
+export function wikiDocsFollowSectionResult(section: Pick<WikiDocsFollowReportSection, 'outcome' | 'changed'>): 'updated' | 'same' | 'failed' | 'gone' {
+  if (section.outcome === 'failed' || section.outcome === 'gone') return section.outcome;
+  if (section.outcome === 'written' && section.changed !== 0) return 'updated';
+  return 'same';
+}
+
+/** A card's result over its sections (contract `chat.drafts.results`): the first of failed, same, updated and gone one of them is. */
+export function wikiDocsFollowCardResult(results: ReadonlyArray<'updated' | 'same' | 'failed' | 'gone'>): 'updated' | 'same' | 'failed' | 'gone' {
+  for (const result of ['failed', 'same', 'updated', 'gone'] as const) if (results.includes(result)) return result;
+  return 'gone';
 }
 
 /**
@@ -721,6 +940,120 @@ export function wikiChatNoteLabel(note: WikiChatNote): string {
       return fill(notes.drafts, { counts: counts.join(', ') });
     }
   }
+}
+
+/** `"` `&` `<` `>` as an opening tag's attribute value carries them (wikiChatNoteAttribute / parseWikiChatNoteTag). */
+const ATTRIBUTE_ESCAPES: Record<string, string> = { '&': '&amp;', '"': '&quot;', '<': '&lt;', '>': '&gt;' };
+
+/** One attribute of a chat note's opening tag, its value escaped so a title holding a quote stays one value. */
+export function wikiChatNoteAttribute(name: string, value: string | number): string {
+  return `${name}="${String(value).replace(/[&"<>]/gu, (ch) => ATTRIBUTE_ESCAPES[ch]!)}"`;
+}
+
+/**
+ * A chat note read back from its block's opening tag (`<orbit_wiki_selection doc="3.1" section="3" …>`), as a client
+ * names it on the "Orbit attached:" line; null for any other block, or one whose tag lacks what its label needs, which
+ * a client then names as any block it does not know.
+ */
+export function parseWikiChatNoteTag(block: string): WikiChatNote | null {
+  const head = /^<(orbit_wiki_\w+)((?:\s+[\w-]+="[^"]*")*)\s*>/u.exec(block.trimStart());
+  if (!head) return null;
+  const attributes = new Map<string, string>();
+  for (const [, name, value] of head[2]!.matchAll(/([\w-]+)="([^"]*)"/gu)) {
+    attributes.set(name!, value!.replace(/&(amp|quot|lt|gt);/gu, (_, e: string) => ({ amp: '&', quot: '"', lt: '<', gt: '>' })[e]!));
+  }
+  const text = (name: string) => attributes.get(name);
+  // A page or a selection no longer in the plan has no number to give: its slug and key name it instead.
+  const doc = text('doc') ?? text('slug');
+  const section = text('section') ?? text('key');
+  const count = (name: string) => {
+    const value = text(name);
+    return value !== undefined && /^\d+$/u.test(value) ? Number(value) : null;
+  };
+  switch (head[1]) {
+    case WIKI_CHAT_NOTE_TAGS.chat:
+      return { kind: 'chat' };
+    case WIKI_CHAT_NOTE_TAGS.page: {
+      const of = text('of');
+      if (of === 'doc' && doc && section) return { kind: 'page', of, doc, section };
+      if (of === 'entry' && (text('title') ?? text('entry')) !== undefined) return { kind: 'page', of, title: (text('title') ?? text('entry'))! };
+      if (of === 'plan' && doc) return { kind: 'page', of, doc };
+      return null;
+    }
+    case WIKI_CHAT_NOTE_TAGS.selection: {
+      const sentences = count('sentences');
+      const sources = count('sources');
+      if (!doc || !section || sentences === null || sources === null) return null;
+      return {
+        kind: 'selection',
+        doc,
+        section,
+        ...(text('to') ? { toSection: text('to')! } : {}),
+        sentences,
+        sources,
+      };
+    }
+    case WIKI_CHAT_NOTE_TAGS.drafts: {
+      const [applied, edited, discarded, undone] = (['applied', 'edited', 'discarded', 'undone'] as const).map((key) => count(key) ?? 0);
+      return { kind: 'drafts', applied: applied!, edited: edited!, discarded: discarded!, undone: undone! };
+    }
+    default:
+      return null;
+  }
+}
+
+// ── The chats of a space, as the user door serves them ───────────────────────────────────────────
+
+/** A workspace a space's chats may run in (contract `chat.list.choices`), or the remembered one (`chat.list.workspace`). */
+export interface WikiChatWorkspace {
+  id: string;
+  name: string;
+  /** Its machine, as Wiki settings' Workspaces card names it; null when it has none. */
+  runner: string | null;
+  /** By the runners list's own rule: not signed off, and heard from within the offline window. */
+  online: boolean;
+}
+
+/** One chat of a space (contract `chat.list.chats`). */
+export interface WikiChatRow {
+  sessionId: string;
+  title: string;
+  status: string;
+  /** One of OPEN_SESSION_STATUSES and not in Trash. */
+  open: boolean;
+  createdAt: string;
+  updatedAt: string;
+  /** How many cards it holds. */
+  drafts: number;
+  /** How many of the button's `needsYou` are this chat's. */
+  needsYou: number;
+}
+
+/** `GET /api/wiki/spaces/:id/chats` (contract `chat.list`). */
+export interface WikiChatList {
+  spaceId: string;
+  /** The remembered workspace as it stands now, or null when none is remembered. */
+  workspace: (WikiChatWorkspace & { eligible: boolean }) | null;
+  choices: WikiChatWorkspace[];
+  fab: WikiChatFabCounts;
+  chats: WikiChatRow[];
+}
+
+/** `POST /api/wiki/spaces/:id/chats` (contract `chat.create.body`). */
+export interface WikiChatCreateBody {
+  workspaceId?: string;
+  content: string;
+  clientTurnId: string;
+  wikiContext?: WikiChatContext;
+  engine?: string;
+  model?: string;
+  permissionMode?: string;
+}
+
+/** What creating a chat answers (contract `chat.create.answer`). */
+export interface WikiChatCreateAnswer {
+  sessionId: string;
+  chat: WikiChatRow;
 }
 
 // ── The page and the selection a message carries ─────────────────────────────────────────────────

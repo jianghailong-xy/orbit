@@ -324,8 +324,8 @@ final class WikiCopyParityTests: XCTestCase {
     // MARK: the drawer's Wiki row
 
     /// The row sits right after Projects, draws the book, and its amber number is what waits on the owner
-    /// across every space — each space's proposals and the things its plan waits for (`wikiWaiting`) —
-    /// nothing at zero, and "3 waiting on you" as its accessible name, the Projects row's own words. The
+    /// across every space — each space's proposals, the things its plan waits for and its chat rewrites that wait
+    /// (`wikiWaiting`) — nothing at zero, and "3 waiting on you" as its accessible name, the Projects row's own words. The
     /// head's Activity badge is the same number from the same function.
     func testTheDrawerRowCountsWhatTheWebSidebarCounts() throws {
         let web = try source(Self.sidebar)
@@ -335,10 +335,12 @@ final class WikiCopyParityTests: XCTestCase {
         assertSays(web, "t.key === 'wiki' && wikiWaitingCount > 0", in: Self.sidebar)
         assertSays(web, "aria-label={wikiWaitingOnYou(wikiWaitingCount)}", in: Self.sidebar)
         let rules = try source(Self.spaceLib)
-        assertSays(rules, "return (space.pendingOps ?? 0) + (space.planWaiting ?? 0);", in: Self.spaceLib)
+        assertSays(rules, "return (space.pendingOps ?? 0) + (space.planWaiting ?? 0) + (space.chatWaiting ?? 0);", in: Self.spaceLib)
         assertSays(rules, "return spaces.reduce((sum, space) => sum + wikiWaitingIn(space), 0);", in: Self.spaceLib)
         XCTAssertEqual(WikiSpaceLogic.waiting([WikiSpace(id: "a", slug: "a", pendingOps: 1, planWaiting: 2),
                                                WikiSpace(id: "b", slug: "b", pendingOps: 3)]), 6)
+        XCTAssertEqual(WikiSpaceLogic.waiting([WikiSpace(id: "a", slug: "a", pendingOps: 1, planWaiting: 2, chatWaiting: 3),
+                                               WikiSpace(id: "b", slug: "b", pendingOps: 3)]), 9)
         XCTAssertEqual(WikiCopy.waitingOnYou(6), "6 waiting on you")
         let page = try source(Self.page)
         assertSays(page, "<WikiActivityButton spaceSlug={space.slug} waiting={wikiWaiting(rows)} on={activity} />",
@@ -547,12 +549,12 @@ final class WikiCopyParityTests: XCTestCase {
     /// decisions, the five newest changes, the three most used — and the verbs.
     func testTheHomeRowsAreTheWebsRows() throws {
         let activity = try source(Self.activity)
-        // Recently changed is Activity's now (design §12.3.2). One run is one row: the five newest rows,
+        // Recently changed is Activity's now (design §12.3.2). One run is one row: the five newest entry rows,
         // every run folded in by the changeset its items name (`wikiRecentRows`) — the same five
-        // `WikiHomeContent.recentRows` the native Activity draws.
-        assertSays(activity, "const rows = useMemo(() => wikiRecentRows(timeline.data?.items ?? []).slice(0, 5), [timeline.data]);",
-                   in: Self.activity)
-        assertSays(activity, "{rows.map((row) =>", in: Self.activity)
+        // `WikiHomeContent.recentRows` the native Activity draws. The web's list also holds the documents' newest
+        // five by time (Docs rows, docs/wiki-chat-design.md §8.4, C9), which that design's §13 gives the web alone.
+        assertSays(activity, "const entryRows = wikiRecentRows(timeline.data?.items ?? []) .slice(0, 5)", in: Self.activity)
+        assertSays(activity, "{rows.map((entry) =>", in: Self.activity)
         let lib = try source(Self.lib)
         for verb in ["if (item.decision === 'accepted') return WIKI_HISTORY_CONFIRMED_BY;",
                      "if (item.decision === 'edited') return 'Edited by you';",

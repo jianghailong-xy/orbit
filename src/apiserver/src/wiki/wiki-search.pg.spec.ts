@@ -43,7 +43,17 @@ import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
 import { WikiController } from './wiki.controller';
 import { broaden, normalizeSearchQuery } from '../sessions/search-query';
-import { anyWordPatterns, compareRanked, looksLikePath, pathQueries, rrfFuse, usageOf, WikiRetrieval } from './wiki-retrieval';
+import {
+  anyWordPatterns,
+  compareRanked,
+  looksLikePath,
+  pathQueries,
+  pathSpecificity,
+  pathWeight,
+  rrfFuse,
+  usageOf,
+  WikiRetrieval,
+} from './wiki-retrieval';
 import { WikiService } from './wiki.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -429,6 +439,41 @@ test('the last keyword pass asks about the words that take part, and session sea
   // The second pass still asks for every word, and that pass is all session search ever asks.
   const session = normalizeSearchQuery('go to the runner')!;
   assert.deepEqual(broaden(session)?.patterns, [['%go%'], ['%to%'], ['%the%'], ['%runner%']]);
+});
+
+test('a path match counts by how specific it is, and an exact one for more than a prefix one', () => {
+  // A file only one entry names is as specific as a path gets; sharing it, or naming many, says less.
+  assert.equal(pathSpecificity(1, 1, 1_000), 1);
+  assert.ok(pathSpecificity(3, 1, 1_000) < 1);
+  assert.ok(pathSpecificity(30, 1, 1_000) < pathSpecificity(3, 1, 1_000));
+  assert.equal(pathSpecificity(3, 2, 1_000), pathSpecificity(6, 1, 1_000), 'an entry naming two paths reads as a path twice as shared');
+  assert.equal(pathSpecificity(5_000, 1, 1_000), 0, 'never below nothing');
+  assert.equal(pathSpecificity(1, 1, 0), 1, 'an empty corpus divides by nothing');
+
+  // The two bands meet at 3/4, so an exact match never counts for less than a prefix one.
+  assert.equal(pathWeight(true, 1), 1);
+  assert.equal(pathWeight(true, 0), 0.75);
+  assert.equal(pathWeight(false, 1), 0.75);
+  assert.equal(pathWeight(false, 0), 0.5);
+
+  // A weight scales its hit's term; a leg without weights is the plain RRF it always was.
+  const fused = rrfFuse([
+    { match: 'keyword', ids: ['words', 'both'] },
+    { match: 'path', ids: ['both', 'shared-file'], weights: [0.5, 0.75] },
+  ]);
+  assert.deepEqual(
+    fused.map((hit) => [hit.id, hit.score]),
+    [
+      ['words', 1 / 61],
+      ['both', 1 / 62 + 0.5 / 61],
+      ['shared-file', 0.75 / 62],
+    ],
+  );
+  assert.deepEqual(
+    rrfFuse([{ match: 'keyword', ids: ['a', 'b'] }]).map((hit) => hit.score),
+    [1 / 61, 1 / 62],
+    'one leg and no weights: the scores a search without paths always had',
+  );
 });
 
 // ── the two-legged search ───────────────────────────────────────────────────────────────────────
@@ -1034,4 +1079,102 @@ test('0307 · the wiki search path', { skip, concurrency: 1, timeout: 300_000 },
     1,
     'the other space of this owner holds its entry',
   );
+});
+
+// ── the path leg's order ────────────────────────────────────────────────────────────────────────
+
+/**
+ * What the review of 2026-11-06 found the path leg's noise to be, each one a case against real rows:
+ * ranked by the length of the entry's own path, an entry anchored on a whole directory, or on a file
+ * many entries share, came back above the one that names the very file asked about, and one file's
+ * entries filled the answer to a search that named several. Its own space, so the counts the weights
+ * read are this case's alone.
+ */
+test('the path leg puts the asked file first, takes the asked paths in turn, and weighs a shared path down', { skip, concurrency: 1, timeout: 300_000 }, async (t) => {
+  const h = await boot();
+  const owner = await account(h, 'the owner of the path order');
+  const here = await space(h, owner, 'git@github.com:orbit/path-order.git');
+  const anchored = (title: string, path: string): Promise<string> =>
+    ownerEntry(h, owner, here, {
+      kind: 'concept',
+      title,
+      summary: `${title}, anchored on ${path}.`,
+      fields: { definition: `${title}.`, boundaries: 'Only itself.' },
+      anchors: [{ type: 'path', path }],
+    });
+  const worded = (title: string): Promise<string> =>
+    ownerEntry(h, owner, here, {
+      kind: 'concept',
+      title,
+      summary: `${title}, which no path reaches.`,
+      fields: { definition: `${title}.`, boundaries: 'Only itself.' },
+    });
+
+  // Two files three entries name each, a directory one entry is about, a file only a pitfall's
+  // trigger names, an entry the words and its own file both reach, and two only the words reach.
+  const main = [await anchored('Hub one', 'apps/hub/Main.kt'), await anchored('Hub two', 'apps/hub/Main.kt'), await anchored('Hub three', 'apps/hub/Main.kt')];
+  const other = [await anchored('Other one', 'apps/hub/Other.kt'), await anchored('Other two', 'apps/hub/Other.kt'), await anchored('Other three', 'apps/hub/Other.kt')];
+  const directory = await anchored('The hub directory', 'apps/hub');
+  const rare = await ownerEntry(h, owner, here, {
+    kind: 'pitfall',
+    title: 'The rare file bites',
+    summary: 'Only this pitfall names the rare file, as where it bites.',
+    fields: {
+      trigger: { paths: ['apps/hub/Rare.kt'], commands: ['gradle build'] },
+      symptom: 'It bites.',
+      cause: 'The rare file.',
+      fix: 'Read it first.',
+    },
+  });
+  const lamp = await anchored('A lantern on its own file', 'apps/hub/Lamp.kt');
+  const words = [await worded('Lantern one'), await worded('Lantern two')];
+  const on = (query: Record<string, string>) => ownerSearch(h, owner, { space: here, ...query });
+  const ids = (answer: Answer) => hitsOf(answer).map((hit) => hit.id);
+
+  await t.test("a directory's own entry comes before what lies under it", async () => {
+    const answer = await on({ paths: 'apps/hub' });
+    assert.equal(ids(answer)[0], directory, `ranked by path length it came last: ${JSON.stringify(answer.body.hits)}`);
+    assert.equal(hitsOf(answer).every((hit) => hit.match.join() === 'path'), true);
+  });
+
+  await t.test('a file one entry names comes before a file three share, and the directory holding both after them', async () => {
+    const answer = await on({ paths: 'apps/hub/Main.kt,apps/hub/Rare.kt' });
+    assert.equal(ids(answer)[0], rare, `the rare file's pitfall leads: ${JSON.stringify(answer.body.hits)}`);
+    assert.deepEqual(new Set(ids(answer).slice(1, 4)), new Set(main), 'then the shared file, exact matches all three');
+    assert.equal(ids(answer).at(-1), directory, 'and the directory, a prefix match, last');
+    assert.equal(ids(answer).length, 5);
+  });
+
+  await t.test('two asked files share the answer, rather than the longer path filling it', async () => {
+    const answer = await on({ paths: 'apps/hub/Main.kt,apps/hub/Other.kt', limit: '2' });
+    const file = (id: string) => (main.includes(id) ? 'Main.kt' : other.includes(id) ? 'Other.kt' : id);
+    assert.deepEqual(ids(answer).map(file).sort(), ['Main.kt', 'Other.kt'], `one of each: ${JSON.stringify(answer.body.hits)}`);
+  });
+
+  await t.test('a shared file counts for less than the words, a file one entry names as much, and no paths changes nothing', async () => {
+    // Without paths there is one leg, fused as it always was.
+    const plain = await on({ q: 'lantern' });
+    assert.deepEqual(new Set(ids(plain)), new Set([...words, lamp]), `the words find three: ${JSON.stringify(plain.body.hits)}`);
+    assert.deepEqual(
+      hitsOf(plain).map((hit) => hit.score),
+      hitsOf(plain).map((_, index) => Number((1 / (61 + index)).toFixed(6))),
+      'scores of 1/61, 1/62 and 1/63, as before any weight',
+    );
+
+    // Every entry the words found before every entry only the shared file did, and the directory last.
+    const shared = ids(await on({ q: 'lantern', paths: 'apps/hub/Main.kt' }));
+    const lastWord = Math.max(...ids(plain).map((id) => shared.indexOf(id)));
+    const firstFile = Math.min(...main.map((id) => shared.indexOf(id)));
+    assert.ok(lastWord >= 0 && lastWord < firstFile, `the words lead: ${JSON.stringify(shared)}`);
+    assert.equal(shared.at(-1), directory);
+
+    // A file only one entry names counts as much as the words' first hit.
+    const single = await on({ q: 'lantern', paths: 'apps/hub/Rare.kt' });
+    assert.equal(hitFor(single, rare, 'the rare pitfall').score, hitsOf(single)[0].score, `tied for first: ${JSON.stringify(single.body.hits)}`);
+
+    // And an entry both legs found leads the answer.
+    const both = await on({ q: 'lantern', paths: 'apps/hub/Lamp.kt' });
+    assert.equal(ids(both)[0], lamp);
+    assert.deepEqual(hitsOf(both)[0].match, ['keyword', 'path']);
+  });
 });

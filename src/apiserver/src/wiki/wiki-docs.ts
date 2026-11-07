@@ -64,6 +64,7 @@ import { markersOf, splitSentences, wikiRepoPath, withoutMarkers } from './wiki-
 import { parseDiagram } from './wiki-doc-diagram';
 import { docWithdrawReason } from './wiki-doc-withdrawal';
 import { withdrawDocSentencesByPath } from './wiki-docs-affected';
+import { wikiDocsFollowLeftRows } from './wiki-docs-follow';
 import { ownerEnvLiterals } from './wiki-dossier';
 import { requireConfirmedPlan } from './wiki-plan';
 import { WikiRefusalError, WikiService, type WikiPrincipal } from './wiki.service';
@@ -945,7 +946,11 @@ export type WikiDocWriteCause =
   | { reason: 'maintenance'; jobId: string }
   | { reason: 'build'; jobId: string; planVersion: number }
   | { reason: 'merge' | 'landing'; jobId: string; title: string; sha: string }
-  | { reason: 'chat'; jobId: string; title: string };
+  /**
+   * A chat's press (`docs.follow.triggers.press`). `draftIds` names the cards that asked for the section when nothing
+   * else did: the write is skipped once every one of them is undone (`store`, contract `chat.presses.undo`).
+   */
+  | { reason: 'chat'; jobId: string; title: string; draftIds?: readonly string[] };
 
 /** What a version says replaced it: a writer's cause, or the owner's restore of another version. */
 type VersionCause = WikiDocWriteCause | { reason: 'restore'; versionId: string };
@@ -1185,7 +1190,7 @@ const VERSION_READ_SELECT = {
   replacedAt: true,
 } satisfies Prisma.WikiDocSectionVersionSelect;
 
-const PLAN_SELECT = {
+export const PLAN_SELECT = {
   id: true,
   version: true,
   confirmedAt: true,
@@ -1209,7 +1214,7 @@ const PLAN_SELECT = {
   },
 } satisfies Prisma.WikiPlanSelect;
 
-type PlanRow = Prisma.WikiPlanGetPayload<{ select: typeof PLAN_SELECT }>;
+export type PlanRow = Prisma.WikiPlanGetPayload<{ select: typeof PLAN_SELECT }>;
 type PlanDocRow = PlanRow['docs'][number];
 
 interface PlanCategory {
@@ -1220,7 +1225,7 @@ interface PlanCategory {
 }
 
 /** Each document's number (`<category>.<n>`) and its category, in the plan's order. */
-function numbering(plan: PlanRow): Map<string, { number: string; category: { key: string; number: number; title: string } }> {
+export function numbering(plan: PlanRow): Map<string, { number: string; category: { key: string; number: number; title: string } }> {
   const categories = (plan.categories as unknown as PlanCategory[]) ?? [];
   const place = new Map(categories.map((category, i) => [category.key, { number: i + 1, title: category.title }]));
   const counted = new Map<string, number>();
@@ -1549,7 +1554,28 @@ export class WikiDocs {
             + 'and writes no document, and what it wants changed it drafts for the owner to apply.',
       });
     }
-    const version = await this.prisma.wikiDocSectionVersion.findFirst({
+    const restored = await withTransactionRetry(
+      this.prisma,
+      async (tx) => this.restoreIn(tx, ownerId, versionId, section),
+      loggedRetry(this.logger, 'wiki.restoreDocVersion'),
+    );
+    if (restored.outcome === 'restored') this.realtime?.publishWikiChanged(ownerId, restored.spaceId);
+    return restored;
+  }
+
+  /**
+   * `restore`, inside its caller's transaction: what a chat's Undo restores a section through (contract
+   * `chat.presses.undo`), after the entries its revert wrote — the lock order of every document write (entries first,
+   * documents after). The caller announces the change once its transaction commits; the owner channel is the caller's
+   * to have checked.
+   */
+  async restoreIn(
+    tx: Tx,
+    ownerId: string,
+    versionId: string,
+    section?: { slug: string; key: string },
+  ): Promise<WikiDocRestoreResult> {
+    const version = await tx.wikiDocSectionVersion.findFirst({
       where: { id: versionId, ownerId },
       select: {
         id: true,
@@ -1572,8 +1598,8 @@ export class WikiDocs {
     if (section && (section.slug !== slug || section.key !== key)) {
       throw new ConflictException(`this version is one section ${key} of ${slug} kept, not section ${section.key} of ${section.slug}: nothing was restored`);
     }
-    await requireConfirmedPlan(this.prisma, { ownerId, spaceId });
-    const plan = await this.confirmedPlan(this.prisma, ownerId, spaceId);
+    await requireConfirmedPlan(tx, { ownerId, spaceId });
+    const plan = await this.confirmedPlan(tx, ownerId, spaceId);
     const planDoc = plan?.docs.find((doc) => doc.slug === slug);
     const planSection = planDoc?.sections.find((one) => one.key === key);
     if (!plan || !planDoc || !planSection) {
@@ -1611,14 +1637,9 @@ export class WikiDocs {
       kept,
     };
     const request: DocWrite = { planVersion: plan.version, repoSha: version.repoSha, model: version.model, sections: [] };
-    const outcome = await withTransactionRetry(
-      this.prisma,
-      async (tx) => this.store(tx, {
-        ownerId, spaceId, plan, planDoc, request, prepared: [prepared], viaIds, cause: { reason: 'restore', versionId: version.id }, restoring,
-      }),
-      loggedRetry(this.logger, 'wiki.restoreDocVersion'),
-    );
-    if (outcome.written.length > 0) this.realtime?.publishWikiChanged(ownerId, spaceId);
+    const outcome = await this.store(tx, {
+      ownerId, spaceId, plan, planDoc, request, prepared: [prepared], viaIds, cause: { reason: 'restore', versionId: version.id }, restoring,
+    });
     const replaced = outcome.versions.get(key);
     return {
       spaceId,
@@ -1743,6 +1764,19 @@ export class WikiDocs {
     versions: Map<string, { id: string; changed: number }>;
   }> {
     const { ownerId, spaceId, plan, planDoc, request, prepared, viaIds, cause, restoring } = input;
+    // A section only a chat's press asked for, every card of which was undone since (contract `chat.presses.undo`): a
+    // follow job that has not written it yet writes none of it. The cards first of all, FOR SHARE and in id order — before
+    // the entries and the document, as the Undo takes them (card, entries, documents) — so an Undo holding one is waited
+    // for, and an Undo after this commit finds this write among the versions its rewrite kept, and restores it.
+    let pressUndone = false;
+    if (cause.reason === 'chat' && cause.draftIds && cause.draftIds.length > 0) {
+      const cards = await tx.$queryRaw<Array<{ undone: boolean }>>(Prisma.sql`
+        SELECT ("undone_at" IS NOT NULL) AS "undone" FROM "wiki_chat_draft"
+         WHERE "owner_id" = ${ownerId}::uuid AND "id" = ANY(${[...cause.draftIds]}::uuid[])
+         ORDER BY "id"
+         FOR SHARE`);
+      pressUndone = cards.length > 0 && cards.every((card) => card.undone);
+    }
     // The via entries first, FOR SHARE and in id order: a rejection of one waits for this to commit and
     // then withdraws what it wrote (`wiki-doc-withdrawal.ts`), and what they are now decides what is withdrawn here.
     const standing = viaIds.length === 0
@@ -1782,7 +1816,9 @@ export class WikiDocs {
     // Unchanged: the fingerprint it was written from, and nothing withdrawn from it since. A restore is written
     // whatever the fingerprint says — the text it puts back is what changes — unless the section already stands as
     // the version kept it (`restoreIdentity`): then it is left as it is, its stale mark too.
-    let toWrite = restoring
+    let toWrite = pressUndone
+      ? []
+      : restoring
       ? prepared
       : prepared.filter((section) => {
         const old = storedByKey.get(section.key);
@@ -2418,13 +2454,21 @@ export class WikiDocs {
    * Activity's Docs rows (contract `docs.versions.reads.changes`): the space's versions of the sections the confirmed
    * plan has, newest first, at most `changesListed`, each with how many sentences the write that kept it changed.
    * Every version newer than a row listed is listed too, so what replaced a row is the next listed version of its
-   * section, or the section as it stands. A follow job's `left` rows come with the follow job (`docs.follow`), whose
-   * report says them: no job of that kind exists before it.
+   * section, or the section as it stands. Among them, newest first by when each happened, the space's follow jobs that
+   * left sections for the next maintenance run (`docs.follow.daily`), each a `left` row its report says.
    */
   async docChanges(ownerId: string, spaceId: string): Promise<WikiDocChanges> {
     await this.requireSpace(ownerId, spaceId);
     const plan = await this.confirmedPlan(this.prisma, ownerId, spaceId);
     if (!plan) return { spaceId, changes: [] };
+    const left = await wikiDocsFollowLeftRows(this.prisma, { ownerId, spaceId, limit: WIKI_DOC_VERSIONS.changesListed });
+    const withLeft = (changes: WikiDocChangeRow[]): WikiDocChanges => ({
+      spaceId,
+      changes: [...changes, ...left]
+        // Stable: a version and a left row of the same moment keep the order they came in.
+        .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
+        .slice(0, WIKI_DOC_VERSIONS.changesListed),
+    });
     const numbers = numbering(plan);
     const places = new Map<string, { slug: string; key: string; where: string; title: string }>();
     for (const doc of plan.docs) {
@@ -2432,7 +2476,7 @@ export class WikiDocs {
         slug: doc.slug, key: section.key, where: wikiChatWhere(numbers.get(doc.slug)!.number, i + 1), title: section.title,
       }));
     }
-    if (places.size === 0) return { spaceId, changes: [] };
+    if (places.size === 0) return withLeft([]);
     const pairs = [...places.values()].map((place) => Prisma.sql`(${place.slug}, ${place.key})`);
     const rows = await this.prisma.$queryRaw<VersionRow[]>(Prisma.sql`
       SELECT v."id"::text AS "id", v."doc_slug" AS "docSlug", v."section_key" AS "sectionKey", v."sentences" AS "sentences",
@@ -2467,7 +2511,7 @@ export class WikiDocs {
         changed,
       };
     });
-    return { spaceId, changes };
+    return withLeft(changes);
   }
 
   /** The newest version each section of one document kept, for the document read's `change`. */

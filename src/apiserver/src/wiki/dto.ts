@@ -71,6 +71,13 @@ export class WikiMaintenanceSettingsDto {
   lookbackDays?: number | null;
 }
 
+/** Where the space's chats run (contract `space.settings.chat`): an eligible workspace, or null to forget it. */
+export class WikiChatSettingsDto {
+  @ValidateIf((_object, value) => value !== null)
+  @IsPublicId()
+  workspaceId!: string | null;
+}
+
 /** POST /api/wiki/spaces — the owner's own space, for a codebase or for nothing in particular. */
 export class CreateWikiSpaceDto {
   @IsString()
@@ -127,6 +134,12 @@ export class UpdateWikiSpaceDto {
   @Type(() => WikiMaintenanceSettingsDto)
   maintenance?: WikiMaintenanceSettingsDto;
 
+  /** Where the space's chats run (Runs in). The owner channel's alone, like the mode: WIKI_OWNER_CHANNEL_ONLY otherwise. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => WikiChatSettingsDto)
+  chat?: WikiChatSettingsDto;
+
   @IsOptional()
   @IsString()
   @MinLength(1)
@@ -168,6 +181,14 @@ export class WikiProposeDto {
   @IsOptional()
   @IsPublicId()
   spaceId?: string;
+
+  /**
+   * In a wiki chat (contract `agentSurface.chat.replaces`): the open card of the same chat the new one replaces. Read by
+   * the chat's draft alone, which refuses one that names no such card WIKI_SCHEMA; any other call leaves it unread.
+   */
+  @IsOptional()
+  @Allow()
+  replaces?: unknown;
 }
 
 /** One op's answer in `POST /api/wiki/changesets/:id/decide` (contract `effectPolicy.decide`). */

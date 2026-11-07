@@ -2787,7 +2787,8 @@ final class ConsoleModel {
     /// way out, nor take the draft they are part-way through typing with it — nor the attachments
     /// they have staged (a retry carries its own message's files; see `carried` below).
     func send(authoritative: RunStatus? = nil, overrideText: String? = nil,
-              overrideAttachments: [TurnAttachment]? = nil, queueForNextTurn: Bool = false) async {
+              overrideAttachments: [TurnAttachment]? = nil, queueForNextTurn: Bool = false,
+              wikiContext: WikiChatContext? = nil, accepted onAccepted: (@MainActor () -> Void)? = nil) async {
         guard !sending, !waitingForUploads else { return }
         // `false` for a retry: its message was handed in, so the composer keeps what it holds.
         let fromComposer = overrideText == nil
@@ -2966,9 +2967,11 @@ final class ConsoleModel {
         do {
             let accepted = try await postTurn(resuming: resuming, clientTurnId: clientTurnId,
                                               text: text, shell: shell, attachmentIds: attachmentIds,
-                                              queueForNextTurn: queueForNextTurn)
+                                              queueForNextTurn: queueForNextTurn, wikiContext: wikiContext)
             // An earlier send's "Couldn't send" is not true any more.
             statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)
+            // A wiki chat's attachments went with it: its panel lets them go (`WikiChatModel.sent`).
+            onAccepted?()
             managedWorkSent()
             if resuming {
                 // The session is revived (back to PENDING/RUNNING); drop the stale terminal
@@ -3251,7 +3254,8 @@ final class ConsoleModel {
     /// request carries a `clientTurnId` the server is idempotent on: a retry either queues the
     /// message or is handed back the turn a lost attempt already queued, never a second one.
     private func postTurn(resuming: Bool, clientTurnId: String, text: String, shell: Bool,
-                          attachmentIds: [String], queueForNextTurn: Bool = false) async throws -> TurnAccepted {
+                          attachmentIds: [String], queueForNextTurn: Bool = false,
+                          wikiContext: WikiChatContext? = nil) async throws -> TurnAccepted {
         // Built once, for the same reason the endpoint is chosen once: every attempt must send the
         // identical request, and the pills it reads stay editable while a retry waits.
         let resumeRequest = ResumeRequest(clientTurnId: clientTurnId, content: text,
@@ -3270,10 +3274,12 @@ final class ConsoleModel {
                                           account: pendingResumeProvider != nil ? pendingResumeAccount : nil,
                                           // Only ever the answer to the question that asked about
                                           // stopping this exact run, and only for this one send.
-                                          stopSessionId: confirmedStopSessionID)
+                                          stopSessionId: confirmedStopSessionID,
+                                          // A wiki chat's page and selection, which revive it too.
+                                          wikiContext: wikiContext)
         let turnRequest = ComposerLogic.makeTurn(clientTurnId: clientTurnId, text: text,
                                                  shell: shell, attachmentIds: attachmentIds,
-                                                 queueForNextTurn: queueForNextTurn)
+                                                 queueForNextTurn: queueForNextTurn, wikiContext: wikiContext)
         // A run that is letting go frees the task within a couple of seconds, so this waits it out
         // rather than handing the reader a refusal about a situation that is already resolving.
         // The identical request goes back out — same `clientTurnId` — so the server either queues

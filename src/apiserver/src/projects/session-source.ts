@@ -91,6 +91,32 @@ export function sourceCreateColumns(resolution: SourceResolution): SessionSource
   };
 }
 
+/** The ref a wiki chat starts from (SR54): main as origin has it. */
+export const CHAT_SOURCE_REF = 'refs/heads/main';
+
+/**
+ * SR54: a wiki chat's selector. A constant rule rather than a row of §4's table, so it does not go
+ * through `resolveSource`: origin/main, asked through the remote, against the chat workspace's
+ * repository, with no codebase, no configuration version and nothing it must contain. Frozen in the
+ * session row's own INSERT like every selector (SR28); the commit is the first claim's, by the same
+ * three-step handshake (§6.3), so a chat starts from main as it stood then, whatever the workspace's
+ * checkout has checked out (SR1 holds for it too).
+ */
+export function chatSourceColumns(repository: { repoUrl: string; rootCommitSha: string | null }): SessionSourceCreateColumns {
+  return {
+    sourceState: 'SELECTED',
+    sourceKind: 'CHAT_UPSTREAM',
+    sourceCodebaseId: null,
+    sourceRepoUrl: repository.repoUrl,
+    sourceRootCommitSha: repository.rootCommitSha,
+    sourceRef: CHAT_SOURCE_REF,
+    sourceRevisionSha: null,
+    sourceConfigRevision: null,
+    sourceRefAuthority: 'REMOTE',
+    sourceRequiredContains: [],
+  };
+}
+
 /** What the resolver concluded, kept beside the columns so a caller can log/attribute it (SR18). */
 export interface SessionSourceDecision {
   columns: SessionSourceCreateColumns;
@@ -354,7 +380,8 @@ export function sessionSourceSnapshot(
   return {
     state: session.sourceState as SourceState,
     kind: session.sourceKind as SourceKind,
-    codebaseId: session.sourceCodebaseId!,
+    // Absent for a wiki chat, the one kind with no binding behind it (SR54).
+    codebaseId: session.sourceCodebaseId ?? undefined,
     repoUrl: session.sourceRepoUrl!,
     rootCommitSha: session.sourceRootCommitSha ?? undefined,
     ref: session.sourceRef ?? undefined,

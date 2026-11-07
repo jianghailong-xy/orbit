@@ -2354,12 +2354,12 @@ func (t *Transport) createSession(parentSessionID, orchestrationToken string, bo
 
 // importSession is `orbit session import`'s create: record a PENDING session that imports the
 // named Claude transcript off THIS machine's disk, and let the runner's import step (inside one
-// claim, before the spawn) do the rest. Headless-only, so deliberately no orchestration headers:
-// a calling session is refused by the door, and a credential token authenticates the process
-// instead.
-func (t *Transport) importSession(body interface{}) (json.RawMessage, error) {
+// claim, before the spawn) do the rest. A calling session goes through the orchestration gate
+// with its credential, as create does; without one the machine's credential, or a service
+// token, authenticates the process instead.
+func (t *Transport) importSession(callerSessionID, orchestrationToken string, body interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
-	err := t.do(nil, "POST", "/runner/sessions/import", body, &out, taskOpTimeout)
+	err := t.doOrchestration("POST", "/runner/sessions/import", body, &out, callerSessionID, orchestrationToken)
 	return out, err
 }
 
@@ -2630,6 +2630,14 @@ func (t *Transport) proposeWikiChangeset(sessionID string, body interface{}) (js
 func (t *Transport) writeWikiNote(sessionID string, body interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
 	_, err := t.doWiki(http.MethodPost, "/runner/wiki/notes", body, &out, taskOpTimeout, sessionHeader(sessionID), true)
+	return out, err
+}
+
+// draftWiki makes a card in the calling wiki chat (`wiki_draft`, contract `agentSurface.chat.draft`). It is made under the
+// call's idempotency key, so a request that lands twice answers with the card the first made: it is sent again like a read.
+func (t *Transport) draftWiki(sessionID string, body interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	_, err := t.doWiki(http.MethodPost, "/runner/wiki/drafts", body, &out, taskOpTimeout, sessionHeader(sessionID), wikiRecordsOnce(body))
 	return out, err
 }
 

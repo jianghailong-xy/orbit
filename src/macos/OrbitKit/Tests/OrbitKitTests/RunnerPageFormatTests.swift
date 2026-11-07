@@ -286,7 +286,18 @@ final class RunnerPageFormatTests: XCTestCase {
                        "one account signed out is the engine's to say")
         XCTAssertTrue(RunnerPageFormat.needsSignIn(oneOut))
         let unsure = RunnerEngineHealth(engine: "kimi", installed: true, auth: "unknown")
-        XCTAssertNil(RunnerPageFormat.engineStatus(unsure), "a CLI that wouldn't say is neither")
+        XCTAssertEqual(RunnerPageFormat.engineStatus(unsure),
+                       RunnerPageFormat.Status(text: "Couldn’t check", tone: .muted),
+                       "a CLI that wouldn't say is a failed check, not a sign-out")
+        let partly = RunnerEngineHealth(engine: "claude", installed: true, auth: "yes",
+                                        accounts: [RunnerEngineAccount(id: "default", auth: "yes"),
+                                                   RunnerEngineAccount(id: "a1", name: "Work", auth: "unknown")])
+        XCTAssertEqual(RunnerPageFormat.engineStatus(partly)?.text, "1 couldn’t be checked")
+        let unchecked = RunnerEngineHealth(engine: "claude", installed: true, auth: "unknown",
+                                           accounts: [RunnerEngineAccount(id: "default", auth: "unknown"),
+                                                      RunnerEngineAccount(id: "a1", name: "Work", auth: "unknown")])
+        XCTAssertEqual(RunnerPageFormat.engineStatus(unchecked)?.text, "couldn’t check 2 accounts")
+        XCTAssertFalse(RunnerPageFormat.needsSignIn(unchecked), "an unanswered check is not a sign-out")
 
         // Antigravity reports its own sign-in state; a missing CLI still takes precedence.
         let agy = RunnerEngineHealth(engine: "antigravity", installed: true, auth: "no")
@@ -296,6 +307,24 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.engineStatus(RunnerEngineHealth(engine: "antigravity", installed: false,
                                                                         auth: "unknown")),
                        RunnerPageFormat.Status(text: "Not installed", tone: .muted))
+    }
+
+    /// A check that got no answer says so under the row — a failed check, not a sign-out — and only
+    /// where Orbit has a sign-in to have checked.
+    func testAnUnansweredSignInCheckSaysSoAndOnlyWhereThereIsOneToCheck() {
+        let mixed = RunnerEngineHealth(engine: "claude", installed: true, auth: "unknown",
+                                       accounts: [RunnerEngineAccount(id: "default", auth: "unknown"),
+                                                  RunnerEngineAccount(id: "a1", name: "Work", auth: "yes")])
+        XCTAssertEqual(RunnerPageFormat.couldntCheckNote(mixed, engine: "claude"),
+                       "The runner didn’t answer the sign-in check this time. It tries again every 5 minutes; sessions can still start.")
+        XCTAssertNil(RunnerPageFormat.couldntCheckNote(mixed, engine: "opencode"),
+                     "OpenCode has no sign-in of Orbit's to have failed")
+        XCTAssertNil(RunnerPageFormat.couldntCheckNote(RunnerEngineHealth(engine: "claude", installed: false,
+                                                                          auth: "unknown"), engine: "claude"),
+                     "a CLI that isn't installed has nothing to check")
+        XCTAssertNil(RunnerPageFormat.couldntCheckNote(RunnerEngineHealth(engine: "claude", installed: true, auth: "yes",
+                                                                          accounts: [RunnerEngineAccount(id: "default", auth: "yes")]),
+                                                       engine: "claude"))
     }
 
     func testTheRowShowsDefaultsQuotaAndEachAccountHasItsOwn() throws {

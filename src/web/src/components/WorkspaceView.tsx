@@ -550,6 +550,7 @@ import {
 } from '../lib/runnerSlots';
 import { type QueuedTurn, type RunEvent, useSessionStream } from '../lib/useSessionStream';
 import { SessionConversation } from './SessionConversation';
+import { useWikiChatSessionCards } from './WikiDraftCard';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
 
 // The queue's types live with the stream that keeps the queue (lib/useSessionStream); the modules
@@ -2606,6 +2607,11 @@ export function WorkspaceView({
     },
   });
   const detailForSelected = sessionDetailQ.data?.id === selectedId ? sessionDetailQ.data : null;
+  // A wiki chat's full page draws the same cards as its panel (contract `chat.drafts.toolResult`, `chat.binding.read`).
+  const wikiChatCards = useWikiChatSessionCards(
+    selectedId ?? null,
+    (detailForSelected as { wikiChatSpaceId?: string | null } | null)?.wikiChatSpaceId ?? null,
+  );
   // The renderer is chosen by the DETAIL's answer, never by `kind` on a list row: a session row is
   // `kind: 'session'` there, and a landing's own flag is `sessionKind` (§2.9 LS6). A landing whose
   // row has not been inserted yet answers the same way through its pre-generated id (LS1), so the
@@ -10251,6 +10257,7 @@ export function WorkspaceView({
                 linkStateWord={orbitLinkStateWord}
                 linkRefreshKey={sessionDetailQ.dataUpdatedAt}
                 answeredQuestions={answeredQuestions}
+                wikiChat={wikiChatCards}
               />
               {/* The conversation's last row while it is at rest: its recap whole, the line its list
                   row reads in one (SessionRecapCard). Above the cards that ask the owner something,

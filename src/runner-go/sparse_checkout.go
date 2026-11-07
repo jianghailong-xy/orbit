@@ -89,47 +89,117 @@ func gitTooOldForSparse() string {
 // addSessionCheckout makes a session's checkout at wtPath with `git worktree add <args>`, the arguments a full
 // checkout takes, and makes it sparse when the declaration at rev, the session's fork point, names paths to leave
 // out and this git can keep a sparse checkout. Otherwise the checkout is the full one it always was, and the log
-// says why. An error leaves no checkout behind, as a failed `git worktree add` does, so that what a caller does
-// when the checkout cannot be made goes on as before.
-func addSessionCheckout(sessionID, repoRoot, wtPath, rev string, args ...string) error {
-	full := func(why string) error {
-		logln(fmt.Sprintf("session %s — full checkout: %s", sessionID, why))
-		_, err := git(repoRoot, append([]string{"worktree", "add"}, args...)...)
-		return err
+// says why. Where the filesystem can clone files, the checkout's files are cloned from repoRoot, the workspace's own
+// checkout (clone_checkout.go), and it reports true; where it cannot, or the clone fails, git writes them, and the
+// log says which and why. An error leaves no checkout behind, as a failed `git worktree add` does, so that what a
+// caller does when the checkout cannot be made goes on as before. Under a storage budget, room is made for the
+// checkout before it is made, and it is counted once it is (checkoutRoom).
+func addSessionCheckout(sessionID, repoRoot, wtPath, rev string, args ...string) (cloned bool, err error) {
+	declared, full := sessionCheckoutExclusions(repoRoot, rev)
+	if full != "" {
+		logln(fmt.Sprintf("session %s — full checkout: %s", sessionID, full))
 	}
+	room := sessionCheckoutRoom.Load()
+	room.makeRoomFor(sessionID, repoRoot, rev, declared)
+	defer func() {
+		if err == nil {
+			room.made(wtPath)
+		}
+	}()
+	// The two log lines, `checkout cloned` and `checkout plain: <reason>`, keep their form (clone_checkout.go).
+	if why := whyNotCloned(repoRoot); why != "" {
+		logln(fmt.Sprintf("session %s — checkout plain: %s", sessionID, why))
+	} else {
+		cloned, added, err := makeSessionCheckout(sessionID, repoRoot, wtPath, rev, declared, true, args)
+		if err == nil {
+			logln(fmt.Sprintf("session %s — checkout cloned: %d files from %s", sessionID, cloned, repoRoot))
+			return true, nil
+		}
+		// `worktree add` itself failing is no clone's doing: a plain checkout would fail the same way, and its error
+		// would hide this one.
+		if !added {
+			return false, err
+		}
+		logln(fmt.Sprintf("session %s — checkout plain: %s; git writes it instead", sessionID, whyCloneFailed(repoRoot, err)))
+		args = plainAfterFailedClone(args)
+	}
+	_, _, err = makeSessionCheckout(sessionID, repoRoot, wtPath, rev, declared, false, args)
+	return false, err
+}
+
+// sessionCheckoutExclusions is what a session checkout forked from rev leaves out: the patterns of the declaration at
+// rev, when it names paths and this git can keep a sparse checkout, or none and why the checkout is full.
+func sessionCheckoutExclusions(repoRoot, rev string) ([]string, string) {
 	if rev == "" {
-		return full("the session has no fork point to read " + checkoutExcludeFile + " from")
+		return nil, "the session has no fork point to read " + checkoutExcludeFile + " from"
 	}
 	declared := checkoutExclusions(repoRoot, rev)
 	if len(declared) == 0 {
-		return full(fmt.Sprintf("no paths to leave out in %s at %s", checkoutExcludeFile, shortSha(rev)))
+		return nil, fmt.Sprintf("no paths to leave out in %s at %s", checkoutExcludeFile, shortSha(rev))
 	}
 	if why := gitTooOldForSparse(); why != "" {
-		return full(fmt.Sprintf("%s at %s names paths to leave out, but %s", checkoutExcludeFile, shortSha(rev), why))
+		return nil, fmt.Sprintf("%s at %s names paths to leave out, but %s", checkoutExcludeFile, shortSha(rev), why)
+	}
+	return declared, ""
+}
+
+// makeSessionCheckout is one attempt at the checkout addSessionCheckout makes: sparse when declared names paths,
+// populated by cloning from repoRoot when clone is set, else by git. It says how many files it cloned, and whether
+// `git worktree add` made the checkout, which a failure after that step removes again.
+func makeSessionCheckout(sessionID, repoRoot, wtPath, rev string, declared []string, clone bool, args []string) (int, bool, error) {
+	if len(declared) == 0 && !clone {
+		_, err := git(repoRoot, append([]string{"worktree", "add"}, args...)...)
+		return 0, err == nil, err
 	}
 	if _, err := git(repoRoot, append([]string{"worktree", "add", "--no-checkout"}, args...)...); err != nil {
-		return err
+		return 0, false, err
 	}
-	// git 2.34 has no --no-cone for `set` (2.35 gave it one) and keeps it as one more pattern, which only a path of
-	// that name matches; that version's `set` makes a non-cone checkout anyway (measured with Ubuntu 22.04's 2.34.1).
-	sparse := true
-	if _, err := git(wtPath, append([]string{"sparse-checkout", "set", "--no-cone"}, sparseCheckoutPatterns(declared)...)...); err != nil {
-		logln(fmt.Sprintf("session %s — the checkout could not be made sparse, so it holds every path: %v", sessionID, err))
-		_, _ = git(wtPath, "sparse-checkout", "disable")
-		sparse = false
+	sparse := len(declared) > 0
+	if sparse {
+		// git 2.34 has no --no-cone for `set` (2.35 gave it one) and keeps it as one more pattern, which only a path
+		// of that name matches; that version's `set` makes a non-cone checkout anyway (measured with Ubuntu 22.04's
+		// 2.34.1).
+		if _, err := git(wtPath, append([]string{"sparse-checkout", "set", "--no-cone"}, sparseCheckoutPatterns(declared)...)...); err != nil {
+			logln(fmt.Sprintf("session %s — the checkout could not be made sparse, so it holds every path: %v", sessionID, err))
+			_, _ = git(wtPath, "sparse-checkout", "disable")
+			sparse = false
+		}
 	}
-	// `worktree add --no-checkout` wrote no index and no files: this is the checkout it left out, of the paths
-	// the patterns keep.
-	if _, err := git(wtPath, "reset", "-q", "--hard"); err != nil {
-		_, _ = git(repoRoot, "worktree", "remove", "--force", wtPath)
-		_ = os.RemoveAll(wtPath)
-		_, _ = git(repoRoot, "worktree", "prune")
-		return err
+	// `worktree add --no-checkout` wrote no index and no files: this is the checkout it left out, of the paths the
+	// patterns keep.
+	var cloned int
+	var err error
+	if clone {
+		cloned, err = populateByCloning(repoRoot, wtPath)
+	} else {
+		_, err = git(wtPath, "reset", "-q", "--hard")
+	}
+	if err != nil {
+		removePartialCheckout(repoRoot, wtPath)
+		return 0, true, err
 	}
 	if sparse {
 		logln(fmt.Sprintf("session %s — sparse checkout: %s at %s leaves out %s", sessionID, checkoutExcludeFile, shortSha(rev), strings.Join(declared, ", ")))
 	}
-	return nil
+	return cloned, true, nil
+}
+
+// removePartialCheckout takes away a checkout `git worktree add` made and populating it then failed in, with git's
+// record of it: what is left is what a failed `git worktree add` leaves.
+func removePartialCheckout(repoRoot, wtPath string) {
+	_, _ = git(repoRoot, "worktree", "remove", "--force", wtPath)
+	_ = os.RemoveAll(wtPath)
+	_, _ = git(repoRoot, "worktree", "prune")
+}
+
+// plainAfterFailedClone is the arguments of the plain checkout made after cloning one failed. That attempt made the
+// branch that `-b <branch> <path> <commit>` asks for, at that commit, and nothing has moved it since: the plain
+// checkout takes the branch as it stands, which a second -b would refuse as one that exists already.
+func plainAfterFailedClone(args []string) []string {
+	if len(args) == 4 && args[0] == "-b" {
+		return []string{args[2], args[1]}
+	}
+	return args
 }
 
 // sparseCheckout reports whether the checkout at dir leaves paths out: core.sparseCheckout, which `git

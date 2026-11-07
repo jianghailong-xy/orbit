@@ -47,7 +47,8 @@ describe('the session route opens a landing in its project’s Landings window',
 
   it('gives the window its own address, which a phone shows in the conversation’s place', () => {
     const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
-    expect(app).toContain('<Route path="projects/:id/landings" />');
+    // `element={null}` because the console's layout draws it; see the layout route in App.tsx.
+    expect(app).toContain('<Route path="projects/:id/landings" element={null} />');
     expect(showsConversation('/projects/p1/landings')).toBe(true);
     expect(showsConversation('/projects/p1')).toBe(false);
     // Nothing is composed under the window.

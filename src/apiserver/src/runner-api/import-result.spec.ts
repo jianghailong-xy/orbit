@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
 import { RunnerApiController } from './runner-api.controller';
+import { importForkSessionId } from '../sessions/import-fork';
 
 /**
  * POST /runner/sessions/:id/import-result — the checkout the runner's transcript-import step
@@ -26,6 +27,8 @@ function makeController(opts: {
   updateManyCount?: number;
   /** Executable turns still queued for the session when the import settles. */
   pendingTurns?: number;
+  /** The Claude session id the row carries when the import settles. */
+  runtimeSessionId?: string;
 } = {}) {
   const updateManyCalls: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
   const updateCalls: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
@@ -34,6 +37,7 @@ function makeController(opts: {
     $queryRaw: async () => opts.lock ?? [{ id: SESSION_ID, leaseOwnerMatches: true }],
     conversationTurn: { count: async () => opts.pendingTurns ?? 0 },
     session: {
+      findUnique: async () => ({ runtimeSessionId: opts.runtimeSessionId ?? null }),
       updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
         updateManyCalls.push(args);
         return { count: opts.updateManyCount ?? 1 };
@@ -72,7 +76,7 @@ function makeController(opts: {
 
 function importResult(
   controller: RunnerApiController,
-  dto: { leaseOwner?: string; ok?: boolean; error?: string; title?: string },
+  dto: { leaseOwner?: string; ok?: boolean; error?: string; title?: string; forked?: boolean },
 ) {
   return controller.importResult({ id: RUNNER_ID }, SESSION_ID, dto);
 }
@@ -163,6 +167,38 @@ test('a retried ok after a lost reply applies nothing (the CAS matches no row)',
 
   assert.deepEqual(response, { ok: true, applied: false, failed: false, announced: false });
   assert.deepEqual(h.published, []);
+});
+
+const CLAUDE_ID = '4e453ab7-f37c-494d-8017-bb4e9beffeef';
+
+test('a forked ok moves the session to the fork of its Claude id, and answers with it', async () => {
+  // The runner could not resume the transcript where it lay without sharing the file with the
+  // conversation it came from, so it placed a copy under the derived id. The id is the server's to
+  // derive, never the request's to name.
+  const h = makeController({ runtimeSessionId: CLAUDE_ID });
+
+  const response = await importResult(h.controller, { leaseOwner: LEASE_OWNER, ok: true, forked: true });
+
+  const fork = importForkSessionId(CLAUDE_ID);
+  assert.equal(h.updateManyCalls[0].data.runtimeSessionId, fork);
+  assert.deepEqual(response, { ok: true, applied: true, failed: false, announced: true, runtimeSessionId: fork });
+});
+
+test('a replayed forked ok answers the id the first attempt wrote, so the runner keeps its copy', async () => {
+  const fork = importForkSessionId(CLAUDE_ID);
+  const h = makeController({ updateManyCount: 0, runtimeSessionId: fork });
+
+  const response = await importResult(h.controller, { leaseOwner: LEASE_OWNER, ok: true, forked: true });
+
+  assert.deepEqual(response, { ok: true, applied: false, failed: false, announced: false, runtimeSessionId: fork });
+});
+
+test('an ok that did not fork leaves the Claude id alone', async () => {
+  const h = makeController({ runtimeSessionId: CLAUDE_ID });
+
+  await importResult(h.controller, { leaseOwner: LEASE_OWNER, ok: true });
+
+  assert.equal('runtimeSessionId' in h.updateManyCalls[0].data, false);
 });
 
 test('a failed import Trashes the session with the runner’s reason', async () => {

@@ -1,7 +1,8 @@
 import type { Prisma } from '@prisma/client';
-import type { WikiSpaceWorkspaceRow, WikiSpaceWorkspaces } from '@orbit/shared';
+import type { WikiChatWorkspace, WikiSpaceWorkspaceRow, WikiSpaceWorkspaces } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
+import { RUNNER_BEATS, runnerIsOnline } from '../runners/runner-presence';
 import { normalizeRepoUrl } from './wiki.service';
 
 /**
@@ -109,4 +110,36 @@ export async function wikiSpaceWorkspaces(
     else if (workspace.repository === null && (!row || row.leftOutAt !== null)) addable.push(shown(workspace, false));
   }
   return { workspaces: here.sort(byName), addable: addable.sort(byName) };
+}
+
+/** A workspace a space's chats may run in, with what the chat's create reads of it besides what the panel shows. */
+export interface WikiChatChoice extends WikiChatWorkspace {
+  /** The remote its folder is on, as the runner reported it; the chat's SOURCE identity (SR54). */
+  repoUrl: string | null;
+}
+
+/**
+ * The workspaces a space's chats may run in (contract `chat.workspace.eligible`, `chat.list.choices`): the ones in
+ * the space (`wikiSpaceWorkspaces`, by name, as Wiki settings lists them) that are not deleted and run their sessions
+ * in worktrees of their own — a chat never runs in a shared checkout — and are switched on, since a session cannot
+ * start in one that is off. Each says whether its runner is online by the runners list's own rule.
+ */
+export async function wikiChatChoices(
+  db: Db,
+  ownerId: string,
+  space: { id: string; repoUrlNorm: string | null },
+): Promise<WikiChatChoice[]> {
+  const { workspaces } = await wikiSpaceWorkspaces(db, ownerId, space);
+  const inWiki = workspaces.filter((workspace) => workspace.inWiki);
+  if (inWiki.length === 0) return [];
+  const rows = await db.workspace.findMany({
+    where: { ownerId, deletedAt: null, id: { in: inWiki.map((workspace) => workspace.id) } },
+    select: { id: true, enableWorktree: true, enabled: true, repoUrl: true, runner: { select: { status: true, ...RUNNER_BEATS } } },
+  });
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return inWiki.flatMap((workspace) => {
+    const row = byId.get(workspace.id);
+    if (!row?.enableWorktree || row.enabled === false) return [];
+    return [{ id: workspace.id, name: workspace.name, runner: workspace.runner, online: runnerIsOnline(row.runner), repoUrl: row.repoUrl }];
+  });
 }

@@ -25,10 +25,10 @@ import {
  * THREE LEGS, TWO OF THEM REAL TODAY, FUSED BY RANK. The keyword leg is pg_trgm over the very
  * expression migration 0307 built `wiki_entry_search_trgm` on, normalized and broadened exactly as
  * session search is, with a last pass of its own when no entry holds every word (`anyWordLeg`); the
- * path leg is a prefix match against an entry's anchor paths and its
- * pitfall trigger paths; the semantic leg (design §6.3) is phase 2 and off. The legs' ranked lists
- * are fused with reciprocal rank fusion (k=60) and the answer is entries — never a page, never a
- * slice.
+ * path leg is a prefix match against an entry's anchor paths and its pitfall trigger paths, ranked
+ * exact file first and weighted by how many entries share what it matched (`pathLeg`); the semantic
+ * leg (design §6.3) is phase 2 and off. The legs' ranked lists are fused with reciprocal rank fusion
+ * (k=60) and the answer is entries — never a page, never a slice.
  *
  * WHAT IS RETURNED IS AN ENTRY. `match` says which legs found it and `score` how strongly they
  * agreed; the rest is the entry's own public shape, small enough to render a ⌘K row or hand a
@@ -109,6 +109,21 @@ export interface RankedHit {
   match: WikiSearchMatch[];
 }
 
+/** One entry the path leg found, and what its match is worth in the fusion (`pathWeight`). */
+export interface PathHit {
+  id: string;
+  weight: number;
+}
+
+/** The path leg's row: an entry, whether its best match was exact, and what `pathSpecificity` reads. */
+interface PathRow {
+  id: string;
+  exact: boolean;
+  covered: number;
+  span: number;
+  entries: number;
+}
+
 // ── Query shape (pure) ──────────────────────────────────────────────────────────────────────────
 
 /**
@@ -174,21 +189,55 @@ export function anyWordPatterns(norm: NormalizedSearchQuery): string[][] | null 
  * entry found by two legs is worth both — which is the point of fusing by rank rather than by any
  * leg's own score, since a trigram ratio and a path prefix have no common scale.
  *
+ * A leg may weigh its hits: `weights[i]` scales the i-th hit's term, and a hit without one counts
+ * whole. Only the path leg does (`pathWeight`), so a search with no paths is fused exactly as an
+ * unweighted RRF would fuse it.
+ *
  * `match` carries the legs that found it, in the order the legs are handed over (keyword first,
  * then path), which is the contract's own order in `searchMatches`.
  */
-export function rrfFuse(legs: ReadonlyArray<{ match: WikiSearchMatch; ids: readonly string[] }>): RankedHit[] {
+export function rrfFuse(
+  legs: ReadonlyArray<{ match: WikiSearchMatch; ids: readonly string[]; weights?: readonly number[] }>,
+): RankedHit[] {
   const score = new Map<string, number>();
   const match = new Map<string, WikiSearchMatch[]>();
   for (const leg of legs) {
     leg.ids.forEach((id, index) => {
-      score.set(id, (score.get(id) ?? 0) + 1 / (RRF_K + index + 1));
+      score.set(id, (score.get(id) ?? 0) + (leg.weights?.[index] ?? 1) / (RRF_K + index + 1));
       const found = match.get(id) ?? [];
       if (!found.includes(leg.match)) found.push(leg.match);
       match.set(id, found);
     });
   }
   return [...score].map(([id, value]) => ({ id, score: value, match: match.get(id)! }));
+}
+
+/**
+ * How specific a path match is, from 0 to 1: an IDF over the entries it covers.
+ *
+ * `covered` is how many entries name a path in the region the match is about — the asked file
+ * itself for an exact match, the asked directory for an entry under it, the entry's own directory
+ * for an asked path under that — and `span` how many paths the entry names itself. A file only one
+ * entry names is 1; a file thirty entries name, or a directory hundreds of entries live under, or an
+ * entry anchored on a dozen files, says much less about why the caller asked, which is what the
+ * review of 2026-11-06 found the path leg's noise to be. `entries` is how many entries in reach name
+ * any path at all, the corpus the frequency is read against.
+ */
+export function pathSpecificity(covered: number, span: number, entries: number): number {
+  const corpus = Math.log(Math.max(entries, 1) + 1);
+  const value = Math.log((Math.max(entries, 1) + 1) / Math.max(covered * span, 1)) / corpus;
+  return Math.min(1, Math.max(0, value));
+}
+
+/**
+ * What a path match is worth in the fusion, as a share of a keyword hit at the same rank: an exact
+ * match (the asked file is the entry's anchor or trigger path) between 3/4 and all of it, a match
+ * by directory prefix between 1/2 and 3/4, by its specificity within each band. So an exact match
+ * always counts for more than a prefix one, a file only one entry names still ties the keyword leg's
+ * first hit, and a hub file's or a wide directory's entries land below what the words found.
+ */
+export function pathWeight(exact: boolean, specificity: number): number {
+  return exact ? 0.75 + 0.25 * specificity : 0.5 + 0.25 * specificity;
 }
 
 /** Trust, strongest first (design §6.1's first tiebreak). `external` is last: it is Web-derived. */
@@ -365,7 +414,7 @@ export class WikiRetrieval {
 
     const fused = rrfFuse([
       { match: 'keyword', ids: keywords },
-      { match: 'path', ids: byPath },
+      { match: 'path', ids: byPath.map((hit) => hit.id), weights: byPath.map((hit) => hit.weight) },
     ]);
     const hits = await this.rank(request.ownerId, fused, take, request.include ?? []);
     return { q: norm?.raw ?? '', semantic: false, hits };
@@ -435,21 +484,34 @@ export class WikiRetrieval {
    *  - the entry's last segment starts with the query: the one relation with no direction to it,
    *    and the reason a file can be named out loud without its directory.
    *
-   * Deepest match first, because the deeper path is the more specific statement: an entry anchored
-   * to the very file being worked on comes before one anchored to the directory above it. The
-   * comparison happens in SQL, literally (`starts_with`, and `split_part` for the last segment)
-   * rather than through a pattern, so a path carrying `%` or `_` matches itself and not the world.
+   * Those decide which entries the leg finds, and nothing below changes that. The comparison happens
+   * in SQL, literally (`starts_with`, and `split_part` for the last segment) rather than through a
+   * pattern, so a path carrying `%` or `_` matches itself and not the world.
+   *
+   * THE ORDER is what the review of 2026-11-06 found wrong: ranked by the length of the entry's own
+   * path, an entry anchored on a big file or a whole directory came back for anything near it, and
+   * one file's many entries filled the answer to a search that named five. So each match, both paths
+   * read without a trailing `/`, is first one of these, best first (`rel`):
+   *
+   *  0. exact — the entry names the asked file itself, or, for a bare name, a file of that name;
+   *  1. the entry's path is under the asked directory;
+   *  2. it starts with the asked string at no `/`: `pages/Wiki` naming `pages/WikiPage.tsx`;
+   *  3. the asked path is under the entry's directory;
+   *  4. the asked path starts with the entry's at no `/`: `wiki` beside `wiki-worker/`, kept for
+   *     the recall above and last for it.
+   *
+   * and then as specific as the entries in its region allow (`pathSpecificity`): `covered` counts the
+   * entries naming that file for an exact match, those under the asked path for 1 and 2, and those
+   * under the entry's own path for 3 and 4. The leg lists every exact match before any other, and
+   * within each of the two it takes the asked paths in turn — each one's best, then each one's next —
+   * the more specific first within a turn. The weight each hit takes into the fusion is
+   * `pathWeight`'s.
    */
-  private async pathLeg(where: Prisma.Sql, paths: readonly string[]): Promise<string[]> {
-    const relation = Prisma.join(
-      paths.map(
-        (path) => Prisma.sql`(starts_with(p."path", ${path})
-          OR starts_with(${path}, p."path")
-          OR starts_with(split_part(p."path", '/', -1), ${path}))`,
-      ),
-      ' OR ',
-    );
-    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+  private async pathLeg(where: Prisma.Sql, paths: readonly string[]): Promise<PathHit[]> {
+    const relation = Prisma.sql`(starts_with(p."path", a."q")
+          OR starts_with(a."q", p."path")
+          OR starts_with(split_part(p."path", '/', -1), a."q"))`;
+    const rows = await this.prisma.$queryRaw<PathRow[]>(Prisma.sql`
       WITH entry_path AS (
         SELECT e."id" AS "id", a."value"->>'path' AS "path"
           FROM "wiki_entry" e, jsonb_array_elements(e."anchors") AS a("value")
@@ -468,15 +530,80 @@ export class WikiRetrieval {
                       THEN e."fields" #> '{trigger,paths}' ELSE '[]'::jsonb END
                ) AS t("value")
          WHERE ${where}
+      ),
+      ep AS MATERIALIZED (
+        SELECT "id", "path", rtrim("path", '/') AS "np" FROM entry_path
+      ),
+      asked AS (
+        SELECT a."q", rtrim(a."q", '/') AS "nq", a."qi"
+          FROM unnest(${textArray(paths)}) WITH ORDINALITY AS a("q", "qi")
+      ),
+      hit AS (
+        SELECT p."id", p."np", a."nq", a."qi",
+               CASE
+                 WHEN p."np" = a."nq" THEN 0
+                 WHEN strpos(a."nq", '/') = 0 AND split_part(p."np", '/', -1) = a."nq" THEN 0
+                 WHEN starts_with(p."np", a."nq" || '/') THEN 1
+                 WHEN starts_with(p."np", a."nq") THEN 2
+                 WHEN strpos(a."nq", '/') = 0 AND starts_with(split_part(p."np", '/', -1), a."nq") THEN 2
+                 WHEN starts_with(a."nq", p."np" || '/') THEN 3
+                 ELSE 4
+               END AS "rel"
+          FROM ep p JOIN asked a ON ${relation}
+      ),
+      -- The region a prefix match is about, whose entries are counted below; an exact match, or a
+      -- bare name's, is about the one path and counts the entries naming it.
+      measured AS (
+        SELECT h.*,
+               CASE WHEN h."rel" IN (1, 2) AND starts_with(h."np", h."nq") THEN h."nq"
+                    WHEN h."rel" IN (3, 4) THEN h."np" END AS "region"
+          FROM hit h
+      ),
+      under AS (
+        SELECT r."region", count(DISTINCT p."id")::int AS "n"
+          FROM (SELECT DISTINCT "region" FROM measured WHERE "region" IS NOT NULL) r
+          JOIN ep p ON starts_with(p."np", r."region")
+         GROUP BY r."region"
+      ),
+      named AS (
+        SELECT "np", count(DISTINCT "id")::int AS "n" FROM ep WHERE "np" IN (SELECT "np" FROM hit) GROUP BY "np"
+      ),
+      span AS (
+        SELECT "id", count(DISTINCT "np")::int AS "m" FROM ep WHERE "id" IN (SELECT "id" FROM hit) GROUP BY "id"
+      ),
+      scored AS (
+        SELECT m."id", m."qi", m."rel", COALESCE(u."n", n."n") AS "covered", s."m" AS "span"
+          FROM measured m
+          JOIN named n ON n."np" = m."np"
+          JOIN span s ON s."id" = m."id"
+          LEFT JOIN under u ON u."region" = m."region"
+      ),
+      -- Each entry's best match to each asked path, then its turn among that path's entries.
+      best AS (
+        SELECT DISTINCT ON ("id", "qi") "id", "qi", "rel", "covered", "span"
+          FROM scored
+         ORDER BY "id", "qi", "rel", "covered"::bigint * "span"
+      ),
+      turned AS (
+        SELECT "id", "rel" > 0 AS "prefix", "covered", "span",
+               row_number() OVER (PARTITION BY "qi", "rel" > 0 ORDER BY "rel", "covered"::bigint * "span", "id") AS "turn"
+          FROM best
+      ),
+      chosen AS (
+        SELECT DISTINCT ON ("id") "id", "prefix", "turn", "covered", "span"
+          FROM turned
+         ORDER BY "id", "prefix", "turn", "covered"::bigint * "span"
       )
-      SELECT id
-        FROM entry_path p
-       WHERE ${relation}
-       GROUP BY id
-       ORDER BY max(length(p."path")) DESC, id
+      SELECT c."id", NOT c."prefix" AS "exact", c."covered", c."span",
+             (SELECT count(DISTINCT "id")::int FROM ep) AS "entries"
+        FROM chosen c
+       ORDER BY c."prefix", c."turn", c."covered"::bigint * c."span", c."id"
        LIMIT ${LEG_CAP}::int
     `);
-    return rows.map((row) => row.id);
+    return rows.map((row) => ({
+      id: row.id,
+      weight: pathWeight(row.exact, pathSpecificity(row.covered, row.span, row.entries)),
+    }));
   }
 
   /**

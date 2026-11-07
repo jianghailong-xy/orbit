@@ -140,7 +140,8 @@
       "plan_revise": "Plan revision",
       "docs_build": "Documents",
       "maintain": "Maintenance",
-      "smoke": "Model check"
+      "smoke": "Model check",
+      "docs_follow": "Rewrite"
     },
     "callsTitle": "Calls",
     "columns": [

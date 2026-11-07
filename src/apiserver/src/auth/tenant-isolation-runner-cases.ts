@@ -745,6 +745,10 @@ const taskFilterCases = (route: string, filters: ReadonlyArray<'projectId' | 'li
 /** The routes RunnerSessionsController serves in-session, as a field case of the calling session's header. */
 const ownSessionRequests: Readonly<Record<string, (mine: RunnerTenant) => TenantRequest>> = {
   'POST /runner/sessions': (mine) => ({ params: {}, body: { prompt: 'opened by the census', workspaceId: mine.workspaceId } }),
+  'POST /runner/sessions/import': (mine) => ({
+    params: {},
+    body: { claudeSessionId: '00000000-0000-4000-8000-0000000c1a0f', workspaceId: mine.workspaceId },
+  }),
   'GET /runner/sessions': () => ({ params: {} }),
   'GET /runner/sessions/search': () => ({ params: {}, query: { q: 'census' } }),
   'GET /runner/sessions/:id': (mine) => ({ params: { id: mine.sessionId } }),
@@ -940,13 +944,13 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     request: (of) => ({ params: {}, body: { prompt: 'opened by the census', agentId: of.workspaceId } }),
   },
   'POST /runner/sessions/import body workspaceId': {
-    as: ['runner', 'service'],
+    as: ['runner', 'service', 'session'],
     request: (of) => ({ params: {}, body: { claudeSessionId: '00000000-0000-4000-8000-0000000c1a0f', workspaceId: of.workspaceId } }),
   },
   // A transcript another account already imported — its engine session id, which a stranger may know.
   // Titled, so that what the two imports are answered with is not told apart by a title spelled from the id.
   'POST /runner/sessions/import body claudeSessionId': {
-    as: ['runner', 'service'],
+    as: ['runner', 'service', 'session'],
     request: (of, mine) => ({
       params: {},
       body: { claudeSessionId: of.runner.runtimeSessionId, workspaceId: mine.workspaceId, title: 'imported by the census' },
@@ -1259,6 +1263,31 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     () => ({ params: {}, body: { text: 'The census notes this.' } }),
     (of) => of.runner.wikiSessionId,
   ),
+  // A wiki chat's rewrite card (contract `agentSurface.chat.draft`): drafted as another account's chat, refused as a
+  // session this runner does not host; drafted in the caller's own chat, a card of its own.
+  'POST /runner/wiki/drafts header x-orbit-session-id': fromTheirSession(
+    RUNNER,
+    () => ({
+      params: {},
+      body: { kind: 'rewrite', sections: [{ doc: 'census', section: 'census' }], reason: 'The census section lags behind main.', idempotencyKey: 'census-draft' },
+    }),
+    (of) => of.wikiChatId,
+  ),
+  // Another account's card is no card of this chat to replace: answered WIKI_SCHEMA at replaces, as one that names nothing.
+  'POST /runner/wiki/drafts body replaces': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: {},
+      headers: calling(mine.wikiChatId),
+      body: {
+        kind: 'rewrite',
+        sections: [{ doc: 'census', section: 'census' }],
+        reason: 'The census section lags behind main.',
+        replaces: of.wikiChatDraftId,
+        idempotencyKey: 'census-draft-replaces',
+      },
+    }),
+  },
   ...Object.fromEntries(Object.entries(wikiRequests()).map(([route, own]) => [
     `${route} header x-orbit-session-id`,
     fromTheirSession(RUNNER, own, (of) => of.runner.wikiSessionId),
@@ -1368,11 +1397,6 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'the engine\'s id for the tool call a sub-agent\'s event belongs to, read only to tell its text from the main '
     + 'conversation\'s (runner-api.controller.ts:5549)',
 
-  // ── sessions ────────────────────────────────────────────────────────────────────────────────────
-  'POST /runner/sessions/import header x-orbit-session-id':
-    'any calling session at all refuses the import before anything is read: it is a shell\'s door '
-    + '(runner-sessions.controller.ts:222)',
-    
   // ── tasks ───────────────────────────────────────────────────────────────────────────────────────
   'DELETE /runner/tasks/:id header x-orbit-session-id':
     'looked up only by the id and the caller\'s owner, so another account\'s session is not found and the request reads '
@@ -1478,6 +1502,12 @@ export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly str
   'POST /runner/sessions/:id/turns body replyWithinSeconds': {
     reads: [],
     reading: 'a number of seconds (sessions/session-request.ts:144)',
+  },
+  'POST /runner/wiki/drafts body (the body)': {
+    reads: ['body replaces'],
+    reading: 'read field by field (WikiChatDrafts.draftInChat, wiki/wiki-chat-drafts.ts:247): kind, sections (slugs and keys of '
+      + 'the calling chat\'s own space), reason and idempotencyKey name no row; the one id is replaces, the card of the '
+      + 'calling chat the new one replaces, read by (id, the caller\'s owner) and refused unless the calling chat drafted it',
   },
   'POST /runner/workspaces body (the body)': {
     reads: ['body runnerId'],

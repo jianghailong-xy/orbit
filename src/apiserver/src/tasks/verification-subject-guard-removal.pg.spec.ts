@@ -209,7 +209,7 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
   // can drift alone, which is what makes "one fewer" a detectable event rather than a hand edit.
   assert.deepEqual(installed.rows, registered,
     'the core tables\' installed triggers and the inventory must be the same set');
-  assert.equal(installed.rowCount, 53,
+  assert.equal(installed.rowCount, 54,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -234,7 +234,9 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
     + '`session_engine_immutable` with the recorded session engine, and 51 once 0426 added '
     + '`session_cursor_runner_acquisition_guard` for Cursor CLI, and 53 once 0441 added '
     + '`project_rollup_candidate_task_insert` and `project_rollup_candidate_task_update` to `task`, '
-    + 'appending the tasks GET /projects has to classify itself');
+    + 'appending the tasks GET /projects has to classify itself, and 54 once 0476 added '
+    + '`session_wiki_chat_space_guard` to `session`, which refuses a write that would change the '
+    + 'wiki space a session is a chat of');
   for (const [, trigger] of DROPPED_TRIGGERS) {
     assert.equal(installed.rows.some((row) => row.trigger === trigger), false);
   }
