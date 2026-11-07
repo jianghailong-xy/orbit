@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
-import { FeishuOwnerService, type FeishuTextMessage } from './feishu-owner.service';
+import { FEISHU_OWNER_REPLIES, FeishuOwnerService, type FeishuTextMessage } from './feishu-owner.service';
 
 /** Who a Feishu event acts as (docs/feishu-bot-design.md §7.2): always the account its app belongs to. */
 export interface FeishuActor {
@@ -92,8 +92,13 @@ export function textMessageOf(payload: unknown): FeishuTextMessage | null {
 /**
  * FeishuRouter (docs/feishu-bot-design.md §3, §7): sends each inbound event to its branch, acting as the account the app
  * belongs to — read from feishu_app as the event is routed, so an event of an app that is gone acts nowhere. A text
- * message that is an owner code, or the owner's `disconnect`, goes to FeishuOwnerService (§5); every other branch records
- * the event and does nothing more yet; later tasks fill them in, each calling only service methods on the §7.2 allowlist
+ * message that is an owner code, or the owner's `disconnect`, goes to FeishuOwnerService (§5).
+ *
+ * Only the owner is served (§7.3, §7.4). Any other direct message is answered with one English sentence — that the bot
+ * takes direct messages only from its owner, or, while nobody is the owner, how to become it — and writes nothing. A
+ * card click is checked first of all: a clicker whose open_id is not the app's ownerOpenId (a forwarded card) is
+ * answered with a toast and writes nothing. Every later card action goes through that same check. Every other branch
+ * records the event and does nothing more yet; later tasks fill them in, each calling only service methods on the §7.2 allowlist
  * (feishu/feishu-actions.ts). What is logged names the event, the app, the branch and the account,
  * never the message's text.
  */
@@ -121,9 +126,21 @@ export class FeishuRouter {
       credential: { kind: 'FEISHU', appId: event.appId, openId, ...(messageId ? { messageId } : {}) },
     };
     this.logger.log(`feishu event ${event.eventId} of app ${event.appId} routed as ${route} for account ${app.ownerId}`);
+    if (route === 'CARD_ACTION') {
+      if (!app.ownerOpenId || openId !== app.ownerOpenId) {
+        this.logger.log(`feishu event ${event.eventId} of app ${event.appId}: a card click by someone other than the owner, refused`);
+        return { route, actor, answer: { toast: { type: 'error', content: FEISHU_OWNER_REPLIES.strangerCard } } };
+      }
+      return { route, actor };
+    }
     if (route === 'DIRECT_MESSAGE' || route === 'GROUP_MENTION') {
       const message = textMessageOf(event.payload);
-      if (message) await this.owner.handleMessage(app, message);
+      // An owner code is taken from anyone (§5.1): it is how someone becomes the owner.
+      if (message && (await this.owner.handleMessage(app, message))) return { route, actor };
+      if (route === 'DIRECT_MESSAGE' && messageId && (!app.ownerOpenId || openId !== app.ownerOpenId)) {
+        this.logger.log(`feishu event ${event.eventId} of app ${event.appId}: a direct message from someone other than the owner, refused`);
+        await this.owner.replyTo(app, messageId, app.ownerOpenId ? FEISHU_OWNER_REPLIES.stranger : FEISHU_OWNER_REPLIES.noOwner);
+      }
     }
     return { route, actor };
   }
