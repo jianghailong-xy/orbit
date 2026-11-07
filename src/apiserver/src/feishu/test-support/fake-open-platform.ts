@@ -91,7 +91,8 @@ export interface FakeAnswer {
 
 export type FakeRoute = (request: FakeRequest & { platform: FeishuPlatform }) => FakeAnswer | Promise<FakeAnswer>;
 
-export type FakeMode = 'ok' | 'unreachable' | 'not-json';
+/** How every route is answered: as Feishu would; the connection dropped; HTML; or HTTP 500 to every request. */
+export type FakeMode = 'ok' | 'unreachable' | 'not-json' | 'server-error';
 
 /** Feishu's refusals of a token trade, as the open platform words them. */
 export const FAKE_INVALID_PARAM = { code: 10003, msg: 'invalid param' } as const;
@@ -324,6 +325,11 @@ export class FakeOpenPlatform {
     this.requests.push(request);
     if (this.mode === 'unreachable') {
       req.socket.destroy();
+      return;
+    }
+    if (this.mode === 'server-error') {
+      res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ code: 500, msg: 'internal error' }));
       return;
     }
     if (this.mode === 'not-json') {

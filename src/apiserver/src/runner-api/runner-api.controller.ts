@@ -28,6 +28,7 @@ import type { Request, Response } from 'express';
 import { plainToInstance } from 'class-transformer';
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
+import { registerFeishuReply } from '../feishu/feishu-outbox-register';
 import { deriveSessionCapabilities, type SessionCapabilityFields } from '../sessions/session-state';
 import { readWorktreeArtifactRequest, worktreeFileAnswerKey } from '../sessions/worktree-artifact';
 import { importForkSessionId } from '../sessions/import-fork';
@@ -7353,6 +7354,12 @@ export class RunnerApiController {
     // RUNNING. Publish the committed row for every applied non-steer completion; task-bound
     // summaries carry taskId and clear the running overlay without waiting for reconciliation.
     if (finalized.applied && !finalized.steer) {
+      // The turn's reply, registered to go back to the session's Feishu chain (docs/feishu-bot-design.md §7.5): after
+      // the commit, one statement of its own, a failure only logged — the turn never waits on Feishu nor fails for it
+      // (§1.3 item 6). A worker on any replica sends it (feishu/feishu-outbox.ts).
+      if ('taskOwnerId' in finalized && finalized.taskOwnerId) {
+        await registerFeishuReply(this.prisma, this.logger, { sessionId, ownerId: finalized.taskOwnerId, turnId: dto.turnId });
+      }
       // A turn of this conversation has ended, which is where anything a project still owes it is
       // handed over — including what was recorded while it was busy, and what the door that recorded
       // it never got to deliver (contract §4.4 X-D4 3).

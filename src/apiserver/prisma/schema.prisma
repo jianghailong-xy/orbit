@@ -373,6 +373,8 @@ model User {
   feishuMessages   FeishuMessage[]
   /// The Feishu message chains of its sessions (migration 0499).
   feishuThreads    FeishuThread[]
+  /// Its sessions' replies on their way back to Feishu (migration 0501).
+  feishuOutbox     FeishuOutbox[]
 
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
@@ -8718,6 +8720,7 @@ model FeishuApp {
   chatRoutes         FeishuChatRoute[]
   messages           FeishuMessage[]
   threads            FeishuThread[]
+  outbox             FeishuOutbox[]
 
   @@map("feishu_app")
 }
@@ -8858,6 +8861,42 @@ model FeishuThread {
   @@index([sessionId, lastSpokenAt], map: "feishu_thread_session_id_last_spoken_at_idx")
   @@index([ownerId], map: "feishu_thread_owner_id_idx")
   @@map("feishu_thread")
+}
+
+/// A session's reply on its way back to Feishu (docs/feishu-bot-design.md §7.5, migration 0501): one row per finished
+/// turn of a session that has a message chain (feishu_thread), with the turn's last assistant text and the chain spoken
+/// in last. turn-complete writes it after its own transaction committed, in a statement of its own, and only logs a
+/// failure (§1.3 item 6), so a turn never waits on Feishu nor fails for it. A worker on any replica claims due rows and
+/// replies into the chain (feishu/feishu-outbox.ts). `status` is PENDING | FAILED | SENT | GAVE_UP (a CHECK);
+/// `feishu_outbox_due_idx` is partial and cannot be spelled here.
+model FeishuOutbox {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  ownerId       String    @map("owner_id") @db.Uuid
+  owner         User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "feishu_outbox_owner_id_fkey")
+  appId         String    @map("app_id")
+  app           FeishuApp @relation(fields: [appId], references: [appId], onDelete: Cascade, onUpdate: Cascade, map: "feishu_outbox_app_id_fkey")
+  sessionId     String    @map("session_id") @db.Uuid
+  turnId        String    @unique(map: "feishu_outbox_turn_id_key") @map("turn_id") @db.Uuid
+  /// The chain it goes to, as feishu_thread had it when the turn ended.
+  chatId        String    @map("chat_id")
+  rootMessageId String    @map("root_message_id")
+  /// The turn's last assistant text.
+  text          String
+  status        String    @default("PENDING")
+  attempts      Int       @default(0)
+  /// When it is next due: now, a claim's lease, or the backoff after a failure.
+  dueAt         DateTime  @default(now()) @map("due_at") @db.Timestamptz(3)
+  messageId     String?   @map("message_id")
+  /// Feishu's code and message of the last failure, never a credential or the text.
+  lastError     String?   @map("last_error")
+  sentAt        DateTime? @map("sent_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([sessionId, createdAt], map: "feishu_outbox_session_id_created_at_idx")
+  @@index([ownerId], map: "feishu_outbox_owner_id_idx")
+  @@index([appId], map: "feishu_outbox_app_id_idx")
+  @@map("feishu_outbox")
 }
 
 /// The inbound inbox of the Feishu bot integration (docs/feishu-bot-design.md §7.1, migration 0492): every event an
