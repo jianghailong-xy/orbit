@@ -28,7 +28,8 @@ class SessionProjectCopyParityTest {
     }
 
     @Test fun everyFixedWordIsDeclaredUnderItsSwiftName() {
-        listOf("noCoordinator" to SessionProjectCopy.noCoordinator, "openSession" to SessionProjectCopy.openSession, "sessions" to SessionProjectCopy.sessions,
+        listOf("noCoordinator" to SessionProjectCopy.noCoordinator, "openSession" to SessionProjectCopy.openSession,
+            "complete" to SessionProjectCopy.complete, "sessions" to SessionProjectCopy.sessions,
             "openProject" to SessionProjectCopy.openProject, "pin" to SessionProjectCopy.pin, "unpin" to SessionProjectCopy.unpin, "move" to SessionProjectCopy.move,
             "pageSubtitleLoading" to SessionProjectCopy.pageSubtitleLoading, "coordinatorSection" to SessionProjectCopy.coordinatorSection,
             "startReview" to SessionProjectCopy.startReview, "startNotAsked" to SessionProjectCopy.startNotAsked, "startHint" to SessionProjectCopy.startHint,
@@ -36,7 +37,7 @@ class SessionProjectCopyParityTest {
             "landingNoWordFromRunner" to SessionProjectCopy.landingNoWordFromRunner,
         ).forEach { (name, value) -> assertDeclares(name, value) }
         val declared = SessionProjectCopy::class.java.declaredFields.filter { it.type == String::class.java }.map { it.isAccessible = true; it.get(null) as String }
-        assertEquals("a SessionProjectCopy word is not held above", 14, declared.size)
+        assertEquals("a SessionProjectCopy word is not held above", 15, declared.size)
     }
 
     @Test fun everyBuiltSentenceIsOneSwiftLiteral() {
@@ -62,12 +63,14 @@ class SessionProjectCopyParityTest {
         val template = SessionProjectCopy.markHint("\${title}")
         assertTrue("sessionProjects.ts no longer says `$template`", web.contains("  markHint: (title: string) => `$template`,"))
         assertTrue("sessionProjects.ts no longer says '${SessionProjectCopy.sessions}'", web.contains("  sessions: '${SessionProjectCopy.sessions}',"))
+        // A finished project's row menu leads with it (§4.3, owner 2026-11-07): the same word on all three clients.
+        assertTrue("sessionProjects.ts no longer says '${SessionProjectCopy.complete}'", web.contains("  complete: '${SessionProjectCopy.complete}',"))
         assertEquals("Part of Launch · open its sessions", SessionProjectCopy.markHint("Launch"))
     }
 
     /** The words of the web's `SESSION_PROJECT_COPY` the tests in this file hold, to the Swift that OrbitKit holds to the web's
      * (`startSuggestion` through MainBranchCopyTest). */
-    private val held = setOf("noCoordinator", "openSession", "sessions", "openProject", "pin", "unpin", "move", "coordinatorSection",
+    private val held = setOf("noCoordinator", "openSession", "complete", "sessions", "openProject", "pin", "unpin", "move", "coordinatorSection",
         "pageSubtitleLoading", "startReview", "startNotAsked", "startHint", "progress", "markHint", "waitingSession", "pageSubtitle",
         "pageProgress", "startAsked", "pageNotStarted", "startSuggestion")
     /** The web's words this table does not carry: the progress hover, which a phone has no pointer for; Open Coordinator, which no
@@ -140,5 +143,16 @@ class SessionProjectCopyParityTest {
             assertTrue(projects.contains("case .$case: return \"${SessionProjectCopy.statusLabel(status)}\""))
         }
         assertEquals("Done", SessionProjectCopy.statusWords(row))
+    }
+
+    /** Design §4.3 (owner 2026-11-07), as iOS's `offersComplete(in:)`: a DONE or CANCELLED project's row leads its menu with Complete,
+     * in Open only; an OPEN project's row has no completion. */
+    @Test fun onlyAFinishedProjectInOpenOffersComplete() {
+        val row = SessionProjectRow("p1", "Launch", "OPEN", emptyList(), 0, null, null, null, null, null, false, false, false, null,
+            SessionLine("x", SessionLine.Tone.PREVIEW), SessionProjectRow.Target.Project("p1"), null, 0)
+        for (status in listOf("OPEN", "DONE", "CANCELLED", "SOMETHING_NEW")) for (view in SessionView.entries) {
+            assertEquals("$status in $view", view == SessionView.OPEN && status in setOf("DONE", "CANCELLED"),
+                row.copy(status = status).offersComplete(view))
+        }
     }
 }

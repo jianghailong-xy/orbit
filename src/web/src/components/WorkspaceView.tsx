@@ -278,6 +278,7 @@ import {
   getSession,
   interruptSession,
   listApprovals,
+  completeProjectSessions,
   mergeSessionToMain,
   type EventPageEvent,
   type PermissionRule,
@@ -5720,6 +5721,17 @@ export function WorkspaceView({
         tone: 'error',
       }),
   });
+  // Complete on a finished project's row (design §4.3, §3.6): the server moves its coordinator and
+  // every member still in Open, in any workspace, to Completed in one call.
+  const completeProjectMut = useMutation({
+    mutationFn: ({ projectId }: { projectId: string; memberIds: string[] }) => completeProjectSessions(projectId),
+    onSuccess: (_d, { projectId, memberIds }) => {
+      if (selectedId && memberIds.includes(selectedId)) leaveIfOpen(selectedId);
+      memberIds.forEach((id) => dropFromLists(id, projectId));
+      qc.invalidateQueries({ queryKey: ['sessions'] });
+    },
+    onError: (e: Error) => message.error("Couldn't complete the project's sessions", e.message),
+  });
   const requestComplete = useCallback(
     (session: any): void => {
       const source = selectedSession?.id === session.id ? selectedSession : session;
@@ -9485,6 +9497,16 @@ export function WorkspaceView({
                       } : undefined}
                       // The menu stops its own clicks before they reach the row, which would open it.
                       menu={[
+                        // A finished project's row can leave Open: Complete moves its coordinator and
+                        // the members still open to Completed (§4.3; board 2026-11-07, part ④).
+                        ...(effectiveView === 'open' && (s.status === 'DONE' || s.status === 'CANCELLED') ? [
+                          { key: 'complete', icon: <CheckOutlined />, label: SESSION_PROJECT_COPY.complete,
+                            onSelect: () => {
+                              setMenuOpenId(null);
+                              completeProjectMut.mutate({ projectId: s.projectId, memberIds: s.members.map((m: any) => m.id) });
+                            } },
+                          { key: 'divider-complete', type: 'separator' as const },
+                        ] : []),
                         { key: 'session', label: SESSION_PROJECT_COPY.openSession, disabled: s.target.kind !== 'session',
                           onSelect: () => { setMenuOpenId(null); openTarget(); } },
                         { key: 'sessions', label: SESSION_PROJECT_COPY.sessions,

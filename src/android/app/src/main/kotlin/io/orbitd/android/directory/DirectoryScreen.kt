@@ -209,7 +209,8 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
     action?.let { DirectoryActionDialog(it, api, data.copy(fresh = true), setDialog = { action = it },
         openSessions = { project -> open(OrbitRoute(Destination.PROJECT_SESSIONS, project, workspace, origin = Origin.LIST)) }, onChanged = refresh) }
     projectMenu?.let { row ->
-        ProjectRowMenu(row, true, close = { projectMenu = null },
+        ProjectRowMenu(row, true, view, close = { projectMenu = null },
+            complete = { SessionActions(api, app) { refresh() }.completeProject(row.projectId, row.title) },
             openSession = { id -> open(OrbitRoute(Destination.SESSION, id, workspace, folderId)) },
             openSessions = { open(OrbitRoute(Destination.PROJECT_SESSIONS, row.projectId, workspace, origin = Origin.LIST)) },
             openProject = { open(OrbitRoute(Destination.PROJECT, row.projectId)) },

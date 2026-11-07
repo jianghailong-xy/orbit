@@ -34,6 +34,9 @@ data class SessionProjectRow(
     val taskCounts: ProjectTaskCounts?, val runningCount: Int,
 ) {
     enum class Indicator { NEEDS_YOU, RUNNING, JOBS }
+    /** Whether the row's menu leads with Complete (design §4.3, owner 2026-11-07; iOS `offersComplete(in:)`): only a DONE or
+     * CANCELLED project, and only in Open, where there is something left to move to Completed. */
+    fun offersComplete(view: SessionView) = view == SessionView.OPEN && (status == "DONE" || status == "CANCELLED")
     /** What the line speaks for, which Open Session opens: a session, or — with none — the project. */
     sealed interface Target {
         data class Session(val id: String) : Target
@@ -215,6 +218,8 @@ object SessionProjectCopy {
     fun waitingSession(text: String, title: String) = "$text · $title"
     const val noCoordinator = "No coordinator"
     const val openSession = "Open Session"
+    /** The first item of a finished project's row menu (design §4.3, owner 2026-11-07). */
+    const val complete = "Complete"
     const val sessions = "Sessions"
     const val openProject = "Open Project"
     const val pin = "Pin"
