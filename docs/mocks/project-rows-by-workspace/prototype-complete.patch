@@ -1,0 +1,30 @@
+diff --git a/src/web/src/components/WorkspaceView.tsx b/src/web/src/components/WorkspaceView.tsx
+index 187d706..11e254b 100644
+--- a/src/web/src/components/WorkspaceView.tsx
++++ b/src/web/src/components/WorkspaceView.tsx
+@@ -9471,6 +9471,13 @@ export function WorkspaceView({
+                       } : undefined}
+                       // The menu stops its own clicks before they reach the row, which would open it.
+                       menu={[
++                        // A finished project's row can leave Open: Complete moves its coordinator and
++                        // the members still open to Completed (board 2026-11-07, part ④).
++                        ...((s.status === 'DONE' || s.status === 'CANCELLED') && coordinator ? [
++                          { key: 'complete', icon: <CheckOutlined />, label: SESSION_PROJECT_COPY.complete,
++                            onSelect: () => { setMenuOpenId(null); runSwipeAction('complete', coordinator); } },
++                          { key: 'divider-complete', type: 'separator' as const },
++                        ] : []),
+                         { key: 'session', label: SESSION_PROJECT_COPY.openSession, disabled: s.target.kind !== 'session',
+                           onSelect: () => { setMenuOpenId(null); openTarget(); } },
+                         { key: 'sessions', label: SESSION_PROJECT_COPY.sessions,
+diff --git a/src/web/src/lib/sessionProjects.ts b/src/web/src/lib/sessionProjects.ts
+index 5ea90e6..2063bfd 100644
+--- a/src/web/src/lib/sessionProjects.ts
++++ b/src/web/src/lib/sessionProjects.ts
+@@ -85,6 +85,7 @@ export const SESSION_PROJECT_COPY = {
+   waitingSession: (text: string, title: string) => `${text} · ${title}`,
+   noCoordinator: 'No coordinator',
+   openSession: 'Open Session',
++  complete: 'Complete',
+   openCoordinator: 'Open Coordinator',
+   sessions: 'Sessions',
+   openProject: 'Open Project',

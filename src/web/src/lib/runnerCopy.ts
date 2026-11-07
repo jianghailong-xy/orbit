@@ -86,6 +86,11 @@ export const RUNNER_ENGINE_NO_QUOTA = 'No quota reported';
 /** A Kimi login whose plan carries no quota limit: its quota was read and held no window at all —
  *  not a read that failed or never ran (RUNNER_ENGINE_NO_QUOTA). */
 export const RUNNER_ENGINE_NO_QUOTA_LIMIT = 'No quota limit';
+/** The sign-in check got no answer: a failed check, not a sign-out, and never drawn as signed in
+ *  (the probe has three states for exactly this). */
+export const RUNNER_ENGINE_COULDNT_CHECK = 'Couldn’t check';
+/** The quota column when the sign-in check gave no answer — no reading at all, rather than a zero. */
+export const RUNNER_ENGINE_NO_READING = 'No reading';
 export const RUNNER_SIGN_IN = 'Sign In';
 export const RUNNER_UPDATE_ENGINES_NOW = 'Update Engines Now';
 export const RUNNER_REFRESH_MODEL_LISTS = 'Refresh Model Lists';
@@ -119,6 +124,23 @@ export function runnerEnginesReported(when: string): string {
 
 export function runnerEngineAccountsSignedIn(count: number): string {
   return `${count} accounts signed in`;
+}
+
+/** A group head's count when the sign-in check answered for none of its accounts — said instead of
+ *  "0 of N accounts available", which reads as "nothing is logged in". */
+export function runnerEngineCouldntCheckAccounts(count: number): string {
+  return `couldn’t check ${count} accounts`;
+}
+
+/** The tail of that count when the check answered for some of the accounts only. */
+export function runnerEngineAccountsUnchecked(count: number): string {
+  return `${count} couldn’t be checked`;
+}
+
+/** Under a row whose accounts' sign-in check got no answer: what happened, that it retries, and that
+ *  nothing is blocked in the meantime. */
+export function runnerEngineCouldntCheckNote(): string {
+  return `The runner didn’t answer the sign-in check this time. It tries again every 5 minutes; sessions can still start.`;
 }
 
 /** Above an engine's quota while it has several accounts: the one a new session starts on. */

@@ -1,0 +1,159 @@
+diff --git a/src/web/src/components/WorkspaceView.tsx b/src/web/src/components/WorkspaceView.tsx
+index 74d5eb4..187d706 100644
+--- a/src/web/src/components/WorkspaceView.tsx
++++ b/src/web/src/components/WorkspaceView.tsx
+@@ -3046,6 +3046,7 @@ export function WorkspaceView({
+       byTag: listByTag,
+       folderId: openFolder?.id,
+       coordinators: projectData.coordinators,
++      workspaceId: resolvedWorkspaceId,
+       contentSessions: projectData.contentSessions,
+       runnerOffline: runner.online === false,
+       needsYou: sessionNeedsYou,
+@@ -3053,7 +3054,7 @@ export function WorkspaceView({
+       line: (s) => sessionLine(selectedSession?.id === s.id ? selectedSession : s,
+         effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled, machineName(runner)),
+     }),
+-    [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
++    [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions, resolvedWorkspaceId,
+       effectiveView, listByTag, runner.online, runner.name, runner.displayName, watchingBySession, selectedSession, recapsEnabled],
+   );
+   // A project's entry stands for its coordinator only in the workspace the coordinator runs in.
+@@ -9656,6 +9657,24 @@ export function WorkspaceView({
+                                 or waiting on, else its recap (sessionLine). Tags are filed and
+                                 filtered by, not drawn on the row (the owner, 2026-10-22). */}
+                             <div className="session-sub">
++                              {/* A member of a project whose row is in another workspace (option A):
++                                  the project's mark, which opens its sessions page. */}
++                              {s.projectMark && (
++                                <span
++                                  className={`session-project-progress${s.projectMark.status === 'DONE' ? ' done' : ''}`}
++                                  title={SESSION_PROJECT_COPY.markHint(s.projectMark.title)}
++                                  role="button"
++                                  onClick={(e) => { e.stopPropagation(); enterProjectSessions(s.projectMark!.projectId); }}
++                                >
++                                  {s.projectMark.taskCounts ? (
++                                    <>
++                                      <SessionProjectProgressBar counts={s.projectMark.taskCounts}
++                                        runningCount={s.projectMark.runningCount} />
++                                      {SESSION_PROJECT_COPY.progress(s.projectMark.taskCounts.done, s.projectMark.taskCounts.total)}
++                                    </>
++                                  ) : s.projectMark.status}
++                                </span>
++                              )}
+                               <div
+                                 className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
+                               >
+diff --git a/src/web/src/lib/sessionProjects.ts b/src/web/src/lib/sessionProjects.ts
+index 9608364..5ea90e6 100644
+--- a/src/web/src/lib/sessionProjects.ts
++++ b/src/web/src/lib/sessionProjects.ts
+@@ -25,6 +25,7 @@ export interface SessionProjectSession extends GroupableSession {
+   folderId?: string | null;
+   projectMembership?: SessionProjectMembership | null;
+   ownerItems?: readonly { since: string }[];
++  workspace?: { id?: string | null } | null;
+ }
+ 
+ export interface SessionProjectLine {
+@@ -52,8 +53,18 @@ export interface SessionProjectRow<T> extends GroupableSession {
+   runningCount: number;
+ }
+ 
++/** The project an ordinary row belongs to, where that project has no row of its own: a member in a
++ *  workspace its coordinator does not run in (owner 2026-11-07, option A). */
++export interface SessionProjectMark {
++  projectId: string;
++  title: string;
++  status: SessionProjectMembership['projectStatus'];
++  taskCounts?: ProjectSidebarTaskCounts;
++  runningCount: number;
++}
++
+ export type SessionProjectEntry<T> =
+-  | (T & { kind: 'session' })
++  | (T & { kind: 'session'; projectMark?: SessionProjectMark })
+   | (SessionProjectRow<T> & { kind: 'project' });
+ 
+ export interface SessionProjectListing<T> {
+@@ -69,6 +80,8 @@ export const listShowsProjects = (view: SessionListView, byTag: boolean, searchi
+ export const SESSION_PROJECT_COPY = {
+   progress: (done: number, total: number) => `${done}/${total}`,
+   progressHint: (sessions: number, running: number) => `${sessions} sessions · ${running} running`,
++  /** The progress mark on a member's own row, where its project has no row (option A). */
++  markHint: (title: string) => `Part of ${title} · open its sessions`,
+   waitingSession: (text: string, title: string) => `${text} · ${title}`,
+   noCoordinator: 'No coordinator',
+   openSession: 'Open Session',
+@@ -583,6 +596,8 @@ export function sessionProjectListing<T extends SessionProjectSession>(
+     runnerOffline?: boolean;
+     now?: number;
+     coordinators?: readonly T[];
++    /** The workspace this list is. A project is a row only in the one its coordinator runs in. */
++    workspaceId?: string | null;
+     /** Same-view sessions across workspaces, used for the waiting line and tooltip count. */
+     contentSessions?: readonly T[];
+     line: (session: T) => SessionProjectLine;
+@@ -603,26 +618,48 @@ export function sessionProjectListing<T extends SessionProjectSession>(
+       coordinators.set(session.projectMembership.projectId, session);
+     }
+   }
++  // A project is a row only in the workspace its coordinator runs in. Anywhere else its members are
++  // that workspace's own rows, each marked with the project (owner 2026-11-07, option A).
++  const elsewhere = (session: T): boolean => {
++    const id = session.projectMembership?.projectId;
++    const home = id ? coordinators.get(id)?.workspace?.id : null;
++    return !!opts.workspaceId && !!home && home !== opts.workspaceId;
++  };
+   for (const session of sessions) {
+     const id = session.projectMembership?.projectId;
+-    if (!id) continue;
++    if (!id || elsewhere(session)) continue;
+     const members = groups.get(id);
+     if (members) members.push(session);
+     else groups.set(id, [session]);
+   }
+   const assigned = sessions.map((session) => {
+     const id = session.projectMembership?.projectId;
+-    return id ? { ...session, folderId: coordinators.get(id)?.folderId ?? null } : session;
++    return id && !elsewhere(session) ? { ...session, folderId: coordinators.get(id)?.folderId ?? null } : session;
+   });
+   const folderListing = sessionFolderListing(assigned, folders, opts);
+   const knownFolders = new Set(folders.map((folder) => folder.id));
+   const inScope = (folderId: string | null | undefined) => opts.folderId
+     ? folderId === opts.folderId
+     : !folderId || !knownFolders.has(folderId);
+-  const loose = sessions.filter((session) => !session.projectMembership && inScope(session.folderId));
+-  if (!groups.size) return flat(loose, opts.folderId ? [] : folderListing.folders);
+-
++  const loose = sessions.filter((session) =>
++    (!session.projectMembership || elsewhere(session)) && inScope(session.folderId));
+   const summaries = new Map(projects.map((project) => [project.id, project]));
++  const looseEntries = loose.map((session): SessionProjectEntry<T> => {
++    const membership = session.projectMembership;
++    if (!membership || !elsewhere(session)) return { ...session, kind: 'session' };
++    const summary = summaries.get(membership.projectId);
++    return { ...session, kind: 'session', projectMark: {
++      projectId: membership.projectId,
++      title: summary?.title ?? membership.projectTitle,
++      status: summary?.status ?? membership.projectStatus,
++      taskCounts: summary?.taskCounts,
++      runningCount: summary?.buckets.running ?? 0,
++    } };
++  });
++  if (!groups.size) {
++    return { folders: opts.folderId ? [] : folderListing.folders, projects: [], sessions: loose, entries: looseEntries };
++  }
++
+   const rows: SessionProjectRow<T>[] = [];
+   for (const [projectId, members] of groups) {
+     const coordinator = coordinators.get(projectId) ?? null;
+@@ -704,7 +741,7 @@ export function sessionProjectListing<T extends SessionProjectSession>(
+     });
+   }
+   const entries: SessionProjectEntry<T>[] = [
+-    ...loose.map((session) => ({ ...session, kind: 'session' as const })),
++    ...looseEntries,
+     ...rows.map((project) => ({ ...project, kind: 'project' as const })),
+   ];
+   entries.sort((a, b) => {

@@ -46,6 +46,11 @@ public enum RunnerPageCopy {
     /// A Kimi login whose plan carries no quota limit: its quota was read and held no window at all —
     /// not a read that failed or never ran (RUNNER_ENGINE_NO_QUOTA).
     public static let RUNNER_ENGINE_NO_QUOTA_LIMIT = "No quota limit"
+    /// The sign-in check got no answer: a failed check, not a sign-out, and never drawn as signed in
+    /// (the probe has three states for exactly this).
+    public static let RUNNER_ENGINE_COULDNT_CHECK = "Couldn’t check"
+    /// The quota line when the sign-in check gave no answer — no reading at all, rather than a zero.
+    public static let RUNNER_ENGINE_NO_READING = "No reading"
     public static let RUNNER_SIGN_IN = "Sign In"
     public static let RUNNER_UPDATE_ENGINES_NOW = "Update Engines Now"
     public static let RUNNER_REFRESH_MODEL_LISTS = "Refresh Model Lists"
@@ -66,6 +71,16 @@ public enum RunnerPageCopy {
     public static func runnerEnginesChecked(when: String) -> String { "Checked \(when)" }
     public static func runnerEnginesReported(when: String) -> String { "Reported \(when)" }
     public static func runnerEngineAccountsSignedIn(count: Int) -> String { "\(count) accounts signed in" }
+    /// A row's count when the sign-in check answered for none of its accounts — said instead of
+    /// "0 of N accounts available", which reads as "nothing is logged in".
+    public static func runnerEngineCouldntCheckAccounts(count: Int) -> String { "couldn’t check \(count) accounts" }
+    /// The tail of that count when the check answered for some of the accounts only.
+    public static func runnerEngineAccountsUnchecked(count: Int) -> String { "\(count) couldn’t be checked" }
+    /// Under a row whose accounts' sign-in check got no answer: what happened, that it retries, and
+    /// that nothing is blocked in the meantime.
+    public static func runnerEngineCouldntCheckNote() -> String {
+        "The runner didn’t answer the sign-in check this time. It tries again every 5 minutes; sessions can still start."
+    }
     public static func runnerEngineNext(account: String) -> String { "Next: \(account)" }
     public static func runnerEngineUpdateFailed(version: String, when: String) -> String {
         "Update to \(version) failed \(when)"
