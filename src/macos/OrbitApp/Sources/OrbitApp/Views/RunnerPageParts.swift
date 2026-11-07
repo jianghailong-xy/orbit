@@ -333,6 +333,16 @@ struct RunnerEngineRow: View {
                         if !RunnerPageFormat.claudeRegionBlocked(runner, engine: health.engine) {
                             RunnerCapsule(enabled: !offline) { Text(RunnerPageCopy.RUNNER_SIGN_IN) }
                         }
+                    } else if !RunnerPageFormat.claudeRegionBlocked(runner, engine: health.engine),
+                              !(health.engine == CursorRuntime.engine
+                                && CursorRuntime.state(of: runner).blocks),
+                              let note = RunnerPageFormat.couldntCheckNote(health, engine: health.engine) {
+                        // A check that got no answer: said where Sign In would be, because signing in
+                        // is not its fix (web's note under the group head).
+                        Text(note)
+                            .font(.orbitLabel)
+                            .foregroundStyle(Color.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     // Several accounts: whose window this is — the account a new session starts on.
                     if let next {

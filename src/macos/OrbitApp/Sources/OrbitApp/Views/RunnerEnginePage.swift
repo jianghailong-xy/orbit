@@ -237,6 +237,17 @@ private struct RunnerEngineContent: View {
                     Text(versionLine(health, now: now))
                         .font(.orbitListSubtitle)
                         .foregroundStyle(Color.secondary)
+                    // The check got no answer: said once here, as the web puts it under the group's
+                    // head. Signing in is not the fix for a timeout.
+                    if let health,
+                       let note = RunnerPageFormat.couldntCheckNote(health, engine: engine),
+                       !RunnerPageFormat.claudeRegionBlocked(runner, engine: engine),
+                       !(engine == CursorRuntime.engine && CursorRuntime.state(of: runner).blocks) {
+                        Text(note)
+                            .font(.orbitLabel)
+                            .foregroundStyle(Color.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     if let health, let failed = RunnerPageFormat.updateFailedLine(health, now: now) {
                         Text(failed)
                             .font(.orbitListSubtitle)
@@ -348,7 +359,10 @@ private struct RunnerEngineContent: View {
     /// a pause, what being signed out costs — and its way (back) in where it is out.
     @ViewBuilder private func accountRow(_ line: RunnerPageFormat.AccountLine, login: LoginEngine, offline: Bool,
                                          now: Date, canPause: Bool) -> some View {
-        let windows = RunnerPageFormat.accountWindows(runner, engine: engine, account: line.id)
+        let unknown = line.auth == "unknown"
+        // No reading is shown for a check that got no answer: the snapshot beside it may be older
+        // than the account's last sign-out (web's QuotaCell).
+        let windows = unknown ? [] : RunnerPageFormat.accountWindows(runner, engine: engine, account: line.id)
         let alone = (runner.engines?.first(where: { $0.engine == engine })?.accounts?.count ?? 0) < 2
         // A Cursor CLI account a turn met Cursor's limit on is spent until its usage resets, which no
         // reading says (web's "Spent · resets …").
@@ -410,6 +424,10 @@ private struct RunnerEngineContent: View {
                      ? RunnerPageCopy.RUNNER_ENGINE_NO_QUOTA_LIMIT : RunnerPageCopy.RUNNER_ENGINE_NO_QUOTA)
                     .font(.orbitLabel)
                     .foregroundStyle(Color.secondary)
+            } else if unknown, !regionBlocked {
+                Text(RunnerPageCopy.RUNNER_ENGINE_NO_READING)
+                    .font(.orbitLabel)
+                    .foregroundStyle(Color.secondary)
             }
             // A login about to lapse, said before it does the way Claude Code says it, with the way to
             // renew it beside it: the row's own sign-in, into the same account.
@@ -454,8 +472,11 @@ private struct RunnerEngineContent: View {
                 // offers that sign-in, as it always has — on a runner too old to add accounts it is the
                 // only way in; beside Google accounts Add Account is where another joins (as on web). On a
                 // phone an account signed in is signed in again from its long-press menu.
+                // The check got no answer: no sign-in on the row (it is the menu's, for the case the
+                // login really is gone). A Mac keeps its Sign In Again on a signed-in row; a phone
+                // offers one only where the account is out.
                 if RunnerPageFormat.canSignIn(runner, engine: engine) && (!line.envKey || alone)
-                    && (Self.pressesOnRow || line.auth != "yes") {
+                    && (line.auth == "no" || (Self.pressesOnRow && line.auth == "yes")) {
                     Button(line.envKey ? "Sign in with Google" : line.auth == "yes" ? "Sign In Again" : RunnerPageCopy.RUNNER_SIGN_IN) {
                         signingIn = line.id
                     }
@@ -541,9 +562,12 @@ private struct RunnerEngineContent: View {
         } label: {
             Label("Rename…", systemImage: "pencil")
         }
-        if line.auth == "yes" && !line.envKey && RunnerPageFormat.canSignIn(runner, engine: engine) {
+        if (line.auth == "yes" || line.auth == "unknown") && !line.envKey
+            && RunnerPageFormat.canSignIn(runner, engine: engine) {
+            // The row's own sign-in, where the check couldn't answer and the row shows no button: an
+            // escape hatch, not the fix. On a signed-in account it is the old Sign In Again.
             Button { signingIn = line.id } label: {
-                Label("Sign In Again", systemImage: "arrow.clockwise")
+                Label(line.auth == "yes" ? "Sign In Again" : "Sign In", systemImage: "arrow.clockwise")
             }
             .disabled(offline || removal?.pending == true)
         }
