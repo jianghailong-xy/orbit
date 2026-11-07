@@ -438,11 +438,14 @@ func (t *Transport) deregister() error {
 }
 
 func (t *Transport) heartbeat(b HeartbeatRequest) (*HeartbeatResponse, error) {
+	timeout := 15 * time.Second
 	if t.link != nil {
 		t.link.supervising(b.SupervisedSessionIDs)
+		// Over the link a beat waits for its answer as long as the gateway may take to give one (link_heartbeat.go).
+		timeout = linkHeartbeatTimeout
 	}
 	var r HeartbeatResponse
-	if err := t.do(nil, "POST", "/runner/heartbeat", b, &r, 15*time.Second); err != nil {
+	if err := t.do(nil, "POST", "/runner/heartbeat", b, &r, timeout); err != nil {
 		return nil, err
 	}
 	if t.link != nil {

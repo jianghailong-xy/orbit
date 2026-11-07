@@ -25,9 +25,9 @@ import (
 )
 
 // TestTheGatewayRunsAgainstTheStub builds the link gateway from this checkout and runs it against the stub as
-// gateway-limit.sh does, in MODE_LINK and in MODE_HTTP with the stub's switch on, minus TLS and NATS: a runner with a
-// link token the stub minted is welcomed with the sessions it names, and its heartbeat, its event batch and a tunnelled
-// request are each answered through the gateway, which read the revocation list (and the switch) from the stub.
+// gateway-limit.sh does, minus TLS and NATS: a runner with a link token the stub minted is welcomed with the sessions it
+// names, and its heartbeat, its event batch and a tunnelled request are each answered through the gateway, which read
+// the revocation list from the stub.
 func TestTheGatewayRunsAgainstTheStub(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds and runs the gateway")
@@ -37,12 +37,10 @@ func TestTheGatewayRunsAgainstTheStub(t *testing.T) {
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("building the gateway: %v\n%s", err, out)
 	}
-	for _, mode := range []string{"link", "http"} {
-		t.Run("LINK_MODE="+mode, func(t *testing.T) { runGatewayAgainstStub(t, bin, mode) })
-	}
+	runGatewayAgainstStub(t, bin)
 }
 
-func runGatewayAgainstStub(t *testing.T, bin, mode string) {
+func runGatewayAgainstStub(t *testing.T, bin string) {
 	listen, metrics := freeAddr(t), freeAddr(t)
 	s, srv, key := newTestStub(t, time.Millisecond, "ws://"+listen)
 	der, err := x509.MarshalPKIXPublicKey(key.Public().(ed25519.PublicKey))
@@ -54,7 +52,7 @@ func runGatewayAgainstStub(t *testing.T, bin, mode string) {
 	gw.Env = append(os.Environ(),
 		"LINK_LISTEN_ADDR="+listen, "LINK_METRICS_ADDR="+metrics, "LINK_TLS_MODE=off",
 		"LINK_PUBLIC_KEYS="+string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der})),
-		"LINK_API_URL="+srv.URL, "LINK_GATEWAY_TOKEN="+testGatewayToken, "LINK_MODE="+mode,
+		"LINK_API_URL="+srv.URL, "LINK_GATEWAY_TOKEN="+testGatewayToken,
 		"LINK_INTERNAL_API_URLS="+srv.URL, "LINK_FRAME_LOG=off", "LINK_NATS_URL=")
 	gw.Stdout, gw.Stderr = logs, logs
 	if err := gw.Start(); err != nil {
@@ -154,7 +152,7 @@ func runGatewayAgainstStub(t *testing.T, bin, mode string) {
 
 	st := s.stats()
 	want := map[string]bool{routeRevocations: true, routeWelcome: true, routeHeartbeat: true, routeEventsMerged: true, routeRPC: true,
-		routeLinkToken: true, routeMode: mode == "http"}
+		routeLinkToken: true}
 	for route, called := range want {
 		if (st.Routes[route].Calls > 0) != called {
 			t.Errorf("the stub answered %s %d times: want it called %v", route, st.Routes[route].Calls, called)

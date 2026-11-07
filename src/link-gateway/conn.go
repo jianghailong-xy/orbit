@@ -31,10 +31,7 @@ type conn struct {
 	// (X-Orbit-Runner-Link-Token): the apiserver checks it on each one.
 	token  string
 	remote string
-	// mode is what the gateway told runners when the connection opened, which its Welcome says, and what it has to
-	// forward with. Its HeartbeatAcks say what the gateway tells runners now (mode.go).
-	mode linkpb.Mode
-	log  *slog.Logger
+	log    *slog.Logger
 	// started is when the upgrade request arrived; the handshake's duration ends when Welcome is written.
 	started time.Time
 
@@ -61,9 +58,8 @@ type conn struct {
 	welcomedAt time.Time
 
 	chunks reassembler
-	shadow *shadowState
-	// link is what a MODE_LINK connection forwards with (forward.go, heartbeat.go, events.go, live.go); nil in
-	// MODE_HTTP.
+	// link is what the connection forwards with (forward.go, heartbeat.go, events.go, live.go); nil on a gateway built
+	// without backends, as some tests build it, which forwards nothing.
 	link *linkState
 	// readError is why reading stopped; only the reading goroutine touches it.
 	readError error
@@ -114,7 +110,7 @@ var tierNames = [tierCount]string{"control", "normal", "live"}
 func newConn(g *gateway, ws *websocket.Conn, claims *linkClaims, remote string) *conn {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &conn{
-		g: g, ws: ws, id: newConnectionID(), claims: claims, remote: remote, mode: g.mode(),
+		g: g, ws: ws, id: newConnectionID(), claims: claims, remote: remote,
 		ctx: ctx, cancel: cancel,
 		queues: [tierCount]chan outItem{
 			tierControl: make(chan outItem, controlQueue),
@@ -125,10 +121,9 @@ func newConn(g *gateway, ws *websocket.Conn, claims *linkClaims, remote string) 
 	}
 	c.log = g.log.With("conn", c.id, "runner", claims.RunnerID, "process", claims.LeaseOwner, "remote", remote)
 	c.writeWS = func(ctx context.Context, b []byte) error { return ws.Write(ctx, websocket.MessageBinary, b) }
-	c.shadow = newShadowState(c)
-	// Forwarding needs somewhere to forward to: configuration requires backends in MODE_LINK, and a gateway built
-	// without them (as some tests build it) forwards nothing.
-	if c.mode == linkpb.Mode_MODE_LINK && g.backends != nil {
+	// Forwarding needs somewhere to forward to: configuration requires backends, and a gateway built without them (as
+	// some tests build it) forwards nothing.
+	if g.backends != nil {
 		c.link = newLinkState(c)
 	}
 	return c
@@ -219,8 +214,10 @@ func (c *conn) handshake() bool {
 	m.handshakes.inc("ok")
 	credit := c.g.credit.current()
 	c.send(&linkpb.Frame{Body: &linkpb.Frame_Welcome{Welcome: &linkpb.Welcome{
-		ProtocolVersion:     1,
-		Mode:                c.mode,
+		ProtocolVersion: 1,
+		// Every Welcome and HeartbeatAck says MODE_LINK. A runner from before the gateway's cleanup (0.1.246 and
+		// older) moves its work onto the link when told MODE_LINK, and keeps the transport it is on when told no mode.
+		Mode:                linkpb.Mode_MODE_LINK,
 		HeartbeatIntervalMs: uint32(c.g.cfg.HeartbeatInterval / time.Millisecond),
 		Limits:              &linkpb.Limits{MaxFrameBytes: maxFrameBytes},
 		Credit:              &linkpb.Credit{MaxUnackedEvents: credit.Events, MaxUnackedBytes: credit.Bytes},
@@ -301,21 +298,15 @@ func (c *conn) dispatch(f *linkpb.Frame) bool {
 	c.logFrame("in", f)
 	switch body := f.GetBody().(type) {
 	case *linkpb.Frame_Heartbeat:
-		c.onHeartbeat(f.GetId(), body.Heartbeat, proto.Size(f))
+		c.onHeartbeat(body.Heartbeat)
 	case *linkpb.Frame_EventBatch:
-		switch {
-		case c.link != nil:
-			// Forwarded even once RUNNER_LINK_REQUIRED is switched off, until the runner leaves the connection: the
-			// ingest stores each seq once, so a batch stored here is not stored again when the runner resends it.
+		// No EventAck without backends: nothing is stored, and an ack says the events are (§5.8).
+		if c.link != nil {
 			c.link.onEvents(body.EventBatch)
-		case c.mode == linkpb.Mode_MODE_HTTP:
-			// No EventAck: in MODE_HTTP nothing is stored, and an ack says the events are (§5.8).
-			c.shadow.typed(f.GetId(), &shadowEntry{kind: "events", events: body.EventBatch}, proto.Size(f))
 		}
 	case *linkpb.Frame_Rpc:
-		c.onRpc(body.Rpc, proto.Size(f))
+		c.onRpc(body.Rpc)
 	case *linkpb.Frame_LiveBatch:
-		// In MODE_HTTP a live batch is counted and dropped: the shadow period publishes no live stream.
 		if c.link != nil {
 			c.link.onLive(body.LiveBatch)
 		}
@@ -341,68 +332,33 @@ func (c *conn) dispatch(f *linkpb.Frame) bool {
 	return true
 }
 
-// onHeartbeat records the beat and answers it (§5.7). In MODE_LINK the beat is forwarded to the apiserver's heartbeat
-// route and answered with what it says (heartbeat.go). In MODE_HTTP it is the typed half of a mirror: answered at once
-// with MODE_HTTP and nothing to apply, and compared, never forwarded.
-//
-// The answer states the mode the gateway tells runners now, which may not be the connection's (mode.go): a MODE_HTTP
-// connection is told MODE_LINK once RUNNER_LINK_REQUIRED is on, and a MODE_LINK connection MODE_HTTP once it is off.
-// Then the beat is not forwarded either, and the runner, which applies nothing of an answer saying MODE_HTTP, sends it
-// again over HTTPS.
-func (c *conn) onHeartbeat(frameID uint64, hb *linkpb.Heartbeat, size int) {
+// onHeartbeat records the beat and forwards it to the apiserver's heartbeat route, whose answer the HeartbeatAck carries
+// (§5.7, heartbeat.go). A gateway without backends, as some tests build it, answers it at once with nothing to apply.
+func (c *conn) onHeartbeat(hb *linkpb.Heartbeat) {
 	c.g.metrics.heartbeats.inc()
-	mode := c.g.mode()
-	if c.link != nil && mode == linkpb.Mode_MODE_LINK {
+	if c.link != nil {
 		c.link.onHeartbeat(hb)
 		return
 	}
 	c.send(&linkpb.Frame{Body: &linkpb.Frame_HeartbeatAck{HeartbeatAck: &linkpb.HeartbeatAck{
-		Mode: mode, Hints: &linkpb.HintState{},
+		Mode: linkpb.Mode_MODE_LINK, Hints: &linkpb.HintState{}, BeatId: hb.GetBeatId(),
 	}}}, true)
-	if c.mode == linkpb.Mode_MODE_HTTP {
-		c.shadow.typed(frameID, &shadowEntry{kind: "heartbeat", heartbeat: hb}, size)
-	}
 }
 
-// mayForward is the one check an Rpc passes before it may reach a backend. Two things hold whatever is behind it: a
-// connection in MODE_HTTP forwards nothing, and a shadow mirror (request_id "shadow:...") is never forwarded, in any
-// mode. TestRpcForwardingInvariants pins both.
-func mayForward(mode linkpb.Mode, rpc *linkpb.Rpc) bool {
-	return mode == linkpb.Mode_MODE_LINK && !strings.HasPrefix(rpc.GetRequestId(), shadowPrefix)
-}
-
-// onRpc compares a mirror with its typed frame and answers every Rpc with exactly one RpcResult: forwarded in
-// MODE_LINK (forward.go), refused otherwise. A connection opened in MODE_LINK is in MODE_HTTP once RUNNER_LINK_REQUIRED
-// is switched off (mode.go): its calls are refused LINK_MODE_HTTP, and the runner sends them again over HTTPS.
-func (c *conn) onRpc(rpc *linkpb.Rpc, size int) {
-	shadow := strings.HasPrefix(rpc.GetRequestId(), shadowPrefix)
-	if shadow {
-		c.shadow.mirror(rpc, size)
-	}
-	mode := c.mode
-	if c.g.mode() != linkpb.Mode_MODE_LINK {
-		mode = linkpb.Mode_MODE_HTTP
-	}
-	if mayForward(mode, rpc) && c.g.forward != nil {
+// onRpc answers every Rpc with exactly one RpcResult: the route's answer, once it is forwarded (forward.go), or a
+// refusal from a gateway without backends.
+func (c *conn) onRpc(rpc *linkpb.Rpc) {
+	if c.g.forward != nil {
 		c.g.metrics.rpcs.inc("forwarded")
 		c.g.forward(c, rpc)
 		return
 	}
-	code, message := "NOT_FORWARDED", "this gateway has no backend to forward requests to"
-	switch {
-	case mode != linkpb.Mode_MODE_LINK:
-		code, message = "LINK_MODE_HTTP", "this connection is in MODE_HTTP: daemon requests go over HTTPS, and a mirror is compared, never forwarded"
-	case shadow:
-		code, message = "SHADOW_MIRROR", "a mirror is compared, never forwarded"
-	}
-	result := "not_forwarded"
-	if shadow {
-		result = "shadow"
-	}
-	c.g.metrics.rpcs.inc(result)
+	c.g.metrics.rpcs.inc("not_forwarded")
 	c.send(&linkpb.Frame{Body: &linkpb.Frame_RpcResult{RpcResult: &linkpb.RpcResult{
 		RequestId: rpc.GetRequestId(),
-		Outcome:   &linkpb.RpcResult_Failure{Failure: &linkpb.Failure{Code: code, Message: message, Retryable: false}},
+		Outcome: &linkpb.RpcResult_Failure{Failure: &linkpb.Failure{
+			Code: "NOT_FORWARDED", Message: "this gateway has no backend to forward requests to", Retryable: false,
+		}},
 	}}}, false)
 }
 
@@ -666,7 +622,6 @@ func (c *conn) pingLoop() {
 			return
 		}
 		c.g.metrics.rtt.observe(time.Since(start))
-		c.shadow.expire()
 	}
 }
 
@@ -694,7 +649,6 @@ func (c *conn) finish() {
 	welcomed := c.welcomed
 	c.mu.Unlock()
 	c.chunks.close()
-	c.shadow.close()
 	if !welcomed {
 		return
 	}

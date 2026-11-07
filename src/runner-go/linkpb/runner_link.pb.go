@@ -2359,7 +2359,11 @@ type Heartbeat struct {
 	// carries them; it replaces the list from Hello or the previous Heartbeat.
 	SupportedProviders []string `protobuf:"bytes,5,rep,name=supported_providers,json=supportedProviders,proto3" json:"supported_providers,omitempty"`
 	// The rest of today's heartbeat body, part by part, each identified by its digest (§5.7).
-	Facts         []*Fact `protobuf:"bytes,6,rep,name=facts,proto3" json:"facts,omitempty"`
+	Facts []*Fact `protobuf:"bytes,6,rep,name=facts,proto3" json:"facts,omitempty"`
+	// Names this beat, so that the HeartbeatAck answering it can say so: unique within the process
+	// and increasing, from 1. A runner keeps at most one beat unanswered on a connection, and a late
+	// answer does not end the connection (§15.13). 0 from a runner older than this field.
+	BeatId        uint64 `protobuf:"varint,7,opt,name=beat_id,json=beatId,proto3" json:"beat_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2434,6 +2438,13 @@ func (x *Heartbeat) GetFacts() []*Fact {
 		return x.Facts
 	}
 	return nil
+}
+
+func (x *Heartbeat) GetBeatId() uint64 {
+	if x != nil {
+		return x.BeatId
+	}
+	return 0
 }
 
 // One part of what a runner reports about itself on every beat, such as its model catalog (§5.7:
@@ -2523,7 +2534,13 @@ type HeartbeatAck struct {
 	// Everything Hint frames announce that holds right now (§5.5).
 	Hints *HintState `protobuf:"bytes,4,opt,name=hints,proto3" json:"hints,omitempty"`
 	// The runner release the control plane assigns this runner (§7); unset when it assigns none.
-	Release       *AssignedRelease `protobuf:"bytes,5,opt,name=release,proto3" json:"release,omitempty"`
+	Release *AssignedRelease `protobuf:"bytes,5,opt,name=release,proto3" json:"release,omitempty"`
+	// The beat_id of the Heartbeat this answers. A gateway forwards a connection's beats one at a
+	// time, in order, and answers each with one HeartbeatAck; a beat that comes while another is being
+	// forwarded waits, and a newer one replaces it unanswered. 0 when the Heartbeat carried none, or
+	// from a gateway older than this field: a runner then takes the ack as the answer to its one
+	// unanswered beat on the connection.
+	BeatId        uint64 `protobuf:"varint,6,opt,name=beat_id,json=beatId,proto3" json:"beat_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2591,6 +2608,13 @@ func (x *HeartbeatAck) GetRelease() *AssignedRelease {
 		return x.Release
 	}
 	return nil
+}
+
+func (x *HeartbeatAck) GetBeatId() uint64 {
+	if x != nil {
+		return x.BeatId
+	}
+	return 0
 }
 
 // Durable events of one session (§5.8). Delivered at least once and stored once per seq: the
@@ -3377,7 +3401,7 @@ const file_v1_runner_link_proto_rawDesc = "" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1c\n" +
 	"\tretryable\x18\x03 \x01(\bR\tretryable\x12$\n" +
-	"\x0eretry_after_ms\x18\x04 \x01(\rR\fretryAfterMs\"\xee\x01\n" +
+	"\x0eretry_after_ms\x18\x04 \x01(\rR\fretryAfterMs\"\x87\x02\n" +
 	"\tHeartbeat\x12\x1d\n" +
 	"\n" +
 	"process_id\x18\x01 \x01(\tR\tprocessId\x12\x1a\n" +
@@ -3386,18 +3410,20 @@ const file_v1_runner_link_proto_rawDesc = "" +
 	"\vsession_ids\x18\x04 \x03(\tR\n" +
 	"sessionIds\x12/\n" +
 	"\x13supported_providers\x18\x05 \x03(\tR\x12supportedProviders\x12/\n" +
-	"\x05facts\x18\x06 \x03(\v2\x19.orbit.runnerlink.v1.FactR\x05facts\"F\n" +
+	"\x05facts\x18\x06 \x03(\v2\x19.orbit.runnerlink.v1.FactR\x05facts\x12\x17\n" +
+	"\abeat_id\x18\a \x01(\x04R\x06beatId\"F\n" +
 	"\x04Fact\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x16\n" +
 	"\x06sha256\x18\x02 \x01(\tR\x06sha256\x12\x12\n" +
-	"\x04json\x18\x03 \x01(\fR\x04json\"\xf9\x01\n" +
+	"\x04json\x18\x03 \x01(\fR\x04json\"\x92\x02\n" +
 	"\fHeartbeatAck\x12-\n" +
 	"\x04mode\x18\x01 \x01(\x0e2\x19.orbit.runnerlink.v1.ModeR\x04mode\x12%\n" +
 	"\x0ereconcile_json\x18\x02 \x01(\fR\rreconcileJson\x12\x1d\n" +
 	"\n" +
 	"want_facts\x18\x03 \x03(\tR\twantFacts\x124\n" +
 	"\x05hints\x18\x04 \x01(\v2\x1e.orbit.runnerlink.v1.HintStateR\x05hints\x12>\n" +
-	"\arelease\x18\x05 \x01(\v2$.orbit.runnerlink.v1.AssignedReleaseR\arelease\"_\n" +
+	"\arelease\x18\x05 \x01(\v2$.orbit.runnerlink.v1.AssignedReleaseR\arelease\x12\x17\n" +
+	"\abeat_id\x18\x06 \x01(\x04R\x06beatId\"_\n" +
 	"\n" +
 	"EventBatch\x12\x1d\n" +
 	"\n" +

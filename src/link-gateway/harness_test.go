@@ -59,7 +59,7 @@ func testConfig() config {
 		DrainBatch:        100, DrainBatchInterval: 100 * time.Millisecond,
 		DrainReconnectMin: 100 * time.Millisecond, DrainReconnectMax: 300 * time.Millisecond,
 		DrainGrace: 300 * time.Millisecond, DrainTimeout: 10 * time.Second,
-		FrameLog: "all", Mode: linkpb.Mode_MODE_HTTP,
+		FrameLog:   "all",
 		RPCTimeout: 10 * time.Second, link: defaultLinkTuning(),
 	}
 }
