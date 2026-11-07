@@ -9,7 +9,7 @@ import {
   type RuntimeDefaultModels,
 } from '@orbit/shared';
 
-export const MODEL_ROUTING_POLICY_VERSION = 1;
+export const MODEL_ROUTING_POLICY_VERSION = 2;
 export const MODEL_ROUTING_LEVELS = ['S', 'M', 'L', 'XL'] as const;
 export type ModelRoutingLevel = (typeof MODEL_ROUTING_LEVELS)[number];
 
@@ -77,7 +77,44 @@ export interface ModelRoutingRun {
   outcome?: ModelRoutingOutcome;
 }
 
+export interface ModelRoutingFeatures {
+  completionCriterion?: string | null;
+  hasAcceptanceCommand?: boolean;
+  verifiesTask?: boolean;
+  isForeman?: boolean;
+  dependents?: number;
+  promptChars?: number;
+}
+
+/** Structural inference uses only the same value snapshot recorded with the decision. */
+export function inferRuleTier(features: ModelRoutingFeatures = {}): {
+  level: ModelRoutingLevel | null; source: 'rule'; reasons: string[];
+} {
+  const validCount = (value: number | undefined): value is number =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  const { completionCriterion, hasAcceptanceCommand, verifiesTask, isForeman, dependents, promptChars } = features;
+  let level: ModelRoutingLevel | null = null;
+  let body = 'No structural rule matched';
+  if (isForeman === true || verifiesTask === true ||
+      completionCriterion === 'OWNER_CONFIRMED' || completionCriterion === 'VERIFICATION') {
+    level = 'L';
+    body = 'Tier L: review or coordination requires a conservative starting tier';
+  } else if ((validCount(dependents) && dependents >= 3) || (validCount(promptChars) && promptChars >= 8000)) {
+    level = 'L';
+    body = 'Tier L: broad dependency impact or a large prompt';
+  } else if (completionCriterion === 'EXECUTABLE' && hasAcceptanceCommand === true) {
+    level = 'M';
+    body = 'Tier M: executable work with acceptance feedback';
+    if (dependents === 0 && validCount(promptChars) && promptChars > 0 && promptChars <= 2000) {
+      level = 'S';
+      body = 'Tier S: bounded executable work with immediate acceptance feedback';
+    }
+  }
+  return { level, source: 'rule', reasons: [`[rule] Rule inference — ${body}`] };
+}
+
 export interface ModelRoutingInput {
+  features?: ModelRoutingFeatures;
   task: {
     /** The task's engine pin: like a provider pin, it keeps the run on its engine. */
     engine?: string | null;
@@ -245,8 +282,9 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
       break;
     }
   }
-  let level = task.modelHint ?? null;
-  const reasons: string[] = [];
+  const rule = task.modelHint ? null : inferRuleTier(input.features);
+  let level = task.modelHint ?? rule?.level ?? null;
+  const reasons: string[] = rule?.level ? [...rule.reasons] : [];
   const lastLevel = last ? priorLevel(last, runtime) : null;
   const failure = last?.outcome && last.outcome !== 'OK'
     ? last.outcome
@@ -269,9 +307,9 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
     if (task.modelHint && MODEL_ROUTING_LEVELS.indexOf(task.modelHint) > next) {
       reasons.push(`Coordinator suggested tier ${task.modelHint}${task.modelHintReason ? `: ${task.modelHintReason}` : ''}`);
     }
-  } else if (level) {
+  } else if (task.modelHint) {
     reasons.push(`Tier ${level}: suggested by the coordinator${task.modelHintReason ? ` — ${task.modelHintReason}` : ''}`);
-  } else {
+  } else if (!level) {
     reasons.push("No suggestion — keeps the agent's model, as today");
   }
   reasons.push(...skipped);

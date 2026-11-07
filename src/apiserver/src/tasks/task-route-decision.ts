@@ -440,7 +440,16 @@ export async function planTaskRunRoute(
   const effort = normalizeEffortForProvider(env.engine as AgentProvider, named) || null;
   const modelHint = MODEL_ROUTING_LEVELS.find((level) => level === task.modelHint) ?? null;
   const engines = await routeEngines(reads, task, agent, env);
+  const structuralFeatures = {
+    completionCriterion: task.completionCriterion ?? null,
+    hasAcceptanceCommand: task.acceptanceCommand != null,
+    verifiesTask: task.verifiesTaskId != null,
+    isForeman: task.isForeman === true,
+    dependents,
+    promptChars: prompt.length,
+  };
   const decision = routeTaskRun({
+    features: structuralFeatures,
     task: {
       engine: task.engine ?? null,
       provider: task.provider ?? null,
@@ -498,12 +507,7 @@ export async function planTaskRunRoute(
     // No ids: earlier runs are named by ordinal, as the clients name them.
     features: {
       modelHint,
-      completionCriterion: task.completionCriterion ?? null,
-      hasAcceptanceCommand: task.acceptanceCommand != null,
-      verifiesTask: task.verifiesTaskId != null,
-      isForeman: task.isForeman === true,
-      dependents,
-      promptChars: prompt.length,
+      ...structuralFeatures,
       priorRuns: history.length,
       priorFailures: history
         .filter((run) => run.outcome !== 'OK' && !run.quotaFailure && !run.capacityFailure).length,

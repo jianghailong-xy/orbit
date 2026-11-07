@@ -481,7 +481,7 @@ test('a takeover creates the run on the route that was bound, not on one decided
       const press = randomUUID();
       // Decided at S by a holder that died between binding and creating; the task now says M.
       const route = {
-        policyVersion: 1, applied: true, level: 'S', provider: 'claude', model: SONNET, effort: 'low',
+        policyVersion: 2, applied: true, level: 'S', provider: 'claude', model: SONNET, effort: 'low',
         baseline: { provider: 'claude', providerSource: 'task-pin', model: null, effort: AGENT_EFFORT },
         features: { modelHint: 'S', modelRouting: true }, reasons: ['decided by the holder that died'],
       };
@@ -514,7 +514,7 @@ test('a routed run refused by a run already holding the task names no pin the ta
       const press = randomUUID();
       await boundReceipt(services.db, target.ownerId, TASK_RUN_ACTION.execute, press, `task:${taskId}`,
         routedTarget(target, taskId, press, {
-          policyVersion: 1, applied: true, level: 'M', provider: 'claude', model: SONNET, effort: 'medium',
+          policyVersion: 2, applied: true, level: 'M', provider: 'claude', model: SONNET, effort: 'medium',
           baseline: { provider: 'claude', providerSource: 'task-pin', model: null, effort: AGENT_EFFORT },
           features: { modelHint: 'M', modelRouting: true }, reasons: ['decided by the holder that died'],
         }));

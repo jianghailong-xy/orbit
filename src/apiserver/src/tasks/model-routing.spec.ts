@@ -56,7 +56,7 @@ function assertDecision(
 ): void {
   const { reasons, engine, ...selection } = actual;
   const { engine: expectedEngine, ...rest } = expected;
-  assert.deepEqual(selection, { policyVersion: 1, ...rest });
+  assert.deepEqual(selection, { policyVersion: 2, ...rest });
   if (expectedEngine !== undefined) assert.equal(engine, expectedEngine);
   assert.ok(reasons.length > 0);
   assert.ok(reasons.every((reason) => typeof reason === 'string' && reason.length > 0));
@@ -75,8 +75,8 @@ for (const [level, model, effort] of claudeTiers) {
   });
 }
 
-test('policy version is one', () => {
-  assert.equal(MODEL_ROUTING_POLICY_VERSION, 1);
+test('policy version is two', () => {
+  assert.equal(MODEL_ROUTING_POLICY_VERSION, 2);
 });
 
 test('no suggestion preserves the full baseline for new and nonfailed runs', () => {
@@ -606,4 +606,43 @@ test('an engine with no tier table is never a candidate, nor the same runtime un
   const pooled = routeTaskRun(pool);
   assert.equal(pooled.provider, 'claude-pool');
   assert.ok(pooled.reasons.includes("Engine claude: this agent's own engine"));
+});
+
+test('rule inference follows structural thresholds and abstains on missing or invalid inputs', () => {
+  const cases: Array<[ModelRoutingInput['features'], ModelRoutingLevel | null]> = [
+    [{ isForeman: true }, 'L'], [{ verifiesTask: true }, 'L'],
+    [{ completionCriterion: 'OWNER_CONFIRMED' }, 'L'], [{ completionCriterion: 'VERIFICATION' }, 'L'],
+    [{ dependents: 3 }, 'L'], [{ promptChars: 8000 }, 'L'],
+    [{ completionCriterion: 'EXECUTABLE', hasAcceptanceCommand: true, dependents: 0, promptChars: 2000 }, 'S'],
+    [{ completionCriterion: 'EXECUTABLE', hasAcceptanceCommand: true, dependents: 0, promptChars: 2001 }, 'M'],
+    [{ completionCriterion: 'EXECUTABLE', hasAcceptanceCommand: true }, 'M'],
+    [{ dependents: -1, promptChars: NaN }, null], [{}, null],
+  ];
+  for (const [features, level] of cases) {
+    const value = input();
+    value.features = features;
+    const before = structuredClone(value);
+    const decision = routeTaskRun(value);
+    assert.equal(decision.level, level, JSON.stringify(features));
+    if (level) assert.match(decision.reasons[0], /\[rule\] Rule inference/);
+    assert.deepEqual(value, before);
+  }
+});
+
+test('rules preserve hint and pin precedence and cannot lower failure escalation', () => {
+  const value = input();
+  value.features = { isForeman: true };
+  value.task.modelHint = 'S';
+  assert.equal(routeTaskRun(value).level, 'S');
+  value.task.model = 'pinned';
+  assert.equal(routeTaskRun(value).model, 'pinned');
+  assert.equal(routeTaskRun(value).level, null);
+  value.task = {};
+  value.features = { completionCriterion: 'EXECUTABLE', hasAcceptanceCommand: true, dependents: 0, promptChars: 100 };
+  value.history = [{ ordinal: 1, status: 'FAILED', quotaFailure: false, level: 'L' }];
+  assert.equal(routeTaskRun(value).level, 'XL');
+  value.history[0].capacityFailure = true;
+  assert.equal(routeTaskRun(value).level, 'S');
+  value.environment.hasOwnModelSpace = true;
+  assert.equal(routeTaskRun(value).level, null);
 });
