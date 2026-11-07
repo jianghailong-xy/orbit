@@ -11,7 +11,14 @@ import type { ConfigService } from '@nestjs/config';
 import { RunStatus } from '@prisma/client';
 import { renderFeishuCard, type FeishuAlert, type FeishuCard } from '../feishu/cards/feishu-cards';
 import type { FeishuSendResult } from '../feishu/feishu-outbound';
-import { FEISHU_ALERT_ATTEMPTS, FeishuTransport, type FeishuCardSpec, type FeishuTarget } from './feishu-transport';
+import {
+  approvalOutcome,
+  FEISHU_ALERT_ATTEMPTS,
+  FeishuTransport,
+  ownerItemOutcome,
+  type FeishuCardSpec,
+  type FeishuTarget,
+} from './feishu-transport';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { PushService } from './push.service';
 
@@ -382,4 +389,52 @@ test('an alert whose caller awaits it is not held by Feishu: the devices are, Fe
   assert.equal(outcome, 'resolved', 'the watch delivery drain is not held by Feishu');
   assert.equal(sent.length, 1, 'the device was alerted');
   assert.equal(started, 1, 'and the Feishu card was started');
+});
+
+// ── F1-5: a card whose matter was settled elsewhere (§6.2) ───────────────────────────────────────────────────────────
+
+test('an approval card says how its approvals were settled, at the time they were (UTC)', () => {
+  const now = new Date('2026-11-08T12:00:00Z');
+  const at = new Date('2026-11-08T10:32:10Z');
+  const later = new Date('2026-11-08T10:40:00Z');
+  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'ALLOWED', decidedAt: at }], now), 'Allowed in Orbit · 10:32 UTC');
+  assert.equal(approvalOutcome([
+    { toolName: 'Bash', status: 'DENIED', decidedAt: at }, { toolName: 'Edit', status: 'DENIED', decidedAt: later },
+  ], now), 'Denied in Orbit · 10:40 UTC', 'the last answer');
+  assert.equal(approvalOutcome([
+    { toolName: 'Bash', status: 'ALLOWED', decidedAt: at }, { toolName: 'Edit', status: 'DENIED', decidedAt: at },
+  ], now), 'Answered in Orbit · 10:32 UTC');
+  assert.equal(approvalOutcome([{ toolName: 'AskUserQuestion', status: 'ALLOWED', decidedAt: at }], now), 'Answered in Orbit · 10:32 UTC');
+  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'ABANDONED', decidedAt: null }], now), 'No longer waiting in Orbit · 12:00 UTC');
+  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'PENDING', decidedAt: null }], now), 'No longer waiting in Orbit · 12:00 UTC',
+    'a session that left needs-you with the approval unanswered');
+  assert.equal(ownerItemOutcome({ resolution: 'ANSWERED', resolvedAt: at }, now), 'Answered in Orbit · 10:32 UTC');
+  assert.equal(ownerItemOutcome({ resolution: 'LANDED', resolvedAt: at }, now), 'Resolved in Orbit · 10:32 UTC');
+  assert.equal(ownerItemOutcome(null, now), 'No longer waiting in Orbit · 12:00 UTC');
+});
+
+test('the badge reconcile runs with Feishu as the only channel, and hands the transport its needs-you', async () => {
+  const sessionId = randomUUID();
+  const prisma = { deviceToken: { findMany: async () => [] } };
+  const calls: { target: FeishuTarget; needsYou: string[] }[] = [];
+  const transport = {
+    target: async () => TARGET,
+    closeSettled: async (target: FeishuTarget, needsYou: ReadonlySet<string>) => {
+      calls.push({ target, needsYou: [...needsYou] });
+      return { closed: 0, busy: false };
+    },
+  } as unknown as FeishuTransport;
+  const push = new PushService(prisma as never, NO_DEVICES, transport);
+  push.needsYouSessions = async () => [sessionId]; // its query is owner-item-badge.pg.spec.ts's
+  push.scheduleBadgeSync(OWNER);
+  for (let i = 0; i < 50 && calls.length === 0; i++) await new Promise((r) => setTimeout(r, 20));
+  await push.feishuIdle();
+  assert.equal(calls.length, 1, 'one reconcile, with no APNs or FCM configured');
+  assert.equal(calls[0]!.target, TARGET);
+  assert.deepEqual(calls[0]!.needsYou, [sessionId]);
+
+  // Without Feishu and without a device transport there is still nothing to reconcile.
+  const quiet = new PushService(prisma as never, NO_DEVICES);
+  quiet.scheduleBadgeSync(OWNER);
+  await new Promise((r) => setTimeout(r, 400));
 });

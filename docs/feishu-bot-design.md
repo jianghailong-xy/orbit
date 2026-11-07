@@ -268,6 +268,14 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
   谁拿到行上的租约（`lease_token` / `lease_until`）谁按库里此刻的内容画卡、发送或 PATCH，记下 `rendered_revision` 后放手并再看一次，
   所以两个 apiserver 同时通告只发一张卡。没认领到 `claimApprovalAlert` 的审批只给这一段的卡加一（`joinApprovalStretch`），
   卡上列出会话里所有仍待批的审批。
+- 实现（F1-5，无迁移）：`PushService.reconcileBadge` 每次对账（不论角标动没动）都调 `FeishuTransport.closeSettled`，
+  `scheduleBadgeSync` 在只有飞书可用时也运行。看的是 14 天内发出、状态 `SENT` 的审批卡与 owner item 卡：审批卡在其会话仍在
+  needs-you 且所列审批还有待批时成立（少了几条就按此刻待批的重画一遍），否则改成终态；owner item 卡在事项不再 OPEN 时改。
+  改卡在行的租约下、且要求每次通告都已画过（`rendered_revision = revision`），用卡上次画的 alert 加终态一行重画、去掉按钮，
+  行记 `CLOSED`（pump 不再碰它）；飞书没接通或 5xx 时留在 `SENT`，下次对账再试，飞书明确拒绝也记 `CLOSED`。
+  终态文案：`Allowed in Orbit · 10:32 UTC`、`Denied in Orbit · …`、`Answered in Orbit · …`（有提问、或允许与拒绝都有）、
+  `Resolved in Orbit · …` / `Answered in Orbit · …`（owner item）、`No longer waiting in Orbit · …`（会话离开 needs-you 或审批作废）；
+  Orbit 不知道主人的时区，所以写明 UTC。`finished` / `failed` / `agent-message` 卡没有动作按钮，回复它们仍然进会话，不改。
 
 ### 6.3 限频、失败与文案
 
