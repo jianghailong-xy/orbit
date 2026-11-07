@@ -59,7 +59,7 @@ final class RunnerSignInModel {
 
     /// How often the relay is re-read while something is in flight. The runner picks work up on its
     /// heartbeat and reports on the next one, so this is about noticing promptly, not about speed.
-    private static let pollNanos: UInt64 = 2_000_000_000
+    private static let pollInterval: TimeInterval = 2
 
     init(runnerID: String, engine: LoginEngine, account: String? = nil, adding: Bool = false,
          baseURL: URL, tokenStore: TokenStore) {
@@ -204,7 +204,8 @@ final class RunnerSignInModel {
         guard poll == nil else { return }
         poll = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: RunnerSignInModel.pollNanos)
+                // In flight and visible only; shown again, it reads at once.
+                await VisibilityGate.app.pause(RunnerSignInModel.pollInterval)
                 guard let self, !Task.isCancelled else { return }
                 // A failed read is a blip on the way to the same relay — keep waiting on it.
                 guard let next = try? await self.api.runnerLoginState(self.runnerID) else { continue }

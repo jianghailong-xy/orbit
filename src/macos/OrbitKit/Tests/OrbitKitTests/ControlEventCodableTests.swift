@@ -254,6 +254,25 @@ final class ControlEventCodableTests: XCTestCase {
         }
     }
 
+    /// `sessions.list_changed` (realtime.ts `SESSIONS_LIST_CHANGED`) decodes as itself, with its
+    /// version — user-scoped, so `sessionId` is empty.
+    func testTheListChangedHintIsKnown() throws {
+        let ev = try decode("""
+        {"type":"sessions.list_changed","sessionId":"","agentId":null,"ts":"t","data":{"version":"v9"}}
+        """)
+        XCTAssertEqual(ev.type, .sessionsListChanged)
+        XCTAssertEqual(ev.sessionId, "")
+        XCTAssertEqual(ev.payload(ControlListChanged.self)?.version, "v9")
+    }
+
+    /// The stream declares the hint on connect; without `hints=list_changed` the server never sends it.
+    func testTheStreamDeclaresTheListHint() {
+        let url = ControlStreamURL.events(URL(string: "https://orbit.example.com")!)
+        XCTAssertEqual(url.absoluteString, "https://orbit.example.com/api/events?hints=list_changed")
+        let mounted = ControlStreamURL.events(URL(string: "https://example.com/orbit/")!)
+        XCTAssertEqual(mounted.absoluteString, "https://example.com/orbit/api/events?hints=list_changed")
+    }
+
     func testSSEDecodingDiscardsThePingKeepalive() {
         // The server's ~20s keepalive is a data frame `{"type":"ping"}` (Nest can't emit `:`
         // comments); it has no sessionId, so the decoder drops it — its bytes only feed the

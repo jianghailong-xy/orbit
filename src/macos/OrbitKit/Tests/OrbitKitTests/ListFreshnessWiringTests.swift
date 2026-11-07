@@ -112,7 +112,10 @@ final class ListFreshnessWiringTests: XCTestCase {
         let run = try slice(app, from: "private func runControlPlane() async {", to: "\n    }\n")
         XCTAssertTrue(run.contains("let loop = ControlPlaneLoop(stream: stream,"))
         XCTAssertTrue(run.contains("refreshSession: { await api.refreshSession() },"))
-        XCTAssertTrue(run.contains("case .live:\n                self.controlPlaneLive = true\n                await self.reconcileOnConnect()"))
+        XCTAssertTrue(run.contains("case .live:\n                self.controlPlaneLive = true\n                self.appPoll?.streamChanged()\n"
+                                   + "                await self.reconcileOnConnect()"))
+        XCTAssertTrue(run.contains("case .down:\n                self.controlPlaneLive = false\n                self.appPoll?.streamChanged()"),
+                      "each connection tells its own versions")
         XCTAssertTrue(run.contains("case .event(let ev):\n                self.apply(ev)"))
         XCTAssertFalse(run.contains("policy.noteHealthy()"), "health is the loop's to judge, on the first message")
         XCTAssertFalse(run.contains("status == 401"), "a 401 no longer stops the stream")
@@ -243,5 +246,94 @@ final class ListFreshnessWiringTests: XCTestCase {
         XCTAssertTrue(try slice(source("ProjectsModel.swift"), from: "func refreshIfDue(now: Date = Date(), live: Bool = false) async {",
                                 to: "\n    }")
             .contains("refreshNotBefore = now.addingTimeInterval(live ? PollSchedule.liveFallback : 15)"))
+    }
+
+    // MARK: the list hint (P2: docs/list-freshness-design.md §3, §4 R1–R2)
+
+    /// `sessions.list_changed` is the poll's hint — a read for a burst, and the loop woken for it — and
+    /// never a read of its own; the reads made outside the tick tell the poll, so a hint they answer
+    /// is not read twice.
+    func testTheListHintDrivesThePoll() throws {
+        let app = try source("AppModel.swift")
+        let apply = try slice(app, from: "private func apply(_ ev: ControlEvent) {", to: "\n    }\n")
+        let hint = try slice(apply, from: "case .listHint(let version):", to: "case .tags:")
+        XCTAssertTrue(hint.contains("if appPoll?.hint(version: version, at: Date()) == true { pollSleeper?.cancel() }"))
+        XCTAssertFalse(hint.contains("loadSessions") || hint.contains("scheduleControlRefresh"), "the poll reads for it")
+        let refresh = try slice(app, from: "private func scheduleControlRefresh() {", to: "\n    }\n")
+        XCTAssertTrue(refresh.contains("self.appPoll?.noteOpenRead(at: Date())\n                await self.loadSessions()"))
+        let reconnect = try slice(app, from: "private func reconcileOnConnect() async {", to: "\n    }\n")
+        XCTAssertTrue(reconnect.contains("appPoll?.noteOpenRead(at: Date())\n        await loadSessions()"))
+        let run = try slice(app, from: "private func runControlPlane() async {", to: "\n    }\n")
+        XCTAssertTrue(run.contains("self.appPoll?.streamChanged()\n                // Down, the Open list is read on the stream-down ramp rather than the minute's.\n                self.pollSleeper?.cancel()")
+                      || run.contains("self.appPoll?.streamChanged()\n                self.pollSleeper?.cancel()"),
+                      "down, the loop wakes for the stream-down cadence")
+        // The poll keeps its tested defaults: 4 s down, a minute live.
+        let start = try slice(app, from: "func startPolling() {", to: "\n    }\n")
+        XCTAssertFalse(start.contains("liveInterval:"), "the minute's safety read is AppPoll's default")
+    }
+
+    /// The stream asks for the hint; without `hints=list_changed` the server never sends it.
+    func testTheStreamDeclaresTheHint() throws {
+        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        var text: String?
+        for _ in 0..<12 {
+            let candidate = dir.appendingPathComponent("src/macos/OrbitKit/Sources/OrbitKit/Realtime/ControlStream.swift")
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                text = try String(contentsOf: candidate, encoding: .utf8)
+                break
+            }
+            dir.deleteLastPathComponent()
+        }
+        let stream = try XCTUnwrap(text, "Realtime/ControlStream.swift wasn't found above this test")
+        XCTAssertTrue(stream.contains("var req = URLRequest(url: ControlStreamURL.events(baseURL))"))
+    }
+
+    /// `tag.changed` re-reads the tag library, and the Open list whose rows draw the tags.
+    func testTagChangedReadsTheTagLibrary() throws {
+        let app = try source("AppModel.swift")
+        let apply = try slice(app, from: "private func apply(_ ev: ControlEvent) {", to: "\n    }\n")
+        let tags = try slice(apply, from: "case .tags:", to: "case .nothing:")
+        XCTAssertTrue(tags.contains("Task { await loadSessionTags() }"))
+        XCTAssertTrue(tags.contains("scheduleControlRefresh()"))
+        let load = try slice(app, from: "func loadSessionTags() async {", to: "\n    }")
+        XCTAssertTrue(load.contains("api.listSessionTags()"))
+    }
+
+    // MARK: the per-console and per-page loops (R3, R6)
+
+    /// The Mac's visibility reaches the loops that are not page polls (`VisibilityGate.app`).
+    func testTheGateFollowsTheAppsVisibility() throws {
+        let app = try source("AppModel.swift")
+        let shown = try slice(app, from: "func setAppVisible(_ visible: Bool) {", to: "\n    }")
+        XCTAssertTrue(shown.contains("VisibilityGate.app.set(visible)"))
+    }
+
+    /// Each per-console and per-page loop pauses on the gate between reads — no request while the app
+    /// cannot be seen, one at once when it is shown — and none sleeps on its own any more. The ones
+    /// that only mean something while an operation is in flight still end when it settles.
+    func testEveryConsoleAndPageLoopPausesWhileHidden() throws {
+        let loops: [(file: String, from: String, to: String, pause: String)] = [
+            ("WorktreeModel.swift", "func startPolling() async {", "\n    }\n", "await VisibilityGate.app.pause(pending ? 3 : 5)"),
+            ("WorktreeModel.swift", "for _ in 0..<Self.diffRefreshPolls {", "\n        }\n", "await VisibilityGate.app.pause(Self.diffRefreshInterval)"),
+            ("CreatedTasksModel.swift", "func startPolling() async {", "\n    }\n", "await VisibilityGate.app.pause(Self.pollInterval)"),
+            ("ConsoleRegistry.swift", "private func pollOperations() async {", "\n    }\n", "await VisibilityGate.app.pause(3)"),
+            ("Views/WikiJobView.swift", ".task(id: jobID) {", ".refreshable", "await VisibilityGate.app.pause(5)"),
+            ("Views/WikiActivityView.swift", "while !Task.isCancelled, wiki.jobsUnderWay {", "}\n", "await VisibilityGate.app.pause(5)"),
+            ("Views/WikiScreens.swift", "while !Task.isCancelled, WikiPlanLogic.jobUnderWay(wiki.plan) {", "}\n", "await VisibilityGate.app.pause(30)"),
+            ("Views/ProviderPoolViews.swift", "private func waitForApproval() async {", "\n    }\n", "await VisibilityGate.app.pause(CodexSignIn.pollInterval)"),
+            ("Views/CodexResetCreditView.swift", ".task(id: console.runnerID) {", ".accessibilityElement", "await VisibilityGate.app.pause(30)"),
+            ("Views/SessionReplyCardView.swift", ".task(id: requestId) {", "private func load() async {", "await VisibilityGate.app.pause(60)"),
+            ("RunnerSignInModel.swift", "private func startPolling() {", "\n    }\n", "await VisibilityGate.app.pause(RunnerSignInModel.pollInterval)"),
+        ]
+        for loop in loops {
+            let body = try slice(try source(loop.file), from: loop.from, to: loop.to)
+            XCTAssertTrue(body.contains(loop.pause), "\(loop.file): \(loop.from) pauses on the gate")
+            XCTAssertFalse(body.contains("Task.sleep"), "\(loop.file): \(loop.from) no sleep of its own")
+        }
+        // In flight only: the pending operations and the sign-ins stop when nothing is left to wait on.
+        let registry = try slice(try source("ConsoleRegistry.swift"), from: "private func pollOperations() async {", to: "\n    }\n")
+        XCTAssertTrue(registry.contains("while !Task.isCancelled, !pendingOperations.isEmpty {"))
+        let runner = try slice(try source("RunnerSignInModel.swift"), from: "private func startPolling() {", to: "\n    }\n")
+        XCTAssertTrue(runner.contains("if next.status?.inFlight != true { break }"))
     }
 }

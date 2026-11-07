@@ -280,7 +280,9 @@ final class ConsoleRegistry {
     /// nothing is left to follow.
     private func pollOperations() async {
         while !Task.isCancelled, !pendingOperations.isEmpty {
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            // In flight and visible only: no event reports an operation settling, and while the app
+            // cannot be seen nobody is watching for it — shown again, it reads at once.
+            await VisibilityGate.app.pause(3)
             for operation in pendingOperations.operations where !Task.isCancelled {
                 do {
                     let detail = try await api.sessionDetail(operation.sessionID)

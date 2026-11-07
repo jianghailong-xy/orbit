@@ -43,6 +43,11 @@ public enum ControlEventType: String, Codable, Sendable {
     /// and nothing else (contract `realtime.redaction`): a nudge to re-read the Wiki pages and the
     /// Review queue, never the session list, and nothing depends on it arriving at all.
     case wikiChanged = "wiki.changed"
+    /// The account's Open list may read differently now (docs/realtime-control-plane-stream.md
+    /// §4.8). USER-scoped; `data` carries the list's version (`ControlListChanged`). Sent only to a
+    /// stream that declared `?hints=list_changed` (`URLSessionControlStream`): a hint to make one
+    /// conditional delta read, never a change in itself.
+    case sessionsListChanged = "sessions.list_changed"
     case notification = "notification"
     case unknown
 
@@ -292,6 +297,14 @@ public struct ControlResourceChanged: Codable, Equatable, Sendable {
     public let id: String
 
     public init(id: String) { self.id = id }
+}
+
+/// `data` for `sessions.list_changed`: the Open list's version when the hint was sent — opaque, only
+/// ever compared with the previous hint's.
+public struct ControlListChanged: Codable, Equatable, Sendable {
+    public let version: String
+
+    public init(version: String) { self.version = version }
 }
 
 /// `data` for `background.task`.
