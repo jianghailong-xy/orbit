@@ -91,13 +91,16 @@ const LINK_LIVE_HOLD_CAP = 500;
 const READ_BACK_RETRY_WAITS_MS = [250, 1_000, 3_000];
 const READ_BACK_GIVE_UP_MS = 10_000;
 
-/** A read-back of the events another replica stored at seqs `from` to `to`, whose notice arrived at `heardAt`. */
+/** A read-back of what another replica stored, named in the log as `what` (`seq 3-14`, `approval <id>`), whose notice
+ *  arrived at `heardAt`. */
 interface ReadBack {
-  from: number;
-  to: number;
+  what: string;
   heardAt: number;
   read: () => Promise<NormalizedRunEvent[]>;
 }
+
+/** The seqs `from` to `to`, as the log names a read-back of them. */
+const seqRange = (from: number, to: number): string => (from === to ? `seq ${from}` : `seq ${from}-${to}`);
 
 /** A run_event row as the hub carries it. */
 function storedEvent(row: { seq: number; type: string; payload: unknown; turnId: string | null; createdAt: Date }): NormalizedRunEvent {
@@ -261,6 +264,33 @@ export function runEventBatchNotice(
   const from = seqs.reduce((a, b) => Math.min(a, b));
   const to = seqs.reduce((a, b) => Math.max(a, b));
   return { channel: EVENT_CHANNEL, payload: JSON.stringify({ i: instanceId, r: runId, f: from, t: to }) };
+}
+
+/**
+ * The card an approval row raises, published at `ts` (RunnerApiController.createApproval). Built from the row both there
+ * and on the other replicas, which read the row back when the card is too big for its notification (publish): its tool
+ * input is whatever the asker sent. Seq 0, like every live-only event: a card is never stored in run_event.
+ */
+export function approvalRequestEvent(
+  approval: { id: string; toolName: string; input: unknown; toolUseId: string | null; backgroundJobId: string | null },
+  ts: string,
+): NormalizedRunEvent {
+  return {
+    seq: 0,
+    type: RunEventType.APPROVAL_REQUEST,
+    payload: {
+      id: approval.id,
+      toolName: approval.toolName,
+      input: approval.input,
+      toolUseId: approval.toolUseId ?? undefined,
+      // The reader that outlives the turn, to a client that has to answer "is this still a
+      // question" itself: a card raised by a runner-hosted job is live while that process is
+      // up, whatever the conversation is doing, and a client that reads only the turn would
+      // take the card down the moment the turn ended (`WorkspaceView`'s local predicate).
+      backgroundJobId: approval.backgroundJobId ?? undefined,
+    },
+    ts,
+  };
 }
 
 /**
@@ -455,7 +485,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   private onNotify(channel: string, payload?: string): void {
     if (!payload) return;
-    let m: { i?: string; r: string; c?: true; e?: NormalizedRunEvent; s?: number; b?: NormalizedRunEvent[]; f?: number; t?: number };
+    let m: {
+      i?: string; r: string; c?: true; e?: NormalizedRunEvent; s?: number; b?: NormalizedRunEvent[]; f?: number; t?: number;
+      a?: string; ts?: string;
+    };
     try {
       m = JSON.parse(payload);
     } catch {
@@ -488,9 +521,20 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       } else if (typeof m.s === 'number') {
         // Oversized event was sent as a signal — fetch it from the durable log.
         const seq = m.s;
-        this.readBackInOrder(m.r, seq, seq, async () => {
+        this.readBackInOrder(m.r, seqRange(seq, seq), async () => {
           const row = await this.prisma.runEvent.findUnique({ where: { sessionId_seq: { sessionId: m.r, seq } } });
           return row ? [storedEvent(row)] : [];
+        });
+      } else if (typeof m.a === 'string') {
+        // An approval card too big to ride along: built again from the row it was raised from, at its own `ts`.
+        const approvalId = m.a;
+        const ts = m.ts;
+        this.readBackInOrder(m.r, `approval ${approvalId}`, async () => {
+          const row = await this.prisma.approval.findFirst({
+            where: { id: approvalId, sessionId: m.r },
+            select: { id: true, toolName: true, input: true, toolUseId: true, backgroundJobId: true, createdAt: true },
+          });
+          return row ? [approvalRequestEvent(row, ts ?? row.createdAt.toISOString())] : [];
         });
       }
     }
@@ -501,7 +545,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    * published of it and nothing else, so neither a noise ping nor a live-only row (a tombstone, a legacy delta).
    */
   private relayStoredBatch(runId: string, from: number, to: number): void {
-    this.readBackInOrder(runId, from, to, async () => {
+    this.readBackInOrder(runId, seqRange(from, to), async () => {
       const rows = await this.prisma.runEvent.findMany({
         where: { sessionId: runId, seq: { gte: from, lte: to }, type: { notIn: [...NON_REPLAYABLE_EVENT_TYPES] } },
         orderBy: { seq: 'asc' },
@@ -523,8 +567,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    * arrives for the session while the read-back is in flight, from another replica or from this one, waits behind it
    * (toHub), and so does a second read-back. With one replica nothing is ever read back, so nothing ever waits.
    */
-  private readBackInOrder(runId: string, from: number, to: number, read: () => Promise<NormalizedRunEvent[]>): void {
-    const readBack: ReadBack = { from, to, heardAt: Date.now(), read };
+  private readBackInOrder(runId: string, what: string, read: () => Promise<NormalizedRunEvent[]>): void {
+    const readBack: ReadBack = { what, heardAt: Date.now(), read };
     const held = this.heldBehindReadBack.get(runId);
     if (held) {
       held.push(readBack);
@@ -555,31 +599,31 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Read back events another replica stored, again after each of READ_BACK_RETRY_WAITS_MS while the read fails, until
-   * READ_BACK_GIVE_UP_MS after the notice arrived. Each failure is logged with the session, the seqs and the error, never
-   * the events. Read: the events go to the hub, true. Given up: this replica's streams of the session are told to
-   * re-fetch (`resync`), and its owner's lists here to re-read its row (a session_updated of this replica's alone), false.
+   * READ_BACK_GIVE_UP_MS after the notice arrived. Each failure is logged with the session, the seqs (or the approval)
+   * and the error, never the events. Read: the events go to the hub, true. Given up: this replica's streams of the
+   * session are told to re-fetch (`resync`), and its owner's lists here to re-read its row (a session_updated of this
+   * replica's alone), false.
    */
   private async readBack(runId: string, readBack: ReadBack): Promise<boolean> {
-    const { from, to, heardAt } = readBack;
-    const seqs = from === to ? `seq ${from}` : `seq ${from}-${to}`;
+    const { what, heardAt } = readBack;
     const reads = READ_BACK_RETRY_WAITS_MS.length + 1;
     for (let attempt = 1; ; attempt += 1) {
       try {
         const events = await within(heardAt + READ_BACK_GIVE_UP_MS - Date.now(), readBack.read);
         for (const event of events) this.hub.next({ runId, event });
-        if (attempt > 1) this.log.log(`session ${runId}: read back ${seqs}, stored by another apiserver, on attempt ${attempt} of ${reads}`);
+        if (attempt > 1) this.log.log(`session ${runId}: read back ${what}, stored by another apiserver, on attempt ${attempt} of ${reads}`);
         return true;
       } catch (error) {
         const wait = READ_BACK_RETRY_WAITS_MS[attempt - 1];
         if (wait === undefined || Date.now() + wait >= heardAt + READ_BACK_GIVE_UP_MS || this.stopped) {
           this.log.error(
-            `session ${runId}: gave up reading back ${seqs}, stored by another apiserver, after ${attempt} attempt(s) in ${Date.now() - heardAt} ms (${describeError(error)}); told this apiserver's streams of the session to re-fetch`,
+            `session ${runId}: gave up reading back ${what}, stored by another apiserver, after ${attempt} attempt(s) in ${Date.now() - heardAt} ms (${describeError(error)}); told this apiserver's streams of the session to re-fetch`,
           );
           this.resyncHere(runId);
           return false;
         }
         this.log.warn(
-          `session ${runId}: could not read back ${seqs}, stored by another apiserver (attempt ${attempt} of ${reads}: ${describeError(error)}); trying again in ${wait} ms`,
+          `session ${runId}: could not read back ${what}, stored by another apiserver (attempt ${attempt} of ${reads}: ${describeError(error)}); trying again in ${wait} ms`,
         );
         await new Promise<void>((resolve) => setTimeout(resolve, wait).unref?.());
       }
@@ -702,6 +746,21 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   // ── run events (SSE) ────────────────────────────────────────────────────
 
+  /**
+   * One event to this replica's streams, and over NOTIFY to the other replicas' (onNotify). An event too big for its
+   * notification (MAX_NOTIFY_BYTES) is announced by where the other replicas read it back from: an approval card by its
+   * approval row, any other event by its run_event row.
+   *
+   * The events published here that run_event never holds (seq 0, and a settlement's STATUS at Number.MAX_SAFE_INTEGER)
+   * could not be read back by their seq. The approval card is the one whose size has no bound, its tool input being
+   * whatever the asker sent; every other one fits at its largest (realtime-notify-bounds.spec.ts):
+   *   - session_created, session_updated, queued_turns_changed: an empty payload;
+   *   - session_ended (publishSessionLifecycleChanged): seven enum values;
+   *   - task_changed: at most TASK_CHANGED_MAX_ROWS (100) task ids, a wider change being a resync (tasks.service.ts);
+   *   - agent_changed: a workspace id and a flag; publishForUser's and publishForAllUsers' other events: one id;
+   *   - approval_resolved (SessionsService.decideApproval, and a card collected as ABANDONED): an id and a word;
+   *   - a settlement's STATUS: a status, `final`, a retry time and, from the reaper, its reason, a short fixed phrase.
+   */
   publish(runId: string, event: NormalizedRunEvent): void {
     this.publishHere(runId, event);
     const payload = JSON.stringify({ i: this.instanceId, r: runId, e: event });
@@ -709,6 +768,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     // (a multibyte CJK/emoji event can be < 7000 chars but > 8000 bytes).
     if (Buffer.byteLength(payload, 'utf8') <= MAX_NOTIFY_BYTES) {
       this.notifyRaw(EVENT_CHANNEL, payload);
+    } else if (event.type === RunEventType.APPROVAL_REQUEST) {
+      // A card is never stored: the other replicas build it again from its approval row (approvalRequestEvent), at
+      // the `ts` it was published at here.
+      this.notifyRaw(EVENT_CHANNEL, JSON.stringify({ i: this.instanceId, r: runId, a: approvalIdOf(event.payload), ts: event.ts }));
     } else {
       // Too big for a NOTIFY payload — signal by seq; other replicas fetch the
       // (already-persisted) RunEvent row.

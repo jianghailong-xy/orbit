@@ -3,13 +3,14 @@ import { test } from 'node:test';
 import { RunEventType, type NormalizedRunEvent } from '@orbit/shared';
 import type { Subject } from 'rxjs';
 
-import { RealtimeService } from './realtime.service';
+import { approvalRequestEvent, RealtimeService } from './realtime.service';
 
 /**
  * Events another replica stored, read back here because their notification carried only where they are (a big batch's
- * seq range, an oversized event's seq), when the read fails (RealtimeService.readBack; docs/runner-link-design.md §15.3,
- * prerequisite (f)). The read is tried again at most three times over at most ten seconds, and the session's later
- * events wait behind it, so its streams here receive them in seq order. Given up, the session's streams here are told to
+ * seq range, an oversized event's seq, an oversized approval card's approval), when the read fails
+ * (RealtimeService.readBack; docs/runner-link-design.md §15.3, prerequisite (f)). The read is tried again at most three
+ * times over at most ten seconds, and the session's later events wait behind it, so its streams here receive them in seq
+ * order. Given up, the session's streams here are told to
  * re-fetch (`resync`) and its owner's lists here to re-read its row (session_updated). Each failure is logged with the
  * session, the seqs and the error, never the events. The two-process twin is relay-read-back.pg.spec.ts.
  */
@@ -17,9 +18,20 @@ import { RealtimeService } from './realtime.service';
 const SESSION = '0190a0b0-0000-7000-8000-0000000000c1';
 const OTHER_REPLICA = '0190a0b0-0000-7000-8000-0000000000d1';
 const TURN = '0190a0b0-0000-7000-8000-0000000000e1';
+const APPROVAL = '0190a0b0-0000-7000-8000-0000000000f1';
 const TS = '2026-10-28T10:00:00.000Z';
 /** In every event's text, so a log line that quoted an event would be found out. */
 const CONTENT = 'the-reply-text';
+
+/** An approval row whose card, with about 20 KB of tool input, is too big for a notification. */
+const BIG_CARD_ROW = {
+  id: APPROVAL,
+  toolName: 'Bash',
+  input: { command: `${CONTENT} ${'x'.repeat(20_000)}` },
+  toolUseId: 'toolu_01',
+  backgroundJobId: null,
+  createdAt: new Date(TS),
+};
 
 function ev(seq: number, type: string = RunEventType.ASSISTANT): NormalizedRunEvent {
   return { seq, type: type as RunEventType, payload: { text: `${CONTENT} #${seq}` }, turnId: TURN, ts: TS };
@@ -188,15 +200,75 @@ test('with one replica nothing is read back and nothing waits', async () => {
 
   realtime.publishBatch(SESSION, big);
   realtime.publish(SESSION, { ...ev(32), payload: { text: 'y'.repeat(8_000) } });
-  assert.deepEqual(seqsOf(streamed), range(20, 32), 'at once, as they were published');
-  assert.equal(db.notified.length, 2);
+  realtime.publish(SESSION, approvalRequestEvent(BIG_CARD_ROW, TS)); // this fake has no approval rows to read
+  const published = [...range(20, 32), '0:approval_request'];
+  assert.deepEqual(seqsOf(streamed), published, 'at once, as they were published');
+  assert.equal(db.notified.length, 3);
   for (const payload of db.notified) {
     const { i, ...notice } = JSON.parse(payload) as Record<string, unknown>;
-    assert.ok('f' in notice || 's' in notice, 'announced by where they are stored');
+    assert.ok('f' in notice || 's' in notice || 'a' in notice, 'announced by where they are stored');
     hear(notice, i as string); // its own notification, back from PostgreSQL
   }
   await settle();
   assert.deepEqual(db.reads, []);
   assert.deepEqual(lines, []);
-  assert.deepEqual(seqsOf(streamed), range(20, 32));
+  assert.deepEqual(seqsOf(streamed), published);
+});
+
+test('an approval card too big for its notification is built again from its row, and what arrived behind it follows', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  // The replica the runner asked: what it announces of the card is what this one hears.
+  const announced: string[] = [];
+  const asker = new RealtimeService({
+    $executeRawUnsafe: async (_sql: string, _channel: string, payload: string) => {
+      announced.push(payload);
+      return 0;
+    },
+  } as never, {} as never);
+  const card = approvalRequestEvent(BIG_CARD_ROW, '2026-10-28T10:00:01.000Z');
+  asker.publish(SESSION, card);
+  assert.equal(announced.length, 1);
+  assert.ok(Buffer.byteLength(announced[0], 'utf8') < 200, 'the notification carries none of the input');
+  const { i, ...notice } = JSON.parse(announced[0]) as Record<string, unknown>;
+  assert.deepEqual(notice, { r: SESSION, a: APPROVAL, ts: card.ts });
+
+  // This replica: the approval row's first read fails, as a dropped connection does.
+  const reads: unknown[] = [];
+  const db = {
+    prisma: {
+      $executeRawUnsafe: async () => 0,
+      approval: {
+        findFirst: (query: { where: unknown }) => {
+          reads.push(query.where);
+          return reads.length === 1 ? Promise.reject(PRISMA_FAILURE) : Promise.resolve(BIG_CARD_ROW);
+        },
+      },
+    },
+  };
+  const { lines, streamed, hear } = replica(db as unknown as ReturnType<typeof database>);
+  hear(notice, i as string);
+  hear({ b: [ev(5)] }); // the session's next batch, from another replica
+  await settle();
+  assert.deepEqual(streamed, [], 'nothing overtakes the card being read');
+  t.mock.timers.tick(250);
+  await settle();
+
+  assert.deepEqual(streamed, [card, ev(5)], 'the card the asker published, then what waited behind it');
+  assert.deepEqual(reads, [{ id: APPROVAL, sessionId: SESSION }, { id: APPROVAL, sessionId: SESSION }]);
+  assert.deepEqual(lines, [
+    `WARN session ${SESSION}: could not read back approval ${APPROVAL}, stored by another apiserver (attempt 1 of 4: P1017 Server has closed the connection.); trying again in 250 ms`,
+    `LOG session ${SESSION}: read back approval ${APPROVAL}, stored by another apiserver, on attempt 2 of 4`,
+  ]);
+});
+
+test('an approval card whose row is gone by the time it is read raises nothing, and nothing waits', async () => {
+  const db = {
+    prisma: { $executeRawUnsafe: async () => 0, approval: { findFirst: async () => null } },
+  };
+  const { lines, streamed, hear } = replica(db as unknown as ReturnType<typeof database>);
+  hear({ a: APPROVAL, ts: TS });
+  hear({ b: [ev(5)] });
+  await settle();
+  assert.deepEqual(seqsOf(streamed), [5]);
+  assert.deepEqual(lines, []);
 });
