@@ -2895,7 +2895,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "sessions/sessions.service.ts#decideApproval", class: "ONE_ROW_CAS", statements: 1 },
   { at: "runner-api/runner-workspace-approval.ts#requireWorkspaceWriteApproval", class: "ONE_ROW_CAS", statements: 1, note: "Spends the owner's yes for one workspace write: one UPDATE of one approval by its primary key, guarded on its status and on the input as it was read, so two copies of a write cannot both spend it. The write that follows is its own statement on purpose: a write that fails after this asks again, refused twice and never written twice." },
   { at: "sessions/sessions.service.ts#enqueueLegacyArtifactRequest", class: "ONE_ROW_BY_KEY", statements: 1 },
-  { at: "sessions/sessions.service.ts#getWorktreeFileForOwner", class: "ONE_ROW_CAS", statements: 2 },
+  { at: "sessions/sessions.service.ts#readWorktreeArtifact", class: "ONE_ROW_CAS", statements: 2 },
   { at: "sessions/sessions.service.ts#nameUntitledImport", class: "ONE_ROW_CAS", statements: 1, note: "An imported session whose transcript carried no title, named from its first prompt: the title moves only while the row still reads the import's placeholder and no project owns it, so a rename made since stands and a second call matches nothing." },
   { at: "sessions/sessions.service.ts#persistLegacyArtifactAttachment", class: "INSERT", statements: 1 },
   { at: "sessions/sessions.service.ts#pin", class: "ONE_ROW_BY_KEY", statements: 1 },
