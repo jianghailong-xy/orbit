@@ -186,6 +186,28 @@ export class FakeOpenPlatform {
     this.route('POST', '/open-apis/im/v1/messages', message);
     this.route('POST', '/open-apis/im/v1/messages/:message_id/reply', message);
     this.route('PATCH', '/open-apis/im/v1/messages/:message_id', message);
+    // A card callback's delayed update (§7.1): its token, from `cardTokens`, takes at most two updates.
+    this.route('POST', '/open-apis/interactive/v1/card/update', (request) =>
+      this.withToken(request, () => {
+        const token = (request.body as { token?: unknown } | null)?.token;
+        const used = typeof token === 'string' ? this.cardTokenUses.get(token) : undefined;
+        if (used === undefined || used >= 2) return { status: 400, body: { code: 200672, msg: 'token is invalid or expired' } };
+        this.cardTokenUses.set(token as string, used + 1);
+        this.cardUpdates.push(request);
+        return { status: 200, body: { code: 0, msg: 'success' } };
+      }));
+  }
+
+  /** Delayed card updates (`/open-apis/interactive/v1/card/update`) the platform took, as they arrived. */
+  readonly cardUpdates: FakeRequest[] = [];
+  /** How often each card callback's update token has been used; a spec registers a token with `cardToken`. */
+  private readonly cardTokenUses = new Map<string, number>();
+
+  /** A fresh update token for one card callback, as Feishu puts in `event.token`. */
+  cardToken(): string {
+    const token = `c-${randomBytes(12).toString('hex')}`;
+    this.cardTokenUses.set(token, 0);
+    return token;
   }
 
   /** Make an app known to the platform, or change its secret. */

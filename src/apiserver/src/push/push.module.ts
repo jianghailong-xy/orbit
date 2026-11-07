@@ -12,6 +12,7 @@ import { PushService } from './push.service';
   imports: [forwardRef(() => FeishuModule)],
   controllers: [PushController],
   providers: [PushService, FeishuTransport],
-  exports: [PushService],
+  // FeishuTransport too, for the Feishu card actions (feishu/feishu-card-actions.ts): a click answers its own card.
+  exports: [PushService, FeishuTransport],
 })
 export class PushModule {}

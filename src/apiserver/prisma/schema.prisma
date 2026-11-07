@@ -2562,6 +2562,13 @@ model Approval {
   startAfterCreate Boolean @default(false) @map("start_after_create")
   // User who decided it (no FK; cf. Activity.actorId).
   decidedById  String?   @map("decided_by_id") @db.Uuid
+  /// The credential the decider used (0500): `LOGIN` | `PAT` | `IMPERSONATION` | `FEISHU` — a click on a Feishu card
+  /// (docs/feishu-bot-design.md §7.2). NULL on a row nobody decided and on every row decided before 0500.
+  decidedCredentialKind String? @map("decided_credential_kind")
+  /// The clicker's open_id and the card's message_id when `decidedCredentialKind` is `FEISHU`, and only then
+  /// (approval_decided_via_chk).
+  decidedFeishuOpenId    String? @map("decided_feishu_open_id")
+  decidedFeishuMessageId String? @map("decided_feishu_message_id")
   createdAt    DateTime  @default(now()) @map("created_at")
   decidedAt    DateTime? @map("decided_at")
 

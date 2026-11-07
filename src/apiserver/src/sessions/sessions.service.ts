@@ -8464,13 +8464,25 @@ export class SessionsService {
   }
 
   /** Record a human allow/deny on a pending approval; the runner's next read picks
-   *  it up and returns it to claude's --permission-prompt-tool. */
+   *  it up and returns it to claude's --permission-prompt-tool.
+   *
+   *  `credential` is the door the decider came in by, recorded on the decision that lands
+   *  (`decided_credential_kind`, 0500). A FEISHU one is a click on a Feishu card
+   *  (docs/feishu-bot-design.md §7.2): its clicker's open_id and the card's message_id are recorded
+   *  beside it, and it carries only a plain allow or deny — "always allow" widens a standing grant and
+   *  "Create and start" starts work, both of which stay in the app — so either is refused before anything
+   *  is written. */
   async decideApproval(
     ownerId: string,
     id: string,
     approvalId: string,
     dto: ApprovalDecisionRequest,
+    credential?: AuthCredential,
   ): Promise<ApprovalInfo> {
+    const feishu = credential?.kind === 'FEISHU' ? credential : null;
+    if (feishu && (dto.rememberRules !== undefined || dto.startAfterCreate !== undefined)) {
+      throw new BadRequestException('a decision from a Feishu card is a plain allow or deny: "always allow" and "Create and start" stay in Orbit');
+    }
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       select: { id: true, workspaceId: true, sessionKind: true },
@@ -8520,8 +8532,12 @@ export class SessionsService {
       where: { id: approvalId, sessionId: id },
       select: { toolName: true, input: true },
     });
-    // Only the first decision on a still-PENDING approval applies (idempotent).
-    const res = await this.prisma.approval.updateMany({
+    // Only the first decision on a still-PENDING approval applies (idempotent). A Feishu card's
+    // decision is also an Activity row (docs/feishu-bot-design.md §7.2): written in the same
+    // transaction, and only by the decision that lands, so a replayed event or a stale card's
+    // click records nothing more.
+    const decide = async (db: Prisma.TransactionClient) => {
+      const landed = await db.approval.updateMany({
       where: { id: approvalId, sessionId: id, status: 'PENDING' },
       data: {
         status,
@@ -8539,9 +8555,28 @@ export class SessionsService {
             ? (dto.rememberRules as unknown as Prisma.InputJsonValue)
             : Prisma.DbNull,
         decidedById: ownerId,
+        decidedCredentialKind: credential?.kind ?? null,
+        decidedFeishuOpenId: feishu?.openId ?? null,
+        decidedFeishuMessageId: feishu?.messageId ?? null,
         decidedAt: new Date(),
       },
     });
+      if (feishu && landed.count > 0) {
+        await db.activity.create({
+          data: {
+            actorId: ownerId,
+            type: 'feishu.approval.decided',
+            credentialKind: 'FEISHU',
+            payload: {
+              sessionId: id, approvalId, behavior: dto.behavior,
+              appId: feishu.appId, openId: feishu.openId, messageId: feishu.messageId ?? null,
+            } as Prisma.InputJsonValue,
+          },
+        });
+      }
+      return landed;
+    };
+    const res = await withTransactionRetry(this.prisma, (tx) => decide(tx), loggedRetry(this.logger, 'sessions.decideApproval'));
     const a = await this.prisma.approval.findFirst({ where: { id: approvalId, sessionId: id } });
     if (!a) throw new NotFoundException('approval not found');
     if (res.count > 0) {

@@ -193,9 +193,10 @@ export class FeishuAppService {
   }
 
   /**
-   * `PATCH /integrations/feishu`: the app's own switch, how much an alert card carries (§6.4), and the default workspace
-   * the owner's direct messages open sessions in (§7.3). 404 while the account has no app, and for a workspace that is
-   * not the account's own (another account's is answered as one that does not exist); nothing asked, nothing written.
+   * `PATCH /integrations/feishu`: the app's own switch, how much an alert card carries (§6.4), whether a tool approval
+   * is answered on its card (§7.2), and the default workspace the owner's direct messages open sessions in (§7.3). 404
+   * while the account has no app, and for a workspace that is not the account's own (another account's is answered as
+   * one that does not exist); nothing asked, nothing written.
    */
   async change(ownerId: string, change: FeishuAppChange): Promise<FeishuIntegration> {
     if (change.defaultWorkspaceId) {
@@ -208,6 +209,7 @@ export class FeishuAppService {
     const data = {
       ...(change.enabled !== undefined ? { enabled: change.enabled } : {}),
       ...(change.messageDetail !== undefined ? { messageDetail: change.messageDetail } : {}),
+      ...(change.approvalsInFeishu !== undefined ? { approvalsInFeishu: change.approvalsInFeishu } : {}),
       ...(change.defaultWorkspaceId !== undefined ? { defaultWorkspaceId: change.defaultWorkspaceId } : {}),
     };
     if (Object.keys(data).length > 0) {

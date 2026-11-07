@@ -37,7 +37,9 @@ test('the push module keeps only the sender, and gained no resident process', ()
   // The sender and its third transport, the owner's Feishu app (docs/feishu-bot-design.md §6.1): a channel the same
   // alerts go out on, with no worker, timer or outbox of its own.
   assert.match(module, /providers: \[PushService, FeishuTransport\]/u);
-  assert.match(module, /exports: \[PushService\]/u);
+  // FeishuTransport is exported for the owner's clicks on cards (feishu/feishu-card-actions.ts, task F2-1): a click draws
+  // the card it was made on. Still no worker, timer or outbox.
+  assert.match(module, /exports: \[PushService, FeishuTransport\]/u);
   assert.doesNotMatch(module, /Judgment/u);
   assert.doesNotMatch(module, /setInterval|setTimeout|OnModuleInit|OnApplicationBootstrap/u);
 

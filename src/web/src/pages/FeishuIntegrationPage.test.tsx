@@ -35,13 +35,14 @@ vi.mock('../lib/toast', () => ({ useToast: () => toast }));
 const copied: string[] = [];
 vi.mock('../lib/clipboard', () => ({ copyText: vi.fn(async (text: string) => (copied.push(text), true)) }));
 const { api } = await import('../api');
-const { CONNECT_ACCOUNT, DEFAULT_WORKSPACE_HINT, DISCONNECT_OWNER, FeishuIntegrationPage, MESSAGE_DETAIL_HINT, NOT_ALLOWED_NOTICE, OPEN_BOT, SECRET_UNREADABLE_NOTICE, SEND_TEST } = await import('./FeishuIntegrationPage');
+const { CONNECT_ACCOUNT, APPROVALS_IN_FEISHU_HINT, DEFAULT_WORKSPACE_HINT, DISCONNECT_OWNER, FeishuIntegrationPage, MESSAGE_DETAIL_HINT, NOT_ALLOWED_NOTICE, OPEN_BOT, SECRET_UNREADABLE_NOTICE, SEND_TEST } = await import('./FeishuIntegrationPage');
 
 const SECRET = 'feishu-secret-never-shown-again';
 
 /** The account's app as the stand-in keeps it: the secret as sent, which no answer carries. */
 let stored: {
   platform: FeishuPlatform; appId: string; secret: string; enabled: boolean; messageDetail?: FeishuMessageDetail; defaultWorkspaceId?: string | null;
+  approvalsInFeishu?: boolean;
 } | null;
 /** The account's workspaces, as GET /workspaces answers them. */
 const WORKSPACES = [{ id: 'ws-1', name: 'groups workspace', runner: { name: 'build-box' } }, { id: 'w2docs', name: 'docs' }];
@@ -71,7 +72,7 @@ const app = (): FeishuAppSettings | null =>
     secretUnreadable,
     enabled: stored.enabled,
     messageDetail: stored.messageDetail ?? 'TITLES_ONLY',
-    approvalsInFeishu: true,
+    approvalsInFeishu: stored.approvalsInFeishu ?? true,
     defaultWorkspaceId: stored.defaultWorkspaceId ?? null,
     ownerOpenId: owner?.openId ?? null,
     ownerName: owner?.name ?? null,
@@ -218,9 +219,12 @@ beforeEach(() => {
       secretUnreadable = false;
     } else if (method === 'PATCH') {
       if (!stored) throw new ApiError('No Feishu app is connected to this account.', 404);
-      const change = options.body as { enabled?: boolean; messageDetail?: FeishuMessageDetail; defaultWorkspaceId?: string | null };
+      const change = options.body as {
+        enabled?: boolean; messageDetail?: FeishuMessageDetail; defaultWorkspaceId?: string | null; approvalsInFeishu?: boolean;
+      };
       if (change.enabled !== undefined) stored.enabled = change.enabled;
       if (change.defaultWorkspaceId !== undefined) stored.defaultWorkspaceId = change.defaultWorkspaceId;
+      if (change.approvalsInFeishu !== undefined) stored.approvalsInFeishu = change.approvalsInFeishu;
       if (change.messageDetail !== undefined) stored.messageDetail = change.messageDetail;
     } else if (method === 'DELETE') {
       stored = null;
@@ -351,6 +355,23 @@ describe('the app connected', () => {
     await click(control(), 'Include details in alerts');
     expect(requests.at(-1)).toEqual({ method: 'PATCH', body: { messageDetail: 'TITLES_ONLY' } });
     expect(control()?.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('answers approvals in Feishu by default, says "always allow" stays in Orbit, and switches it with PATCH', async () => {
+    await open();
+    const row = [...card('Your app')!.querySelectorAll<HTMLElement>('.admin-signin-row')]
+      .find((r) => r.querySelector('.admin-signin-label')?.textContent?.trim() === 'Answer approvals in Feishu');
+    expect(row?.textContent).toContain(APPROVALS_IN_FEISHU_HINT);
+    expect(APPROVALS_IN_FEISHU_HINT).toContain('Allow once and Deny');
+    expect(APPROVALS_IN_FEISHU_HINT).toContain('"Always allow"');
+    const control = () => row!.querySelector<HTMLElement>('[role="switch"]');
+    expect(control()?.getAttribute('aria-checked')).toBe('true');
+    await click(control(), 'Answer approvals in Feishu');
+    expect(requests.at(-1)).toEqual({ method: 'PATCH', body: { approvalsInFeishu: false } });
+    expect(control()?.getAttribute('aria-checked')).toBe('false');
+    await click(control(), 'Answer approvals in Feishu');
+    expect(requests.at(-1)).toEqual({ method: 'PATCH', body: { approvalsInFeishu: true } });
+    expect(control()?.getAttribute('aria-checked')).toBe('true');
   });
 
   it('chooses the default workspace of direct messages from the account\'s workspaces with PATCH, and clears it', async () => {

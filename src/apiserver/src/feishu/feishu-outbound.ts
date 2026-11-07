@@ -127,6 +127,15 @@ export class FeishuOutbound {
   }
 
   /**
+   * `POST /open-apis/interactive/v1/card/update`: replace the card a callback was clicked on, with the callback's own
+   * update token (§7.1) — the late answer to a click Orbit could not answer within Feishu's 3 seconds. Feishu takes a
+   * token for 30 minutes after the click and at most twice.
+   */
+  delayedUpdateCard(app: FeishuAppCredentials, token: string, card: unknown): Promise<FeishuSendResult> {
+    return this.call(app, { method: 'POST', url: 'open-apis/interactive/v1/card/update', data: { token, card } });
+  }
+
+  /**
    * `GET /open-apis/contact/v3/users/:user_id` (open_id): a person's name in the app's tenant, for display (§5.1). Null
    * when Feishu does not say — the permission not granted, the person out of the app's range, Feishu unreachable.
    */
