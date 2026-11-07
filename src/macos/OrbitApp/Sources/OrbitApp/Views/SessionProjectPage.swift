@@ -169,11 +169,13 @@ private struct SessionProjectProgressBar: View {
     }
 }
 
-/// Pin and Move affect the coordinator; the project has no completion, sharing or deletion action.
+/// Pin and Move affect the coordinator. An OPEN project has no completion, sharing or deletion
+/// action; a finished one in Open leads with Complete, which moves all its open sessions (§4.3).
 private struct SessionProjectRowActions: ViewModifier {
     @Environment(AppModel.self) private var app
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     let row: SessionProjectRow
+    let view: SessionView
     let onOpen: () -> Void
     let onSessions: () -> Void
     let onProject: () -> Void
@@ -199,6 +201,12 @@ private struct SessionProjectRowActions: ViewModifier {
 
     @ViewBuilder
     private var menu: some View {
+        if row.offersComplete(in: view) {
+            Button { app.completeProjectSessions(row) } label: {
+                Label(SessionProjectCopy.complete, systemImage: "checkmark")
+            }
+            Divider()
+        }
         Button(action: onOpen) {
             Label(SessionProjectCopy.openSession, systemImage: "bubble.left")
         }
@@ -237,10 +245,10 @@ private struct SessionProjectRowActions: ViewModifier {
 }
 
 extension View {
-    func sessionProjectRowActions(_ row: SessionProjectRow, onOpen: @escaping () -> Void,
+    func sessionProjectRowActions(_ row: SessionProjectRow, view: SessionView, onOpen: @escaping () -> Void,
                                   onSessions: @escaping () -> Void, onProject: @escaping () -> Void,
                                   onMove: @escaping () -> Void) -> some View {
-        modifier(SessionProjectRowActions(row: row, onOpen: onOpen, onSessions: onSessions,
+        modifier(SessionProjectRowActions(row: row, view: view, onOpen: onOpen, onSessions: onSessions,
                                           onProject: onProject, onMove: onMove))
     }
 }

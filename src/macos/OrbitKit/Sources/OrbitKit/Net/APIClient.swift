@@ -378,6 +378,14 @@ public final class APIClient: @unchecked Sendable {
             _ = try await postRaw("sessions/\(id)/archive", body: Optional<Empty>.none)
         }
     }
+    /// Complete on a DONE or CANCELLED project's row (docs/session-list-projects-design.md §3.6): its
+    /// coordinator and its members still in Open, in every workspace, move to Completed together.
+    /// Answers how many moved; an OPEN project is refused 409 PROJECT_STILL_OPEN.
+    public func completeProjectSessions(_ projectID: String) async throws -> Int {
+        struct Completed: Decodable { let completed: Int }
+        let data = try await postRaw("projects/\(projectID)/sessions/complete", body: Optional<Empty>.none)
+        return try decoder.decode(Completed.self, from: data).completed
+    }
     public func restoreSession(_ id: String) async throws { _ = try await postRaw("sessions/\(id)/restore", body: Optional<Empty>.none) }
     public func deleteSession(_ id: String) async throws { try await deleteRaw("sessions/\(id)") }
     /// Hard-delete a trashed session and all its data — irreversible (the Trash tab's "Delete

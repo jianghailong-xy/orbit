@@ -167,14 +167,20 @@ internal fun ProjectProgressBar(counts: ProjectTaskCounts, running: Int, modifie
 }
 
 /** A project row's menu (iOS `SessionProjectRowActions`): the session its line speaks for, the project's sessions, its page — then
- * Pin and Move, which act on its coordinator. A project has no completion, sharing or deletion of its own. */
+ * Pin and Move, which act on its coordinator. An OPEN project has no completion, sharing or deletion of its own; a finished one in
+ * Open leads with Complete and a divider, which moves all its open sessions to Completed (§4.3, owner 2026-11-07). */
 @Composable
-internal fun ProjectRowMenu(row: SessionProjectRow, fresh: Boolean, close: () -> Unit, openSession: (String) -> Unit, openSessions: () -> Unit,
-    openProject: () -> Unit, pin: (DirectorySession) -> Unit, move: (DirectorySession) -> Unit) {
+internal fun ProjectRowMenu(row: SessionProjectRow, fresh: Boolean, view: SessionView, close: () -> Unit, complete: () -> Unit,
+    openSession: (String) -> Unit, openSessions: () -> Unit, openProject: () -> Unit, pin: (DirectorySession) -> Unit,
+    move: (DirectorySession) -> Unit) {
     AlertDialog(onDismissRequest = close, title = { Text(row.title) }, modifier = Modifier.testTag("project-row-menu"),
         confirmButton = { TextButton(onClick = close) { Text("Close") } },
         text = {
             Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (row.offersComplete(view)) {
+                    ActionButton(SessionProjectCopy.complete, fresh) { close(); complete() }
+                    HorizontalDivider()
+                }
                 val session = (row.target as? SessionProjectRow.Target.Session)?.id
                 ActionButton(SessionProjectCopy.openSession, session != null) { close(); session?.let(openSession) }
                 ActionButton(SessionProjectCopy.sessions, true) { close(); openSessions() }

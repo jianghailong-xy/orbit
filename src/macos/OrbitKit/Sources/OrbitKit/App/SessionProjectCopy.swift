@@ -16,6 +16,8 @@ public enum SessionProjectCopy {
 
     public static let noCoordinator = "No coordinator"
     public static let openSession = "Open Session"
+    /// The first item of a finished project's row menu (design §4.3, owner 2026-11-07).
+    public static let complete = "Complete"
     public static let openCoordinator = "Open Coordinator"
     public static let sessions = "Sessions"
     public static let openProject = "Open Project"
