@@ -21901,8 +21901,11 @@ div.landing-jobs-open {
   margin: 4px 0 20px;
   color: var(--text-3);
 }
-.feishu-not-allowed,
 .feishu-card {
+  margin-bottom: 16px;
+}
+/* Above the app. The Alert's own `margin: 0` (ui/Alert.css, loaded later) is one class deep, so this is two. */
+.feishu-page > .feishu-not-allowed {
   margin-bottom: 16px;
 }
 .feishu-fields {
