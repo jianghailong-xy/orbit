@@ -10259,6 +10259,9 @@ export interface SessionComposerProps {
   /** Whether a leading `!` makes the draft a shell command. A wiki chat opens with the owner's words, so its first
    *  message is never one. */
   shellOffered?: boolean;
+  /** Fit the empty field to its placeholder again when that changes (the wiki chat's: its draft's words replace the
+   *  first ones once a card loads). The session page keeps the field's own rule: a value or width change. */
+  measureOnPlaceholder?: boolean;
   /** The `+` menu's Shell cannot run here now, and says so. */
   shellUnavailable: boolean;
   workspaceReadOnly: boolean;
@@ -10331,6 +10334,7 @@ export function SessionComposer({
   runner,
   workspacesForRunner,
   shellOffered = true,
+  measureOnPlaceholder = false,
   shellUnavailable,
   workspaceReadOnly,
   shownWorkspaceId,
@@ -10818,6 +10822,7 @@ export function SessionComposer({
         // the cap truncates; very large content should go through File instead.
         maxLength={MAX_PROMPT_CHARS}
         placeholder={offeredSuggestion ? '' : composerPlaceholder}
+        measureKey={measureOnPlaceholder ? composerPlaceholder : undefined}
         aria-describedby={offeredSuggestion ? suggestionHintId : undefined}
         value={text}
         disabled={composerDisabled}

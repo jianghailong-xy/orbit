@@ -588,6 +588,8 @@ function sharedComposerProps(
     removeImage: draft.removeImage,
     taRef: draft.taRef,
     composerDisabled: false,
+    // The draft's words replace the first ones once a card loads: the empty field fits them again (board 43 ④).
+    measureOnPlaceholder: true,
     replyTo: null,
     workspaceReadOnly: true,
     setWorkspaceId: () => undefined,
