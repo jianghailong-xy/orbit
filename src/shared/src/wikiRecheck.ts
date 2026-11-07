@@ -47,6 +47,17 @@ export const WIKI_RECHECK = {
   commitsMax: 20,
   linesMax: 40,
   diffBytes: 6000,
+  /**
+   * The changes one answer carries (`repoOps.kindRuns.history`): commits that changed how often a term occurs, each
+   * with its message's body and its own patch with `changeContext` lines of context, cut to `changeBytes`, all the
+   * patches within `changesBytes`; a change is given only while `changeMinBytes` of that are left.
+   */
+  changesMax: 8,
+  bodyRunes: 600,
+  changeContext: 8,
+  changeBytes: 2500,
+  changesBytes: 12000,
+  changeMinBytes: 500,
   /** One ask's max_tokens: one JSON object with a one-sentence reason. */
   maxTokens: 1024,
 } as const;
@@ -60,8 +71,24 @@ export interface WikiHistoryRequestEntry {
   since?: string;
   paths: string[];
   terms: string[];
-  /** Asked: commits, lines and the diff besides the census. */
+  /** Asked: commits, lines, the diff and the changes besides the census. */
   detail: boolean;
+}
+
+/** A path with one of these is a pattern (`*`, `?` within one directory, `**` across any number), not a file. */
+export const WIKI_RECHECK_PATTERN = /[*?[]/u;
+
+/** One commit that changed how often a term occurs in the entry's paths, as the model reads it. */
+export interface WikiHistoryChange {
+  sha: string;
+  date: string;
+  subject: string;
+  /** The terms git log -S found it changed, in the entry's order. */
+  terms: string[];
+  body: string;
+  /** Its own patch of the entry's paths against its first parent, the hunks holding a term first. */
+  diff: string;
+  diffTruncated: boolean;
 }
 
 /** What the runner answers for one entry. */
@@ -80,6 +107,9 @@ export interface WikiHistoryAnswerEntry {
   linesTotal?: number;
   diff?: string;
   diffTruncated?: boolean;
+  /** Absent from a runner older than the changes: the question then has no CHANGES section. */
+  changes?: WikiHistoryChange[];
+  changesTotal?: number;
 }
 
 /** The whole answer, under the result's `history`. */

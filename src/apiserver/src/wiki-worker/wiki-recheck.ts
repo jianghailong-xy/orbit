@@ -1,5 +1,6 @@
 import {
   WIKI_RECHECK,
+  WIKI_RECHECK_PATTERN,
   WIKI_RECHECK_RANKS,
   type WikiHistoryAnswerEntry,
   type WikiRecheckRank,
@@ -183,7 +184,7 @@ export function wikiScreenRank(answer: WikiHistoryAnswerEntry, fresh: boolean): 
 /** The whole system prompt one recheck carries. */
 export const WIKI_RECHECK_SYSTEM_PROMPT = 'You check whether an entry of a repository\'s wiki is still true of the repository\'s code. '
   + 'Judge only from the material given: the entry, the commits that changed its files, how often its terms occur, the lines '
-  + 'that hold them now and the diff. Answer with one JSON object and nothing else.';
+  + 'that hold them now, the diff, and the changes that altered how often a term occurs. Answer with one JSON object and nothing else.';
 
 /** What the prompt reads besides the entry: the screen's base, the head, and the runner's detail for this entry. */
 export interface WikiRecheckMaterial {
@@ -216,7 +217,7 @@ export function wikiRecheckPrompt(entry: WikiRecheckEntry, material: WikiRecheck
   out.push(`Fields: ${fields}`);
   out.push('');
   out.push('FILES IT IS ABOUT');
-  for (const path of material.paths) out.push(`- ${path}`);
+  for (const path of material.paths) out.push(`- ${path}${WIKI_RECHECK_PATTERN.test(path) ? ' (a pattern: every file it matches)' : ''}`);
   out.push('');
   out.push('MAIN THEN AND NOW');
   out.push(`Base: ${(answer.base ?? '').slice(0, 12)} (${shortDate(answer.baseDate)}), main as it was ${material.baseIs === 'sources' ? 'before the records this entry was written from' : 'when this entry was last checked'}.`);
@@ -226,14 +227,9 @@ export function wikiRecheckPrompt(entry: WikiRecheckEntry, material: WikiRecheck
   if (commits.length === 0) out.push('(none)');
   // Where the entry was recorded falls between two commits: the ones below that line are the history it was written
   // from, and a pitfall's own fix is usually among them.
-  const recorded = entry.recordedAt.getTime();
-  let marked = false;
+  const recordedLine = recordedLineOf(entry.recordedAt);
   for (const commit of commits) {
-    const at = Date.parse(commit.date);
-    if (!marked && Number.isFinite(at) && at < recorded) {
-      out.push(`--- the entry was recorded here, on ${entry.recordedAt.toISOString().slice(0, 10)}: the commits below came before it ---`);
-      marked = true;
-    }
+    recordedLine(commit.date, out);
     out.push(`${commit.matched ? '*' : ' '} ${commit.sha.slice(0, 12)} ${shortDate(commit.date)} ${commit.subject}`);
   }
   out.push('');
@@ -249,6 +245,21 @@ export function wikiRecheckPrompt(entry: WikiRecheckEntry, material: WikiRecheck
   out.push(`THE DIFF OF THESE FILES FROM THE BASE TO NOW (hunks that mention a term first${answer.diffTruncated ? '; cut' : ''})`);
   out.push(answer.diff && answer.diff.length > 0 ? answer.diff : '(no difference)');
   out.push('');
+  // A runner older than the changes answers none: the question is then the one it was before them.
+  if (answer.changes !== undefined) {
+    const changes = answer.changes;
+    out.push(`CHANGES: THE COMMITS THAT CHANGED HOW OFTEN A TERM OCCURS (${changes.length} of ${answer.changesTotal ?? changes.length}, newest first; each with its message and its own patch, ${WIKI_RECHECK.changeContext} lines of context around every change)`);
+    if (changes.length === 0) out.push('(none)');
+    const changeLine = recordedLineOf(entry.recordedAt);
+    for (const change of changes) {
+      changeLine(change.date, out);
+      out.push(`=== ${change.sha.slice(0, 12)} ${shortDate(change.date)} ${change.subject}`);
+      out.push(`Changed how often it holds: ${change.terms.map(quoteTerm).join(', ')}`);
+      out.push(change.body.length > 0 ? `Message: ${change.body}` : 'Message: (no more than the subject)');
+      out.push(change.diff.length > 0 ? `${change.diff}${change.diffTruncated ? '(patch cut)\n' : ''}` : '(no patch)');
+    }
+    out.push('');
+  }
   out.push('QUESTION');
   out.push('Is what the entry says true of the code at the head commit, so that an agent who reads it today and acts on it would be right?');
   out.push('- "holds": yes, it is still true.');
@@ -256,12 +267,42 @@ export function wikiRecheckPrompt(entry: WikiRecheckEntry, material: WikiRecheck
   out.push('- "obsolete": no, because what the entry talks about is gone or was replaced, or the decision or convention no longer describes the code, without that being a fix of the problem. Give the commit that shows it, if one does.');
   out.push('- "unsure": the material shows a change to what the entry describes, but not enough to tell.');
   out.push('How to read the material:');
-  out.push('- If a term the entry names as present or broken occurs in none of its files now (see the counts), the entry describes code that is gone: answer fixed or obsolete, even when the entry itself records that change.');
+  if (answer.changes !== undefined) {
+    out.push('- Answer fixed or obsolete only from a change the material shows, and name it: a commit of COMMITS or CHANGES.');
+    out.push('- If a term the entry names as present or broken occurs in none of its files now (see the counts), read the change in CHANGES that removed it. If it removed the code the entry describes, answer fixed or obsolete, even when the entry itself records that change. If it only renamed, moved or deleted a test, a file or a name while the behaviour the entry describes is still in the LINES or the DIFF, the entry holds.');
+  } else {
+    out.push('- If a term the entry names as present or broken occurs in none of its files now (see the counts), the entry describes code that is gone: answer fixed or obsolete, even when the entry itself records that change.');
+  }
   out.push('- Otherwise, a pitfall that records its own fix (its fix field) holds while the code does what that fix says: the commit that applied it, usually one recorded before the entry, is not a reason to answer fixed. Answer fixed only when a change after the entry was recorded altered the behaviour it describes as current.');
   out.push('- A decision or a convention is obsolete when a commit after it was recorded does what it says not to do, or replaces what it decided.');
   out.push('- If nothing in the material changes what the entry describes, it holds.');
   out.push('Answer with exactly one JSON object: {"verdict": "holds" | "fixed" | "obsolete" | "unsure", "commit": "<the 12-character sha of a commit listed above, or null>", "reason": "<one sentence naming what in the material decides it>"}');
   return out.join('\n');
+}
+
+/**
+ * Where the entry was recorded falls between two commits: the ones below that line are the history it was written from,
+ * and a pitfall's own fix is usually among them. The line goes once, above the first commit older than the entry.
+ */
+function recordedLineOf(recordedAt: Date): (date: string, out: string[]) => void {
+  const recorded = recordedAt.getTime();
+  let marked = false;
+  return (date, out) => {
+    const at = Date.parse(date);
+    if (!marked && Number.isFinite(at) && at < recorded) {
+      out.push(`--- the entry was recorded here, on ${recordedAt.toISOString().slice(0, 10)}: the commits below came before it ---`);
+      marked = true;
+    }
+  };
+}
+
+/** The commits an answer may name: those COMMITS and CHANGES list, each once. */
+export function wikiRecheckListed(answer: WikiHistoryAnswerEntry): Array<{ sha: string; date: string; subject: string }> {
+  const listed = new Map<string, { sha: string; date: string; subject: string }>();
+  for (const commit of [...(answer.commits ?? []), ...(answer.changes ?? [])]) {
+    if (!listed.has(commit.sha)) listed.set(commit.sha, { sha: commit.sha, date: commit.date, subject: commit.subject });
+  }
+  return [...listed.values()];
 }
 
 // ── The answer ──────────────────────────────────────────────────────────────────────────────────
@@ -275,8 +316,8 @@ export interface WikiRecheckAnswer {
 
 const VERDICTS: ReadonlySet<string> = new Set(['holds', 'fixed', 'obsolete', 'unsure']);
 
-/** Read one answer against the commits the prompt listed (`recheck.question`). */
-export function wikiParseRecheckAnswer(text: string, commits: WikiHistoryAnswerEntry['commits'] = []): WikiRecheckAnswer {
+/** Read one answer against the commits the prompt listed (`recheck.question`, {@link wikiRecheckListed}). */
+export function wikiParseRecheckAnswer(text: string, commits: ReadonlyArray<{ sha: string; date: string; subject: string }> = []): WikiRecheckAnswer {
   const body = lastJSONObject(text);
   let parsed: unknown = null;
   if (body !== null) {
@@ -295,7 +336,7 @@ export function wikiParseRecheckAnswer(text: string, commits: WikiHistoryAnswerE
   if (!VERDICTS.has(said)) return { verdict: 'unsure', commit: null, reason: `The answer's verdict was not one of the four: ${cutRunes(said, 40) || 'none'}.` };
   const verdict = said as WikiRecheckVerdict;
   const named = typeof record.commit === 'string' ? record.commit.trim().toLowerCase() : '';
-  const listed = /^[0-9a-f]{7,40}$/u.test(named) ? (commits ?? []).find((commit) => commit.sha.startsWith(named)) ?? null : null;
+  const listed = /^[0-9a-f]{7,40}$/u.test(named) ? commits.find((commit) => commit.sha.startsWith(named)) ?? null : null;
   const commit = listed ? { sha: listed.sha, date: listed.date, subject: listed.subject } : null;
   if (verdict === 'fixed' && commit === null) {
     return { verdict: 'unsure', commit: null, reason: 'The answer said fixed but named no commit the material listed.' };

@@ -60,8 +60,10 @@ decisions and conventions name no path (§5).
 
 An entry is rechecked when it is active, its kind is `pitfall`, `decision` or `convention`, and it names at least one
 path: the paths of its `path` and `symbol` anchors, and a pitfall's `fields.trigger.paths`, spelled as the anchors
-step spells them (no leading `./` or `/`, no trailing `/`; a path names itself and everything under it). Commit
-anchors and the server-checked anchor types name no path. Principles, recipes and concepts are out of scope.
+step spells them (no leading `./` or `/`, no trailing `/`; a path names itself and everything under it). A path with
+`*`, `?` or `[` is a pattern, as trigger paths are often written (`src/web/src/**/*.tsx`): it names every file it
+matches, `*` and `?` within one directory and `**` across any number of them (round 3, §7). Commit anchors and the
+server-checked anchor types name no path. Principles, recipes and concepts are out of scope.
 
 ### 2.2 What the entry talks about: its terms
 
@@ -74,8 +76,8 @@ keywords are left out. `34ZfFGATAFiBBi9qmqPF7` gives `sum_cache_read`, `session.
 ### 2.3 The screen: what changed, without a model
 
 Each run diffs main from the commit the previous run's recheck screened to its own commit (one `diff` operation, which
-exists; the commit screened is kept per space). For every entry with a path in that diff, the runner counts, at both
-commits, the lines of its paths that hold each term (`history`, screen mode, §3.1). The entry joins the due queue with
+exists; the commit screened is kept per space). For every entry with a path in that diff, or a pattern that matches
+one of its names (read as the plan's paths are, `wikiPlanPathMatches`), the runner counts, at both commits, the lines of its paths that hold each term (`history`, screen mode, §3.1). The entry joins the due queue with
 a rank, the lowest it has earned until it is asked:
 
 | Rank | Signal |
@@ -117,7 +119,16 @@ Asked entries (`detail`) also get:
 - `commits`: `git log <base>..<to> -- <paths>`, newest first, at most 20 (sha, date, subject), each marked when it
   changed how many times a term occurs (`git log -S`, a fixed string);
 - `lines`: the lines of the paths at the head that hold a term (`git grep -n -F`), at most 40;
-- `diff`: `git diff <base> <to> -- <paths>`, the hunks with a term first, at most 6,000 characters.
+- `diff`: `git diff <base> <to> -- <paths>`, the hunks with a term first, at most 6,000 characters;
+- `changes` (round 3, §7): the marked commits read whole, because the commit list and a cut range diff often did not
+  show the one that mattered (a fix among 29, 437 or 608 commits). Those of a term whose count differs between the base
+  and the head come first, then the others, newest first within each; at most 8, each with the terms it changed, its
+  message's body (600 characters) and its own patch of the paths against its first parent with 8 lines of context, the
+  hunks with a term first, at most 2,500 bytes each and 12,000 in all.
+
+A pattern goes to git as a `:(glob)` pathspec and any other path as `:(literal)`, so everything above covers the files
+a pattern matches; a pattern is never itself `moved`. Before round 3 every path went literally
+(`--literal-pathspecs`), and an entry whose trigger paths were patterns read as if nothing had ever changed.
 
 The screen is a few `git grep` calls an entry, about 15–30 s of git for the ~740 entries a run touches; nothing of it
 reaches the model.
@@ -145,8 +156,15 @@ the commit that applied it is not a fix of the entry — and is fixed only when 
 behaviour it describes as current; a decision or convention is obsolete when a later commit does what it said not to
 do; and nothing in the material that changes what the entry describes means holds.
 
+With the changes (round 3), the prompt has a CHANGES section after the diff, split at the recording the same way, and
+the vanished-term rule reads the change that removed the term: fixed or obsolete when it removed the code the entry
+describes, holds when it only renamed, moved or deleted a test, a file or a name while the behaviour the entry
+describes is still in the lines or the diff (round 2's one false `obsolete` was a deleted test file). Fixed or
+obsolete is answered only from a change the material shows. A runner without the changes gets the question as it was.
+
 The answer is one JSON object: `{"verdict": …, "commit": "<12-character sha from the list, or null>", "reason": "<one
-sentence>"}`. An answer that cannot be read, or that names a commit not in the list for `fixed`, counts as `unsure`.
+sentence>"}`. An answer that cannot be read, or that names a commit neither the commit list nor the changes list for
+`fixed`, counts as `unsure`.
 
 ### 3.3 Two asks
 

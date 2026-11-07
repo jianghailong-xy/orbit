@@ -3425,10 +3425,12 @@ agents as verified. The recheck asks about the claim itself when main changes th
 ### 31.2 What runs, in each ordinary maintenance run after the anchors step
 
 1. **Scope.** Active pitfalls, decisions and conventions that name a path: their path and symbol anchors' paths and a
-   pitfall's `fields.trigger.paths`, cleaned as anchor paths are. An entry whose claim is `fixed` or `obsolete` waits
-   for the owner and is not screened or asked.
+   pitfall's `fields.trigger.paths`, cleaned as anchor paths are. A path with `*`, `?` or `[` is a pattern that names
+   every file it matches (`**` across directories). An entry whose claim is `fixed` or `obsolete` waits for the owner
+   and is not screened or asked.
 2. **Screen (no model call).** A `diff` from the space's last screen (`wiki_space.claim_recheck_ref`) to the run's
-   commit; every entry in scope with a path in it is screened from that commit, and up to `rules.screenMax` entries
+   commit; every entry in scope with a path in it, or a pattern that matches one of its names, is screened from that
+   commit, and up to `rules.screenMax` entries
    never screened are screened from their earliest source (the UUIDv7 time of the current revision's earliest source,
    or the recording). The `history` operation counts the lines of the entry's paths that hold each term at both ends.
    Rank 0: written in the last day with any signal; 1: a term vanished or a path itself was added, deleted or renamed;
@@ -3436,8 +3438,9 @@ agents as verified. The recheck asks about the claim itself when main changes th
    `claim_due_at`); the space's screen then moves to the run's commit.
 3. **Asks.** At most `rules.asksMax` (20) entries a run, lowest rank, most read by agents, longest due first; an entry
    asked within `rules.askIntervalDays` waits. Each gets the `history` operation's detail (commits, census, lines,
-   diff) from its last check, or from its earliest source, and one question under step `recheck`, unit the entry's
-   id. A `fixed` or `obsolete` answer is asked again under `<id>#second`; only two such answers act.
+   diff, and the changes: up to `rules.changesMax` commits that changed a term's count, each with its message and its
+   own patch) from its last check, or from its earliest source, and one question under step `recheck`, unit the
+   entry's id. A `fixed` or `obsolete` answer is asked again under `<id>#second`; only two such answers act.
 4. **Effect.** `holds` and `unsure` change nothing but the claim columns. `fixed` and `obsolete` write the claim check
    (the commit, the reason, `wrongWhenRecorded`), file one system challenge proposing Retire when none is open, and
    take the entry out of the runner door's `wiki_search`; `wiki_get` and the owner's doors still show it with its

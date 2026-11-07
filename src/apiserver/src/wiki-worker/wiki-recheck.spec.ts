@@ -8,6 +8,7 @@ import {
   wikiEarliestSourceTime,
   wikiParseRecheckAnswer,
   wikiRecheckChallengeReason,
+  wikiRecheckListed,
   wikiRecheckPrompt,
   wikiRecheckTerms,
   wikiRecheckWantsSecond,
@@ -119,6 +120,7 @@ test('the screen ranks a vanished term or a moved path 1, a changed count 2, a t
 });
 
 test('the question shows the entry, the commits, the census, the lines and the diff, and states the four answers', () => {
+  // A runner older than the changes answers none: the question has no CHANGES section and reads a vanished term as before.
   const answer: WikiHistoryAnswerEntry = {
     id: SUM_CACHE_READ.id,
     base: '1bfa9848b6' + '0'.repeat(30),
@@ -157,10 +159,66 @@ test('the question shows the entry, the commits, the census, the lines and the d
   assert.doesNotMatch(later, /the entry was recorded here/u);
   assert.match(later, /main as it was when this entry was last checked/u);
   assert.match(WIKI_RECHECK_SYSTEM_PROMPT, /Judge only from the material given/u);
+  assert.doesNotMatch(prompt, /CHANGES/u);
   // The same entry and material ask the same bytes: the queue's identity is the request's.
   assert.equal(prompt, wikiRecheckPrompt(SUM_CACHE_READ, {
     paths: wikiClaimPaths(SUM_CACHE_READ), baseIs: 'sources', head: { sha: '29739d60aa515f82732f6e64c701b2dce118594c', date: '2026-11-06T17:00:00+08:00' }, answer,
   }));
+});
+
+test('with the changes, the question shows each one whole and reads a vanished term through the change that removed it', () => {
+  const fix = 'fdeea9d5163d1e09b208cfbc60eaaf15933870cc';
+  const later = 'b4619320b294f164c7cf7af9ebfd0225f4d25c6f';
+  const answer: WikiHistoryAnswerEntry = {
+    id: SUM_CACHE_READ.id,
+    base: '1bfa9848b6' + '0'.repeat(30),
+    baseDate: '2026-10-02T00:38:00+02:00',
+    census: [{ term: 'sum_cache_read', base: 1, head: 0 }, { term: 'integer out of range', base: 0, head: 0 }],
+    moved: [],
+    changed: true,
+    commits: [{ sha: later, date: '2026-11-05T16:55:46Z', subject: 'fix(runner-api): a report can no longer hold a turn', matched: false }],
+    commitsTotal: 41,
+    lines: [],
+    linesTotal: 0,
+    diff: '',
+    diffTruncated: false,
+    changes: [
+      { sha: fix, date: '2026-10-02T06:15:47+02:00', subject: 'fix: drop overflowing lifetime token sums from session', terms: ['sum_cache_read'],
+        body: 'The four lifetime sums overflowed int4; usage rows are summed instead.', diff: '--- a/src/apiserver/prisma/schema.prisma\n+++ b/src/apiserver/prisma/schema.prisma\n@@ -1,3 +1,2 @@\n model Session {\n-  sumCacheRead Int @map("sum_cache_read")\n }\n', diffTruncated: true },
+    ],
+    changesTotal: 3,
+  };
+  const entry = { ...SUM_CACHE_READ, fields: { ...SUM_CACHE_READ.fields, trigger: { paths: ['src/apiserver/src/runner-api/*.ts'] } } };
+  const prompt = wikiRecheckPrompt(entry, {
+    paths: wikiClaimPaths(entry), baseIs: 'sources', head: { sha: '29739d60aa515f82732f6e64c701b2dce118594c', date: '2026-11-06T17:00:00+08:00' }, answer,
+  });
+  assert.match(prompt, /^- src\/apiserver\/src\/runner-api\/\*\.ts \(a pattern: every file it matches\)$/mu);
+  assert.match(prompt, /^- src\/apiserver\/prisma\/schema\.prisma$/mu);
+  assert.match(prompt, new RegExp(`CHANGES: THE COMMITS THAT CHANGED HOW OFTEN A TERM OCCURS \\(1 of 3, newest first; each with its message and its own patch, ${WIKI_RECHECK.changeContext} lines of context`, 'u'));
+  // The recording splits the changes as it splits the commits, and a change reads whole: terms, message, patch.
+  assert.match(prompt, new RegExp('--- the entry was recorded here, on 2026-10-03: the commits below came before it ---\\n'
+    + '=== fdeea9d5163d 2026-10-02 fix: drop overflowing lifetime token sums from session\\n'
+    + 'Changed how often it holds: "sum_cache_read"\\n'
+    + 'Message: The four lifetime sums overflowed int4; usage rows are summed instead\\.\\n'
+    + '--- a/src/apiserver/prisma/schema\\.prisma\\n', 'u'));
+  assert.match(prompt, /-  sumCacheRead Int @map\("sum_cache_read"\)\n \}\n\(patch cut\)\n/u);
+  assert.match(prompt, /THE DIFF OF THESE FILES FROM THE BASE TO NOW \(hunks that mention a term first\)\n\(no difference\)/u);
+  assert.match(prompt, /Answer fixed or obsolete only from a change the material shows, and name it: a commit of COMMITS or CHANGES\./u);
+  assert.match(prompt, /read the change in CHANGES that removed it\. If it removed the code the entry describes, answer fixed or obsolete/u);
+  assert.match(prompt, /If it only renamed, moved or deleted a test, a file or a name while the behaviour the entry describes is still in the LINES or the DIFF, the entry holds\./u);
+  assert.doesNotMatch(prompt, /the entry describes code that is gone: answer fixed or obsolete/u);
+  // No change, said so; a change without a parent shows no patch.
+  const none = wikiRecheckPrompt(entry, {
+    paths: wikiClaimPaths(entry), baseIs: 'check', head: { sha: '29739d60aa515f82732f6e64c701b2dce118594c', date: '2026-11-06T17:00:00+08:00' },
+    answer: { ...answer, changes: [{ ...answer.changes![0]!, body: '', diff: '', diffTruncated: false }], changesTotal: 1 },
+  });
+  assert.match(none, /Message: \(no more than the subject\)\n\(no patch\)/u);
+  assert.match(wikiRecheckPrompt(entry, { paths: [], baseIs: 'check', head: { sha: 'a'.repeat(40), date: '2026-11-06' }, answer: { ...answer, changes: [], changesTotal: 0 } }),
+    /OCCURS \(0 of 0, newest first;[^\n]*\n\(none\)/u);
+  // A fixed may name the commit of a change the commit list left out.
+  assert.deepEqual(wikiRecheckListed(answer).map((commit) => commit.sha), [later, fix]);
+  assert.equal(wikiParseRecheckAnswer('{"verdict": "fixed", "commit": "fdeea9d5163d", "reason": "0347 dropped it."}', wikiRecheckListed(answer)).commit?.sha, fix);
+  assert.equal(wikiParseRecheckAnswer('{"verdict": "fixed", "commit": "fdeea9d5163d", "reason": "x"}', answer.commits).verdict, 'unsure');
 });
 
 test('an answer is read strictly: a fixed names a listed commit, anything unreadable is unsure', () => {

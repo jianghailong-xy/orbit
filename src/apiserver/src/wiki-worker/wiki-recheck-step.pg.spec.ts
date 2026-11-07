@@ -11,7 +11,8 @@
  *   3. the next run screens only what its diff touched, from the last screen's commit, and an entry asked within
  *      the week waits in the queue;
  *   4. the owner's Re-confirm makes the claim hold again, and an amend makes it unchecked;
- *   5. a runner that does not know the operation, and a model that cannot answer, leave everything as it was.
+ *   5. a runner that does not know the operation, and a model that cannot answer, leave everything as it was;
+ *   6. a trigger path that is a pattern (`*`, `?`, `**`) is touched by any name of the run's diff it matches.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-recheck-step.pg.spec.ts
  *
@@ -455,4 +456,29 @@ test('a run handed back runs no finished step again, and takes a screened one on
   const other: Seen = { ops: [], units: [], prompts: new Map() };
   await runWikiRecheck({ ...withCarry(other, null), head: HEAD_2, reaches: new Set([HEAD_1, HEAD_2]), earlier: { report: { ...straight }, phase: 'asked' } });
   assert.ok(other.ops.length > 0, 'a carry of another commit is not reused');
+});
+
+test('a pattern among an entry\'s paths is touched by any name of the run\'s diff it matches, and by nothing else', { skip }, async () => {
+  const h = await boot();
+  const s = await space(h, 'recheck-patterns');
+  const pages = await entry(h, s, pitfall('a page renders before its data', ['src/web/src/**/*.tsx'], 'useQuery returns undefined first'));
+  const specs = await entry(h, s, pitfall('a project pg spec leaks its schema', ['src/apiserver/src/projects/*.pg.spec.ts'], 'DROP SCHEMA runs in after()'));
+  const styles = await entry(h, s, pitfall('a stylesheet loads twice', ['src/web/src/*.css'], 'import order'));
+  const script: Script = { diff: [], screen: new Map(), detail: new Map(), answers: new Map() };
+  // The first run screens all three from their sources: nothing changed, nothing ranked.
+  const first: Seen = { ops: [], units: [], prompts: new Map() };
+  await runWikiRecheck(deps(h, s, HEAD_1, script, first, [HEAD_1]));
+  assert.deepEqual((first.ops[0]!.input.entries as WikiHistoryRequestEntry[]).map((request) => request.paths).sort(),
+    [['src/apiserver/src/projects/*.pg.spec.ts'], ['src/web/src/**/*.tsx'], ['src/web/src/*.css']], 'a pattern goes to the runner as written');
+  // The next run's diff: a page two directories down, a project pg spec, a stylesheet one directory down (`*` stays in its
+  // directory) and a spec that is not a pg spec.
+  script.diff = ['src/web/src/pages/session/SessionPage.tsx', 'src/apiserver/src/projects/projects.pg.spec.ts', 'src/web/src/styles/app.css',
+    'src/apiserver/src/projects/projects.spec.ts'];
+  const second: Seen = { ops: [], units: [], prompts: new Map() };
+  await runWikiRecheck(deps(h, s, HEAD_2, script, second, [HEAD_1, HEAD_2]));
+  assert.deepEqual(second.ops[0], { kind: 'diff', input: { from: HEAD_1, to: HEAD_2 } });
+  const screened = second.ops[1]!.input.entries as WikiHistoryRequestEntry[];
+  assert.deepEqual(screened.map((request) => request.id).sort(), [pages, specs].sort());
+  assert.ok(!screened.some((request) => request.id === styles), 'the stylesheet pattern matches no name of the diff');
+  assert.ok(screened.every((request) => request.from === HEAD_1));
 });

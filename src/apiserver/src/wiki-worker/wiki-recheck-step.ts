@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import {
   WIKI_CLAIM_HIDDEN_STATES,
   WIKI_RECHECK,
+  WIKI_RECHECK_PATTERN,
   uuidToBase62,
   type WikiClaimCheck,
   type WikiHistoryAnswer,
@@ -13,6 +14,7 @@ import { anchorDiffNames } from '../wiki/wiki-anchors';
 import type { WikiService } from '../wiki/wiki.service';
 import { isWikiJobCancellation } from './wiki-job-executor';
 import { wikiMaintainParallel } from './wiki-maintain';
+import { wikiPlanPathMatches } from './wiki-plan-repo';
 import type { WikiRepoOpWait } from './wiki-repo-ops';
 import {
   WIKI_RECHECK_SYSTEM_PROMPT,
@@ -21,6 +23,7 @@ import {
   wikiEarliestSourceTime,
   wikiParseRecheckAnswer,
   wikiRecheckChallengeReason,
+  wikiRecheckListed,
   wikiRecheckPrompt,
   wikiRecheckTerms,
   wikiRecheckWantsSecond,
@@ -35,8 +38,8 @@ import {
  * the screen, which costs no model call, and the asks, at most `rules.asksMax` a run.
  *
  * THE SCREEN. The space's last screen stopped at `wiki_space.claim_recheck_ref`; the run diffs main from there to
- * its own commit (the `diff` operation) and screens every entry in scope that names a path in that diff, from that
- * commit. An entry never screened is screened from its earliest source instead, the newest `rules.screenMax` a run.
+ * its own commit (the `diff` operation) and screens every entry in scope that names a path in that diff, or a pattern
+ * (`*`, `?`, `**`, as a pitfall's trigger paths are written) one of its names matches, from that commit. An entry never screened is screened from its earliest source instead, the newest `rules.screenMax` a run.
  * The `history` operation counts the lines of the entry's paths that hold each of its terms at both ends, and names
  * the paths themselves that moved; `wikiScreenRank` turns that into a rank, and `recordClaimScreen` puts the ranked
  * entries in the due queue and moves the space's screen to this commit — only once the screen is written, so a run
@@ -204,7 +207,13 @@ async function screen(deps: WikiRecheckStepDeps, report: WikiMaintainRecheckRepo
         names = anchorDiffNames(files.map((file) => ({ status: String(file.status ?? ''), path: String(file.path ?? ''), from: file.from ?? null }))).any;
       }
       const changed = names;
-      touched = inScope.filter((row) => pathsOf.get(row.id)!.some((path) => changed.has(path)));
+      // A pattern (`src/web/src/**/*.tsx`) is touched by any name of the diff it matches, as the plan's paths are read.
+      const patterns = new Map<string, boolean>();
+      const patternTouched = (pattern: string) => {
+        if (!patterns.has(pattern)) patterns.set(pattern, [...changed].some((name) => wikiPlanPathMatches(pattern, name)));
+        return patterns.get(pattern)!;
+      };
+      touched = inScope.filter((row) => pathsOf.get(row.id)!.some((path) => (WIKI_RECHECK_PATTERN.test(path) ? patternTouched(path) : changed.has(path))));
     }
   }
   const touchedIds = new Set(touched.map((row) => row.id));
@@ -337,10 +346,10 @@ async function askTheQueue(deps: WikiRecheckStepDeps, report: WikiMaintainRechec
     let first: WikiRecheckAnswer;
     let second: WikiRecheckAnswer | null = null;
     try {
-      first = wikiParseRecheckAnswer(await deps.ask(entry.id, WIKI_RECHECK_SYSTEM_PROMPT, prompt, WIKI_RECHECK.maxTokens), detail.commits);
+      first = wikiParseRecheckAnswer(await deps.ask(entry.id, WIKI_RECHECK_SYSTEM_PROMPT, prompt, WIKI_RECHECK.maxTokens), wikiRecheckListed(detail));
       report.calls += 1;
       if (wikiRecheckWantsSecond(first)) {
-        second = wikiParseRecheckAnswer(await deps.ask(`${entry.id}#second`, WIKI_RECHECK_SYSTEM_PROMPT, prompt, WIKI_RECHECK.maxTokens), detail.commits);
+        second = wikiParseRecheckAnswer(await deps.ask(`${entry.id}#second`, WIKI_RECHECK_SYSTEM_PROMPT, prompt, WIKI_RECHECK.maxTokens), wikiRecheckListed(detail));
         report.calls += 1;
       }
     } catch (error) {
