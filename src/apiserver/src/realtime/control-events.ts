@@ -98,7 +98,9 @@ export function isUserScopedType(t: ControlEventType): boolean {
  * `streamForUser` merges it only into a stream that declared `hints=list_changed` — a shipped client
  * re-reads everything on a type it does not know, so to an undeclared stream it would be a full
  * re-read every second. `data` is `{ version }`; it is a hint to make a conditional
- * `GET /sessions?view=open&since=` read, never a change to apply. At most one per account per second.
+ * `GET /sessions?view=open&since=` read, never a change to apply. A new stream is told the current
+ * version about a second after it connects; after that it is told only a version that differs from
+ * the one it holds, at most once a second.
  */
 
 /** `data` for `session.error`. Decision Q3: errors carry their own event. `recoverable` is only

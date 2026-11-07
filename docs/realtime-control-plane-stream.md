@@ -275,14 +275,15 @@ GET /api/events?hints=list_changed
 - 信封 `{ type: 'sessions.list_changed', sessionId: '', agentId: null, ts, data: { version } }`,用户级(`sessionId` 为空串)。
 - 含义是"该账户的 Open 列表**可能**读出来不一样了",不是变更本身。客户端收到后发一次条件增量读 `GET /sessions?view=open&since=<cursor>`;版本没变时服务端回空 delta、不构建。**正确性只来自那次读**,提示丢了只是晚一点,由客户端的慢兜底读补上。
 - `data.version` 是发送时该账户的 Open 列表数据版本(`readOpenListVersion`),即未带过滤条件的 Open 列表 ETag `W/"ol1-<version>"` 的不透明部分。带过滤条件的 ETag 由它派生,不相等;客户端只拿它和上一条提示比较。
-- 同一账户**每秒至多一条**;版本与上一次告知的相同则不发。
+- **新连接先收到一条**:每条声明了提示的流在订阅后的第一个 tick(约 1 s 内)收到一条带当前版本的提示,不管有没有变化。客户端连接前后各自会读一次列表(先后顺序不定),这第一条提示就是重连读要对齐的版本(见 [list-freshness-design.md](./list-freshness-design.md) R4);连接与读之间提交的写不会被吞进"基线"里。
+- 之后,**"上次告知的版本"按流记录,不按账户**:某条流只在版本与它上次收到的不同时才收到下一条,每条流**每秒至多一条**。同一账户后连上的流不会继承别的流已经收到的版本。
 
 **来源(不依赖任何写路径发布)。** 每个 apiserver 进程对"本进程有声明了提示的在线流"的账户:
 
 1. 每 1 s 用一条语句(`owner_id = ANY($owners)`)读 `open_list_epoch` 的计数和(0484/0487 的计数器覆盖 Open 列表全部源表的写)。某账户的和变了,就算一次版本,变了就发。裸 SQL 写、别的副本的写、不发事件的写都会被覆盖。
 2. 每 15 s 对这些账户都算一次完整版本,覆盖只随时钟翻转的阈值(runner 离线、后台任务变安静、评审窗口、升级期限、分享链接过期)。
 
-实现在 `src/apiserver/src/realtime/open-list-hints.ts`;只读、不写、不加锁。多副本下每个进程只管连在自己身上的流。
+实现在 `src/apiserver/src/realtime/open-list-hints.ts`;只读、不写、不加锁。同一时刻只有一条 tick 链:tick 进行中到来的新流,由这次 tick 结束后排下一次。多副本下每个进程只管连在自己身上的流。
 
 **同版本只构建一次。** 一次变化会同时提示该账户的所有设备。`SessionsService.list` / `listOpenSince` 对同一 `(owner, 过滤条件(含 confinedTo 与 limit), version)` 的并发读共享一次构建:在途的读等同一个 promise,构建完成后约 5 s 内的同版本读直接用它(每个读拿一份拷贝)。
 

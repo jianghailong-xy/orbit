@@ -91,8 +91,12 @@ export enum ControlEventType {
    *  `GET /api/events?hints=list_changed` (`CONTROL_HINT_LIST_CHANGED`): shipped clients treat a type
    *  they do not know as "re-read everything", so an undeclared stream never receives it. A hint, not
    *  a change: the client answers it with a conditional `GET /sessions?view=open&since=<cursor>`,
-   *  which is the truth. At most one per account per second; derived from the Open list's own
-   *  counters and clock thresholds, so it also covers writes that publish no event at all. */
+   *  which is the truth. A newly connected stream gets one with the current version about a second
+   *  after it connects, whether or not anything moved — that is what a client's reconnect read is
+   *  answered against (list-freshness-design.md R4), so a write between the read and the subscription
+   *  is not lost. After that a stream gets one only when the version differs from the one it was last
+   *  told, at most one per second. Derived from the Open list's own counters and clock thresholds, so
+   *  it also covers writes that publish no event at all. */
   SESSIONS_LIST_CHANGED = 'sessions.list_changed',
   /** Reserved generic notification channel — future pushes ride this without a protocol bump. */
   NOTIFICATION = 'notification',
@@ -123,7 +127,8 @@ export const CONTROL_HINT_LIST_CHANGED = 'list_changed';
 export interface ControlListChanged {
   /** The account's Open-list data version as it stood when the hint was sent: the opaque part of the
    *  ETag the unfiltered Open list is served with (`W/"ol1-<version>"`). A filtered list's ETag is
-   *  derived from it, so a client compares it with nothing but a previous hint's. */
+   *  derived from it, so a client compares it with nothing but a previous hint's. The first hint a
+   *  stream gets, shortly after it connects, carries the current version even when nothing moved. */
   version: string;
 }
 

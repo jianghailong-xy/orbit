@@ -29,7 +29,11 @@ import { RealtimeService } from './realtime.service';
  *  b) a runner going offline by the clock alone, with no row written, reaches it within 20 s;
  *  c) two concurrent reads of the Open list at one version build it once;
  *  d) one `session.updated` with three streams of the account open reads the summary once;
- *  e) a stream that did not declare the hint receives `sessions.list_changed` in neither a) nor b).
+ *  e) a stream that did not declare the hint receives `sessions.list_changed` in neither a) nor b);
+ *  i) a write committed before a new stream's first tick reaches that stream;
+ *  ii) a stream joining an account another stream already watches is told a version of its own.
+ *
+ * A new declared stream is told the current version once, at its first tick, whatever happened.
  *
  * Streams are opened through EventsController, the door the clients use, so the declaration is the
  * query parameter itself. Not destructive: every case owns freshly generated ids.
@@ -133,35 +137,79 @@ test('a/e: a bare SQL write reaches a declared stream as sessions.list_changed w
   const f = await fixture(t);
   const declared = open(f, t, 'list_changed');
   const undeclared = open(f, t);
-  // The first counter read is the baseline the change is measured against.
-  await sleep(1_500);
-  assert.equal(hintsIn(declared.received).length, 0, 'a hint before anything changed');
+  // A new stream is told the version that stands, once, about a second after it subscribed.
+  assert.ok(await until(() => hintsIn(declared.received).length === 1, 2_000), 'a new stream was not told the current version');
+  const [first] = hintsIn(declared.received);
+  assert.equal(first.event.data.version, await readOpenListVersion(f.prisma, f.ownerId));
+  await sleep(1_200);
+  assert.equal(hintsIn(declared.received).length, 1, 'a hint repeated while nothing moved');
 
   // Publishes nothing: only the table's own counter trigger knows.
   await f.db.$executeRawUnsafe(`UPDATE session SET title = 'renamed by sql' WHERE id = $1::uuid`, f.sessionId);
   const wroteAt = Date.now();
-  assert.ok(await until(() => hintsIn(declared.received).length > 0, 2_000), 'no sessions.list_changed within 2 s of the write');
-  const [hint] = hintsIn(declared.received);
+  assert.ok(await until(() => hintsIn(declared.received).length === 2, 2_000), 'no sessions.list_changed within 2 s of the write');
+  const hint = hintsIn(declared.received)[1];
   assert.ok(hint.at - wroteAt <= 2_000);
   assert.equal(hint.event.sessionId, '');
   assert.equal(hint.event.agentId, null);
-  assert.equal(typeof hint.event.data.version, 'string');
+  assert.notEqual(hint.event.data.version, first.event.data.version);
   assert.equal(hint.event.data.version, await readOpenListVersion(f.prisma, f.ownerId));
 
-  // At most one per account per second, and none while nothing moves.
+  // None while nothing moves.
   await sleep(1_500);
-  assert.equal(hintsIn(declared.received).length, 1, 'a hint repeated for a version already announced');
+  assert.equal(hintsIn(declared.received).length, 2, 'a hint repeated for a version already told');
   assert.equal(hintsIn(undeclared.received).length, 0, 'an undeclared stream received sessions.list_changed');
+});
+
+test('i: a write before a new stream\'s first tick is not lost in a baseline', { skip }, async (t) => {
+  const f = await fixture(t);
+  const declared = open(f, t, 'list_changed');
+  await sleep(100);
+  await f.db.$executeRawUnsafe(`UPDATE session SET title = 'written before the first tick' WHERE id = $1::uuid`, f.sessionId);
+  const after = await readOpenListVersion(f.prisma, f.ownerId);
+  assert.ok(
+    await until(() => hintsIn(declared.received).at(-1)?.event.data.version === after, 2_000),
+    'within 2 s the stream was not told the version that stands after the write',
+  );
+});
+
+test('ii: a stream that joins an account another stream already watches gets its own first hint', { skip }, async (t) => {
+  const f = await fixture(t);
+  const first = open(f, t, 'list_changed');
+  // The first stream is told a version through a write, so the account's state is past its baseline
+  // before the second stream arrives.
+  await sleep(1_500);
+  await f.db.$executeRawUnsafe(`UPDATE session SET title = 'told to the first stream' WHERE id = $1::uuid`, f.sessionId);
+  const after = await readOpenListVersion(f.prisma, f.ownerId);
+  assert.ok(
+    await until(() => hintsIn(first.received).at(-1)?.event.data.version === after, 2_000),
+    'the first stream was not told the write',
+  );
+  const toldFirst = hintsIn(first.received).length;
+
+  const second = open(f, t, 'list_changed');
+  assert.ok(await until(() => hintsIn(second.received).length === 1, 2_000), 'the second stream was never told a version');
+  assert.equal(hintsIn(second.received)[0].event.data.version, after);
+  // Telling the newcomer is no reason to tell the first stream again.
+  await sleep(1_200);
+  assert.equal(hintsIn(first.received).length, toldFirst);
 });
 
 test('b/e: a runner going offline by the clock alone reaches a declared stream within 20 s, and an undeclared one never', { skip }, async (t) => {
   // Online for four more seconds, then offline with nothing written anywhere.
-  const f = await fixture(t, new Date(Date.now() - RUNNER_OFFLINE_AFTER_MS + 4_000));
+  const offlineAt = Date.now() + 4_000;
+  const f = await fixture(t, new Date(offlineAt - RUNNER_OFFLINE_AFTER_MS));
   const declared = open(f, t, 'other,list_changed');
   const undeclared = open(f, t, 'other');
-  const openedAt = Date.now();
-  assert.ok(await until(() => hintsIn(declared.received).length > 0, 20_000), 'no sessions.list_changed within 20 s of the runner going offline');
-  assert.ok(hintsIn(declared.received)[0].at - openedAt <= 20_000);
+  assert.ok(await until(() => hintsIn(declared.received).length === 1, 2_000), 'a new stream was not told the current version');
+  const told = hintsIn(declared.received)[0].event.data.version;
+  assert.ok(
+    await until(() => hintsIn(declared.received).length === 2, offlineAt + 20_000 - Date.now()),
+    'no sessions.list_changed within 20 s of the runner going offline',
+  );
+  const hint = hintsIn(declared.received)[1];
+  assert.ok(hint.at >= offlineAt && hint.at - offlineAt <= 20_000);
+  assert.notEqual(hint.event.data.version, told);
   assert.equal(hintsIn(undeclared.received).length, 0, 'an undeclared stream received sessions.list_changed');
 });
 
