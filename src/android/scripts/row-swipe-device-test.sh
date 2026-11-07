@@ -88,13 +88,25 @@ run() {
   adb shell input keyevent KEYCODE_WAKEUP
   adb shell wm dismiss-keyguard
   adb shell pm clear "$package" > "$dir/clear.txt"
-  printf 'navigation_mode=%s night=%s\n' "$(adb shell settings get secure navigation_mode | tr -d '\r')" "$(adb shell cmd uimode night | tr -d '\r')" > "$dir/device.txt"
-  local start; start="$(adb shell date +%s | tr -d '\r').000"
-  adb shell am instrument -w -r -e class "$class#$method" -e row_swipe_theme "$theme" "$runner" > "$dir/instrumentation.txt" 2>&1 || true
-  adb logcat -d -v threadtime -T "$start" -s AndroidRuntime:E A12Speech:I > "$dir/logcat.txt" 2>&1 || true
-  adb shell run-as "$package" tar -cf files/row-swipe.tar -C files row-swipe > "$dir/capture-create.txt" 2>&1
-  adb exec-out run-as "$package" cat files/row-swipe.tar > "$dir/captures.tar"
-  tar --no-same-owner -xf "$dir/captures.tar" -C "$dir"
+  # A loaded host leaves "… isn't responding" over the app (a slow launcher after a boot); it would take the touches.
+  adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS > /dev/null 2>&1 || true
+  printf 'navigation_mode=%s night=%s anr_windows=%s\n' "$(adb shell settings get secure navigation_mode | tr -d '\r')" "$(adb shell cmd uimode night | tr -d '\r')" \
+    "$(adb shell dumpsys window windows | grep -c 'Application Not Responding' || true)" > "$dir/device.txt"
+  local start attempt
+  for attempt in 1 2; do
+    start="$(adb shell date +%s | tr -d '\r').000"
+    adb shell am instrument -w -r -e class "$class#$method" -e row_swipe_theme "$theme" "$runner" > "$dir/instrumentation.txt" 2>&1 || true
+    adb logcat -d -v threadtime -T "$start" -s AndroidRuntime:E ActivityManager:I lowmemorykiller:I lmkd:I A12Speech:I > "$dir/logcat.txt" 2>&1 || true
+    # A process the guest killed before the test began (a loaded host: no trace in the app's own log) is run once more, and said so.
+    grep -F 'Process crashed' "$dir/instrumentation.txt" >/dev/null && ! grep -F 'INSTRUMENTATION_STATUS: test=' "$dir/instrumentation.txt" >/dev/null \
+      && [[ $attempt == 1 ]] || break
+    printf '%s: the process died before the test began; run again\n' "$name" >> "$output/result.txt"
+    cp "$dir/instrumentation.txt" "$dir/instrumentation-1.txt"; cp "$dir/logcat.txt" "$dir/logcat-1.txt"
+    adb shell pm clear "$package" >> "$dir/clear.txt"
+  done
+  adb shell run-as "$package" tar -cf files/row-swipe.tar -C files row-swipe > "$dir/capture-create.txt" 2>&1 || true
+  adb exec-out run-as "$package" cat files/row-swipe.tar > "$dir/captures.tar" || true
+  tar --no-same-owner -xf "$dir/captures.tar" -C "$dir" 2>/dev/null || true
   if grep -E 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed' "$dir/instrumentation.txt" || \
      ! grep -F 'OK (1 test)' "$dir/instrumentation.txt" >/dev/null; then failed=1; echo "$name: FAILED" >> "$output/result.txt"
   else echo "$name: OK" >> "$output/result.txt"; fi
