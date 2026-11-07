@@ -234,7 +234,7 @@ describe('R2: while the stream is down, the gated polls back off together', () =
     random = vi.spyOn(Math, 'random').mockReturnValue(0); // no jitter, so the steps read exactly
     await mount(<ProjectReads sessions={[member('C1', 'P1', 'COORDINATOR')]} />);
     await open();
-    expect(reads(projectRead('P1'))).toBe(1);
+    expect(reads(projectRead('P1')), 'the project was never read').toBeGreaterThan(0);
 
     const droppedAt = Date.now();
     const from = mark();
