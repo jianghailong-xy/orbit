@@ -345,7 +345,16 @@ export const PROJECT_SESSION_REFRESH_MS = 60_000;
 const PROJECT_READS_AT_ONCE = 4;
 let projectReadsOut = 0;
 const projectReadsWaiting: Array<() => void> = [];
-async function projectRead<T>(read: () => Promise<T>): Promise<T> {
+/**
+ * `priority` is for the reads the person is waiting on — a project page's own session lists
+ * (`projectSessionsQuery` with `priority: true`, at most two per page). They do not join the queue:
+ * the queue can hold every project the workspace list shows — forty-odd on a large account — and a
+ * project opened while it drains would otherwise ask for its own rows only after all of them, a
+ * wait of seconds (up to a minute while the stream is down and the reads fall due every 4 s). Two
+ * extra reads beside the four are not the queue this exists to prevent; being behind forty is.
+ */
+async function projectRead<T>(read: () => Promise<T>, priority = false): Promise<T> {
+  if (priority) return read();
   // A finished read hands its place straight to the next one waiting, so the count never dips
   // between them and lets a newcomer in ahead of the queue.
   if (projectReadsOut < PROJECT_READS_AT_ONCE) projectReadsOut += 1;
@@ -371,13 +380,15 @@ export const projectSessionsQuery = (opts: {
   projectId: string;
   view: SessionListView;
   includeLanding?: boolean;
+  /** The project page (or its Landings window) is waiting on this read — see projectRead. */
+  priority?: boolean;
 }) =>
   queryOptions({
     queryKey: ['project-sessions', opts.projectId, opts.view, opts.includeLanding === true] as const,
     queryFn: () => {
       const qs = new URLSearchParams({ projectId: opts.projectId, view: opts.view });
       if (opts.includeLanding) qs.set('includeLanding', '1');
-      return projectRead(() => api<SessionListItem[]>(`/sessions?${qs}`));
+      return projectRead(() => api<SessionListItem[]>(`/sessions?${qs}`), opts.priority === true);
     },
     staleTime: 15_000,
   });

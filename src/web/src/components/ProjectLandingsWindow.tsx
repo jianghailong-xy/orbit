@@ -128,11 +128,11 @@ export function ProjectLandingsWindow({
   const navigate = useNavigate();
   const qc = useQueryClient();
   const openQ = useQuery({
-    ...projectSessionsQuery({ projectId, view: 'open', includeLanding: true }),
+    ...projectSessionsQuery({ projectId, view: 'open', includeLanding: true, priority: true }),
     refetchInterval: 15_000,
   });
   const completedQ = useQuery({
-    ...projectSessionsQuery({ projectId, view: 'completed', includeLanding: true }),
+    ...projectSessionsQuery({ projectId, view: 'completed', includeLanding: true, priority: true }),
     refetchInterval: 15_000,
   });
   const mergedQ = useQuery({ ...projectMergedPromotionsQuery(projectId), refetchInterval: 60_000 });

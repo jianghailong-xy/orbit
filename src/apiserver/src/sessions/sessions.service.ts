@@ -3468,10 +3468,10 @@ export class SessionsService {
     return [...counts.values()];
   }
 
-  /** The Open list's data version; see open-list-version.ts. `includeLanding` widens it to the
-   *  landing source, which only a project-scoped read that asks for landings can see. */
-  openListVersion(ownerId: string, includeLanding = false): Promise<string> {
-    return readOpenListVersion(this.prisma, ownerId, Date.now(), includeLanding);
+  /** The Open list's data version; see open-list-version.ts. Only the flat list reads it — a
+   *  project read is built every time (see the controller's list handler). */
+  openListVersion(ownerId: string): Promise<string> {
+    return readOpenListVersion(this.prisma, ownerId, Date.now());
   }
 
   async list(
