@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { Injectable, Logger } from '@nestjs/common';
 import { feishuClient, type FeishuAppCredentials } from './feishu-open-platform';
@@ -12,6 +13,16 @@ export type FeishuSendResult =
 export interface FeishuMessageBody {
   msgType: string;
   content: unknown;
+}
+
+/**
+ * Feishu's own de-duplication key for a send or a reply (`uuid` in the request body, at most 50 characters): Feishu
+ * delivers one message per uuid within an hour. Derived from why the message is sent — never from the attempt — so the
+ * same event processed again, a retry after a timeout whose request got through, and two replicas sending at once all
+ * reach the person once (project instruction 15). A hex SHA-256 of the reasons, cut to 32 characters.
+ */
+export function feishuDedupeUuid(...why: string[]): string {
+  return createHash('sha256').update(JSON.stringify(why)).digest('hex').slice(0, 32);
 }
 
 /** Retries of one request after a 429: Feishu's suggested wait each time, then the 429 is the answer. */
@@ -51,22 +62,38 @@ export class FeishuOutbound {
   timing: FeishuTiming = feishuTiming();
   wait: (ms: number) => Promise<unknown> = sleep;
 
-  /** `POST /open-apis/im/v1/messages`: to a user (`open_id`) or a chat (`chat_id`). */
-  send(app: FeishuAppCredentials, to: { receiveIdType: 'open_id' | 'chat_id'; receiveId: string }, body: FeishuMessageBody): Promise<FeishuSendResult> {
+  /**
+   * `POST /open-apis/im/v1/messages`: to a user (`open_id`) or a chat (`chat_id`). `uuid` (feishuDedupeUuid) makes Feishu
+   * deliver it once however often it is sent within an hour.
+   */
+  send(
+    app: FeishuAppCredentials,
+    to: { receiveIdType: 'open_id' | 'chat_id'; receiveId: string },
+    body: FeishuMessageBody,
+    { uuid }: { uuid?: string } = {},
+  ): Promise<FeishuSendResult> {
     return this.call(app, {
       method: 'POST',
       url: 'open-apis/im/v1/messages',
       params: { receive_id_type: to.receiveIdType },
-      data: { receive_id: to.receiveId, msg_type: body.msgType, content: JSON.stringify(body.content) },
+      data: { receive_id: to.receiveId, msg_type: body.msgType, content: JSON.stringify(body.content), ...(uuid ? { uuid } : {}) },
     });
   }
 
-  /** `POST /open-apis/im/v1/messages/:message_id/reply`; `replyInThread` answers in the message's thread (§8.2). */
-  reply(app: FeishuAppCredentials, messageId: string, body: FeishuMessageBody, { replyInThread = false } = {}): Promise<FeishuSendResult> {
+  /**
+   * `POST /open-apis/im/v1/messages/:message_id/reply`; `replyInThread` answers in the message's thread (§8.2), and `uuid`
+   * is Feishu's de-duplication key, as for `send`.
+   */
+  reply(
+    app: FeishuAppCredentials,
+    messageId: string,
+    body: FeishuMessageBody,
+    { replyInThread = false, uuid }: { replyInThread?: boolean; uuid?: string } = {},
+  ): Promise<FeishuSendResult> {
     return this.call(app, {
       method: 'POST',
       url: `open-apis/im/v1/messages/${encodeURIComponent(messageId)}/reply`,
-      data: { msg_type: body.msgType, content: JSON.stringify(body.content), reply_in_thread: replyInThread },
+      data: { msg_type: body.msgType, content: JSON.stringify(body.content), reply_in_thread: replyInThread, ...(uuid ? { uuid } : {}) },
     });
   }
 

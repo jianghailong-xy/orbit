@@ -275,7 +275,13 @@ test('Feishu owner identity: only a one-time code from Settings, sent in a direc
     assert.equal(again.ownerOpenId, ALICE);
     assert.equal(again.ownerName, 'Alice Example');
     assert.equal(again.updatedAt.getTime(), updatedAt.getTime(), 'the second processing wrote nothing to the app');
-    assert.deepEqual(ok.replies(), [FEISHU_OWNER_REPLIES.connected, FEISHU_OWNER_REPLIES.connected]);
+    // Answered alike, and Feishu delivers it once: both replies carry the same uuid (project instruction 15).
+    assert.deepEqual(ok.replies(), [FEISHU_OWNER_REPLIES.connected]);
+    const replyUuids = fake.requests
+      .filter((r: FakeRequest) => r.path === `/open-apis/im/v1/messages/om_${ok.eventId}/reply`)
+      .map((r) => (r.body as { uuid?: string }).uuid);
+    assert.equal(replyUuids.length, 2, 'the reply was sent twice');
+    assert.equal(new Set(replyUuids).size, 1, 'with one de-duplication key');
   });
 
   await t.test('(6) the test message reaches the open platform, addressed to the owner', async () => {

@@ -367,6 +367,8 @@ model User {
   feishuApp        FeishuApp?
   /// Owner-identity codes the account generated for its Feishu app and has not used yet (migration 0494).
   feishuConnectCodes FeishuConnectCode[]
+  /// The alert cards sent to the owner of the account's Feishu app (migration 0495).
+  feishuMessages   FeishuMessage[]
 
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
@@ -8699,6 +8701,7 @@ model FeishuApp {
   updatedAt          DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   inboundEvents      FeishuInboundEvent[]
   links              FeishuLink[]
+  messages           FeishuMessage[]
 
   @@map("feishu_app")
 }
@@ -8719,6 +8722,55 @@ model FeishuConnectCode {
   @@index([ownerId], map: "feishu_connect_code_owner_id_idx")
   @@index([expiresAt], map: "feishu_connect_code_expires_at_idx")
   @@map("feishu_connect_code")
+}
+
+/// An alert card the Feishu bot sent to its owner (docs/feishu-bot-design.md §6.1, §6.2, migration 0495), written only by
+/// push/feishu-transport.ts. Cards are merged at the grain of the APNs collapse id: `(appId, collapseKey)` is unique, a
+/// repeated announcement bumps `revision`, and whoever holds the lease sends or updates the card and records
+/// `renderedRevision`, so two apiservers send one card between them. `sessionId`, `approvalId` and `openItemId` carry no
+/// foreign key, as `Approval.turnId` carries none. Two CHECKs carry the closed sets and cannot be spelled here:
+/// `feishu_message_kind_chk` and `feishu_message_status_chk`.
+model FeishuMessage {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  ownerId          String    @map("owner_id") @db.Uuid
+  owner            User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "feishu_message_owner_id_fkey")
+  appId            String    @map("app_id")
+  app              FeishuApp @relation(fields: [appId], references: [appId], onDelete: Cascade, onUpdate: Cascade, map: "feishu_message_app_id_fkey")
+  /// `approval-<first approval of the stretch>`, `settled-<session>-<turn seq>`, `owner-item-<item>`, or another
+  /// alert's own collapse id; a one-off alert's is unique to it.
+  collapseKey      String    @map("collapse_key")
+  /// `approval` | `finished` | `failed` | `agent-message` | `owner-item` | `other` (§6.1).
+  kind             String
+  /// The owner's open_id the card was sent to.
+  receiveId        String    @map("receive_id")
+  /// The chat Feishu put the card in.
+  chatId           String?   @map("chat_id")
+  /// Feishu's message_id, once Feishu accepted the card.
+  messageId        String?   @unique(map: "feishu_message_message_id_key") @map("message_id")
+  sessionId        String?   @map("session_id") @db.Uuid
+  /// An approval card's: the first approval of the stretch it lists.
+  approvalId       String?   @map("approval_id") @db.Uuid
+  openItemId       String?   @map("open_item_id") @db.Uuid
+  /// `PENDING` (not sent yet) | `SENT` | `FAILED` (given up before Feishu accepted it).
+  status           String    @default("PENDING")
+  /// The alert the card was last drawn from (feishu/cards/feishu-cards.ts `FeishuAlert`).
+  alert            Json?     @db.JsonB
+  revision         Int       @default(1)
+  renderedRevision Int       @default(0) @map("rendered_revision")
+  leaseToken       String?   @map("lease_token") @db.Uuid
+  leaseUntil       DateTime? @map("lease_until") @db.Timestamptz(3)
+  attempts         Int       @default(0)
+  /// Feishu's code and message for the last failure, never a credential.
+  lastError        String?   @map("last_error")
+  sentAt           DateTime? @map("sent_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([appId, collapseKey], map: "feishu_message_app_id_collapse_key_key")
+  @@index([sessionId], map: "feishu_message_session_id_idx")
+  @@index([openItemId], map: "feishu_message_open_item_id_idx")
+  @@index([ownerId], map: "feishu_message_owner_id_idx")
+  @@map("feishu_message")
 }
 
 /// The inbound inbox of the Feishu bot integration (docs/feishu-bot-design.md §7.1, migration 0492): every event an

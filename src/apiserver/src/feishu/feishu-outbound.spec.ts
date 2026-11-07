@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { FEISHU_TEST_OPEN_PLATFORM_ENV } from './feishu-open-platform';
-import { FeishuOutbound, rateLimitWaitMs } from './feishu-outbound';
+import { FeishuOutbound, feishuDedupeUuid, rateLimitWaitMs } from './feishu-outbound';
 import { feishuTiming } from './feishu-timing';
 import { FakeOpenPlatform } from './test-support/fake-open-platform';
 
@@ -42,6 +42,25 @@ test('the outbound client sends, replies and updates cards, and waits out a 429 
     assert.equal(patch.path, '/open-apis/im/v1/messages/om_card');
     assert.deepEqual(patch.body, { content: '{"elements":[]}' });
     for (const r of fake.messages) assert.ok(fake.tenantAccessTokens.includes(String(r.headers.authorization).replace('Bearer ', '')));
+  });
+
+  await t.test("a send or reply sent again with the same uuid is one message: Feishu's de-duplication key", async () => {
+    const before = fake.messages.length;
+    const uuid = feishuDedupeUuid('alert-card', APP.appId, 'approval-1');
+    assert.ok(uuid.length <= 50, 'Feishu takes at most 50 characters');
+    assert.equal(feishuDedupeUuid('alert-card', APP.appId, 'approval-1'), uuid, 'derived from why, not from the attempt');
+    assert.notEqual(feishuDedupeUuid('alert-card', APP.appId, 'approval-2'), uuid);
+    const to = { receiveIdType: 'open_id' as const, receiveId: 'ou_owner' };
+    const first = await outbound.send(APP, to, { msgType: 'text', content: { text: 'Once' } }, { uuid });
+    const again = await outbound.send(APP, to, { msgType: 'text', content: { text: 'Once' } }, { uuid });
+    assert.equal(first.ok && again.ok && first.messageId === again.messageId, true, 'the same message answered');
+    const replyUuid = feishuDedupeUuid('owner-reply', APP.appId, 'om_root', 'Done');
+    await outbound.reply(APP, 'om_root', { msgType: 'text', content: { text: 'Done' } }, { uuid: replyUuid });
+    await outbound.reply(APP, 'om_root', { msgType: 'text', content: { text: 'Done' } }, { uuid: replyUuid });
+    const delivered = fake.messages.slice(before);
+    assert.equal(delivered.length, 2, 'one send and one reply delivered');
+    assert.equal((delivered[0].body as { uuid: string }).uuid, uuid, 'the field is in the send body');
+    assert.equal((delivered[1].body as { uuid: string }).uuid, replyUuid, 'and in the reply body');
   });
 
   await t.test('a 429 waits the suggested time, twice, then succeeds', async () => {

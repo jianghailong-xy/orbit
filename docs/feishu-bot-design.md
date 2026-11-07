@@ -263,12 +263,20 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
   同一批「可能让 needs-you 变少」的事件，多做一步「关掉已不成立的卡」。飞书只允许更新 14 天内发出的卡，更早的不动。
 - **合并而不叠加**，粒度与 APNs 的 collapse id 相同：一个会话的一段待批（同一轮的多个审批进同一张卡，每条有自己的按钮）、
   一个 owner item、一次 settle 各一张卡。重复通告改原卡，不发第二张。
+- 实现（F1-4，迁移 0495）：`feishu_message` 以 `(app_id, collapse_key)` 唯一——审批是 `approval-<开启这一段的审批>`，
+  settle 是 `settled-<会话>-<最后一轮的 seq>`，owner item 是 `owner-item-<id>`，其余沿用推送的 collapse id；重复通告把 `revision` 加一。
+  谁拿到行上的租约（`lease_token` / `lease_until`）谁按库里此刻的内容画卡、发送或 PATCH，记下 `rendered_revision` 后放手并再看一次，
+  所以两个 apiserver 同时通告只发一张卡。没认领到 `claimApprovalAlert` 的审批只给这一段的卡加一（`joinApprovalStretch`），
+  卡上列出会话里所有仍待批的审批。
 
 ### 6.3 限频、失败与文案
 
 - 飞书的限频：对同一用户 5 QPS；对同一群 5 QPS，由群内所有机器人共享；超限返回 429 并给出建议等待时间。
   `agent-message` 本来就是每会话每分钟一次。
 - 失败按「推送只是提示」处理：有限次重试后放弃，权威状态永远在 Orbit 里。
+  实现：飞书没接通或 5xx 时最多试 3 次（2 秒起翻倍），飞书明确拒绝（4xx、错误码）不重试；放弃时原因写进该行与应用的 `last_error`。
+- 首次发卡带飞书的去重键 `uuid`（`feishuDedupeUuid('alert-card', app_id, collapse_key)`，项目说明第 15 条）：应答丢失后重发、
+  租约过期被别的副本接手重发，飞书都只投递一条。PATCH 不需要。
 - 文案全英文；会话标题、agent 原文原样转发。
 
 ### 6.4 详情的边界（决定 5）
