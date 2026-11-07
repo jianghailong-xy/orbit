@@ -1,0 +1,35 @@
+diff --git a/src/web/src/components/WorkspaceView.tsx b/src/web/src/components/WorkspaceView.tsx
+index 11e254b..6a9a915 100644
+--- a/src/web/src/components/WorkspaceView.tsx
++++ b/src/web/src/components/WorkspaceView.tsx
+@@ -1048,8 +1048,10 @@ type SessionLine = {
+ // line is otherwise the workspace's voice: unmarked, a message you sent and a reply to it read
+ // exactly alike, and "has it answered me yet?" is the one question the list has to answer while a
+ // turn is running. Same flattening as a reply preview — it may be markdown too.
+-const sentLine = (text: string): SessionLine => ({
+-  text: `You: ${plainPreview(text)}`,
++// A message another Orbit session sent (`lastUserFrom`, its title) is named for that session, not for
++// you: a coordinator's unanswered message is usually a task's report (board 2026-11-07, part ⑤).
++const sentLine = (text: string, from?: string | null): SessionLine => ({
++  text: `${from?.trim() || 'You'}: ${plainPreview(text)}`,
+   tone: 'preview',
+ });
+ 
+@@ -1167,7 +1169,7 @@ export const sessionLine = (
+     // from the moment it is enqueued until a reply lands) instead of the previous turn's reply,
+     // which would read as if this one had already been answered. It's content, not status — the
+     // spinner already carries "working" — so it takes the muted preview tone, not blue.
+-    if (s.lastUserText) return sentLine(s.lastUserText);
++    if (s.lastUserText) return sentLine(s.lastUserText, s.lastUserFrom?.title);
+     if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
+     return { text: 'Running…', tone: 'running' };
+   }
+@@ -1186,7 +1188,7 @@ export const sessionLine = (
+   // A message that never got an answer — the turn was interrupted, or failed, before any reply
+   // landed — outranks the previous turn's reply: it's the newer of the two, and it's what the
+   // session is left waiting on. The server only keeps lastUserText while it stands unanswered.
+-  if (s.lastUserText) return sentLine(s.lastUserText);
++  if (s.lastUserText) return sentLine(s.lastUserText, s.lastUserFrom?.title);
+   // The rolling recap (0418) takes the place of the reply preview it used to show: the sentence
+   // the server wrote about the session, not the raw last reply flattened down to one line. Only
+   // here — below every live line above — so a working session still says what it is doing. Off
