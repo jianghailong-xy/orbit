@@ -30,11 +30,24 @@ public enum ControlEventType: String, Codable, Sendable {
     /// whose summary carries the new `folderId`.
     case folderChanged = "folder.changed"
     case providerChanged = "provider.changed"
+    /// A project's pending criteria decisions changed — a loosening edit was held for the owner, or
+    /// the owner decided one. USER-scoped; `data` names the project (`ControlResourceChanged`): a
+    /// nudge to re-read that project's pending decisions, and nothing else.
+    case projectCriteriaDecisionsChanged = "project.criteria_decisions.changed"
+    /// One of the owner's watches changed — made, edited, paused, resumed, stopped, matched, expired,
+    /// or a delivery of it delivered or dead-lettered. USER-scoped; `data` names the watch and
+    /// nothing else: a nudge to re-read the watch list (docs/watch-contract.md §8.1).
+    case watchChanged = "watch.changed"
     /// One of the owner's wiki spaces changed — a proposal recorded, ops decided in Review, the
     /// space's settings or bindings moved. USER-scoped like the three above. `data` names the SPACE
     /// and nothing else (contract `realtime.redaction`): a nudge to re-read the Wiki pages and the
     /// Review queue, never the session list, and nothing depends on it arriving at all.
     case wikiChanged = "wiki.changed"
+    /// The account's Open list may read differently now (docs/realtime-control-plane-stream.md
+    /// §4.8). USER-scoped; `data` carries the list's version (`ControlListChanged`). Sent only to a
+    /// stream that declared `?hints=list_changed` (`URLSessionControlStream`): a hint to make one
+    /// conditional delta read, never a change in itself.
+    case sessionsListChanged = "sessions.list_changed"
     case notification = "notification"
     case unknown
 
@@ -275,6 +288,23 @@ public struct ControlApproval: Codable, Equatable, Sendable {
     /// Overwritten together with the count, for the reason `SessionUpsert` gives: the event's count
     /// is the whole total the row shows, and so is the kind that says what the total is.
     public let waitingKind: SessionWaitingKind?
+}
+
+/// `data` for the USER-scoped events that name one resource and nothing else —
+/// `project.criteria_decisions.changed` names the project, `watch.changed` the watch,
+/// `folder.changed` the folder.
+public struct ControlResourceChanged: Codable, Equatable, Sendable {
+    public let id: String
+
+    public init(id: String) { self.id = id }
+}
+
+/// `data` for `sessions.list_changed`: the Open list's version when the hint was sent — opaque, only
+/// ever compared with the previous hint's.
+public struct ControlListChanged: Codable, Equatable, Sendable {
+    public let version: String
+
+    public init(version: String) { self.version = version }
 }
 
 /// `data` for `background.task`.

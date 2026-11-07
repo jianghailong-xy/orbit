@@ -35,7 +35,8 @@ file under `app/realtime`; it does not replace those entrypoints.
 | `directoryRestored` | The device's copy has been read, whether or not there was one. Until then having no rows says nothing yet. |
 | `controlConnection`, `controlError` | Account SSE status, separate from REST success. |
 | `session` | Selected session's transcript, pending-state snapshot, freshness, connection and error. |
-| `invalidationRevision` | Increments on control reconnect and every non-ping control event, including an empty `sessionId`. Other pages use it to reload their authority. |
+| `invalidationRevision` | Increments on control reconnect, and once for each 500 ms window of account events that held a type this build knows (`INVALIDATING_EVENTS`: every `ControlEventType` but `wiki.changed` and `notification`), including an empty `sessionId`. Other pages use it to reload their authority. |
+| `accountEvents`, `controlConnects` | How many events of each type the stream has delivered, at once and uncoalesced, and how many times it connected. A page that reads its own list keys on the types that move it (`PagePoll`). |
 
 `DirectorySnapshot` keeps complete `JsonObject`s, keyed by each object's `id`:
 `workspaces`, `folders`, `tags`, `runners`, and `sessions` with the `open` list.
@@ -49,7 +50,7 @@ All directory requests form one snapshot; a failed component does not silently
 erase rows from another component. Each list is read row by row from the
 response bytes, never as one string, and a row equal to the published
 snapshot's row with the same `id` is kept as that object: reading an unchanged
-directory again (on every account event) holds one copy of it, not two. New
+directory again (on an account event) holds one copy of it, not two. New
 rows are compacted: objects with the same keys share one key table and keep
 their values in an array, and equal primitives are one object (an owner's
 5,945 Completed rows took 72 MB of heap as plain trees, 4.2 times their JSON).
@@ -73,10 +74,27 @@ open its own SSE or persist these state objects.
 
 ## Two streams and authority
 
-The account stream is `/api/events`. It has no replay cursor. Connecting it or
-receiving any non-ping event invalidates REST data, including all directory
-views, folders, tags, workspaces and runners. Raw control summaries never
-overwrite full permission/capability fields from a REST snapshot.
+The account stream is `/api/events`. It has no replay cursor. Connecting it
+reads every directory list at once, and an ask (`refreshDirectory`,
+`rereadDirectory`) does too. An account event reads only the lists it moves
+(docs/list-freshness-design.md §4 R1 and R5), once for a burst: the window opens
+at its first event and the read leaves 500 ms later. `session.*`, `approval.*`
+and `background.task` read Open; `tag.changed` the tags, `folder.changed` the
+folders, `agent.changed` the workspaces; nothing reads the runners but a connect
+or an ask; every other type reads no list of the store's. One loop reads, so no
+list is on the wire twice at once: windows that close during a read leave one
+more read behind it. Raw control summaries never overwrite full
+permission/capability fields from a REST snapshot.
+
+Pages that read their own lists (a project's sessions page, the sidebar, the
+drawer's projects, Projects, Following, the Landings window) follow the stream
+through `PagePoll`: on the account events that move what they show and on each
+connect, once a minute without one, on a 4, 8, 16 then 30 s backoff while the
+stream is down, and not at all while the Activity is stopped. A landing in
+flight publishes no event (§2.9 LS6), so while one is, the reads that draw it
+keep their own cadence (the project page's landing and merge 4 s, the Landings
+window's lists 15 s and merges 60 s, its cards and the running check's log
+§2.7a's 4 s / 15 s), still only while the Activity is started.
 
 The selected session opens `/api/sessions/:id/events?sinceSeq=...&maxPayload=2048`.
 A cold open reads `events/page?tail=200`. A window seeded before the attempt

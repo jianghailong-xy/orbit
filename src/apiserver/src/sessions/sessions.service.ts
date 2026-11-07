@@ -372,6 +372,9 @@ function isPlatformContentTurn(clientTurnId: string | null | undefined): boolean
 // at worst, never indefinitely.
 const MAX_ARM_AHEAD_MS = 8 * 24 * 60 * 60 * 1000;
 
+/** How long a finished Open-list build answers the reads of its version (`sharedOpenList`). */
+const OPEN_LIST_BUILD_KEEP_MS = 5_000;
+
 // A lease this close to expiry is not a usable CURRENT_WORK target: capability resolution and the
 // insert still have to commit before the runner can poll. The final check uses PostgreSQL's clock.
 const CURRENT_WORK_LEASE_SAFETY_MS = 1_000;
@@ -832,6 +835,8 @@ export class SessionsService {
   private readonly logger = new Logger(SessionsService.name);
   /** The snapshots `listOpenSince` answers a cursor against — see open-list-delta.ts. */
   private readonly openListDelta = new OpenListDeltaStore();
+  /** Open lists built at a version, shared by the reads that ask for the same one (`sharedOpenList`). */
+  private readonly openListBuilds = new Map<string, { builtAt: number; rows: Promise<unknown> }>();
   /** How long a steer's withdrawal waits for the runner's answer (steer-withdraw.ts). A field so a
    *  spec can wait less for an answer it knows is not coming. */
   protected steerWithdrawWaitMs = STEER_WITHDRAW_WAIT_MS;
@@ -3492,6 +3497,34 @@ export class SessionsService {
     return readOpenListVersion(this.prisma, ownerId, Date.now());
   }
 
+  /**
+   * `list`'s answer for the flat Open list, built once for every read that asks for it at the same
+   * data version with the same filters: a change hints every device of the account at once
+   * (`sessions.list_changed`), and each of them reads. Reads that arrive while the build is in flight
+   * await it; for OPEN_LIST_BUILD_KEEP_MS after it finished they are answered from it. A version is
+   * read before the list it stands beside is built, so these rows can only be newer than the version
+   * every reader of them read, never older: a reader is never handed a list that lags what it asked
+   * for. A failed build is forgotten at once. Each reader gets its own copy, because the response
+   * interceptors rewrite ids in place, per request.
+   */
+  private async sharedOpenList<T>(key: string, build: () => Promise<T>): Promise<T> {
+    const now = Date.now();
+    for (const [k, entry] of this.openListBuilds) {
+      if (now - entry.builtAt >= OPEN_LIST_BUILD_KEEP_MS) this.openListBuilds.delete(k);
+    }
+    let entry = this.openListBuilds.get(key);
+    if (!entry) {
+      const fresh = { builtAt: Number.POSITIVE_INFINITY, rows: build() };
+      fresh.rows.then(
+        () => { fresh.builtAt = Date.now(); },
+        () => { if (this.openListBuilds.get(key) === fresh) this.openListBuilds.delete(key); },
+      );
+      this.openListBuilds.set(key, fresh);
+      entry = fresh;
+    }
+    return structuredClone((await entry.rows) as T);
+  }
+
   async list(
     ownerId: string,
     filters: {
@@ -3507,6 +3540,9 @@ export class SessionsService {
       view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system';
       limit?: number;
     },
+    /** The Open list's data version the caller read for this list (`openListVersion`). Given, a flat
+     *  Open read is shared with every other read of the same version and filters (`sharedOpenList`). */
+    version?: string,
   ) {
     // Open = neither completed nor deleted; Completed = completed but not deleted;
     // Trash = deleted, regardless of completion state. Legacy view names remain aliases.
@@ -3581,12 +3617,20 @@ export class SessionsService {
       view === 'completed'
         ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) DESC NULLS LAST, s.created_at DESC`
         : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.last_turn_at, s.created_at) DESC, s.created_at DESC`;
-    return this.listRows(ownerId, {
+    const build = () => this.listRows(ownerId, {
       scope: Prisma.sql`${runnerFilter} ${workspaceFilter} ${confinedFilter} ${tagFilter} ${projectFilter}`,
       visibility,
       orderBy,
       pageLimit,
     });
+    if (version === undefined || view !== 'open' || filters.projectId !== undefined) return build();
+    return this.sharedOpenList(JSON.stringify([
+      ownerId, version, filters.runnerId ?? null, filters.workspaceId ?? null, filters.tagId ?? null,
+      filters.confinedTo ?? null,
+      typeof filters.limit === 'number' && Number.isFinite(filters.limit) && filters.limit > 0
+        ? Math.floor(filters.limit)
+        : null,
+    ]), build);
   }
 
   /**
@@ -3622,8 +3666,9 @@ export class SessionsService {
     // it equals the ETag the plain read sends for them. A project read reads no version and is built
     // every time, as its plain read is: its rows are a few, and the LANDING rows of the
     // landing-aware one are not sources of the version.
-    const version = filters.projectId === undefined
-      ? openListEtag(await this.openListVersion(ownerId), {
+    const dataVersion = filters.projectId === undefined ? await this.openListVersion(ownerId) : undefined;
+    const version = dataVersion !== undefined
+      ? openListEtag(dataVersion, {
           runnerId: filters.runnerId,
           workspaceId: filters.workspaceId,
           tagId: filters.tagId,
@@ -3635,7 +3680,7 @@ export class SessionsService {
     if (since && version !== undefined && this.openListDelta.unchanged(ownerId, scope, since, version)) {
       return { full: false as const, upserts: [], removedIds: [], cursor: since };
     }
-    const rows = await this.list(ownerId, { ...filters, view: 'open' });
+    const rows = await this.list(ownerId, { ...filters, view: 'open' }, dataVersion);
     // A runner's heartbeat restamps every row it hosts every 30 seconds; with a few runners that
     // alone would resend most of the list on most polls. The clients that read this delta draw
     // nothing from the raw timestamp — what it decides (the queue gate, capabilities) are fields of

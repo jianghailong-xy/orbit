@@ -717,15 +717,12 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(task.contains("await withTaskGroup(of: Void.self) { group in"))
         XCTAssertFalse(task.contains("async let"), "project reads avoid async-let teardown")
         XCTAssertEqual(task.components(separatedBy: "group.addTask { @MainActor in").count - 1, 4)
-        for reads in ["await app.loadProjectSessions(address)\n                    await Self.poll { await app.pollProjectSessions(address) }",
-                      "await app.loadProjectIntegration(address)\n                    await Self.poll { await app.loadProjectIntegration(address) }",
-                      "await app.loadProjectMerge(address)\n                    await Self.poll { await app.loadProjectMerge(address) }",
-                      "await app.projects?.load()\n                    await app.loadProjectStart(address)\n                    await app.loadProjectDone(address)\n                    await Self.poll {\n                        await app.loadProjectStart(address)\n                        await app.loadProjectDone(address)\n                    }"] {
+        for reads in ["await app.loadProjectSessions(address)\n                    await ViewPoll.run(app, every: 4, inFlight: { 4 }) { await app.pollProjectSessions(address) }",
+                      "await app.loadProjectIntegration(address)\n                    await ViewPoll.run(app, every: 15, hints: { app.projectHints },\n                                       inFlight: { app.projectSessionsLandingRunning ? 4 : nil }) {\n                        await app.loadProjectIntegration(address)",
+                      "await app.loadProjectMerge(address)\n                    await ViewPoll.run(app, every: 15, hints: { app.projectHints },\n                                       inFlight: { app.projectSessionsMergeRunning ? 4 : nil }) {\n                        await app.loadProjectMerge(address)",
+                      "await app.projects?.load()\n                    await app.loadProjectStart(address)\n                    await app.loadProjectDone(address)\n                    await ViewPoll.run(app, every: 4, hints: { app.projectHints }) {\n                        await app.loadProjectStart(address)\n                        await app.loadProjectDone(address)\n                    }"] {
             XCTAssertTrue(task.contains(reads), "a read of its own: `\(reads)`")
         }
-        let poll = try slice(page, from: "private static func poll(_ read: () async -> Void) async {", to: "\n    }")
-        XCTAssertTrue(poll.contains("try? await Task.sleep(for: .seconds(4))"))
-        XCTAssertTrue(poll.contains("if Task.isCancelled { break }"))
         let refresh = try slice(page, from: ".refreshable {", to: "\n        }")
         for part in ["await withTaskGroup(of: Void.self) { group in",
                      "group.addTask { @MainActor in await app.loadProjectSessions(address) }",

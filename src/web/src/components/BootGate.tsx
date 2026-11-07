@@ -6,9 +6,11 @@ import { routeId } from '../lib/idCodec';
 import {
   workspacesQuery,
   meQuery,
+  openProjectsQuery,
   providersQuery,
   runnersQuery,
   SESSION_PAGE_SIZE,
+  sessionFoldersQuery,
   sessionQuery,
   sessionsQuery,
   setupStatusQuery,
@@ -157,12 +159,19 @@ export function BootGate({ children }: { children: React.ReactNode }) {
       : deep?.kind === 'agent'
         ? deep.id
         : (homeFirst?.id ?? null);
-  // The first page of the scoped Open list WorkspaceView reads on load — same factory and page size,
-  // so it lands in cache under the same key and the console paints in one shot instead of
-  // flashing "Starting…".
+  // The scoped Open list WorkspaceView reads on load — same factory, so it lands in cache under the
+  // same key and the console paints in one shot instead of flashing "Starting…". Its shape is the
+  // console's: one page, or the whole list for a workspace that shows folders or projects. Those two
+  // reads are the console's own, so they decide it first; warming one page while the console then
+  // read the whole list was a second Open-list read on every page load (docs/list-freshness-design.md
+  // W5).
+  const folders = useQuery({ ...sessionFoldersQuery(), enabled: warm });
+  const projects = useQuery({ ...openProjectsQuery(), enabled: warm });
+  const wholeList = !!workspaceId &&
+    ((folders.data ?? []).some((folder) => folder.workspaceId === workspaceId) || (projects.data?.length ?? 0) > 0);
   const scopedSessions = useQuery({
-    ...sessionsQuery({ runnerId, workspaceId, view: 'open', limit: SESSION_PAGE_SIZE }),
-    enabled: warm && !!runnerId,
+    ...sessionsQuery({ runnerId, workspaceId, view: 'open', limit: wholeList ? null : SESSION_PAGE_SIZE }),
+    enabled: warm && !!runnerId && folders.isFetched && projects.isFetched,
   });
 
   // Per-route readiness milestones (besides the mounted app). The signed-out setup check

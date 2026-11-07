@@ -6,6 +6,7 @@ import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.protocol.ProtocolException
 import io.orbitd.android.core.protocol.Wire
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -45,6 +46,73 @@ data class RecordAnchor(val kind: String, val id: String, val seq: Long)
 
 @Serializable
 data class ControlEvent(val type: String, val sessionId: String = "", val data: JsonObject = JsonObject(emptyMap()))
+
+/** The lists the store reads as its directory ([RealtimeRest.directory]). */
+internal enum class DirectoryList {
+    WORKSPACES, FOLDERS, TAGS, RUNNERS, OPEN;
+    companion object { val ALL: Set<DirectoryList> = entries.toSet() }
+}
+
+/** What an account event moves of the store's lists (docs/list-freshness-design.md §4 R5). A session's, an approval's or a background
+ * job's moves its row in Open and nothing else the store reads; each library event its own list, and `agent.changed` the workspaces.
+ * Runners have no event: a connect reads them. Any other type — a task's, a project's, a watch's, the wiki's, or one this build does
+ * not know — reads none of them. */
+internal fun directoryListsMovedBy(type: String): Set<DirectoryList> = when {
+    type.startsWith("session.") || type.startsWith("approval.") || type == "background.task" -> setOf(DirectoryList.OPEN)
+    type == "tag.changed" -> setOf(DirectoryList.TAGS)
+    type == "folder.changed" -> setOf(DirectoryList.FOLDERS)
+    type == "agent.changed" -> setOf(DirectoryList.WORKSPACES)
+    else -> emptySet()
+}
+
+/** The account events that move [RealtimeState.invalidationRevision]: every type of src/shared/src/realtime.ts `ControlEventType` this
+ * build knows, but `wiki.changed`, which by contract asks for the wiki to be read again and nothing else, and `notification`, which
+ * carries nothing yet. A type this build does not know asks for no read at all (R5). */
+internal val INVALIDATING_EVENTS = setOf("session.created", "session.updated", "session.ended", "session.error", "approval.requested",
+    "approval.resolved", "background.task", "task.changed", "agent.changed", "task.list.changed", "tag.changed", "folder.changed",
+    "provider.changed", "project.criteria_decisions.changed", "project.changed", "watch.changed")
+
+/** `sessions.list_changed` (docs/realtime-control-plane-stream.md §4.8): the Open list may read differently. Sent only to a stream that
+ * declared [LIST_CHANGED_HINT]; answered with one `since=` read of the Open list, never by itself a change. */
+internal const val LIST_CHANGED = "sessions.list_changed"
+/** The `hints=` value of `GET /api/events` that declares this build understands [LIST_CHANGED] (`CONTROL_HINT_LIST_CHANGED`). */
+internal const val LIST_CHANGED_HINT = "list_changed"
+
+/** Whether an account event can move what the open conversation reads — its snapshot ([RealtimeRest.session]) and its reader's cards:
+ * one about this session, or a project or task event of the project it belongs to. `task.changed` names no project, so it concerns
+ * the session when the session created the task (the envelope's sessionId), when it is the session's own task, or when it asks for a
+ * full resync. Ids are compared in either spelling (UUID or public). */
+internal fun ControlEvent.concerns(session: SessionState?): Boolean {
+    val id = session?.id ?: return false
+    if (sameId(sessionId, id)) return true
+    val detail = session.snapshot?.detail ?: return false
+    val project = detail.text("projectId") ?: (detail["project"] as? JsonObject)?.text("id")
+    return when {
+        type.startsWith("project.") -> project != null && sameId(data.text("id"), project)
+        type == "task.changed" -> {
+            val task = detail.text("taskId")
+            (data["resync"] as? JsonPrimitive)?.contentOrNull == "true" || task != null &&
+                (sameId(data.text("taskId"), task) || (data["taskIds"] as? JsonArray).orEmpty().any { sameId((it as? JsonPrimitive)?.contentOrNull, task) })
+        }
+        else -> false
+    }
+}
+
+private fun sameId(a: String?, b: String?): Boolean = a != null && b != null && a.isNotEmpty() && (a == b || canonicalId(a)?.let { it == canonicalId(b) } == true)
+
+/** A UUID or its public Base62 spelling, as a lower-case UUID; null for anything else. */
+private fun canonicalId(value: String): String? {
+    if (uuid.matches(value)) return value.lowercase()
+    if (value.length > 22 || value.any { it !in base62 }) return null
+    var number = java.math.BigInteger.ZERO
+    val radix = java.math.BigInteger.valueOf(62)
+    value.forEach { number = number * radix + java.math.BigInteger.valueOf(base62.indexOf(it).toLong()) }
+    if (number.bitLength() > 128) return null
+    val hex = number.toString(16).padStart(32, '0')
+    return "${hex.take(8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}"
+}
+private const val base62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+private val uuid = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 
 enum class ConnectionState { STOPPED, CONNECTING, CONNECTED, BACKOFF }
 enum class FailureReason { NETWORK, HTTP, PROTOCOL, STORAGE }
@@ -92,6 +160,9 @@ data class SessionState(
     /** The transcript is the device's own copy from when the session was selected (RealtimeCache), not since re-seeded from
      * the server's tail: what a reader draws first came off the disk. D09 P02 tells its warm-cache case apart by it. */
     val seededFromCache: Boolean = false,
+    /** How many snapshot reads have landed for this selection. The reader's cards read again behind each one, and on nothing else
+     * of the store's: an account event about another session moves neither. */
+    val snapshotReads: Long = 0,
 )
 
 data class RealtimeState(
@@ -109,8 +180,8 @@ data class RealtimeState(
     val session: SessionState? = null,
     val controlConnection: ConnectionState = ConnectionState.STOPPED,
     val controlError: RealtimeError? = null,
-    /** Changes on every control reconnect and non-ping event, including empty sessionId events.
-     * Business pages use it to re-read their own authoritative REST state. */
+    /** Changes on every control reconnect, and once for each burst of account events ([RealtimeStore.EVENT_WINDOW_MS]) that held one
+     * of [INVALIDATING_EVENTS], including empty sessionId events. Business pages use it to re-read their own authoritative REST state. */
     val invalidationRevision: Long = 0,
     /** How many account events of each type this handle's stream has delivered, and how many times the stream has
      * (re)connected. A page that owns a model re-reads it on the event types that concern it (iOS `AppModel.apply`)

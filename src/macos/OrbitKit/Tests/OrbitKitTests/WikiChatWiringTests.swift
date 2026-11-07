@@ -140,7 +140,7 @@ final class WikiChatWiringTests: XCTestCase {
         let model = code(try source("AppModel.swift"))
         XCTAssertTrue(model.contains("let id = focusedConsoleSessionID ?? (selectedSection == .wiki ? wikiChat?.focusedSessionID : nil)"))
         XCTAssertTrue(model.contains("wikiChat = WikiChatModel(baseURL: url, tokenStore: tokenStore)"))
-        let arm = try slice(model, from: "case .wikiChanged:", to: "case .providerChanged:")
+        let arm = try slice(model, from: "case .wiki:\n", to: "case .folders:")
         XCTAssertTrue(arm.contains("wikiChat?.nudge()"), "a card made, replaced or pressed is read again")
         let chat = code(try source("WikiChatModel.swift"))
         XCTAssertTrue(chat.contains("presented && chat != WikiChatLogic.newChat ? chat : nil"))

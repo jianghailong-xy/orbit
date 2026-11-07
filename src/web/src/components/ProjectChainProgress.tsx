@@ -1,5 +1,6 @@
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import { api } from '../api';
+import { streamPoll } from '../lib/listBudget';
 import type {
   ProjectPanoramaBuckets,
   ProjectPanoramaShape,
@@ -74,7 +75,7 @@ export const projectChainPanoramaQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId, 'panorama'] as const,
     queryFn: () => api<ProjectPanorama>(`/projects/${encodeURIComponent(projectId)}/panorama`),
-    refetchInterval: 30_000,
+    refetchInterval: streamPoll(30_000),
   });
 
 /** The leaderboard card's own default depth, so the two cards share one cache entry. Two names is
@@ -88,7 +89,7 @@ export const projectChainRankingQuery = (projectId: string) =>
       api<ProjectBlockingLeaderboard>(
         `/projects/${encodeURIComponent(projectId)}/panorama/blocking?limit=${CHAIN_RANKING_LIMIT}`,
       ),
-    refetchInterval: 30_000,
+    refetchInterval: streamPoll(30_000),
   });
 
 /**

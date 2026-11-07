@@ -102,6 +102,16 @@ public final class APIClient: @unchecked Sendable {
         }
     }
 
+    /// Trade the stored refresh token for a fresh access token, through the same single-flight refresh
+    /// a REST call's 401 takes. For the control-plane stream, which is not a REST call: its 401 asks
+    /// for this and connects again. False when there is no fresh token now — the refresh token is
+    /// gone or refused, or the server could not be reached.
+    public func refreshSession() async -> Bool {
+        let refresher = await SessionRefresherRegistry.shared.refresher(
+            baseURL: baseURL, tokenStore: tokenStore, session: session)
+        return await refresher.refresh()
+    }
+
     /// Revoke a refresh token server-side on sign-out. Best-effort (`try?`); takes the token
     /// explicitly so the caller can clear local storage immediately without racing this call.
     public func revokeRefreshToken(_ refreshToken: String) async {

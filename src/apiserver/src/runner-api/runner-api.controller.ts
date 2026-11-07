@@ -201,7 +201,7 @@ import {
 import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
 import { QueueService } from '../queue/queue.service';
-import { RealtimeService, runEventBatchNotice } from '../realtime/realtime.service';
+import { approvalRequestEvent, RealtimeService, runEventBatchNotice } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
 import { CreateTaskBatchItemDto } from '../tasks/dto';
 import { TASK_CRITERION_SHAPE_ADVICE_CODE } from '../tasks/task-criterion-shape-advice';
@@ -5627,22 +5627,7 @@ export class RunnerApiController {
     // An already-answered approval raises no card and buzzes no phone: not interrupting is the
     // entire point of having granted it.
     if (!existing && !allowedMessage) {
-      this.realtime.publish(sessionId, {
-        seq: 0,
-        type: RunEventType.APPROVAL_REQUEST,
-        payload: {
-          id: approval.id,
-          toolName: approval.toolName,
-          input: approval.input,
-          toolUseId: approval.toolUseId ?? undefined,
-          // The reader that outlives the turn, to a client that has to answer "is this still a
-          // question" itself: a card raised by a runner-hosted job is live while that process is
-          // up, whatever the conversation is doing, and a client that reads only the turn would
-          // take the card down the moment the turn ended (`WorkspaceView`'s local predicate).
-          backgroundJobId: approval.backgroundJobId ?? undefined,
-        },
-        ts: new Date().toISOString(),
-      });
+      this.realtime.publish(sessionId, approvalRequestEvent(approval, new Date().toISOString()));
       // Fire-and-forget: nudge the owner's iOS devices that a reply is needed. Not awaited so a
       // slow APNs round-trip can't delay the runner's approval-create response.
       void this.push.notifyApprovalRequest(sessionId, approval.id, approval.toolName);

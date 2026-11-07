@@ -686,6 +686,8 @@ struct TasksListView: View {
             let delay: UInt64 = tasks.hasBusyTasks ? 5_000_000_000 : 15_000_000_000
             do { try await Task.sleep(nanoseconds: delay) }
             catch { return }
+            // Nothing timed is read while the app cannot be seen (docs/list-freshness-design.md §4 R3).
+            if !model.appVisible { continue }
             // The owner stream now applies task.changed by id. Polling the same page underneath a
             // healthy stream both duplicates that work and, on a large Ready scope, repeats its
             // aggregate query forever. Keep a slow one-minute reconciliation for count drift and
@@ -706,6 +708,7 @@ struct TasksListView: View {
             let busy = tasks.lists.contains { ($0.runningTasks ?? 0) > 0 }
             do { try await Task.sleep(nanoseconds: busy ? 5_000_000_000 : 15_000_000_000) }
             catch { return }
+            if !model.appVisible { continue }
             if model.controlPlaneLive, Date().timeIntervalSince(lastSnapshot) < 60 { continue }
             await tasks.loadNavigation()
             lastSnapshot = Date()
@@ -1311,6 +1314,8 @@ private struct TaskDetailContent: View {
             do { try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000)) }
             catch { return }
             guard tasks.detail?.id == taskID else { return }
+            // A landing in flight is read at §2.7a's cadence — while the app can be seen.
+            if !model.appVisible { continue }
             _ = await tasks.loadDetail(taskID)
         }
     }

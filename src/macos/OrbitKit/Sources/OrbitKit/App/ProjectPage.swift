@@ -1363,3 +1363,25 @@ public enum ProjectPage {
         "\(n) \(n == 1 ? one : many)"
     }
 }
+
+// MARK: what no event reports
+
+extension ProjectPage {
+    /// Whether the integration read has a landing job running. No event reports a landing as it moves
+    /// (contract §2.7a, project-integration-line-contract.md:767), so a page showing one reads it every
+    /// 4 s — only while the page can be seen (docs/list-freshness-design.md §4, R6's bounded exception).
+    public static func landingRunning(_ view: ProjectIntegrationView?) -> Bool {
+        guard let view else { return false }
+        return view.integratingCount > 0 || view.inFlight?.state == "RUNNING"
+            || view.inFlightJobs?.contains { $0.state == "RUNNING" } == true
+    }
+
+    /// Whether the merge-into-main card has a merge under way: its candidate being checked, or
+    /// confirmed and landing on its own. Read like a running landing, for the same reason.
+    public static func mergeRunning(_ promotion: ProjectPromotionView?) -> Bool {
+        switch promotion?.state {
+        case .checking, .confirmed, .rechecking: return true
+        default: return false
+        }
+    }
+}

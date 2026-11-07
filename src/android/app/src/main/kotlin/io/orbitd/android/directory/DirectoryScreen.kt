@@ -51,13 +51,12 @@ private const val PULL_WAIT_MS = 12_000L
  * else in ≡, and ✎; the list holds the needs-you capsule, rows that a tap opens and a long press offers the menu of, and a search
  * at its foot; a pull refreshes it. Nothing is drawn beside rows while a read is out, and nothing waits on one: a server's refusal
  * says so through the prompts it always has. A folder's page has ⋯ for ≡, and no capsule or search: its scope is its list's.
- * [revision] re-reads the project rows' progress after a control event; [watching] is every session parked on a watch that will
- * resume it, which a row's line says.
+ * [watching] is every session parked on a watch that will resume it, which a row's line says.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: DirectoryApi, handle: SessionHandle,
-    open: (OrbitRoute) -> Unit, refresh: () -> Unit, revision: Long = 0L, watching: Map<String, WatchSessionSummary> = emptyMap(),
+    open: (OrbitRoute) -> Unit, refresh: () -> Unit, watching: Map<String, WatchSessionSummary> = emptyMap(),
     scopeList: SessionScopeList = remember(api) { SessionScopeList(api) }) {
     val app = LocalContext.current.applicationContext as OrbitApplication
     var view by rememberSaveable { mutableStateOf(SessionView.entries.firstOrNull { it.query == route.sessionView } ?: SessionView.OPEN) }
@@ -68,7 +67,7 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
     var projectMenu by remember { mutableStateOf<SessionProjectRow?>(null) }
     var pulling by remember { mutableStateOf(false) }
     var pinnedCollapsed by rememberPinnedCollapsed()
-    val sidebar by rememberProjectSidebar(api, revision)
+    val sidebar by rememberProjectSidebar(app, handle, api)
     val asks by app.realtime.directoryAsks.collectAsState()
     val trashing by app.trashing.ids.collectAsState()
     val recaps = LocalSessionRecaps.current

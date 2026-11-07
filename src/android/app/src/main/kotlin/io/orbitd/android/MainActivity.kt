@@ -274,7 +274,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                 ModalDrawerSheet(modifier = Modifier.onSizeChanged { sheetWidth = it.width }, drawerContainerColor = LocalOrbitColors.current.drawer,
                     drawerContentColor = MaterialTheme.colorScheme.onSurface) {
                     Column(Modifier.fillMaxHeight().widthIn(max = 360.dp).verticalScroll(rememberScrollState()).imePadding().padding(12.dp)) {
-                        val projects = rememberDrawerProjects(api, revision)
+                        val projects = rememberDrawerProjects(app, signedIn.handle, api)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text("Orbit", style = MaterialTheme.typography.headlineMedium)
                             IconButton(onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.SEARCH, origin = Origin.DRAWER)) }) {
@@ -373,8 +373,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                             when (route.destination) {
                                 Destination.WORKSPACES -> WorkspaceHome(data, startSession = { openNewSession() }) { app.realtime.refreshDirectory() }
                                 Destination.WORKSPACE, Destination.FOLDER -> DirectoryScreen(route, data, api, signedIn.handle, ::open, { app.realtime.refreshDirectory() },
-                                    revision, watches.summaries, scopeList)
-                                Destination.PROJECT_SESSIONS -> SessionProjectPage(app, signedIn.handle, route, data, api, revision, ::open)
+                                    watches.summaries, scopeList)
+                                Destination.PROJECT_SESSIONS -> SessionProjectPage(app, signedIn.handle, route, data, api, ::open)
                                 Destination.LANDINGS -> route.id?.let { project ->
                                     ProjectLandingsWindow(app, signedIn.handle, route, api, project, route.recordId, ::open)
                                 }
@@ -384,7 +384,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 }
                                 Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open) { key, root -> land(key, root) }
                                 Destination.TASKS, Destination.TASK, Destination.LIST -> TasksScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
-                                Destination.PROJECTS, Destination.PROJECT -> ProjectsScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
+                                Destination.PROJECTS, Destination.PROJECT -> ProjectsScreen(app, signedIn.handle, route, ::open) { navigation = navigation.back() }
                                 Destination.WIKI, Destination.WIKI_ENTRY, Destination.WIKI_BROWSE, Destination.WIKI_INDEX,
                                 Destination.WIKI_ARTICLE, Destination.WIKI_DOC, Destination.WIKI_REVIEW, Destination.WIKI_SETTINGS,
                                 Destination.WIKI_RUN, Destination.WIKI_JOB, Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION,

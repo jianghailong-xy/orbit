@@ -25,7 +25,8 @@ describe('canonical session lifecycle API', () => {
 
       expect(query.queryKey).toEqual(['sessions', 'runner-1', null, view, null, null]);
       await (query.queryFn as () => Promise<unknown>)();
-      expect(apiMock).toHaveBeenCalledWith(`/sessions?runnerId=runner-1&view=${view}`);
+      // The whole Open list is read as a delta (lib/openListDelta); a first read asks with `since=`.
+      expect(apiMock).toHaveBeenCalledWith(`/sessions?runnerId=runner-1&view=${view}${view === 'open' ? '&since=' : ''}`);
     },
   );
 

@@ -333,6 +333,23 @@ final class AgentsModel {
         runnerSnapshotRefreshInFlight = true
         defer { runnerSnapshotRefreshInFlight = false }
         guard let runners = try? await api.runners() else { return }
+        adoptRunnerSnapshot(runners)
+    }
+
+    /// The workspaces and their machines — what the sidebar draws — read again, without the provider
+    /// and pool libraries `load()` brings with them: what a reconnect reconciles once the library has
+    /// loaded (docs/list-freshness-design.md §4 R4). A failed read keeps what is shown.
+    func reloadWorkspaces() async {
+        guard let read = try? await api.agents() else { return }
+        if read != items { items = read }
+        workspacesAnswered = true
+        await refreshRunnerSnapshot()
+        updateMachinesToSetUp()
+    }
+
+    /// Take a `/runners` read made elsewhere — a runners page's own (`RunnersModel.onRead`) — as this
+    /// snapshot, so the page and the app's tick do not each read the same list.
+    func adoptRunnerSnapshot(_ runners: [Runner]) {
         let order = runners.map(\.id)
         let names = Dictionary(runners.map { ($0.id, $0.displayName ?? $0.name) },
                                uniquingKeysWith: { a, _ in a })

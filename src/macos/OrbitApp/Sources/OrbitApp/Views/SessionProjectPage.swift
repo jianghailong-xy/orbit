@@ -461,7 +461,7 @@ struct SessionProjectPage: View {
             }
         }
         // The jobs a landing row counts (docs/mocks/landing-jobs-sheet), hosted here rather than by
-        // either row, so neither their clocks nor the 4-second poll can take it down. It reads the
+        // either row, so neither their clocks nor the page's poll can take it down. It reads the
         // page's own landing read at every tick; a Retry that went through reads it again at once.
         .sheet(isPresented: $showsLandingJobs) {
             ProjectLandingJobsSheet(
@@ -480,44 +480,44 @@ struct SessionProjectPage: View {
                     app.openFromConversation(.task(taskID), overConsole: rowNavigation == .push)
                 })
         }
-        // Side by side, each on its own 4-second poll: the landing line, the merge card, the start
-        // row and the ending never wait behind the member lists, the slowest reads the page makes,
-        // and a poll of the members asks for neither list again unless something moved
-        // (`pollProjectSessions`).
+        // Side by side, each on its own poll: the landing line, the merge card, the start row and
+        // the ending never wait behind the member lists, the slowest reads the page makes, and a
+        // poll of the members asks for neither list again unless something moved
+        // (`pollProjectSessions`). Every poll stops while the app cannot be seen, and the ones that
+        // read the server follow the control stream (`ViewPoll`, docs/list-freshness-design.md §4 R6).
         .task(id: address) {
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { @MainActor in
                     await app.loadProjectSessions(address)
-                    await Self.poll { await app.pollProjectSessions(address) }
+                    await ViewPoll.run(app, every: 4, inFlight: { 4 }) { await app.pollProjectSessions(address) }
                 }
+                // No event reports a landing or a merge as it moves (contract §2.7a), so while one
+                // runs its card is read every 4 s; otherwise on the project's hints and a minute's
+                // safety read with the stream live, every 15 s without it.
                 group.addTask { @MainActor in
                     await app.loadProjectIntegration(address)
-                    await Self.poll { await app.loadProjectIntegration(address) }
+                    await ViewPoll.run(app, every: 15, hints: { app.projectHints },
+                                       inFlight: { app.projectSessionsLandingRunning ? 4 : nil }) {
+                        await app.loadProjectIntegration(address)
+                    }
                 }
                 group.addTask { @MainActor in
                     await app.loadProjectMerge(address)
-                    await Self.poll { await app.loadProjectMerge(address) }
+                    await ViewPoll.run(app, every: 15, hints: { app.projectHints },
+                                       inFlight: { app.projectSessionsMergeRunning ? 4 : nil }) {
+                        await app.loadProjectMerge(address)
+                    }
                 }
                 group.addTask { @MainActor in
                     await app.projects?.load()
                     await app.loadProjectStart(address)
                     await app.loadProjectDone(address)
-                    await Self.poll {
+                    await ViewPoll.run(app, every: 4, hints: { app.projectHints }) {
                         await app.loadProjectStart(address)
                         await app.loadProjectDone(address)
                     }
                 }
             }
-        }
-    }
-
-    /// `read` again 4 seconds after each one ends, until the page's task is cancelled: the page
-    /// went, or its address changed.
-    private static func poll(_ read: () async -> Void) async {
-        while !Task.isCancelled {
-            try? await Task.sleep(for: .seconds(4))
-            if Task.isCancelled { break }
-            await read()
         }
     }
 
