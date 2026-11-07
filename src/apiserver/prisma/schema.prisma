@@ -7818,6 +7818,14 @@ model WikiChangesetOp {
   /// The trail of every earlier verdict of an op that was reopened (0314), oldest first: a JSON array.
   verificationHistory     Json      @default("[]") @map("verification_history")
 
+  /// The pending challenge of the same entry an amend answers (0488, contract `reviewModes.challenge`): when the
+  /// amend takes effect, that challenge is recorded edited. A history reference with no foreign key, as
+  /// `verification_duplicate_of` is: it outlives the op it names. Set exactly on an amend.
+  answersChallenge String? @map("answers_challenge") @db.Uuid
+  /// Who closed a challenge: `owner` | `agent` | `research` (0488). NULL on every row recorded before it and on
+  /// every answer given in Review, which read as the owner's. Set exactly on a challenge.
+  answeredBy       String? @map("answered_by")
+
   @@unique([changesetId, seq], map: "wiki_changeset_op_changeset_seq_key")
   @@map("wiki_changeset_op")
 }
