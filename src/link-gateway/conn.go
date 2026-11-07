@@ -341,7 +341,7 @@ func (c *conn) onHeartbeat(hb *linkpb.Heartbeat) {
 		return
 	}
 	c.send(&linkpb.Frame{Body: &linkpb.Frame_HeartbeatAck{HeartbeatAck: &linkpb.HeartbeatAck{
-		Mode: linkpb.Mode_MODE_LINK, Hints: &linkpb.HintState{},
+		Mode: linkpb.Mode_MODE_LINK, Hints: &linkpb.HintState{}, BeatId: hb.GetBeatId(),
 	}}}, true)
 }
 

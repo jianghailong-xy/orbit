@@ -374,6 +374,12 @@ It carries `release` too when `linkHints` names one: the release the runner is a
 
 A beat that gets no 2xx answer is acknowledged with nothing to apply: no reconcile, no hints, no release.
 
+Every `HeartbeatAck` names the beat it answers: its `beat_id` is the `Heartbeat`'s, whatever became of the beat
+(reconciled, `want_facts`, refused, or no answer within `LINK_RPC_TIMEOUT`). A runner keeps one beat unanswered on a
+connection and keeps the connection when the answer is late; by `beat_id` it tells that answer from the next beat's
+(docs/runner-link-design.md §15.13). A beat from a runner older than the field names none, and its answer names none.
+`TestEveryHeartbeatAckNamesTheBeatItAnswers` holds the gateway to this.
+
 ### Durable events and credit
 
 An `EventBatch` is stored through `POST /runner/sessions/<id>/events`, the existing ingest route, as the batch a runner

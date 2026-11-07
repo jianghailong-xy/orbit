@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -276,5 +277,61 @@ func TestAHeartbeatAckStatesTheReleaseTheRouteAssigns(t *testing.T) {
 	})
 	if ack := beat(); ack.GetRelease() != nil || len(ack.GetReconcileJson()) != 0 {
 		t.Fatalf("a refused beat: %v", ack)
+	}
+}
+
+// Every HeartbeatAck names the beat it answers (proto HeartbeatAck.beat_id), whatever became of the beat: reconciled,
+// answered with want_facts, refused by the route, or given up on at LINK_RPC_TIMEOUT. A runner that keeps one beat
+// unanswered on a connection tells by it that a late answer is that beat's. A beat from a runner older than the field
+// names none, and its answer names none either. A gateway without backends names it as well.
+func TestEveryHeartbeatAckNamesTheBeatItAnswers(t *testing.T) {
+	var answer atomic.Value
+	answer.Store("reconcile")
+	backend := newFakeBackend(t, func(w http.ResponseWriter, r *http.Request, body []byte) {
+		switch answer.Load() {
+		case "refuse":
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"code": "DATABASE_UNAVAILABLE", "retryable": true})
+		case "none":
+			<-r.Context().Done()
+		default:
+			heartbeatAnswer(w, r, body)
+		}
+	})
+	h := newLinkHarness(t, []*fakeBackend{backend}, func(c *config) {
+		c.RPCTimeout, c.link.RetryBudget = 500*time.Millisecond, 100*time.Millisecond
+	})
+	tc, _ := h.connectLink(runnerA, processA)
+	beat := func(id uint64, facts ...*linkpb.Fact) *linkpb.HeartbeatAck {
+		t.Helper()
+		tc.send(heartbeatFrame(&linkpb.Heartbeat{ProcessId: processA, BeatId: id, Facts: facts}))
+		return tc.await("heartbeat_ack", 5*time.Second, nil).GetHeartbeatAck()
+	}
+	if ack := beat(41, fact("engines", `[{"engine":"claude"}]`)); ack.GetBeatId() != 41 || len(ack.GetReconcileJson()) == 0 {
+		t.Fatalf("a reconciled beat: %v", ack)
+	}
+	if ack := beat(42, digestOnly(fact("repos", `[]`))); ack.GetBeatId() != 42 || strings.Join(ack.GetWantFacts(), ",") != "repos" {
+		t.Fatalf("a beat answered with want_facts: %v", ack)
+	}
+	answer.Store("refuse")
+	if ack := beat(43); ack.GetBeatId() != 43 || len(ack.GetReconcileJson()) != 0 {
+		t.Fatalf("a beat the route refused: %v", ack)
+	}
+	answer.Store("none")
+	if ack := beat(44); ack.GetBeatId() != 44 || len(ack.GetReconcileJson()) != 0 || h.g.metrics.heartbeatForwards.get("failed") != 1 {
+		t.Fatalf("a beat the route did not answer in time: %v (failed %v)", ack, h.g.metrics.heartbeatForwards.get("failed"))
+	}
+	answer.Store("reconcile")
+	if ack := beat(0); ack.GetBeatId() != 0 || len(ack.GetReconcileJson()) == 0 {
+		t.Fatalf("a beat that names none: %v", ack)
+	}
+	if logs := h.logs.String(); !strings.Contains(logs, "beat=44") || strings.Contains(logs, "beat=0") {
+		t.Fatalf("the frame log does not name the beats as they were named:\n%s", logs)
+	}
+
+	bare := newHarness(t, nil)
+	bc, _ := bare.connect(runnerA, processA)
+	bc.send(heartbeatFrame(&linkpb.Heartbeat{ProcessId: processA, BeatId: 7}))
+	if ack := bc.await("heartbeat_ack", 5*time.Second, nil).GetHeartbeatAck(); ack.GetBeatId() != 7 {
+		t.Fatalf("a gateway without backends: %v", ack)
 	}
 }

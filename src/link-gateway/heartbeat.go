@@ -149,7 +149,8 @@ func (l *linkState) forwardHeartbeat(hb *linkpb.Heartbeat) {
 	}
 	l.noteHeartbeat(hb)
 	members, want := l.facts.resolve(hb.GetFacts(), m)
-	ack := &linkpb.HeartbeatAck{Mode: linkpb.Mode_MODE_LINK}
+	// Every answer names the beat it answers, so the runner can tell it from the answer to another (proto beat_id).
+	ack := &linkpb.HeartbeatAck{Mode: linkpb.Mode_MODE_LINK, BeatId: hb.GetBeatId()}
 	if len(want) > 0 {
 		// Nothing was reconciled: no reconcile_json, and no HintState, which the route was not asked for.
 		m.heartbeatForwards.inc("want_facts")
