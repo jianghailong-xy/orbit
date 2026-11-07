@@ -394,7 +394,7 @@ struct SessionFolderPage: View {
             }
         }
         return SessionProjectRowView(row: row, onOpen: { app.openProjectSessions(projectAddress) })
-        .sessionProjectRowActions(row, onOpen: onOpen, onSessions: { app.openProjectSessions(projectAddress) }, onProject: {
+        .sessionProjectRowActions(row, view: address.view, onOpen: onOpen, onSessions: { app.openProjectSessions(projectAddress) }, onProject: {
             app.openProject(row.projectId)
         }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })
     }

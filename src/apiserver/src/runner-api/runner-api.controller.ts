@@ -164,6 +164,7 @@ import {
   CLAUDE_REGION_STOPPED_SUBTYPE,
   type ClaudeRegionCheckRequest,
   type ClaudeRegionCheckResponse,
+  type OrbitMessageFrom,
   type SessionMessageFrom,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
@@ -303,6 +304,7 @@ import {
   pendingMessageColumns,
   readBriefSender,
 } from '../sessions/session-message';
+import { orbitMessageOf } from '../sessions/orbit-message';
 import { SessionRequestService } from '../sessions/session-request.service';
 import {
   appendSessionRepliesContext,
@@ -596,6 +598,9 @@ const INGEST_SESSION_SELECT = {
   // this batch is the one that delivers the task's brief (`readTurnCards`).
   taskId: true,
   runSource: true,
+  // That the platform wrote this session's opening prompt (0493): its opening turn's echo is then
+  // Orbit's message on the row (`orbitMessageOf`), not the owner's.
+  promptByOrbit: true,
   // The line an account-pool member switch owes the transcript, taken by the first
   // engine start a batch carries (QueueService.resolvePoolMember writes it).
   poolSwitchNotice: true,
@@ -824,6 +829,7 @@ const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 
   lastUserText: { column: 'last_user_text', type: 'text' },
   lastUserFromSessionId: { column: 'last_user_from_session_id', type: 'uuid' },
   lastUserFromTitle: { column: 'last_user_from_title', type: 'text' },
+  lastUserFromOrbit: { column: 'last_user_from_orbit', type: 'jsonb' },
   retryAt: { column: 'retry_at', type: 'timestamp' },
   retryAttempts: { column: 'retry_attempts', type: 'integer' },
   claudeAccount: { column: 'claude_account', type: 'text' },
@@ -849,6 +855,8 @@ function ingestedSessionValue(type: (typeof INGESTED_SESSION_COLUMNS)[string]['t
     case 'text[]':
       return Array.isArray(value) && value.every((v) => typeof v === 'string') ? JSON.stringify(value) : undefined;
     case 'jsonb':
+      // `Prisma.DbNull` is how a nullable one is cleared (`lastUserFromOrbit`): SQL NULL, not JSON null.
+      if (value === Prisma.DbNull) return null;
       return value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype ? JSON.stringify(value) : undefined;
   }
 }
@@ -7981,6 +7989,7 @@ export class RunnerApiController {
           })
         : [];
       const authoredUserText = new Map(userTurns.map((turn) => [turn.id, turn.content]));
+      const userTurnById = new Map(userTurns.map((turn) => [turn.id, turn]));
       // The cards those turns are drawn as rather than as the owner's own message — an exception
       // item's delivery, the owner's answer handed to the coordinator, a fact the coordinator is told
       // or the answer to a criteria proposal, a task run's brief, a project's start, a confirmation
@@ -8144,6 +8153,11 @@ export class RunnerApiController {
       // name the same session the same way — and null for the owner's words, the platform's, or an
       // echo with no turn to read a sender from. Decided wherever pendingUserText is.
       let pendingUserFrom: SessionMessageFrom | null = null;
+      // Or that Orbit wrote it (`lastUserFromOrbit`): a turn the control plane wrote itself, read off
+      // the turn's key and the cards stored with this very echo (orbit-message.ts), so the row says
+      // "Orbit" for exactly the turns the conversation draws as the platform's — with the card of a
+      // coordinator's notification, which the row's line is written from.
+      let pendingUserOrbit: OrbitMessageFrom | null = null;
       let currentWorkAcknowledged = 0;
       const acknowledgedTurnIds = acknowledgedRuntimeTurnIds(durable);
       if (acknowledgedTurnIds.length > 0) {
@@ -8198,11 +8212,17 @@ export class RunnerApiController {
             ? authoredUserText.get(e.turnId)
             : echoed;
           pendingUserText = text?.trim() || null;
-          const card = e.turnId ? turnCards.get(e.turnId)?.sessionMessage : undefined;
+          const cards = e.turnId ? turnCards.get(e.turnId) : undefined;
+          const card = cards?.sessionMessage;
           pendingUserFrom = card ? { sessionId: card.fromSessionId, title: card.fromTitle } : null;
+          const turn = e.turnId ? userTurnById.get(e.turnId) : undefined;
+          pendingUserOrbit = turn
+            ? orbitMessageOf(turn, cards, { id: sessionId, promptByOrbit: session.promptByOrbit })
+            : null;
         } else if (ANSWERS_USER_TURN.has(e.type)) {
           pendingUserText = null;
           pendingUserFrom = null;
+          pendingUserOrbit = null;
         }
         frontier = { seq: e.seq, tool };
       }
@@ -8272,7 +8292,7 @@ export class RunnerApiController {
         ...(enginePhaseSince !== undefined ? { enginePhaseSince } : {}),
         // undefined = nothing in this batch either asked or answered; keep the stored
         // message rather than writing null over it. Its sender is written with it, every time.
-        ...(pendingUserText !== undefined ? pendingMessageColumns(pendingUserText, pendingUserFrom) : {}),
+        ...(pendingUserText !== undefined ? pendingMessageColumns(pendingUserText, pendingUserFrom, pendingUserOrbit) : {}),
         ...retry,
       });
 

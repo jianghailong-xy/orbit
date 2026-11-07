@@ -26,6 +26,12 @@ public struct SessionProjectRow: Identifiable, Equatable, Sendable {
     public let runningCount: Int
 
     public var id: String { projectId }
+
+    /// Whether the row's menu leads with Complete (design §4.3, owner 2026-11-07): only a DONE or
+    /// CANCELLED project, and only in Open, where there is something left to move to Completed.
+    public func offersComplete(in view: SessionView) -> Bool {
+        view == .open && (status == .done || status == .cancelled)
+    }
 }
 
 /// The project an ordinary row belongs to where that project has no row: a member in a workspace its

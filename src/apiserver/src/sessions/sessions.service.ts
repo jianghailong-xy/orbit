@@ -31,7 +31,7 @@ import { freshRunningBgJobs } from './background-job-activity';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
-import { isOrbitAuthoredTurn } from './orbit-authored-turn';
+import { isOrbitAuthoredTurn, isOrbitAuthoredTurnOf, openingTurnKey } from './orbit-authored-turn';
 import { importForkSessionId } from './import-fork';
 import { assertMayMoveRuns, assertSessionMayReach, type SessionAct } from './session-reach';
 import {
@@ -42,7 +42,8 @@ import {
   STEER_WITHDRAW_WAIT_MS,
 } from './steer-withdraw';
 import { readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql } from './session-project-membership';
-import { lastUserFromOf, pendingMessageColumns, readSessionMessageFrom } from './session-message';
+import { lastUserFromOf, lastUserFromOrbitOf, pendingMessageColumns, readSessionMessageFrom } from './session-message';
+import { readOrbitMessageFrom } from './orbit-message';
 import {
   closeRequestsTheRetryWillNotResend,
   isSessionReplyTurn,
@@ -1009,6 +1010,13 @@ export class SessionsService {
        */
       titleManagedByProject?: boolean;
       /**
+       * The platform wrote `dto.prompt`, not a person (0493): set by the doors that open a session with
+       * a prompt of their own — a project's coordinator, a judgment, a task list's dispatch console, an
+       * @-mention's reply. Its opening turn is then Orbit's on the row and the queue
+       * (`isOrbitAuthoredTurnOf`). Internal: public session creation cannot claim it.
+       */
+      promptByOrbit?: boolean;
+      /**
        * The HTTP create door's credential. A personal access token may not choose `permissionMode`
        * at all, to any value, for the reason `updateConfig` refuses it one (§5.1 of
        * docs/personal-access-token-design.md): a session opened in a mode that runs without asking
@@ -1465,6 +1473,7 @@ export class SessionsService {
         title,
         titleManagedByProject: opts?.titleManagedByProject ?? false,
         titleBeforeProjectManagement: null,
+        promptByOrbit: opts?.promptByOrbit ?? false,
         branch,
         prompt: dto.prompt,
         status: RunStatus.PENDING,
@@ -1615,6 +1624,8 @@ export class SessionsService {
     const {
       titleManagedByProject: _titleManagedByProject,
       titleBeforeProjectManagement: _titleBeforeProjectManagement,
+      // Read where the row is (orbit-authored-turn.ts); the row already says it as `lastUserFromOrbit`.
+      promptByOrbit: _promptByOrbit,
       ...publicSession
     } = session;
     return withSessionState(publicSession);
@@ -3752,6 +3763,7 @@ export class SessionsService {
       lastUserText: string | null;
       lastUserFromSessionId: string | null;
       lastUserFromTitle: string | null;
+      lastUserFromOrbit: Prisma.JsonValue | null;
       // The rolling recap and when it was written (0418): the line the list prefers to the raw
       // last reply. Both null on a session no pass has recapped yet.
       recapText: string | null;
@@ -3847,6 +3859,8 @@ export class SessionsService {
         -- Who sent it, when another session did (0485): the row names that session, not "You".
         s.last_user_from_session_id AS "lastUserFromSessionId",
         s.last_user_from_title AS "lastUserFromTitle",
+        -- Or that Orbit wrote it (0491), with the notification card its line is written from.
+        s.last_user_from_orbit AS "lastUserFromOrbit",
         -- The rolling recap (0418), clipped like the previews above. A session with no recap yet
         -- answers nulls, which is what the row falls back from to lastAssistantText.
         left(s.recap_text, ${SessionsService.PREVIEW_LEN}::int) AS "recapText",
@@ -4063,6 +4077,8 @@ export class SessionsService {
         lastUserText: r.lastUserText,
         // `{ sessionId, title }` of the session that sent lastUserText, null for the owner's own.
         lastUserFrom: lastUserFromOf(r),
+        // `{ coordinatorDelivery }` when Orbit wrote it, null for anybody else's.
+        lastUserFromOrbit: lastUserFromOrbitOf(r),
         recapText: r.recapText,
         recapAt: r.recapAt,
         mergeStatus: r.mergeStatus,
@@ -4335,6 +4351,8 @@ export class SessionsService {
       sharedAt: _retiredSharedAt,
       titleManagedByProject: _titleManagedByProject,
       titleBeforeProjectManagement: _titleBeforeProjectManagement,
+      // Internal, as in `create`: the row says it as `lastUserFromOrbit`, the queue as `authoredByOrbit`.
+      promptByOrbit: _promptByOrbit,
       // Read, never spread: it is the input to the count below, and a client that wants to know
       // which jobs are moving asks the count, not the per-job instants behind it.
       runningBgJobActivity,
@@ -4344,6 +4362,8 @@ export class SessionsService {
       // Read, never spread: answered as one `lastUserFrom`, the shape the list row and the summary carry.
       lastUserFromSessionId,
       lastUserFromTitle,
+      // Read, never spread, as the list row reads it (`lastUserFromOrbitOf`).
+      lastUserFromOrbit,
       ...rest
     } = projected;
     const tags = tagLinks
@@ -4424,6 +4444,8 @@ export class SessionsService {
       projectMembership: await readSessionProjectMembership(this.prisma, session.id),
       // Who sent lastUserText, when another session did — the list row's and the summary's key.
       lastUserFrom: lastUserFromOf({ lastUserFromSessionId, lastUserFromTitle }),
+      // Or that Orbit wrote it, with the notification card its line is written from.
+      lastUserFromOrbit: lastUserFromOrbitOf({ lastUserFromOrbit }),
       sourceLanding,
       ...(landing ? { landing } : {}),
       shareToken: shareLinks?.[0]?.token ?? null,
@@ -5773,7 +5795,7 @@ export class SessionsService {
    *  / queue.service.buildSession. It's a real PENDING message turn but isn't a withdrawable
    *  queued follow-up, so the queued-turn list/cancel paths exclude it. */
   static initialTurnClientId(sessionId: string): string {
-    return `initial-${sessionId}`;
+    return openingTurnKey(sessionId);
   }
 
   /** Allocate a turn while the caller holds the Session row lock. */
@@ -6474,6 +6496,12 @@ export class SessionsService {
       const sentBy = dto.content && opts?.senderSessionId
         ? await readSessionMessageFrom(tx, ownerId, opts.senderSessionId)
         : null;
+      // Or that Orbit wrote it — a coordinator's notification, a watch's wake, the owner's answer
+      // handed on — with the notification's card, which the hook above has already bound to this turn
+      // (orbit-message.ts). Read only for a key in the platform's own namespace.
+      const sentByOrbit = dto.content
+        ? await readOrbitMessageFrom(tx, id, turn, opts?.senderSessionId ?? null)
+        : null;
       const nextStatus = statusAfterTurnEnqueued(session.status);
       await tx.session.update({
         where: { id },
@@ -6487,8 +6515,8 @@ export class SessionsService {
           // the one thing that reads as "already answered". The runner's own `user` event rewrites
           // the same value; only a reply clears it (ANSWERS_USER_TURN). An attachment-only send
           // carries no text to preview and so leaves the column as it found it. Its sender goes
-          // with it (`lastUserFrom`), null for the owner's own words.
-          ...(dto.content ? pendingMessageColumns(dto.content, sentBy) : {}),
+          // with it (`lastUserFrom`, `lastUserFromOrbit`), both null for the owner's own words.
+          ...(dto.content ? pendingMessageColumns(dto.content, sentBy, sentByOrbit) : {}),
           // A message on this session disarms any auto-retry waiting on it — whether it
           // came from the user (they took over; sending their own message again behind
           // their back would be a second, unasked-for turn) or from the sweeper itself
@@ -6790,6 +6818,9 @@ export class SessionsService {
       const sentBy = content && opts?.senderSessionId
         ? await readSessionMessageFrom(tx, ownerId, opts.senderSessionId)
         : null;
+      const sentByOrbit = content
+        ? await readOrbitMessageFrom(tx, id, turn, opts?.senderSessionId ?? null)
+        : null;
       const nextStatus = statusAfterTurnEnqueued(session.status);
       await tx.session.update({
         where: { id },
@@ -6798,7 +6829,7 @@ export class SessionsService {
           lastTurnAt: new Date(),
           // The redirected message is what the session is waiting on now — previewed from here
           // exactly as in createTurn, with who sent it.
-          ...(content ? pendingMessageColumns(content, sentBy) : {}),
+          ...(content ? pendingMessageColumns(content, sentBy, sentByOrbit) : {}),
           // The person took over: an auto-retry waiting on this session must not fire a
           // second, unasked-for turn behind the one they just redirected to. A claim the sweep had
           // in flight ends for the same reason (migration 0354) — this turn is not its.
@@ -6870,7 +6901,8 @@ export class SessionsService {
       where: { id, ownerId },
       // What the cards are read against (turn-cards.ts): whose rows they may name, and the task a
       // run's brief was built from. And whether it is a wiki chat, whose opening turn is its prompt.
-      select: { id: true, ownerId: true, taskId: true, runSource: true, wikiChatSpaceId: true },
+      // And whether the platform wrote that prompt (0493), which makes the opening Orbit's.
+      select: { id: true, ownerId: true, taskId: true, runSource: true, wikiChatSpaceId: true, promptByOrbit: true },
     });
     if (!session) throw new NotFoundException('session not found');
     const turns = await this.prisma.conversationTurn.findMany({
@@ -6955,7 +6987,7 @@ export class SessionsService {
             mimeType: attachment.mimeType,
           })),
           ...cards.get(turn.id),
-          ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
+          ...(isOrbitAuthoredTurnOf(session, turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
         };
       });
     }
@@ -7024,7 +7056,7 @@ export class SessionsService {
               }
             : {}),
           ...cards.get(turn.id),
-          ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
+          ...(isOrbitAuthoredTurnOf(session, turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
           content,
           createdAt: turn.createdAt.toISOString(),
           attachments: turn.attachments.map((attachment) => ({
@@ -9386,6 +9418,9 @@ export class SessionsService {
       const sentBy = dto.content && opts?.senderSessionId
         ? await readSessionMessageFrom(tx, ownerId, opts.senderSessionId)
         : null;
+      const sentByOrbit = dto.content
+        ? await readOrbitMessageFrom(tx, id, turn, opts?.senderSessionId ?? null)
+        : null;
       await tx.session.update({
         where: { id },
         data: {
@@ -9404,7 +9439,7 @@ export class SessionsService {
           // Previewed from enqueue, as in createTurn: a revive waits for a slot like any other
           // turn, and until the runner reports it the row would show the reply from before. With
           // its sender, as there.
-          ...(dto.content ? pendingMessageColumns(dto.content, sentBy) : {}),
+          ...(dto.content ? pendingMessageColumns(dto.content, sentBy, sentByOrbit) : {}),
           mergeStatus: null,
           mergeOperationId: null,
           mergeOperationOwner: null,
