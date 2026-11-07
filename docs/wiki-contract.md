@@ -360,12 +360,27 @@ JSON 的 `kinds.<kind>.fields` 与 TS 的 `KIND_SPECS[kind].fields` 用同一套
 - **`tool_call` 的 tool_use_id**（契约 `sourceInput.toolUseId`）：先当行 id 找；本 owner 没有这个 id 的行，再当 tool_use_id 找。
   先找调用方会话自己的调用；没有，再找本 owner 的其他会话，恰好一个会话带它才算数。同一会话里同一次调用被重复入库
   （线上有 324 个 tool_use_id 各存了 2–19 行，内容逐字节相同），算一次调用，取最早那一行；两个及以上会话都带它，或者谁都
-  没带，就是 `WIKI_SOURCE_UNRESOLVED`。存进 `wiki_source.ref` 的是行 id。决定（decide）和核实时，op 的出处从它的 payload 重读，
-  调用方同样是提议它的那个会话。调用方会话那一步是 `(session_id, tool_use_id)` 索引的一次探测；跨会话那一步要沿同一个索引
-  走遍 owner 的会话（10-06 线上 5.5k 个会话约 0.14 秒），只有引的不是自己会话的调用时才走到。
+  没带（下一条的待核实除外），就是 `WIKI_SOURCE_UNRESOLVED`。存进 `wiki_source.ref` 的是行 id。决定（decide）和核实时，
+  op 的出处从它的 payload 重读，调用方同样是提议它的那个会话。调用方会话那一步是 `(session_id, tool_use_id)` 索引的一次探测；
+  跨会话那一步要沿同一个索引走遍 owner 的会话（10-06 线上 5.5k 个会话约 0.14 秒），只有引的不是自己会话的调用时才走到。
+- **刚发生、还没入库的调用**（契约 `sourceInput.pending`，C14）：runner 按批送事件，会话可能在自己的调用入库前就引用它
+  （C10，11-06：`cat` 结束 24 毫秒后到的 wiki_propose 被拒）。本 owner 没有任何会话带的 tool_use_id（行 id 不算：只有入库的行
+  才有 id），由调用方会话在引擎正为它生成时引用（一轮正在跑：派发来的，或运行时自己起的，见 `common/session-generating.ts`；
+  两轮之间的会话，调用都已送达，照旧当场拒）——聊天里的 wiki_propose 任何 op 都行，其他会话除 challenge 以外的 op（challenge 的标记当场
+  写下，之后没有哪一步再核它的出处）——先记为**待核实**：引文不验，出处不落库；这条 op 不管效果策略和审阅模式本来怎么处理，
+  一律等 owner（卡片本来就等按键）。到 op 结算时再解析：卡片的 Apply / Edit，或 owner 在 Review 里的决定。那时它必须是调用方
+  会话自己的调用，引文当场核；别的会话的调用，只有在这条 op 最初记下之前（卡片或 changeset op，都是 uuid(7)，id 的先后就是
+  写入的先后）就已入库才算数。所以后来出现在别的会话、别的账户里，或者始终没出现的 tool_use_id，结算时一律
+  `WIKI_SOURCE_UNRESOLVED`，什么都不写。接受后，add / supersede 的第 1 版补上这条出处（存行 id）；amend、reinforce 接受时
+  本来就写全部出处。初见时，别的账户的调用和还没入库的调用分不出来，也不该分得出来。
 - **校验**（T3）：每个出处都要在本 owner 的行里解析出来，否则 `WIKI_SOURCE_UNRESOLVED`，`errors[]` 按 path 点名那条出处，
   消息里说这种 kind 的 ref 该填什么；引文做空白归一化后必须是原文子串，
   否则 `WIKI_QUOTE_NOT_FOUND`；非 owner 的 add / amend / supersede / reinforce 至少带一个出处，owner 自己写的可以不带。
+- **脱敏形式的引文**（契约 `sourceRules.quote`，C14）：共享脱敏器（带 owner 的 `workspace.env` 值）原样放过的引文——卡片和 op
+  存的引文脱敏后就是这样，按键和决定结算时读回来的也是它——也到按同样规则脱敏后的原文里找，找到算数，但记为未验证
+  （`quote_verified` 为 false：不是原文逐字）。C10 的卡片把 `ENROLLMENT_TOKEN_TTL_MS = 900_000` 存成 `… = [redacted]`，此前
+  每次 Apply 都是 `WIKI_QUOTE_NOT_FOUND`。还带着值的引文仍须逐字出自原文：原文没有的值，不会因为两边都读作 `[redacted]`
+  就被找到；脱敏器没拿掉东西的地方写 `[redacted]`，也找不到。
 - **存储**：出处行挂在它支撑的那一版上；reinforce 只往当前版追加出处行。`quote` 至多 300 字、先脱敏；`quote_sha256`
   与 `quote` 同在同缺。`url` 只给 assumption 用，并且一定标 `tainted`。
 - **删除即遗忘**：出处状态 `live → trashed → live | deleted`，`live → deleted`。会话进回收站时出处先标 `trashed`，条目退出推送但保留；
