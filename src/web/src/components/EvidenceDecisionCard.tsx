@@ -1,21 +1,12 @@
 import { useEffect, useRef, useState, type JSX, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  ArrowRightOutlined,
-  ClockCircleOutlined,
-  HourglassOutlined,
-  PauseCircleOutlined,
-  RightOutlined,
-} from '@ant-design/icons';
-import { isUsageLimitErrorText } from '@orbit/shared';
+import { ArrowRightOutlined } from '@ant-design/icons';
 import { Alert } from './ui/Alert';
 import { api } from '../api';
 import { decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { citesFiles } from '../lib/evidenceFiles';
 import { pendingDecisionsQuery, taskEvidenceQuery } from '../lib/queries';
 import { streamPoll } from '../lib/listBudget';
-import { quotaWindowKind, type QuotaWindowKind } from '../lib/quotaWindow';
-import { sessionRunStateOf, type SessionStateSource } from '../lib/sessionState';
 import { CardActionButton, CardActions } from './CardAction';
 import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
 import { PROVENANCE_LABEL } from './CriteriaDecisionCard';
@@ -432,22 +423,6 @@ function drawnHere(
   );
 }
 
-/**
- * The versions waiting for this conversation's coordinator, under the same rule as the cards above.
- *
- * The server lists them for the conversation the project is coordinated from and for no other
- * reader. None of them is a question this reader is asked — nothing counts them, and none holds
- * the keyboard — but each is the owner's to decide at any moment, so each is drawn here as the
- * folded card that opens into the one above (`QueuedEvidenceCard`). An older server sends none.
- */
-export function coordinatorQueueRows(
-  queue: PendingDecisionQueue | null | undefined,
-  projectId: string | null | undefined,
-  sessionId?: string | null,
-): PendingDecisionRow[] {
-  return (queue?.waitingOnCoordinator ?? []).filter((row) => drawnHere(row, projectId, sessionId));
-}
-
 /** The versions that waited and have since been handed to this conversation's coordinator, while
  *  it still holds them: one line each where its card was. This project's rows only. */
 function sentToCoordinatorRows(
@@ -498,8 +473,7 @@ export function evidenceDecisionStanding(
   return standingAmong(evidenceDecisionCardRows(queue, projectId, sessionId), address);
 }
 
-/** The same three conclusions, among the rows given: a card a reader opened while its version
- *  waited for the coordinator reads them among that queue's rows as well (`evidenceSlot`). */
+/** The same three conclusions among the rows given. */
 function standingAmong(
   rows: PendingDecisionRow[],
   address: EvidenceDecisionAddress,
@@ -601,7 +575,6 @@ export function EvidenceDecisionCard({
   error = null,
   recorded = null,
   keys = false,
-  waiting = null,
   onConfirm,
   onChatAbout,
 }: {
@@ -616,10 +589,6 @@ export function EvidenceDecisionCard({
   recorded?: EvidenceDecisionResult | null;
   /** Whether this card holds the keyboard — see `CardHotkey.ts`. A static render never does. */
   keys?: boolean;
-  /** Why the coordinator has not been handed this version, when the reader opened it from its
-   *  queued card (`Decide it myself`): said above everything else, with what deciding here means,
-   *  until an answer from here is recorded. Null for every other card. */
-  waiting?: CoordinatorPause | null;
   /** `Confirm done` presses the door from here. The other answer does not: it arms the composer,
    *  and the door is pressed by the send that follows. */
   onConfirm: () => void;
@@ -646,12 +615,6 @@ export function EvidenceDecisionCard({
       </div>
       <div className="approval-body is-questions decision-ask-body">
         <section className="decision-ask-q">
-          {waiting && !recorded ? (
-            <div className="evidence-queued-notice">
-              <CoordinatorPauseStatus pause={waiting} />
-              <div className="evidence-queued-note">{EVIDENCE_DECISION_QUEUED_OPEN_NOTE}</div>
-            </div>
-          ) : null}
           {row ? (
             <>
               <div className="decision-ask-chip">{row.title}</div>
@@ -750,13 +713,10 @@ export function sendEvidenceDecision(
 function EvidenceDecisionSlot({
   sessionId,
   standing,
-  waiting = null,
   onSendBack,
 }: {
   sessionId: string;
   standing: EvidenceDecisionStanding;
-  /** Set while this version waits for the coordinator and the reader opened it to decide here. */
-  waiting?: CoordinatorPause | null;
   /** Hand this version back to the composer to say why. */
   onSendBack: (row: PendingDecisionRow) => void;
 }): JSX.Element {
@@ -778,13 +738,11 @@ function EvidenceDecisionSlot({
     if (standing.state !== 'DECIDABLE') return;
     onSendBack(standing.row);
   };
-  // Enter follows the confirmation button's liveness. Chat about this leaves by the composer. A
-  // version waiting for the coordinator is nobody's question yet, opened or not, so it never takes
-  // the keys from a card that is one: its own buttons are its only presses.
+  // Enter follows the confirmation button's liveness. Chat about this leaves by the composer.
   const live = standing.state === 'DECIDABLE' && !answer.isPending && !answer.isSuccess;
   const anchor = useRef<HTMLDivElement>(null);
   const keys = useDecisionCardKeys({
-    confirmEnabled: live && waiting === null,
+    confirmEnabled: live,
     onConfirm: confirm,
     anchor,
   });
@@ -796,7 +754,6 @@ function EvidenceDecisionSlot({
       error={answer.isError ? answer.error : null}
       recorded={answer.isSuccess ? answer.data : null}
       keys={keys}
-      waiting={waiting}
       onConfirm={confirm}
       onChatAbout={chat}
     />
@@ -817,19 +774,10 @@ function EvidenceDecisionSlot({
  *
  * Reloading the page forgets them, which is correct: a settled question needs no card.
  *
- * AND THE VERSIONS WAITING FOR THE COORDINATOR
- * --------------------------------------------
- * A coordinator conversation also draws the versions its paused coordinator is owed, folded
- * (`QueuedEvidenceCard`), and one line for each that has since been handed to it
- * (`SentToCoordinatorLine`). They are remembered the same way and in the same list, so a version
- * keeps its place while it moves between the three: folded while it waits, one line once it is
- * sent, the card above if it becomes the owner's question after all. One that only ever waited and
- * then left the read — replaced by a later revision — leaves no card behind: nobody was asked it.
  */
 export function SessionEvidenceDecisionCard({
   sessionId,
   projectId,
-  coordinator = null,
   onSendBack,
 }: {
   /** The session a press decides FROM — unless the row's `ownerCard` names another — and the one
@@ -838,17 +786,12 @@ export function SessionEvidenceDecisionCard({
   /** The project this session coordinates, whose rows it draws cards for. Every session also draws
    *  the cards of tasks dispatched outside any project that the read places in it (`ownerCard`). */
   projectId: string | null | undefined;
-  /** This conversation's own session: in a coordinator conversation, the coordinator its queued
-   *  versions wait for, whose run state, error and armed retry say why (`coordinatorPause`). */
-  coordinator?: SessionStateSource | null;
   /** Arm the bottom composer to send this version back, given the row it is about: it is handed
    *  the row, and the send that follows presses the door with the typed reason. The card stays
    *  put, with its own `Confirm done` still live — pressing that is the other way out. */
   onSendBack: (row: PendingDecisionRow) => void;
 }): JSX.Element | null {
   const [seen, setSeen] = useState<SeenVersion[]>([]);
-  // The waiting versions the reader opened to decide here (`Decide it myself`), by address.
-  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
   const pending = useQuery({
     ...pendingDecisionsQuery(sessionId),
     enabled: Boolean(sessionId),
@@ -872,30 +815,20 @@ export function SessionEvidenceDecisionCard({
       const key = decisionRowKey(version);
       const slot = evidenceSlot(read, projectId, version, {
         asked: version.asked,
-        opened: opened.has(key),
       }, sessionId);
       return slot === null ? [] : [{ key, slot }];
     });
   if (slots.length === 0) return null;
-  const pause = coordinatorPause(coordinator);
   return (
     <>
       {slots.map(({ key, slot }) =>
         slot.kind === 'SENT' ? (
           <SentToCoordinatorLine key={key} sent={slot.sent} />
-        ) : slot.kind === 'QUEUED' ? (
-          <QueuedEvidenceCard
-            key={key}
-            row={slot.row}
-            pause={pause}
-            onDecide={() => setOpened((previous) => new Set(previous).add(key))}
-          />
         ) : (
           <EvidenceDecisionSlot
             key={key}
             sessionId={sessionId}
             standing={slot.standing}
-            waiting={slot.waiting ? pause : null}
             onSendBack={onSendBack}
           />
         ))}
@@ -904,12 +837,12 @@ export function SessionEvidenceDecisionCard({
 }
 
 /** A version this conversation has drawn something for, and whether it was ever a question put to
- *  the reader here — in `pending` — rather than only a version waiting for the coordinator. */
+ *  the reader here — in `pending` — rather than a delivery receipt. */
 type SeenVersion = EvidenceDecisionAddress & { asked: boolean };
 
 /**
  * The versions remembered so far, with whatever this read adds: the questions first, in the read's
- * order, then the versions handed to the coordinator and the ones still waiting for it. Returns the
+ * order, then the versions handed to the coordinator. Returns the
  * same array when nothing is new, so the effect that keeps it settles.
  */
 function rememberVersions(
@@ -923,7 +856,6 @@ function rememberVersions(
   const arrived: EvidenceDecisionAddress[] = [
     ...asked,
     ...sentToCoordinatorRows(queue, projectId),
-    ...coordinatorQueueRows(queue, projectId, sessionId),
   ];
   const known = new Set<string>();
   let changed = false;
@@ -931,7 +863,7 @@ function rememberVersions(
     const key = decisionRowKey(version);
     known.add(key);
     if (version.asked || !askedKeys.has(key)) return version;
-    // It waited first and is the reader's question now: the same place, remembered as asked.
+    // A delivered version is now the reader's question: keep its place, remembered as asked.
     changed = true;
     return { ...version, asked: true };
   });
@@ -947,195 +879,39 @@ function rememberVersions(
 
 /** How one version this conversation has drawn is drawn now. */
 type EvidenceSlot =
-  /** The card that decides it: a question put to this reader, one that has since moved on, or one
-   *  the reader opened while it still waits for the coordinator (`waiting`). */
-  | { kind: 'CARD'; standing: EvidenceDecisionStanding; waiting: boolean }
-  /** Waiting for the coordinator, folded. */
-  | { kind: 'QUEUED'; row: PendingDecisionRow }
+  /** A question put to this reader, or one that has since moved on. */
+  | { kind: 'CARD'; standing: EvidenceDecisionStanding }
   /** Handed to the coordinator, which holds it. */
   | { kind: 'SENT'; sent: SentToCoordinatorRow };
 
-/**
- * Where one remembered version stands, read off the read and nothing else — the same rule as
- * `evidenceDecisionStanding`, with the coordinator's queue in it.
- *
- * A question in `pending` is the card it has always been. One handed to the coordinator is its
- * line. One waiting for it is folded, or the card that decides it once the reader opened it. Any
- * other version is a card only if it was ever one — asked, or opened — and then it says why it can
- * no longer be answered, a later revision in either group being what supersedes it. A version
- * that only ever waited is drawn as nothing once it leaves.
- */
+/** Derive a remembered question or delivery receipt from the current read. */
 function evidenceSlot(
   read: PendingDecisionQueue | null,
   projectId: string | null | undefined,
   address: EvidenceDecisionAddress,
-  { asked, opened }: { asked: boolean; opened: boolean },
+  { asked }: { asked: boolean },
   sessionId?: string | null,
 ): EvidenceSlot | null {
-  const card = asked || opened;
-  if (!read) return card ? { kind: 'CARD', standing: { state: 'UNREAD', address }, waiting: false } : null;
+  const card = asked;
+  if (!read) return card ? { kind: 'CARD', standing: { state: 'UNREAD', address } } : null;
   const key = decisionRowKey(address);
   const questions = evidenceDecisionCardRows(read, projectId, sessionId);
   if (questions.some((row) => decisionRowKey(row) === key)) {
-    return { kind: 'CARD', standing: standingAmong(questions, address), waiting: false };
+    return { kind: 'CARD', standing: standingAmong(questions, address) };
   }
   const sent = sentToCoordinatorRows(read, projectId).find((row) => decisionRowKey(row) === key);
   if (sent) return { kind: 'SENT', sent };
-  const queued = coordinatorQueueRows(read, projectId, sessionId);
-  const waiting = queued.find((row) => decisionRowKey(row) === key);
-  if (waiting) {
-    return opened
-      ? { kind: 'CARD', standing: { state: 'DECIDABLE', address, row: waiting }, waiting: true }
-      : { kind: 'QUEUED', row: waiting };
-  }
   return card
-    ? { kind: 'CARD', standing: standingAmong([...questions, ...queued], address), waiting: false }
+    ? { kind: 'CARD', standing: standingAmong(questions, address) }
     : null;
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────────────────────
-   WHILE THE COORDINATOR IS PAUSED
-   ───────────────────────────────────────────────────────────────────────────────────────────── */
-
-/*
- * A version waiting for its coordinator, and one handed to it since
- * (`docs/evidence-waits-for-coordinator-design.md`; the owner's decisions of 2026-10-09).
- *
- * An Automatic project's evidence is its coordinator's to decide. While that conversation is paused
- * — a usage limit, a 429, an expired sign-in, a runner that went away, a retry it has armed — the
- * server keeps each new version for it rather than making it the owner's card, lists it for this
- * conversation in `waitingOnCoordinator`, and hands it over once the coordinator is back; then it
- * is in `sentToCoordinator` while the coordinator holds it. Neither is a question this reader is
- * asked, so nothing counts them — not the pinned strip, not the session's Needs you, not the
- * keyboard — and the card is folded to what waits, why, and one way in: the owner may decide at
- * any moment, and `Decide it myself` opens it in place into the card above, pressed exactly as
- * that card is.
- *
- * Why it waits is read off the coordinator's own conversation — its run state, the error its run
- * failed with, the retry it armed — which the page already holds, and the window is named by the
- * judgment the transcript's quota notice makes (`quotaWindowKind`), so the two cannot disagree.
- * Every time is the receipt's (`decisionReceiptTime`). The words are pinned by the native clients'
- * copy parity tests, which read the declarations below.
- */
-
-/** The folded card's heading. */
-export const EVIDENCE_DECISION_QUEUED_HEADING = 'Waiting for the coordinator';
-/** What the folded card says under why it waits. */
-export const EVIDENCE_DECISION_QUEUED_NOTE =
-  'It goes to the coordinator when it’s back. You can still decide now.';
-/** The folded card's one way in: it opens, in place, into the card that decides it. */
-export const DECISION_DECIDE_MYSELF_ACTION = 'Decide it myself';
-/** What the opened card says under why it waits. */
-export const EVIDENCE_DECISION_QUEUED_OPEN_NOTE =
-  'It gets this when it’s back. Decide here only if you don’t want to wait.';
-/** Why it waits while the coordinator is paused — the whole line when nothing more is known. */
-export const EVIDENCE_DECISION_COORDINATOR_PAUSED = 'Coordinator paused';
-/** And once it is back, before this version has been handed to it. */
-export const EVIDENCE_DECISION_COORDINATOR_BACK =
-  'Coordinator is back · it gets this when its current turn ends';
-/** The usage window a paused coordinator ran out of, as `quotaWindowKind` tells them apart. */
-export const DECISION_PAUSE_FIVE_HOUR_LIMIT = '5-hour limit';
-export const DECISION_PAUSE_WEEKLY_LIMIT = 'weekly limit';
-export const DECISION_PAUSE_USAGE_LIMIT = 'usage limit';
 /** What a version that waited says once it is handed over, ahead of when. */
 export const EVIDENCE_DECISION_SENT_TO_COORDINATOR = 'Sent to the coordinator';
-
-const PAUSE_WINDOW: Record<QuotaWindowKind, string> = {
-  FIVE_HOUR: DECISION_PAUSE_FIVE_HOUR_LIMIT,
-  WEEKLY: DECISION_PAUSE_WEEKLY_LIMIT,
-  OTHER: DECISION_PAUSE_USAGE_LIMIT,
-};
-
-/** Why the coordinator does not have a waiting version yet, read off its own conversation. */
-export type CoordinatorPause =
-  /** Paused, by the server's own rule (`conversationIsPaused`): its run FAILED, or it armed a
-   *  retry. `window` is the usage window it ran out of when that is why; `retryAt` is when the
-   *  retry it armed fires. */
-  | { state: 'PAUSED'; window: string | null; retryAt: string | null }
-  /** Neither: it is back, and gets the version when its current turn ends. */
-  | { state: 'BACK' };
-
-/** Where the coordinator stands. With no session to read, it is paused for a reason nobody knows:
- *  the server lists a waiting version for a paused coordinator, or for a turn's few seconds. */
-export function coordinatorPause(session: SessionStateSource | null | undefined): CoordinatorPause {
-  if (session && sessionRunStateOf(session) !== 'FAILED' && !session.retryAt) return { state: 'BACK' };
-  const error = session?.error ?? '';
-  return {
-    state: 'PAUSED',
-    window: isUsageLimitErrorText(error) ? PAUSE_WINDOW[quotaWindowKind(error)] : null,
-    retryAt: session?.retryAt ?? null,
-  };
-}
-
-/** The line under a waiting version's title: why the coordinator does not have it, and when it
- *  is expected back when its conversation says. */
-export function coordinatorPauseLine(pause: CoordinatorPause, now?: Date): string {
-  if (pause.state === 'BACK') return EVIDENCE_DECISION_COORDINATOR_BACK;
-  const at = pause.retryAt === null ? null : decisionReceiptTime(pause.retryAt, now);
-  if (pause.window !== null) {
-    return at === null
-      ? `${EVIDENCE_DECISION_COORDINATOR_PAUSED} · ${pause.window}`
-      : `${EVIDENCE_DECISION_COORDINATOR_PAUSED} · ${pause.window} · resets ${at}`;
-  }
-  return at === null
-    ? EVIDENCE_DECISION_COORDINATOR_PAUSED
-    : `${EVIDENCE_DECISION_COORDINATOR_PAUSED} · retries ${at}`;
-}
 
 /** The one line a version that waited leaves once it is handed to the coordinator. */
 export function sentToCoordinatorLine(deliveredAt: string, now?: Date): string {
   return `${EVIDENCE_DECISION_SENT_TO_COORDINATOR} · ${decisionReceiptTime(deliveredAt, now)}`;
-}
-
-/** The pause line, amber while the coordinator is paused and quiet once it is back. */
-function CoordinatorPauseStatus({ pause }: { pause: CoordinatorPause }): JSX.Element {
-  const paused = pause.state === 'PAUSED';
-  return (
-    <div className={`evidence-queued-pause${paused ? ' is-paused' : ''}`}>
-      {paused ? <PauseCircleOutlined aria-hidden="true" /> : <ClockCircleOutlined aria-hidden="true" />}
-      <span>{coordinatorPauseLine(pause)}</span>
-    </div>
-  );
-}
-
-/**
- * A version waiting for its coordinator, folded: the heading and when it was submitted, the task,
- * why it waits, and `Decide it myself`.
- *
- * Grey, in the frame the exception card wears while the coordinator is handling it, because
- * nobody is being asked anything yet; it carries no address the pinned strip could point at, and
- * holds no key.
- */
-function QueuedEvidenceCard({
-  row,
-  pause,
-  onDecide,
-}: {
-  row: PendingDecisionRow;
-  pause: CoordinatorPause;
-  /** Open it in place into the card that decides it. */
-  onDecide: () => void;
-}): JSX.Element {
-  return (
-    <div className="approval-card evidence-queued" data-queued-row={decisionRowKey(row)}>
-      <div className="approval-head evidence-queued-head">
-        <HourglassOutlined className="evidence-queued-mark" aria-hidden="true" />
-        <span className="evidence-decision-heading">{EVIDENCE_DECISION_QUEUED_HEADING}</span>
-        {row.submittedAt ? (
-          <span className="evidence-queued-time">{decisionReceiptTime(row.submittedAt)}</span>
-        ) : null}
-      </div>
-      <div className="approval-body is-questions evidence-queued-body">
-        <div className="evidence-queued-title">{row.title}</div>
-        <CoordinatorPauseStatus pause={pause} />
-        <div className="evidence-queued-note">{EVIDENCE_DECISION_QUEUED_NOTE}</div>
-        <button type="button" className="evidence-queued-decide" onClick={onDecide}>
-          {DECISION_DECIDE_MYSELF_ACTION}
-          <RightOutlined className="evidence-queued-caret" aria-hidden="true" />
-        </button>
-      </div>
-    </div>
-  );
 }
 
 /** A version that waited, once it is handed to the coordinator: one line where its card was. */

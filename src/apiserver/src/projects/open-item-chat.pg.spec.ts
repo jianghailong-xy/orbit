@@ -1,3 +1,4 @@
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -441,6 +442,7 @@ async function failedLanding(stack: Stack, w: World, label: string) {
   assert.equal((await report(stack, w, landing, RED_LANDING)).accepted, true);
   const [item] = await itemsWhere(stack.db, { taskId: task.taskId });
   assert.ok(item, 'the red landing opened an item');
+  await receiveOpenItem(stack.db, item.id);
   return { ...task, itemId: item.id };
 }
 
@@ -460,6 +462,7 @@ async function blockedCandidate(stack: Stack, w: World) {
   assert.equal(promotion.state, 'BLOCKED', 'a red MERGE_CHECK blocks the candidate');
   const [item] = await itemsWhere(stack.db, { promotionId: promotion.id });
   assert.ok(item, 'the red check opened an item');
+  await receiveOpenItem(stack.db, item.id);
   assert.equal(item.taskId, null, 'about the candidate, and about no task');
   return { promotionId: promotion.id, itemId: item.id };
 }
@@ -555,6 +558,7 @@ test('task-scoped: with the coordinator, being handled, superseded, then the own
         stage: 'SUPERSEDED',
         refusal: 'SUPERSEDED',
       });
+      await receiveOpenItem(stack.db, second);
       read = await rowOf(stack, w, second);
       assert.deepEqual(read.row.chat, {
         sessionId: w.coordinatorSessionId,

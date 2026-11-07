@@ -451,27 +451,57 @@ export class WikiRetrieval {
    * The keyword leg's last pass: the entries holding any of the words, those holding the most first,
    * and pg_trgm's similarity to the whole query among those holding as many.
    *
-   * Always over the indexed expression. A word of three characters or more is a condition the trigram index
-   * can answer; a CJK pair has no trigram, so a query holding one reads the space's entries, which is what the
-   * replay's latency gate is for. The inner query reads each entry's text once and hands it up, because the
-   * count asks of the text once per word and `wiki_entry_search_text` costs about 0.1 ms a call (0313);
-   * `OFFSET 0` is what keeps the planner from folding the call back into every one of them.
+   * Always over the indexed expression, and each entry's text is built once and lowered once. ILIKE is
+   * `lower()` of both sides and then LIKE (like.c, in a multibyte database), so counting the groups an
+   * entry holds as LIKEs on its lowered text counts exactly what ILIKE on its text would. Asked word by
+   * word, the same count cost a call of `wiki_entry_search_text` and a lowering of the whole text per
+   * word and per entry, which was most of what this pass cost on production (task 34t7MlnhUVsNSIh1X5tvK).
+   * Each subquery ends in `OFFSET 0`, which is what keeps the planner from folding a computed column back
+   * into every expression that reads it.
+   *
+   * Which entries hold a word is the trigram index's to answer when every word has a trigram: one
+   * `ILIKE ANY`, which the index answers element by element for rare words and a scan evaluates with
+   * one call per entry for common ones. A CJK pair has no trigram, so a query holding one reads every
+   * entry it may see either way, and the cheapest read is then the one without that condition.
+   *
+   * `word_similarity` costs the most of anything asked of an entry (a quarter of a millisecond on
+   * production), so only the entries that can still reach the cap are asked it: those holding at least
+   * as many groups as the cap's last one. Every entry holding fewer comes after at least LEG_CAP that
+   * hold more, so the answer and its order are the ones asking every entry gave.
    */
   private async anyWordLeg(where: Prisma.Sql, norm: NormalizedSearchQuery, groups: string[][]): Promise<string[]> {
-    const holds = (col: Prisma.Sql, group: string[]): Prisma.Sql =>
-      Prisma.sql`(${Prisma.join(group.map((pattern) => Prisma.sql`${col} ILIKE ${pattern}`), ' OR ')})`;
-    const text = Prisma.sql`m."text"`;
+    const holds = (group: string[]): Prisma.Sql =>
+      Prisma.sql`(${Prisma.join(group.map((pattern) => Prisma.sql`t."lowered" LIKE lower(${pattern})`), ' OR ')})`;
+    // The words that take part below the floor are the CJK pairs, and a pair has no trigram.
+    const pairTakesPart = norm.terms.some((term) =>
+      term.some((word) => usableInLastPass(word) && [...word].length < CONTENT_MIN_CHARS),
+    );
+    const narrowed = pairTakesPart ? Prisma.empty : Prisma.sql` AND ${SEARCH_TEXT} ILIKE ANY (${textArray(groups.flat())})`;
     const rows = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-      SELECT m."id" AS "id"
+      WITH found AS MATERIALIZED (
+        SELECT h."id", h."held"
+          FROM (
+            SELECT t."id", (${Prisma.join(groups.map((group) => Prisma.sql`${holds(group)}::int`), ' + ')}) AS "held"
+              FROM (
+                SELECT e."id" AS "id", lower(${SEARCH_TEXT}) AS "lowered"
+                  FROM "wiki_entry" e
+                 WHERE ${where}${narrowed}
+                OFFSET 0
+              ) t
+            OFFSET 0
+          ) h
+         WHERE h."held" > 0
+      ),
+      cut AS (SELECT "held" FROM found ORDER BY "held" DESC LIMIT 1 OFFSET ${LEG_CAP - 1}::int)
+      SELECT r."id" AS "id"
         FROM (
-          SELECT e."id" AS "id", ${SEARCH_TEXT} AS "text"
-            FROM "wiki_entry" e
-           WHERE ${where} AND (${Prisma.join(groups.map((group) => holds(SEARCH_TEXT, group)), ' OR ')})
+          SELECT f."id", f."held", ${SEARCH_TEXT} AS "text"
+            FROM found f
+            JOIN "wiki_entry" e ON e."id" = f."id"
+           WHERE f."held" >= COALESCE((SELECT "held" FROM cut), 0)
           OFFSET 0
-        ) m
-       ORDER BY (${Prisma.join(groups.map((group) => Prisma.sql`${holds(text, group)}::int`), ' + ')}) DESC,
-                word_similarity(${norm.raw}, ${text}) DESC,
-                m."id"
+        ) r
+       ORDER BY r."held" DESC, word_similarity(${norm.raw}, r."text") DESC, r."id"
        LIMIT ${LEG_CAP}::int
     `);
     return rows.map((row) => row.id);
