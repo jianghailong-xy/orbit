@@ -92,6 +92,16 @@ export function feishuDerivedUuid(...why: string[]): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
+/**
+ * The clientTurnId of a turn a Feishu event writes: derived from the app and the event, so the event handled twice
+ * names the same turn. Prefixed, never a bare derived UUID: that is the key of a turn Orbit wrote itself
+ * (`isOrbitAuthoredTurn`), and these are a person's words — the owner's own in a direct chat, a group member's in a
+ * group — which the row, the composer and a withdrawal treat as somebody's, not the platform's.
+ */
+export function feishuTurnKey(appId: string, eventId: string): string {
+  return `feishu:${feishuDerivedUuid('feishu-turn', appId, eventId)}`;
+}
+
 /** What a refusal says, as one clause: the words a client would show for it. */
 export function refusalWords(error: HttpException): string {
   const body = error.getResponse();
@@ -188,7 +198,7 @@ export class FeishuDirectService {
       return;
     }
     try {
-      await this.sessions.createTurn(app.ownerId, sessionId, { clientTurnId: feishuDerivedUuid('feishu-turn', app.appId, eventId), content: text }, {
+      await this.sessions.createTurn(app.ownerId, sessionId, { clientTurnId: feishuTurnKey(app.appId, eventId), content: text }, {
         // Written with the turn, so a second handling — a replay of this clientTurnId — records nothing again.
         onTurnWritten: async (tx, turn) => {
           await this.registerChain(tx, app, message.chatId, root, sessionId);

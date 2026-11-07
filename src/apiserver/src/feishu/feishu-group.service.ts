@@ -4,7 +4,7 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import type { ExternalTurnSender } from '../sessions/session-message';
 import { SessionsService } from '../sessions/sessions.service';
-import { feishuDerivedUuid, refusalWords } from './feishu-direct.service';
+import { feishuDerivedUuid, feishuTurnKey, refusalWords } from './feishu-direct.service';
 import { FeishuOutbound, feishuDedupeUuid } from './feishu-outbound';
 import { credentialsOf, type FeishuOwnerApp } from './feishu-owner.service';
 import type { FeishuActor } from './feishu-router';
@@ -182,7 +182,7 @@ export class FeishuGroupService {
     }
     const sessionId = thread.sessionId;
     try {
-      await this.sessions.createTurn(route.ownerId, sessionId, { clientTurnId: feishuDerivedUuid('feishu-turn', app.appId, message.eventId), content: message.text }, {
+      await this.sessions.createTurn(route.ownerId, sessionId, { clientTurnId: feishuTurnKey(app.appId, message.eventId), content: message.text }, {
         ...(sender ? { externalSender: sender } : {}),
         // Written with the turn, so a replay of this clientTurnId records nothing again.
         onTurnWritten: async (tx, turn) => {

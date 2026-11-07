@@ -43,7 +43,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { encryptSecret } from '../providers/provider-crypto';
 import '../test-support/daemon-routes-over-http';
-import { feishuDerivedUuid } from './feishu-direct.service';
+import { feishuDerivedUuid, feishuTurnKey } from './feishu-direct.service';
 import { FEISHU_TEST_OPEN_PLATFORM_ENV } from './feishu-open-platform';
 import { feishuDedupeUuid } from './feishu-outbound';
 import { FEISHU_TEST_TIME_SCALE_ENV } from './feishu-timing';
@@ -321,7 +321,7 @@ test('Feishu: a connected group sends work, one topic per request', {
   await t.test('(4) a mention inside the topic is a turn of the same session; handled twice, one turn; answered in the topic', async () => {
     const sessions = await sessionCount();
     const m = await mention(TEAM, BOB, 'Also run it ten times to be sure', { root: started!.messageId, parent: started!.receiptId });
-    const clientTurnId = feishuDerivedUuid('feishu-turn', X.appId, m.eventId);
+    const clientTurnId = feishuTurnKey(X.appId, m.eventId);
     const turn = await until('the turn', () => db.conversationTurn.findFirst({ where: { sessionId: started!.sessionId, clientTurnId } }));
     assert.equal(turn.content, 'Also run it ten times to be sure');
     assert.equal(turn.kind, 'message');
@@ -365,7 +365,7 @@ test('Feishu: a connected group sends work, one topic per request', {
     // (9) The owner's words in a group are the owner's: no outside sender, top-level or inside the topic.
     const inTopic = await mention(TEAM, ALICE, 'And tag the release', { root: m.messageId });
     const turn = await until('the owner\'s turn', () => db.conversationTurn.findFirst({
-      where: { sessionId: session.id, clientTurnId: feishuDerivedUuid('feishu-turn', X.appId, inTopic.eventId) },
+      where: { sessionId: session.id, clientTurnId: feishuTurnKey(X.appId, inTopic.eventId) },
     }));
     assert.deepEqual([turn.externalSenderSource, turn.externalSenderId, turn.externalSenderName], [null, null, null],
       'the owner is named as nobody outside Orbit');
@@ -397,7 +397,7 @@ test('Feishu: a connected group sends work, one topic per request', {
   await t.test('(9) a member\'s turn names them on the turn, the row, the inbox and the echo; the reply clears the row\'s', async () => {
     const sessionId = started!.sessionId;
     const m = await mention(TEAM, BOB, 'And open a PR when it passes', { root: started!.messageId });
-    const clientTurnId = feishuDerivedUuid('feishu-turn', X.appId, m.eventId);
+    const clientTurnId = feishuTurnKey(X.appId, m.eventId);
     const turn = await until('the turn', () => db.conversationTurn.findFirst({ where: { sessionId, clientTurnId } }));
     assert.deepEqual([turn.externalSenderSource, turn.externalSenderId, turn.externalSenderName], ['FEISHU', BOB, 'Bob Chen'], 'the turn names its sender');
 
@@ -406,6 +406,8 @@ test('Feishu: a connected group sends work, one topic per request', {
       `SELECT "last_user_text" AS "text", "last_user_from_external_source" AS "source", "last_user_from_external_name" AS "name",
               "last_user_from_session_id" AS "fromSession" FROM "session" WHERE "id" = $1::uuid`, [sessionId])).rows[0];
     assert.deepEqual(await columns(), { text: 'And open a PR when it passes', source: 'FEISHU', name: 'Bob Chen', fromSession: null });
+    // A member's words are a person's, not Orbit's own message (0491): the row says who, never "Orbit".
+    assert.equal((await sql.query(`SELECT "last_user_from_orbit" AS "orbit" FROM "session" WHERE "id" = $1::uuid`, [sessionId])).rows[0].orbit, null);
     const want = { source: 'FEISHU', name: 'Bob Chen' };
     const detail = await call(server!, 'GET', `/api/sessions/${uuidToBase62(sessionId)}`, bearer);
     assert.equal(detail.status, 200, detail.text);
