@@ -51,6 +51,7 @@ import { WikiJobsController } from '../wiki/wiki-jobs.controller';
 import { WikiPlanController } from '../wiki/wiki-plan.controller';
 import { WikiDocsController } from '../wiki/wiki-docs.controller';
 import { WikiChatController } from '../wiki/wiki-chat.controller';
+import { FeishuAdminController } from '../feishu/feishu-admin.controller';
 
 // Every id crossing the HTTP boundary arrives from a URL, a human, or a model — pasted out of a
 // client link, echoed from a previous tool result, or invented. The columns behind them are all
@@ -145,6 +146,9 @@ const CONTROLLERS = [
   // A space's wiki chats (migration 0476, contract `chat`): making one and reading them. The create's
   // `workspaceId` is decoded by the body pipe.
   WikiChatController,
+  // Each account's own Feishu app (migration 0489, docs/feishu-bot-design.md §10): an administrator's removal
+  // names the account by its id. The account's own routes (FeishuController) name nothing, so are not listed.
+  FeishuAdminController,
 ];
 
 // Nest records one entry per decorated argument under `__routeArguments__`, keyed
