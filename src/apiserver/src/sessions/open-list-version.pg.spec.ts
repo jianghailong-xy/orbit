@@ -21,7 +21,8 @@ import { SessionsService } from './sessions.service';
  * shows — through Prisma, through raw SQL that leaves `updated_at` alone, or only by the clock
  * passing a threshold — and asserts that the list really changed (so the case means something)
  * and that the version, and the ETag the controller sends, changed with it. The door itself is
- * driven too: a matching If-None-Match is answered without the list being read.
+ * driven too: a matching If-None-Match is answered without the list being read, and so is a
+ * `since=` cursor built at the version that still stands.
  *
  * Not destructive: every case owns freshly generated ids.
  */
@@ -109,7 +110,7 @@ async function openList(
 async function poll(
   f: Fixture,
   ifNoneMatch?: string,
-  filters: { projectId?: string; includeLanding?: boolean } = {},
+  filters: { projectId?: string; includeLanding?: boolean; since?: string } = {},
 ) {
   let listed = 0;
   const service = new Proxy(f.sessions, {
@@ -133,9 +134,20 @@ async function poll(
   const body = await controller.list(
     { userId: f.ownerId } as never,
     undefined, undefined, undefined, undefined, 'open', undefined,
-    filters.projectId, filters.includeLanding ? '1' : undefined, undefined, ifNoneMatch, res as never,
+    filters.projectId, filters.includeLanding ? '1' : undefined, filters.since, ifNoneMatch, res as never,
   );
   return { etag: headers.etag, body, listed, status };
+}
+
+type Row = { id: string; title: string };
+type Delta =
+  | { full: true; sessions: Row[]; cursor: string }
+  | { full: false; upserts: Row[]; removedIds: string[]; order?: string[]; cursor: string };
+
+/** One `since=` read of the Open list through the controller, as the native clients poll it. */
+async function pollSince(f: Fixture, since: string) {
+  const { body, listed } = await poll(f, undefined, { since });
+  return { delta: body as unknown as Delta, listed };
 }
 
 /** Assert that `change` moves the list, the version and the ETag, and that an unchanged poll is a hit. */
@@ -548,4 +560,77 @@ test('a landing insert and its settlement leave the flat Open list alone', { ski
   const plainAfterSettlement = await poll(f, plain.etag);
   assert.equal(plainAfterSettlement.status, 304, 'a settlement moved the plain list');
   assert.equal(plainAfterSettlement.etag, plain.etag);
+});
+
+/**
+ * `since=` is the native clients' poll (every 4 s on macOS and iOS), and it answers from the same
+ * version first: while the version the cursor was built at stands, the answer is an empty delta
+ * under the same cursor and the list is not built. One write that moves the version costs exactly
+ * one build, which sends only the row that changed, under a cursor that is answered from the
+ * version again.
+ */
+test('a since= read whose version stands is an empty delta, answered without building the list', { skip }, async (t) => {
+  const f = await fixture(t);
+  const first = await pollSince(f, '');
+  assert.equal(first.delta.full, true);
+  assert.equal(first.listed, 1);
+  const { cursor } = first.delta;
+  for (const read of ['first', 'second']) {
+    const unchanged = await pollSince(f, cursor);
+    assert.equal(unchanged.listed, 0, `${read} unchanged read: the list was built`);
+    assert.deepEqual(unchanged.delta, { full: false, upserts: [], removedIds: [], cursor });
+  }
+
+  const version = await readOpenListVersion(f.db as never, f.ownerId);
+  await f.db.session.update({ where: { id: f.sessionId }, data: { title: 'renamed' } });
+  assert.notEqual(await readOpenListVersion(f.db as never, f.ownerId), version,
+    'the write did not move the version (the case proves nothing)');
+  const changed = await pollSince(f, cursor);
+  assert.equal(changed.listed, 1, 'a moved version did not build the list exactly once');
+  assert.equal(changed.delta.full, false);
+  const delta = changed.delta as Extract<Delta, { full: false }>;
+  assert.deepEqual(delta.upserts.map((row) => [row.id, row.title]), [[f.sessionId, 'renamed']]);
+  assert.deepEqual(delta.removedIds, []);
+  assert.equal(delta.order, undefined);
+  assert.notEqual(delta.cursor, cursor);
+
+  const settled = await pollSince(f, delta.cursor);
+  assert.equal(settled.listed, 0, 'the new cursor was not answered from the version');
+  assert.deepEqual(settled.delta, { full: false, upserts: [], removedIds: [], cursor: delta.cursor });
+});
+
+/**
+ * The version is read before the list is built, never after. A write that lands between the build
+ * and the snapshot then still moves the version past the one kept beside rows that miss it. Read
+ * after the build, the version would already cover that write, and the next read would answer an
+ * empty delta over a list that had moved.
+ */
+test('a write landing after the build is not hidden behind the version kept with the rows', { skip }, async (t) => {
+  const f = await fixture(t);
+  const racing = new Proxy(f.sessions, {
+    get(target, key, receiver) {
+      if (key === 'list') {
+        return async (...args: Parameters<SessionsService['list']>) => {
+          const rows = await target.list(...args);
+          await f.db.session.update({ where: { id: f.sessionId }, data: { title: 'written after the build' } });
+          return rows;
+        };
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  const raced = await racing.listOpenSince(f.ownerId, {}, '');
+  assert.equal(raced.full, true);
+  assert.ok(!JSON.stringify(raced).includes('written after the build'),
+    'the write landed before the build (the case proves nothing)');
+
+  const next = await pollSince(f, raced.cursor);
+  assert.equal(next.listed, 1, 'a write after the build was answered from the version');
+  assert.equal(next.delta.full, false);
+  const delta = next.delta as Extract<Delta, { full: false }>;
+  assert.deepEqual(delta.upserts.map((row) => [row.id, row.title]), [[f.sessionId, 'written after the build']]);
+
+  const settled = await pollSince(f, delta.cursor);
+  assert.equal(settled.listed, 0, 'the cursor that carries the write was not answered from the version');
+  assert.deepEqual(settled.delta, { full: false, upserts: [], removedIds: [], cursor: delta.cursor });
 });
