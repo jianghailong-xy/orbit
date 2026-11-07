@@ -118,6 +118,7 @@ import { Select } from './ui/Select';
 import { Spinner } from './ui/Spinner';
 import { Switch } from './ui/Switch';
 import { Textarea } from './ui/Textarea';
+import { streamPoll } from '../lib/listBudget';
 
 /**
  * "Start this project?" — the one card on which the account owner starts a project: the criteria
@@ -843,7 +844,7 @@ export function SessionStartProjectCard({
     queryKey: ['project', project],
     queryFn: () => api<StartProjectDocument>(`/projects/${encodeURIComponent(project)}`),
     enabled,
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
   // A read that failed is not an answer, whatever an earlier read said.
   const standing = standingRead.isError ? null : (standingRead.data ?? null);
@@ -854,7 +855,7 @@ export function SessionStartProjectCard({
   const itemsRead = useQuery({
     ...projectOpenItemsQuery(project),
     enabled: enabled && started === false,
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
   const openRow = itemsRead.isError ? null : (itemsRead.data?.startRequest ?? null);
   const live: ProjectOpenItemRow | null = started === false && openRow?.startRequest ? openRow : null;

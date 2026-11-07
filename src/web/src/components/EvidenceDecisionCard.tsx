@@ -13,6 +13,7 @@ import { api } from '../api';
 import { decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { citesFiles } from '../lib/evidenceFiles';
 import { pendingDecisionsQuery, taskEvidenceQuery } from '../lib/queries';
+import { streamPoll } from '../lib/listBudget';
 import { quotaWindowKind, type QuotaWindowKind } from '../lib/quotaWindow';
 import { sessionRunStateOf, type SessionStateSource } from '../lib/sessionState';
 import { CardActionButton, CardActions } from './CardAction';
@@ -851,7 +852,7 @@ export function SessionEvidenceDecisionCard({
   const pending = useQuery({
     ...pendingDecisionsQuery(sessionId),
     enabled: Boolean(sessionId),
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
   const queue = pending.data ?? null;
   useEffect(() => {

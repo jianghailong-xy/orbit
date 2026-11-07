@@ -61,6 +61,7 @@ import {
   wikiSpacesQuery,
   workspaceSessionCountsQuery,
 } from '../lib/queries';
+import { listPollMs, streamDown, streamPoll } from '../lib/listBudget';
 import { workspaceListPath } from '../lib/workspaceListFolder';
 import { orderWorkspaces, reorderedWorkspaceIds, workspaceRunnerId } from '../lib/workspaceOrder';
 import { machineDraftPath, machineName, machinesToSetUp } from '../lib/machineSetup';
@@ -537,12 +538,13 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     window.addEventListener('mouseup', onUp);
   };
 
-  // Runners carry the computed `online` flag and the names the rows show. Poll on the same 15s
-  // cadence as a machine's page so status stays in sync while the sidebar is up.
+  // Runners carry the computed `online` flag and the names the rows show. A runner going on or off
+  // line is not on the control-plane stream, so this is read on the list budget's safety read while
+  // the stream is live, and on its shared backoff while it is down (listBudget).
   const runners = useQuery({
     queryKey: ['runners'],
     queryFn: () => api<Runner[]>('/runners'),
-    refetchInterval: 15_000,
+    refetchInterval: streamPoll(15_000),
   });
   const runnerOnlineById = useMemo(
     () => new Map((runners.data ?? []).map((runner) => [runner.id, runner.online])),
@@ -713,10 +715,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // badges per workspace. Sessions with no workspace still belong to no row, as before.
   const sessionCounts = useQuery({
     ...workspaceSessionCountsQuery(),
-    // Keep this small aggregate polling even with the control-plane stream connected: the
-    // engineTurnActive/runningSubagents transitions behind `running` are intentionally finer than
-    // its coarse session.updated events, so SSE alone cannot keep the spinner truthful.
-    refetchInterval: (q) => workspaceCountsPollInterval(q.state.data ?? []),
+    // Every session event re-reads it (useControlPlane). The engineTurnActive/runningSubagents
+    // transitions behind `running` are finer than those events, and wait for the list budget's
+    // safety read while the stream is live (docs/list-freshness-design.md W4); while it is down,
+    // the shared backoff, never faster than the cadence below.
+    refetchInterval: (q) => listPollMs(!streamDown(), q, workspaceCountsPollInterval(q.state.data ?? [])),
   });
   // The "needs you" signal per workspace: how many of its Open sessions are blocked on an approval.
   // Lets a workspace row show its own attention count so you can jump straight to the workspace

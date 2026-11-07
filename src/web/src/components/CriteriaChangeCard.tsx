@@ -41,6 +41,7 @@ import { ReviewCard } from './ReviewCard';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { PROVENANCE_LABEL, shortSeal } from './CriteriaDecisionCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
+import { streamPoll } from '../lib/listBudget';
 
 /**
  * "Confirm the new criteria?" — a started project whose criteria moved after the owner confirmed
@@ -253,7 +254,7 @@ export function SessionCriteriaChangeCard({
     queryKey: ['project', project],
     queryFn: () => api<ConfirmationProjectDocument>(`/projects/${encodeURIComponent(project)}`),
     enabled,
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
   const standing = standingRead.isError ? null : (standingRead.data ?? null);
   const document = documentRead.isError ? null : (documentRead.data ?? null);

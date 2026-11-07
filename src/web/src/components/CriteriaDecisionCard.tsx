@@ -7,6 +7,7 @@ import { useIsMobile } from '../lib/useMediaQuery';
 import { SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
 import { api } from '../api';
 import { pendingCriteriaDecisionsQuery } from '../lib/queries';
+import { streamPoll } from '../lib/listBudget';
 
 /**
  * The card that asks the account owner whether this project's ruler may move, in the conversation
@@ -1219,7 +1220,7 @@ export function SessionCriteriaDecisionCard({
   const pending = useQuery({
     ...pendingCriteriaDecisionsQuery(projectId ?? ''),
     enabled: Boolean(projectId),
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
   const queue = pending.data ?? null;
   useEffect(() => {

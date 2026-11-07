@@ -8,6 +8,7 @@ import {
   type AbandonedCheckout,
 } from '../api';
 import { useToast } from '../lib/toast';
+import { useRefreshSessionLists } from '../lib/useControlPlane';
 import { Button } from './ui/Button';
 import { useConfirm } from './ui/ConfirmDialog';
 import { Spinner } from './ui/Spinner';
@@ -37,6 +38,7 @@ export function AbandonedCheckouts({
   canDiscard: boolean;
 }) {
   const qc = useQueryClient();
+  const refreshSessionLists = useRefreshSessionLists();
   const message = useToast();
   const [confirm, confirmation] = useConfirm();
   const [open, setOpen] = useState<string | null>(null);
@@ -62,7 +64,7 @@ export function AbandonedCheckouts({
   const settle = (headline: string, detail?: string) => {
     setBusy(null);
     void qc.invalidateQueries({ queryKey: ['runner-abandoned-checkouts', runnerId] });
-    void qc.invalidateQueries({ queryKey: ['sessions'] });
+    refreshSessionLists();
     message.success(headline, detail);
   };
 
