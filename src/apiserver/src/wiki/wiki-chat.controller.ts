@@ -49,6 +49,12 @@ export class WikiChatController {
     if (typeof workspaceId === 'string' && workspaceId.trim() === '') {
       throw new BadRequestException('workspaceId names one of the workspaces the space\'s chats may run in, or is left out');
     }
+    // The pipe decodes every id the list holds and refuses one it cannot, a blank one included; a blank string in the
+    // list's place is no list, and the pipe hands it on as it came. Refused here, as a blank workspaceId is.
+    const attachmentIds = (body as { attachmentIds?: unknown } | null)?.attachmentIds;
+    if (typeof attachmentIds === 'string' && attachmentIds.trim() === '') {
+      throw new BadRequestException('attachmentIds is a list of the ids of files the owner uploaded, and a blank one names none');
+    }
     return this.chats.create(user.userId, id, body, actingSession(request.headers), user.credential);
   }
 

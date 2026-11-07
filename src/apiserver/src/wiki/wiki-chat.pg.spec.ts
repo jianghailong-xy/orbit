@@ -710,6 +710,14 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
       assert.match(refused.text, /one or more attachments are unknown, not yours, or already used/u, why);
       assert.equal(await sessionsIn(wsDelivery), before, `${why}: no session, and so no turn`);
     }
+    // A blank id names no file, in the list (the pipe cannot decode it) or as the list itself (refused at the door).
+    for (const [attachmentIds, said] of [[[pub(picture), '   '], /invalid attachmentIds/u], ['   ', /a blank one names none/u]] as const) {
+      const before = await sessionsIn(wsDelivery);
+      const blank = await create({ workspaceId: pub(wsDelivery), attachmentIds });
+      assert.equal(blank.status, 400, `a blank attachment id: ${blank.text}`);
+      assert.match(blank.text, said);
+      assert.equal(await sessionsIn(wsDelivery), before, 'a blank attachment id: nothing is made');
+    }
     assert.deepEqual(await attachment(picture), { session_id: null, turn_id: null }, 'the refused create took nothing of the owner\'s');
     assert.deepEqual(await attachment(theirs), { session_id: null, turn_id: null }, "nor of the stranger's");
 
