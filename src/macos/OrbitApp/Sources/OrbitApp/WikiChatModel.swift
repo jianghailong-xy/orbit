@@ -76,7 +76,7 @@ final class WikiChatModel {
     private(set) var spaceID: String?
     /// The composer's attachments: the page, following the reader, and the quote an Ask put there (design §4.2).
     private(set) var attachments = WikiChatLogic.Attachments()
-    /// A new chat's words, kept while it has no session to hold them.
+    /// A new chat's words, kept while it has no session to hold them: its draft console's, across the panel folding.
     var draftText = ""
     /// The Ask sheet, open in the panel over its chat.
     var asking: WikiChatAskRequest?
@@ -385,14 +385,16 @@ final class WikiChatModel {
         list(spaceID).map { WikiChatLogic.runsIn($0, picked: pickedWorkspace) }
     }
 
-    /// Make the chat with the owner's first words, word for word, and show it. False when it was refused.
-    func create(spaceID: String, text: String) async -> Bool {
-        guard !creating, case .chosen(let workspace, _, _)? = runsIn(spaceID) else { return false }
+    /// Make the chat in `workspaceID` with the composer's first message — the owner's words, the page and the
+    /// selection, the files and the toolbar's picks (`WikiChatLogic.createRequest`) — and show it. False when it was
+    /// refused, which the panel says.
+    func create(spaceID: String, workspaceID: String, _ first: WikiChatLogic.FirstMessage) async -> Bool {
+        guard !creating, let request = WikiChatLogic.createRequest(
+            first, workspaceId: workspaceID, context: context, clientTurnId: UUID().uuidString.lowercased()) else { return false }
         creating = true
         defer { creating = false }
         do {
-            let made = try await api.createWikiChat(spaceID: spaceID, WikiChatCreateRequest(
-                workspaceId: workspace.id, content: text, clientTurnId: UUID().uuidString.lowercased(), wikiContext: context))
+            let made = try await api.createWikiChat(spaceID: spaceID, request)
             sent()
             draftText = ""
             pickedWorkspace = nil

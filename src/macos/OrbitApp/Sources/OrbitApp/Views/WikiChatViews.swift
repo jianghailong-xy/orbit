@@ -296,8 +296,8 @@ struct WikiChatUpdatedPill: View {
 // MARK: - the panel (design §4.1, board 42 ⑤)
 
 /// The panel the button opens: its head — the chat's title, which opens the space's chats, `↗` the full session page,
-/// `✕` fold it away (and on a wide window `+` a new chat) — where it runs, the conversation or the Ask sheet over it,
-/// and the short composer.
+/// `✕` fold it away (and on a wide window `+` a new chat) — a new chat's Runs in, the conversation or the Ask sheet
+/// over it, and the session page's composer (board 43).
 struct WikiChatPanel: View {
     @Environment(AppModel.self) private var model
     let chat: WikiChatModel
@@ -312,9 +312,9 @@ struct WikiChatPanel: View {
             if let asking = chat.asking {
                 WikiChatAskSheet(request: asking, chat: chat)
             } else if chat.chat == WikiChatLogic.newChat {
-                WikiChatNewBody(chat: chat, space: space, compact: compact)
+                WikiChatNewBody(chat: chat, space: space)
             } else {
-                WikiChatRunningBody(chat: chat, space: space, sessionID: chat.chat, compact: compact)
+                WikiChatRunningBody(chat: chat, space: space, sessionID: chat.chat)
                     .id(chat.chat)
             }
         }
@@ -411,21 +411,19 @@ struct WikiChatPanel: View {
     }
 }
 
-/// A chat not started yet: where it will run — chosen once per space, then remembered (design §5.1) — the empty
-/// panel's two sentences, and the composer that makes the chat.
+/// A chat not started yet: Runs in, the workspace alone — chosen once per space, then remembered (design §5.1), and
+/// gone once the first message makes the chat (board 43 ②) — the empty panel's two sentences, and the composer whose
+/// first message makes the chat.
 private struct WikiChatNewBody: View {
     let chat: WikiChatModel
     let space: WikiSpace
-    let compact: Bool
 
     var body: some View {
         let runsIn = chat.runsIn(space.id)
         VStack(spacing: 0) {
             switch runsIn {
-            case .chosen(let workspace, let remembered, let choices)?:
-                if !remembered || !compact {
-                    runsInLine(workspace, choices: choices)
-                }
+            case .chosen(let workspace, _, let choices)?:
+                runsInLine(workspace, choices: choices)
                 if !workspace.online, let machine = workspace.runner {
                     note(WikiChatCopy.offline(machine))
                 }
@@ -454,8 +452,9 @@ private struct WikiChatNewBody: View {
                 .padding(.vertical, 22)
                 .frame(maxWidth: .infinity)
             }
-            if case .chosen? = runsIn {
-                WikiChatComposer(chat: chat, space: space, console: nil)
+            if case .chosen(let workspace, _, _)? = runsIn {
+                WikiChatNewComposer(chat: chat, spaceID: space.id, workspaceID: workspace.id)
+                    .id(workspace.id)
             }
         }
     }
@@ -523,27 +522,17 @@ private struct WikiChatNewBody: View {
     }
 }
 
-/// A chat that runs: where (on a wide window), its conversation — the session page's transcript, the cards in it —
-/// and the composer, which sends through the session's own console.
+/// A chat that runs: its conversation — the session page's transcript, the cards in it — and the session page's
+/// composer over the session's own console. No workspace is shown, as on the session page (board 43 ④ ⑤).
 private struct WikiChatRunningBody: View {
     @Environment(AppModel.self) private var model
     let chat: WikiChatModel
     let space: WikiSpace
     let sessionID: String
-    let compact: Bool
 
     var body: some View {
         let console = model.consoleRegistry?.peek(sessionID)
         VStack(spacing: 0) {
-            if !compact, let line = runLine, !line.isEmpty {
-                Text(line)
-                    .font(.orbitLabel)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
-            }
             if let machine = offlineMachine {
                 Text(WikiChatCopy.offline(machine))
                     .font(.orbitLabel)
@@ -557,7 +546,7 @@ private struct WikiChatRunningBody: View {
                 if let ended = endedLine(console) {
                     WikiChatEndedLine(text: ended) { chat.newChat() }
                 } else {
-                    WikiChatComposer(chat: chat, space: space, console: console)
+                    WikiChatComposer(chat: chat, console: console)
                 }
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -584,14 +573,6 @@ private struct WikiChatRunningBody: View {
     private func runner<T>(_ map: [String: T]?, _ id: String?) -> T? {
         guard let id, let map else { return nil }
         return map[id] ?? map.first { PublicID.storageKey($0.key) == PublicID.storageKey(id) }?.value
-    }
-
-    /// `orbit-develop · HPC · Claude Opus 5.5 · Default` (design §4.1).
-    private var runLine: String? {
-        guard let session else { return nil }
-        let mode = session.permissionMode.flatMap(PermissionMode.init(rawValue:)).map(AgentDefaults.label)
-        return WikiChatLogic.runLine([session.agent?.name, runner(model.agents?.runnerNames, session.assignedRunnerId),
-                                      session.model, mode])
     }
 
     /// The machine the chat runs on, when it is offline: said, and the chat waits for it (design §5.1).
@@ -650,20 +631,97 @@ private struct WikiChatConversation: View {
     }
 }
 
-// MARK: - the composer (design §4.1–§4.2)
+// MARK: - the composer (board 43: the session page's, in the panel)
 
-/// The short composer: the page and the quote as chips, each with its cross — what they show is what the message
-/// sends — the words, Send, and Stop while a turn runs. A running chat's words are its console's draft, sent through
-/// its console (so a message waits behind a running turn, and revives an ended chat, as on the session page); a new
-/// chat's are made into the chat itself.
+/// The panel's composer is the session page's own (`ComposerView`, board 43 ② ④ ⑤), over the chat's console — a new
+/// chat's draft, or its session's — so pictures and files, the slash menu, the mode, the model with its effort and
+/// speed, the gauges, Send, Stop and a message sent into a running turn or queued for the next all behave as there.
+/// The page and the selection lead its attachment row, each with its cross: what they show is what the message sends,
+/// beside the words (`ConsoleModel.wikiChat`), and they go once the server took it.
 struct WikiChatComposer: View {
+    let chat: WikiChatModel
+    let console: ConsoleModel
+    /// A new chat's: the space and the workspace its first message makes the chat in (contract `chat.create`).
+    var creates: (spaceID: String, workspaceID: String)? = nil
+
+    var body: some View {
+        let shown = WikiChatLogic.shown(chat.attachments)
+        ComposerBand {
+            if let message = console.statusMessage {
+                HStack {
+                    Text(message).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(2)
+                    Spacer()
+                    Button { console.statusMessage = nil } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.plain).foregroundStyle(.secondary)
+                }
+                .padding(.bottom, .composerBandGap)
+            }
+            ComposerView(console: console,
+                         emptyPlaceholder: creates == nil ? chat.placeholder : WikiChatCopy.placeholder,
+                         leadingAttachments: shown.page == nil && shown.quote == nil
+                             ? nil : AnyView(WikiChatChips(chat: chat)))
+        }
+        .onAppear { console.wikiChat = composing }
+        .onDisappear { console.wikiChat = nil }
+    }
+
+    private var composing: WikiChatComposing {
+        let chat = chat
+        var composing = WikiChatComposing(context: { chat.context }, accepted: { chat.sent() })
+        if let creates {
+            composing.create = { first in
+                await chat.create(spaceID: creates.spaceID, workspaceID: creates.workspaceID, first)
+            }
+        }
+        return composing
+    }
+}
+
+/// A new chat's composer: a draft console for the workspace Runs in names, made once it is known, holding the words
+/// typed so far (`WikiChatModel.draftText`) across the panel folding away.
+private struct WikiChatNewComposer: View {
     @Environment(AppModel.self) private var model
+    let chat: WikiChatModel
+    let spaceID: String
+    let workspaceID: String
+    @State private var draft: ConsoleModel?
+
+    private var agent: Agent? {
+        model.agents?.items.first { PublicID.storageKey($0.id) == PublicID.storageKey(workspaceID) }
+    }
+
+    var body: some View {
+        Group {
+            if let draft {
+                WikiChatComposer(chat: chat, console: draft, creates: (spaceID, workspaceID))
+            }
+        }
+        .task(id: agent?.id) {
+            guard draft == nil, let agent, let registry = model.consoleRegistry, let agents = model.agents else { return }
+            let made = registry.draftModel(
+                for: agent, defaultModel: agents.effectiveDefaultModel(for: agent),
+                configuredProviders: agents.configuredProviders,
+                configuredProvidersLoaded: agents.configuredProvidersLoaded,
+                providerPools: agents.providerPools, sharedPools: agents.sharedPools,
+                modelCatalog: agents.modelCatalog(for: agent.runnerId),
+                accountDefaultEffort: model.user?.preferences?.defaultEffort) { _ in }
+            made.composerText = chat.draftText
+            draft = made
+            await made.prepareDraft()
+        }
+        .onChange(of: draft?.composerText) { _, text in
+            if let text { chat.draftText = text }
+        }
+    }
+}
+
+/// The page and the selection, the first chips of the composer's attachment row (board 43 ②: drawn as its file chips
+/// are), each with its cross.
+private struct WikiChatChips: View {
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var hSize
     #endif
     let chat: WikiChatModel
-    let space: WikiSpace
-    let console: ConsoleModel?
 
     /// A compact column's chip — a phone's sheet, an iPad's third column, each about 380 points wide — says how many
     /// sentences alone (board 42 ⑤); a Mac's adds the sources, as the web's docked panel does.
@@ -675,94 +733,11 @@ struct WikiChatComposer: View {
         #endif
     }
 
-    @FocusState private var focused: Bool
-
-    private var text: Binding<String> {
-        if let console {
-            return Binding(get: { console.composerText }, set: { console.composerText = $0 })
-        }
-        return Binding(get: { chat.draftText }, set: { chat.draftText = $0 })
-    }
-
-    private var busy: Bool {
-        guard let console else { return false }
-        return (model.session(id: console.sessionID)?.effectiveRunStatus ?? console.state.status) == .running
-    }
-
-    private var canSend: Bool {
-        let words = text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let console { return !words.isEmpty && !console.sending }
-        return !words.isEmpty && !chat.creating
-    }
-
     var body: some View {
         let shown = WikiChatLogic.shown(chat.attachments)
-        VStack(alignment: .leading, spacing: 6) {
-            if shown.page != nil || shown.quote != nil {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        if let page = shown.page { pageChip(page) }
-                        if let quote = shown.quote { quoteChip(quote) }
-                    }
-                }
-            }
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField(console == nil ? WikiChatCopy.placeholder : chat.placeholder, text: text, axis: .vertical)
-                    .lineLimit(1...6)
-                    .textFieldStyle(.plain)
-                    .focused($focused)
-                    .font(.orbitProse)
-                    .padding(.vertical, 6)
-                    .accessibilityIdentifier("wiki-chat-input")
-                    .onSubmit { send() }
-                if busy, let console {
-                    Button {
-                        Task { await console.interrupt() }
-                    } label: {
-                        Image(systemName: "stop.fill")
-                            .font(.orbitBarGlyph)
-                            .foregroundStyle(.white)
-                            .frame(width: 30, height: 30)
-                            .background(Color.primary.opacity(0.75), in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(WikiChatCopy.stop)
-                }
-                Button(action: send) {
-                    Image(systemName: "arrow.up")
-                        .font(.orbitBarGlyph)
-                        .foregroundStyle(.white)
-                        .frame(width: 30, height: 30)
-                        .background(canSend ? Color.accentColor : Color.accentColor.opacity(0.35), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .disabled(!canSend)
-                .accessibilityLabel(WikiChatCopy.send)
-                .accessibilityIdentifier("wiki-chat-send")
-            }
-        }
-        .padding(.leading, 14)
-        .padding(.trailing, 8)
-        .padding(.vertical, 8)
-        .background(Color.primary.opacity(0.001))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.secondary.opacity(0.35)))
-        .padding(.horizontal, 12)
-        .padding(.top, 6)
-        .padding(.bottom, 10)
-    }
-
-    private func send() {
-        let words = text.wrappedValue
-        guard canSend else { return }
-        if let console {
-            let context = chat.context
-            Task {
-                await console.send(queueForNextTurn: true, wikiContext: context, accepted: { chat.sent() })
-            }
-        } else {
-            Task {
-                if await chat.create(spaceID: space.id, text: words) { focused = false }
-            }
+        HStack(spacing: 8) {
+            if let page = shown.page { pageChip(page) }
+            if let quote = shown.quote { quoteChip(quote) }
         }
     }
 
@@ -813,7 +788,7 @@ struct WikiChatComposer: View {
         .padding(.leading, 8)
         .padding(.trailing, 4)
         .padding(.vertical, 4)
-        .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .background(.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
