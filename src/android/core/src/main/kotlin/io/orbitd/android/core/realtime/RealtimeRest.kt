@@ -39,14 +39,54 @@ internal class RealtimeRest(private val api: OrbitApi, private val background: C
         }
     }
 
-    /** Open is the app's list (iOS): what a launch, a connect and an event read. Completed and Trash are read by the page showing them. */
-    suspend fun directory(handle: SessionHandle, previous: DirectorySnapshot? = null): DirectorySnapshot = coroutineScope {
-        val workspaces = async { objects(handle, listOf("workspaces"), previous = previous?.workspaces) }
-        val folders = async { objects(handle, listOf("session-folders"), previous = previous?.folders) }
-        val tags = async { objects(handle, listOf("session-tags"), previous = previous?.tags) }
-        val runners = async { objects(handle, listOf("runners"), previous = previous?.runners) }
-        val open = async { objects(handle, listOf("sessions"), listOf("view" to "open"), previous?.sessions?.get("open")) }
-        DirectorySnapshot(workspaces.await(), mapOf("open" to open.await()), folders.await(), tags.await(), runners.await())
+    /** The Open list as the server last sent it under [cursor], for [handle]'s account: what the next delta applies to. Not what the
+     * store published — a read the store dropped still moved the server's cursor. */
+    private class OpenBase(val handle: SessionHandle, val cursor: String, val rows: List<JsonObject>)
+    /** The store's directory loop is the only reader of the Open list, so one read at a time writes this. */
+    @Volatile private var openBase: OpenBase? = null
+
+    /**
+     * The Open list as `GET sessions?view=open&since=<cursor>` (docs/list-freshness-design.md §3, OrbitKit `OpenListReader`): the delta
+     * is applied to the list the server last sent under the cursor, and a `full: true` answer replaces it whole. An empty `since` asks
+     * for the first cursor; a server that predates the delta read ignores it and answers the plain array, which is read as before.
+     * A delta that does not fit its base is answered by reading the whole list again, with a fresh cursor. Rows equal to [held]'s
+     * are held's, as [objects] keeps them.
+     */
+    private suspend fun open(handle: SessionHandle, held: List<JsonObject>?): List<JsonObject> {
+        repeat(2) {
+            val base = openBase?.takeIf { it.handle === handle }
+            val body = api.request(handle, ApiRequest(listOf("sessions"),
+                query = listOf("view" to "open", "since" to base?.cursor.orEmpty()))).body
+            val read = withContext(background) {
+                val known = held.orEmpty().associateBy { it.text("id") }
+                OpenListRead.decode(body) { row -> known[row.text("id")]?.takeIf { it == row } }
+            }
+            val rows = when (read) {
+                is OpenListRead.Full -> read.rows.also { openBase = read.cursor?.let { cursor -> OpenBase(handle, cursor, it) } }
+                is OpenListRead.Delta -> base?.let { withContext(background) { read.applied(it.rows) } }
+                    ?.also { openBase = OpenBase(handle, read.cursor, it) }
+            }
+            if (rows != null) return rows
+            openBase = null
+        }
+        throw ProtocolException()
+    }
+
+    /** Open is the app's list (iOS): what a launch, a connect and an event read. Completed and Trash are read by the page showing them.
+     * Only [lists] are read; every other list is [previous]'s, as it was. */
+    suspend fun directory(handle: SessionHandle, previous: DirectorySnapshot? = null,
+        lists: Set<DirectoryList> = DirectoryList.ALL): DirectorySnapshot = coroutineScope {
+        fun read(list: DirectoryList, path: String, held: List<JsonObject>?) =
+            if (list in lists) async { objects(handle, listOf(path), previous = held) } else null
+        val workspaces = read(DirectoryList.WORKSPACES, "workspaces", previous?.workspaces)
+        val folders = read(DirectoryList.FOLDERS, "session-folders", previous?.folders)
+        val tags = read(DirectoryList.TAGS, "session-tags", previous?.tags)
+        val runners = read(DirectoryList.RUNNERS, "runners", previous?.runners)
+        val open = if (DirectoryList.OPEN in lists) async { open(handle, previous?.sessions?.get("open")) } else null
+        DirectorySnapshot(workspaces?.await() ?: previous?.workspaces.orEmpty(),
+            mapOf("open" to (open?.await() ?: previous?.sessions?.get("open").orEmpty())),
+            folders?.await() ?: previous?.folders.orEmpty(), tags?.await() ?: previous?.tags.orEmpty(),
+            runners?.await() ?: previous?.runners.orEmpty())
     }
 
     /** `after=` pages are 200 events, as on iOS and web: five of them are the server's SSE_GAP_CAP. */

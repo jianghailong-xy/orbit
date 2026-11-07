@@ -231,6 +231,8 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
     'lists the landing attempt’s source session as a menu row; decides nothing',
   'src/web/src/components/ProjectLandingsWindow.test.tsx':
     'asserts the landing menu draws the source-session row',
+  'src/web/src/components/ProjectLandingsWindow.hiddenTab.test.tsx':
+    'drives the Landings window poll with a landing row fixture; decides nothing',
   'src/web/src/lib/landingSession.test.ts':
     'asserts the landing menu lists the source-session row',
 };

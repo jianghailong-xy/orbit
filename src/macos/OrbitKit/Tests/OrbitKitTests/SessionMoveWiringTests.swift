@@ -218,7 +218,7 @@ final class SessionMoveWiringTests: XCTestCase {
         for part in ["var sessionFolders: [SessionFolder] = []", "func loadSessionFolders() async",
                      "func moveSession(_ id: String, toFolder folderID: String?)",
                      "func createSessionFolder(named name: String, in workspace: Agent, moving sessionID: String)",
-                     "private func patchSessionFolder(", "case .folderChanged:"] {
+                     "private func patchSessionFolder(", "Task { await loadSessionFolders() }"] {
             XCTAssertEqual(try branches(of: part, in: app), ["os(iOS)"], "`\(part)` is iOS only")
         }
         let model = code(try appSource("AgentsModel.swift"))
@@ -327,11 +327,12 @@ final class SessionMoveWiringTests: XCTestCase {
 
         let app = code(try appSource("AppModel.swift"))
         let apply = try slice(app, from: "private func apply(_ ev: ControlEvent) {", to: "\n    }\n")
-        let branch = try slice(apply, from: "case .folderChanged:", to: "#endif")
+        let branch = try slice(apply, from: "case .folders:", to: "#endif")
         XCTAssertTrue(branch.contains("Task { await loadSessionFolders() }"))
         XCTAssertFalse(branch.contains("scheduleControlRefresh()"), "a folder change refetches no list")
+        XCTAssertTrue(branch.contains("#else\n            break"), "the Mac draws no folders: it reads nothing")
 
-        let connected = try slice(app, from: "case .connected:", to: "case .event(let ev):")
+        let connected = try slice(app, from: "private func reconcileOnConnect() async {", to: "\n    }\n")
         XCTAssertTrue(connected.contains("Task { await loadSessionFolders() }"))
 
         let load = try slice(app, from: "func loadSessionFolders() async {", to: "\n    }")

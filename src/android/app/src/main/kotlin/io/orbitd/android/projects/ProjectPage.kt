@@ -191,6 +191,11 @@ object ProjectPage {
     /** Every job the two counts count, in `inFlight`'s order; null from a server that does not list them — which is not none in flight. */
     fun inFlightJobs(view: JsonObject): List<JsonObject>? = (view["inFlightJobs"] as? JsonArray)?.takeIf { jobs -> jobs.all { it is JsonObject } }?.map { it as JsonObject }
 
+    /** Whether the line ([view], its integration read) has a landing or a merge into main in flight. No event announces one (§2.9 LS6:
+     * a LANDING session publishes nothing), so a page that draws it keeps a bounded poll of its own while this holds. */
+    fun landingInFlight(view: JsonObject?): Boolean = view != null && (view.obj("inFlight") != null ||
+        (view.number("integratingCount") ?: 0) > 0 || (view.number("queuedCount") ?: 0) > 0)
+
     /** The landing in flight, or null when nothing is (`landingLine`). "Update unavailable" is only ever this app unable to read the
      * server — its last read failed or is more than 90 s old — and it outranks what the last read said. A server that lists its jobs
      * judges a silent runner itself, and a job it judged timed out says so. An older server leaves the reading of the reports here: a

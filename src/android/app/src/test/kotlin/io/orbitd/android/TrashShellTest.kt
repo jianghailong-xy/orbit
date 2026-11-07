@@ -129,7 +129,7 @@ class TrashShellTest {
         await { toastShows("Moved to Open") }
     }
 
-    private fun openReads() = NavShell.calls.count { it == "GET sessions?view=open" }
+    private fun openReads() = NavShell.calls.count { it.substringBefore("&since=") == "GET sessions?view=open" }
     private fun snapshotHasPlain() = snapshotHas(NavShell.PLAIN)
     private fun snapshotHas(id: String) = app().realtime.state.value.directory?.sessions?.get("open").orEmpty()
         .any { it["id"]?.jsonPrimitive?.content == id }

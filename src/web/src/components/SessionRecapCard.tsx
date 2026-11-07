@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { refreshSessionRecap, type RecapOutcome } from '../api';
 import { sessionQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
+import { useRefreshSessionLists } from '../lib/useControlPlane';
 import { Glyph } from './ProjectPanoramaHeader';
 import { Menu } from './ui/Menu';
 
@@ -102,6 +103,7 @@ export function SessionRecapCard({
   onHide: () => void;
 }) {
   const qc = useQueryClient();
+  const refreshSessionLists = useRefreshSessionLists();
   const message = useToast();
   const refresh = useMutation({
     mutationFn: () => refreshSessionRecap(sessionId),
@@ -120,7 +122,7 @@ export function SessionRecapCard({
       // A pass wrote: read the session again, which is where this card's line and time come from,
       // and the lists, whose row reads the same line.
       await qc.invalidateQueries({ queryKey: sessionQuery(sessionId).queryKey });
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
     },
     onError: () => message.error(RECAP_CARD_COPY.failed),
   });

@@ -60,7 +60,9 @@ private val DarkScrim = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
 fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
     val auth by app.session.state.collectAsState()
     val handle = (auth as? AuthState.SignedIn)?.handle
-    val live by remember(app) { app.realtime.state.map { it.handle to it.invalidationRevision }.distinctUntilChanged() }
+    // `users/me` is read as the app comes to the front and as the account stream connects, which replays nothing; no account event
+    // names the preferences, so none reads them (docs/list-freshness-design.md D2).
+    val live by remember(app) { app.realtime.state.map { it.handle to it.controlConnects }.distinctUntilChanged() }
         .collectAsState(null to 0L)
     val revision = if (live.first === handle) live.second else 0L
     var theme by remember(handle) { mutableStateOf("system") }
