@@ -36,8 +36,9 @@ class SessionRowTest {
     @get:Rule(order = 1) val compose = createComposeRule()
     private val marks = listOf("needs-you", "review", "running", "watching", "jobs", "failed").map { "session-mark-$it" }
 
-    private fun draw(session: DirectorySession, watching: WatchSessionSummary? = null, deleted: Boolean = false, machine: String? = null) {
-        compose.setContent { OrbitTheme { SessionRow(session, machine, {}, deleted, watching) {} } }
+    private fun draw(session: DirectorySession, watching: WatchSessionSummary? = null, deleted: Boolean = false, machine: String? = null,
+        mark: SessionProjectMark? = null) {
+        compose.setContent { OrbitTheme { SessionRow(session, machine, {}, deleted, watching, mark) {} } }
         compose.waitForIdle()
     }
     private fun mark(): List<String> = marks.filter { compose.onAllNodesWithTag(it, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
@@ -102,6 +103,38 @@ class SessionRowTest {
         val held = parked().copy(runState = "QUEUED", status = "PENDING", error = "CLAUDE_REGION_UNSUPPORTED: Claude Code stopped")
         assertEquals(SessionLine("Anthropic unavailable on HPC", SessionLine.Tone.QUEUED), SessionLine.make(held, live = true, machine = "HPC"))
         assertEquals("with no machine known it is plain Queued", SessionLine(SessionLineCopy.queued, SessionLine.Tone.QUEUED), SessionLine.make(held, live = true))
+    }
+
+    /** A member whose project has no row in the list (owner 2026-11-07, option A) leads its second line with the project row's own
+     * progress chip, before what the session says; a screen reader hears it as the web's hover, beside the progress it shows. */
+    @Test fun aMarkedMemberLeadsItsSecondLineWithItsProjectsProgress() {
+        draw(parked().copy(projectMembership = SessionProjectMembership("p1", "Launch", "OPEN", "TASK"), lastAssistantText = "Checked the index."),
+            mark = SessionProjectMark("p1", "Launch", "OPEN", ProjectTaskCounts(10, 0, 12), 1))
+        val chip = compose.onNodeWithTag("session-project-mark:p1", useUnmergedTree = true)
+        chip.assert(hasContentDescription("Part of Launch · open its sessions"))
+        compose.onNode(hasText("10/12") and hasAnyAncestor(hasTestTag("project-progress-chip")) and hasAnyAncestor(hasTestTag("session-project-mark:p1")),
+            useUnmergedTree = true).assertExists()
+        val line = compose.onNodeWithTag("session-state:s", useUnmergedTree = true).fetchSemanticsNode()
+        assertEquals("Checked the index.", line.config[SemanticsProperties.Text].joinToString { it.text })
+        val head = chip.fetchSemanticsNode()
+        assertTrue("the chip leads the line", head.positionInRoot.x + head.size.width <= line.positionInRoot.x)
+        assertEquals("on the second line", line.boundsInRoot.center.y, head.boundsInRoot.center.y, 2f)
+        // The row is still the session's: its title, its menu and its state.
+        val row = compose.onNode(hasText("Row") and hasClickAction()).fetchSemanticsNode().config
+        assertEquals("Options for Row", row.getOrNull(SemanticsActions.OnLongClick)?.label)
+        assertEquals("Waiting for your reply", row.getOrNull(SemanticsProperties.StateDescription))
+    }
+
+    /** A project the sidebar does not list (a DONE one): the mark is its status, as the project row's chip is. */
+    @Test fun aMarkWithoutProgressSaysTheProjectsStatus() {
+        draw(parked(), mark = SessionProjectMark("p1", "Launch", "DONE", null, 0))
+        compose.onNode(hasText("Done") and hasAnyAncestor(hasTestTag("session-project-mark:p1")), useUnmergedTree = true).assertExists()
+    }
+
+    @Test fun aRowWithNoMarkDrawsNoChip() {
+        draw(parked().copy(projectMembership = SessionProjectMembership("p1", "Launch", "OPEN", "TASK")))
+        compose.onAllNodesWithTag("project-progress-chip", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("Part of Launch · open its sessions", useUnmergedTree = true).assertCountEquals(0)
     }
 
     /** A coordinator a list draws flat says so (Trash, a tag). */

@@ -40,7 +40,7 @@ import { isNoiseSystemEvent, NON_REPLAYABLE_EVENT_TYPES } from '../common/system
 import { isSessionGenerating } from '../common/session-generating';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { readOpenRequestPeers } from '../sessions/session-request';
-import { lastUserFromOf } from '../sessions/session-message';
+import { lastUserFromOf, lastUserFromOrbitOf } from '../sessions/session-message';
 import { readSessionProjectMembership } from '../sessions/session-project-membership';
 import { readConfirmationsUnderReview } from '../tasks/owner-confirmation-read';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
@@ -1489,9 +1489,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         // them would leave every row on screen previewing the turn before the one just finished.
         lastAssistantText: true,
         lastUserText: true,
-        // Who sent lastUserText, when another session did (0485).
+        // Who sent lastUserText, when another session did (0485), or that Orbit did (0491).
         lastUserFromSessionId: true,
         lastUserFromTitle: true,
+        lastUserFromOrbit: true,
         recapText: true,
         recapAt: true,
         // The engine it runs on, and what the old rules derive it from for a row that has none.
@@ -1583,6 +1584,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       lastUserText: previewText(s.lastUserText),
       // Who sent it, as the list row says: null for the owner's own, and cleared with it.
       lastUserFrom: lastUserFromOf(s),
+      // That Orbit wrote it, with the notification card its line is written from; cleared with it.
+      lastUserFromOrbit: lastUserFromOrbitOf(s),
       recapText: s.recapText ?? null,
       recapAt: s.recapAt ? s.recapAt.toISOString() : null,
       // Read fresh with the status it qualifies: the same summary has to be able to say both

@@ -14,6 +14,7 @@ import type {
   SessionLandingView,
   SessionMessageCard,
   SessionMessageFrom,
+  OrbitMessageFrom,
   SessionReplyCard,
   SessionMoveTargets,
   SessionRequestView,
@@ -1759,6 +1760,11 @@ export type SessionListItem = Record<string, any> & {
    *  §3.5). Null for the owner's own words; absent from an older server, where every message reads as
    *  the owner's, as it always did. */
   lastUserFrom?: SessionMessageFrom | null;
+  /** That the unanswered message is Orbit's own (a coordinator's notification, a watch's wake, the
+   *  owner's answer handed on…), with the notification card its line is written from: the row says
+   *  `Orbit: …` (docs/session-list-projects-design.md §3.5). Null for anybody else's words; absent
+   *  from an older server. */
+  lastUserFromOrbit?: OrbitMessageFrom | null;
 };
 
 /** The repair conversation attached to a merge recovery on its parent session. */
@@ -1850,6 +1856,8 @@ export interface SessionDetail {
   recapAt?: string | null;
   /** Who sent the unanswered message, as the list row carries it (`SessionListItem.lastUserFrom`). */
   lastUserFrom?: SessionMessageFrom | null;
+  /** That Orbit wrote it, as the list row carries it (`SessionListItem.lastUserFromOrbit`). */
+  lastUserFromOrbit?: OrbitMessageFrom | null;
   startedAt?: string | null;
   finishedAt?: string | null;
   error?: string | null;

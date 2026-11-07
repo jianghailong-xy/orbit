@@ -29,6 +29,9 @@ class DirectoryApi(private val api: OrbitApi, private val handle: SessionHandle)
     suspend fun renameWorkspace(id: String, name: String) { mutate(listOf("workspaces", id), HttpMethod.PATCH, buildJsonObject { put("name", name.trim()) }) }
     suspend fun pin(id: String, pinned: Boolean) { mutate(listOf("sessions", id, "pin"), if (pinned) HttpMethod.POST else HttpMethod.DELETE) }
     suspend fun complete(id: String) { mutate(listOf("sessions", id, "complete")) }
+    /** Complete on a DONE or CANCELLED project's row (docs/session-list-projects-design.md §3.6): its coordinator and its members
+     * still in Open, in every workspace, move to Completed together. An OPEN project is refused 409 PROJECT_STILL_OPEN. */
+    suspend fun completeProject(projectId: String) { mutate(listOf("projects", projectId, "sessions", "complete")) }
     /** Write the session's recap again now, past the settle hooks' two-minute window: the conversation's Recap card's refresh.
      * Answers once the pass has finished, with what it did. */
     suspend fun refreshRecap(id: String): RecapOutcome = Wire.decode(mutate(listOf("sessions", id, "recap")), RecapOutcome.serializer())

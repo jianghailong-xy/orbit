@@ -25,7 +25,9 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 
 sealed interface DirectoryDialog {
-    data class SessionMenu(val session: DirectorySession, val view: SessionView) : DirectoryDialog
+    /** [project]: the project of a member whose project has no row in the list it was pressed in (owner 2026-11-07, option A): its
+     * menu opens with Sessions, and it moves on its own. */
+    data class SessionMenu(val session: DirectorySession, val view: SessionView, val project: SessionProjectMark? = null) : DirectoryDialog
     data class Rename(val session: DirectorySession) : DirectoryDialog
     data class Purge(val session: DirectorySession) : DirectoryDialog
     data class Tags(val session: DirectorySession) : DirectoryDialog
@@ -37,9 +39,10 @@ sealed interface DirectoryDialog {
     data class DeleteFolder(val folder: Folder) : DirectoryDialog
 }
 
+/** [openSessions] opens a project's sessions page, by its id: a marked member's Sessions ([DirectoryDialog.SessionMenu.project]). */
 @Composable
 fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: DirectoryData,
-    setDialog: (DirectoryDialog?) -> Unit, onChanged: () -> Unit) = key(dialog) {
+    setDialog: (DirectoryDialog?) -> Unit, openSessions: (String) -> Unit = {}, onChanged: () -> Unit) = key(dialog) {
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -122,6 +125,11 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
                     when (dialog) {
                         is DirectoryDialog.SessionMenu -> {
                             val s = dialog.session
+                            // The project's sessions, in a group of their own above this session's actions (iOS's long press).
+                            dialog.project?.let { project ->
+                                ActionButton(SessionProjectCopy.sessions, !busy) { setDialog(null); openSessions(project.projectId) }
+                                HorizontalDivider()
+                            }
                             if (dialog.view != SessionView.TRASH) {
                                 ActionButton("Rename", canWrite) { setDialog(DirectoryDialog.Rename(s)) }
                                 ActionButton(if (s.pinnedAt == null) "Pin" else "Unpin", canWrite) { perform { api.pin(s.id, s.pinnedAt == null) } }
@@ -136,8 +144,9 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
                             if (!allowed) Text("This action isn't available in the current session state.", style = MaterialTheme.typography.bodySmall)
                             if (dialog.view != SessionView.TRASH) {
                                 ActionButton("Share…", canWrite) { setDialog(DirectoryDialog.Share(s)) }
-                                // A project's members are listed where its coordinator is, so of its sessions only the coordinator offers Move… (A05-6).
-                                if (s.projectMembership?.isCoordinator != false) ActionButton("Move…", canWrite) { setDialog(DirectoryDialog.Move(s)) }
+                                // A project's members are listed where its coordinator is, so of its sessions only the coordinator offers Move… (A05-6),
+                                // unless the list has no row for the project, where the member is a row of its own (option A).
+                                if (s.projectMembership?.isCoordinator != false || dialog.project != null) ActionButton("Move…", canWrite) { setDialog(DirectoryDialog.Move(s)) }
                             }
                             ActionButton(if (dialog.view == SessionView.TRASH) "Delete Permanently…" else "Move to Trash", canWrite) {
                                 if (dialog.view == SessionView.TRASH) setDialog(DirectoryDialog.Purge(s))
