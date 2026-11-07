@@ -432,23 +432,32 @@ public struct WikiChatContext: Codable, Equatable, Sendable {
     }
 }
 
-/// `POST /wiki/spaces/:id/chats` (contract `chat.create.body`): the owner's first words, word for word.
+/// `POST /wiki/spaces/:id/chats` (contract `chat.create.body`): the owner's first words, word for word, and what the
+/// composer's attachment row and toolbar hold (board 43) — the pictures and files staged for it, and the model, mode,
+/// effort and speed. Left out, each starts as a session of the workspace does.
 public struct WikiChatCreateRequest: Encodable, Equatable, Sendable {
     public let workspaceId: String?
     public let content: String
     public let clientTurnId: String
     public let wikiContext: WikiChatContext?
+    public let attachmentIds: [String]?
     public let model: String?
     public let permissionMode: String?
+    public let effort: String?
+    public let fastMode: Bool?
 
     public init(workspaceId: String?, content: String, clientTurnId: String, wikiContext: WikiChatContext? = nil,
-                model: String? = nil, permissionMode: String? = nil) {
+                attachmentIds: [String]? = nil, model: String? = nil, permissionMode: String? = nil,
+                effort: String? = nil, fastMode: Bool? = nil) {
         self.workspaceId = workspaceId
         self.content = content
         self.clientTurnId = clientTurnId
         self.wikiContext = wikiContext
+        self.attachmentIds = attachmentIds
         self.model = model
         self.permissionMode = permissionMode
+        self.effort = effort
+        self.fastMode = fastMode
     }
 }
 

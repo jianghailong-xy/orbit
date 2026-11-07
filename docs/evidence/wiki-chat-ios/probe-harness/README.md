@@ -21,3 +21,9 @@ presses nothing. All data is made up.
 
 Run on a Mac with Xcode and XcodeGen: `bash run.sh` (`PASSES=ios` or `PASSES=mac` for one). On GitHub, the probe branch
 carries this directory as `.c11-probe/` and `client.probe.yml` as its `.github/workflows/client.yml`.
+
+C19 (task 34tEzSSp0Ii1rRpbXxRbi, board 43) reuses this harness: `WikiChatShotTests.testC19*` photograph the panel's
+composer, now the Console's (`ComposerView`) — a new chat's Runs in with the workspace alone over the composer card
+whose attachment row leads with the page and the selection (`ask`), a running chat's Stop and no workspace
+(`working`), and the draft's placeholder beside an open card (`card`). Run them alone with
+`ONLY_TESTING="WikiChatShotTests/testC19NewChatComposer WikiChatShotTests/testC19RunningChatComposer WikiChatShotTests/testC19CardOpenComposer"`.
