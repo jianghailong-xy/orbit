@@ -96,6 +96,13 @@ services:
       # JIT off, as production already runs it for its role and database: docs/postgres-runtime-settings.md §10.
       - -c
       - jit=off
+      # At the 128MB default every hot read went through the OS page cache: on 2026-11-06,
+      # with the host at load 40-50, about half of postgres' CPU was kernel time. 4GB of the
+      # host's 24GB; effective_cache_size tells the planner the rest of the page cache is there.
+      - -c
+      - shared_buffers=4GB
+      - -c
+      - effective_cache_size=12GB
     environment:
       POSTGRES_USER: orbit
       POSTGRES_PASSWORD: orbit
