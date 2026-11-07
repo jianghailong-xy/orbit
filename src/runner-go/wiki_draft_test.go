@@ -143,16 +143,21 @@ func TestWikiDraftSaysACardNotAWrite(t *testing.T) {
 }
 
 // A plan card says what its press does instead (C12): the plan changed, confirmed and rebuilt, and nothing written yet.
+// One card may change several documents (C17): a split sends both, and this side sends them as asked.
 func TestWikiDraftSaysAPlanCardIsAChangeOfThePlanNotAWrite(t *testing.T) {
 	reply := `{"status":"draft","draftId":"d3","kind":"plan","replayed":false,` +
-		`"rewrites":[{"doc":"sessions-runtime","key":"recovery","where":"1.1 §2","title":"Recovery"}]}`
+		`"rewrites":[{"doc":"sessions-runtime","key":"turn-delivery","where":"1.1 §1","title":"Turn delivery"},` +
+		`{"doc":"recovery","key":"recovery","where":"1.3 §1","title":"Recovery"}]}`
 	srv, requests := wikiDoor(t, http.StatusOK, reply)
-	change := map[string]interface{}{"doc": map[string]interface{}{"slug": "sessions-runtime", "title": "Sessions runtime"}}
+	change := map[string]interface{}{"docs": []interface{}{
+		map[string]interface{}{"slug": "sessions-runtime", "title": "Sessions runtime"},
+		map[string]interface{}{"slug": "recovery", "title": "Recovery and respawn"},
+	}}
 	text := wikiToolText(t, wikiMCP(t, srv.URL).callTool("wiki_draft", map[string]interface{}{
-		"kind": "plan", "change": change, "reason": "For a first-time reader.", "idempotencyKey": "k3",
+		"kind": "plan", "change": change, "reason": "1.1 is too long: recovery gets a document of its own.", "idempotencyKey": "k3",
 	}))
 	for _, phrase := range []string{"Drafted card d3 (plan)", "Nothing was written", "only then is the plan changed, confirmed and its documents rebuilt",
-		"Never call it applied", "replaces: d3", "1.1 §2 Recovery"} {
+		"Never call it applied", "replaces: d3", "1.1 §1 Turn delivery", "1.3 §1 Recovery"} {
 		if !strings.Contains(text, phrase) {
 			t.Errorf("a plan card's answer does not say %q: %q", phrase, text)
 		}

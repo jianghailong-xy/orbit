@@ -218,7 +218,9 @@ final class WikiChatWiringTests: XCTestCase {
                            "ForEach(Array(face.rows.enumerated()), id: \\.offset)", "label(row.label)",
                            "Text(row.value)\n                            .fixedSize(horizontal: false, vertical: true)\n                            .frame(maxWidth: .infinity, alignment: .leading)",
                            "label(WikiChatCopy.cardSources)",
-                           "label(WikiChatCopy.cardRewrites)", "WikiDraftCardTarget.section(doc: $0.doc, key: $0.key)",
+                           "label(WikiChatCopy.cardRewrites)",
+                           "links(WikiChatLogic.rewriteLinks(kind: card.kind, rewrites: card.rewrites)",
+                           ".map { ($0.label, WikiDraftCardTarget.section(doc: $0.doc, key: $0.key)) })",
                            "label(WikiChatCopy.similar)", "WikiDraftCardTarget.entry($0.id)",
                            "private func label(_ text: String) -> some View {\n        Text(text)\n            .foregroundStyle(.secondary)\n            .fixedSize()",
                            "let primary: WikiChatAction? = card.state == .draft ? look.actions.first : nil",
@@ -241,9 +243,9 @@ final class WikiChatWiringTests: XCTestCase {
         // with every error the gate found under the reason (C12).
         let model = code(try source("WikiChatModel.swift"))
         XCTAssertTrue(model.contains("if press != .seen { pressFailures[key] = WikiChatLogic.pressRefusal(error) }"))
-        // A plan card opens its document on the plan page (C12), as the web's Open in Plan does.
+        // A plan card opens its first document on the plan page (C12, C17), as the web's Open in Plan does.
         assertOrder(slot, ["case .openInPlan:",
-                           "let node: NavNode = card.change.map { .wikiPlanDoc(slug: $0.doc.slug, version: nil) } ?? .wikiPlan(version: nil)",
+                           "let node: NavNode = card.change?.docs.first.map { .wikiPlanDoc(slug: $0.slug, version: nil) } ?? .wikiPlan(version: nil)",
                            "leave { go(node) }"], "Open in Plan")
         XCTAssertTrue(model.contains("return WikiChatLogic.pressError(error)"), "Edit's refusal")
         XCTAssertTrue(model.contains("guard WikiChatLogic.needsSeen(card) else { return }"))

@@ -11,6 +11,7 @@ import {
   wikiChatPressDetails,
   wikiChatPressError,
   wikiChatResultLook,
+  wikiChatRewritesRow,
   wikiChatSendError,
 } from './wikiChat';
 import { wikiWaiting, wikiWaitingIn } from './wikiSpace';
@@ -122,6 +123,12 @@ describe('how a card looks in each state (design §7.3, board 42 ② ③ ④)', 
     ['undone', { state: 'undone' }, 'Undone', 'grey', [], null, true],
     ['a rewrite drafted', { kind: 'rewrite', label: 'Rewrite from main', state: 'draft' }, 'Draft · Rewrite from main', 'brand', ['rewrite', 'discard'], null, false],
     ['a plan change', { kind: 'plan', label: 'Plan change', state: 'draft' }, 'Draft · Plan change', 'brand', ['apply_rebuild', 'open_in_plan', 'discard'], null, false],
+    // An applied plan card (C17): Undo while the plan stands where its press left it, and Open in Plan; once the plan
+    // moved on, Open in Plan alone, and the card says why Undo is off.
+    ['a plan change applied', { kind: 'plan', label: 'Plan change', state: 'applied', undoable: true }, 'Applied · Confirmed by you', 'ok', ['undo', 'open_in_plan'], null, true],
+    ['a plan change applied, the plan moved on since', { kind: 'plan', label: 'Plan change', state: 'applied', undoable: false }, 'Applied · Confirmed by you', 'ok',
+      ['open_in_plan'], 'The plan has changed since, so this can no longer be undone.', true],
+    ['a plan change undone', { kind: 'plan', label: 'Plan change', state: 'undone' }, 'Undone', 'grey', [], null, true],
   ] as const)('%s', (_name, over, title, tone, actions, note, quiet) => {
     const look = wikiChatCardLook(card({ ops: add, ...(over as Partial<WikiChatDraftView>) }));
     expect(look.title).toBe(title);
@@ -281,13 +288,16 @@ describe('a plan card (C12): its face, and a press the plan’s gate refused', (
   const change: NonNullable<WikiChatDraftView['change']> = {
     baseVersion: 4,
     version: null,
-    doc: { slug: 'sessions-runtime', title: 'Sessions runtime', number: '3.1' },
-    category: { key: 'runtime', title: 'Runtime', opens: false },
-    fields: ['audience'],
-    sections: [
-      { key: 'recovery', title: 'Recovery', number: 2, edit: 'changed', fields: ['covers', 'sources'], covers: 'For a first-time reader.' },
-      { key: 'old', title: 'The old poll', number: 4, edit: 'removed', fields: [], covers: null },
-    ],
+    docs: [{
+      slug: 'sessions-runtime', title: 'Sessions runtime', number: '3.1', added: false,
+      category: { key: 'runtime', title: 'Runtime', opens: false },
+      fields: ['audience'],
+      sections: [
+        { key: 'recovery', title: 'Recovery', number: 2, edit: 'changed', fields: ['covers', 'sources'], covers: 'For a first-time reader.' },
+        { key: 'old', title: 'The old poll', number: 4, edit: 'removed', fields: [], covers: null },
+      ],
+    }],
+    moves: [],
   };
 
   it('says the document, what of it changes and the covers it writes, then why: no entry\'s rows', () => {
@@ -319,6 +329,18 @@ describe('a plan card (C12): its face, and a press the plan’s gate refused', (
     expect(wikiChatPressDetails(gate)).toEqual(['change.doc.sections[1].kind: "essay" is not a section kind', 'plan.docs[1]: runbooks is protected']);
     expect(wikiChatPressDetails(new ApiError('this card is applied', 409))).toEqual([]);
     expect(wikiChatPressDetails(new TypeError('Failed to fetch'))).toEqual([]);
+  });
+
+  it('links its Rewrites by section within one document, and by document once the rebuild spans several (C17, board 42 ③)', () => {
+    const one = [{ doc: 'sessions-runtime', key: 'recovery', where: '3.1 §2', title: 'Recovery' }];
+    expect(wikiChatRewritesRow(card({ kind: 'plan', rewrites: one }))).toEqual([{ label: '3.1 §2', doc: 'sessions-runtime', key: 'recovery', title: 'Recovery' }]);
+    const split = [...one, { doc: 'delivery', key: 's3', where: '3.5 §1', title: 'Delivery' }, { doc: 'delivery', key: 's4', where: '3.5 §2', title: 'Heartbeats' }];
+    expect(wikiChatRewritesRow(card({ kind: 'plan', rewrites: split }))).toEqual([
+      { label: '3.1', doc: 'sessions-runtime', key: 'recovery', title: null },
+      { label: '3.5', doc: 'delivery', key: 's3', title: null },
+    ]);
+    // Any other card links each section, whatever documents they are in.
+    expect(wikiChatRewritesRow(card({ kind: 'rewrite', rewrites: split })).map((link) => link.label)).toEqual(['3.1 §2', '3.5 §1', '3.5 §2']);
   });
 });
 

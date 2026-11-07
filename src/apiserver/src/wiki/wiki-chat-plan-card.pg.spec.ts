@@ -22,8 +22,9 @@
  *      reads changed, its Apply refused WIKI_REVISION_CONFLICT;
  *   5. the covers change moves that section's fingerprint, so the build writes it again — it alone, from the new covers —
  *      and the card reads Wiki updated; the next build leaves it as it is: the requirement held;
- *   6. a draft of the plan waiting for the owner refuses a plan card WIKI_PLAN_STALE; Undo is refused; Try again asks for
- *      a failed build again while its version is in force, and not once another is;
+ *   6. a draft of the plan waiting for the owner refuses a plan card WIKI_PLAN_STALE, and — the plan moved on from the card's
+ *      version — the card's Undo too (C17); Try again asks for a failed build again while its version is in force, and not
+ *      once another is;
  *   7. the next message tells the agent the version the press made.
  *
  * Not destructive: every row belongs to the account this run creates.
@@ -429,11 +430,14 @@ test('a plan card: the page brings the plan, the gate answers the agent, one pre
     assert.deepEqual([read.json.kind, read.json.state, read.json.label, read.json.undoable, read.json.rewrite], ['plan', 'draft', 'Plan change', false, null]);
     assert.deepEqual(read.json.change, {
       baseVersion: 1, version: null,
-      doc: { slug: SLUG, title: 'Sessions runtime', number: '1.1' },
-      category: { key: 'runtime', title: 'Runtime', opens: false },
-      fields: [],
-      sections: [{ key: 'recovery', title: 'Recovery', number: 2, edit: 'changed', fields: ['covers'], covers: NEW_COVERS }],
-    }, 'the change as the card shows it: one section, its covers');
+      docs: [{
+        slug: SLUG, title: 'Sessions runtime', number: '1.1', added: false,
+        category: { key: 'runtime', title: 'Runtime', opens: false },
+        fields: [],
+        sections: [{ key: 'recovery', title: 'Recovery', number: 2, edit: 'changed', fields: ['covers'], covers: NEW_COVERS }],
+      }],
+      moves: [],
+    }, 'the change as the card shows it: one document, one section, its covers');
 
     // Card B names a project in a session condition: the gate finds it now.
     await sql.query(`INSERT INTO "project" ("id", "title", "owner_id", "updated_at") VALUES ($1, 'Runner hosting', $2, now())`, [projectId, ownerId]);
@@ -441,7 +445,7 @@ test('a plan card: the page brings the plan, the gate answers the agent, one pre
     const second = await draft({ ...base, reason: 'Cite what the project decided.', change: { doc: named }, idempotencyKey: `plan-b-${RUN}` });
     assert.equal(second.status, 200, second.text);
     cardB = toUuid(second.json.draftId);
-    assert.deepEqual((await draftRow(cardB)).change.doc.sections[2].sources.sessions.projects, [projectId], 'the project kept by its id, as the gate resolved it');
+    assert.deepEqual((await draftRow(cardB)).change.docs[0].sections[2].sources.sessions.projects, [projectId], 'the project kept by its id, as the gate resolved it');
   });
 
   // ── 3 ─────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -465,7 +469,8 @@ test('a plan card: the page brings the plan, the gate answers the agent, one pre
     assert.deepEqual([refused.status, refused.json.code], [403, 'WIKI_OWNER_CHANNEL_ONLY'], 'the owner door alone');
     const pressed = await press(cardA, 'apply');
     assert.equal(pressed.status, 200, pressed.text);
-    assert.deepEqual([pressed.json.replayed, pressed.json.draft.state, pressed.json.draft.change.version, pressed.json.draft.undoable], [false, 'applied', 2, false]);
+    // Undoable while the plan stands where the press left it (C17).
+    assert.deepEqual([pressed.json.replayed, pressed.json.draft.state, pressed.json.draft.change.version, pressed.json.draft.undoable], [false, 'applied', 2, true]);
     assert.ok(['rewriting', 'waiting'].includes(pressed.json.draft.rewrite.result), JSON.stringify(pressed.json.draft.rewrite));
     const versions = (await sql.query(
       `SELECT "version", "status", "origin", "base_version" AS "base", "author_user_id"::text AS "author", "confirmed_by_user_id"::text AS "confirmer", "proposal_id" AS "proposal"
@@ -536,10 +541,7 @@ test('a plan card: the page brings the plan, the gate answers the agent, one pre
   });
 
   // ── 6 ─────────────────────────────────────────────────────────────────────────────────────────────────────────
-  await t.test('6. a waiting draft refuses a plan card; Undo is refused; Try again asks for a failed build while its version is in force', async () => {
-    const undo = await press(cardA, 'undo');
-    assert.equal(undo.status, 409, undo.text);
-    assert.match(undo.json.message, /the plan keeps every version/u);
+  await t.test('6. a waiting draft refuses a plan card and the Undo of one before it; Try again asks for a failed build while its version is in force', async () => {
     const early = await press(cardA, 'retry');
     assert.equal(early.status, 409, 'Try again is for a failed rebuild');
     // Had the card's own build ended with the section left unwritten, the card reads failed, and Try again asks for it again.
@@ -567,6 +569,14 @@ test('a plan card: the page brings the plan, the gate answers the agent, one pre
     const waiting = await draft({ kind: 'plan', reason: 'r', change: { doc: withCovers('Something else.') }, idempotencyKey: `plan-c-${RUN}` });
     assert.deepEqual([waiting.status, waiting.json.code], [409, 'WIKI_PLAN_STALE'], waiting.text);
     assert.match(waiting.json.message, /has a draft the owner has not confirmed \(version 3\)/u);
+    // The plan moved on from version 2, which card A's press made: Undo is off, says so, and writes nothing (C17).
+    assert.equal((await card(cardA)).json.undoable, false);
+    const versionsBefore = (await planWrites()).versions;
+    const undo = await press(cardA, 'undo');
+    assert.deepEqual([undo.status, undo.json.code], [409, 'WIKI_REVISION_CONFLICT'], undo.text);
+    assert.match(undo.json.message, /moved on since this card's press made version 2/u);
+    assert.equal((await planWrites()).versions, versionsBefore, 'no version written');
+    assert.equal((await draftRow(cardA)).undone_at, null);
     // Version 3 confirmed: version 2, which card A's press made, is in force no more, and its Try again asks for nothing.
     const confirmedV3 = await api('POST', `/api/wiki/spaces/${pub(spaceId)}/plan/versions/3/confirm`, ownerToken);
     assert.equal(confirmedV3.status, 200, confirmedV3.text);

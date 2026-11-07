@@ -45,6 +45,7 @@ import {
   wikiChatPressDetails,
   wikiChatPressError,
   wikiChatResultLook,
+  wikiChatRewritesRow,
   wikiReviewItemAnchor,
   type WikiChatAction,
   type WikiChatDraftOpView,
@@ -212,7 +213,8 @@ function WikiDraftCardView({ view, host }: { view: WikiChatDraftView; host: Wiki
       return;
     }
     if (action === 'settings') return host.openSettings();
-    if (action === 'open_in_plan') return host.openPlan(view.change?.doc.slug);
+    // A plan card opens its first document on the plan page (C17: a card may change several).
+    if (action === 'open_in_plan') return host.openPlan(view.change?.docs[0]?.slug);
     setBusy(action);
     try {
       if (action === 'redo') await host.send(WIKI_CHAT_REDO_MESSAGE);
@@ -285,16 +287,16 @@ function WikiDraftCardView({ view, host }: { view: WikiChatDraftView; host: Wiki
               )}
               {view.rewrites.length > 0 && (
                 <FaceRow label={WIKI_CHAT_REWRITES}>
-                  {view.rewrites.map((section, index) => (
-                    <span key={`${section.doc}#${section.key}`}>
+                  {wikiChatRewritesRow(view).map((link, index) => (
+                    <span key={`${link.doc}#${link.key}`}>
                       {index > 0 && ' · '}
                       <button
                         type="button"
                         className="lk"
-                        title={section.title ?? undefined}
-                        onClick={() => host.openSection(section.doc, section.key)}
+                        title={link.title ?? undefined}
+                        onClick={() => host.openSection(link.doc, link.key)}
                       >
-                        {section.where}
+                        {link.label}
                       </button>
                     </span>
                   ))}

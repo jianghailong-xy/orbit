@@ -20,7 +20,9 @@ import {
   wikiChatCardTitle,
   wikiChatFabState,
   wikiChatPlanFace,
+  wikiChatPlanMovedNote,
   wikiChatResultLine,
+  wikiChatRewriteLinks,
   wikiChatRewriteWaits,
   wikiDocChanged,
   wikiDocVersionHeading,
@@ -32,6 +34,7 @@ import {
   type WikiChatFabCounts,
   type WikiChatFabState,
   type WikiChatPress,
+  type WikiChatRewriteLink,
   type WikiDocSectionVersionView,
 } from '@orbit/shared';
 import { api, ApiError } from '../api';
@@ -617,7 +620,10 @@ export interface WikiChatCardLook {
   tone: WikiChatTone;
   /** A settled card is drawn flat (board 42 ③ ④'s quiet cards). */
   quiet: boolean;
-  /** The line under the title a state carries: `A newer draft took over.`, or the In Review note. */
+  /**
+   * The line under the title a state carries: `A newer draft took over.`, the In Review note, or — an applied plan card
+   * the plan moved on from — why it can no longer be undone (`wikiChatPlanMovedNote`, C17).
+   */
   note: string | null;
   /** Applied with a challenge still waiting in Review (`wikiChatAppliedInReview`): its note opens that item. */
   inReview: boolean;
@@ -644,7 +650,11 @@ export function wikiChatCardLook(view: Pick<WikiChatDraftView, 'kind' | 'state' 
     title: wikiChatCardTitle(view.state, view.label, inReview),
     tone: inReview ? 'amber' : STATE_TONE[view.state],
     quiet: view.state !== 'draft' && view.state !== 'changed',
-    note: inReview ? WIKI_CHAT_COPY.card.appliedInReviewNote : view.state === 'replaced' ? WIKI_CHAT_COPY.card.replacedNote : null,
+    note: inReview
+      ? WIKI_CHAT_COPY.card.appliedInReviewNote
+      : view.state === 'replaced'
+        ? WIKI_CHAT_COPY.card.replacedNote
+        : wikiChatPlanMovedNote(view),
     inReview,
     actions: all.filter((action) => !REWRITE_ACTIONS.includes(action)),
     rewriteActions: all.filter((action) => REWRITE_ACTIONS.includes(action)),
@@ -787,6 +797,18 @@ export function wikiChatCardFace(
     for (const source of raw) if (source && typeof source === 'object') sources.add(sourceLine(source, view.sessionId));
   }
   return { heading, rows, diff, sources: [...sources] };
+}
+
+/**
+ * The links of a card's Rewrites row (board 42 ② ③): a section each — or, for a plan card whose rebuild spans more than
+ * one document, a document each, opening its first section (board 42 ③: `3.1 · 3.5`; `wikiChatRewriteLinks`, C17).
+ */
+export function wikiChatRewritesRow(view: Pick<WikiChatDraftView, 'kind' | 'rewrites'>): Array<WikiChatRewriteLink & { title: string | null }> {
+  return wikiChatRewriteLinks(view.kind, view.rewrites).map((link) => {
+    // A section's link says its title on hover; a document's names no one section.
+    const section = view.rewrites.find((one) => one.doc === link.doc && one.key === link.key && one.where === link.label);
+    return { ...link, title: section?.title ?? null };
+  });
 }
 
 /** The labels of the card's rows (board 42 ②): Sources, Rewrites, Similar. */

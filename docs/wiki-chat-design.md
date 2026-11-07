@@ -132,7 +132,7 @@
 |---|---|---|---|---|
 | 「这句的原因写错了」「这个坑修好了」 | 知识 | 条目 | `Add / Amend / Supersede / Retire` | 现有写入口，经草稿 |
 | 「这个数早就变了」 | 文档落后于 main | 重写这一节 | `Rewrite from main` | 新：按下排 `docs_follow` |
-| 「这篇太长，拆开」「写给新人看」 | 结构和写法 | plan（写法要求落在节的 `covers` 上，指纹包含它，下次重写还在） | `Plan change` | 现有 `plan/edits`、`confirm`、`build`，一按三步 |
+| 「这篇太长，拆开」「写给新人看」 | 结构和写法 | plan（写法要求落在节的 `covers` 上，指纹包含它，下次重写还在） | `Plan change`：一张卡可改几篇，拆一篇就是一张卡（移一节到新开的一篇），卡面先写移节、再逐篇写改动（图 42 ③） | 现有 `plan/edits`、`confirm`、`build`，一按三步；几篇的改动合成一次 plan 编辑，对改完的整份 plan 过一次闸，任何一篇过不了就什么都不写、卡上列出全部错误。Undo 把 plan 和那次重建写过的节放回去（§7.2） |
 | 「这里应该改成 45 秒」 | 系统本身 | 代码或它引用的设计文档 | 没有卡，是会话的改动条 | 审批照拨盘走，Merge 你按，进 main 后 §8.1 跟上 |
 
 agent 判断错了怎么办：你接着说，或者按 Discard。卡上写明落在哪一层，这个判断是看得见的。
@@ -156,7 +156,7 @@ agent 判断错了怎么办：你接着说，或者按 Discard。卡上写明落
 | `Apply` | `POST /api/wiki/chat-drafts/:id/apply`，只认 JWT，带会话头拒 `WIKI_OWNER_CHANNEL_ONLY` | 同一个事务里记变更集（origin agent，会话是这场聊天）并接受：trust = confirmed，不走核实。原则类是你自己的写入：trust = owner。然后排 §8 的重写 |
 | `Edit` | 同一道门 | 同 Review 的 Edit：记 edited，修订作者是你 |
 | `Discard` | 同一道门 | 只标记草稿。不记 Not true，不留反例 |
-| `Undo` | 现有 `changesets/:id/revert`，加恢复节的旧版 | 整次撤回，节恢复到 Apply 之前那一版 |
+| `Undo` | 现有 `changesets/:id/revert`，加恢复节的旧版 | 整次撤回，节恢复到 Apply 之前那一版。plan 卡（owner 11-07 定）：plan 回到这张卡按之前的内容，作为你的新版本存下并确认；那次重建改写或拿掉的节恢复到重建前留下的那一版，不调模型，留一版原因 `restore`；plan 在这张卡之后又动过时不可撤 |
 
 - **一张卡一按。** 一张卡可以有几个 op，一起生效。
 - **agent 下一轮知道结果。** Applied、Discarded、Undone 随下一条消息作为附注送达，不单独开回合。
@@ -173,6 +173,17 @@ agent 判断错了怎么办：你接着说，或者按 Discard。卡上写明落
 | `Applied · Confirmed by you` | 已按 | Undo · Open entry |
 | `Discarded` | 已弃 | — |
 | `Not applied` | 聊天结束了，草稿没处理 | — |
+| `Undone` | 已按，又按了 Undo | — |
+
+plan 卡（§6 第三行，一张卡可改几篇）：
+
+| 显示 | 条件 | 动作 |
+|---|---|---|
+| `Draft · Plan change` | 刚起草；卡面先写移节（`3.1 §3 … → new document 3.5`），再逐篇写改动和新的 covers，Rewrites 每篇一个（图 42 ③） | Apply & rebuild · Open in Plan · Discard |
+| `Changed since this draft` | plan 在起草之后又存过版本（草稿或确认版） | Redo · Discard |
+| `Applied · Confirmed by you` | 已按，plan 还停在这张卡按出的版本 | Undo · Open in Plan |
+| `Applied · Confirmed by you`，下一行 `The plan has changed since, so this can no longer be undone.` | 已按，plan 之后又动过 | Open in Plan |
+| `Undone` | 已撤：plan 回到按之前的内容（新的一版，已确认），重建写过的节放回去 | — |
 
 重写的进展接在卡下面，见 §8.3。
 

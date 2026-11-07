@@ -1736,9 +1736,10 @@ export class WikiDocs {
 
   /**
    * The transaction a write is (db-write-inventory `wiki.writeDoc`, and `wiki.restoreDocVersion` for a restore): its
-   * via entries FOR SHARE, the plan checked again, the document made if it is new and locked, every section it
-   * replaces kept as a version for `cause` (the newest `perSection` of each kept), the sections that need it
-   * replaced, and every sentence of the document classified again. A restore (`restoring`) writes its section
+   * via entries FOR SHARE, the plan version it writes from held FOR SHARE and checked to be the one in force, the
+   * document made if it is new and locked, every section it replaces — or drops, its document's plan no longer having it
+   * — kept as a version for `cause` (the newest `perSection` of each kept), the sections that need it replaced, and
+   * every sentence of the document classified again. A restore (`restoring`) writes its section
    * whatever the stored fingerprint says, as the version kept it, and leaves the document's plan version and commit
    * as they are: it brings back what a job wrote and reads no repository of its own.
    */
@@ -1792,8 +1793,15 @@ export class WikiDocs {
       const reason = docWithdrawReason(entry);
       if (reason) withdrawn.set(entry.id, reason);
     }
-    const confirmed = await requireConfirmedPlan(tx, { ownerId, spaceId });
-    if (confirmed.version !== plan.version) throw staleWrite(plan.version, confirmed.version);
+    // The version written from, held FOR SHARE while this writes: a confirmation of another — a plan card's press or its
+    // Undo among them (C17) — waits for this write to commit, or this write waits for it and finds its version superseded.
+    // Read only, a write that passed the check could land after an Undo had restored the section it writes over.
+    const [held] = await tx.$queryRaw<Array<{ status: string }>>(Prisma.sql`
+      SELECT "status" FROM "wiki_plan" WHERE "id" = ${plan.id}::uuid AND "owner_id" = ${ownerId}::uuid FOR SHARE`);
+    if (held?.status !== 'confirmed') {
+      const confirmed = await requireConfirmedPlan(tx, { ownerId, spaceId });
+      throw staleWrite(plan.version, confirmed.version);
+    }
 
     const now = new Date();
     await tx.$queryRaw(Prisma.sql`
@@ -1824,9 +1832,13 @@ export class WikiDocs {
         const old = storedByKey.get(section.key);
         return !old || old.materialSha256 !== section.materialSha256 || old.staleAt !== null;
       });
-    // The sections written over, as they stand: each is kept as a version below (contract `docs.versions.kept`).
+    // The sections written over, as they stand: each is kept as a version below (contract `docs.versions.kept`). So is
+    // every section the plan's document no longer has, which this write takes out: a plan card's Undo puts back a section
+    // a build moved into another document or removed (C17).
     const overwritten = stored.filter((section) => toWrite.some((write) => write.key === section.key));
-    const asTheyStand = await standingSections(tx, ownerId, overwritten.map((section) => section.id));
+    const planKeys = new Set(planDoc.sections.map((section) => section.key));
+    const dropped = stored.filter((section) => !planKeys.has(section.key));
+    const asTheyStand = await standingSections(tx, ownerId, [...overwritten, ...dropped].map((section) => section.id));
     if (restoring) {
       const current = overwritten[0];
       const same = current !== undefined
@@ -1834,23 +1846,21 @@ export class WikiDocs {
           === restoreIdentity(restoring.kept, restoring.materialSha256, restoring.repoSha);
       if (same) toWrite = [];
     }
-    const planKeys = new Set(planDoc.sections.map((section) => section.key));
-    const dropped = stored.filter((section) => !planKeys.has(section.key));
     if (toWrite.length === 0 && (restoring !== null || (dropped.length === 0 && doc.planVersion === plan.version))) {
       const statuses = await tx.wikiDocSentence.findMany({ where: { ownerId, section: { docId: doc.id } }, select: { status: true } });
       const counts = countSentences(statuses.map((row) => row.status as WikiDocSentenceStatus));
       return { docId: doc.id, written: [], status: docStatusOf(counts), counts, versions: new Map() };
     }
 
-    // What each overwritten section held, kept with why it was replaced; then the newest `perSection` of each.
+    // What each overwritten or dropped section held, kept with why it was replaced; then the newest `perSection` of each.
     const versions = new Map<string, { id: string; changed: number }>();
-    if (overwritten.length > 0) {
+    if (overwritten.length + dropped.length > 0) {
       const columns = causeColumns(cause);
-      const rows = overwritten.map((section) => {
+      const rows = [...overwritten, ...dropped].map((section) => {
         const kept = asTheyStand.get(section.id)!;
-        const next = toWrite.find((write) => write.key === section.key)!;
+        const next = toWrite.find((write) => write.key === section.key);
         const id = randomUUID();
-        versions.set(section.key, { id, changed: wikiDocSentenceDiff(kept.sentences.map((one) => one.text), next.sentences.map((one) => one.text)).changed });
+        versions.set(section.key, { id, changed: wikiDocSentenceDiff(kept.sentences.map((one) => one.text), next ? next.sentences.map((one) => one.text) : []).changed });
         return {
           id,
           spaceId,
@@ -1871,7 +1881,7 @@ export class WikiDocs {
         };
       });
       await tx.wikiDocSectionVersion.createMany({ data: rows });
-      const keys = overwritten.map((section) => section.key);
+      const keys = [...overwritten, ...dropped].map((section) => section.key);
       await tx.$executeRaw(Prisma.sql`
         DELETE FROM "wiki_doc_section_version"
          WHERE "id" IN (

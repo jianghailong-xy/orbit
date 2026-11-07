@@ -128,9 +128,15 @@ const PLAN_NOTE_SELECT = {
   },
 } satisfies Prisma.WikiPlanSelect;
 
-/** What a plan page's note tells the agent of a plan card (contract `chat.notes.page.body`, design §6's third row). */
-const PLAN_CARD_HOW = 'To change how this document is planned, draft a plan card: wiki_draft with kind plan, a reason, and as change.doc '
-  + 'this doc as it should read — every field as it is here, the ones you change changed. A writing requirement goes into the '
+/**
+ * What a plan page's note tells the agent of a plan card (contract `chat.notes.page.body`, design §6's third row): the
+ * server's own words, so an agent reads how one card changes several documents (C17) without a runner release.
+ */
+const PLAN_CARD_HOW = 'To change how this document is planned, draft a plan card: wiki_draft with kind plan, a reason, and as change.docs '
+  + 'the documents as they should read — this doc with every field as it is here and the ones you change changed, and any other '
+  + 'document the change touches, whole. To split this document, send it without the sections that move, and a new document '
+  + '(a slug of its own, its category, question, audience, scope and sections) holding them: one card, one press, both '
+  + 'documents at once. A category the plan does not have goes in change.categories. A writing requirement goes into the '
   + 'covers of the sections it is for: the writer reads covers, and a section\'s fingerprint holds them, so the next rewrite '
   + 'keeps the requirement. Nothing changes until the owner applies the card, which confirms and rebuilds the plan.';
 

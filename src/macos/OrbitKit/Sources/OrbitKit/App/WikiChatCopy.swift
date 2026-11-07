@@ -76,6 +76,12 @@ public enum WikiChatCopy {
     public static let cardPlanCovers = "Covers"
     public static let cardPlanSectionFields = "{section} ({fields})"
     public static let cardPlanSectionCovers = "{section}: {covers}"
+    /// The sections a plan card moves between its documents (C17): `3.1 §3 Delivery and heartbeats → new document 3.5`.
+    public static let cardPlanMoves = "Moves"
+    public static let cardPlanMove = "{section} → {doc}"
+    public static let cardPlanNewDocRef = "new document {doc}"
+    /// Under an applied plan card's title once the plan moved on since its press (`wikiChatPlanMovedNote`, C17).
+    public static let cardPlanMovedNote = "The plan has changed since, so this can no longer be undone."
     /// The words a plan card says a document's or a section's field by (`chat.copy.planFields`).
     public static let planFields: [String: String] = [
         "category": "category", "title": "title", "question": "question", "audience": "audience", "scopeIn": "scope",
@@ -279,7 +285,8 @@ public enum WikiChatCopy {
             "card.planDocument": cardPlanDocument, "card.planNewDoc": cardPlanNewDoc, "card.planNewCategory": cardPlanNewCategory,
             "card.planDocFields": cardPlanDocFields, "card.planAdds": cardPlanAdds, "card.planChanges": cardPlanChanges,
             "card.planRemoves": cardPlanRemoves, "card.planCovers": cardPlanCovers, "card.planSectionFields": cardPlanSectionFields,
-            "card.planSectionCovers": cardPlanSectionCovers,
+            "card.planSectionCovers": cardPlanSectionCovers, "card.planMoves": cardPlanMoves, "card.planMove": cardPlanMove,
+            "card.planNewDocRef": cardPlanNewDocRef, "card.planMovedNote": cardPlanMovedNote,
             "result.rewriting": resultRewriting, "result.rewritingFrom": resultRewritingFrom,
             "result.waiting": resultWaiting, "result.failed": resultFailed, "result.updatedLead": resultUpdatedLead,
             "result.sentenceOne": resultSentenceOne, "result.sentenceMany": resultSentenceMany,
