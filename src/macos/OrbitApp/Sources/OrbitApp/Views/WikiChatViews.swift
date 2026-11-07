@@ -691,9 +691,12 @@ private struct WikiChatNewComposer: View {
     }
 
     var body: some View {
-        Group {
+        // A view that is there before the draft is: a task on an empty group never runs.
+        ZStack {
             if let draft {
                 WikiChatComposer(chat: chat, console: draft, creates: (spaceID, workspaceID))
+            } else {
+                Color.clear.frame(height: 1)
             }
         }
         .task(id: agent?.id) {
