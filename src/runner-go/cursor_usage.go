@@ -127,14 +127,18 @@ func (r *cursorUsageRead) call(ctx context.Context, client *http.Client, token, 
 
 // parseCursorPlanUsage maps what GetCurrentPeriodUsage and GetPlanInfo answered to one account's snapshot
 // (@orbit/shared PlanUsageIncludedUsage says how): the period and its reset, the share used when Cursor
-// reports one above 0, and the plan. Read leniently, field by field: a field that is missing or not what
-// it should be is left out — unavailable, never 0.
+// reports one above 0, the included allowance in cents when Cursor names remaining/limit, and the plan.
+// Read leniently, field by field: a field that is missing or not what it should be is left out —
+// unavailable, never invented. Proto3 omits zero scalars, so a present limit with no remaining is
+// remaining 0 (exhausted), not "Cursor hid the field".
 func parseCursorPlanUsage(periodBody, planBody []byte) (*PlanUsage, error) {
 	var period struct {
 		BillingCycleStart interface{} `json:"billingCycleStart"`
 		BillingCycleEnd   interface{} `json:"billingCycleEnd"`
 		PlanUsage         struct {
 			TotalPercentUsed interface{} `json:"totalPercentUsed"`
+			Remaining        interface{} `json:"remaining"`
+			Limit            interface{} `json:"limit"`
 		} `json:"planUsage"`
 	}
 	if err := json.Unmarshal(periodBody, &period); err != nil {
@@ -145,6 +149,7 @@ func parseCursorPlanUsage(periodBody, planBody []byte) (*PlanUsage, error) {
 			PlanName              interface{} `json:"planName"`
 			IncludedUsagePeriod   interface{} `json:"includedUsagePeriod"`
 			IncludedUsageResetsAt interface{} `json:"includedUsageResetsAt"`
+			IncludedAmountCents   interface{} `json:"includedAmountCents"`
 		} `json:"planInfo"`
 	}
 	if err := json.Unmarshal(planBody, &plan); err != nil {
@@ -161,6 +166,26 @@ func parseCursorPlanUsage(periodBody, planBody []byte) (*PlanUsage, error) {
 	if used, ok := numberValue(period.PlanUsage.TotalPercentUsed); ok && used > 0 {
 		included.PercentUsed = used
 	}
+	limit, hasPeriodLimit := numberValue(period.PlanUsage.Limit)
+	remaining, hasRemaining := numberValue(period.PlanUsage.Remaining)
+	planLimit, hasPlanLimit := numberValue(plan.PlanInfo.IncludedAmountCents)
+	switch {
+	case hasPeriodLimit && limit > 0:
+		// planUsage.limit named the allowance. Proto3 omits remaining at 0, so no remaining field
+		// means exhausted — not "Cursor forgot to send it".
+		included.LimitCents = floatPtr(limit)
+		if hasRemaining {
+			included.RemainingCents = floatPtr(remaining)
+		} else {
+			included.RemainingCents = floatPtr(0)
+		}
+	case hasRemaining:
+		included.RemainingCents = floatPtr(remaining)
+		// planInfo.includedAmountCents is this plan's allowance when period usage omitted limit.
+		if hasPlanLimit && planLimit > 0 {
+			included.LimitCents = floatPtr(planLimit)
+		}
+	}
 	planName, _ := plan.PlanInfo.PlanName.(string)
 	usage := &PlanUsage{Provider: providerCursor, PlanName: strings.TrimSpace(planName), FetchedAt: time.Now().UTC().Format(time.RFC3339)}
 	if included != (PlanUsageIncludedUsage{}) {
@@ -168,6 +193,8 @@ func parseCursorPlanUsage(periodBody, planBody []byte) (*PlanUsage, error) {
 	}
 	return usage, nil
 }
+
+func floatPtr(v float64) *float64 { return &v }
 
 // cursorTime is one of Cursor's times — milliseconds since the epoch, which Connect's JSON writes as a
 // string — in cursorTimeLayout, or "" for anything else.

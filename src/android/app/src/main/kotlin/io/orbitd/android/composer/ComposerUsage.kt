@@ -77,7 +77,7 @@ fun ComposerUsage(model: ComposerModel, state: ComposerState, detail: JsonObject
                 if (provider == ProviderEngines.CURSOR) snapshot.text("planName")?.let { Text(CursorCopy.plan(it)) }
                 if (provider == "antigravity" || provider == "kimi" || provider == ProviderEngines.CURSOR) usageRows(snapshot).forEach { row ->
                     row.groupLabel?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                    Text("${row.label}: ${row.percent}%${if (row.remaining) " remaining" else ""}")
+                    Text("${row.label}: ${row.reading}")
                     // A spent window's bar is full and red: at 0% remaining it would otherwise be an empty track.
                     LinearProgressIndicator(progress = { row.gaugeFraction }, Modifier.testTag("composer-usage-bar-${row.key}"),
                         color = if (row.spent) Ink.red else ProgressIndicatorDefaults.linearColor)
