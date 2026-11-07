@@ -16,7 +16,24 @@ export const FEISHU_GROUP_WORK_REPLIES = {
   notLinked: (bot: string) => `This topic isn't linked to an Orbit session. To start one, send "@${bot} <request>" in the group, not in a topic.`,
   notStarted: (reason: string) => `Orbit didn't start a session: ${reason}.`,
   notSent: (reason: string) => `Orbit didn't send this to the session: ${reason}.`,
+  busy: (limit: number) =>
+    `Orbit didn't start a session: this group already has ${sessionsWord(limit)} running, the most its connection allows at a time. Try again when one finishes.`,
+  dailyLimit: (limit: number) =>
+    `Orbit didn't start a session: this group has started ${sessionsWord(limit)} today, the most its connection allows in a day. Try again after midnight UTC.`,
+  gone: "Orbit didn't start a session: this group is no longer connected to Orbit.",
 } as const;
+
+function sessionsWord(n: number): string {
+  return n === 1 ? '1 session' : `${n} sessions`;
+}
+
+/**
+ * `last_spoken_at` of a topic reserved for a session not made yet (§8.2, F3-4): nobody has spoken in it. The start
+ * stamps it with now() once the session exists, and only the start that does so records the activity.
+ */
+const RESERVED_AT = '1970-01-01T00:00:00Z';
+/** How long a reservation whose session never came (the process died mid-start) still holds a slot. */
+const RESERVATION_HOLD = '10 minutes';
 
 /** The confirmed, switched-on route of the group a mention was sent in (feishu_chat_route, §8.1). */
 export interface FeishuGroupRoute {
@@ -91,6 +108,13 @@ export class FeishuGroupService {
     const find = () => this.prisma.session.findFirst({ where: { id: sessionId, ownerId: route.ownerId }, select: { id: true, title: true } });
     let session = await find();
     if (!session) {
+      const refusal = await withTransactionRetry(this.prisma, (tx) => this.reserve(tx, app, route, message.chatId, message.messageId, sessionId),
+        loggedRetry(this.logger, 'feishuGroup.reserve'));
+      if (refusal) {
+        this.logger.log(`feishu app ${app.appId}: a group session was not started (over the route's limits)`);
+        await this.reply(app, message.messageId, 'over-limit', refusal, true);
+        return;
+      }
       try {
         const made = await this.sessions.create(
           route.ownerId,
@@ -101,7 +125,9 @@ export class FeishuGroupService {
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') session = await find();
         if (!session) {
+          // Anything but a refusal fails the inbox attempt, and the next one finds the reservation and uses it.
           if (!(error instanceof HttpException)) throw error;
+          await this.release(app, message.chatId, message.messageId, sessionId);
           this.logger.log(`feishu app ${app.appId}: a group session was not started (${error.getStatus()})`);
           await this.reply(app, message.messageId, 'not-started', FEISHU_GROUP_WORK_REPLIES.notStarted(refusalWords(error)), true);
           return;
@@ -110,7 +136,8 @@ export class FeishuGroupService {
     }
     const opened = session;
     await withTransactionRetry(this.prisma, async (tx) => {
-      if (await this.registerTopic(tx, app, route, message.chatId, message.messageId, opened.id)) {
+      if (await this.openReserved(tx, app, message.chatId, message.messageId, opened.id)
+        || await this.registerTopic(tx, app, route, message.chatId, message.messageId, opened.id)) {
         await this.recordActivity(tx, route.ownerId, actor, 'feishu.group.session.created', {
           sessionId: opened.id, workspaceId: route.workspaceId, chatId: message.chatId,
         });
@@ -147,6 +174,67 @@ export class FeishuGroupService {
       return;
     }
     this.logger.log(`feishu app ${app.appId}: a group message went to session ${sessionId} as a turn`);
+  }
+
+  /**
+   * Hold a slot of the route for the session `sessionId` about to be made from message `root`, or say why not (§8.1 the
+   * limits, F3-4). Under the route row's lock, so two requests arriving together are counted one after the other: the
+   * topic row is written here, before the session, and counts as the session from then on.
+   *
+   *   - at a time: the route's topics whose session is PENDING or RUNNING (a turn queued or being worked; a session
+   *     waiting for its next message, ended or in Trash holds none), and those reserved for a session still being made;
+   *   - a day: the route's topics opened since midnight UTC whose session exists or is still being made.
+   *
+   * A reservation of this very request (the same event handled again) passes as it is. Null when the slot is held.
+   */
+  private async reserve(
+    tx: Prisma.TransactionClient, app: FeishuOwnerApp, route: FeishuGroupRoute, chatId: string, root: string, sessionId: string,
+  ): Promise<string | null> {
+    const [limits] = await tx.$queryRaw<Array<{ max: number; perDay: number }>>`
+      SELECT "max_concurrent_sessions" AS "max", "sessions_per_day" AS "perDay" FROM "feishu_chat_route"
+      WHERE "app_id" = ${app.appId} AND "chat_id" = ${chatId} AND "owner_id" = ${route.ownerId}::uuid
+        AND "enabled" AND "confirmed_at" IS NOT NULL
+      FOR UPDATE`;
+    if (!limits) return FEISHU_GROUP_WORK_REPLIES.gone;
+    const [mine] = await tx.$queryRaw<Array<{ one: number }>>`
+      SELECT 1 AS "one" FROM "feishu_thread"
+      WHERE "app_id" = ${app.appId} AND "chat_id" = ${chatId} AND "root_message_id" = ${root} AND "session_id" = ${sessionId}::uuid`;
+    if (mine) return null;
+    const [held] = await tx.$queryRaw<Array<{ running: number; today: number }>>`
+      SELECT
+        count(*) FILTER (WHERE (s."id" IS NULL AND t."created_at" > now() - ${RESERVATION_HOLD}::interval)
+                            OR (s."status" IN ('PENDING', 'RUNNING') AND s."deleted_at" IS NULL))::int AS "running",
+        count(*) FILTER (WHERE t."created_at" >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+                           AND (s."id" IS NOT NULL OR t."created_at" > now() - ${RESERVATION_HOLD}::interval))::int AS "today"
+      FROM "feishu_thread" t
+      LEFT JOIN "session" s ON s."id" = t."session_id" AND s."owner_id" = t."owner_id"
+      WHERE t."app_id" = ${app.appId} AND t."chat_id" = ${chatId} AND t."owner_id" = ${route.ownerId}::uuid`;
+    if (held!.running >= limits.max) return FEISHU_GROUP_WORK_REPLIES.busy(limits.max);
+    if (held!.today >= limits.perDay) return FEISHU_GROUP_WORK_REPLIES.dailyLimit(limits.perDay);
+    await tx.$executeRaw`
+      INSERT INTO "feishu_thread" ("id", "owner_id", "app_id", "chat_id", "root_message_id", "session_id", "last_spoken_at")
+      VALUES (${feishuDerivedUuid('feishu-thread', app.appId, chatId, root)}::uuid, ${route.ownerId}::uuid, ${app.appId}, ${chatId}, ${root},
+              ${sessionId}::uuid, ${RESERVED_AT}::timestamptz)
+      ON CONFLICT ("app_id", "chat_id", "root_message_id") DO NOTHING`;
+    return null;
+  }
+
+  /** Give back the slot of a session that was refused before it was written: its reservation, never a made session's topic. */
+  private async release(app: FeishuOwnerApp, chatId: string, root: string, sessionId: string): Promise<void> {
+    await this.prisma.$executeRaw`
+      DELETE FROM "feishu_thread" t
+      WHERE t."app_id" = ${app.appId} AND t."chat_id" = ${chatId} AND t."root_message_id" = ${root} AND t."session_id" = ${sessionId}::uuid
+        AND t."last_spoken_at" = ${RESERVED_AT}::timestamptz
+        AND NOT EXISTS (SELECT 1 FROM "session" s WHERE s."id" = t."session_id")`;
+  }
+
+  /** Stamp the reserved topic of a session now made as spoken in; true for the one start that does. */
+  private async openReserved(tx: Prisma.TransactionClient, app: FeishuOwnerApp, chatId: string, root: string, sessionId: string): Promise<boolean> {
+    const stamped = await tx.$executeRaw`
+      UPDATE "feishu_thread" SET "last_spoken_at" = now(), "updated_at" = now()
+      WHERE "app_id" = ${app.appId} AND "chat_id" = ${chatId} AND "root_message_id" = ${root} AND "session_id" = ${sessionId}::uuid
+        AND "last_spoken_at" = ${RESERVED_AT}::timestamptz`;
+    return stamped > 0;
   }
 
   /** Make the topic `(chatId, root)` session S's, spoken in now; true when this wrote it. A topic is one session's. */

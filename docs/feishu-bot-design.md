@@ -456,6 +456,19 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
   clientTurnId 由 appId 与 event_id 派生。根不属于任何会话时回一句说明，不开会话。
 - 每个新会话 / 新 turn 写一行 activity（`feishu.group.session.created` / `feishu.group.session.turn`，credential_kind FEISHU）。
 
+落地（F3-4，`feishu/feishu-group.service.ts`，无迁移）：上限与预检。
+
+- 「同时进行」数的是该路由话题里 `PENDING` / `RUNNING` 的会话（有 turn 排队或在跑）；等下一句的（`AWAITING_INPUT`）、已结束的、
+  在回收站的不占名额，否则一个群开满几个会话后要主人逐个结束才能再派活。「每天」按 UTC 自然日，数的是当天开的话题。
+- 顶层 @ 在建会话前先占位：一个事务里对 `feishu_chat_route` 那一行 `FOR UPDATE`（跨副本串行化同一个群的开会话），数上面两个数，
+  未超限就先写这条请求的 `feishu_thread` 行（`last_spoken_at` 为 1970 纪元，表示「会话还在建」），提交后再 `SessionsService.create`。
+  所以两条同时到达的请求只有一条能占到最后一个名额。占位行在会话建成后由开话题的事务改成 now()，只有改到它的那次写 activity。
+  占了位但会话始终没建成的（进程中途死掉）10 分钟后不再占名额；同一事件再处理时找到自己的占位直接用。
+- 超限不建会话、零写入，在话题里回
+  `Orbit didn't start a session: this group already has <n> session(s) running, the most its connection allows at a time. Try again when one finishes.`
+  或 `Orbit didn't start a session: this group has started <n> session(s) today, the most its connection allows in a day. Try again after midnight UTC.`
+- 预检拒绝（没有能跑的 runner、引擎没登录、配额用完）时删掉占位，名额还回去，照 F3-2 回 `Orbit didn't start a session: <原因>.`。
+
 ### 8.3 安全边界
 
 群成员不是账号主人，他们的话会成为跑在主人机器上、带着主人仓库与凭据的 agent 的输入。提示注入与外泄是群派活的主风险。规则：
