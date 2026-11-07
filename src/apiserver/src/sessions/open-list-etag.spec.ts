@@ -169,17 +169,20 @@ test('other views keep the body-hash ETag and never consult the version', async 
   assert.equal(state.versions, 0);
 });
 
-test('a plain project read is built every time and never consults the version', async (t) => {
+test('a project read is built every time and never consults the version', async (t) => {
   const { state, get } = await harness(t);
   const project = await get(`?view=open&projectId=${PROJECT_ID}`);
   assert.equal(project.status, 200);
   assert.doesNotMatch(project.etag ?? '', /ol1-/);
   assert.equal(state.versions, 0);
   assert.equal(state.listed, 1);
-  // The project page's landing-aware read keeps its own version scope.
+  // The project page's landing-aware read is built the same way: the account-wide version answered
+  // only a few percent of its polls, so it keeps only Express's body-hash ETag.
   const landing = await get(`?view=open&projectId=${PROJECT_ID}&includeLanding=1`);
-  assert.match(landing.etag ?? '', /^W\/"ol1-/);
-  assert.equal(state.versions, 1);
+  assert.equal(landing.status, 200);
+  assert.doesNotMatch(landing.etag ?? '', /ol1-/);
+  assert.equal(state.versions, 0);
+  assert.equal(state.listed, 2);
 });
 
 test('a delta poll (`since`) is the delta store\'s to answer, not the version\'s', async (t) => {

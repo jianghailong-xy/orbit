@@ -2922,14 +2922,15 @@ export function WorkspaceView({
     controlLive, needsYou: (s) => sessionLine(s, true, sessionWatching(watchingBySession, s.id)).tone === 'approval',
   });
   // `includeLanding`: the page's Landings group lists the project's LANDING sessions, and no other
-  // read ever sees one (§2.9 LS6).
+  // read ever sees one (§2.9 LS6). `priority`: the page is waiting on these two, so they do not
+  // queue behind the workspace list's background project reads (queries.ts projectRead).
   const projectSessionsQ = useQuery({
-    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'open', includeLanding: !!openProjectId }),
+    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'open', includeLanding: !!openProjectId, priority: true }),
     enabled: !!openProjectId,
     refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
   });
   const completedProjectSessionsQ = useQuery({
-    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'completed', includeLanding: !!openProjectId }),
+    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'completed', includeLanding: !!openProjectId, priority: true }),
     enabled: !!openProjectId,
     refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
   });
