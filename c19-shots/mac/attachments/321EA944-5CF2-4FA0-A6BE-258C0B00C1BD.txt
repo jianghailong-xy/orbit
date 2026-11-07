@@ -1,0 +1,5 @@
+Query chain:
+ →Find: Target Application 'io.orbitd.c11macprobe'
+  ↪︎Find: Descendants matching type Button
+    ↪︎Find: Elements matching predicate 'label CONTAINS "Opus 5.5"'
+      ↪︎Find: First Match

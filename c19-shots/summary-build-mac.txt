@@ -1,0 +1,7 @@
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testC19NewChatComposer]' started.
+/Users/runner/work/orbit/orbit/.c19-probe/UITests/WikiChatShotTests.swift:296: error: -[C11MacProbeUITests.WikiChatShotTests testC19NewChatComposer] : XCTAssertLessThan failed: ("851.0") is not less than ("140.0") - mac-c19-1-new: the chips are not in the composer card
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testC19NewChatComposer]' failed (105.054 seconds).
+	 Executed 1 test, with 1 failure (0 unexpected) in 105.054 (105.056) seconds
+	 Executed 1 test, with 1 failure (0 unexpected) in 105.054 (105.059) seconds
+	 Executed 1 test, with 1 failure (0 unexpected) in 105.054 (105.060) seconds
+** TEST FAILED **

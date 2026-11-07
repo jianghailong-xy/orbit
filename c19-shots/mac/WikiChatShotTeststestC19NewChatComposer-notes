@@ -1,0 +1,8 @@
+mac-c19-1-new: no window after launch; File > New Window
+mac-c19-1-new-section-3: never in the band 61.0–200.25; last frame (missing)
+mac-c19-1-new: Runs in: 48 label="" value="Runs in" frame=(626.0, 144.0, 42.0, 15.0) hittable=true
+mac-c19-1-new: workspace: 16 label="Workspace" value="" frame=(676.0, 144.0, 112.0, 15.0) hittable=true
+mac-c19-1-new: page ×: 9 label="Remove 3.1 §2" value="" frame=(706.0, 596.0, 9.0, 9.0) hittable=true
+mac-c19-1-new: quote ×: 9 label="Remove Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。" value="" frame=(958.0, 596.0, 9.0, 9.0) hittable=true
+mac-c19-1-new: mode: 9 label="runner-go 全量测试须在 runner 宿主跑而非引擎 Bash, [39], Auto" value="" frame=(309.0, 1456.0, 275.0, 19.0) hittable=false
+mac-c19-1-new: model: 16 label="Model Opus 5.5, effort Default" value="" frame=(801.0, 665.0, 110.0, 18.0) hittable=true

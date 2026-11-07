@@ -1,0 +1,300 @@
+    t =    50.67s     Wait for io.orbitd.c11macprobe to idle
+    t =    50.68s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    50.69s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    50.72s     Synthesize event
+    t =    50.73s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    50.73s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    50.84s     Wait for io.orbitd.c11macprobe to idle
+    t =    50.85s Scroll "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.82, 0.50] by dx: 0.00, dy: -12.00
+    t =    50.85s     Wait for io.orbitd.c11macprobe to idle
+    t =    50.85s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    50.86s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    50.88s     Synthesize event
+    t =    50.88s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    50.90s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    51.11s     Wait for io.orbitd.c11macprobe to idle
+    t =    52.12s Checking existence of `StaticText (First Match)`
+    t =    52.35s Checking existence of `StaticText (First Match)`
+    t =    52.52s Hover over "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.82, 0.50]
+    t =    52.53s     Wait for io.orbitd.c11macprobe to idle
+    t =    52.53s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    52.64s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    52.65s     Synthesize event
+    t =    52.65s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    52.66s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    52.78s     Wait for io.orbitd.c11macprobe to idle
+    t =    52.78s Scroll "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.82, 0.50] by dx: 0.00, dy: -12.00
+    t =    52.79s     Wait for io.orbitd.c11macprobe to idle
+    t =    52.79s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    52.79s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    52.81s     Synthesize event
+    t =    52.81s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    52.82s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    53.03s     Wait for io.orbitd.c11macprobe to idle
+    t =    54.04s Checking existence of `StaticText (First Match)`
+    t =    54.32s Checking existence of `StaticText (First Match)`
+    t =    54.56s Hover over "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.82, 0.50]
+    t =    54.56s     Wait for io.orbitd.c11macprobe to idle
+    t =    54.56s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    54.57s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    54.58s     Synthesize event
+    t =    54.58s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    54.60s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    54.71s     Wait for io.orbitd.c11macprobe to idle
+    t =    54.72s Scroll "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.82, 0.50] by dx: 0.00, dy: -12.00
+    t =    54.72s     Wait for io.orbitd.c11macprobe to idle
+    t =    54.72s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    54.73s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    54.75s     Synthesize event
+    t =    54.75s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    54.76s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    55.03s     Wait for io.orbitd.c11macprobe to idle
+    t =    56.03s Checking existence of `StaticText (First Match)`
+    t =    56.21s Checking existence of `StaticText (First Match)`
+    t =    56.36s Hover over "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.82, 0.50]
+    t =    56.36s     Wait for io.orbitd.c11macprobe to idle
+    t =    56.36s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    56.37s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    56.38s     Synthesize event
+    t =    56.38s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    56.38s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    56.49s     Wait for io.orbitd.c11macprobe to idle
+    t =    56.50s Scroll "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.82, 0.50] by dx: 0.00, dy: -12.00
+    t =    56.50s     Wait for io.orbitd.c11macprobe to idle
+    t =    56.50s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    56.51s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    56.51s     Synthesize event
+    t =    56.51s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    56.52s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    56.75s     Wait for io.orbitd.c11macprobe to idle
+    t =    57.76s Checking existence of `StaticText (First Match)`
+    t =    57.96s Checking existence of `StaticText (First Match)`
+    t =    58.20s Hover over "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.82, 0.50]
+    t =    58.20s     Wait for io.orbitd.c11macprobe to idle
+    t =    58.20s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    58.22s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    58.24s     Synthesize event
+    t =    58.24s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    58.25s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    58.37s     Wait for io.orbitd.c11macprobe to idle
+    t =    58.37s Scroll "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.82, 0.50] by dx: 0.00, dy: -12.00
+    t =    58.37s     Wait for io.orbitd.c11macprobe to idle
+    t =    58.38s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    58.38s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    58.40s     Synthesize event
+    t =    58.40s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    58.41s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    58.68s     Wait for io.orbitd.c11macprobe to idle
+    t =    59.69s Checking existence of `StaticText (First Match)`
+    t =    59.86s Checking existence of `StaticText (First Match)`
+    t =    59.97s Hover over "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.82, 0.50]
+    t =    59.97s     Wait for io.orbitd.c11macprobe to idle
+    t =    59.98s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    59.98s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    60.00s     Synthesize event
+    t =    60.00s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    60.01s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    60.13s     Wait for io.orbitd.c11macprobe to idle
+    t =    60.13s Scroll "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.82, 0.50] by dx: 0.00, dy: -12.00
+    t =    60.13s     Wait for io.orbitd.c11macprobe to idle
+    t =    60.14s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    60.14s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    60.15s     Synthesize event
+    t =    60.15s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    60.16s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    60.44s     Wait for io.orbitd.c11macprobe to idle
+    t =    61.44s Checking existence of `StaticText (First Match)`
+    t =    61.63s Checking existence of `StaticText (First Match)`
+    t =    61.77s Hover over "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.82, 0.50]
+    t =    61.77s     Wait for io.orbitd.c11macprobe to idle
+    t =    61.77s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    61.78s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    61.78s     Synthesize event
+    t =    61.79s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    61.79s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    61.91s     Wait for io.orbitd.c11macprobe to idle
+    t =    61.91s Scroll "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.82, 0.50] by dx: 0.00, dy: -12.00
+    t =    61.91s     Wait for io.orbitd.c11macprobe to idle
+    t =    61.91s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    61.92s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    61.94s     Synthesize event
+    t =    61.94s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    61.95s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<C11MacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<C11MacProbe.AppModel>>>, SwiftUI._PreferenceWritingModifier<SwiftUI.PreferredColorSchemeKey>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    62.23s     Wait for io.orbitd.c11macprobe to idle
+    t =    63.23s Checking existence of `StaticText (First Match)`
+    t =    63.45s Requesting snapshot of accessibility hierarchy for app with pid 52953
+    t =    63.87s Requesting snapshot of accessibility hierarchy for app with pid 52953
+    t =    64.15s Added attachment named 'missing-band-mac-c19-1-new-section-3.txt'
+    t =    65.15s Waiting 20.0s for StaticText (First Match) to exist
+    t =    66.16s     Checking `Expect predicate `existsNoRetry == 1` for object StaticText (First Match)`
+    t =    66.16s         Checking existence of `StaticText (First Match)`
+    t =    66.32s Right click StaticText (First Match)
+    t =    66.32s     Wait for io.orbitd.c11macprobe to idle
+    t =    66.33s     Find the StaticText (First Match)
+    t =    66.46s     Check for interrupting elements affecting "心跳机制用于控制面探测失联的 runner。 Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。[5][12] " StaticText
+    t =    66.47s     Synthesize event
+    t =    66.49s         Scroll element to visible
+    t =    66.50s             Scroll ScrollView (Identity Binding) by dx: 819.50, dy: -416.50
+    t =    66.50s                 Wait for io.orbitd.c11macprobe to idle
+    t =    66.50s                 Find the ScrollView (Identity Binding)
+    t =    66.88s                 Check for interrupting elements affecting ScrollView
+    t =    66.90s                 Synthesize event
+    t =    67.41s                 Wait for io.orbitd.c11macprobe to idle
+    t =    67.50s         Find the "心跳机制用于控制面探测失联的 runner。 Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。[5][12] " StaticText
+    t =    68.30s     Wait for io.orbitd.c11macprobe to idle
+    t =    68.31s Waiting 10.0s for "Ask" MenuItem to exist
+    t =    69.33s     Checking `Expect predicate `existsNoRetry == 1` for object "Ask" MenuItem`
+    t =    69.33s         Checking existence of `"Ask" MenuItem`
+    t =    69.71s Click "Ask" MenuItem
+    t =    69.71s     Wait for io.orbitd.c11macprobe to idle
+    t =    69.72s     Find the "Ask" MenuItem
+    t =    70.10s     Check for interrupting elements affecting "ellipsis.bubble" MenuItem
+    t =    70.10s     Synthesize event
+    t =    70.13s         Checking existence of `"ellipsis.bubble" MenuItem`
+    t =    70.47s         Hover menu item 'Ask'
+    t =    70.47s             Wait for io.orbitd.c11macprobe to idle
+    t =    70.48s             Find the "ellipsis.bubble" MenuItem
+    t =    70.84s             Check for interrupting elements affecting "ellipsis.bubble" MenuItem
+    t =    70.84s             Synthesize event
+    t =    71.08s             Wait for io.orbitd.c11macprobe to idle
+    t =    71.08s         Find the "ellipsis.bubble" MenuItem
+    t =    72.25s     Wait for io.orbitd.c11macprobe to idle
+    t =    74.40s Waiting 15.0s for Button (First Match) to exist
+    t =    75.42s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    75.43s         Checking existence of `Button (First Match)`
+    t =    75.87s Click Button (First Match)
+    t =    75.87s     Wait for io.orbitd.c11macprobe to idle
+    t =    75.98s     Find the Button (First Match)
+    t =    76.38s     Check for interrupting elements affecting "Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。[5][12]" Button
+    t =    76.42s     Synthesize event
+    t =    76.85s     Wait for io.orbitd.c11macprobe to idle
+    t =    77.66s Click "wiki-chat-ask-done" Button
+    t =    77.66s     Wait for io.orbitd.c11macprobe to idle
+    t =    77.67s     Find the "wiki-chat-ask-done" Button
+    t =    78.21s     Check for interrupting elements affecting "wiki-chat-ask-done" Button
+    t =    78.24s     Synthesize event
+    t =    78.86s     Wait for io.orbitd.c11macprobe to idle
+    t =    80.88s Checking existence of `"Workspace" Button`
+    t =    81.71s Waiting 5.0s for Button (First Match) to exist
+    t =    82.72s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    82.73s         Checking existence of `Button (First Match)`
+    t =    83.12s Waiting 5.0s for Button (First Match) to exist
+    t =    84.14s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    84.14s         Checking existence of `Button (First Match)`
+    t =    84.54s         Capturing element debug description
+    t =    85.14s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    85.14s         Checking existence of `Button (First Match)`
+    t =    85.52s         Capturing element debug description
+    t =    86.13s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    86.13s         Checking existence of `Button (First Match)`
+    t =    86.44s         Capturing element debug description
+    t =    87.12s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    87.13s         Checking existence of `Button (First Match)`
+    t =    87.45s         Capturing element debug description
+    t =    88.12s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    88.12s         Checking existence of `Button (First Match)`
+    t =    88.43s         Capturing element debug description
+    t =    88.43s     Checking existence of `Button (First Match)`
+    t =    88.74s Collecting debug information to assist test failure triage
+    t =    88.74s     Requesting snapshot of accessibility hierarchy for app with pid 52953
+    t =    89.56s Checking existence of `MenuButton (First Match)`
+    t =    89.68s Waiting 15.0s for Button (First Match) to exist
+    t =    90.71s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    90.71s         Checking existence of `Button (First Match)`
+    t =    92.33s Checking existence of `StaticText (First Match)`
+    t =    92.43s Find the StaticText (First Match)
+    t =    92.48s Find the "Runs in" StaticText
+    t =    92.53s Find the "Runs in" StaticText
+    t =    92.59s Find the "Runs in" StaticText
+    t =    92.65s Find the "Runs in" StaticText
+    t =    92.73s Checking existence of `"Workspace" MenuButton`
+    t =    92.82s Find the "Workspace" MenuButton
+    t =    92.89s Find the "Workspace" MenuButton
+    t =    92.94s Find the "Workspace" MenuButton
+    t =    93.00s Find the "Workspace" MenuButton
+    t =    93.05s Find the "Workspace" MenuButton
+    t =    93.13s Checking existence of `Button (First Match)`
+    t =    93.20s Find the Button (First Match)
+    t =    93.28s Find the "wiki-chat-page-chip" Button
+    t =    93.35s Find the "wiki-chat-page-chip" Button
+    t =    93.39s Find the "wiki-chat-page-chip" Button
+    t =    93.46s Find the "wiki-chat-page-chip" Button
+    t =    93.52s Checking existence of `Button (First Match)`
+    t =    93.56s Find the Button (First Match)
+    t =    93.62s Find the "wiki-chat-quote-chip" Button
+    t =    93.68s Find the "wiki-chat-quote-chip" Button
+    t =    93.73s Find the "wiki-chat-quote-chip" Button
+    t =    93.80s Find the "wiki-chat-quote-chip" Button
+    t =    93.86s Checking existence of `Button (First Match)`
+    t =    94.19s Find the Button (First Match)
+    t =    94.54s Find the "runner-go 全量测试须在 runner 宿主跑而非引擎 Bash, [39], Auto" Button
+    t =    94.76s Find the "runner-go 全量测试须在 runner 宿主跑而非引擎 Bash, [39], Auto" Button
+    t =    94.95s Find the "runner-go 全量测试须在 runner 宿主跑而非引擎 Bash, [39], Auto" Button
+    t =    95.30s Find the "runner-go 全量测试须在 runner 宿主跑而非引擎 Bash, [39], Auto" Button
+    t =    95.72s Checking existence of `MenuButton (First Match)`
+    t =    95.81s Find the MenuButton (First Match)
+    t =    95.90s Find the "Model Opus 5.5, effort Default" MenuButton
+    t =    96.00s Find the "Model Opus 5.5, effort Default" MenuButton
+    t =    96.08s Find the "Model Opus 5.5, effort Default" MenuButton
+    t =    96.16s Find the "Model Opus 5.5, effort Default" MenuButton
+    t =    96.29s Checking existence of `"Runs in" StaticText`
+    t =    96.35s Checking existence of `"Workspace" MenuButton`
+    t =    96.42s Checking existence of `"wiki-chat-quote-chip" Button`
+    t =    96.51s Checking existence of `"runner-go 全量测试须在 runner 宿主跑而非引擎 Bash, [39], Auto" Button`
+    t =    96.84s Checking existence of `"Model Opus 5.5, effort Default" MenuButton`
+    t =    96.94s Checking existence of `Any (First Match)`
+    t =    97.57s Checking existence of `StaticText (First Match)`
+    t =    97.68s Checking existence of `"Runs in" StaticText`
+    t =    97.77s Checking existence of `"Workspace" MenuButton`
+    t =    97.85s Checking existence of `"wiki-chat-page-chip" Button`
+    t =    98.12s Checking existence of `"runner-go 全量测试须在 runner 宿主跑而非引擎 Bash, [39], Auto" Button`
+    t =    98.43s Find the "Runs in" StaticText
+    t =    98.49s Find the "wiki-chat-page-chip" Button
+    t =    98.54s Find the "runner-go 全量测试须在 runner 宿主跑而非引擎 Bash, [39], Auto" Button
+    t =    98.85s Find the "Workspace" MenuButton
+    t =    98.95s Find the "wiki-chat-page-chip" Button
+    t =    99.10s Find the "runner-go 全量测试须在 runner 宿主跑而非引擎 Bash, [39], Auto" Button
+    t =    99.36s Checking existence of `"wiki-chat-quote-chip" Button`
+    t =    99.45s Find the "wiki-chat-page-chip" Button
+    t =    99.54s Find the "wiki-chat-quote-chip" Button
+    t =    99.62s Find the "runner-go 全量测试须在 runner 宿主跑而非引擎 Bash, [39], Auto" Button
+    t =    99.98s Find the "wiki-chat-page-chip" Button
+/Users/runner/work/orbit/orbit/.c19-probe/UITests/WikiChatShotTests.swift:296: error: -[C11MacProbeUITests.WikiChatShotTests testC19NewChatComposer] : XCTAssertLessThan failed: ("851.0") is not less than ("140.0") - mac-c19-1-new: the chips are not in the composer card
+    t =   101.49s Checking existence of `Window (First Match)`
+    t =   101.50s Checking existence of `Window (First Match)`
+    t =   101.50s Find the Window (First Match)
+    t =   101.71s Added attachment named 'mac-c19-1a-new-chat-half'
+    t =   101.72s Click "wiki-chat-quote-chip" Button
+    t =   101.72s     Wait for io.orbitd.c11macprobe to idle
+    t =   101.73s     Find the "wiki-chat-quote-chip" Button
+    t =   101.84s     Check for interrupting elements affecting "wiki-chat-quote-chip" Button
+    t =   101.88s     Synthesize event
+    t =   102.39s     Wait for io.orbitd.c11macprobe to idle
+    t =   103.40s Checking existence of `Button (First Match)`
+    t =   103.92s Checking existence of `"wiki-chat-page-chip" Button`
+    t =   104.59s Checking existence of `Window (First Match)`
+    t =   104.60s Checking existence of `Window (First Match)`
+    t =   104.61s Find the Window (First Match)
+    t =   104.69s Added attachment named 'mac-c19-1c-quote-crossed'
+    t =   104.71s Tear Down
+    t =   104.71s     Added attachment named 'WikiChatShotTeststestC19NewChatComposer-notes.txt'
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testC19NewChatComposer]' failed (105.054 seconds).
+Test Suite 'WikiChatShotTests' failed at 2026-11-07 20:25:29.524.
+	 Executed 1 test, with 1 failure (0 unexpected) in 105.054 (105.056) seconds
+Test Suite 'C11MacProbeUITests.xctest' failed at 2026-11-07 20:25:29.526.
+	 Executed 1 test, with 1 failure (0 unexpected) in 105.054 (105.059) seconds
+Test Suite 'Selected tests' failed at 2026-11-07 20:25:29.528.
+	 Executed 1 test, with 1 failure (0 unexpected) in 105.054 (105.060) seconds
+2026-11-07 20:25:36.322 xcodebuild[40052:112742] [MT] IDETestOperationsObserverDebug: 116.549 elapsed -- Testing started completed.
+2026-11-07 20:25:36.322 xcodebuild[40052:112742] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-07 20:25:36.322 xcodebuild[40052:112742] [MT] IDETestOperationsObserverDebug: 116.550 sec, +116.550 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.c19-probe/results/mac.xcresult
+
+Failing tests:
+	WikiChatShotTests.testC19NewChatComposer()
+
+** TEST FAILED **
+
+Testing started

@@ -1,0 +1,35 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "9F9B4A17-4195-40F0-8B46-728F6A6AA8EB",
+        "deviceName" : "iPad Pro 13-inch (M5)",
+        "exportedFileName" : "489FD240-9009-4089-8B75-80B32E6FE848.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "WikiChatShotTeststestC19NewChatComposer-notes_0_71ED134A-71AC-4A72-9DA2-23F286345B60.txt",
+        "timestamp" : 1794082757.795
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "9F9B4A17-4195-40F0-8B46-728F6A6AA8EB",
+        "deviceName" : "iPad Pro 13-inch (M5)",
+        "exportedFileName" : "166B492E-30D1-46A8-A80A-AA4CF076C2B8.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ipad-c19-1c-quote-crossed_0_EA1B82B0-24D2-4992-8BE7-5243A43D0D4B.png",
+        "timestamp" : 1794082757.786
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "9F9B4A17-4195-40F0-8B46-728F6A6AA8EB",
+        "deviceName" : "iPad Pro 13-inch (M5)",
+        "exportedFileName" : "44BFA5F6-7DDC-4200-9035-FCDB77C0D3C6.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ipad-c19-1a-new-chat-half_0_5E64A08B-960F-40E7-8E17-357105106D89.png",
+        "timestamp" : 1794082754.602
+      }
+    ],
+    "testIdentifier" : "WikiChatShotTests/testC19NewChatComposer()",
+    "testIdentifierURL" : "test://com.apple.xcode/C11Probe/C11ProbeUITests/WikiChatShotTests/testC19NewChatComposer"
+  }
+]

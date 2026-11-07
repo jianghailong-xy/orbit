@@ -1,0 +1,68 @@
+==> iPad 9F9B4A17-4195-40F0-8B46-728F6A6AA8EB: iPad Pro 13-inch (M5) (9F9B4A17-4195-40F0-8B46-728F6A6AA8EB) (Shutdown) 
+==> stub ready on 127.0.0.1:8765 (pid 16052, after 4s)
+==> ipad
+Test Case '-[C11ProbeUITests.WikiChatShotTests testC19NewChatComposer]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testC19NewChatComposer]' passed (89.023 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 89.023 (89.025) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 89.023 (89.026) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 89.023 (89.027) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 39979, after 2s)
+==> mac
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testC19NewChatComposer]' started.
+/Users/runner/work/orbit/orbit/.c19-probe/UITests/WikiChatShotTests.swift:296: error: -[C11MacProbeUITests.WikiChatShotTests testC19NewChatComposer] : XCTAssertLessThan failed: ("851.0") is not less than ("140.0") - mac-c19-1-new: the chips are not in the composer card
+Test Case '-[C11MacProbeUITests.WikiChatShotTests testC19NewChatComposer]' failed (105.054 seconds).
+	 Executed 1 test, with 1 failure (0 unexpected) in 105.054 (105.056) seconds
+	 Executed 1 test, with 1 failure (0 unexpected) in 105.054 (105.059) seconds
+	 Executed 1 test, with 1 failure (0 unexpected) in 105.054 (105.060) seconds
+** TEST FAILED **
+.c19-probe/run.sh: line 133: 39979 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.c19-probe/shots:
+total 0
+drwxr-xr-x   5 runner  staff  160 Nov  7 20:05 .
+drwxr-xr-x  19 runner  staff  608 Nov  7 20:19 ..
+drwxr-xr-x   2 runner  staff   64 Nov  7 20:05 ios
+drwxr-xr-x  14 runner  staff  448 Nov  7 20:25 ipad
+drwxr-xr-x  17 runner  staff  544 Nov  7 20:25 mac
+
+/Users/runner/work/orbit/orbit/.c19-probe/shots/ios:
+total 0
+drwxr-xr-x  2 runner  staff   64 Nov  7 20:05 .
+drwxr-xr-x  5 runner  staff  160 Nov  7 20:05 ..
+
+/Users/runner/work/orbit/orbit/.c19-probe/shots/ipad:
+total 4304
+drwxr-xr-x  14 runner  staff     448 Nov  7 20:25 .
+drwxr-xr-x   5 runner  staff     160 Nov  7 20:05 ..
+drwxr-xr-x   6 runner  staff     192 Nov  7 20:19 attachments
+-rw-r--r--   1 runner  staff   14644 Nov  7 20:19 compiled-ipad.txt
+-rw-r--r--   1 runner  staff      46 Nov  7 20:19 diagnostics-ipad.txt
+-rw-r--r--   1 runner  staff  736164 Nov  7 20:19 ipad-c19-1a-new-chat-half.png
+-rw-r--r--   1 runner  staff  716435 Nov  7 20:19 ipad-c19-1c-quote-crossed.png
+-rw-r--r--   1 runner  staff     391 Nov  7 20:25 not-served.txt
+-rw-r--r--   1 runner  staff    6915 Nov  7 20:19 requests.log
+-rw-r--r--   1 runner  staff      49 Nov  7 20:10 requests.log.out
+-rw-r--r--   1 runner  staff     834 Nov  7 20:19 WikiChatShotTeststestC19NewChatComposer-notes
+-rw-r--r--@  1 runner  staff     834 Nov  7 20:19 WikiChatShotTeststestC19NewChatComposer-notes.txt
+-rw-r--r--   1 runner  staff     162 Nov  7 20:25 writes.txt
+-rw-r--r--   1 runner  staff  697331 Nov  7 20:19 xcodebuild-ipad.log
+
+/Users/runner/work/orbit/orbit/.c19-probe/shots/mac:
+total 2552
+drwxr-xr-x   17 runner  staff     544 Nov  7 20:25 .
+drwxr-xr-x    5 runner  staff     160 Nov  7 20:05 ..
+-rw-r--r--    1 runner  staff   73409 Nov  7 20:25 App UI hierarchy for io.orbitd
+drwxr-xr-x  109 runner  staff    3488 Nov  7 20:25 attachments
+-rw-r--r--    1 runner  staff   14930 Nov  7 20:25 compiled-mac.txt
+-rw-r--r--    1 runner  staff     215 Nov  7 20:25 Debug description for `Button (First Match)`
+-rw-r--r--    1 runner  staff     141 Nov  7 20:25 Debug description for `Window (First Match)`
+-rw-r--r--    1 runner  staff      46 Nov  7 20:25 diagnostics-mac.txt
+-rw-r--r--    1 runner  staff  192053 Nov  7 20:25 mac-c19-1a-new-chat-half.png
+-rw-r--r--    1 runner  staff  186005 Nov  7 20:25 mac-c19-1c-quote-crossed.png
+-rw-r--r--    1 runner  staff   45721 Nov  7 20:25 missing-band-mac-c19-1-new-section-3
+-rw-r--r--    1 runner  staff     245 Nov  7 20:25 not-served.txt
+-rw-r--r--    1 runner  staff    5807 Nov  7 20:25 requests.log
+-rw-r--r--    1 runner  staff      49 Nov  7 20:19 requests.log.out
+-rw-r--r--    1 runner  staff     957 Nov  7 20:25 WikiChatShotTeststestC19NewChatComposer-notes
+-rw-r--r--    1 runner  staff     162 Nov  7 20:25 writes.txt
+-rw-r--r--    1 runner  staff  747930 Nov  7 20:25 xcodebuild-mac.log

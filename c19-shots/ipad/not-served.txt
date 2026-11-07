@@ -1,0 +1,6 @@
+   7 [ask] "GET /api/projects/sidebar HTTP/1.1" 404 -
+   3 [ask] "GET /api/wiki/trash HTTP/1.1" 404 -
+   2 [ask] "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 404 -
+   1 [ask] "GET /api/wiki/spaces/0196f000-0000-7000-8000-000000000001/share HTTP/1.1" 404 -
+   1 [ask] "GET /api/users/me HTTP/1.1" 404 -
+   1 [ask] "GET /api/auth/capabilities HTTP/1.1" 404 -

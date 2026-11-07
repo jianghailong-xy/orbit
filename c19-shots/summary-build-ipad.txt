@@ -1,0 +1,6 @@
+Test Case '-[C11ProbeUITests.WikiChatShotTests testC19NewChatComposer]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testC19NewChatComposer]' passed (89.023 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 89.023 (89.025) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 89.023 (89.026) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 89.023 (89.027) seconds
+** TEST SUCCEEDED **
