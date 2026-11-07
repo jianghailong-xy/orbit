@@ -18,6 +18,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { renderConnectGroupCard } from './cards/feishu-cards';
 import { FeishuOutbound, feishuDedupeUuid } from './feishu-outbound';
+import type { FeishuGroupRoute } from './feishu-group.service';
 import { credentialsOf, type FeishuOwnerApp } from './feishu-owner.service';
 
 /** What the bot answers in a group (§8.1). English, as every word the bot sends (CLAUDE.md §5). */
@@ -109,29 +110,34 @@ export class FeishuChatRouteService {
     private readonly outbound: FeishuOutbound,
   ) {}
 
-  /** A group message that @-mentions the bot: `connect`, or anything else in a group that cannot run it. */
-  async handleGroupMessage(app: FeishuChatApp, message: FeishuGroupMessage): Promise<void> {
+  /**
+   * A group message that @-mentions the bot: `connect`, or anything else in a group that cannot run it — answered here.
+   * In a group whose route is confirmed and on, the route is returned, and the request is FeishuGroupService's (§8.2).
+   */
+  async handleGroupMessage(app: FeishuChatApp, message: FeishuGroupMessage): Promise<FeishuGroupRoute | null> {
     if (message.text.trim().toLowerCase() === 'connect') {
       await this.connect(app, message);
-      return;
+      return null;
     }
     const route = await this.prisma.feishuChatRoute.findUnique({
       where: { appId_chatId: { appId: app.appId, chatId: message.chatId } },
-      select: { confirmedAt: true, enabled: true },
+      select: { ownerId: true, chatId: true, workspaceId: true, permissionMode: true, allowedOpenIds: true, confirmedAt: true, enabled: true },
     });
     const bot = app.botName ?? 'bot';
     if (!route?.confirmedAt) {
       this.logger.log(`feishu app ${app.appId}: a mention in a group that is not connected; nothing started`);
       await this.replyText(app, message.messageId, FEISHU_GROUP_REPLIES.notConnected(bot));
-      return;
+      return null;
     }
     if (!route.enabled) {
       this.logger.log(`feishu app ${app.appId}: a mention in a group whose connection is off; nothing started`);
       await this.replyText(app, message.messageId, FEISHU_GROUP_REPLIES.switchedOff(bot));
-      return;
+      return null;
     }
-    // A connected group's requests are F3-2's (§8.2).
+    // A confirmed route always holds both (the confirm writes them together).
+    if (!route.workspaceId || !route.permissionMode) return null;
     this.logger.log(`feishu app ${app.appId}: a mention in a connected group`);
+    return { ownerId: route.ownerId, chatId: route.chatId, workspaceId: route.workspaceId, permissionMode: route.permissionMode, allowedOpenIds: route.allowedOpenIds };
   }
 
   private async connect(app: FeishuChatApp, message: FeishuGroupMessage): Promise<void> {

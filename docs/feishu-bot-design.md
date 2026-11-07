@@ -435,6 +435,18 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
   `last_user_from_*`（会话列表的「From <title>」）。客户端画成 `From Feishu · <name>`；runner 投递时加一句前言，
   告诉 agent 这句话来自飞书群里的某人、**不是账号主人**。前言计入 agent 指令的 token 预算，加之前先量。
 
+落地（F3-2，`feishu/feishu-group.service.ts`，无迁移）：
+
+- `FeishuChatRouteService.handleGroupMessage` 对已确认且开着的路由返回路由，由 `FeishuGroupService` 接手；`connect`、未接入与已停用的群照旧由前者回一句。
+- 允许名单：主人总是可以；`allowed_open_ids` 为空即群里所有人；不在名单的人回
+  `This group's Orbit connection doesn't take requests from you, so nothing was started. Ask the bot's owner to add you in Orbit.`，零写入。
+- 顶层 @：`SessionsService.create(route.ownerId, { workspaceId: route.workspaceId, prompt, permissionMode: route.permissionMode })`，
+  会话 id 由 appId 与 message_id 派生；该消息就是 `feishu_thread` 的根，回执 `Started · <title>` 以 `reply_in_thread` 发出，
+  此后 §7.5 的发件箱把每轮正文回到这个话题。建会话前的拒绝把原因回到话题（`Orbit didn't start a session: <原因>.`）；上限与预检的细化归 F3-4。
+- 话题里 @（事件带 `root_id`）：根在 `feishu_thread` 里属于会话 S，就以 `createTurn` 进 S，不带 intent，按常规 steer / 排队；
+  clientTurnId 由 appId 与 event_id 派生。根不属于任何会话时回一句说明，不开会话。
+- 每个新会话 / 新 turn 写一行 activity（`feishu.group.session.created` / `feishu.group.session.turn`，credential_kind FEISHU）。
+
 ### 8.3 安全边界
 
 群成员不是账号主人，他们的话会成为跑在主人机器上、带着主人仓库与凭据的 agent 的输入。提示注入与外泄是群派活的主风险。规则：

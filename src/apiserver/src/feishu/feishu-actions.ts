@@ -20,19 +20,21 @@ export interface FeishuAllowedAction {
 export const FEISHU_ALLOWED_ACTIONS: readonly FeishuAllowedAction[] = [
   // "What needs me": the sessions waiting on the owner (§7.2, the read-only row).
   { service: 'PushService', method: 'needsYouSessions', access: 'READ', condition: 'Always: it reads the account’s own sessions.' },
-  // Reply to a session (§7.2, §7.3 1): feishu/feishu-direct.service.ts.
+  // Reply to a session (§7.2, §7.3 1, §8.2): feishu/feishu-direct.service.ts, feishu/feishu-group.service.ts.
   {
     service: 'SessionsService',
     method: 'createTurn',
     access: 'WRITE',
-    condition: 'The owner’s reply, in their direct messages, to a message that belongs to the session (an alert card or a chain of it).',
+    condition: 'The owner’s reply, in their direct messages, to a message that belongs to the session (an alert card or a chain of it);'
+      + ' or a mention of the bot by an allowed sender inside a connected group’s topic that belongs to the session (§8.2).',
   },
-  // Open a session (§7.2, §7.3 2): feishu/feishu-direct.service.ts.
+  // Open a session (§7.2, §7.3 2, §8.2): feishu/feishu-direct.service.ts, feishu/feishu-group.service.ts.
   {
     service: 'SessionsService',
     method: 'create',
     access: 'WRITE',
-    condition: 'The owner’s new direct message, in the app’s default workspace, with no permissionMode: the account’s default applies.',
+    condition: 'The owner’s new direct message, in the app’s default workspace, with no permissionMode: the account’s default applies;'
+      + ' or a top-level mention of the bot by an allowed sender in a connected group, in the route’s workspace and permissionMode (§8.2).',
   },
   // Answering a tool approval on a card (§7.2, §7.4; F2-1, feishu-card-actions.ts).
   {
@@ -65,6 +67,7 @@ export const FEISHU_INFRASTRUCTURE = [
   'FeishuOwnerService',
   'FeishuChatRouteService',
   'FeishuDirectService',
+  'FeishuGroupService',
   'FeishuCardActions',
   // The alert cards' own machinery (push/feishu-transport.ts): a click draws the card it was made on (§7.4).
   'FeishuTransport',

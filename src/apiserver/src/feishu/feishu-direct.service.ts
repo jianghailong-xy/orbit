@@ -93,7 +93,7 @@ export function feishuDerivedUuid(...why: string[]): string {
 }
 
 /** What a refusal says, as one clause: the words a client would show for it. */
-function refusalWords(error: HttpException): string {
+export function refusalWords(error: HttpException): string {
   const body = error.getResponse();
   const said = typeof body === 'string' ? body : obj(body).message;
   const words = Array.isArray(said) ? said.join('; ') : typeof said === 'string' ? said : error.message;

@@ -2,7 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { FeishuChatRouteService } from './feishu-chat-route.service';
-import { FeishuDirectService } from './feishu-direct.service';
+import { directMessageOf, FeishuDirectService } from './feishu-direct.service';
+import { FeishuGroupService } from './feishu-group.service';
 import { FEISHU_OWNER_REPLIES, FeishuOwnerService, type FeishuTextMessage } from './feishu-owner.service';
 
 /** Who a Feishu event acts as (docs/feishu-bot-design.md §7.2): always the account its app belongs to. */
@@ -133,6 +134,7 @@ export class FeishuRouter {
     private readonly owner: FeishuOwnerService,
     private readonly chats: FeishuChatRouteService,
     private readonly direct: FeishuDirectService,
+    private readonly group: FeishuGroupService,
   ) {}
 
   /** Who answers the owner's card clicks from now on. */
@@ -188,10 +190,12 @@ export class FeishuRouter {
       } else if (route === 'DIRECT_MESSAGE') {
         await this.direct.handleMessage(app, actor, event.eventId, event.payload);
       }
-      // A group: `connect`, or a mention in a group that cannot run it (§8.1).
+      // A group: `connect`, or a mention in a group that cannot run it (§8.1); in a connected group, a request (§8.2).
       const chatId = chatIdOf(event.payload);
       if (route === 'GROUP_MENTION' && messageId && openId && chatId) {
-        await this.chats.handleGroupMessage(app, { eventId: event.eventId, chatId, messageId, openId, text: message?.text ?? '' });
+        const mention = { eventId: event.eventId, chatId, messageId, openId, text: message?.text ?? '' };
+        const connected = await this.chats.handleGroupMessage(app, mention);
+        if (connected) await this.group.handleMention(app, actor, connected, { ...mention, rootId: directMessageOf(event.payload)?.rootId });
       }
     }
     if (route === 'BOT_REMOVED_FROM_CHAT') await this.chats.botRemoved(event.appId, chatIdOf(event.payload) ?? '');
