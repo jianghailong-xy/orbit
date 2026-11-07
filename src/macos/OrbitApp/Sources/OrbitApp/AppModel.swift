@@ -1202,10 +1202,13 @@ final class AppModel {
         // The drawer's task lists, and the Tasks page only while it is the one on screen
         // (`TasksModel.refresh`).
         scheduleLibraryRefresh(.tasks)
-        // `wiki.changed` has no replay either: re-read what the Wiki shows, while it is on screen.
+        // `wiki.changed` has no replay either: re-read what the Wiki shows while it is on screen, and
+        // otherwise only its spaces — the drawer's number, which is on screen beside every section.
         if selectedSection == .wiki {
             if let wiki { Task { await wiki.reloadLoaded() } }
             if let wikiChat { Task { await wikiChat.reloadLoaded() } }
+        } else if let wiki, wiki.spacesState.hasLoaded {
+            Task { await wiki.loadSpaces() }
         }
         #if os(iOS)
         // Nor has `folder.changed`: a workspace's list draws its folders, and the Move panel offers them.

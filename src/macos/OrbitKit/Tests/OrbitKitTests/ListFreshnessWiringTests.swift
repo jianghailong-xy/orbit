@@ -127,6 +127,7 @@ final class ListFreshnessWiringTests: XCTestCase {
         XCTAssertTrue(reconnect.contains("await refreshFocusedSessionDetailIfNeeded()"))
         XCTAssertTrue(reconnect.contains("Task { await agents.reloadWorkspaces() }"), "the workspaces alone once loaded")
         XCTAssertTrue(reconnect.contains("if selectedSection == .wiki {"), "the Wiki only while it is on screen")
+        XCTAssertTrue(reconnect.contains("Task { await wiki.loadSpaces() }"), "otherwise the drawer's number alone")
         XCTAssertFalse(reconnect.contains("watches.load()"), "the watch list waits for watch.changed and its floor")
         XCTAssertTrue(reconnect.contains("lifecycleHints &+= 1") && reconnect.contains("projectHints &+= 1"),
                       "each page poll on screen reads once")

@@ -669,6 +669,8 @@ final class WikiWiringTests: XCTestCase {
         let connected = try slice(app, from: "private func reconcileOnConnect() async {", to: "\n    }\n")
         XCTAssertTrue(connected.contains("if selectedSection == .wiki {\n            if let wiki { Task { await wiki.reloadLoaded() } }"),
                       "a reconnect re-reads the Wiki while it is on screen")
+        XCTAssertTrue(connected.contains("} else if let wiki, wiki.spacesState.hasLoaded {\n            Task { await wiki.loadSpaces() }"),
+                      "and otherwise its spaces: the drawer's number is on screen beside every section")
         XCTAssertTrue(app.contains("wiki = WikiModel(baseURL: url, tokenStore: tokenStore)"))
     }
 
