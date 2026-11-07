@@ -106,7 +106,8 @@ import {
   type SwipeGeometry,
   type SwipeSide,
 } from '../lib/sessionSwipe';
-import { useControlPlaneLive } from '../lib/useControlPlane';
+import { useControlPlaneLive, useRefreshSessionLists } from '../lib/useControlPlane';
+import { listPollMs, pollWhileInFlight, promotionInFlight, streamPoll } from '../lib/listBudget';
 import { useSessionProjectData } from '../lib/useSessionProjectData';
 import {
   workspacesQuery,
@@ -2488,8 +2489,11 @@ export function WorkspaceView({
   // The workspace whose conversation list this column is. The route names it on /workspaces/<id>;
   // a /sessions/<id> deep link doesn't, so it's latched from the open session once that
   // resolves (see the effect below) — the query itself is scoped by it, so it can't be
-  // derived further down where the list it would depend on is built.
-  const [scopeWorkspaceId, setScopeWorkspaceId] = useState<string | null>(lockedWorkspaceId ?? null);
+  // derived further down where the list it would depend on is built. On a reload of a session's
+  // page the splash has already read that session (BootGate), so the list starts in its workspace:
+  // starting from none, it read the runner's whole Open list first and this workspace's a frame later.
+  const [scopeWorkspaceId, setScopeWorkspaceId] = useState<string | null>(() =>
+    lockedWorkspaceId ?? qc.getQueryData(sessionQuery(selectedId).queryKey)?.workspace?.id ?? null);
   // How much of the list is loaded. One page on open; scrolling toward the end widens the
   // window (see loadMoreSessions), which re-keys the query to the larger page.
   const [sessionLimit, setSessionLimit] = useState(SESSION_PAGE_SIZE);
@@ -2523,13 +2527,17 @@ export function WorkspaceView({
     limit: scopeWorkspaceId && (foldersShown || projectsShown) ? null : sessionLimit,
   });
   const sessionsKey = sessionsOpts.queryKey;
-  // While the control-plane stream is connected it pushes list changes (a coalesced refetch per
-  // event), so stop the 4s poll; on any stream gap `controlLive` flips false and it resumes.
+  // While the control-plane stream is connected it re-reads the list on every event that touches
+  // it, so the poll is only the list budget's safety read; on any stream gap `controlLive` flips
+  // false and the shared outage backoff takes over (lib/listBudget).
   const controlLive = useControlPlaneLive();
+  // What a write made here re-reads the lists with: in the stream's coalescing window, which the
+  // server's own event for the write joins (W5).
+  const refreshSessionLists = useRefreshSessionLists();
   const sessionsQ = useQuery({
     ...sessionsOpts,
     enabled: !openProjectId,
-    refetchInterval: controlLive || openProjectId ? false : 4000,
+    refetchInterval: openProjectId ? false : (query) => listPollMs(controlLive, query),
     // Widening the window re-keys the query, so hold the rows already on screen while the
     // larger page loads instead of blanking the list. Only within one scope (every key part
     // but the page size): another scope's rows must never stand in for this one's, even for
@@ -2619,8 +2627,10 @@ export function WorkspaceView({
       // server runs after it has answered. Then it goes quiet.
       if (detail && mergeRepairLoopLive(detail)) return 3000;
       // A deep-linked/Completed ENDING row may already be absent from the Open list. Keep polling
-      // its own current detail until terminal instead of relying solely on selectedFromList.
-      return shouldPollSessionDetail(selectedId, detail, selectedFromList) ? 5000 : false;
+      // its own current detail until terminal instead of relying solely on selectedFromList. Every
+      // `session.*` event about it re-reads it (useControlPlane), so while the stream is live this
+      // is the list budget's safety read.
+      return shouldPollSessionDetail(selectedId, detail, selectedFromList) ? listPollMs(controlLive, q, 5000) : false;
     },
   });
   const detailForSelected = sessionDetailQ.data?.id === selectedId ? sessionDetailQ.data : null;
@@ -2945,12 +2955,12 @@ export function WorkspaceView({
   const projectSessionsQ = useQuery({
     ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'open', includeLanding: !!openProjectId, priority: true }),
     enabled: !!openProjectId,
-    refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
+    refetchInterval: (query) => listPollMs(controlLive, query),
   });
   const completedProjectSessionsQ = useQuery({
     ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'completed', includeLanding: !!openProjectId, priority: true }),
     enabled: !!openProjectId,
-    refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
+    refetchInterval: (query) => listPollMs(controlLive, query),
   });
   // The merges into main this project has made: they are rows of its Landings window (owner
   // 2026-10-27), and the page's Landings row counts today's.
@@ -3014,7 +3024,7 @@ export function WorkspaceView({
   const pageOpenItemsQ = useQuery({
     ...projectOpenItemsQuery(openProjectId ?? ''),
     enabled: !!openProjectId && pageNotStarted,
-    refetchInterval: controlLive ? 20_000 : 4000,
+    refetchInterval: (query) => listPollMs(controlLive, query),
   });
   const pageStart = pageNotStarted
     ? startPageRow(pageStarted, pageOpenItemsQ.isError ? undefined : pageOpenItemsQ.data)
@@ -4385,28 +4395,30 @@ export function WorkspaceView({
     gcTime: Infinity,
   });
 
-  // The merges this project has already made, for the record each one leaves where it happened
-  // (`ProjectPromotionReceipt` below). NOT the read the strip's card is drawn from: that one is the
-  // candidate on offer, and it moves on to the next one — a receipt drawn from it would describe a
-  // different merge every time the branch was offered again, which is exactly what the card at the
-  // bottom of this pane used to do. Polled with the card, because a conversation that is open is
-  // where somebody watches their own merge land.
-  const mergedPromotions = useQuery({
-    ...projectMergedPromotionsQuery(coordinatedProjectId ?? ''),
-    enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
-    refetchInterval: 20_000,
-  });
-
   // The candidate on offer, read HERE as well as inside the strip's card below, for the one state
   // the strip does not keep: a candidate a check blocked has a moment, and where that moment falls
   // is a fact about this conversation's own events (`transcriptEvents`), which only this view
   // holds. Same query key as the card's own read, so the two share one request. Polled, because a
   // blocked candidate is still moving — somebody is resolving it — and the card drawn from it says
-  // who and for how long.
+  // who and for how long. A merge check ending announces nothing on the stream, so while one runs
+  // the candidate keeps its cadence; otherwise it follows the stream (lib/listBudget).
   const currentPromotion = useQuery({
     ...projectPromotionQuery(coordinatedProjectId ?? ''),
     enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
-    refetchInterval: 20_000,
+    refetchInterval: pollWhileInFlight(20_000, (query) => promotionInFlight(query.state.data)),
+  });
+
+  // The merges this project has already made, for the record each one leaves where it happened
+  // (`ProjectPromotionReceipt` below). NOT the read the strip's card is drawn from: that one is the
+  // candidate on offer, and it moves on to the next one — a receipt drawn from it would describe a
+  // different merge every time the branch was offered again, which is exactly what the card at the
+  // bottom of this pane used to do. Polled with the card while a merge is in flight, because a
+  // conversation that is open is where somebody watches their own merge land.
+  const mergeInFlight = promotionInFlight(currentPromotion.data);
+  const mergedPromotions = useQuery({
+    ...projectMergedPromotionsQuery(coordinatedProjectId ?? ''),
+    enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
+    refetchInterval: pollWhileInFlight(20_000, () => mergeInFlight),
   });
 
   // What this project still owes somebody, for the exceptions drawn into the transcript at the
@@ -4416,7 +4428,7 @@ export function WorkspaceView({
   const openItems = useQuery({
     ...projectOpenItemsQuery(coordinatedProjectId ?? ''),
     enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
 
   // Which of those rows the pinned strip lists: the ones the evidence card below is drawn for, by
@@ -5325,7 +5337,7 @@ export function WorkspaceView({
         setComposerRefs({});
         setImages([]);
         setView('open');
-        qc.invalidateQueries({ queryKey: ['sessions'] });
+        refreshSessionLists();
         navigate(`/sessions/${encodeId(routedToSessionId)}`);
         return;
       }
@@ -5428,7 +5440,7 @@ export function WorkspaceView({
           );
         }
       }
-      qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       // Reviving moves the row from Completed to Open server-side (see SessionsService.resume),
       // so refetch the detail too — otherwise the header ⋮ keeps offering Move to Open for a
       // session that's already back in Open.
@@ -5564,7 +5576,7 @@ export function WorkspaceView({
       if (restored) setText(restored);
       stageRestored(theirs.flatMap((q) => q.attachments ?? []));
       setQueued([]);
-      qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
     },
     onError: (e: Error) => message.error("Couldn't stop the session", e.message),
   });
@@ -5602,7 +5614,7 @@ export function WorkspaceView({
     onSuccess: (_d, session) => {
       setView('open');
       refreshProjectSession(session.id, session.projectId);
-      qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       qc.invalidateQueries({ queryKey: ['session', session.id] });
       if (session.notify) {
         message.sessionNotice({
@@ -5681,7 +5693,7 @@ export function WorkspaceView({
     onSuccess: (_d, session) => {
       leaveIfOpen(session.id);
       dropFromLists(session.id, session.projectId);
-      qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       showUndo(session, 'complete');
     },
     onError: (e: Error, session) =>
@@ -5759,7 +5771,7 @@ export function WorkspaceView({
     onSuccess: (_d, session) => {
       leaveIfOpen(session.id);
       dropFromLists(session.id, session.projectId);
-      qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       showUndo(session, 'trash');
     },
     onError: (e: Error, session) =>
@@ -5829,7 +5841,7 @@ export function WorkspaceView({
     onSuccess: (_d, session) => {
       leaveIfOpen(session.id);
       dropFromLists(session.id);
-      qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       message.sessionNotice({
         sessionId: session.id,
         sessionTitle: session.title,
@@ -5875,7 +5887,7 @@ export function WorkspaceView({
     },
     onError: (e: Error) => message.error("Couldn't rename the session", e.message),
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       void qc.invalidateQueries({ queryKey: ['project-sessions'] });
     },
   });
@@ -5897,7 +5909,7 @@ export function WorkspaceView({
     onError: (e: Error, { pin }) =>
       message.error(pin ? "Couldn't pin the session" : "Couldn't unpin the session", e.message),
     onSettled: (_data, _error, { projectId }) => {
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       if (projectId) void qc.invalidateQueries({ queryKey: ['project-sessions', projectId] });
     },
   });
@@ -5943,7 +5955,7 @@ export function WorkspaceView({
     },
     onSettled: (_data, _error, { id }) => {
       tagSaveInFlight.current = false;
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       void qc.invalidateQueries({ queryKey: ['session', id], exact: true });
     },
   });
@@ -6068,7 +6080,7 @@ export function WorkspaceView({
         headline: continued ? 'Handed to the existing repair session' : 'Repair session started',
         detail: 'Opening the repair session.', tone: 'info' });
       navigate(`/sessions/${encodeId(session.id)}`);
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
     },
     onError: (e: Error) => message.error("Couldn't start the repair session", e.message),
   });
@@ -6120,7 +6132,7 @@ export function WorkspaceView({
         icon: 'sync',
       });
       void qc.invalidateQueries({ queryKey: ['session', vars.id] });
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
     },
     onError: (e: Error, vars) =>
       message.sessionNotice({
@@ -6158,7 +6170,7 @@ export function WorkspaceView({
         icon: 'sync',
       });
       void qc.invalidateQueries({ queryKey: ['session', vars.id] });
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
     },
     onError: (e: Error, vars) =>
       message.sessionNotice({
@@ -6262,7 +6274,7 @@ export function WorkspaceView({
         e.message,
       );
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
+    onSettled: () => refreshSessionLists(),
   });
   // Move a session to another of its runner's accounts, or back onto Automatic (switchAccount). The
   // gauge, its popover and the menu read the session's detail, so that is re-read with the list.
@@ -6272,7 +6284,7 @@ export function WorkspaceView({
       message.error("Couldn't switch the account", e.message);
     },
     onSettled: (_result, _error, vars) => {
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       void qc.invalidateQueries({ queryKey: ['session', vars.id] });
     },
   });
@@ -7097,7 +7109,7 @@ export function WorkspaceView({
       api(`/tasks/${taskId}/execute`, { method: 'POST', body: { triggerId } }),
     onSuccess: () => {
       message.success('Assignee workspace triggered');
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       if (selectedId) void qc.invalidateQueries({ queryKey: ['session', selectedId] });
     },
     // The task moved on between the page's read and the press; the refusal names the run that has
@@ -7566,7 +7578,7 @@ export function WorkspaceView({
           Array.isArray(old) ? old.map((s) => (s.folderId === folder.id ? { ...s, folderId: null } : s)) : old,
         );
         void qc.invalidateQueries({ queryKey: ['session-folders'] });
-        void qc.invalidateQueries({ queryKey: ['sessions'] });
+        refreshSessionLists();
         if (openFolder?.id === folder.id) leaveFolder(true);
       },
     });

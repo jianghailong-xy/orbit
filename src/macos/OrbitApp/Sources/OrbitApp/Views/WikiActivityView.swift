@@ -267,7 +267,7 @@ struct WikiActivityView: View {
                 await wiki.loadJobs()
                 // A run on its way is read again every few seconds, as the web card reads it.
                 while !Task.isCancelled, wiki.jobsUnderWay {
-                    try? await Task.sleep(for: .seconds(5))
+                    await VisibilityGate.app.pause(5)   // a run under way, and the app seen
                     await wiki.loadJobs()
                 }
             }

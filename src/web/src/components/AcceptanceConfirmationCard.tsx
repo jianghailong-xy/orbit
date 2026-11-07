@@ -19,6 +19,7 @@ import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
 import { ReviewCard } from './ReviewCard';
 import { Alert } from './ui/Alert';
 import { useIsMobile } from '../lib/useMediaQuery';
+import { streamPoll } from '../lib/listBudget';
 import { PROVENANCE_LABEL, receiptClock, shortSeal } from './CriteriaDecisionCard';
 // The words this card's second action uses. Imported rather than re-declared, and read inside the
 // component rather than bound at module scope: `OwnerConfirmationCard` reaches this module again
@@ -732,7 +733,7 @@ export function SessionCriteriaConfirmationCard({
     queryFn: () =>
       api<ConfirmationProjectDocument>(`/projects/${encodeURIComponent(project)}`),
     enabled: Boolean(projectId),
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
   // A read that failed is not an answer, whatever an earlier read said.
   const standing = standingRead.isError ? null : (standingRead.data ?? null);

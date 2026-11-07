@@ -5,9 +5,10 @@ import OrbitKit
 /// The account's watches, behind the Following page, the console's Watching card and every session's
 /// header, row and glyph. Owned by `AppModel` and rebuilt per instance, like the other section stores.
 ///
-/// The control plane has no watch event, so the list is refetched: when the stream connects, on a
-/// short coalesced nudge after an event that can move a target, on the app poll's 30s floor, and
-/// after each control. What the server answered is always what's drawn.
+/// The list is refetched: on `watch.changed`, the server naming a watch that moved (`changed`); on a
+/// short coalesced nudge after an event that can move a target; on the app poll's floor — a minute
+/// apart while the control stream is live, 30 s without it; and after each control. What the server
+/// answered is always what's drawn.
 @MainActor
 @Observable
 final class WatchesModel {
@@ -25,6 +26,7 @@ final class WatchesModel {
 
     private let api: APIClient
     private var nudgeTask: Task<Void, Never>?
+    private var changedTask: Task<Void, Never>?
 
     init(baseURL: URL, tokenStore: TokenStore) {
         api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
@@ -65,6 +67,19 @@ final class WatchesModel {
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             guard let self else { return }
             self.nudgeTask = nil
+            await self.load()
+        }
+    }
+
+    /// The server named a watch (`watch.changed`): it was made, edited, matched, expired or ended, or a
+    /// delivery of it moved — the changes no session or task event comes with. Read the list again,
+    /// once for a burst, whether or not anything was live before (a new watch is not yet).
+    func changed() {
+        guard changedTask == nil else { return }
+        changedTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            guard let self else { return }
+            self.changedTask = nil
             await self.load()
         }
     }

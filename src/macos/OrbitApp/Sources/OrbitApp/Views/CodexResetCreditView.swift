@@ -119,7 +119,7 @@ struct CodexResetCreditCard: View {
         .task(id: console.runnerID) {
             await console.loadCodexResetOperations()
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                await VisibilityGate.app.pause(30)   // not while the app cannot be seen
                 if Task.isCancelled { break }
                 now = Date()
                 await console.loadCodexResetOperations()

@@ -45,6 +45,7 @@ import {
   matchesTaskFilter,
 } from '../lib/taskFilters';
 import { activeTasksQuery, labelSummaryQuery, sessionQuery, taskCountsQuery } from '../lib/queries';
+import { listPollMs, streamDown } from '../lib/listBudget';
 import type { LabelSummaryRow } from '../lib/taskPages';
 import { taskPagePath, type TaskCounts, type TaskPage } from '../lib/taskPages';
 import {
@@ -572,13 +573,17 @@ export function TaskListView() {
     // reader has scrolled — and with the window in place they can now scroll to 137 pages, which
     // would be 137 requests and ~31MB every interval. Past a handful of pages the list stops
     // polling itself: by then it is being read as history, and the part that has to stay live is
-    // the pinned strip above it, which is bounded and refetches on its own every 5s.
+    // the pinned strip above it, which is bounded and refetches on its own. `task.*` events re-read
+    // both (useControlPlane), so the poll is the list budget's safety read while the stream is live,
+    // and its shared backoff while it is down, never faster than the cadence here (listBudget).
     refetchInterval: (q) => {
       const pages = q.state.data?.pages ?? [];
       if (pages.length > 5) return false;
-      return pages.some((page) => page.items.some((t: any) => t.running || t.queued))
-        ? 5_000
-        : 15_000;
+      return listPollMs(
+        !streamDown(),
+        q,
+        pages.some((page) => page.items.some((t: any) => t.running || t.queued)) ? 5_000 : 15_000,
+      );
     },
   });
   const taskData = useMemo(

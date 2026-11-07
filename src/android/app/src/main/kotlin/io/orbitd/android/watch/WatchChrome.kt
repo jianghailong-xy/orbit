@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.realtime.ConnectionState
+import io.orbitd.android.realtime.PagePoll
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -94,7 +95,9 @@ internal fun rememberWatchClock(): Instant {
 internal val watchMovingEvents = setOf("session.created", "session.updated", "session.ended", "approval.requested", "approval.resolved", "task.changed")
 
 /** What keeps the account's watches current while a watch surface is on screen (iOS `AppModel`'s three reads):
- * the stream reconnecting re-reads them, an event that can move a target nudges them, and the 30 s floor polls them. */
+ * the stream reconnecting re-reads them, an event that can move a target nudges them, so does a watch's own event
+ * (`watch.changed`, live watches or none), and the floor polls them — once a minute while the stream is up, on a backoff
+ * while it is down, and not while the Activity is stopped ([PagePoll]). */
 @Composable
 internal fun WatchFeed(app: OrbitApplication, handle: SessionHandle, store: WatchStore) {
     LaunchedEffect(store) {
@@ -102,11 +105,18 @@ internal fun WatchFeed(app: OrbitApplication, handle: SessionHandle, store: Watc
             .distinctUntilChanged().drop(1).collect { store.nudge() }
     }
     LaunchedEffect(store) {
+        app.realtime.state.filter { it.handle === handle }.map { it.accountEvents[WATCH_CHANGED] ?: 0L }
+            .distinctUntilChanged().drop(1).collect { store.nudge(anyWatch = true) }
+    }
+    LaunchedEffect(store) {
         app.realtime.state.map { it.handle === handle && it.controlConnection == ConnectionState.CONNECTED }
             .distinctUntilChanged().collect { store.connection(it) }
     }
-    LaunchedEffect(store) { while (true) { store.refreshIfDue(); delay(5_000) } }
+    PagePoll(app, handle, emptySet(), store) { store.refreshIfDue() }
 }
+
+/** A watch of the account's changed (src/shared/src/realtime.ts `WATCH_CHANGED`): made, edited, paused, matched, ended. */
+private const val WATCH_CHANGED = "watch.changed"
 
 /** A session's title where this client holds it (iOS `model.session(id:)?.title`), from the account's directory.
  * Tasks have no list on this client yet, so a task is named by the title the watch carries for it. */

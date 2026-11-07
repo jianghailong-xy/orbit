@@ -1,12 +1,16 @@
 package io.orbitd.android.directory
 
 import androidx.compose.runtime.*
+import io.orbitd.android.OrbitApplication
+import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.projects.ProjectAttention
 import io.orbitd.android.projects.ProjectPage
 import io.orbitd.android.projects.ProjectTime
 import io.orbitd.android.projects.RunSettings
+import io.orbitd.android.realtime.PagePoll
+import io.orbitd.android.realtime.PagePolls
 import io.orbitd.android.watch.WatchSessionSummary
 import io.orbitd.android.watch.watchKey
 import java.text.Collator
@@ -14,7 +18,6 @@ import java.time.Instant
 import java.util.Locale
 import kotlin.math.max
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 
@@ -313,19 +316,17 @@ object SessionProjectMembers {
     }
 }
 
-/** The project rows' `GET /projects/sidebar` (OrbitKit `ProjectsModel.sidebarProjects`): read when a list that draws them appears,
- * every 15 s while it shows and after every control event ([revision]). A read that fails keeps the last answer; a server without
- * the read leaves it empty, and the rows say what the sessions' memberships say. */
+/** The project rows' `GET /projects/sidebar` (OrbitKit `ProjectsModel.sidebarProjects`): read when a list that draws them appears, then
+ * as a page's poll reads ([PagePoll]: on a project's or its tasks' events and on each connect, once a minute without one, on a backoff
+ * while the stream is down, and never while the Activity is stopped). A read that fails keeps the last answer; a server without the read
+ * leaves it empty, and the rows say what the sessions' memberships say. */
 @Composable
-internal fun rememberProjectSidebar(api: DirectoryApi, revision: Long): State<List<JsonObject>> {
+internal fun rememberProjectSidebar(app: OrbitApplication, handle: SessionHandle, api: DirectoryApi): State<List<JsonObject>> {
     val rows = remember(api) { mutableStateOf<List<JsonObject>>(emptyList()) }
-    LaunchedEffect(api, revision) {
-        while (true) {
-            try { rows.value = api.read(listOf("projects", "sidebar"), JsonArray.serializer()).filterIsInstance<JsonObject>() }
-            catch (cancel: CancellationException) { throw cancel }
-            catch (_: Exception) { }
-            delay(15_000)
-        }
+    PagePoll(app, handle, PagePolls.PROJECT_EVENTS, api) {
+        try { rows.value = api.read(listOf("projects", "sidebar"), JsonArray.serializer()).filterIsInstance<JsonObject>() }
+        catch (cancel: CancellationException) { throw cancel }
+        catch (_: Exception) { }
     }
     return rows
 }
