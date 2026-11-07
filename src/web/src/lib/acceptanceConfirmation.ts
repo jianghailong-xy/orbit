@@ -4,6 +4,7 @@ import type {
   ProjectStartRecord,
 } from '@orbit/shared';
 import { api } from '../api';
+import { streamPoll } from './listBudget';
 
 /**
  * The account owner's confirmation of a project's stated criteria, as the browser reads and writes
@@ -87,7 +88,7 @@ export const readAcceptanceConfirmation = (
 export const acceptanceConfirmationQuery = (projectId: string) => ({
   queryKey: acceptanceConfirmationKey(projectId),
   queryFn: () => readAcceptanceConfirmation(projectId),
-  refetchInterval: 20_000,
+  refetchInterval: streamPoll(20_000),
 });
 
 /** The write. The digest is REQUIRED by the door and is the whole point of it: without naming a

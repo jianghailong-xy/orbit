@@ -14,6 +14,7 @@ import {
 } from '../lib/machineSetupCopy';
 import { sessionQuery, workspacesQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
+import { useRefreshSessionLists } from '../lib/useControlPlane';
 import { Input } from './ui/Input';
 import './MachineSetupCard.css';
 
@@ -34,6 +35,7 @@ export function CreatedWorkspaceLine({
   runnerId: string;
 }) {
   const qc = useQueryClient();
+  const refreshSessionLists = useRefreshSessionLists();
   const navigate = useNavigate();
   const message = useToast();
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -45,7 +47,7 @@ export function CreatedWorkspaceLine({
       );
       void qc.invalidateQueries({ queryKey: workspacesQuery().queryKey });
       // The session list's rows carry the name too, and the column's title reads it from them.
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
     },
     onError: (e: Error) => message.error(CREATED_RENAME_FAILED, e.message),
   });

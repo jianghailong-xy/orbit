@@ -91,7 +91,7 @@ describe('project summaries ride the control-plane stream', () => {
   it('project.changed refreshes sidebar summaries and the session list', async () => {
     const client = await mount();
     await publish('project.changed', { id: 'P1' });
-    await advance(500);
+    await advance(1_000);
     expect(invalidated(client, PROJECTS)).toBe(true);
     expect(invalidated(client, SESSIONS)).toBe(true);
     expect(invalidated(client, PROJECT_PAGE)).toBe(false);
@@ -101,10 +101,10 @@ describe('project summaries ride the control-plane stream', () => {
     const client = await mount();
     const data = { id: 'S1', projectMembership: { projectId: 'P1', role: 'TASK' } };
     await publish('session.updated', data);
-    await advance(500);
+    await advance(1_000);
     expect(invalidated(client, SESSIONS)).toBe(true);
     expect(invalidated(client, PROJECTS)).toBe(false);
-    await advance(1_000);
+    await advance(500);
     await publish('session.updated', data);
     await advance(1_999);
     expect(invalidated(client, PROJECTS)).toBe(false);
@@ -126,7 +126,10 @@ describe('project summaries ride the control-plane stream', () => {
 
   it('reconciles project summaries when the stream reconnects', async () => {
     const client = await mount();
-    await act(async () => { FakeEventSource.open[0].onopen?.(); });
+    // A stream that opens after one dropped: the page's first stream reads nothing again.
+    await act(async () => { FakeEventSource.open[0].onerror?.(); });
+    await advance(1_500);
+    await act(async () => { FakeEventSource.open[1].onopen?.(); });
     expect(invalidated(client, PROJECTS)).toBe(true);
     expect(invalidated(client, PROJECT_SESSIONS)).toBe(true);
     expect(invalidated(client, OTHER_PROJECT_SESSIONS)).toBe(true);
@@ -137,7 +140,7 @@ describe('project summaries ride the control-plane stream', () => {
     await publish('session.updated', { projectMembership: { projectId: 'P1' } });
     await advance(400);
     await publish('session.updated', { projectMembership: { projectId: 'P1' } });
-    await advance(499);
+    await advance(999);
     expect(invalidated(client, PROJECT_SESSIONS)).toBe(false);
     await advance(1);
     expect(invalidated(client, PROJECT_SESSIONS)).toBe(true);
@@ -149,7 +152,7 @@ describe('project summaries ride the control-plane stream', () => {
     const client = await mount();
     client.setQueryData(PROJECT_SESSIONS, [{ id: 'S1' }]);
     await publish('session.updated', { id: 'S1', projectMembership: null });
-    await advance(500);
+    await advance(1_000);
     expect(invalidated(client, PROJECT_SESSIONS)).toBe(true);
     expect(invalidated(client, OTHER_PROJECT_SESSIONS)).toBe(false);
   });
@@ -168,7 +171,7 @@ describe('project summaries ride the control-plane stream', () => {
     const client = await mount();
     client.setQueryData(PROJECT_SESSIONS, [{ id: 'S1' }]);
     await publish('session.ended', { lifecycleState: 'COMPLETED', endReason: 'task_done' });
-    await advance(500);
+    await advance(1_000);
     expect(invalidated(client, PROJECT_SESSIONS)).toBe(true);
     expect(invalidated(client, COMPLETED_PROJECT_SESSIONS)).toBe(true);
     expect(invalidated(client, OTHER_PROJECT_SESSIONS)).toBe(false);
@@ -180,7 +183,7 @@ describe('project summaries ride the control-plane stream', () => {
     if (source === 'workspace-list') client.setQueryData(SESSIONS, [member]);
     else client.setQueryData(['session', 'S1'], member);
     await publish('session.ended', { lifecycleState: 'COMPLETED' });
-    await advance(500);
+    await advance(1_000);
     expect(invalidated(client, COMPLETED_PROJECT_SESSIONS)).toBe(true);
     expect(invalidated(client, OTHER_PROJECT_SESSIONS)).toBe(false);
   });
@@ -188,7 +191,7 @@ describe('project summaries ride the control-plane stream', () => {
   it('does not re-read a project for an unrelated lifecycle-ended frame', async () => {
     const client = await mount();
     await publish('session.ended', { lifecycleState: 'COMPLETED' });
-    await advance(500);
+    await advance(1_000);
     expect(invalidated(client, PROJECT_SESSIONS)).toBe(false);
     expect(invalidated(client, COMPLETED_PROJECT_SESSIONS)).toBe(false);
     expect(invalidated(client, OTHER_PROJECT_SESSIONS)).toBe(false);
@@ -205,7 +208,9 @@ describe('project summaries ride the control-plane stream', () => {
     expect(invalidated(client, PROJECT_SESSIONS)).toBe(false);
   });
 
-  it('keeps the sidebar summary poll as the fallback for missed events', () => {
-    expect(openProjectsQuery().refetchInterval).toBe(15_000);
+  it('keeps a slow sidebar summary poll as the fallback for missed events', () => {
+    // Once a minute while the stream is live (docs/list-freshness-design.md R1): events keep it current.
+    const interval = openProjectsQuery().refetchInterval as (query: { queryHash: string }) => number;
+    expect(interval({ queryHash: '["projects","sidebar"]' })).toBe(60_000);
   });
 });
