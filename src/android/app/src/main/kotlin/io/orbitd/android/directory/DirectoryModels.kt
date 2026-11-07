@@ -1,5 +1,7 @@
 package io.orbitd.android.directory
 
+import io.orbitd.android.core.cards.CoordinatorDelivery
+import io.orbitd.android.core.cards.CoordinatorDeliveryLine
 import io.orbitd.android.core.protocol.SessionCapabilities
 import io.orbitd.android.navigation.ObjectId
 import java.time.Instant
@@ -7,6 +9,7 @@ import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -45,6 +48,11 @@ data class DirectorySession(
     /** Who sent [lastUserText], when another Orbit session did: the row names that session instead of saying "You"
      *  ([SessionLine.sender]). Null for the owner's own words, and from an older server, which does not send it. */
     val lastUserFrom: SessionMessageFrom? = null,
+    /** That [lastUserText] is Orbit's own message (a coordinator's notification, a watch's wake, the owner's answer handed on…), with
+     *  the notification card its line is written from: the row says "Orbit: …" ([SessionLine.orbitLine], read by [OrbitMessageFrom.of]).
+     *  Null for anybody else's words, and from an older server. Kept as the JSON it came as, so a shape this build cannot read is no
+     *  mark rather than a list that fails to decode. */
+    val lastUserFromOrbit: JsonElement? = null,
     /** The rolling recap the server wrote about this session and when it wrote it (0418), clipped like the previews beside it; the
      *  line the list prefers to [lastAssistantText]. Both null on a session no pass has recapped yet, and from a server that writes
      *  no recaps (`ORBIT_RECAP_ENABLED=0`) — exactly what the row falls back from. The account's Session recaps switch can also hold
@@ -73,6 +81,18 @@ data class DirectorySession(
  * only in part still says that someone other than the owner sent it. */
 @Serializable
 data class SessionMessageFrom(val sessionId: String? = null, val title: String? = null)
+/** That the message a session row previews is Orbit's own: a turn the control plane wrote itself (`@orbit/shared` and OrbitKit
+ * `OrbitMessageFrom`, design §3.5, owner 2026-11-07). [coordinatorDelivery] is the card the conversation draws a coordinator's
+ * notification as, read by the conversation's own rule ([CoordinatorDeliveryLine.parse]): the row says that line's sentence. Null for
+ * every other message of Orbit's — and for a card this build cannot read — whose row says its first line. */
+data class OrbitMessageFrom(val coordinatorDelivery: CoordinatorDelivery? = null) {
+    companion object {
+        /** A row's `lastUserFromOrbit`, read as OrbitKit reads it: an object is Orbit's mark, anything else none. */
+        fun of(value: JsonElement?): OrbitMessageFrom? = (value as? JsonObject)?.let { mark ->
+            OrbitMessageFrom((mark["coordinatorDelivery"] as? JsonObject)?.let { CoordinatorDeliveryLine.parse(it) })
+        }
+    }
+}
 /** What a LANDING session row says about its subject (`SessionLandingSummary`, contract §2.9 LS6): the subject it represents and where
  * it stands, so the project's Landings window can put a landing still in hand under `Now` and a settled one in the day it settled, and
  * the page's Landings row can count them. Every slot optional, so a server that sends less still decodes. */

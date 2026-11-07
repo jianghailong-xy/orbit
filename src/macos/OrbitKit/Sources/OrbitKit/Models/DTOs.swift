@@ -520,6 +520,12 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// server writes and clears it with `lastUserText`, and an event folds neither into a row
     /// (`SessionUpsert`), so a row always holds the pair one read gave it.
     public let lastUserFrom: SessionMessageFrom?
+    /// That `lastUserText` is Orbit's own message (a coordinator's notification, a watch's wake, the
+    /// owner's answer handed on…), with the notification card its line is written from: the row says
+    /// `Orbit: …` (`SessionLine.orbitLine`). Nil for anybody else's words, and from an older control
+    /// plane, which does not send it. Written and cleared with `lastUserText`, and kept beside it as
+    /// `lastUserFrom` is (`SessionUpsert`).
+    public let lastUserFromOrbit: OrbitMessageFrom?
     /// The rolling recap the server wrote about this session (0418) and when it wrote it — the
     /// sentence the list prefers to `lastAssistantText`. Both nil on a session no pass has recapped
     /// yet, and on a server writing no recaps (ORBIT_RECAP_ENABLED=0): exactly what the row falls
@@ -706,6 +712,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         // A sender this build cannot read is none: the row says "You", as it always did, rather than
         // the whole list failing to decode.
         lastUserFrom = try? values.decodeIfPresent(SessionMessageFrom.self, forKey: .lastUserFrom)
+        // The same for Orbit's mark: a value this build cannot read is none, and the row says "You".
+        lastUserFromOrbit = try? values.decodeIfPresent(OrbitMessageFrom.self, forKey: .lastUserFromOrbit)
         recapText = try values.decodeIfPresent(String.self, forKey: .recapText)
         recapAt = try values.decodeIfPresent(String.self, forKey: .recapAt)
         runningBgCount = try values.decodeIfPresent(Int.self, forKey: .runningBgCount)
@@ -744,6 +752,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 lastAssistantText: String? = nil,
                 lastToolUse: String? = nil, lastUserText: String? = nil,
                 lastUserFrom: SessionMessageFrom? = nil,
+                lastUserFromOrbit: OrbitMessageFrom? = nil,
                 recapText: String? = nil, recapAt: String? = nil,
                 runningBgCount: Int? = nil,
                 runningBgJobCount: Int? = nil,
@@ -820,6 +829,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.lastToolUse = lastToolUse
         self.lastUserText = lastUserText
         self.lastUserFrom = lastUserFrom
+        self.lastUserFromOrbit = lastUserFromOrbit
         self.recapText = recapText
         self.recapAt = recapAt
         self.runningBgCount = runningBgCount

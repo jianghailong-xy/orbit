@@ -183,8 +183,9 @@ final class SessionLineSenderTests: XCTestCase {
         XCTAssertTrue(web.contains("return (typeof from.title === 'string' ? from.title.trim() : '') || SESSION_MESSAGE_UNTITLED;"),
                       "the web no longer names an untitled sender as the card does")
         XCTAssertEqual(SessionLine.sender(SessionMessageFrom(sessionId: "s", title: " ")), SessionMessageCard.untitled)
-        // Both of the web's lines that show a pending message name who sent it, and neither says You alone.
-        XCTAssertEqual(web.components(separatedBy: "return sentLine(s.lastUserText, sentBy(s));").count - 1, 2)
+        // Both of the web's lines that show a pending message name who sent it — Orbit, when Orbit wrote it
+        // (SessionLineOrbitTests) — and neither says You alone.
+        XCTAssertEqual(web.components(separatedBy: "return orbitLine(s) ?? sentLine(s.lastUserText, sentBy(s));").count - 1, 2)
         XCTAssertFalse(web.contains("`You: "), "the web still says You: whoever sent the message")
     }
 }

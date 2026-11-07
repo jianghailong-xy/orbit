@@ -47,7 +47,9 @@ import {
   RETRY_CLAIM_WINDOW_MS,
   SESSION_REPLY_TURN_PREFIX,
 } from './session-request';
-import { AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
+import { AUTO_RETRY_ORBIT_TURN_KEY_PREFIX, AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
+import { isOrbitAuthoredTurnOf, openingTurnKey } from './orbit-authored-turn';
+import { readTaskStartCard } from '../tasks/task-start-card';
 import {
   confirmationReviewRetryTurnId,
   isConfirmationReviewContentTurn,
@@ -116,6 +118,12 @@ interface ResendMessage {
   attachmentsOf: string | null;
   senderSessionId: string | null;
   turnId: string | null;
+  /**
+   * The control plane wrote these words (orbit-message.ts `orbitMessageOf`, read off the turn they come
+   * from): the re-send goes under `auto-retry:orbit:`, so it is Orbit's where the message was — on the
+   * row and on the queue. Absent for the owner's words and another session's.
+   */
+  orbit?: true;
   sessionReplies?: true;
   /** The key of a failed confirmation-review or return turn, which is re-sent as itself. */
   confirmationReviewTurn?: string;
@@ -127,6 +135,8 @@ interface ResendMessage {
  * press that wrote it, and for the message it re-sent (`resendRetryMessage`'s `pressAlreadyOut`).
  */
 const MANUAL_RETRY_TURN_KEY_PREFIX = `${AUTO_RETRY_TURN_KEY_PREFIX}retry-message:`;
+/** The same press over a message Orbit wrote, in the re-send namespace `isOrbitAuthoredTurn` counts. */
+const MANUAL_RETRY_ORBIT_TURN_KEY_PREFIX = `${AUTO_RETRY_ORBIT_TURN_KEY_PREFIX}retry-message:`;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -142,11 +152,22 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * A message whose words never became a turn row — a pre-attribution echo, the seeded opening prompt —
  * is keyed by the words themselves: the same text typed twice and failing twice then collapses onto
  * one turn, which is the safe direction for a door whose whole promise is "once".
+ *
+ * A message Orbit wrote is re-sent under `auto-retry:orbit:retry-message:` instead, so its re-send is
+ * Orbit's too (`ResendMessage.orbit`); the source the key names is the same.
  */
-export function manualRetryTurnKey(message: { turnId: string | null; content: string }): string {
+export function manualRetryTurnKey(message: { turnId: string | null; content: string; orbit?: true }): string {
   const source = message.turnId
     ?? createHash('sha256').update(message.content).digest('hex').slice(0, 32);
-  return `${MANUAL_RETRY_TURN_KEY_PREFIX}${source}`;
+  return `${message.orbit ? MANUAL_RETRY_ORBIT_TURN_KEY_PREFIX : MANUAL_RETRY_TURN_KEY_PREFIX}${source}`;
+}
+
+/** What a turn written by the failure card's Retry names after its prefix, or null for any other key. */
+function manualRetrySourceOf(clientTurnId: string): string | null {
+  for (const prefix of [MANUAL_RETRY_ORBIT_TURN_KEY_PREFIX, MANUAL_RETRY_TURN_KEY_PREFIX]) {
+    if (clientTurnId.startsWith(prefix)) return clientTurnId.slice(prefix.length);
+  }
+  return null;
 }
 
 /** The refusal of a Retry pressed when the session is not stopped on a failure (§8 criterion 22). */
@@ -831,7 +852,9 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
               // again, so its outcomes are found, merged and drawn as what they are.
               clientTurnId: resendsReplies
                 ? `${SESSION_REPLY_TURN_PREFIX}retry:${randomUUID()}`
-                : resendsReview ?? `${AUTO_RETRY_TURN_KEY_PREFIX}${randomUUID()}`,
+                : resendsReview
+                  // Orbit's words are re-sent as Orbit's (`ResendMessage.orbit`); the owner's as theirs.
+                  ?? `${message.orbit ? AUTO_RETRY_ORBIT_TURN_KEY_PREFIX : AUTO_RETRY_TURN_KEY_PREFIX}${randomUUID()}`,
             },
             {
               ...this.resendCarrying(session.id, message, resendsReplies),
@@ -1210,8 +1233,9 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       where: { id: message.turnId, sessionId },
       select: { clientTurnId: true },
     });
-    if (!turn?.clientTurnId.startsWith(MANUAL_RETRY_TURN_KEY_PREFIX)) return null;
-    const source = turn.clientTurnId.slice(MANUAL_RETRY_TURN_KEY_PREFIX.length);
+    if (!turn) return null;
+    const source = manualRetrySourceOf(turn.clientTurnId);
+    if (source === null) return null;
     return { key: turn.clientTurnId, attachmentsOf: UUID.test(source) ? source : null };
   }
 
@@ -1315,6 +1339,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
             targetTurn: {
               select: {
                 id: true,
+                clientTurnId: true,
                 kind: true,
                 sendIntent: true,
                 deliveryStatus: true,
@@ -1327,6 +1352,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       : [];
     type RetryTurn = {
       id: string;
+      clientTurnId: string;
       kind: string;
       sendIntent: string | null;
       deliveryStatus: string | null;
@@ -1344,6 +1370,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       id: turn.id,
       content: turn.content ?? '',
       senderSessionId: turn.senderSessionId ?? null,
+      clientTurnId: turn.clientTurnId,
     }]));
 
     const executableFor = (turnId: string) => {
@@ -1365,7 +1392,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     };
 
     let chosen: (typeof events)[number] | undefined;
-    let chosenDurable: { id: string; content: string; senderSessionId: string | null } | undefined;
+    let chosenDurable: { id: string; content: string; senderSessionId: string | null; clientTurnId: string } | undefined;
     let content = '';
     for (let i = events.length - 1; i >= 0; i--) {
       const event = events[i];
@@ -1419,6 +1446,17 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       if (opening.trim()) content = opening;
     }
     if (!content) return { content: '', attachmentsOf: null, senderSessionId: null, turnId: null };
+    const senderSessionId = chosenDurable?.senderSessionId ?? null;
+    // Whether Orbit wrote those words, read off the turn they come from by the rule the row reads its
+    // echo with (`orbitMessageOf`), so the re-send is Orbit's exactly where the message was. The opening
+    // prompt with no turn row behind it is read under the key it would have been filed under. An echo
+    // with no turn row says nothing of who wrote it, and is the owner's, as it always was.
+    const source = chosenDurable
+      ? { clientTurnId: chosenDurable.clientTurnId, content: chosenDurable.content }
+      : !chosen
+        ? { clientTurnId: openingTurnKey(sessionId), content }
+        : null;
+    const orbit = source && !senderSessionId && await this.wroteByOrbit(sessionId, source);
     // The turn THAT message came from, never merely the session's latest turn: pairing these words
     // with a later turn's images would re-send a message the user never wrote.
     return {
@@ -1429,10 +1467,31 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       attachmentsOf: chosenDurable?.id ?? (chosen ? chosen.turnId : seeded?.id ?? null),
       // Read off the same durable turn as the words. An echo with no turn row behind it, and the
       // opening prompt, are nobody's session's message.
-      senderSessionId: chosenDurable?.senderSessionId ?? null,
+      senderSessionId,
       // ...and so is the request those words were, when they were one: it sits on that turn.
       turnId: chosenDurable?.id ?? null,
+      ...(orbit ? { orbit: true as const } : {}),
     };
+  }
+
+  /**
+   * Whether the control plane wrote the turn a retry re-sends (`ResendMessage.orbit`), by the rule the
+   * row reads its echo with (orbit-message.ts `orbitMessageOf`): its key is one of the platform's own,
+   * it opened a session the platform opened with a prompt of its own (`isOrbitAuthoredTurnOf`), or it is
+   * a task run's brief on the turn that opened its run — the one card a turn can be drawn as whose key
+   * alone does not say so (`readTaskStartCard`); every other card is read under a key of the platform's.
+   */
+  private async wroteByOrbit(
+    sessionId: string,
+    turn: { clientTurnId: string; content: string },
+  ): Promise<boolean> {
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { id: true, taskId: true, runSource: true, promptByOrbit: true },
+    });
+    if (!session) return false;
+    if (isOrbitAuthoredTurnOf(session, turn.clientTurnId)) return true;
+    return (await readTaskStartCard(this.prisma, session, turn)) !== null;
   }
 
   /**

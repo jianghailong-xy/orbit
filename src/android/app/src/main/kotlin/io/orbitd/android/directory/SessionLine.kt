@@ -7,6 +7,7 @@ import io.orbitd.android.projects.ProjectDone
 import io.orbitd.android.projects.ProjectTime
 import io.orbitd.android.projects.StartProjectCopy
 import io.orbitd.android.tasks.OwnerConfirmationCopy
+import io.orbitd.android.core.cards.CoordinatorDeliveryLine
 import io.orbitd.android.tasks.TaskDetailCopy
 import io.orbitd.android.watch.WatchSessionSummary
 import java.time.Instant
@@ -58,7 +59,7 @@ data class SessionLine(val text: String, val tone: Tone) {
                 // A sub-agent or workflow in flight: its launch cleared the tool line at once.
                 s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.subagentRunning(it)), Tone.RUNNING) }
                 // The agent hasn't answered yet: the message it was sent, not the previous turn's reply.
-                s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return sentLine(it, s.lastUserFrom) }
+                s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return orbitLine(it, OrbitMessageFrom.of(s.lastUserFromOrbit)) ?: sentLine(it, s.lastUserFrom) }
                 s.lastAssistantText?.takeIf { it.isNotEmpty() }?.let { return SessionLine(plainPreview(it), Tone.PREVIEW) }
                 return SessionLine(SessionLineCopy.running, Tone.RUNNING)
             }
@@ -70,7 +71,7 @@ data class SessionLine(val text: String, val tone: Tone) {
             // Parked, with a background process still up: not idle, not the agent working either.
             if (live) s.runningBgCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.bgRunning(it)), Tone.BACKGROUND) }
             // A message that never got an answer is newer than the reply before it, and what the session waits on.
-            s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return sentLine(it, s.lastUserFrom) }
+            s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return orbitLine(it, OrbitMessageFrom.of(s.lastUserFromOrbit)) ?: sentLine(it, s.lastUserFrom) }
             // The rolling recap (0418) takes the place of the reply preview it used to show, below every live line above and
             // above the raw reply. Off with the account's Session recaps switch, the line falls through to the reply exactly
             // as it did before the recap existed. Unlabelled (the owner, 2026-10-22): the whole line is the sentence, and when
@@ -89,6 +90,18 @@ data class SessionLine(val text: String, val tone: Tone) {
          * 2026-11-07). A coordinator's unanswered message is usually a task's report, which "You:" put in the owner's mouth. */
         internal fun sender(from: SessionMessageFrom?): String =
             if (from == null) SessionLineCopy.you else from.title?.trim()?.takeIf { it.isNotEmpty() } ?: TaskDetailCopy.untitledSession
+
+        /** The line for a message Orbit wrote itself (OrbitKit `SessionLine.orbitLine`, web `orbitLine`; design §3.5, owner 2026-11-07),
+         * or null for anybody else's: Orbit says it, never "You", which put "You: From Orbit · project …" on a coordinator's row while it
+         * read the notification. A notification the conversation draws as a line says that line's own sentence
+         * ([CoordinatorDeliveryLine.sentence]); any other says its first line, flattened like a preview — the rest is written for the
+         * agent. */
+        internal fun orbitLine(text: String, mark: OrbitMessageFrom?): SessionLine? {
+            mark ?: return null
+            val said = mark.coordinatorDelivery?.let { CoordinatorDeliveryLine.sentence(it) }
+                ?: plainPreview(text.split('\n').firstOrNull { it.isNotBlank() }.orEmpty())
+            return SessionLine(SessionLineCopy.sent(SessionLineCopy.orbit, said), Tone.PREVIEW)
+        }
     }
 }
 
@@ -104,6 +117,8 @@ internal object SessionLineCopy {
     fun sent(sender: String, text: String) = "$sender: $text"
     /** The owner, as the sender of their own message (web `SENT_BY_YOU`). */
     const val you = "You"
+    /** Orbit, as the sender of its own messages (web `SENT_BY_ORBIT`). */
+    const val orbit = "Orbit"
     /** Work still under way, as the line says it: the label and an ellipsis ("Running Agent…"). */
     fun ongoing(label: String) = "$label…"
     /** The runtime's own sub-agents and workflows (web `subagentRunningLabel`). */

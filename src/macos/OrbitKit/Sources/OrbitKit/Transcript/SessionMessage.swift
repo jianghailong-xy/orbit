@@ -98,6 +98,29 @@ public struct SessionMessageFrom: Sendable, Equatable, Codable {
     }
 }
 
+/// That the message a session row previews (`Session.lastUserText`) is Orbit's own: a turn the control
+/// plane wrote itself — a fact told to a coordinator, the answer to a criteria proposal, a watch's wake,
+/// the owner's answer handed on, a task run's brief (docs/session-list-projects-design.md §3.5, owner
+/// 2026-11-07). Mirrors `@orbit/shared`'s `OrbitMessageFrom`. The rows carry it as `lastUserFromOrbit`,
+/// nil for anybody else's words, and the row says `Orbit: …` (`SessionLine.orbitLine`).
+public struct OrbitMessageFrom: Sendable, Equatable, Codable {
+    /// The card the conversation draws a coordinator's notification as, read by the conversation's own
+    /// rule (`CoordinatorDelivery.parseCard`): the row says that line's sentence. Nil for every other
+    /// message of Orbit's — and for a card this build cannot read — whose row says its first line.
+    public let coordinatorDelivery: CoordinatorDelivery?
+
+    public init(coordinatorDelivery: CoordinatorDelivery? = nil) {
+        self.coordinatorDelivery = coordinatorDelivery
+    }
+
+    private enum CodingKeys: String, CodingKey { case coordinatorDelivery }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        coordinatorDelivery = CoordinatorDelivery.parseCard(try? values.decodeIfPresent(JSONValue.self, forKey: .coordinatorDelivery))
+    }
+}
+
 /// What the card says, in the web's own words: `lib/sessionMessage.ts`, which
 /// `SessionMessageCopyParityTests` holds this end to.
 public enum SessionMessageCard {

@@ -25,6 +25,18 @@ export const SESSION_REPLY_TURN_KEY_PREFIX = 'session-reply:';
 export const AUTO_RETRY_TURN_KEY_PREFIX = 'auto-retry:';
 
 /**
+ * The part of the re-send namespace a re-send of Orbit's own words is written under: the sweep's and the
+ * failure card's Retry alike, when the message they re-send is one the control plane wrote (a fact told
+ * to a coordinator, a watch's wake, a task run's brief, the opening of a session the platform opened —
+ * orbit-message.ts `orbitMessageOf`). Counted by `isOrbitAuthoredTurn`, so the re-send is Orbit's where
+ * the message it re-sends was: on the session row (`lastUserFromOrbit`) and on the queue
+ * (`authoredByOrbit`). A re-send of the owner's own words stays under the bare prefix above, and is
+ * still the owner's (docs/session-list-projects-design.md §3.5). Inside the reserved prefix, so no
+ * caller can take it.
+ */
+export const AUTO_RETRY_ORBIT_TURN_KEY_PREFIX = `${AUTO_RETRY_TURN_KEY_PREFIX}orbit:`;
+
+/**
  * The three namespaces a confirmation request's review is carried in
  * (docs/owner-confirmation-review-contract.md §10 G6, tasks/owner-confirmation-review-turn.ts): the
  * request handed to its reviewer, the reviewer's return handed to the run, and the owner's answers

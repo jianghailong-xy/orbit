@@ -35,6 +35,17 @@ internal class SessionActions(private val api: DirectoryApi, private val scope: 
         OrbitToasts.show("Session completed", toastTitle(title), id, canUndo = true)
     }
 
+    /** Complete on a finished project's row (design §4.3, §3.6; iOS `AppModel.completeProjectSessions`): one press on the
+     * server's project door moves its coordinator and every member still in Open to Completed; the lists are read again after. */
+    fun completeProject(projectId: String, title: String?) = scope.launch {
+        try { api.completeProject(projectId) }
+        catch (cancel: CancellationException) { throw cancel }
+        catch (failure: Exception) {
+            OrbitToasts.show("Couldn't complete the project's sessions", toastTitle(title), detail = toastDetail(failure), tone = ToastTone.ERROR)
+        }
+        changed()
+    }
+
     /** Also every Undo: the server's `restore` clears both completion and trash. An Undo can come while the move to Trash is still
      * reading the lists again; the row is coming back, so nothing may keep it out now (iOS `moveSessionToOpen`). */
     fun restore(id: String, title: String?): Job {

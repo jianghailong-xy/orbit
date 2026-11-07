@@ -10,7 +10,7 @@ import {
 import type { SessionCapabilities } from './dto';
 import type { ConfirmationUnderReview } from './owner-confirmation-review';
 import type { SessionOwnerItem, SessionWaitingKind } from './project-progress';
-import type { SessionMessageFrom } from './session-message';
+import type { OrbitMessageFrom, SessionMessageFrom } from './session-message';
 import type { SessionRequestPeer } from './session-request';
 import type { SessionSourceRefusalDetail, SourceRefusalCode, SourceState } from './source';
 
@@ -296,6 +296,11 @@ export interface ControlSessionSummary {
    *  with `lastUserText` — a value, so a client folding this summary into a row drops the sender it
    *  held; only an absent key, from an older control plane, means "unchanged". */
   lastUserFrom?: SessionMessageFrom | null;
+  /** That `lastUserText` is Orbit's own message (`OrbitMessageFrom`), with the notification card to
+   *  write its line from when it is one: the row then says `Orbit: …`. Null for any other sender, and
+   *  cleared with `lastUserText` — a value, as `lastUserFrom` is; only an absent key, from an older
+   *  control plane, means "unchanged". */
+  lastUserFromOrbit?: OrbitMessageFrom | null;
 }
 
 /** `data` for `session.ended`. */
