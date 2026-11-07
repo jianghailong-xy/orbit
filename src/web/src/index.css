@@ -8333,6 +8333,19 @@ button.chat-jump-start:hover {
   overflow: hidden;
   cursor: zoom-in;
 }
+/* In a conversation a Markdown picture pages with the others (.chat-image-btn), and keeps the place
+   and size the .orbit-image above gives it: a block of its own between paragraphs, which the
+   picture fills. */
+.md .chat-image-btn {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 10px 0;
+}
+.md .chat-image-btn .md-image {
+  width: 100%;
+  height: auto;
+}
 .md-image {
   display: block;
   max-width: min(100%, 760px);

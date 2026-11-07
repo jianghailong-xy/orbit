@@ -427,7 +427,7 @@ describe('only a raster image is drawn', () => {
     await openPage(node);
     await click(tile('webkit-light-phone/webkit.png'));
     expect(viewer().querySelector('.orbit-image-preview-progress')?.textContent).toBe('6 of 6');
-    expect(viewer().querySelector<HTMLButtonElement>('[aria-label="Next image"]')?.disabled).toBe(true);
+    expect(viewer().querySelector<HTMLButtonElement>('[aria-label="Next image"]')?.getAttribute('aria-disabled')).toBe('true');
   });
 
   it('says so when a save fails', async () => {

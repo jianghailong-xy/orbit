@@ -10,7 +10,7 @@
 | | |
 |---|---|
 | 参数落点 | `docker-compose.yml` → `services.postgres.command`（为什么是这里，见 §0.1） |
-| 核对生效值 | `docker exec orbit-postgres psql -U orbit -d orbit -c "select name,setting,unit,source from pg_settings where name in ('statement_timeout','lock_timeout','idle_in_transaction_session_timeout','work_mem','shared_buffers','jit')"` |
+| 核对生效值 | `docker exec orbit-postgres psql -U orbit -d orbit -c "select name,setting,unit,source from pg_settings where name in ('statement_timeout','lock_timeout','idle_in_transaction_session_timeout','work_mem','shared_buffers','jit','effective_cache_size')"` |
 | 相关 | `docs/postgres-lock-order.md`（锁序）· `docs/postgres-conflict-runbook.md`（冲突）· `docs/postgres-backup-restore.md`（归档） |
 
 ## 0. 一览
@@ -21,8 +21,9 @@
 | `lock_timeout` | `0`（无限） | `30s` | `30s` | 同上 |
 | `idle_in_transaction_session_timeout` | `0`（无限） | `300s` | `300s` | 同上 |
 | `work_mem` | `4MB` | `4MB`（不改） | `4MB` | 结论是不改，见 §4 |
-| `shared_buffers` | `128MB` | `1GB` | **`128MB`** | **未获批准，未落地**，等所有者单独决定，见 §5 |
+| `shared_buffers` | `128MB` | `4GB`（09-17 建议的是 `1GB`，见 §5） | `4GB`（2026-11-06 14:27:52Z 起，`ALTER SYSTEM` 写在 `postgresql.auto.conf`） | 2026-11-06 账号所有者要求提交进 compose，已写进，见 §11 |
 | `jit` | `on`（默认） | `off` | `off`（角色和数据库级设置，不在 compose 里；本次未登生产核对） | 2026-11-01 账号所有者批准，已写进 compose，见 §10 |
+| `effective_cache_size` | `4GB`（默认） | `12GB` | `12GB`（同 `shared_buffers`） | 同 `shared_buffers`，见 §11 |
 
 三个 `0` 是这次复核的主因：**任何一条失控语句、或任何一个忘关事务的客户端，都能无限期持有锁。**
 这已经发生过两次：
@@ -215,13 +216,16 @@ all to disk`（2026-09-28 23:58Z 落 main）把那个 CTE 改成逐项目计数�
 `select calls, temp_blks_written*8192/calls as bytes_per_call, left(query,80) from pg_stat_statements where temp_blks_written > 0 order by temp_blks_written desc;`
 若剩下的应用溢出仍集中在某一条，优先在那条查询里 `SET LOCAL work_mem` 或改写，而不是动全局。
 
-## 5. `shared_buffers`：建议 `128MB` → `1GB`，**未获批准，线上仍是 128MB**
+## 5. `shared_buffers`：`128MB` → `4GB`（2026-11-06，见 §11）
+
+**现状：线上从 2026-11-06 14:27:52Z 起是 `4GB`，compose 的 `command` 里也写上了，见 §11。** 本节下面是 2026-09
+那一轮的记录：当时建议的是 `1GB`，没有落地。
 
 2026-09-29 账号所有者批准的范围只有三个 timeout。`shared_buffers` 是 postmaster 级参数、+896MB 常驻内存、
-必须重建容器，而宿主 swap 全满、根分区只剩 11–12G，**它等所有者单独决定**，本次没有落地。
-compose 里也没有写它——线上的 128MB 来自 `postgresql.conf` 的 initdb 默认值。
+必须重建容器，而宿主 swap 全满、根分区只剩 11–12G，**它等所有者单独决定**，那一轮没有落地。
+compose 里也没有写它——当时线上的 128MB 来自 `postgresql.conf` 的 initdb 默认值。
 
-建议仍然成立，依据如下，供决定时参考：
+当时的依据如下（09-17 的读数，留作记录）：
 
 | 口径 | 实测 |
 |---|---|
@@ -235,9 +239,9 @@ OLTP 的合理目标是 99%+。**为什么建议 1GB 而不是教科书的「内
 是 8 倍于现值、足以让热行与索引页常驻的一步。宿主内存压力解决后（部署运维问题，不在本项目范围内），
 2–4GB 是合理的下一档。
 
-**顺带记录、本次未改的两项：** `effective_cache_size` 仍是默认 4GB（只是规划器提示、不占内存，但改它会改
-执行计划）；容器 `/dev/shm` 只有 docker 默认的 64MB（并行查询的 `dynamic_shared_memory_type=posix` 用它，
-目前的并行 worker 都溢到磁盘而非卡在 shm 上）。
+**顺带记录、那一轮没改的两项：** `effective_cache_size` 当时是默认 4GB（只是规划器提示、不占内存，但改它会改
+执行计划），2026-11-06 起是 12GB，见 §11；容器 `/dev/shm` 当时只有 docker 默认的 64MB（并行查询的
+`dynamic_shared_memory_type=posix` 用它，当时的并行 worker 都溢到磁盘而非卡在 shm 上），后来 compose 给了 256MB，见 §9。
 
 ## 6. 那条空闲 12 天的连接是怎么来的：`docker exec` 的进程不随客户端一起死
 
@@ -380,3 +384,32 @@ autoanalyze 的触发线是 50 + 0.1×行数 ≈ 56.5 万次变更，所以 2026
 
 **核对。** 用 superuser 连接时，`select setting, source from pg_settings where name = 'jit'` 应为
 `off` / `command line`。用 orbit 角色连接时 `SHOW jit` 为 `off`：角色和数据库级设置优先于命令行。
+
+## 11. `shared_buffers` 与 `effective_cache_size`：`128MB` → `4GB`，`4GB` → `12GB`
+
+**结论**：compose 的 `command` 在 `jit=off` 之后加 `-c shared_buffers=4GB` 和 `-c effective_cache_size=12GB`，
+前面是说明它们的三行注释。线上从 2026-11-06 14:27:52Z 起已经是这两个值；同一天账号所有者要求把它们提交进 compose。
+
+**线上先改，compose 后补。** 2026-11-06 生产上用 `ALTER SYSTEM` 把这两个值写进了 `postgresql.auto.conf`，
+容器 14:27:52Z 重启后生效（`shared_buffers` 只在启动时读）。同一天 14:56:58Z，生产部署目录 `/root/orbit` 的
+`docker-compose.yml` 里写进了同样两项的 7 行，却没有提交。工作树不干净，`.claude/skills/upgrade/upgrade.sh`
+不加 `--allow-dirty` 就拒绝运行。这次提交的就是那 7 行，和生产上存下的 patch 逐字节一致。§0.2 说过不要再往
+`postgresql.auto.conf` 里加东西；这次把两项放回本文件管的地方。
+
+**为什么。** compose 注释记的是 2026-11-06 的观察：在 128MB 的默认值下，每次热读都要经过操作系统的页缓存；
+宿主负载 40–50 时，postgres 的 CPU 时间约一半是内核态。宿主共 24GB 内存，`shared_buffers` 取其中 4GB；
+`effective_cache_size` 不占内存，只告诉规划器其余的页缓存也在（§5 记过：改它会改执行计划）。§5 那一轮建议 1GB，
+把 2–4GB 留作宿主内存压力解决后的下一档；这次的 4GB 依据的是上面 11-06 的观察，不是 09-17 的读数。
+
+**代价。** postgres 的 `command` 变了：这个提交进 main 以后，下一次部署会把 postgres 当作依赖重建，期间库不可用
+（§0.1 第 3 条）。生产的有效值不变。
+
+**两处配置。** compose 生效以后，同名参数以命令行的 `-c` 为准：PostgreSQL 文档写明，命令行给的参数覆盖
+`postgresql.conf` 和 `ALTER SYSTEM` 的设置。`postgresql.auto.conf` 里那两行值相同，从此不起作用；要不要用
+`ALTER SYSTEM RESET` 清掉它们，是生产上的操作，不在这次提交里。
+
+**核对。** 用文首的命令（`orbit` 是 superuser，可在 select 里加上 `sourcefile`）。compose 生效前，
+两项的 `source` 是 `configuration file`，`sourcefile` 是 `postgresql.auto.conf`；生效后应为 `command line`，
+`sourcefile` 为空。`setting` 以 8kB 为单位：`shared_buffers` 的 4GB 显示为 `524288`，`effective_cache_size` 的
+12GB 显示为 `1572864`。任务 34t8cNbilotGUeasR269n 在本地的 `postgres:16-alpine`（16.15）上照这个顺序试过：
+先 `ALTER SYSTEM` 再重启，再用同一个数据目录带上与之不同的 `-c` 重建，读到的正是这几种结果，命令行的值胜出。
