@@ -488,6 +488,8 @@ type worktreeSweeper struct {
 	armed              bool
 	nextAt             time.Time
 	resumableWaitUntil time.Time
+	// When the storage budget was measured that the look starting the wait was judged on; zero without a budget.
+	resumableWaitMeasured time.Time
 }
 
 // due reports whether a sweep should run now, advancing the schedule when it says yes. An unarmed
@@ -502,8 +504,12 @@ func (s *worktreeSweeper) due(now time.Time) bool {
 }
 
 // sweepResumable runs the second half of a sweep, unless a look that found nothing is still waiting out its
-// resumableSweepWait, which only a disk back above its floor ends early. A reading that failed says nothing about
+// resumableSweepWait, which a disk back above its floor ends early. A reading that failed says nothing about
 // the disk, so it leaves the wait as it is. This decides when anybody looks and never what may go.
+//
+// A look that found nothing under a storage budget's floor waits resumableBudgetSweepWait instead. Any wait also ends
+// early on a reading under a budget's floor that was judged on a newer measurement of the budget than the look was, if
+// the look had one at all: the volume's usage has moved since, which nothing else tells the schedule.
 //
 // forCheckout is a sweep making room for a session checkout about to be made under a storage budget (makeRoom). It
 // does not wait: that checkout is the change the wait assumes has not happened, and the look stays within the sweep's
@@ -511,15 +517,23 @@ func (s *worktreeSweeper) due(now time.Time) bool {
 func (s *worktreeSweeper) sweepResumable(t *Transport, pool *sessionPool, pressure worktreeGCPressure, forCheckout bool) {
 	if !forCheckout && pool.clock.Now().Before(s.resumableWaitUntil) {
 		pressure = pressure.again()
-		if !pressure.measured || pressure.belowFloor() {
+		if !pressure.measured || pressure.belowFloor() && !pressure.measuredAfter(s.resumableWaitMeasured) {
 			return
 		}
 		s.resumableWaitUntil = time.Time{}
 	}
-	if !gcResumableCheckouts(t, pool, pressure) {
+	foundNothing, last := gcResumableCheckouts(t, pool, pressure)
+	if !foundNothing {
 		return
 	}
-	s.resumableWaitUntil = pool.clock.Now().Add(resumableSweepWait)
+	if last.underBudgetFloor() {
+		s.resumableWaitUntil = pool.clock.Now().Add(resumableBudgetSweepWait)
+		s.resumableWaitMeasured, _ = last.budget.measuredAt()
+		logln(fmt.Sprintf("gc: no resumable checkout can go and the storage budget is still under its floor; not looking again until %s, or sooner once a newer measurement of the volume comes in or the budget is back above its floor",
+			s.resumableWaitUntil.UTC().Format(time.RFC3339)))
+		return
+	}
+	s.resumableWaitUntil, s.resumableWaitMeasured = pool.clock.Now().Add(resumableSweepWait), time.Time{}
 	logln(fmt.Sprintf("gc: no resumable checkout can go and the disk is still under its floor; not looking again until %s, or sooner once the disk is back above its floor",
 		s.resumableWaitUntil.UTC().Format(time.RFC3339)))
 }
