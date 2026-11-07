@@ -57,7 +57,7 @@
 | S3 | 服务端 | 除平铺 Open 列表外的列表端点全都每次完整构建 | 见 2.2 | — |
 | S4 | 服务端 | 版本里哈希了 `runner_presence` 的 ctid:xmin（列表正文带 `lastHeartbeatAt`），每台 runner 每 30 s 心跳一次就让版本变 | `open-list-version.ts:81` | 304 命中率上限被压低 |
 
-（另：调研推断出两处正确性疑点，待复核后另立：`approval.requested` 以 seq 0 发布，载荷超 7000 字节时其他副本按 seq 0 取不到；以及上面的乱序覆盖。）
+（另：调研推断出两处正确性疑点，待复核后另立：`approval.requested` 以 seq 0 发布，载荷超 7000 字节时其他副本按 seq 0 取不到——已由任务 34tKrjpbH0uCYFz9dpJrL 修复，超限的审批卡改按审批 id 通知，其他副本从 approval 表读回重建（`realtime.service.ts` 的 `publish()`，`realtime/approval-relay.pg.spec.ts`）；以及上面的乱序覆盖。）
 
 ## 3. 结论：能不能复用 events 做增量更新
 
