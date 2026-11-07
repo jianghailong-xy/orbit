@@ -244,7 +244,7 @@ export class FeishuOwnerService {
 const text = (words: string) => ({ msgType: 'text', content: { text: words } });
 
 /** The app's credentials, or null when its secret no longer decrypts (§4.1). */
-function credentialsOf(app: { platform: string; appId: string; appSecretEnc: string }): FeishuAppCredentials | null {
+export function credentialsOf(app: { platform: string; appId: string; appSecretEnc: string }): FeishuAppCredentials | null {
   try {
     return { platform: app.platform as FeishuPlatform, appId: app.appId, appSecret: decryptSecret(app.appSecretEnc) };
   } catch {

@@ -193,13 +193,22 @@ export class FeishuAppService {
   }
 
   /**
-   * `PATCH /integrations/feishu`: the app's own switch, and how much an alert card carries (§6.4). 404 while the
-   * account has no app; nothing asked, nothing written.
+   * `PATCH /integrations/feishu`: the app's own switch, how much an alert card carries (§6.4), and the default workspace
+   * the owner's direct messages open sessions in (§7.3). 404 while the account has no app, and for a workspace that is
+   * not the account's own (another account's is answered as one that does not exist); nothing asked, nothing written.
    */
   async change(ownerId: string, change: FeishuAppChange): Promise<FeishuIntegration> {
+    if (change.defaultWorkspaceId) {
+      const workspace = await this.prisma.workspace.findFirst({
+        where: { id: change.defaultWorkspaceId, ownerId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!workspace) throw new NotFoundException('workspace not found');
+    }
     const data = {
       ...(change.enabled !== undefined ? { enabled: change.enabled } : {}),
       ...(change.messageDetail !== undefined ? { messageDetail: change.messageDetail } : {}),
+      ...(change.defaultWorkspaceId !== undefined ? { defaultWorkspaceId: change.defaultWorkspaceId } : {}),
     };
     if (Object.keys(data).length > 0) {
       const { count } = await this.prisma.feishuApp.updateMany({ where: { ownerId }, data });

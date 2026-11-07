@@ -74,6 +74,8 @@ export interface FeishuAppChange {
   enabled?: boolean;
   /** How much an alert card carries (§6.4). Details are stored on Feishu's servers once sent. */
   messageDetail?: FeishuMessageDetail;
+  /** Where a session started from the owner's direct messages opens (§7.3); null clears it. */
+  defaultWorkspaceId?: string | null;
 }
 
 /**

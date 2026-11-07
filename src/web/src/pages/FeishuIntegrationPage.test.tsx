@@ -34,12 +34,16 @@ vi.mock('../lib/toast', () => ({ useToast: () => toast }));
 const copied: string[] = [];
 vi.mock('../lib/clipboard', () => ({ copyText: vi.fn(async (text: string) => (copied.push(text), true)) }));
 const { api } = await import('../api');
-const { CONNECT_ACCOUNT, DISCONNECT_OWNER, FeishuIntegrationPage, MESSAGE_DETAIL_HINT, NOT_ALLOWED_NOTICE, OPEN_BOT, SECRET_UNREADABLE_NOTICE, SEND_TEST } = await import('./FeishuIntegrationPage');
+const { CONNECT_ACCOUNT, DEFAULT_WORKSPACE_HINT, DISCONNECT_OWNER, FeishuIntegrationPage, MESSAGE_DETAIL_HINT, NOT_ALLOWED_NOTICE, OPEN_BOT, SECRET_UNREADABLE_NOTICE, SEND_TEST } = await import('./FeishuIntegrationPage');
 
 const SECRET = 'feishu-secret-never-shown-again';
 
 /** The account's app as the stand-in keeps it: the secret as sent, which no answer carries. */
-let stored: { platform: FeishuPlatform; appId: string; secret: string; enabled: boolean; messageDetail?: FeishuMessageDetail } | null;
+let stored: {
+  platform: FeishuPlatform; appId: string; secret: string; enabled: boolean; messageDetail?: FeishuMessageDetail; defaultWorkspaceId?: string | null;
+} | null;
+/** The account's workspaces, as GET /workspaces answers them. */
+const WORKSPACES = [{ id: 'w1orbit', name: 'orbit' }, { id: 'w2docs', name: 'docs' }];
 let allowed: boolean;
 let secretUnreadable: boolean;
 /** How many replicas the stand-in server says hold the app's long connection. */
@@ -65,7 +69,7 @@ const app = (): FeishuAppSettings | null =>
     enabled: stored.enabled,
     messageDetail: stored.messageDetail ?? 'TITLES_ONLY',
     approvalsInFeishu: true,
-    defaultWorkspaceId: null,
+    defaultWorkspaceId: stored.defaultWorkspaceId ?? null,
     ownerOpenId: owner?.openId ?? null,
     ownerName: owner?.name ?? null,
     botName: null,
@@ -89,6 +93,20 @@ async function click(element: Element | null | undefined, what: string): Promise
   expect(element, `${what} is on screen`).toBeTruthy();
   await act(async () => {
     element!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+  await settle();
+}
+
+/** A full pointer press, as Base UI's list takes one to pick an option. */
+async function press(element: HTMLElement | null | undefined, what: string): Promise<void> {
+  expect(element, `${what} is on screen`).toBeTruthy();
+  await act(async () => {
+    const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+    element!.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse' }));
+    element!.dispatchEvent(new MouseEvent('mousedown', init));
+    element!.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse' }));
+    element!.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+    element!.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
   });
   await settle();
 }
@@ -157,6 +175,7 @@ beforeEach(() => {
   vi.mocked(api).mockReset();
   vi.mocked(api).mockImplementation(async (path: string, options: { method?: string; body?: unknown } = {}) => {
     const method = options.method ?? 'GET';
+    if (path === '/workspaces' && method === 'GET') return WORKSPACES;
     if (path.startsWith('/integrations/feishu/')) {
       ownerRequests.push({ method, path });
       if (path === '/integrations/feishu/connect-codes' && method === 'POST') {
@@ -180,8 +199,9 @@ beforeEach(() => {
       secretUnreadable = false;
     } else if (method === 'PATCH') {
       if (!stored) throw new ApiError('No Feishu app is connected to this account.', 404);
-      const change = options.body as { enabled?: boolean; messageDetail?: FeishuMessageDetail };
+      const change = options.body as { enabled?: boolean; messageDetail?: FeishuMessageDetail; defaultWorkspaceId?: string | null };
       if (change.enabled !== undefined) stored.enabled = change.enabled;
+      if (change.defaultWorkspaceId !== undefined) stored.defaultWorkspaceId = change.defaultWorkspaceId;
       if (change.messageDetail !== undefined) stored.messageDetail = change.messageDetail;
     } else if (method === 'DELETE') {
       stored = null;
@@ -312,6 +332,24 @@ describe('the app connected', () => {
     await click(control(), 'Include details in alerts');
     expect(requests.at(-1)).toEqual({ method: 'PATCH', body: { messageDetail: 'TITLES_ONLY' } });
     expect(control()?.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('chooses the default workspace of direct messages from the account\'s workspaces with PATCH, and clears it', async () => {
+    await open();
+    const row = [...card('Your app')!.querySelectorAll<HTMLElement>('.admin-signin-row')]
+      .find((r) => r.querySelector('.admin-signin-label')?.textContent?.trim() === 'Default workspace');
+    expect(row?.textContent).toContain(DEFAULT_WORKSPACE_HINT);
+    const picker = () => row!.querySelector<HTMLElement>('[role="combobox"]')!;
+    expect(picker().textContent).toContain('None');
+    await click(picker(), 'Default workspace');
+    const listed = [...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')];
+    expect(listed.map((o) => o.textContent)).toEqual(['orbit', 'docs']);
+    await press(listed.find((o) => o.textContent === 'docs'), 'docs');
+    expect(requests.at(-1)).toEqual({ method: 'PATCH', body: { defaultWorkspaceId: 'w2docs' } });
+    expect(picker().textContent).toContain('docs');
+    await click(row!.querySelector('[aria-label="No default workspace"]'), 'clear');
+    expect(requests.at(-1)).toEqual({ method: 'PATCH', body: { defaultWorkspaceId: null } });
+    expect(picker().textContent).toContain('None');
   });
 
   it('replaces the credentials through the same check, the App ID kept and the secret asked for again', async () => {

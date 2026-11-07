@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
 import {
   FEISHU_APP_ID_MAX_LENGTH,
   FEISHU_APP_SECRET_MAX_LENGTH,
@@ -10,6 +10,7 @@ import {
   type FeishuMessageDetail,
   type FeishuPlatform,
 } from '@orbit/shared';
+import { IsPublicId } from '../common/public-id';
 
 /** `PUT /integrations/feishu`: the whole app, its secret included (docs/feishu-bot-design.md §4.1). */
 export class ConnectFeishuAppDto implements FeishuAppConnect {
@@ -34,6 +35,12 @@ export class ChangeFeishuAppDto implements FeishuAppChange {
   @IsOptional()
   @IsIn(FEISHU_MESSAGE_DETAILS)
   messageDetail?: FeishuMessageDetail;
+
+  /** Where the owner's new direct messages open a session (§7.3); null clears it. */
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsPublicId()
+  defaultWorkspaceId?: string | null;
 }
 
 /** `PUT /admin/integrations/feishu`: "Allow accounts to connect Feishu bots". */
