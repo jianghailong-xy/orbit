@@ -1019,6 +1019,9 @@ model ApiserverProcess {
 /// (sessions/open-list-version.ts, migration 0484). Statement-level triggers are the only writer;
 /// the apiserver only reads the table, through `$queryRaw`. The counter can never lag a write, and
 /// may move when the list did not change — the one direction that version is allowed to be wrong.
+/// One row of an (owner, source) counter, keyed `<source>` or `<source>#<n>` (0487): the counter is
+/// the sum of its rows, and a bump takes one no other transaction holds (FOR UPDATE SKIP LOCKED),
+/// inserting the next only when all are held. `open_list_epoch_shard_seq` numbers those rows.
 model OpenListEpoch {
   ownerId String @map("owner_id") @db.Uuid
   source  String

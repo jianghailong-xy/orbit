@@ -107,7 +107,9 @@ export const LOCK_ORDER = [
     rank: 30,
     relation: 'session',
     modes: 'FOR UPDATE (runner lease fence, inbox, lifecycle) · FOR KEY SHARE (task.creator_session_id FK)',
-    why: 'I2. Pre-locked before the first Task/edge write; the entire lock set of a runner events transaction (I3).',
+    why: 'I2. Pre-locked before the first Task/edge write; the entire lock set of a runner events transaction (I3), '
+      + 'besides the Open-list counter rows its Session write bumps, which it takes without waiting (open_list_epoch, '
+      + 'LOCK_ORDER_COMPATIBLE).',
   },
   {
     rank: 40,
@@ -357,6 +359,18 @@ export const LOCK_ORDER_COMPATIBLE = [
     why:
       'Child rows only. They are inserted or updated by the transaction that already holds their ' +
       'Session row, so they introduce no lock their parent has not already given.',
+  },
+  {
+    relation: 'open_list_epoch',
+    why:
+      'Written by the Open-list counter triggers on 29 tables (0484), at whatever rank the written ' +
+      'row has, and in the order the transaction writes them. That is harmless only because a bump ' +
+      'waits for nobody (0487): `open_list_bump` takes a counter row FOR UPDATE SKIP LOCKED, so a ' +
+      'row another transaction holds is passed over, updates the row it then holds, and when every ' +
+      'row is held inserts one keyed from `open_list_epoch_shard_seq`, a key no other insert can be ' +
+      'holding. A lock nobody waits for is no edge of a wait graph. With 0484\'s single row per ' +
+      '(owner, source), held to commit, it was both: writers of one account queued on it, and two ' +
+      'taking two counters in opposite write orders deadlocked (open-list-version.pg.spec.ts).',
   },
 ] as const;
 
