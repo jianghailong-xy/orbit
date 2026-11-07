@@ -126,9 +126,11 @@ describe('TasksSidePanel nav', () => {
     expect({ opened, prevented }).toEqual({ opened: 1, prevented: 1 });
     expect(handleNavActivation({ key: ' ', preventDefault: () => { prevented += 1; } },
       () => { opened += 1; })).toBe(false);
-    // The two surfaces, and a wiki's row in the group under them.
+    // The two surfaces, and a wiki's row in the group under them; and the group's Trash row, which opens a dialog and
+    // is a button (docs/mocks/wiki-trash).
     expect(source.match(/role="link"/g)).toHaveLength(3);
-    expect(source.match(/tabIndex=\{0\}/g)).toHaveLength(3);
+    expect(source.match(/tabIndex=\{0\}/g)).toHaveLength(4);
+    expect(source.match(/role="button"\s+tabIndex=\{0\}/g)).toHaveLength(1);
     expect(source.match(/aria-current=\{sel === t\.key \? 'page' : undefined\}/g)).toHaveLength(1);
     expect(source.match(/aria-current=\{railSel === t\.key \? 'page' : undefined\}/g)).toHaveLength(1);
   });

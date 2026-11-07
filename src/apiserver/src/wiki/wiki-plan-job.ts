@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+import { Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import {
@@ -289,8 +289,10 @@ class PlanJobRebuildWriter {
     return withTransactionRetry(
       this.prisma,
       async (tx) => {
-        await tx.$queryRaw`
-          SELECT "id" FROM "wiki_space" WHERE "id" = ${ask.spaceId}::uuid AND "owner_id" = ${ask.ownerId}::uuid FOR NO KEY UPDATE`;
+        const space = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT "id" FROM "wiki_space"
+           WHERE "id" = ${ask.spaceId}::uuid AND "owner_id" = ${ask.ownerId}::uuid AND "deleted_at" IS NULL FOR NO KEY UPDATE`;
+        if (space.length === 0) throw new NotFoundException('no such wiki space');
         const open = await tx.wikiPlanJob.findFirst({
           where: { ownerId: ask.ownerId, spaceId: ask.spaceId, kind: 'build', version: ask.version, state: { in: [...OPEN_STATES] } },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -388,7 +390,7 @@ export async function makeWikiPlanJobOnServer(
   server: WikiPlanServerJob,
   now: Date = new Date(),
 ): Promise<string | null> {
-  const space = await prisma.wikiSpace.findFirst({ where: { id: job.spaceId, ownerId: job.ownerId }, select: { settings: true } });
+  const space = await prisma.wikiSpace.findFirst({ where: { id: job.spaceId, ownerId: job.ownerId, deletedAt: null }, select: { settings: true } });
   if (!space) return null;
   const settings = storedMaintenance(space.settings);
   const workspace = settings.workspaceId
@@ -554,7 +556,7 @@ export async function wikiPlanJobById(prisma: Db, ownerId: string, jobId: string
  */
 export async function wikiPlanMaterials(prisma: Db, ownerId: string, spaceId: string, now: Date = new Date()): Promise<WikiPlanMaterials> {
   const space = await prisma.wikiSpace.findFirstOrThrow({
-    where: { id: spaceId, ownerId },
+    where: { id: spaceId, ownerId, deletedAt: null },
     select: { id: true, title: true, repoUrlNorm: true, rootCommitSha: true, settings: true },
   });
   const settings = storedMaintenance(space.settings);

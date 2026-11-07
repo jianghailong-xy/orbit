@@ -2750,6 +2750,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // trigger, type or constraint is created, replaced or dropped, so it is not another writer of the DONE fence. No
       // INSERT, UPDATE or DELETE: every stored session reads NULL in both.
       '0485_session_last_user_from',
+      // 0486 (the wiki's Trash) adds five columns, a CHECK and a partial index to `wiki_space` alone, in one DO block that
+      // asks for the table's lock 2 s at a time. It is not a preserved relation, no `task`, `session`, `project` or
+      // `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function, trigger or
+      // type is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '0486_wiki_space_trash',
       // 0487 spreads 0484's Open-list counters over several `open_list_epoch` rows so that writers never queue on one: a
       // new sequence `open_list_epoch_shard_seq`, a new function `open_list_bump`, and CREATE OR REPLACE of 0484's four
       // bump functions to call it. No table, column, constraint or trigger is created, altered or dropped; the functions

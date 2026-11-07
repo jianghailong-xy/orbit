@@ -197,7 +197,7 @@ export async function appendWikiContext(
   });
   if (!binding) return subject.content;
   const space = await tx.wikiSpace.findFirst({
-    where: { id: binding.spaceId, ownerId: subject.ownerId },
+    where: { id: binding.spaceId, ownerId: subject.ownerId, deletedAt: null },
     select: { settings: true },
   });
   if (!space) return subject.content;

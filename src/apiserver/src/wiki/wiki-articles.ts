@@ -757,9 +757,9 @@ export class WikiArticles {
 
   // ── Who asks ──────────────────────────────────────────────────────────────────────────────────
 
-  /** Another owner's space is the plain 404 every tenancy check answers (contract `refusalRules.notFound`). */
+  /** Another owner's space is the plain 404 every tenancy check answers (contract `refusalRules.notFound`), and one in Trash. */
   private async requireSpace(ownerId: string, spaceId: string): Promise<void> {
-    const space = await this.prisma.wikiSpace.findFirst({ where: { id: spaceId, ownerId }, select: { id: true } });
+    const space = await this.prisma.wikiSpace.findFirst({ where: { id: spaceId, ownerId, deletedAt: null }, select: { id: true } });
     if (!space) throw new NotFoundException('no such wiki space');
   }
 

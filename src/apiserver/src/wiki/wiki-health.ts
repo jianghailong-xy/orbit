@@ -34,7 +34,7 @@ export class WikiHealth {
   constructor(private readonly prisma: PrismaService) {}
 
   async read(ownerId: string, spaceId: string, now: Date = new Date()): Promise<WikiSpaceHealth> {
-    const space = await this.prisma.wikiSpace.findFirst({ where: { id: spaceId, ownerId }, select: { settings: true } });
+    const space = await this.prisma.wikiSpace.findFirst({ where: { id: spaceId, ownerId, deletedAt: null }, select: { settings: true } });
     if (!space) throw new NotFoundException('no such wiki space');
     const settings = wikiMaintenanceSettings((space.settings as Record<string, unknown> | null)?.maintenance);
     const entries = await this.prisma.wikiEntry.count({ where: { ownerId, spaceId, status: 'active' } });
