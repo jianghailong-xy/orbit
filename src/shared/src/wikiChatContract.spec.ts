@@ -282,7 +282,7 @@ describe('wiki chat contract', () => {
     // The coordinator's reading of C6: Apply raises a challenge's flag, and the owner answers it in Review, so the
     // contract's `Applied · Confirmed by you` would say the opposite of what happened.
     expect(CONTRACT.chat.copy.card.appliedInReview).toBe('Applied · In Review');
-    expect(CONTRACT.chat.copy.card.appliedInReviewNote).toBe('Re-confirm, amend or retire the entry in Review.');
+    expect(CONTRACT.chat.copy.card.appliedInReviewNote).toBe('Keep, amend or retire the entry in Review.');
     for (const sentence of [WIKI_CHAT_COPY.card.appliedInReview, WIKI_CHAT_COPY.card.appliedInReviewNote]) {
       expect(sentence).not.toMatch(/\bconfirmed\b/iu);
     }
@@ -291,7 +291,7 @@ describe('wiki chat contract', () => {
     expect(applied).toContain('copy.card.appliedInReviewNote');
     expect(applied).toContain('wikiChatAppliedInReview');
     expect(applied).toMatch(/Review item/u);
-    expect(DOC).toContain('`Applied · In Review` · `Re-confirm, amend or retire the entry in Review.`');
+    expect(DOC).toContain('`Applied · In Review` · `Keep, amend or retire the entry in Review.`');
     const pending = [{ op: 'challenge', decision: 'pending' }];
     expect(wikiChatAppliedInReview('applied', pending)).toBe(true);
     expect(wikiChatCardTitle('applied', 'Challenge entry', true)).toBe('Applied · In Review');

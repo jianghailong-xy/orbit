@@ -1855,10 +1855,17 @@
   ],
   "challenge": {
     "answers": [
-      "Re-confirm",
-      "Amend",
-      "Retire"
+      "Keep",
+      "Amend…",
+      "Retire…"
     ],
+    "after": {
+      "label": "After",
+      "keep": "Agents get this entry again. You can still retire it later.",
+      "amend": "Agents get your version, and its anchors are checked again.",
+      "retire": "Agents stop getting it. This cannot be undone."
+    },
+    "retireNote": "Agents stop getting this entry. It stays in History, struck through, and the reason goes on the record. This cannot be undone.",
     "waits": "Agents stop getting this entry until you answer.",
     "challenged": "Challenged",
     "amendNote": "Your version replaces the entry, and its anchors are checked again."

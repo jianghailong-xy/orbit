@@ -26,6 +26,19 @@ class AuxiliaryCardsTest {
                 .filter { it.key.startsWith("wiki-op:") }.all { it.actions.isEmpty() })
         }
     }
+    /** A challenge's chat card answers in Review's words (owner, 2026-11-07): Keep entry is `reconfirm`, then Amend entry
+     * and Retire entry. */
+    @Test fun aChallengesCardAnswersKeepAmendOrRetire() {
+        val changeset = buildJsonObject {
+            put("id", "change")
+            putJsonArray("ops") { add(buildJsonObject { put("id", "op"); put("op", "challenge"); put("entryId", "e1"); put("decision", "pending") }) }
+            putJsonArray("entries") { add(buildJsonObject { put("id", "e1"); put("revision", 3) }) }
+        }
+        val card = AuxiliaryCards.wikiChangeset("session", changeset).single()
+        assertEquals(listOf("Keep entry", "Amend entry", "Retire entry"), card.actions.map { it.label })
+        val body = Wire.json.parseToJsonElement(CardRequests.build(card, CardVerb.WIKI_RECONFIRM).body!!.decodeToString()).jsonObject
+        assertEquals("reconfirm", body.objects("decisions").single().text("action"))
+    }
     @Test fun wikiTrustMarksMatchSharedOwnerCapabilities() {
         fixture("wiki-review-mode.fixture.json").objects("marks").forEach { row ->
             val entry = JsonObject(row.obj("entry")!! + ("id" to JsonPrimitive("entry")))

@@ -169,7 +169,7 @@ export const WIKI_CHAT_COPY = {
     webNote: 'Read before you apply.',
     applied: 'Applied · Confirmed by you',
     appliedInReview: 'Applied · In Review',
-    appliedInReviewNote: 'Re-confirm, amend or retire the entry in Review.',
+    appliedInReviewNote: 'Keep, amend or retire the entry in Review.',
     discarded: 'Discarded',
     notApplied: 'Not applied',
     undone: 'Undone',

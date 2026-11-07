@@ -3215,7 +3215,7 @@ C6（草稿与按压）、C8 与 C9（web）、C11（iOS）、C12（plan 卡）�
 
 | 状态 | 显示 | 条件 | 动作 |
 | --- | --- | --- | --- |
-| `applied` | `Applied · Confirmed by you`；卡里有 challenge、它在按压所记变更集里的决定还是 pending 时写 `Applied · In Review` · `Re-confirm, amend or retire the entry in Review.`，链到那条条目的 Review（`wikiChatAppliedInReview`：按下立起的标记要你在 Review 里答，没有确认任何东西）；plan 卡在 plan 之后又动过、Undo 不可用时写 `The plan has changed since, so this can no longer be undone.`（`wikiChatPlanMovedNote`，C17） | 按过 Apply 或 Edit | Undo（可撤时）· Open entry（entry 卡）· Open in Plan（plan 卡，C17）；重写的动作见 28.8 |
+| `applied` | `Applied · Confirmed by you`；卡里有 challenge、它在按压所记变更集里的决定还是 pending 时写 `Applied · In Review` · `Keep, amend or retire the entry in Review.`，链到那条条目的 Review（`wikiChatAppliedInReview`：按下立起的标记要你在 Review 里答，没有确认任何东西）；plan 卡在 plan 之后又动过、Undo 不可用时写 `The plan has changed since, so this can no longer be undone.`（`wikiChatPlanMovedNote`，C17） | 按过 Apply 或 Edit | Undo（可撤时）· Open entry（entry 卡）· Open in Plan（plan 卡，C17）；重写的动作见 28.8 |
 | `undone` | `Undone` | 按过 Apply，又按了 Undo | — |
 | `discarded` | `Discarded` | 按过 Discard | — |
 | `replaced` | `Replaced` · `A newer draft took over.` | 这场聊天里有新卡替换了它 | — |

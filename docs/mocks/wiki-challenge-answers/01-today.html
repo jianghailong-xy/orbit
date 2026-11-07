@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>01 · 现状：Review 的质疑卡片为什么会把 Retire 按成 Re-confirm</title>
+<link rel="stylesheet" href="board.css">
+<script src="marks.js"></script>
+</head>
+<body>
+
+<h1>01 · 现状：Review 的质疑卡片，Re-confirm 和 Retire 为什么会按反</h1>
+<p class="lede">2026-11-06，任务 A（34snwipJZpZ7fBMfDPhqH）在 changeset 34so6smHP5ywNOPjvYbqa 里提了四条质疑，每条理由的最后一句都是 <b>“Proposed answer: Retire”</b>。四条在 Review 里都被答成了 <b>Re-confirm</b>：条目从 auto / unreviewed 升成 confirmed，又作为现行事实返回给 agent。同一天 23:35Z，同样四条做成 Retire 卡（changeset 34stmJcx3PtpKqU6EUnBD）后，四条都答对了。</p>
+<p class="lede"><span class="tag real">全部是真实画面</span> 数据逐字取自那次 <code>wiki_propose</code>（四条质疑的理由、出处、提议会话 5vD9EcdOwXQIktLuv8GaOn），经本树（main 8480a7f2e）自己的 apiserver、经 runner 入口记下。Web 是这个私有栈上的真实页面（Chromium，1440 宽和 390 宽）；iPhone 是 CI 的 macOS 模拟器跑本树源码编出的 app；Android 是 API 36 模拟器跑本树编出的 debug APK，连的是同一份数据库。红色虚线和数字是标注。</p>
+
+<section class="b-part">
+  <h2>一张质疑卡（Web 桌面，sum_cache_read 这条）</h2>
+  <p class="b-sub">卡的头写着 CHALLENGE，琥珀色一段是质疑的理由，最后一句是它建议的回答。往下约 570 px，才是三个按钮。</p>
+  <div class="b-row">
+    <figure class="b-frame" style="width:600px">
+      <figcaption>现在<span class="b-dim">/wiki/review，第 2 张卡，窗口 1440 宽</span></figcaption>
+      <div class="b-shot" data-w="720">
+        <img src="shots/web-desk-card.png" alt="">
+        <div class="b-ring" data-box="17,54.4,686,174"></div><div class="b-badge" data-box="17,54.4,686,174" data-side="right">1</div>
+        <div class="b-ring" data-box="15,794.9,103.1,34.4"></div><div class="b-badge" data-box="15,794.9,103.1,34.4">2</div>
+        <div class="b-ring" data-box="128.1,794.9,157,34.4"></div><div class="b-badge" data-box="128.1,794.9,157,34.4" data-side="right">3</div>
+        <div class="b-ring" data-box="438.8,802.7,266.2,18.8"></div><div class="b-badge" data-box="438.8,802.7,266.2,18.8">4</div>
+      </div>
+    </figure>
+    <div style="width:960px">
+      <ul class="b-notes">
+        <li class="n" data-n="1"><b>质疑自己的建议写在理由里</b>：“…Proposed answer: Retire (the contract retires a pitfall once its fix lands).” 这是一段自由文本，按钮不知道它，也不跟着它变。</li>
+        <li class="n" data-n="2"><b>Re-confirm 是唯一一个蓝色实心按钮，排第一。</b>按下去：条目留下、变成 Confirmed、重新推送给 agent，锚点以现在的代码为准（契约 <code>anchorRules.verify.answers.reconfirm</code>）。它的意思正好和 ① 相反。</li>
+        <li class="n" data-n="3"><b>Amend 和 Retire 是一样的白底灰字。</b>Retire 是三个里唯一回不去的：契约 <code>reviewModes.effect.rule</code> 写的是 retire 结束一条 lineage，“no revert or Reject could bring back”。三个按钮都没有确认，按下就生效；Amend 会先打开一个表单。</li>
+        <li class="n" data-n="4"><b>卡上唯一的说明</b>是 “Agents stop getting this entry until you answer.” 说的是现在的状态，不是每个回答会怎样，也没说哪个能撤回。</li>
+      </ul>
+      <div class="b-box" style="margin-top:18px">
+        <b>为什么按反（对照下面的 Retire 卡和三端截图）</b>
+        <ul class="b-notes">
+          <li><b>在 Review 里，蓝色实心按钮一直是「照这张卡的提议做」</b>：新增、修改卡是 Accept，Retire 卡是 Retire。只有质疑卡反过来：蓝色的 Re-confirm 是「不照提议做」。所有者 23:35Z 在 Retire 卡上四次都按对，用的是同一个习惯。</li>
+          <li><b>“Re-confirm” 没说确认的是什么。</b>贴在 CHALLENGE、Challenged 和 “Proposed answer: Retire” 旁边，读起来像「确认这条质疑」。</li>
+          <li><b>建议和按钮隔得很远。</b>从那句建议到按钮，桌面上约 570 px，手机上约 740 px，差不多一整屏（844 高，去掉页头约 800）。手指够得着按钮时，那句建议已经滚出屏幕上方（见 ⑥ 左边那张）。</li>
+          <li><b>手机上一张接一张。</b>答完一张，下一张出现在原来的滚动位置，不从它的头开始；web 手机上它的蓝色 Re-confirm 只比刚按的那个低 29 px（见 ⑥）。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="b-part">
+  <h2>三端的按钮（同一张卡，手机竖屏）</h2>
+  <p class="b-sub">三端用的是同一套回答栈（2026-09-25 所有者定：审批卡的回答用同一个组件、同一个顺序，竖排满宽，主按钮在最上）。质疑卡沿用了它，Re-confirm 因此坐在主按钮的位置。</p>
+  <div class="b-row" id="phones">
+    <figure class="b-frame" style="width:300px">
+      <figcaption>Web 手机<span class="b-dim">390 宽，一次一张，1 of 4</span></figcaption>
+      <div class="b-shot" data-w="358"><img src="shots/web-phone-top.png" alt=""><div class="b-ring" data-box="17,54.4,324,349.5"></div><div class="b-badge" data-box="17,54.4,324,349.5" data-side="right">1</div></div>
+      <div class="b-cut">中间约 600 px：字段、出处、锚点</div>
+      <div class="b-shot" data-w="358"><img src="shots/web-phone-foot.png" alt=""><div class="b-ring" data-box="15,87.6,328,42.4"></div><div class="b-badge" data-box="15,87.6,328,42.4">2</div><div class="b-ring" data-box="15,140,328,94.9"></div><div class="b-badge" data-box="15,140,328,94.9">3</div></div>
+    </figure>
+    <figure class="b-frame" style="width:250px">
+      <figcaption>iPhone，卡的上半<span class="b-dim">iPhone 17 Pro 模拟器（iOS 26.5），1 of 4</span></figcaption>
+      <div class="b-shot b-phone" data-w="402"><img src="shots/iphone-review-top.png" alt=""><div class="b-ring" data-box="30,269.7,341.7,292.3"></div><div class="b-badge" data-box="30,269.7,341.7,292.3" data-side="right">1</div></div>
+    </figure>
+    <figure class="b-frame" style="width:250px">
+      <figcaption>iPhone，滑到按钮<span class="b-dim">.borderedProminent + 两个 .bordered</span></figcaption>
+      <div class="b-shot b-phone" data-w="402"><img src="shots/iphone-answers.png" alt=""><div class="b-ring" data-box="30,402.7,342,34.3"></div><div class="b-badge" data-box="30,402.7,342,34.3">2</div><div class="b-ring" data-box="30,447,342,78.6"></div><div class="b-badge" data-box="30,447,342,78.6">3</div></div>
+    </figure>
+    <figure class="b-frame" style="width:250px">
+      <figcaption>Android，卡的上半<span class="b-dim">API 36 模拟器，1 of 4</span></figcaption>
+      <div class="b-shot b-phone" data-w="1080"><img src="shots/android-review-top.png" alt=""><div class="b-ring" data-box="79,923,921,665"></div><div class="b-badge" data-box="79,923,921,665" data-side="right">1</div></div>
+    </figure>
+    <figure class="b-frame" style="width:250px">
+      <figcaption>Android，滑到按钮<span class="b-dim">Button（实心）+ 两个 OutlinedButton</span></figcaption>
+      <div class="b-shot b-phone" data-w="1080"><img src="shots/android-answers.png" alt=""><div class="b-ring" data-box="80,1467,920,125"></div><div class="b-badge" data-box="80,1467,920,125">2</div><div class="b-ring" data-box="80,1620,920,276"></div><div class="b-badge" data-box="80,1620,920,276">3</div></div>
+    </figure>
+  </div>
+  <div class="b-row" style="margin-top:22px">
+    <figure class="b-frame" style="width:620px">
+      <figcaption>Mac（OrbitApp，三栏窗口）<span class="b-dim">同一张卡在右栏，三个回答横排，Re-confirm 实心</span></figcaption>
+      <div class="b-shot" data-w="1000"><img src="shots/mac-review-foot.png" alt=""><div class="b-ring" data-box="659,562,92,24"></div><div class="b-badge" data-box="659,562,92,24">2</div><div class="b-ring" data-box="759,562,136,24"></div><div class="b-badge" data-box="759,562,136,24" data-side="right">3</div></div>
+    </figure>
+  </div>
+</section>
+
+<section class="b-part">
+  <h2>按下 Re-confirm 之后</h2>
+  <p class="b-sub">三端都一样：答复一落地，卡就离开，下一张顶上来；toast 只说 “Re-confirmed” 和条目标题。没有撤回。</p>
+  <div class="b-row" style="flex-wrap:wrap; row-gap:24px; width:1600px">
+    <figure class="b-frame" style="width:520px">
+      <figcaption>Web 桌面，按下后 250 ms<span class="b-dim">卡已离开（重读一次就走），右上角 toast 3 秒</span></figcaption>
+      <div class="b-shot" data-w="1110"><img src="shots/web-desk-press-250ms.png" alt=""><div class="b-ring" data-box="735,15,357,55"></div><div class="b-badge" data-box="735,15,357,55">5</div></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption>Web 手机，按下前<span class="b-dim">手指在 Re-confirm 上</span></figcaption>
+      <div class="b-shot b-phone" data-w="390"><img src="shots/web-phone-press-before.png" alt=""><div class="b-ring" data-box="31,425,328,42"></div></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption>Web 手机，按下后 250 ms<span class="b-dim">下一张在原处，2 of 4 变 1 of 3</span></figcaption>
+      <div class="b-shot b-phone" data-w="390"><img src="shots/web-phone-press-250ms.png" alt=""><div class="b-ring" data-box="25,56,342,52"></div><div class="b-badge" data-box="25,56,342,52" data-side="right">5</div><div class="b-ring" data-box="31,454,328,42"></div><div class="b-badge" data-box="31,454,328,42">6</div></div>
+    </figure>
+    <div style="flex-basis:100%; height:0"></div>
+    <figure class="b-frame" style="width:230px">
+      <figcaption>iPhone，按下前<span class="b-dim">手指在 (201, 597) pt</span></figcaption>
+      <div class="b-shot b-phone" data-w="402"><img src="shots/iphone-press-before.png" alt=""><div class="b-ring" data-box="186,582,30,30" data-pad="2"></div></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption>iPhone，按下后 2.5 s<span class="b-dim">toast；下一张原地替换，手指下是它的正文</span></figcaption>
+      <div class="b-shot b-phone" data-w="402"><img src="shots/iphone-press-2.5s.png" alt=""><div class="b-ring" data-box="52,115,298,50"></div><div class="b-badge" data-box="52,115,298,50" data-side="right">5</div><div class="b-ring" data-box="186,582,30,30" data-pad="2"></div><div class="b-badge" data-box="186,582,30,30" data-side="right">6</div></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption>Android，按下后 0.6 s<span class="b-dim">三个按钮变灰，等答复</span></figcaption>
+      <div class="b-shot b-phone" data-w="1080"><img src="shots/android-press-busy.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption>Android，按下后 1.6 s<span class="b-dim">toast，下一张停在同一滚动位置</span></figcaption>
+      <div class="b-shot b-phone" data-w="1080"><img src="shots/android-press-after.png" alt=""><div class="b-ring" data-box="110,340,860,150"></div><div class="b-badge" data-box="110,340,860,150" data-side="right">5</div></div>
+    </figure>
+  </div>
+  <ul class="b-notes" style="width:1560px">
+    <li class="n" data-n="5"><b>toast 只有一个词。</b>“Re-confirmed” 加条目标题，绿色对勾，3 秒后消失。它不说条目会重新返回给 agent，也不给撤回（产品里只有 wiki 聊天卡的 Apply 有 Undo，Review 的回答没有）。</li>
+    <li class="n" data-n="6"><b>下一张停在原来的滚动位置，不回到顶上。</b>Web 手机上，按下前 Re-confirm 在 425–467 px，按下后下一张的 Re-confirm 在 454–496 px，只低 29 px；连按，就是下一条 Re-confirm。iPhone 和 Android 上这次手指下是下一张的正文（Cause、Fix 一带），它的按钮在下面（iPhone 低 433 pt，在屏幕外），因为两张卡长短不同。三端的下一张都不是从它的头开始。</li>
+  </ul>
+</section>
+
+<section class="b-part">
+  <h2>产品里别处怎么处理 Retire</h2>
+  <p class="b-sub">同一个动作（退役一条条目）在别处的两种样子。不另起交互，提案就照这两样做。</p>
+  <div class="b-row">
+    <figure class="b-frame" style="width:560px">
+      <figcaption>Review 的 Retire 卡（op = retire）<span class="b-dim">卡本身就是问题「Retire “…”?」，有 After 一行；所有者 23:35Z 在这里四次都按对</span></figcaption>
+      <div class="b-shot" data-w="720"><img src="shots/web-retire-card.png" alt=""><div class="b-ring" data-box="121,432,585,44"></div><div class="b-ring" data-box="15,498,145,35"></div></div>
+    </figure>
+    <figure class="b-frame" style="width:420px">
+      <figcaption>条目页的 Retire…（web 抽屉，红色菜单项）<span class="b-dim">先弹出对话框：说明后果，要写理由，红色 Retire</span></figcaption>
+      <div class="b-shot" data-w="520"><img src="shots/web-entry-retire-dialog.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption>iPhone 条目页的 Retire…<span class="b-dim">⋯ 菜单里红色带垃圾桶；alert 写了理由，红色 Retire 才能按</span></figcaption>
+      <div class="b-shot b-phone" data-w="402"><img src="shots/iphone-entry-retire-alert.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption>Android 条目页的 Retire…<span class="b-dim">菜单里红色，对话框要写理由</span></figcaption>
+      <div class="b-shot b-phone" data-w="1080"><img src="shots/android-entry-retire-dialog.png" alt=""></div>
+    </figure>
+  </div>
+</section>
+
+<section class="b-part">
+  <h2>三端对照</h2>
+  <table class="b-table">
+    <tr><th></th><th>Web（桌面 / 手机）</th><th>iPhone / Mac（OrbitApp）</th><th>Android</th></tr>
+    <tr><td>按钮与顺序</td><td>Re-confirm · Amend · Retire。桌面横排在卡底左侧，右边是说明；手机竖排满宽</td><td>iPhone 竖排满宽（<code>ApprovalActions</code>，每个 342×34 pt，间隔 10 pt）；Mac 横排、按内容宽</td><td>同；竖排满宽，每个 48 dp 高</td></tr>
+    <tr class="b-hot"><td>颜色</td><td>Re-confirm 蓝色实心（<code>card-action--primary</code>），Amend、Retire 白底灰字（<code>--secondary</code>）</td><td>Re-confirm <code>.borderedProminent</code>（实心蓝 #2E6BFF，白字）；Amend、Retire <code>.bordered</code>（浅灰底 #E2E2E3，蓝字），Retire 不是红色</td><td>Re-confirm <code>Button</code>（实心 primary），另两个 <code>OutlinedButton</code></td></tr>
+    <tr class="b-hot"><td>确认</td><td colspan="3">三端都没有。Re-confirm、Retire 按下即生效；Amend 先打开表单（标题和一句话）</td></tr>
+    <tr><td>说明</td><td colspan="3">只有一句 “Agents stop getting this entry until you answer.”，三端相同</td></tr>
+    <tr><td>按下后卡片</td><td>答复落地，<code>['wiki']</code> 重读，卡离开（约 250 ms）；手机上下一张替换在原处，不滚动</td><td>三个按钮先变灰；答复落地后 <code>WikiModel.decide</code> 把卡放进 <code>answered</code>，下一张原地替换、不滚动，“1 of 3” 已滚出屏幕上方</td><td>三个按钮先变灰（实测按下后 0.6 s 还是灰的），答复落地后 <code>WikiStore</code> 把卡放进 <code>answered</code>，下一张停在同一滚动位置</td></tr>
+    <tr><td>toast</td><td>“Re-confirmed” + 条目标题，3 秒</td><td>“Re-confirmed” + 条目标题，顶部居中半透明，约 3 秒</td><td>“Re-confirmed” + 条目标题，顶部</td></tr>
+    <tr class="b-hot"><td>能否撤回</td><td colspan="3">卡上都没说。事实：Re-confirm 之后条目仍是 active，之后可以在条目页 Retire…；Retire 之后回不去（<code>reviewModes.effect.rule</code>）</td></tr>
+  </table>
+</section>
+
+<section class="b-part">
+  <h2>读过的所有者决定</h2>
+  <ul class="b-notes" style="width:1560px">
+    <li><b>2026-09-25</b>：审批卡的回答三端用同一个组件、同一个顺序，竖排满宽，主按钮在最上（<code>WikiView.swift</code> 的 <code>WikiReviewPage</code> 注释）。质疑卡 2026-09-28 加进来时（a77c9feb6 web、97e44ca02 iOS），沿用了这一套，Re-confirm 排在主按钮的位置。这张卡<b>没有出过设计图</b>：<code>docs/mocks/wiki/04-review</code> 和 <code>09-phone-review</code> 里只有新增、修改、Retire 三种卡。</li>
+    <li><b>docs/mocks/wiki/04-review</b>（10 月初）：Retire 卡是 <code>Retire · Keep</code>，正文里有 After 一行说按下后会怎样。</li>
+    <li><b>2026-11-02「按下后约 2 秒自己离开」</b>：管的是会话里的审批 sheet（iOS <code>ApprovalReviewSheet</code>、Android <code>CardReviewSheet</code>）。卡先变成「答了什么」的记录，约 2 秒后 sheet 自己关上；web 的审批卡跟着卡走。Wiki 的 Review 页不在这条规则里：三端都是答复一落地卡就离开，用 toast 说结果。</li>
+    <li><b>2026-11-06（任务 A 的设计 D1）</b>：复查判为已修、已过时的条目会自动发一条质疑并建议 Retire；当时写给所有者的是「模型判错时你点 Re-confirm 就能恢复」。以后这类质疑卡会越来越多，按钮的意思要一眼看得出来。</li>
+  </ul>
+</section>
+
+</body></html>

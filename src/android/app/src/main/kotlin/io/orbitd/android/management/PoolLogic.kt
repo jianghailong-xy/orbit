@@ -320,7 +320,7 @@ internal object ProviderPools {
         if (short.endsWith(" · all models")) short = short.removeSuffix(" · all models")
         return short.replace(" · ", " ")
     }
-    fun quotaReading(row: UsageRow) = "${compactWindowLabel(row.label)} ${row.percent}%"
+    fun quotaReading(row: UsageRow) = "${compactWindowLabel(row.label)} ${row.headline ?: "${row.percent}%"}"
     /** `14:30` today, `Thu 14:30` on any other day — even tomorrow's bare time would read as today's. */
     fun formatResetTime(iso: String, nowMs: Long, zone: ZoneId = ZoneId.systemDefault()): String? {
         val at = isoMs(iso) ?: return null

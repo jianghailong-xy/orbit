@@ -731,6 +731,10 @@ struct WikiReviewView: View {
     @State private var editing: WikiLogic.ReviewCard?
     /// A challenge whose Amend form is open.
     @State private var amending: WikiLogic.ReviewCard?
+    /// A challenge whose Retire… dialog is open, and the reason the dialog holds: the challenge's own until the
+    /// owner changes it.
+    @State private var retiring: WikiLogic.ReviewCard?
+    @State private var retireReason = ""
     @State private var notice: String?
 
     var body: some View {
@@ -773,6 +777,28 @@ struct WikiReviewView: View {
                     }
                 }
             }
+            // A challenge's Retire…: the entry page's own dialog, with what retiring does and that it cannot be undone,
+            // and the reason filled in from the challenge. Cancel goes first. The reason goes with the decide as its
+            // note, which the server records as the retirement's reason.
+            .alert(WikiCopy.retire, isPresented: Binding(get: { retiring != nil },
+                                                         set: { if !$0 { retiring = nil } }),
+                   presenting: retiring) { card in
+                TextField(WikiCopy.reasonPlaceholder, text: $retireReason)
+                Button("Cancel", role: .cancel) { retireReason = "" }
+                Button(WikiCopy.retireConfirm, role: .destructive) {
+                    let why = retireReason.trimmingCharacters(in: .whitespacesAndNewlines)
+                    retireReason = ""
+                    guard !why.isEmpty else { return }
+                    Task {
+                        let answer = await wiki.decide(card, .retire, note: why)
+                        finish(answer, card: card, action: .retire)
+                    }
+                }
+                // A retirement says why, as the entry page's does: no reason, no Retire.
+                .disabled(retireReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            } message: { _ in
+                Text(WikiCopy.retireNote)
+            }
             .alert(WikiCopy.decideFailed, isPresented: Binding(get: { notice != nil },
                                                           set: { if !$0 { notice = nil } })) {
                 Button("OK", role: .cancel) { notice = nil }
@@ -794,7 +820,11 @@ struct WikiReviewView: View {
             },
             edit: { card in editing = card },
             openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) },
-            amend: { card in amending = card })
+            amend: { card in amending = card },
+            retire: { card in
+                retireReason = card.op.payload?["reason"]?.stringValue ?? ""
+                retiring = card
+            })
     }
 
     /// A refusal opens the alert with the server's reason; an answer that landed is floated.
@@ -819,7 +849,7 @@ struct WikiReviewView: View {
 /// A challenge's Amend: the owner's version of the entry it names — its title and one line — written
 /// as the owner's revision; the anchors are checked again (contract `anchorRules.verify.answers.amend`).
 /// Only what changed is sent, and with nothing changed the answer waits: an Amend that changes nothing
-/// is a Re-confirm.
+/// is a Keep.
 private struct WikiChallengeAmendForm: View {
     let entry: WikiEntry
     /// The answer: nil once it landed and the form can close, else the refusal, which stays here.
