@@ -6,6 +6,7 @@ import {
   FEISHU_APP_SCOPES,
   FEISHU_OPEN_PLATFORM_ORIGINS,
   FEISHU_PLATFORMS,
+  type FeishuAppChange,
   type FeishuAppConnect,
   type FeishuAppSettings,
   type FeishuIntegration,
@@ -48,6 +49,12 @@ export const FEISHU_SCOPE_PURPOSES: Readonly<Record<(typeof FEISHU_APP_SCOPES)[n
   'contact:user.base:readonly': "Read people's basic information, to show their names",
 };
 
+/** §6.4: what the detail switch says, off (the default) and on. Feishu keeps whatever a card carries. */
+export const MESSAGE_DETAIL_HINT =
+  "Off by default: alerts carry only the session or project title, the kind of event and a tool's name. "
+  + "On, they also carry tool inputs, recaps, failure reasons, the agent's messages and questions, and owner item text, "
+  + "and all of it is stored on Feishu's servers.";
+
 export const NOT_ALLOWED_NOTICE = 'An administrator has turned off Feishu bots on this Orbit server.';
 /** Said when the saved secret no longer decrypts (§4.1): the app stays, but Orbit cannot act as it until the secret is entered again. */
 export const SECRET_UNREADABLE_NOTICE =
@@ -77,8 +84,9 @@ function AppSummary({
   const qc = useQueryClient();
   const message = useToast();
   const switchId = useId();
+  const detailId = useId();
   const change = useMutation({
-    mutationFn: (enabled: boolean) => api<FeishuIntegration>('/integrations/feishu', { method: 'PATCH', body: { enabled } }),
+    mutationFn: (body: FeishuAppChange) => api<FeishuIntegration>('/integrations/feishu', { method: 'PATCH', body }),
     onSuccess: (integration) => qc.setQueryData(feishuIntegrationQuery().queryKey, integration),
     onError: (e: Error) => message.error("Couldn't change the app", e.message),
   });
@@ -130,8 +138,22 @@ function AppSummary({
           <Switch
             aria-labelledby={switchId}
             checked={app.enabled}
-            loading={change.isPending}
-            onCheckedChange={(enabled) => change.mutate(enabled)}
+            loading={change.isPending && change.variables?.enabled !== undefined}
+            onCheckedChange={(enabled) => change.mutate({ enabled })}
+          />
+        </div>
+        <div className="admin-signin-row">
+          <div>
+            <div className="admin-signin-label" id={detailId}>
+              Include details in alerts
+            </div>
+            <div className="admin-signin-hint">{MESSAGE_DETAIL_HINT}</div>
+          </div>
+          <Switch
+            aria-labelledby={detailId}
+            checked={app.messageDetail === 'FULL'}
+            loading={change.isPending && change.variables?.messageDetail !== undefined}
+            onCheckedChange={(on) => change.mutate({ messageDetail: on ? 'FULL' : 'TITLES_ONLY' })}
           />
         </div>
         <div className="feishu-actions">

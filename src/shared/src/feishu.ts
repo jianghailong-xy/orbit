@@ -70,6 +70,8 @@ export interface FeishuAppConnect {
 /** `PATCH /api/integrations/feishu`: what an account changes on the app it has. */
 export interface FeishuAppChange {
   enabled?: boolean;
+  /** How much an alert card carries (§6.4). Details are stored on Feishu's servers once sent. */
+  messageDetail?: FeishuMessageDetail;
 }
 
 /**

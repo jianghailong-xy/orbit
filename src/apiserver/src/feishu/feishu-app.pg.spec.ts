@@ -17,7 +17,7 @@
  *   (5) the same app saved again keeps its row, the owner's identity included, and takes the new secret; another
  *       app replaces the row, clears what belonged to the old one, keeps the account's choices, and frees the old
  *       App ID for another account;
- *   (6) PATCH switches the app; DELETE removes it, twice alike; an access token holding every scope reaches none
+ *   (6) PATCH switches the app and sets its messageDetail (TITLES_ONLY or FULL, nothing else); DELETE removes it, twice alike; an access token holding every scope reaches none
  *       of the four routes (ACCOUNT); a secret the PROVIDER_SECRET_KEY in force cannot decrypt reads
  *       `secretUnreadable: true`;
  *   (7) the administrators' switch: on with no row; only an ADMIN reads or switches it, or removes an account's
@@ -399,7 +399,10 @@ test('Feishu apps: saved only once Feishu trades the credentials, one account pe
     // The account's choices, before it replaces the app.
     const off = await ask('PATCH', '/api/integrations/feishu', a.bearer, { enabled: false });
     assertApp(off, { enabled: false }, 'switched off');
-    await sql.query(`UPDATE feishu_app SET message_detail = 'FULL', approvals_in_feishu = false WHERE id = $1`, [row.id]);
+    const full = await ask('PATCH', '/api/integrations/feishu', a.bearer, { messageDetail: 'FULL' });
+    assertApp(full, { enabled: false, messageDetail: 'FULL' }, 'details on');
+    assert.equal((await appRows()).find((r) => r.id === row.id)?.message_detail, 'FULL');
+    await sql.query(`UPDATE feishu_app SET approvals_in_feishu = false WHERE id = $1`, [row.id]);
 
     const replaced = await ask('PUT', '/api/integrations/feishu', a.bearer, APP_Y);
     assertApp(replaced, {
@@ -426,6 +429,10 @@ test('Feishu apps: saved only once Feishu trades the credentials, one account pe
     assert.equal(nothing.status, 404, nothing.text);
     const notBoolean = await ask('PATCH', '/api/integrations/feishu', a.bearer, { enabled: 'yes' });
     assert.equal(notBoolean.status, 400, notBoolean.text);
+    const notADetail = await ask('PATCH', '/api/integrations/feishu', a.bearer, { messageDetail: 'SOME' });
+    assert.equal(notADetail.status, 400, notADetail.text);
+    const noDetailApp = await ask('PATCH', '/api/integrations/feishu', c.bearer, { messageDetail: 'FULL' });
+    assert.equal(noDetailApp.status, 404, noDetailApp.text);
 
     // An access token holding every scope reaches none of the four, and writes nothing.
     const pats = new PatService(db as unknown as PrismaService);

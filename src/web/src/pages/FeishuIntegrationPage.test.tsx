@@ -10,6 +10,7 @@ import {
   FEISHU_APP_SCOPES,
   FEISHU_APP_TAKEN_MESSAGE,
   type FeishuAppSettings,
+  type FeishuMessageDetail,
   type FeishuPlatform,
 } from '@orbit/shared';
 import { ApiError } from '../api';
@@ -33,12 +34,12 @@ vi.mock('../lib/toast', () => ({ useToast: () => toast }));
 const copied: string[] = [];
 vi.mock('../lib/clipboard', () => ({ copyText: vi.fn(async (text: string) => (copied.push(text), true)) }));
 const { api } = await import('../api');
-const { FeishuIntegrationPage, NOT_ALLOWED_NOTICE, SECRET_UNREADABLE_NOTICE } = await import('./FeishuIntegrationPage');
+const { FeishuIntegrationPage, MESSAGE_DETAIL_HINT, NOT_ALLOWED_NOTICE, SECRET_UNREADABLE_NOTICE } = await import('./FeishuIntegrationPage');
 
 const SECRET = 'feishu-secret-never-shown-again';
 
 /** The account's app as the stand-in keeps it: the secret as sent, which no answer carries. */
-let stored: { platform: FeishuPlatform; appId: string; secret: string; enabled: boolean } | null;
+let stored: { platform: FeishuPlatform; appId: string; secret: string; enabled: boolean; messageDetail?: FeishuMessageDetail } | null;
 let allowed: boolean;
 let secretUnreadable: boolean;
 /** What the stand-in's Feishu answers the next save with, when not a token. */
@@ -54,7 +55,7 @@ const app = (): FeishuAppSettings | null =>
     hasSecret: true,
     secretUnreadable,
     enabled: stored.enabled,
-    messageDetail: 'TITLES_ONLY',
+    messageDetail: stored.messageDetail ?? 'TITLES_ONLY',
     approvalsInFeishu: true,
     defaultWorkspaceId: null,
     ownerOpenId: null,
@@ -152,7 +153,9 @@ beforeEach(() => {
       secretUnreadable = false;
     } else if (method === 'PATCH') {
       if (!stored) throw new ApiError('No Feishu app is connected to this account.', 404);
-      stored.enabled = (options.body as { enabled: boolean }).enabled;
+      const change = options.body as { enabled?: boolean; messageDetail?: FeishuMessageDetail };
+      if (change.enabled !== undefined) stored.enabled = change.enabled;
+      if (change.messageDetail !== undefined) stored.messageDetail = change.messageDetail;
     } else if (method === 'DELETE') {
       stored = null;
     }
@@ -264,6 +267,24 @@ describe('the app connected', () => {
     expect(requests.at(-1)).toEqual({ method: 'PATCH', body: { enabled: false } });
     expect(badge()).toBe('Off');
     expect(card('Your app')!.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('sends titles only by default, says Feishu stores the details, and switches them on and off with PATCH', async () => {
+    await open();
+    const row = [...card('Your app')!.querySelectorAll<HTMLElement>('.admin-signin-row')]
+      .find((r) => r.querySelector('.admin-signin-label')?.textContent?.trim() === 'Include details in alerts');
+    expect(row?.textContent).toContain(MESSAGE_DETAIL_HINT);
+    expect(MESSAGE_DETAIL_HINT).toContain('Off by default');
+    expect(MESSAGE_DETAIL_HINT).toContain("stored on Feishu's servers");
+    const control = () => row!.querySelector<HTMLElement>('[role="switch"]');
+    expect(control()?.getAttribute('aria-checked')).toBe('false');
+    await click(control(), 'Include details in alerts');
+    expect(requests.at(-1)).toEqual({ method: 'PATCH', body: { messageDetail: 'FULL' } });
+    expect(control()?.getAttribute('aria-checked')).toBe('true');
+    expect(badge()).toBe('Saved');
+    await click(control(), 'Include details in alerts');
+    expect(requests.at(-1)).toEqual({ method: 'PATCH', body: { messageDetail: 'TITLES_ONLY' } });
+    expect(control()?.getAttribute('aria-checked')).toBe('false');
   });
 
   it('replaces the credentials through the same check, the App ID kept and the secret asked for again', async () => {

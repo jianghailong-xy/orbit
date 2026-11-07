@@ -28,7 +28,7 @@ export class FeishuController {
     return this.apps.connect(user.userId, dto);
   }
 
-  /** The app's own switch. */
+  /** The app's own switch, and how much its alert cards carry. */
   @Patch()
   change(@CurrentUser() user: AuthUser, @Body() dto: ChangeFeishuAppDto) {
     return this.apps.change(user.userId, dto);

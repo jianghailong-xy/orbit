@@ -2,10 +2,12 @@ import { IsBoolean, IsIn, IsOptional, IsString, MaxLength } from 'class-validato
 import {
   FEISHU_APP_ID_MAX_LENGTH,
   FEISHU_APP_SECRET_MAX_LENGTH,
+  FEISHU_MESSAGE_DETAILS,
   FEISHU_PLATFORMS,
   type FeishuAdminChange,
   type FeishuAppChange,
   type FeishuAppConnect,
+  type FeishuMessageDetail,
   type FeishuPlatform,
 } from '@orbit/shared';
 
@@ -28,6 +30,10 @@ export class ChangeFeishuAppDto implements FeishuAppChange {
   @IsOptional()
   @IsBoolean()
   enabled?: boolean;
+
+  @IsOptional()
+  @IsIn(FEISHU_MESSAGE_DETAILS)
+  messageDetail?: FeishuMessageDetail;
 }
 
 /** `PUT /admin/integrations/feishu`: "Allow accounts to connect Feishu bots". */

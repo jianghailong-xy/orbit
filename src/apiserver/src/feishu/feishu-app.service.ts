@@ -180,10 +180,17 @@ export class FeishuAppService {
     }, loggedRetry(this.logger, 'feishuApp.save'));
   }
 
-  /** `PATCH /integrations/feishu`: the app's own switch. 404 while the account has no app; nothing asked, nothing written. */
+  /**
+   * `PATCH /integrations/feishu`: the app's own switch, and how much an alert card carries (§6.4). 404 while the
+   * account has no app; nothing asked, nothing written.
+   */
   async change(ownerId: string, change: FeishuAppChange): Promise<FeishuIntegration> {
-    if (change.enabled !== undefined) {
-      const { count } = await this.prisma.feishuApp.updateMany({ where: { ownerId }, data: { enabled: change.enabled } });
+    const data = {
+      ...(change.enabled !== undefined ? { enabled: change.enabled } : {}),
+      ...(change.messageDetail !== undefined ? { messageDetail: change.messageDetail } : {}),
+    };
+    if (Object.keys(data).length > 0) {
+      const { count } = await this.prisma.feishuApp.updateMany({ where: { ownerId }, data });
       if (count === 0) throw new NotFoundException('No Feishu app is connected to this account.');
       return this.integration(ownerId);
     }
