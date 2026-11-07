@@ -23,6 +23,7 @@ import { Button, LinkButton } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Popconfirm } from '../components/ui/Popconfirm';
 import { Radio, RadioGroup } from '../components/ui/Radio';
+import { Select } from '../components/ui/Select';
 import { Spinner } from '../components/ui/Spinner';
 import { Switch } from '../components/ui/Switch';
 import '../components/ui/Card.css';
@@ -61,6 +62,10 @@ export const MESSAGE_DETAIL_HINT =
   + "On, they also carry tool inputs, recaps, failure reasons, the agent's messages and questions, and owner item text, "
   + "and all of it is stored on Feishu's servers.";
 
+/** §7.3: what the default workspace is for. */
+export const DEFAULT_WORKSPACE_HINT =
+  'A new direct message to the bot starts a session here. With none chosen, the bot asks you to choose one in Feishu.';
+
 export const NOT_ALLOWED_NOTICE = 'An administrator has turned off Feishu bots on this Orbit server.';
 /** Said when the saved secret no longer decrypts (§4.1): the app stays, but Orbit cannot act as it until the secret is entered again. */
 export const SECRET_UNREADABLE_NOTICE =
@@ -98,6 +103,8 @@ function AppSummary({
   const message = useToast();
   const switchId = useId();
   const detailId = useId();
+  const workspaceId = useId();
+  const workspaces = useQuery(workspacesQuery());
   const change = useMutation({
     mutationFn: (body: FeishuAppChange) => api<FeishuIntegration>('/integrations/feishu', { method: 'PATCH', body }),
     onSuccess: (integration) => qc.setQueryData(feishuIntegrationQuery().queryKey, integration),
@@ -177,6 +184,25 @@ function AppSummary({
             checked={app.messageDetail === 'FULL'}
             loading={change.isPending && change.variables?.messageDetail !== undefined}
             onCheckedChange={(on) => change.mutate({ messageDetail: on ? 'FULL' : 'TITLES_ONLY' })}
+          />
+        </div>
+        <div className="admin-signin-row">
+          <div>
+            <div className="admin-signin-label" id={workspaceId}>
+              Default workspace
+            </div>
+            <div className="admin-signin-hint">{DEFAULT_WORKSPACE_HINT}</div>
+          </div>
+          <Select
+            aria-labelledby={workspaceId}
+            style={{ minWidth: 200 }}
+            placeholder="None"
+            clearable
+            clearLabel="No default workspace"
+            loading={workspaces.isPending || (change.isPending && change.variables?.defaultWorkspaceId !== undefined)}
+            value={app.defaultWorkspaceId}
+            onValueChange={(defaultWorkspaceId) => change.mutate({ defaultWorkspaceId })}
+            options={(workspaces.data ?? []).map((w: { id: string; name: string }) => ({ value: w.id, label: w.name }))}
           />
         </div>
         <div className="feishu-actions">

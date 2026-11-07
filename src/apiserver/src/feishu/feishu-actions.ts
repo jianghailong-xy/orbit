@@ -20,6 +20,20 @@ export interface FeishuAllowedAction {
 export const FEISHU_ALLOWED_ACTIONS: readonly FeishuAllowedAction[] = [
   // "What needs me": the sessions waiting on the owner (§7.2, the read-only row).
   { service: 'PushService', method: 'needsYouSessions', access: 'READ', condition: 'Always: it reads the account’s own sessions.' },
+  // Reply to a session (§7.2, §7.3 1): feishu/feishu-direct.service.ts.
+  {
+    service: 'SessionsService',
+    method: 'createTurn',
+    access: 'WRITE',
+    condition: 'The owner’s reply, in their direct messages, to a message that belongs to the session (an alert card or a chain of it).',
+  },
+  // Open a session (§7.2, §7.3 2): feishu/feishu-direct.service.ts.
+  {
+    service: 'SessionsService',
+    method: 'create',
+    access: 'WRITE',
+    condition: 'The owner’s new direct message, in the app’s default workspace, with no permissionMode: the account’s default applies.',
+  },
 ];
 
 /**
@@ -35,5 +49,6 @@ export const FEISHU_INFRASTRUCTURE = [
   'FeishuOutbound',
   'FeishuOwnerService',
   'FeishuChatRouteService',
+  'FeishuDirectService',
   'ControlPlaneLeader',
 ] as const;

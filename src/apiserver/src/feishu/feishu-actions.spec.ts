@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { PushService } from '../push/push.service';
+import { SessionsService } from '../sessions/sessions.service';
 import { FEISHU_ALLOWED_ACTIONS, FEISHU_INFRASTRUCTURE } from './feishu-actions';
 
 // The census of what a Feishu event may call (docs/feishu-bot-design.md §7.2, decision 1), pinned both ways, as
@@ -11,12 +12,12 @@ import { FEISHU_ALLOWED_ACTIONS, FEISHU_INFRASTRUCTURE } from './feishu-actions'
 //   (1) every allowlist entry names a method that exists on its service, once;
 //   (2) every call the feishu module's sources make on an injected service — `this.<field>.<method>(` where the
 //       constructor injects `<field>: <Class>` — is either on the module's own infrastructure or on the allowlist;
-//   (3) the allowlist is read-only until a task adds a write together with §7.2's condition for it.
+//   (3) the writes on it are exactly the ones §7.2 allows so far, each added by its task with §7.2's condition for it.
 
 const FEISHU_DIR = path.resolve(__dirname, '../../src/feishu');
 
 /** The classes the allowlist may name, by the name it uses. A later task adds the service it allows a method of. */
-const SERVICES: Record<string, { prototype: object }> = { PushService };
+const SERVICES: Record<string, { prototype: object }> = { PushService, SessionsService };
 
 /** Production sources of the feishu module: not specs, not the specs' fake. */
 function sources(): Array<{ file: string; text: string }> {
@@ -90,6 +91,10 @@ test('(2) the census reads a call it should refuse', () => {
   assert.deepEqual(serviceCalls(sample), ['SessionsService.createTurn', 'PrismaService.$queryRaw']);
 });
 
-test('(3) the allowlist holds only reads until the actions of F2 add their writes', () => {
-  assert.deepEqual(FEISHU_ALLOWED_ACTIONS.filter((a) => a.access !== 'READ').map((a) => `${a.service}.${a.method}`), []);
+test('(3) the writes on the allowlist are the ones §7.2 allows so far', () => {
+  assert.deepEqual(
+    FEISHU_ALLOWED_ACTIONS.filter((a) => a.access !== 'READ').map((a) => `${a.service}.${a.method}`).sort(),
+    // F2-3: reply to a session, open a session from the owner's direct messages.
+    ['SessionsService.create', 'SessionsService.createTurn'],
+  );
 });

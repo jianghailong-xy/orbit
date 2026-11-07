@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { FeishuChatRouteService } from './feishu-chat-route.service';
+import { FeishuDirectService } from './feishu-direct.service';
 import { FEISHU_OWNER_REPLIES, FeishuOwnerService, type FeishuTextMessage } from './feishu-owner.service';
 
 /** Who a Feishu event acts as (docs/feishu-bot-design.md §7.2): always the account its app belongs to. */
@@ -104,7 +105,8 @@ export function textMessageOf(payload: unknown): FeishuTextMessage | null {
  * Only the owner is served (§7.3, §7.4). Any other direct message is answered with one English sentence — that the bot
  * takes direct messages only from its owner, or, while nobody is the owner, how to become it — and writes nothing. A
  * card click is checked first of all: a clicker whose open_id is not the app's ownerOpenId (a forwarded card) is
- * answered with a toast and writes nothing. Every later card action goes through that same check. Every other branch
+ * answered with a toast and writes nothing. Every later card action goes through that same check. The owner's own
+ * direct messages, and their clicks on its cards, go to FeishuDirectService (§7.3). Every other branch
  * records the event and does nothing more yet; later tasks fill them in, each calling only service methods on the §7.2 allowlist
  * (feishu/feishu-actions.ts). What is logged names the event, the app, the branch and the account,
  * never the message's text.
@@ -117,12 +119,13 @@ export class FeishuRouter {
     private readonly prisma: PrismaService,
     private readonly owner: FeishuOwnerService,
     private readonly chats: FeishuChatRouteService,
+    private readonly direct: FeishuDirectService,
   ) {}
 
   async route(event: InboundEvent): Promise<RouteDecision | null> {
     const app = await this.prisma.feishuApp.findUnique({
       where: { appId: event.appId },
-      select: { ownerId: true, appId: true, platform: true, appSecretEnc: true, ownerOpenId: true, botName: true },
+      select: { ownerId: true, appId: true, platform: true, appSecretEnc: true, ownerOpenId: true, botName: true, defaultWorkspaceId: true },
     });
     if (!app) {
       this.logger.log(`feishu event ${event.eventId} of app ${event.appId} dropped: the app is no longer connected`);
@@ -139,7 +142,8 @@ export class FeishuRouter {
         this.logger.log(`feishu event ${event.eventId} of app ${event.appId}: a card click by someone other than the owner, refused`);
         return { route, actor, answer: { toast: { type: 'error', content: FEISHU_OWNER_REPLIES.strangerCard } } };
       }
-      return { route, actor };
+      const answer = await this.direct.handleCardAction(app, event.payload);
+      return answer ? { route, actor, answer } : { route, actor };
     }
     if (route === 'DIRECT_MESSAGE' || route === 'GROUP_MENTION') {
       const message = textMessageOf(event.payload);
@@ -148,6 +152,8 @@ export class FeishuRouter {
       if (route === 'DIRECT_MESSAGE' && messageId && (!app.ownerOpenId || openId !== app.ownerOpenId)) {
         this.logger.log(`feishu event ${event.eventId} of app ${event.appId}: a direct message from someone other than the owner, refused`);
         await this.owner.replyTo(app, messageId, app.ownerOpenId ? FEISHU_OWNER_REPLIES.stranger : FEISHU_OWNER_REPLIES.noOwner);
+      } else if (route === 'DIRECT_MESSAGE') {
+        await this.direct.handleMessage(app, actor, event.eventId, event.payload);
       }
       // A group: `connect`, or a mention in a group that cannot run it (§8.1).
       const chatId = chatIdOf(event.payload);
