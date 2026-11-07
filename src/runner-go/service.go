@@ -441,13 +441,16 @@ func primaryGroup(u *user.User) string {
 //
 // Prepending one at a time reverses engineInstallerDirs: the last entry there leads
 // the PATH this returns. That reversal is the point — see engineInstallerDirs.
+//
+// Orbit's own ripgrep directory goes at the other end, last (pathWithManagedRgLast), so
+// an rg anywhere else on the PATH is found before it.
 func runnerEnginePath(home, path string) string {
 	for _, dir := range engineInstallerDirs(home) {
 		if !pathContains(path, dir) {
 			path = dir + ":" + path
 		}
 	}
-	return path
+	return pathWithManagedRgLast(path)
 }
 
 // engineInstallerDirs lists the directories the official engine installers drop a binary into,

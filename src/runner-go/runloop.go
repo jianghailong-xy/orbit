@@ -1297,6 +1297,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// that was collected there (see ensureEngine).
 	configureEngineInstall(cfg.AutoInstallEngines, doctorProxyVars(cfg.ServerURL))
 
+	// Orbit's own ripgrep, last on every engine's PATH, under the same consent (managed_rg.go).
+	go keepManagedRg(loopCtx, cfg.AutoInstallEngines, doctorProxyVars(cfg.ServerURL))
+
 	// Which engine CLIs this machine has, and whether they're signed in — the Providers page's
 	// "On your runners" section. Probed in the background: it spawns a couple of processes per
 	// engine, so the heartbeat only ever reads the last completed snapshot.

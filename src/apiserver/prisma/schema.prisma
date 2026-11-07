@@ -1015,6 +1015,19 @@ model ApiserverProcess {
   @@map("apiserver_process")
 }
 
+/// Per-owner, per-source counters the Open list's data version reads in place of scanning a table
+/// (sessions/open-list-version.ts, migration 0484). Statement-level triggers are the only writer;
+/// the apiserver only reads the table, through `$queryRaw`. The counter can never lag a write, and
+/// may move when the list did not change — the one direction that version is allowed to be wrong.
+model OpenListEpoch {
+  ownerId String @map("owner_id") @db.Uuid
+  source  String
+  epoch   BigInt @default(0)
+
+  @@id([ownerId, source])
+  @@map("open_list_epoch")
+}
+
 // A long-lived credential for a HEADLESS process on one machine — a launchd/cron bridge that
 // belongs to no session, so it can hold none of the session-bound proofs orchestration uses.
 //
@@ -5736,6 +5749,10 @@ model TaskCompletionEvidence {
   actorType  CreatorType @map("actor_type")
   actorId    String      @map("actor_id") @db.Uuid
   submittedAt DateTime   @default(now()) @map("submitted_at")
+  /// The moment the evidence-review turn was delivered, copied from that turn by a trigger
+  /// (migration 0484) so the Open list's data version can read the review-window deadline
+  /// without joining the turn and its dispatching session on every poll. Null until delivered.
+  reviewTurnAt DateTime? @map("review_turn_at")
 
   sourceSessionId String  @map("source_session_id") @db.Uuid
   sourceAttemptId String? @map("source_attempt_id") @db.Uuid
