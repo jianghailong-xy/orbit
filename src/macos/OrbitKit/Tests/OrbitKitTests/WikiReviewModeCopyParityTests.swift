@@ -308,7 +308,15 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
             let rows: [Row]
         }
         struct ChallengeWords: Decodable {
+            struct After: Decodable {
+                let label: String
+                let keep: String
+                let amend: String
+                let retire: String
+            }
             let answers: [String]
+            let after: After
+            let retireNote: String
             let waits: String
             let challenged: String
             let amendNote: String
@@ -566,7 +574,13 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
             XCTAssertEqual(ref, challenge.ref, challenge.name)
             XCTAssertEqual(ref.map(WikiModeCopy.checkedOnMain), challenge.checkedOn, challenge.name)
         }
-        XCTAssertEqual([WikiModeCopy.reconfirm, WikiModeCopy.amend, WikiModeCopy.retire], shared.challenge.answers)
+        XCTAssertEqual([WikiModeCopy.reconfirm, WikiModeCopy.amendAnswer, WikiModeCopy.retireAnswer],
+                       shared.challenge.answers)
+        XCTAssertEqual(WikiCopy.afterLabel, shared.challenge.after.label)
+        XCTAssertEqual(WikiModeCopy.afterKeep, shared.challenge.after.keep)
+        XCTAssertEqual(WikiModeCopy.afterAmend, shared.challenge.after.amend)
+        XCTAssertEqual(WikiModeCopy.afterRetire, shared.challenge.after.retire)
+        XCTAssertEqual(WikiCopy.retireNote, shared.challenge.retireNote, "Retire…'s dialog, here and on the entry page")
         XCTAssertEqual(WikiModeCopy.challengeWaits, shared.challenge.waits)
         XCTAssertEqual(WikiModeCopy.challenged, shared.challenge.challenged)
         XCTAssertEqual(WikiModeCopy.amendNote, shared.challenge.amendNote)
@@ -574,6 +588,37 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         XCTAssertTrue(WikiDecideAction.allCases.contains(.reconfirm))
         XCTAssertTrue(WikiDecideAction.allCases.contains(.amend))
         XCTAssertTrue(WikiDecideAction.allCases.contains(.retire))
+    }
+
+    /// The After row says what each answer does to the entry: Keep, Amend, Retire, Retire's word in red. A decision
+    /// is superseded and never amended (contract `kinds.decision.amendable`; the server refuses its amend), so its card
+    /// offers no Amend… and its After row has no Amend line. Every other kind is the contract's too.
+    func testAChallengesAfterRowAndAmendFollowTheEntrysKind() throws {
+        let after = try fixture().challenge.after
+        let pitfall = WikiModeLogic.challengeAfter(kind: .pitfall)
+        XCTAssertEqual(pitfall.map(\.answer), [WikiModeCopy.reconfirm, WikiModeCopy.amend, WikiModeCopy.retire])
+        XCTAssertEqual(pitfall.map(\.answer), ["Keep", "Amend", "Retire"])
+        XCTAssertEqual(pitfall.map(\.effect), [after.keep, after.amend, after.retire])
+        XCTAssertEqual(pitfall.map(\.destructive), [false, false, true], "only Retire's word is red")
+        let decision = WikiModeLogic.challengeAfter(kind: .decision)
+        XCTAssertEqual(decision.map(\.answer), ["Keep", "Retire"])
+        XCTAssertEqual(decision.map(\.effect), [after.keep, after.retire])
+        XCTAssertTrue(WikiModeLogic.amendable(nil), "an entry not read yet keeps Amend…, disabled until it is")
+        XCTAssertTrue(WikiModeLogic.amendable(.unknown), "a kind this build does not know is the server's to refuse")
+        let data = try Data(contentsOf: find("contracts/wiki.contract.json"))
+        let contract = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let kinds = try XCTUnwrap(contract["kinds"] as? [String: Any])
+        XCTAssertFalse(kinds.isEmpty)
+        for (name, spec) in kinds {
+            let kind = try XCTUnwrap(WikiEntryKind(rawValue: name), "\(name) is no kind this client knows")
+            // A reserved placeholder (`assumption`) declares no `amendable` and has no KIND_SPECS entry yet: like a
+            // kind the web does not know (`!(kind in KIND_SPECS)`), it keeps Amend… and leaves the refusal to the server.
+            let amendable = (spec as? [String: Any])?["amendable"] as? Bool ?? true
+            XCTAssertEqual(WikiModeLogic.amendable(kind), amendable, "kinds.\(name).amendable")
+            XCTAssertEqual(WikiModeLogic.challengeAfter(kind: kind).count, amendable ? 3 : 2, name)
+        }
+        XCTAssertEqual(kinds.filter { ($0.value as? [String: Any])?["amendable"] as? Bool == false }.map(\.key), ["decision"],
+                       "the one kind a challenge's card offers no Amend… for")
     }
 
     // MARK: the web's own declarations
@@ -647,7 +692,12 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
             ("WIKI_RUN_REINFORCED", WikiModeCopy.runReinforced),
             ("WIKI_RECONFIRM", WikiModeCopy.reconfirm),
             ("WIKI_AMEND", WikiModeCopy.amend),
+            ("WIKI_AMEND_ANSWER", WikiModeCopy.amendAnswer),
             ("WIKI_RETIRE", WikiModeCopy.retire),
+            ("WIKI_RETIRE_ANSWER", WikiModeCopy.retireAnswer),
+            ("WIKI_CHALLENGE_AFTER_KEEP", WikiModeCopy.afterKeep),
+            ("WIKI_CHALLENGE_AFTER_AMEND", WikiModeCopy.afterAmend),
+            ("WIKI_CHALLENGE_AFTER_RETIRE", WikiModeCopy.afterRetire),
             ("WIKI_CHALLENGE_WAITS", WikiModeCopy.challengeWaits),
             ("WIKI_CHALLENGED", WikiModeCopy.challenged),
             ("WIKI_AMEND_NOTE", WikiModeCopy.amendNote),
@@ -988,12 +1038,43 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                     "Trash read beside the wikis")
     }
 
-    /// A challenge's line and answers at both ends: which anchor broke and how, then Re-confirm, Amend, Retire.
+    /// A challenge's line and answers at both ends: which anchor broke and how, the After row, then Keep, Amend… (for
+    /// a kind that can be amended) and Retire…, none filled, Retire… red and opening the dialog both ends share.
     func testAChallengeCardSaysWhatBrokeAndOffersTheThreeAnswers() throws {
         let review = try web(Self.review)
         let actions = try slice(review, from: ") : challenge ? (", to: ") : (")
-        assertOrder(actions, ["action: 'reconfirm'", "{WIKI_RECONFIRM}", "setAmending(true)", "{WIKI_AMEND}",
-                              "action: 'retire'", "{WIKI_RETIRE}", "{WIKI_CHALLENGE_WAITS}"], "the web's challenge answers")
+        assertOrder(actions, ["action: 'reconfirm'", "{WIKI_RECONFIRM}", "{amendable && (", "setAmending(true)",
+                              "{WIKI_AMEND_ANSWER}",
+                              "className=\"card-action card-action--danger\" onClick={() => setRetiring(true)}",
+                              "{WIKI_RETIRE_ANSWER}", "{WIKI_CHALLENGE_WAITS}"], "the web's challenge answers")
+        XCTAssertFalse(actions.contains("card-action--primary"), "the web's challenge has a filled answer")
+        XCTAssertFalse(actions.contains("action: 'retire'"), "the web's Retire… decides straight from the card")
+        assertSays(review, "const amendable = !kind || !(kind in KIND_SPECS) || KIND_SPECS[kind as WikiKind].amendable;",
+                   in: Self.review)
+        let after = try slice(review, from: "<span className=\"v wk-challenge-after\">", to: "</span>")
+        assertOrder(after, ["<b>{WIKI_RECONFIRM}</b> · {WIKI_CHALLENGE_AFTER_KEEP}", "{amendable && (",
+                            "<b>{WIKI_AMEND}</b> · {WIKI_CHALLENGE_AFTER_AMEND}",
+                            "<b className=\"wk-danger\">{WIKI_RETIRE}</b> · {WIKI_CHALLENGE_AFTER_RETIRE}"], "the web's After row")
+        let dialog = try slice(review, from: "function ChallengeRetireDialog(", to: "function ProposalEditor(")
+        assertOrder(dialog, ["title={WIKI_ACTION_RETIRE}", "initialFocus={cancel}", "{WIKI_CANCEL}", "danger",
+                             "disabled={reason.trim().length === 0}", "{WIKI_RETIRE}",
+                             "<p className=\"wk-modal-note\">{WIKI_RETIRE_NOTE}</p>",
+                             "placeholder={WIKI_RETIRE_REASON_PLACEHOLDER}"], "the web's Retire… dialog")
+        assertSays(review, "reason={typeof payload.reason === 'string' ? payload.reason : ''}", in: Self.review)
+        assertSays(review, "write.mutateAsync([{ opId: op.id, action: 'retire', note }]);", in: Self.review)
+        assertSays(review, "list.current?.scrollIntoView?.({ block: 'start' })", in: Self.review)
+        let nativeView = try native("Views/WikiView.swift")
+        let answers = try slice(nativeView, from: "} else if isChallenge {", to: "} else {")
+        assertOrder(answers, ["actions.decide(card, .reconfirm, nil)", "Text(WikiModeCopy.reconfirm)",
+                              "WikiModeLogic.amendable(", "actions.amend(card)", "Text(WikiModeCopy.amendAnswer)",
+                              "Button(role: .destructive) { actions.retire(card) }", "Text(WikiModeCopy.retireAnswer)"],
+                    "the native challenge answers")
+        XCTAssertFalse(answers.contains(".borderedProminent"), "the native challenge has a filled answer")
+        let nativeScreens = try native("Views/WikiScreens.swift")
+        let nativeDialog = try slice(nativeScreens, from: ".alert(WikiCopy.retire, isPresented: Binding(", to: "Text(WikiCopy.retireNote)")
+        assertOrder(nativeDialog, ["TextField(WikiCopy.reasonPlaceholder, text: $retireReason)", "Button(\"Cancel\", role: .cancel)",
+                                   "Button(WikiCopy.retireConfirm, role: .destructive)", "await wiki.decide(card, .retire, note: why)"],
+                    "the native Retire… dialog")
         let line = try slice(review, from: "function ChallengeLine(", to: "function proposedText(")
         assertOrder(line, ["wikiBrokenAnchors(anchors)", "anchor.state === 'changed' ? 'Changed' : 'Missing'", "</b> · {anchor.label}",
                            "wikiCheckedOnMain(ref)", "{WIKI_CHALLENGED}"], "the web's challenge line")

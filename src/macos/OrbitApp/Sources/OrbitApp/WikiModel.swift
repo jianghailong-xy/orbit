@@ -776,8 +776,11 @@ final class WikiModel {
     /// Landing is not the same as applying: the server answers 200 for an op it could not apply too,
     /// recording `conflict` or `withdrawn` on it, and the answer is read for that. Such an answer is a
     /// refusal like any other — the card is not answered here, and the queue is read again.
+    ///
+    /// `note` rides on the decision: a challenge's Retire… sends the reason its dialog holds, which the server
+    /// records as the retirement's reason.
     func decide(_ card: WikiLogic.ReviewCard, _ action: WikiDecideAction,
-                reason: WikiRejectReason? = nil, edited: WikiEntryChanges? = nil) async -> String? {
+                reason: WikiRejectReason? = nil, edited: WikiEntryChanges? = nil, note: String? = nil) async -> String? {
         busy = true
         defer { busy = false }
         let answer: WikiChangeset
@@ -785,7 +788,7 @@ final class WikiModel {
             answer = try await api.decideWikiChangeset(
                 card.changeset.id,
                 WikiDecideRequest(decisions: [WikiDecision(opId: card.op.id, action: action,
-                                                           edited: edited, reason: reason)]))
+                                                           edited: edited, reason: reason, note: note)]))
         } catch {
             await reloadAfterWrite()
             return Self.refusal(error)

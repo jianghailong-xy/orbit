@@ -288,7 +288,7 @@ describe('a card in each state the server reads (design §7.3)', () => {
     expect(text('.wk-draft-k')).toBe('Applied · In Review');
     expect(text('.wk-draft-k')).not.toMatch(/Confirmed/u);
     expect(document.querySelector('.wk-draft-k')!.className).toContain('amber');
-    await press('Re-confirm, amend or retire the entry in Review.');
+    await press('Keep, amend or retire the entry in Review.');
     expect(host.calls).toEqual(['review C7#0']);
     expect(buttons()).toEqual(['Open entry']);
   });

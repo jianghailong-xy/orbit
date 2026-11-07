@@ -72,7 +72,8 @@ internal object WikiCopy {
 
     const val editNote = "Only the title and the one-line summary change here."
     const val supersedeNote = "The replacement keeps this entry’s kind, fields and anchor, and this entry points at it."
-    const val retireNote = "Agents stop getting this entry. It stays in History, struck through, and the reason goes on the record."
+    /** Retire…'s dialog, on an entry's page and on a challenge's card: what retiring does, and that it is final. */
+    const val retireNote = "Agents stop getting this entry. It stays in History, struck through, and the reason goes on the record. This cannot be undone."
     const val titlePlaceholder = "Title"
     const val summaryPlaceholder = "One line"
     const val reasonPlaceholder = "Why it no longer holds"
@@ -139,7 +140,6 @@ internal object WikiCopy {
     const val decidedEdited = "Accepted with your edits"
     const val rejected = "Rejected"
     const val decidedKept = "Kept"
-    const val decidedReconfirmed = "Re-confirmed"
     const val decidedAmended = "Amended"
     const val decideFailed = "Couldn't record your answer"
     const val accept = "Accept"
@@ -359,9 +359,17 @@ internal object WikiModeCopy {
     fun rejectedByCheck(count: Int) = "$count rejected by the check"
     fun toReview(count: Int) = "$count to review"
 
-    const val reconfirm = "Re-confirm"
+    // A challenge's answers say what becomes of the entry (owner, 2026-11-07): Keep is `reconfirm`, and the two that ask
+    // first end in an ellipsis. Amend and Retire stay the words of the form and the dialog those two open.
+    const val reconfirm = "Keep"
     const val amend = "Amend"
+    const val amendAnswer = "Amend…"
     const val retire = "Retire"
+    const val retireAnswer = "Retire…"
+    /** The After row above the answers: what each one does to the entry, and that Retire cannot be undone. */
+    const val afterKeep = "Agents get this entry again. You can still retire it later."
+    const val afterAmend = "Agents get your version, and its anchors are checked again."
+    const val afterRetire = "Agents stop getting it. This cannot be undone."
     const val challengeWaits = "Agents stop getting this entry until you answer."
     const val challenged = "Challenged"
     const val amendNote = "Your version replaces the entry, and its anchors are checked again."

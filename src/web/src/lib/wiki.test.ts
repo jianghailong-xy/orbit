@@ -267,7 +267,7 @@ describe('the words Review decides by', () => {
     expect(wikiDecidedToast('retire', 'accept')).toBe('Retired');
     expect(wikiDecidedToast('retire', 'reject')).toBe('Kept');
     // A challenge's three answers.
-    expect(wikiDecidedToast('challenge', 'reconfirm')).toBe('Re-confirmed');
+    expect(wikiDecidedToast('challenge', 'reconfirm')).toBe('Kept');
     expect(wikiDecidedToast('challenge', 'amend')).toBe('Amended');
     expect(wikiDecidedToast('challenge', 'retire')).toBe('Retired');
   });
