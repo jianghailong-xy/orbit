@@ -81,15 +81,18 @@
       "addable": "The live workspaces Wiki settings' Add workspace offers: no repository, and in no wiki. One the owner left out of another space counts as in none. inWiki is false in every row.",
       "clients": "Web, macOS/iOS and Android draw it as the Workspaces section between Review mode and Maintenance (docs/mocks/wiki/38-workspaces)."
     },
-    "delete": {
+    "trash": {
       "route": "DELETE /api/wiki/spaces/:id",
-      "answer": "{ spaceId }. Another account's space, or one already gone, is the plain 404.",
-      "who": "The owner's alone: a request with a session header is refused WIKI_OWNER_CHANNEL_ONLY and a personal access token OWNER_INTERACTIVE_CREDENTIAL_REQUIRED. No agent tool and no CLI command reaches it.",
-      "takes": "The space and everything hanging off it, by foreign key in one transaction, its public link included. It cannot be undone, and a failure leaves all of it.",
-      "keeps": "Workspaces, sessions, tasks and projects. Text that names an entry keeps its words, and an orbit-wiki: link in it names nothing.",
-      "runningJobs": "Not waited for and not refused: a job's row goes with its space, so every write of its claim matches nothing, and its next write that needs the space fails, which ends the attempt with nothing left to requeue. A repository operation's result is answered 404, which a runner takes as the operation being gone.",
-      "repository": "A space with a repository is made again, empty, by the next session on that repository to use a wiki tool (`binding.automatic`), and asks for its plan's first draft like any new space. Its workspaces' rows went with the old space, a left-out mark among them. A space with no repository stays gone, and a session bound to it is refused WIKI_SPACE_UNBOUND.",
-      "clients": "Web has it on a wiki's sidebar row and at the foot of Wiki settings; macOS/iOS and Android at the foot of Wiki settings. Each asks first, naming the wiki and how many entries and documents go (docs/mocks/wiki-delete)."
+      "answer": "{ spaceId, deletedAt, purgeAt }. Another account's wiki, one already in Trash, or one gone, is the plain 404.",
+      "who": "The owner's alone, as all four Trash routes are: a request with a session header is refused WIKI_OWNER_CHANNEL_ONLY and a personal access token OWNER_INTERACTIVE_CREDENTIAL_REQUIRED. No agent tool and no CLI command reaches them.",
+      "move": "One short transaction under the wiki's row lock (migration 0486): deleted_at now, purge_at 365 days on (the retention @orbit/shared exports to every client), its slug and repository set aside in trashed_slug and trashed_repo_url_norm and replaced by a placeholder and NULL, its maintenance turned off, and its unfinished wiki_job and wiki_plan_job rows dropped. Every other row stays.",
+      "hidden": "A wiki in Trash is in no door: the list, every page and read by its id or by an id of anything in it, search across wikis, the review queue, link cards, the session tools and every scheduler answer it as one that does not exist. Its public link is paused (PAUSED, IN_TRASH, a visitor's 404) and opens again when it is restored.",
+      "sessions": "A row of wiki_space_workspace naming a wiki in Trash says nothing while it is there. A session on a repository uses the wiki in use for it, made empty by `binding.automatic` if there is none, and its workspace's row moves to that wiki. A session whose workspace has no repository and whose row names a wiki in Trash is refused WIKI_SPACE_UNBOUND, saying the wiki is in Trash.",
+      "restore": "POST /api/wiki/spaces/:id/restore answers the wiki as GET /api/wiki/spaces/:id does: its slug back, or the next free one (-2, -3…) when a wiki in use took it; its repository back, refused 409 with what to do when a wiki in use holds it (\"A newer wiki for <repo> is in your wikis now. Move it to Trash first, then restore this one.\"); its settings with maintenance still off; everything it held, its public link, and the workspaces whose rows did not move to another wiki meanwhile. A wiki in use is answered as it is; one whose purge is due, or gone, is the 404.",
+      "purge": "DELETE /api/wiki/spaces/:id/purge answers { spaceId }: purge_at becomes now and the wiki leaves Trash at once; a wiki not in Trash is the 404. The purge (WikiTrashPurge, on the process that runs the singleton sweeps, once a minute) takes each due wiki under a lease and deletes it a batch per statement — entries with every entry their supersede links reach, then every other table naming the wiki as the catalogue's foreign keys list it, then its row — for up to 30 s a pass; a pass cut short goes on where it stopped. A wiki is due 365 days after it was moved, or when the owner deletes it permanently.",
+      "list": "GET /api/wiki/trash answers { spaces: [{ id, slug, title, repoUrlNorm, deletedAt, purgeAt, entries }] }: the owner's wikis in Trash and not yet due, the newest move first, each with the slug and repository it had and its active entries.",
+      "keeps": "Workspaces, sessions, tasks and projects, through every step. Text that names an entry keeps its words; once the wiki is deleted for good, an orbit-wiki: link in it names nothing.",
+      "clients": "Web: Move to Trash… on a wiki's sidebar row and at the foot of Wiki settings; the Wiki group's last row, Wiki settings' last card and the first-wiki card lead to Trash, a dialog. macOS/iOS and Android: Move to Trash… and a Trash row at the foot of Wiki settings, Trash under the wiki picker's Manage spaces, and the first-wiki card's line. Each asks first, naming the wiki and what Trash keeps (docs/mocks/wiki-trash)."
     },
     "list": {
       "route": "GET /api/wiki/spaces",
@@ -2958,7 +2961,7 @@
       "a changeset recorded something, after its transaction commits",
       "the owner decided ops, after the transaction commits",
       "a space was created, its settings changed, or a workspace was added to it, turned back on or left out",
-      "a space was deleted, after its transaction commits",
+      "a space was moved to Trash, restored or deleted permanently, after its write commits",
       "the owner reverted a changeset or rejected an entry, after the transaction commits",
       "a verdict was recorded, after its transaction commits",
       "pending ops expired or were withdrawn",

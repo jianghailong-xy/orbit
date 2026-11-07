@@ -5,6 +5,7 @@ import io.orbitd.android.core.cards.OwnerReview
 import io.orbitd.android.projects.ProjectDone
 import io.orbitd.android.projects.StartProjectCopy
 import io.orbitd.android.tasks.OwnerConfirmationCopy
+import io.orbitd.android.tasks.TaskDetailCopy
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -44,12 +45,12 @@ class SessionLineCopyParityTest {
         val declared = SessionLineCopy::class.java.declaredFields.filter { it.type == String::class.java }
             .map { it.isAccessible = true; it.get(null) as String }
         assertTrue("a SessionLineCopy word is in neither Swift source: $declared", declared.all { both.contains("\"$it\"") })
-        assertEquals(11, declared.size)
+        assertEquals(12, declared.size)
     }
 
     @Test fun everyBuiltLineIsOneSwiftLiteral() {
         assertSentence(line, "SessionLine.swift", SessionLineCopy.runningTool("\\(fmtTool(t))"))
-        assertSentence(line, "SessionLine.swift", SessionLineCopy.sent("\\(plainPreview(text))"))
+        assertSentence(line, "SessionLine.swift", SessionLineCopy.sent("\\(sender(from))", "\\(plainPreview(text))"))
         assertSentence(line, "SessionLine.swift", SessionLineCopy.ongoing("\\(subagentRunningLabel(n))"))
         assertSentence(line, "SessionLine.swift", SessionLineCopy.ongoing("\\(bgRunningLabel(bg))"))
         assertSentence(line, "SessionLine.swift", SessionLineCopy.subagentRunning(count), "$count" to "\\(n)")
@@ -84,6 +85,29 @@ class SessionLineCopyParityTest {
             val word = NeedsYouLogic.kindWord(kind) ?: throw AssertionError("Android has no word for $kind")
             assertTrue("NeedsYou.swift no longer says \"$word\" for .$case", needsYou.contains("case .$case: return \"$word\""))
         }
+    }
+
+    /** Who sent the message the line previews (design §3.5, owner 2026-11-07): the same sentence, the same word for the owner, and the
+     * card's word for an untitled sender, at all three ends — OrbitKit's `SessionLine.sender` and the web's `sentLine` and `sentBy`
+     * (WorkspaceView.tsx). A missing counterpart is a failure, never a skip. */
+    @Test fun theSenderIsTheSwiftsAndTheWebs() {
+        assertDeclares(line, "SessionLine.swift", "you", SessionLineCopy.you)
+        assertTrue("SessionLine.swift no longer names an untitled sender as the card does",
+            line.contains("return title.isEmpty ? SessionMessageCard.untitled : title"))
+        assertDeclares(swift("../Transcript/SessionMessage.swift"), "SessionMessage.swift", "untitled", TaskDetailCopy.untitledSession)
+        val web = File(root, "src/web/src/components/WorkspaceView.tsx").readText()
+        val template = SessionLineCopy.sent("\${sender}", "\${plainPreview(text)}")
+        assertTrue("WorkspaceView.tsx no longer says \"$template\"", web.contains("text: `$template`,"))
+        assertTrue("WorkspaceView.tsx no longer calls the owner \"${SessionLineCopy.you}\"",
+            web.contains("export const SENT_BY_YOU = '${SessionLineCopy.you}';"))
+        assertTrue("WorkspaceView.tsx says You for something other than no sender",
+            web.contains("if (!from || typeof from !== 'object') return SENT_BY_YOU;"))
+        assertTrue("WorkspaceView.tsx no longer names an untitled sender as the card does", web.contains("|| SESSION_MESSAGE_UNTITLED;"))
+        assertTrue(File(root, "src/web/src/lib/sessionMessage.ts").readText()
+            .contains("export const SESSION_MESSAGE_UNTITLED = '${TaskDetailCopy.untitledSession}';"))
+        assertEquals(SessionLineCopy.you, SessionLine.sender(null))
+        assertEquals("Build the package", SessionLine.sender(SessionMessageFrom("s", " Build the package ")))
+        assertEquals(TaskDetailCopy.untitledSession, SessionLine.sender(SessionMessageFrom("s", " ")))
     }
 
     /** The line's tones are the Swift's, one for one. */

@@ -42,7 +42,7 @@ export class WikiJobReads {
   constructor(private readonly prisma: PrismaService) {}
 
   async read(ownerId: string, spaceId: string): Promise<WikiJobsRead> {
-    const space = await this.prisma.wikiSpace.findFirst({ where: { id: spaceId, ownerId }, select: { id: true } });
+    const space = await this.prisma.wikiSpace.findFirst({ where: { id: spaceId, ownerId, deletedAt: null }, select: { id: true } });
     if (!space) throw new NotFoundException('no such wiki space');
 
     const jobs = await this.prisma.$queryRaw<JobRow[]>`

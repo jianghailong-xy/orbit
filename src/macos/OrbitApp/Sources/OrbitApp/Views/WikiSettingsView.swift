@@ -2,8 +2,8 @@ import SwiftUI
 import OrbitKit
 
 // Wiki settings (criterion 8, mock 20): which review mode the space runs in, whether Automatic sends
-// spot checks, which workspaces are in the wiki (mock 38), the space's Wiki maintenance run, and deleting the wiki
-// (docs/mocks/wiki-delete) — pushed from the Wiki home's gear.
+// spot checks, which workspaces are in the wiki (mock 38), the space's Wiki maintenance run, and moving the wiki to
+// Trash, with the way to Trash under it (docs/mocks/wiki-trash) — pushed from the Wiki home's gear.
 //
 // The app's own settings form, not a new one: inset-grouped sections, a header and a footer each
 // (`SettingsSheet.swift`). The sections are `WikiModeLogic.SettingsSection` in its order, which is the
@@ -27,8 +27,10 @@ struct WikiSettingsActions {
     /// Set up… when maintenance is off, Edit… when it is on: the same sheet.
     var setUp: () -> Void = {}
     var turnOff: () -> Void = {}
-    /// Delete wiki…, which asks first.
-    var delete: () -> Void = {}
+    /// Move to Trash…, which asks first.
+    var moveToTrash: () -> Void = {}
+    /// The Trash row: Trash's page, pushed over this one.
+    var openTrash: () -> Void = {}
 }
 
 /// The settings page, drawn from the space as the server kept it.
@@ -40,6 +42,8 @@ struct WikiSettingsPage: View {
     var workspaceLabel: (String) -> String? = { _ in nil }
     /// The System model while the read says the server executes the account's wiki; nil otherwise.
     var server: WikiSystemModelStatus? = nil
+    /// How many wikis are in Trash: the Trash row under Move to Trash… while any is.
+    var trashed = 0
     var busy = false
     var actions = WikiSettingsActions()
 
@@ -149,12 +153,33 @@ struct WikiSettingsPage: View {
                     Button(WikiModeCopy.turnOff, role: .destructive, action: actions.turnOff)
                 }
             }
-        case .delete:
+        case .trash:
             Section {
-                Button(WikiModeCopy.deleteOpen, role: .destructive, action: actions.delete)
+                Button(WikiModeCopy.trashOpen, role: .destructive, action: actions.moveToTrash)
             } footer: {
-                Text(WikiModeCopy.deleteNote)
+                Text(WikiModeCopy.trashNote)
             }
+            if trashed > 0 { trashRow }
+        }
+    }
+
+    /// Trash, with how many wikis it holds, the way a row that opens a page reads: a press pushes it over this one.
+    private var trashRow: some View {
+        Section {
+            Button(action: actions.openTrash) {
+                LabeledContent {
+                    HStack(spacing: 6) {
+                        Text(WikiModeCopy.trashRowCount(trashed))
+                        Image(systemName: "chevron.forward")
+                            .font(.orbitMeta.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                } label: {
+                    Text(WikiModeCopy.trashPageTitle)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -508,32 +533,32 @@ struct WikiSettingsView: View {
 
     @State private var settingUp = false
     @State private var notice: String?
-    @State private var confirmingDelete = false
-    /// What the delete's question counts, read with the page; nil until then, or when the read fails.
-    @State private var deleteEntries: Int?
-    @State private var deleteRefusal: String?
+    @State private var confirmingMove = false
+    /// What Move to Trash's question counts, read with the page; nil until then, or when the read fails.
+    @State private var trashEntries: Int?
+    @State private var moveRefusal: String?
 
     var body: some View {
         if let wiki = model.wiki, let space = wiki.currentSpace {
             WikiSettingsPage(space: space, workspaces: wiki.spaceWorkspaces[space.id], workspaceLabel: { id in workspaceLabel(id) },
-                             server: wiki.serverModel, busy: wiki.busy, actions: actions(wiki, space))
+                             server: wiki.serverModel, trashed: wiki.trash.count, busy: wiki.busy, actions: actions(wiki, space))
                 .task {
                     await wiki.loadSpaces()
                     await wiki.loadSystemModel()
                     await wiki.loadSpaceWorkspaces(space)
                 }
-                .task(id: space.id) { deleteEntries = await wiki.entryCount(space) }
-                .orbitConfirmation(WikiModeCopy.deleteQuestion(name(of: space, in: wiki)), isPresented: $confirmingDelete) {
-                    Button(WikiModeCopy.deleteConfirm, role: .destructive) { delete(space, from: wiki) }
+                .task(id: space.id) { trashEntries = await wiki.entryCount(space) }
+                .orbitConfirmation(WikiModeCopy.trashQuestion(name(of: space, in: wiki)), isPresented: $confirmingMove) {
+                    Button(WikiModeCopy.trashConfirm, role: .destructive) { moveToTrash(space, from: wiki) }
                     Button(WikiModeCopy.cancel, role: .cancel) {}
                 } message: {
-                    Text(WikiModeCopy.deleteMessage(entries: deleteEntries, documents: space.docs?.written ?? 0,
-                                                    repository: space.repoUrlNorm))
+                    Text(WikiModeCopy.trashMessage(entries: trashEntries, documents: space.docs?.written ?? 0,
+                                                   repository: space.repoUrlNorm))
                 }
-                .alert(WikiModeCopy.deleteFailed, isPresented: Binding(get: { deleteRefusal != nil }, set: { if !$0 { deleteRefusal = nil } })) {
-                    Button("OK", role: .cancel) { deleteRefusal = nil }
+                .alert(WikiModeCopy.trashFailed, isPresented: Binding(get: { moveRefusal != nil }, set: { if !$0 { moveRefusal = nil } })) {
+                    Button("OK", role: .cancel) { moveRefusal = nil }
                 } message: {
-                    Text(deleteRefusal ?? "")
+                    Text(moveRefusal ?? "")
                 }
                 .sheet(isPresented: $settingUp) { WikiSetUpSheet(wiki: wiki, space: space) }
                 .alert(WikiCopy.settingsSaveFailed, isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
@@ -555,7 +580,8 @@ struct WikiSettingsView: View {
             turnOff: {
                 Task { finish(await wiki.updateSpace(space, WikiSpaceUpdate(maintenance: WikiMaintenanceUpdate(enabled: false)))) }
             },
-            delete: { confirmingDelete = true })
+            moveToTrash: { confirmingMove = true },
+            openTrash: { model.push(.wikiTrash) })
     }
 
     private func name(of space: WikiSpace, in wiki: WikiModel) -> String {
@@ -563,10 +589,10 @@ struct WikiSettingsView: View {
     }
 
     /// The page goes as soon as the wiki does, back to the one the Wiki opens now, or to its empty state.
-    private func delete(_ space: WikiSpace, from wiki: WikiModel) {
-        let said = WikiModeCopy.deleted(name(of: space, in: wiki))
+    private func moveToTrash(_ space: WikiSpace, from wiki: WikiModel) {
+        let said = WikiModeCopy.movedToTrash(name(of: space, in: wiki))
         Task {
-            deleteRefusal = await wiki.deleteSpace(space) {
+            moveRefusal = await wiki.moveSpaceToTrash(space) {
                 model.nav.pop()
                 model.showToast(said)
             }

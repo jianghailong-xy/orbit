@@ -105,6 +105,21 @@ struct SessionProjectRowView: View {
     }
 }
 
+/// The project's progress leading the second line of a member's own row, where its project has no row
+/// (owner 2026-11-07, docs/mocks/project-rows-by-workspace, option A): the project row's own chip. A
+/// phone does not press it on its own (the long press has Sessions), so it reads as the web's hover.
+struct SessionProjectMarkChip: View {
+    let mark: SessionProjectMark
+
+    var body: some View {
+        SessionProjectProgressChip(counts: mark.taskCounts, running: mark.runningCount, status: mark.status)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(SessionProjectCopy.markHint(title: mark.title))
+            .accessibilityValue(mark.taskCounts.map { SessionProjectCopy.progress(done: $0.done, total: $0.total) }
+                                ?? mark.status.label)
+    }
+}
+
 private struct SessionProjectProgressChip: View {
     let counts: ProjectSidebarTaskCounts?
     let running: Int

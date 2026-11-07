@@ -1153,6 +1153,28 @@ export interface WikiSpaceWorkspaces {
   addable: WikiSpaceWorkspaceRow[];
 }
 
+/** How long a wiki stays in Trash before it is deleted for good (contract `space.trash`, owner 2026-11-07). */
+export const WIKI_TRASH_RETENTION_DAYS = 365;
+
+/** One wiki in Trash, as `GET /api/wiki/trash` lists it (contract `space.trash.list`). */
+export interface WikiTrashRow {
+  id: string;
+  /** The slug and the repository it had, which a restore gives back. */
+  slug: string;
+  title: string;
+  repoUrlNorm: string | null;
+  /** When it was moved to Trash, and when it is deleted for good. */
+  deletedAt: string;
+  purgeAt: string;
+  /** Its active entries. */
+  entries: number;
+}
+
+/** `GET /api/wiki/trash`: the owner's wikis in Trash, the newest move first. */
+export interface WikiTrash {
+  spaces: WikiTrashRow[];
+}
+
 export interface WikiSpaceSettings {
   push: boolean;
   autoAcceptReinforce: boolean;

@@ -99,7 +99,7 @@ class MaintenanceSettingsWriter {
       });
       if (!workspace) throw new NotFoundException('no such workspace');
     }
-    const before = await this.prisma.wikiSpace.findFirst({ where: { id: spaceId, ownerId }, select: { settings: true } });
+    const before = await this.prisma.wikiSpace.findFirst({ where: { id: spaceId, ownerId, deletedAt: null }, select: { settings: true } });
     if (!before) throw new NotFoundException('no such wiki space');
     const needsWorkspace = (settings: WikiMaintenanceSettings) => {
       if (settings.enabled && !settings.workspaceId) {
@@ -113,7 +113,8 @@ class MaintenanceSettingsWriter {
       this.prisma,
       async (tx) => {
         const [locked] = await tx.$queryRaw<Array<{ settings: unknown }>>`
-          SELECT "settings" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
+          SELECT "settings" FROM "wiki_space"
+           WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid AND "deleted_at" IS NULL FOR UPDATE`;
         if (!locked) throw new NotFoundException('no such wiki space');
         const was = storedMaintenance(locked.settings);
         const next = merged(was, input);

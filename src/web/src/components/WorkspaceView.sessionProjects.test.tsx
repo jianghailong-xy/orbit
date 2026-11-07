@@ -525,6 +525,33 @@ describe('project entry status and second line', { timeout: 60_000 }, () => {
     expect(projectRow().querySelector('.session-project-status')).toBeNull();
   });
 
+  // The sixth line (§4.2) is the coordinator's own row line, so it names who sent the message it
+  // previews the same way: a task's report is the task's, and only the owner's words are "You" (§3.5,
+  // owner 11-07). An ordinary row beside it says it the same way.
+  it('names the session the coordinator’s unanswered message came from', async () => {
+    const from = { sessionId: TASK.id, title: 'Build the package' };
+    rows = [
+      { ...LOOSE, lastUserText: 'Which **branch** should I use?', lastUserFrom: { sessionId: COORDINATOR.id, title: 'Plan the release' } },
+      { ...COORDINATOR, lastUserText: 'Done: **the package builds**', lastUserFrom: from },
+      TASK,
+    ];
+    await mount();
+    expect(preview()?.textContent).toBe('Build the package: Done: the package builds');
+    expect(preview()?.classList.contains('tone-approval')).toBe(false);
+    expect(preview()?.classList.contains('tone-running')).toBe(false);
+    expect(sessionRow('Loose conversation').querySelector('.session-preview')?.textContent)
+      .toBe('Plan the release: Which branch should I use?');
+  });
+
+  it.each([
+    ['the owner sent it', { lastUserFrom: null }],
+    ['an older server names no sender', {}],
+  ])('says You for an unanswered message to the coordinator when %s', async (_, sender) => {
+    rows = [LOOSE, { ...COORDINATOR, lastUserText: 'Ship the release', ...sender }, TASK];
+    await mount();
+    expect(preview()?.textContent).toBe('You: Ship the release');
+  });
+
   it('says No coordinator when none is available', async () => {
     rows = [LOOSE, TASK];
     projects = [project({ coordinatorActivity: null })];

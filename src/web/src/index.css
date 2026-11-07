@@ -24823,6 +24823,29 @@ button.project-open-item-action:disabled {
 .wk-delete { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .wk-delete .wk-maint-d { margin-top: 0; }
 .wk-delete-lines > * + * { margin-top: 12px; }
+.wk-trash-link { font-size: 13px; line-height: 20px; color: var(--text-3); }
+.wk-trash-link .orbit-button.wk-trash-open { height: auto; padding: 0; font-size: inherit; line-height: inherit; vertical-align: baseline; }
+.wk-trash-link-card { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.wk-trash-link-start { margin-top: 10px; }
+/* Under the first-wiki card's lead, whose `.wk-start-h span` would grey out the link's own label. */
+.wk-start-h .wk-trash-link span { display: inline; margin-top: 0; color: inherit; font-size: inherit; line-height: inherit; }
+.wk-trash-lead { margin: 2px 0 12px; font-size: 13px; line-height: 1.5; color: var(--text-3); }
+.wk-trash-empty { padding: 12px 0; border-top: 1px solid var(--border-subtle); font-size: 13px; color: var(--text-3); }
+.wk-trash-list { margin: 0; padding: 0; list-style: none; }
+.wk-trash-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; column-gap: 12px; row-gap: 8px; align-items: center;
+                padding: 12px 0; border-top: 1px solid var(--border-subtle); }
+.wk-trash-ico { color: var(--text-3); font-size: 18px; line-height: 0; }
+.wk-trash-text { min-width: 0; }
+.wk-trash-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 500; color: var(--text-1); }
+.wk-trash-line { margin-top: 2px; font-size: 12.5px; line-height: 1.45; color: var(--text-3); }
+.wk-trash-acts { display: flex; align-items: center; gap: 4px; }
+.wk-trash-row .wk-trash-error { grid-column: 2 / 4; margin: 0; }
+@media (max-width: 560px) {
+  .wk-trash-row { grid-template-columns: 22px minmax(0, 1fr); }
+  .wk-trash-acts { grid-column: 2; }
+  .wk-trash-row .wk-trash-error { grid-column: 2; }
+}
+.tp-group-wiki .tp-wiki-trash { color: var(--text-3); }
 .wk-maint-off { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; }
 .wk-maint-t { font-size: 14px; color: var(--text-1); }
 .wk-maint-d { margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--text-3); }

@@ -98,7 +98,6 @@ final class WikiAPIClientTests: XCTestCase {
         let workspaces = try await api.wikiSpaceWorkspaces("S1")
         try await api.addWikiWorkspace(spaceID: "S1", workspaceID: "W2")
         try await api.leaveWikiWorkspaceOut(spaceID: "S1", workspaceID: "W1")
-        try await api.deleteWikiSpace("S1")
 
         XCTAssertEqual(workspaces.workspaces, [WikiSpaceWorkspaceRow(id: "W1", name: "shop-cli @ EU", runner: "build-01", inWiki: false)])
         XCTAssertEqual(workspaces.addable, [WikiSpaceWorkspaceRow(id: "W2", name: "notes", runner: nil, inWiki: false)])
@@ -122,7 +121,44 @@ final class WikiAPIClientTests: XCTestCase {
             "GET /api/wiki/spaces/S1/workspaces",
             "POST /api/wiki/spaces/S1/workspaces",
             "DELETE /api/wiki/spaces/S1/workspaces/W1",
+        ])
+    }
+
+    /// Trash's four calls (contract `space.trash`): the move answers when the wiki goes for good, the restore the wiki as
+    /// its own read does, the permanent delete nothing to read, and the list every wiki in Trash.
+    func testTrashCallsHitTheirRoutesAndDecode() async throws {
+        let log = WikiRequestLog()
+        WikiAPIURLProtocol.handler = { request in
+            log.record(request)
+            switch (request.httpMethod ?? "", request.url?.path ?? "") {
+            case ("DELETE", "/api/wiki/spaces/S1"):
+                return (200, #"{"spaceId":"S1","deletedAt":"2026-11-07T12:00:00.000Z","purgeAt":"2027-11-07T12:00:00.000Z"}"#)
+            case ("POST", "/api/wiki/spaces/S1/restore"): return (200, WikiFixtures.space)
+            case ("DELETE", "/api/wiki/spaces/S1/purge"): return (200, #"{"spaceId":"S1"}"#)
+            case ("GET", "/api/wiki/trash"):
+                return (200, #"{"spaces":[{"id":"S1","slug":"orbit-vllm-preview","title":"orbit · vLLM preview","repoUrlNorm":null,"deletedAt":"2026-11-07T12:00:00.000Z","purgeAt":"2027-11-07T12:00:00.000Z","entries":11138},{"id":"S2","slug":"orbit","title":"orbit","repoUrlNorm":"github.com/jianghailong-xy/orbit","deletedAt":"2026-10-02T12:00:00.000Z","purgeAt":"2027-10-02T12:00:00.000Z","entries":5120}]}"#)
+            default: return (404, "")
+            }
+        }
+        let api = client()
+        let moved = try await api.moveWikiSpaceToTrash("S1")
+        let restored = try await api.restoreWikiSpace("S1")
+        try await api.purgeWikiSpace("S1")
+        let trash = try await api.wikiTrash()
+
+        XCTAssertEqual(moved, WikiTrashMove(spaceId: "S1", deletedAt: "2026-11-07T12:00:00.000Z", purgeAt: "2027-11-07T12:00:00.000Z"))
+        XCTAssertEqual(restored.slug, "orbit")
+        XCTAssertEqual(trash.spaces, [
+            WikiTrashRow(id: "S1", slug: "orbit-vllm-preview", title: "orbit · vLLM preview", deletedAt: "2026-11-07T12:00:00.000Z",
+                         purgeAt: "2027-11-07T12:00:00.000Z", entries: 11138),
+            WikiTrashRow(id: "S2", slug: "orbit", title: "orbit", repoUrlNorm: "github.com/jianghailong-xy/orbit",
+                         deletedAt: "2026-10-02T12:00:00.000Z", purgeAt: "2027-10-02T12:00:00.000Z", entries: 5120),
+        ])
+        XCTAssertEqual(log.all, [
             "DELETE /api/wiki/spaces/S1",
+            "POST /api/wiki/spaces/S1/restore",
+            "DELETE /api/wiki/spaces/S1/purge",
+            "GET /api/wiki/trash",
         ])
     }
 
