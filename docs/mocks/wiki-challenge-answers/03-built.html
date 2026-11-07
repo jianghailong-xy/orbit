@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>03 · 实现之后：三端的真实画面和设计图逐项对照</title>
+<link rel="stylesheet" href="board.css">
+<script src="marks.js"></script>
+<style>
+  .b-pair { display: flex; gap: 18px; align-items: flex-start; }
+  table.b-table td.ok { color: #1d6b31; font-weight: 650; }
+</style>
+</head>
+<body>
+
+<h1>03 · 实现之后：三端的真实画面和设计图逐项对照</h1>
+<p class="lede">所有者 2026-11-07 选了 02 图的推荐（D1–D5）。下面左边是 02 的设计，右边是实现之后的<b>真实画面</b>，同一份数据（任务 A 的四条质疑，逐字）：web 是本分支构建的控制台跑在私有真栈上；iPhone 是 CI 的 iOS 模拟器跑本分支源码编出的 app；Android 是 CI 的 API 36 模拟器跑本分支编出的 debug APK，连本分支的 apiserver；Mac 是 CI 的 macOS 26.7 跑本分支源码编出的 app。</p>
+
+<section class="b-part">
+  <h2>Web 桌面：卡底</h2>
+  <p class="b-sub">逐像素比：After 一行以上，只有卡头的相对时间不同（“3h ago” 和 “4h ago”，一条 18 px 高的带）；回答这一行 0 个像素不同；After 一行差 34 个像素，是设计图里每行多出的 4 px 下边距。</p>
+  <div class="b-pair">
+    <figure class="b-frame" style="width:700px">
+      <figcaption><span class="tag rec">设计</span> 02 图</figcaption>
+      <div class="b-shot"><img src="shots/web-desk-foot-prop.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:700px">
+      <figcaption><span class="tag real">实现</span> 本分支的控制台，真栈</figcaption>
+      <div class="b-shot"><img src="shots/built-web-desk-card.png" alt=""></div>
+    </figure>
+  </div>
+  <div class="b-pair" style="margin-top:18px">
+    <figure class="b-frame" style="width:700px">
+      <figcaption><span class="tag real">实现</span> decision 类条目（claims 那条）<span class="b-dim">没有 Amend…，After 也没有 Amend 那句</span></figcaption>
+      <div class="b-shot"><img src="shots/built-web-desk-decision.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:440px">
+      <figcaption><span class="tag real">实现</span> 按 Retire… 之后<span class="b-dim">标题 Retire…，说明以 This cannot be undone. 结尾，理由是质疑的理由，焦点在 Cancel</span></figcaption>
+      <div class="b-shot"><img src="shots/built-web-retire-dialog.png" alt=""></div>
+    </figure>
+  </div>
+</section>
+
+<section class="b-part">
+  <h2>Mac</h2>
+  <p class="b-sub">Mac 和 iPhone 是同一份 SwiftUI 代码。Mac 的 bordered 按钮不给 destructive 角色上色，所以 Retire… 在 Mac 上单独加了红字（WikiView.swift，WikiWiringTests 钉住这一行）。Mac 只截了卡底；对话框和按下在 iPhone 上截。</p>
+  <div class="b-pair">
+    <figure class="b-frame" style="width:620px">
+      <figcaption><span class="tag now">今天</span> 01 图<span class="b-dim">Re-confirm 实心</span></figcaption>
+      <div class="b-shot"><img src="shots/mac-review-foot.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:620px">
+      <figcaption><span class="tag real">实现</span> 本分支的 OrbitApp<span class="b-dim">Keep · Amend… · Retire…，没有实心按钮，Retire… 红字</span></figcaption>
+      <div class="b-shot"><img src="shots/built-mac-foot.png" alt=""></div>
+    </figure>
+  </div>
+</section>
+
+<section class="b-part">
+  <h2>手机</h2>
+  <div class="b-row" style="flex-wrap:wrap; row-gap:24px; width:1600px">
+    <figure class="b-frame" style="width:250px">
+      <figcaption><span class="tag rec">设计</span> Web 手机</figcaption>
+      <div class="b-shot"><img src="shots/web-phone-foot-prop.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:250px">
+      <figcaption><span class="tag real">实现</span> Web 手机</figcaption>
+      <div class="b-shot"><img src="shots/built-web-phone-foot.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption><span class="tag real">实现</span> Web 手机，Retire…</figcaption>
+      <div class="b-shot b-phone"><img src="shots/built-web-phone-retire-dialog.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption><span class="tag real">实现</span> Web 手机，按 Keep 后<span class="b-dim">toast “Kept”；下一张从它的头开始</span></figcaption>
+      <div class="b-shot b-phone"><img src="shots/built-web-phone-after-keep.png" alt=""></div>
+    </figure>
+    <div style="flex-basis:100%; height:0"></div>
+    <figure class="b-frame" style="width:230px">
+      <figcaption><span class="tag rec">设计</span> iPhone</figcaption>
+      <div class="b-shot"><img src="shots/iphone-foot-prop.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption><span class="tag real">实现</span> iPhone<span class="b-dim">iPhone 17 Pro 模拟器（iOS 26.5）</span></figcaption>
+      <div class="b-shot b-phone"><img src="shots/built-iphone-foot.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption><span class="tag real">实现</span> iPhone，decision<span class="b-dim">只有 Keep 和 Retire…</span></figcaption>
+      <div class="b-shot b-phone"><img src="shots/built-iphone-decision.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption><span class="tag real">实现</span> iPhone，Retire…<span class="b-dim">条目页同一个 alert；单行框显示理由的末尾</span></figcaption>
+      <div class="b-shot b-phone"><img src="shots/built-iphone-retire-dialog.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption><span class="tag real">实现</span> iPhone，按 Keep 后<span class="b-dim">toast “Kept”；下一张从头开始，1 of 3</span></figcaption>
+      <div class="b-shot b-phone"><img src="shots/built-iphone-after-keep.png" alt=""></div>
+    </figure>
+    <div style="flex-basis:100%; height:0"></div>
+    <figure class="b-frame" style="width:230px">
+      <figcaption><span class="tag rec">设计</span> Android</figcaption>
+      <div class="b-shot"><img src="shots/android-foot-prop.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption><span class="tag real">实现</span> Android<span class="b-dim">API 36 模拟器，连本分支的 apiserver</span></figcaption>
+      <div class="b-shot b-phone"><img src="shots/built-android-answers.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption><span class="tag real">实现</span> Android，decision<span class="b-dim">只有 Keep 和 Retire…</span></figcaption>
+      <div class="b-shot b-phone"><img src="shots/built-android-decision.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption><span class="tag real">实现</span> Android，Retire…<span class="b-dim">条目页同一个对话框，理由可滚动</span></figcaption>
+      <div class="b-shot b-phone"><img src="shots/built-android-retire-dialog.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption><span class="tag real">实现</span> Android，按 Keep 后<span class="b-dim">toast “Kept”；下一张从头开始，1 of 3</span></figcaption>
+      <div class="b-shot b-phone"><img src="shots/built-android-after-keep.png" alt=""></div>
+    </figure>
+  </div>
+</section>
+
+<section class="b-part">
+  <h2>逐项对照</h2>
+  <table class="b-table">
+    <tr><th>02 图上的设计</th><th>Web（真栈）</th><th>iPhone（模拟器）</th><th>Mac</th><th>Android（模拟器）</th></tr>
+    <tr><td>D1 回答依次 Keep · Amend… · Retire…</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+    <tr><td>D2 没有实心按钮</td><td class="ok">✓ 三个都是 <code>--secondary</code> / <code>--danger</code></td><td class="ok">✓ 三个都是 <code>.bordered</code></td><td class="ok">✓</td><td class="ok">✓ 三个都是 OutlinedButton</td></tr>
+    <tr><td>D2 Retire… 红色，排最后</td><td class="ok">✓ rgb(245,74,69)</td><td class="ok">✓ 红字</td><td class="ok">✓ 红字</td><td class="ok">✓ 红色边框和字</td></tr>
+    <tr><td>D3 Retire… 先打开条目页的 Retire… 对话框</td><td class="ok">✓ 焦点在 Cancel</td><td class="ok">✓ 同一个 alert</td><td>同一份代码，没截图</td><td class="ok">✓ 同一个对话框</td></tr>
+    <tr><td>D3 理由预填质疑的理由，作为 note 发出</td><td class="ok">✓ 测试 + 真栈</td><td class="ok">✓ stub 收到的 decide 带 note</td><td>同一份代码</td><td class="ok">✓ 单测</td></tr>
+    <tr><td>D4 After 一行，Retire 那句 “This cannot be undone.”</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+    <tr><td>D4 toast 用按钮上的词（Kept）</td><td class="ok">✓</td><td class="ok">✓</td><td>同一份代码，没按</td><td class="ok">✓</td></tr>
+    <tr><td>D4 手机上下一张从它的头开始</td><td class="ok">✓ 卡头在 109 px</td><td class="ok">✓ Keep 后和 Next 后</td><td>同一份代码</td><td class="ok">✓</td></tr>
+    <tr><td>D5 decision 没有 Amend…</td><td class="ok">✓</td><td class="ok">✓</td><td>同一份代码</td><td class="ok">✓</td></tr>
+    <tr><td>条目页 Retire… 的说明也加了这句</td><td class="ok">✓</td><td class="ok">✓</td><td>同一份代码</td><td class="ok">✓</td></tr>
+    <tr><td>测试</td><td class="ok">web vitest 489 个文件 6931 个测试全过；shared 811 全过</td><td class="ok" colspan="2">OrbitKit swift test 4577 个，0 失败</td><td class="ok">CI：core 393、app 2327 × debug/release，0 失败</td></tr>
+    <tr><td>构建</td><td class="ok">tsc 通过，vite build 通过</td><td class="ok" colspan="2">CI 的 macOS（build + test）和 iOS（generate + build）都通过</td><td class="ok">lintDebug、assembleDebug 通过</td></tr>
+  </table>
+  <ul class="b-notes" style="width:1560px">
+    <li><b>不同之处，留着的：</b>Android 上 Retire 被服务端拒绝时，对话框先关上，再用这一页的拒绝提示说原因（条目页的 Retire… 一直是这样）；web 把拒绝留在对话框里，和它的 Amend 表单一样。iPhone 的理由框是 alert 里的单行框，显示理由的末尾。</li>
+    <li><b>没有完全查明：</b>iPhone 模拟器在 XCUITest 下，有一次按 Keep 后，app 收到答复以后约 10.7 秒没有发任何请求，之后正常。改动之前的代码也出现过一次（12.5 秒）；另外两次按下没有（0.69 秒、0.84 秒）。原因没找到；要不要另开任务查，请所有者定。</li>
+  </ul>
+</section>
+
+</body></html>

@@ -133,8 +133,9 @@ final class WikiCopyParityTests: XCTestCase {
             ("WIKI_DECIDED_REJECTED", WikiCopy.rejected),
             ("WIKI_DECIDED_RETIRED", WikiCopy.retired),
             ("WIKI_DECIDED_KEPT", WikiCopy.decidedKept),
-            ("WIKI_DECIDED_RECONFIRMED", WikiCopy.decidedReconfirmed),
             ("WIKI_DECIDED_AMENDED", WikiCopy.decidedAmended),
+            ("WIKI_RETIRE_NOTE", WikiCopy.retireNote),
+            ("WIKI_RETIRE_REASON_PLACEHOLDER", WikiCopy.reasonPlaceholder),
             ("WIKI_DECIDE_FAILED", WikiCopy.decideFailed),
             ("WIKI_DECIDE_CONFLICT", WikiCopy.conflictRefused),
             ("WIKI_DECIDE_INACTIVE", WikiCopy.inactiveRefused),
@@ -171,13 +172,17 @@ final class WikiCopyParityTests: XCTestCase {
             ("WIKI_MANAGE_SPACES", WikiCopy.manageSpaces),
         ]
         for (name, word) in pairs { assertDeclares(web, name, word) }
+        // A challenge's Keep toasts the button's word; "Re-confirmed" is gone at both ends.
+        XCTAssertFalse(web.contains("WIKI_DECIDED_RECONFIRMED"), "\(Self.lib) still declares WIKI_DECIDED_RECONFIRMED")
     }
 
     /// What a landed Review answer's toast says: the web's `wikiDecidedToast`, case by case.
     func testTheReviewToastSaysWhatTheAnswerDid() throws {
         let web = try source(Self.lib)
+        // A challenge's Keep (`reconfirm` on the wire) toasts the button's word, Kept.
+        let keep = try slice(web, from: "case 'reconfirm':", to: "case 'amend':")
+        XCTAssertTrue(keep.contains("return WIKI_DECIDED_KEPT;"), "\(Self.lib): a challenge's Keep no longer toasts Kept")
         for line in ["case 'edit': return WIKI_DECIDED_EDITED;",
-                     "case 'reconfirm': return WIKI_DECIDED_RECONFIRMED;",
                      "case 'amend': return WIKI_DECIDED_AMENDED;",
                      "case 'retire': return WIKI_DECIDED_RETIRED;",
                      "case 'reject': return op === 'retire' ? WIKI_DECIDED_KEPT : WIKI_DECIDED_REJECTED;",
@@ -190,7 +195,8 @@ final class WikiCopyParityTests: XCTestCase {
         XCTAssertEqual(WikiLogic.decidedToast(op: .retire, action: .accept), "Retired")
         XCTAssertEqual(WikiLogic.decidedToast(op: .retire, action: .reject), "Kept",
                        "Keep is a rejection on the wire, but the owner kept the entry")
-        XCTAssertEqual(WikiLogic.decidedToast(op: .challenge, action: .reconfirm), "Re-confirmed")
+        XCTAssertEqual(WikiLogic.decidedToast(op: .challenge, action: .reconfirm), "Kept",
+                       "a challenge's Keep says the button's word, so a press meant as Retire reads as what it did")
         XCTAssertEqual(WikiLogic.decidedToast(op: .challenge, action: .amend), "Amended")
         XCTAssertEqual(WikiLogic.decidedToast(op: .challenge, action: .retire), "Retired")
     }
@@ -691,12 +697,16 @@ final class WikiCopyParityTests: XCTestCase {
                              "{ key: 'supersede', icon: <SwapOutlined />, label: WIKI_ACTION_SUPERSEDE,",
                              "{ key: 'retire', icon: <StopOutlined />, label: WIKI_ACTION_RETIRE, danger: true,",
                              "label: copied ? WIKI_LINK_COPIED : WIKI_ACTION_COPY_LINK"], "the entry's actions")
-        for text in [WikiCopy.editNote, WikiCopy.supersedeNote, WikiCopy.retireNote] {
+        for text in [WikiCopy.editNote, WikiCopy.supersedeNote] {
             assertSays(drawer, text, in: Self.drawer)
         }
-        for placeholder in [WikiCopy.titlePlaceholder, WikiCopy.summaryPlaceholder, WikiCopy.reasonPlaceholder] {
+        for placeholder in [WikiCopy.titlePlaceholder, WikiCopy.summaryPlaceholder] {
             assertSays(drawer, "placeholder=\"\(placeholder)\"", in: Self.drawer)
         }
+        // Retire…'s note and reason are the lib's constants (`WIKI_RETIRE_NOTE`, `WIKI_RETIRE_REASON_PLACEHOLDER`,
+        // whose words the table above holds to WikiCopy's), the same Review's Retire… dialog says.
+        assertSays(drawer, "<p className=\"wk-modal-note\">{WIKI_RETIRE_NOTE}</p>", in: Self.drawer)
+        assertSays(drawer, "placeholder={WIKI_RETIRE_REASON_PLACEHOLDER}", in: Self.drawer)
         assertSays(drawer, "{mode === 'retire' ? '\(WikiCopy.retireConfirm)' : mode === 'supersede' ? "
                    + "'\(WikiCopy.supersedeConfirm)' : '\(WikiCopy.save)'}", in: Self.drawer)
         assertSays(drawer, "message.success(mode === 'retire' ? '\(WikiCopy.retired)' : mode === 'supersede' ? "
