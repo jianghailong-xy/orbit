@@ -1127,7 +1127,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'sessions/sessions.service.ts#createTurn',
     shape: 'TX_RETRIED',
-    locks: 'session FOR UPDATE (rank 30) — deliberately blocking, because this is where a user turn serializes against the claim and against turnComplete — then the optional orchestration task_attempt charge, the background_job_wake a coalescing wake files, the session_scheduled_wakeup a due wakeup settles — for a loop\'s tick, its session_wakeup_loop row FOR UPDATE first, then the tick settled and the next one inserted (settleLoopTick) — and conversation_turn/startup receipt children (rank 60); for a Watch wake, the delivery row its acknowledgement writes through `participateSendTransaction`, which no transaction holding a delivery row waits on a session for.',
+    locks: 'session FOR UPDATE (rank 30) — deliberately blocking, because this is where a user turn serializes against the claim and against turnComplete — then the optional orchestration task_attempt charge, the background_job_wake a coalescing wake files, the session_scheduled_wakeup a due wakeup settles — for a loop\'s tick, its session_wakeup_loop row FOR UPDATE first, then the tick settled and the next one inserted (settleLoopTick) — and conversation_turn/startup receipt children (rank 60); for a Watch wake, the delivery row its acknowledgement writes through `participateSendTransaction`, which no transaction holding a delivery row waits on a session for. A message another session sent also reads that session\'s id and title for the row\'s `lastUserFrom` (session-message.ts#readSessionMessageFrom), written in the one session UPDATE: a plain read, no lock — the FOR KEY SHARE a foreign key would take on the sender\'s row is what 0349 and 0485 avoid.',
     identity: "The caller's `clientTurnId` and message, both above the closure.",
     isolation: '',
     attempts: 4,
@@ -1138,7 +1138,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'sessions/sessions.service.ts#interrupt',
     shape: 'TX_RETRIED',
-    locks: 'session FOR UPDATE (rank 30), then the optional orchestration task_attempt charge and conversation_turn children (rank 60); with `stopBackgroundWork`, also the session\'s ACTIVE session_wakeup_loop and then its waiting session_scheduled_wakeup tick (rank 60, endWakeupLoop: OWNER_STOP).',
+    locks: 'session FOR UPDATE (rank 30), then the optional orchestration task_attempt charge and conversation_turn children (rank 60); with `stopBackgroundWork`, also the session\'s ACTIVE session_wakeup_loop and then its waiting session_scheduled_wakeup tick (rank 60, endWakeupLoop: OWNER_STOP). A follow-up another session sent reads that session\'s id and title for `lastUserFrom`, unlocked, as createTurn does.',
     identity: 'The session id plus the derived interrupt clientTurnId; a follow-up stores its full payload on that durable control receipt.',
     isolation: '',
     attempts: 4,
@@ -1226,7 +1226,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'sessions/sessions.service.ts#resume',
     shape: 'TX_RETRIED',
-    locks: 'project FOR NO KEY UPDATE (rank 40), task FOR SHARE NOWAIT (rank 50), session FOR UPDATE NOWAIT (rank 30 taken last, NOWAIT, which is the declared way this path declines to wait rather than close a cycle). A wakeup loop\'s revive (ScheduledWakeupWorker) adds, through `onTurnWritten`, the loop row FOR UPDATE and then its tick (rank 60, settleLoopTick).',
+    locks: 'project FOR NO KEY UPDATE (rank 40), task FOR SHARE NOWAIT (rank 50), session FOR UPDATE NOWAIT (rank 30 taken last, NOWAIT, which is the declared way this path declines to wait rather than close a cycle). A wakeup loop\'s revive (ScheduledWakeupWorker) adds, through `onTurnWritten`, the loop row FOR UPDATE and then its tick (rank 60, settleLoopTick). A message another session sent reads that session\'s id and title for `lastUserFrom`, unlocked, as createTurn does.',
     identity: 'The session id and the prompt, both above the closure.',
     isolation: '',
     attempts: 4,

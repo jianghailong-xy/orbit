@@ -2732,7 +2732,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // DO block. It is not a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of
       // the six preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so
       // it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: the table starts empty.
-      '0483_wiki_chat_draft'],
+      '0483_wiki_chat_draft',
+      // 0485 adds two nullable columns to `session` (`last_user_from_session_id`, `last_user_from_title`: who sent the
+      // message the row previews) in one DO statement that takes the table's lock in short tries, and nothing else.
+      // `session` is not a preserved relation, no column any preserved trigger reads is touched, and no function,
+      // trigger, type or constraint is created, replaced or dropped, so it is not another writer of the DONE fence. No
+      // INSERT, UPDATE or DELETE: every stored session reads NULL in both.
+      '0485_session_last_user_from'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

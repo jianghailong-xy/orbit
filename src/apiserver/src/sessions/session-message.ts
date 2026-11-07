@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import {
   uuidToBase62,
   type SessionMessageCard,
+  type SessionMessageFrom,
   type SessionReplyOption,
   type SessionRequestState,
 } from '@orbit/shared';
@@ -375,4 +376,47 @@ export async function readSessionMessageCard(
     // (it is the manual project trigger's fence there), so the card carries the address as it is read.
     ...(requestId ? { requestId: uuidToBase62(requestId) } : {}),
   };
+}
+
+/**
+ * Who a message is from, as a session row records it beside `lastUserText` (`lastUserFrom`,
+ * docs/session-list-projects-design.md §3.5): the card's `fromSessionId` and `fromTitle`, read by the
+ * card's own owner-scoped read. Null when no such session is left in this account to name.
+ */
+export async function readSessionMessageFrom(
+  db: Pick<Prisma.TransactionClient, 'session'>,
+  ownerId: string,
+  senderSessionId: string,
+): Promise<SessionMessageFrom | null> {
+  const sender = await readSender(db, ownerId, senderSessionId);
+  return sender ? { sessionId: sender.id, title: sender.title } : null;
+}
+
+/**
+ * The message a session row previews while it waits for an answer, and who sent it, as the one write
+ * of the three columns: every writer of `lastUserText` writes it through this, so the sender cannot be
+ * left behind when the text moves on. `from` is the sending session (`readSessionMessageFrom`, or the
+ * card the echo is stored with); null is the owner's words, or the platform's. A null text clears all
+ * three, which is what an answer does.
+ */
+export function pendingMessageColumns(
+  text: string | null,
+  from: SessionMessageFrom | null,
+): { lastUserText: string | null; lastUserFromSessionId: string | null; lastUserFromTitle: string | null } {
+  const sender = text === null ? null : from;
+  return {
+    lastUserText: text,
+    lastUserFromSessionId: sender?.sessionId ?? null,
+    lastUserFromTitle: sender?.title ?? null,
+  };
+}
+
+/** A session row's `lastUserFrom`, read back from the two columns `pendingMessageColumns` writes. */
+export function lastUserFromOf(row: {
+  lastUserFromSessionId: string | null;
+  lastUserFromTitle: string | null;
+}): SessionMessageFrom | null {
+  return row.lastUserFromSessionId === null
+    ? null
+    : { sessionId: row.lastUserFromSessionId, title: row.lastUserFromTitle ?? '' };
 }

@@ -42,6 +42,7 @@ import {
   STEER_WITHDRAW_WAIT_MS,
 } from './steer-withdraw';
 import { readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql } from './session-project-membership';
+import { lastUserFromOf, pendingMessageColumns, readSessionMessageFrom } from './session-message';
 import {
   closeRequestsTheRetryWillNotResend,
   isSessionReplyTurn,
@@ -3680,6 +3681,8 @@ export class SessionsService {
       lastAssistantText: string | null;
       lastToolUse: string | null;
       lastUserText: string | null;
+      lastUserFromSessionId: string | null;
+      lastUserFromTitle: string | null;
       // The rolling recap and when it was written (0418): the line the list prefers to the raw
       // last reply. Both null on a session no pass has recapped yet.
       recapText: string | null;
@@ -3772,6 +3775,9 @@ export class SessionsService {
         left(s.last_assistant_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastAssistantText",
         s.last_tool_use   AS "lastToolUse",
         left(s.last_user_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastUserText",
+        -- Who sent it, when another session did (0485): the row names that session, not "You".
+        s.last_user_from_session_id AS "lastUserFromSessionId",
+        s.last_user_from_title AS "lastUserFromTitle",
         -- The rolling recap (0418), clipped like the previews above. A session with no recap yet
         -- answers nulls, which is what the row falls back from to lastAssistantText.
         left(s.recap_text, ${SessionsService.PREVIEW_LEN}::int) AS "recapText",
@@ -3985,6 +3991,8 @@ export class SessionsService {
         lastAssistantText: r.lastAssistantText,
         lastToolUse: r.lastToolUse,
         lastUserText: r.lastUserText,
+        // `{ sessionId, title }` of the session that sent lastUserText, null for the owner's own.
+        lastUserFrom: lastUserFromOf(r),
         recapText: r.recapText,
         recapAt: r.recapAt,
         mergeStatus: r.mergeStatus,
@@ -4263,6 +4271,9 @@ export class SessionsService {
       // OpenAI's own id of the ChatGPT account a login-pool session runs on (migration 0324): no response
       // names an account but by its email and masked form (providers/codex-login.ts).
       poolCodexAccountId: _poolCodexAccountId,
+      // Read, never spread: answered as one `lastUserFrom`, the shape the list row and the summary carry.
+      lastUserFromSessionId,
+      lastUserFromTitle,
       ...rest
     } = projected;
     const tags = tagLinks
@@ -4341,6 +4352,8 @@ export class SessionsService {
       projectTitle: coordinatorForProject?.title ?? null,
       projectIntegrationRef: integrationRef ? branchName(integrationRef) : null,
       projectMembership: await readSessionProjectMembership(this.prisma, session.id),
+      // Who sent lastUserText, when another session did — the list row's and the summary's key.
+      lastUserFrom: lastUserFromOf({ lastUserFromSessionId, lastUserFromTitle }),
       sourceLanding,
       ...(landing ? { landing } : {}),
       shareToken: shareLinks?.[0]?.token ?? null,
@@ -6385,6 +6398,12 @@ export class SessionsService {
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
       await opts?.onTurnWritten?.(tx, turn);
+      // Who the row names beside that message when another session sent it: the session its card
+      // will name (session-message.ts). A plain read of the sender's row, never a lock on it — the
+      // one a foreign key would take is what 0349 and 0485 avoid.
+      const sentBy = dto.content && opts?.senderSessionId
+        ? await readSessionMessageFrom(tx, ownerId, opts.senderSessionId)
+        : null;
       const nextStatus = statusAfterTurnEnqueued(session.status);
       await tx.session.update({
         where: { id },
@@ -6397,8 +6416,9 @@ export class SessionsService {
           // rest of that turn — and throughout it the row previewed the PREVIOUS reply, which is
           // the one thing that reads as "already answered". The runner's own `user` event rewrites
           // the same value; only a reply clears it (ANSWERS_USER_TURN). An attachment-only send
-          // carries no text to preview and so leaves the column as it found it.
-          ...(dto.content ? { lastUserText: dto.content } : {}),
+          // carries no text to preview and so leaves the column as it found it. Its sender goes
+          // with it (`lastUserFrom`), null for the owner's own words.
+          ...(dto.content ? pendingMessageColumns(dto.content, sentBy) : {}),
           // A message on this session disarms any auto-retry waiting on it — whether it
           // came from the user (they took over; sending their own message again behind
           // their back would be a second, unasked-for turn) or from the sweeper itself
@@ -6696,6 +6716,10 @@ export class SessionsService {
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
+      // Its sender, read as createTurn reads one.
+      const sentBy = content && opts?.senderSessionId
+        ? await readSessionMessageFrom(tx, ownerId, opts.senderSessionId)
+        : null;
       const nextStatus = statusAfterTurnEnqueued(session.status);
       await tx.session.update({
         where: { id },
@@ -6703,8 +6727,8 @@ export class SessionsService {
           status: nextStatus,
           lastTurnAt: new Date(),
           // The redirected message is what the session is waiting on now — previewed from here
-          // exactly as in createTurn.
-          ...(content ? { lastUserText: content } : {}),
+          // exactly as in createTurn, with who sent it.
+          ...(content ? pendingMessageColumns(content, sentBy) : {}),
           // The person took over: an auto-retry waiting on this session must not fire a
           // second, unasked-for turn behind the one they just redirected to. A claim the sweep had
           // in flight ends for the same reason (migration 0354) — this turn is not its.
@@ -9288,6 +9312,10 @@ export class SessionsService {
       // and the claim builds one from it — so the only question is whether the value is true, and
       // the claim polices it against whatever model this revive resolves to.
       const normalizedFastMode = dto.fastMode !== undefined ? dto.fastMode === true : undefined;
+      // Its sender, read as createTurn reads one.
+      const sentBy = dto.content && opts?.senderSessionId
+        ? await readSessionMessageFrom(tx, ownerId, opts.senderSessionId)
+        : null;
       await tx.session.update({
         where: { id },
         data: {
@@ -9304,8 +9332,9 @@ export class SessionsService {
           result: null,
           lastTurnAt: new Date(),
           // Previewed from enqueue, as in createTurn: a revive waits for a slot like any other
-          // turn, and until the runner reports it the row would show the reply from before.
-          ...(dto.content ? { lastUserText: dto.content } : {}),
+          // turn, and until the runner reports it the row would show the reply from before. With
+          // its sender, as there.
+          ...(dto.content ? pendingMessageColumns(dto.content, sentBy) : {}),
           mergeStatus: null,
           mergeOperationId: null,
           mergeOperationOwner: null,
