@@ -18,6 +18,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { RUNNER_BEATS, runnerIsOnline } from '../runners/runner-presence';
 import type { CreateSessionDto } from '../sessions/dto';
 import { SessionsService } from '../sessions/sessions.service';
+import { cardsOfChats } from './wiki-chat-cards';
 import { readWikiChatContext } from './wiki-chat-context';
 import { normalizeRepoUrl, WikiRefusalError } from './wiki.service';
 import { wikiChatChoices, type WikiChatChoice } from './wiki-workspaces';
@@ -180,8 +181,8 @@ export class WikiChat {
 
   /**
    * `GET /api/wiki/spaces/:id/chats` (contract `chat.list`): the remembered workspace as it stands, every workspace
-   * the chats may run in, the round button's three counts over every chat of the space not in Trash, and the newest
-   * chats. The cards are the presses' (C6); until a chat has any, each counts as none.
+   * the chats may run in, the round button's three counts over every chat of the space not in Trash — its approvals and
+   * questions, and its cards (`wiki-chat-cards.ts`) — and the newest chats, each with its cards and its share of needsYou.
    */
   async list(ownerId: string, spaceId: string, actingSessionId: string | null): Promise<WikiChatList> {
     refuseActingSession(actingSessionId, "reading where a space's chats run");
@@ -197,23 +198,27 @@ export class WikiChat {
     // What an open chat waits on the owner for, as the session list counts it — the same rows, read by the same reader.
     const listed = await this.sessions.listRowsByIds(ownerId, chats.filter(open).map((chat) => chat.id));
     const approvals = new Map(listed.map((row) => [row.id, row.pendingApprovals ?? 0]));
+    // Every card of the space's chats not in Trash (contract `chat.fab.counts`), each read as its card read says it.
+    const cards = await cardsOfChats(this.prisma, ownerId, chats.map((chat) => chat.id));
     const counted = chats.map((chat) => ({
       chat,
       open: open(chat),
       approvals: open(chat) ? (approvals.get(chat.id) ?? 0) : 0,
+      cards: cards.get(chat.id) ?? [],
     }));
-    const fab = wikiChatFabCounts(counted.map(({ chat, open: isOpen, approvals: waiting }) => ({
-      open: isOpen,
-      turnActive: chat.status === RunStatus.PENDING || isSessionGenerating(chat),
-      approvals: waiting,
-      cards: [],
-    })));
+    const fabOf = (one: (typeof counted)[number]) => ({
+      open: one.open,
+      turnActive: one.chat.status === RunStatus.PENDING || isSessionGenerating(one.chat),
+      approvals: one.approvals,
+      cards: one.cards,
+    });
+    const fab = wikiChatFabCounts(counted.map(fabOf));
     return {
       spaceId: space.id,
       workspace: await this.rememberedWorkspace(ownerId, remembered, choices),
       choices: choices.map(({ id, name, runner, online }) => ({ id, name, runner, online })),
       fab,
-      chats: counted.slice(0, WIKI_CHAT_RULES.chatsListed).map(({ chat, approvals: waiting }) => chatRow(chat, waiting)),
+      chats: counted.slice(0, WIKI_CHAT_RULES.chatsListed).map((one) => chatRow(one.chat, wikiChatFabCounts([fabOf(one)]).needsYou, one.cards.length)),
     };
   }
 
@@ -237,8 +242,8 @@ export class WikiChat {
   }
 }
 
-/** One chat as the list names it (contract `chat.list.chats`). */
-function chatRow(chat: ChatSession, needsYou: number): WikiChatRow {
+/** One chat as the list names it (contract `chat.list.chats`): how many cards it holds, and how much of `needsYou` is its. */
+function chatRow(chat: ChatSession, needsYou: number, drafts = 0): WikiChatRow {
   return {
     sessionId: chat.id,
     title: chat.title,
@@ -246,7 +251,7 @@ function chatRow(chat: ChatSession, needsYou: number): WikiChatRow {
     open: OPEN_SESSION_STATUSES.includes(chat.status),
     createdAt: chat.createdAt.toISOString(),
     updatedAt: chat.updatedAt.toISOString(),
-    drafts: 0,
+    drafts,
     needsYou,
   };
 }

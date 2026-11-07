@@ -10,6 +10,7 @@ import {
   type WikiChatContext,
 } from '@orbit/shared';
 import { addTwins } from '../common/public-id-body';
+import { draftsNote } from './wiki-chat-cards';
 import { numbering, PLAN_SELECT } from './wiki-docs';
 import { ENTRY_SELECT, entryView } from './wiki.service';
 
@@ -26,6 +27,9 @@ import { ENTRY_SELECT, entryView } from './wiki.service';
  * sent is ever read — only ids.
  *
  * Ids are written as public ids: this is text an agent reads and hands back to the wiki's tools, which take them.
+ *
+ * And after the owner pressed a card, the next message tells the agent what became of it (`<orbit_wiki_drafts>`,
+ * `wiki-chat-cards.ts#draftsNote`), so the agent never learns it from a turn of its own.
  */
 
 /** One chat turn being handed to its runner. */
@@ -55,6 +59,12 @@ export async function appendWikiChatNotes(
   if (context?.page?.kind === 'entry') blocks.push(await entryPageNote(tx, delivery, context.page.entryId));
   if (context?.page?.kind === 'plan') blocks.push(await planPageNote(tx, delivery, context.page.docSlug));
   if (context?.selection) blocks.push(await selectionNote(tx, delivery, context.selection));
+  // What the owner pressed since the agent was last told (contract `chat.notes.drafts`): with this message, never as a
+  // turn of its own. Stamped in this delivery's transaction, so a claim rolled back tells the next delivery instead.
+  if (delivery.turn.kind === 'message' || delivery.turn.kind === 'steer') {
+    const drafts = await draftsNote(tx, { ownerId: delivery.ownerId, sessionId: delivery.sessionId });
+    if (drafts) blocks.push(drafts);
+  }
   if (blocks.length === 0) return content;
   return [content ?? '', ...blocks].join('\n\n');
 }

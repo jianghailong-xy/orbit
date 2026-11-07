@@ -1,10 +1,11 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { actingSession } from './wiki.controller';
 import { WikiChat } from './wiki-chat';
+import { WikiChatDrafts } from './wiki-chat-drafts';
 import { WikiRolloutGuard } from './wiki-rollout';
 
 /**
@@ -15,12 +16,25 @@ import { WikiRolloutGuard } from './wiki-rollout';
  * guard, as a binding write is — and the read takes a token with wiki:read.
  *
  * A chat's later messages are the session's own message door's (`POST /api/sessions/:id/turns`, contract
- * `chat.turns`), which takes a chat's wikiContext; the cards and the presses are C6's.
+ * `chat.turns`), which takes a chat's wikiContext.
+ *
+ * The cards (contract `chat.drafts.read`) and the six presses (`chat.presses`) are here too, every one the owner's: a
+ * request with a session header is refused WIKI_OWNER_CHANNEL_ONLY before anything is read (`WikiChatDrafts`), a press
+ * takes only the owner's interactive credential, and a read a token with wiki:read. Another owner's chat or card is the
+ * plain 404.
  */
+/** An Edit's body (contract `chat.presses.edit`): `{ ops: [{ seq, changes }] }`, held to that shape by `WikiChatDrafts.edit`. No id. */
+interface WikiChatEditBody {
+  ops?: unknown;
+}
+
 @UseGuards(JwtAuthGuard, WikiRolloutGuard)
 @Controller('wiki')
 export class WikiChatController {
-  constructor(private readonly chats: WikiChat) {}
+  constructor(
+    private readonly chats: WikiChat,
+    private readonly drafts: WikiChatDrafts,
+  ) {}
 
   @PatForbidden('OWNER_INTERACTIVE')
   @Post('spaces/:id/chats')
@@ -46,5 +60,100 @@ export class WikiChatController {
     @Req() request: { headers: Record<string, string | string[] | undefined> },
   ) {
     return this.chats.list(user.userId, id, actingSession(request.headers));
+  }
+
+  /** Every card of one chat, oldest first (contract `chat.drafts.read`): `:id` is the chat's session. */
+  @PatScope('wiki:read', { workspaceConfinable: false })
+  @Get('chats/:id/drafts')
+  chatDrafts(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.drafts.listOfChat(user.userId, id, actingSession(request.headers));
+  }
+
+  /** One card (contract `chat.drafts.read`). */
+  @PatScope('wiki:read', { workspaceConfinable: false })
+  @Get('chat-drafts/:id')
+  draft(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.drafts.read(user.userId, id, actingSession(request.headers));
+  }
+
+  /** Apply (contract `chat.presses.apply`): the card's ops recorded and accepted, its Rewrites queued. */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Post('chat-drafts/:id/apply')
+  @HttpCode(HttpStatus.OK)
+  apply(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.drafts.apply(user.userId, user.userId, id, actingSession(request.headers));
+  }
+
+  /** Edit (contract `chat.presses.edit`): `{ ops: [{ seq, changes }] }` laid over the card's ops, then Apply's. */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Post('chat-drafts/:id/edit')
+  @HttpCode(HttpStatus.OK)
+  edit(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() body: WikiChatEditBody,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.drafts.edit(user.userId, user.userId, id, body, actingSession(request.headers));
+  }
+
+  /** Discard (contract `chat.presses.discard`): the card marked, nothing else written. */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Post('chat-drafts/:id/discard')
+  @HttpCode(HttpStatus.OK)
+  discard(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.drafts.discard(user.userId, user.userId, id, actingSession(request.headers));
+  }
+
+  /** Undo (contract `chat.presses.undo`): the Apply reverted and the sections its rewrite wrote restored. */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Post('chat-drafts/:id/undo')
+  @HttpCode(HttpStatus.OK)
+  undo(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.drafts.undo(user.userId, user.userId, id, actingSession(request.headers));
+  }
+
+  /** Try again (contract `chat.presses.retry`): a failed rewrite's sections queued again. */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Post('chat-drafts/:id/retry')
+  @HttpCode(HttpStatus.OK)
+  retry(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.drafts.retry(user.userId, user.userId, id, actingSession(request.headers));
+  }
+
+  /** Seen (contract `chat.presses.seen`): the owner opened the card's settled rewrite. */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Post('chat-drafts/:id/seen')
+  @HttpCode(HttpStatus.OK)
+  seen(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.drafts.seen(user.userId, user.userId, id, actingSession(request.headers));
   }
 }

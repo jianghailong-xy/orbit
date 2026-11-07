@@ -284,7 +284,14 @@ export async function runWikiDocsFollowJob(context: WikiJobContext, deps: WikiDo
   const causeOf = (slug: string, key: string): WikiDocWriteCause => {
     const id = at(slug, key);
     const own = forced.get(id);
-    if (own) return chatCause(own.press);
+    // A section only presses asked for names their cards, so the write is skipped once every one of them was undone
+    // (contract `chat.presses.undo`: a rewrite that runs writes none of an undone card's sections it has not written).
+    // One a merge touched too is written for the merge either way.
+    if (own) {
+      return touched.has(id) || factOf.has(id)
+        ? chatCause(own.press)
+        : { reason: 'chat', jobId: job.id, title: own.press.title, draftIds: own.draftIds };
+    }
     const fact = factOf.get(id);
     if (fact) return mergeCause(fact);
     const taken = (one: string): boolean => one.startsWith(`${slug}#`) && (only.get(slug)?.has(one.slice(slug.length + 1)) ?? false);

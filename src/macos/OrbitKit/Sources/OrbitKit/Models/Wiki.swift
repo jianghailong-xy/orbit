@@ -432,6 +432,9 @@ public struct WikiSpace: Codable, Equatable, Sendable, Identifiable {
     /// Only on the list read, and nil from a server older than it: the things of the space's plan that
     /// wait on the owner, counted as `WikiPlanLogic.pending` counts them.
     public let planWaiting: Int?
+    /// Only on the list read, and nil from a server older than it: the space's applied chat cards whose rewrite
+    /// waits on the owner, one each (contract `space.list.chatWaiting`) — the chat's part of W.
+    public let chatWaiting: Int?
     /// Only on the list read, and nil from a server older than it: the workspaces bound to the space, in
     /// the order they were bound.
     public let workspaceIds: [String]?
@@ -443,7 +446,7 @@ public struct WikiSpace: Codable, Equatable, Sendable, Identifiable {
                 rootCommitSha: String? = nil, settings: WikiSpaceSettings? = nil,
                 createdAt: String? = nil, updatedAt: String? = nil, pendingOps: Int? = nil,
                 usage: WikiUsage? = nil, planWaiting: Int? = nil, workspaceIds: [String]? = nil,
-                docs: WikiDocsDirectory.Counts? = nil) {
+                docs: WikiDocsDirectory.Counts? = nil, chatWaiting: Int? = nil) {
         self.id = id
         self.slug = slug
         self.title = title
@@ -455,6 +458,7 @@ public struct WikiSpace: Codable, Equatable, Sendable, Identifiable {
         self.pendingOps = pendingOps
         self.usage = usage
         self.planWaiting = planWaiting
+        self.chatWaiting = chatWaiting
         self.workspaceIds = workspaceIds
         self.docs = docs
     }

@@ -29,6 +29,7 @@ import {
   type WikiChatRewritesInput,
   type WikiDocChange,
   type WikiDocsFollowFacts,
+  wikiChatAppliedInReview,
   wikiChatCardActions,
   wikiChatCardNeedsYou,
   wikiChatCardTitle,
@@ -156,12 +157,19 @@ describe('wiki chat contract', () => {
     expect(notes.how).toMatch(/the Android client and every older one draw them and count nothing from them/u);
   });
 
-  it('drafts every op of a chat, opens wiki_draft to a chat alone, and keeps four tools until the runner serves a fifth', () => {
+  it('drafts every op of a chat, opens wiki_draft to a chat alone, and serves it as the fifth tool (C6)', () => {
     const surface = CONTRACT.agentSurface;
-    // The runner's Go test holds tools to what a binary serves; wiki_draft joins with the binary that serves it (C6).
-    expect(surface.tools).toEqual(['wiki_search', 'wiki_get', 'wiki_propose', 'wiki_note']);
+    // The runner's Go test holds tools to what a binary serves; wiki_draft joined with the binary that serves it (C6).
+    expect(surface.tools).toEqual(['wiki_search', 'wiki_get', 'wiki_propose', 'wiki_note', 'wiki_draft']);
     expect(surface.chat.draft.arrival).toMatch(/TestWikiAgentSurfaceIsTheContracts/u);
     const draft = surface.chat.draft;
+    // The live tool spec is the chat's block, field for field, and its command is the block's.
+    expect(surface.toolSpecs.wiki_draft.params).toEqual(draft.params);
+    expect([surface.toolSpecs.wiki_draft.readOnly, surface.toolSpecs.wiki_draft.destructive]).toEqual([draft.readOnly, draft.destructive]);
+    expect(surface.cli.wiki_draft).toBe(draft.cli);
+    // replaces joined both drafting tools' params, a chat's alone.
+    expect(surface.toolSpecs.wiki_propose.params.replaces).toMatch(/in a wiki chat alone/u);
+    expect(surface.toolSpecs.wiki_note.params.replaces).toMatch(/in a wiki chat alone/u);
     expect(draft.tool).toBe('wiki_draft');
     expect([draft.readOnly, draft.destructive]).toEqual([false, false]);
     expect(keysOf(draft.params)).toEqual(['kind', 'sections', 'change', 'reason', 'replaces', 'idempotencyKey']);
@@ -239,6 +247,30 @@ describe('wiki chat contract', () => {
     }
     expect(keysOf(WIKI_CHAT_COPY.waiting)).toEqual([...WIKI_DOCS_FOLLOW_WAITING]);
     expect(keysOf(WIKI_CHAT_COPY.reasons)).toEqual([...WIKI_DOC_VERSION_REASONS]);
+  });
+
+  it('says an applied card whose challenge waits in Review is in Review, never confirmed', () => {
+    // The coordinator's reading of C6: Apply raises a challenge's flag, and the owner answers it in Review, so the
+    // contract's `Applied · Confirmed by you` would say the opposite of what happened.
+    expect(CONTRACT.chat.copy.card.appliedInReview).toBe('Applied · In Review');
+    expect(CONTRACT.chat.copy.card.appliedInReviewNote).toBe('Re-confirm, amend or retire the entry in Review.');
+    for (const sentence of [WIKI_CHAT_COPY.card.appliedInReview, WIKI_CHAT_COPY.card.appliedInReviewNote]) {
+      expect(sentence).not.toMatch(/\bconfirmed\b/iu);
+    }
+    const applied = CONTRACT.chat.drafts.states.applied as string;
+    expect(applied).toContain('copy.card.appliedInReview');
+    expect(applied).toContain('copy.card.appliedInReviewNote');
+    expect(applied).toContain('wikiChatAppliedInReview');
+    expect(applied).toMatch(/Review item/u);
+    expect(DOC).toContain('`Applied · In Review` · `Re-confirm, amend or retire the entry in Review.`');
+    const pending = [{ op: 'challenge', decision: 'pending' }];
+    expect(wikiChatAppliedInReview('applied', pending)).toBe(true);
+    expect(wikiChatCardTitle('applied', 'Challenge entry', true)).toBe('Applied · In Review');
+    // Only an applied card, and only while the challenge is pending: answered in Review, or any other op, it is confirmed.
+    for (const state of WIKI_CHAT_DRAFT_STATES.filter((s) => s !== 'applied')) expect(wikiChatAppliedInReview(state, pending)).toBe(false);
+    expect(wikiChatAppliedInReview('applied', [{ op: 'challenge', decision: 'accepted' }])).toBe(false);
+    expect(wikiChatAppliedInReview('applied', [{ op: 'amend', decision: 'pending' }])).toBe(false);
+    expect(wikiChatAppliedInReview('applied', [{ op: 'add', decision: 'accepted' }, { op: 'challenge', decision: 'pending' }])).toBe(true);
   });
 
   it('says what the design and its board say, word for word', () => {
@@ -409,11 +441,14 @@ describe('wiki chat vectors', () => {
   });
 
   it.each(cases('cards'))('card: %s', (_name, vector) => {
-    const v = vector as { facts: WikiChatDraftFacts; kind: WikiChatDraftKind; ops: WikiChatDraftOp[]; undoable: boolean; state: string; label: string; title: string; actions: string[]; needsYou: boolean };
+    const v = vector as {
+      facts: WikiChatDraftFacts; kind: WikiChatDraftKind; ops: Array<WikiChatDraftOp & { decision?: string }>; undoable: boolean; state: string;
+      label: string; title: string; actions: string[]; needsYou: boolean;
+    };
     const state = wikiChatDraftState(v.facts);
     expect(state).toBe(v.state);
     expect(wikiChatDraftLabel(v.kind, v.ops)).toBe(v.label);
-    expect(wikiChatCardTitle(state, v.label)).toBe(v.title);
+    expect(wikiChatCardTitle(state, v.label, wikiChatAppliedInReview(state, v.ops))).toBe(v.title);
     const card: WikiChatCard = { kind: v.kind, state, undoable: v.undoable, rewrite: null };
     expect(wikiChatCardActions(card)).toEqual(v.actions);
     expect(wikiChatCardNeedsYou(card)).toBe(v.needsYou);

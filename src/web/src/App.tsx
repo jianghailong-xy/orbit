@@ -468,16 +468,19 @@ export function App() {
               }
             />
             {/* Both workspace paths share one WorkspaceConsole layout route, so WorkspaceView
-                survives navigation between them without remounting. */}
+                survives navigation between them without remounting. These children render no view
+                of their own — the layout draws it from the address — so each says `element={null}`
+                instead of leaving it undefined, which React Router's development build (the dev
+                server's and the tests') warns about: a matched leaf with no element. */}
             <Route element={<WorkspaceConsole />}>
-              <Route path="workspaces/:id/*" />
+              <Route path="workspaces/:id/*" element={null} />
               {/* A machine's own new session page, which needs no workspace to exist (the setup card). */}
-              <Route path="runners/:id/new" />
+              <Route path="runners/:id/new" element={null} />
               {/* Pre-rename URL, still in people's bookmarks and history. */}
-              <Route path="agents/:id/*" />
-              <Route path="sessions/:id" />
+              <Route path="agents/:id/*" element={null} />
+              <Route path="sessions/:id" element={null} />
               {/* A project's Landings window (owner 2026-10-27): the console's right pane. */}
-              <Route path="projects/:id/landings" />
+              <Route path="projects/:id/landings" element={null} />
             </Route>
             {authed && <Route path="*" element={notFound} />}
           </Route>

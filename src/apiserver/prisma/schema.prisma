@@ -7417,6 +7417,8 @@ model WikiSpace {
   docs            WikiDoc[]
   /// The sections its documents' writes replaced, as they stood (0475).
   docVersions     WikiDocSectionVersion[]
+  /// The cards its chats' agents drafted, and what the owner pressed (0483).
+  chatDrafts      WikiChatDraft[]
   /// Its public links, live and ended (0403).
   shareLinks      ShareLink[]
 
@@ -8297,6 +8299,51 @@ model WikiDocSectionVersion {
   @@map("wiki_doc_section_version")
 }
 
+/// One card a wiki chat's agent drafted (migration 0483, contract `chat.drafts`; docs/wiki-contract.md §28.5): never a
+/// changeset, so it takes no place in Review or its quotas. Its state is derived on read (`wikiChatDraftState`), never
+/// stored; the press is the owner's (`chat.presses`).
+model WikiChatDraft {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  ownerId        String    @map("owner_id") @db.Uuid
+  spaceId        String    @map("space_id") @db.Uuid
+  space          WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_chat_draft_space_fkey")
+  /// The chat it was drafted in. A history reference with no foreign key.
+  sessionId      String    @map("session_id") @db.Uuid
+  /// `entry` | `rewrite` | `plan`.
+  kind           String
+  rationale      String
+  /// entry: `[{ seq, op, entryId, baseRevision, payload, similar, tainted }, …]`, as checked and redacted.
+  ops            Json      @default("[]")
+  /// rewrite: `[{ doc, key }, …]`.
+  sections       Json      @default("[]")
+  /// plan: the change, shaped as a plan proposal's.
+  change         Json?
+  /// `[{ doc, key }, …]`: what its press rewrites, worked out when it was drafted.
+  rewrites       Json      @default("[]")
+  tainted        Boolean   @default(false)
+  /// The open card of the same chat it replaced. A history reference with no foreign key.
+  replacesId     String?   @map("replaces_id") @db.Uuid
+  idempotencyKey String?   @map("idempotency_key")
+  requestSha256  String?   @map("request_sha256") @db.Char(64)
+  /// `applied` | `edited` | `discarded`, set with `decidedAt`.
+  decision       String?
+  decidedAt      DateTime? @map("decided_at") @db.Timestamptz(3)
+  /// The changeset an entry card's Apply or Edit recorded. A history reference with no foreign key.
+  changesetId    String?   @map("changeset_id") @db.Uuid
+  /// `{ "<entry id>": "<trust>" }`: what each entry an amend of the card changed was trusted as before the press.
+  trustBefore    Json?     @map("trust_before")
+  undoneAt       DateTime? @map("undone_at") @db.Timestamptz(3)
+  seenAt         DateTime? @map("seen_at") @db.Timestamptz(3)
+  /// When the agent was last told of its press, with the owner's next message (`chat.notes.drafts`).
+  toldAt         DateTime? @map("told_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([id, ownerId], map: "wiki_chat_draft_id_owner_id_key")
+  @@index([sessionId, createdAt], map: "wiki_chat_draft_session_idx")
+  @@index([spaceId, createdAt], map: "wiki_chat_draft_space_idx")
+  @@map("wiki_chat_draft")
+}
+
 /// The System model as the wiki-worker last found it, and the worker's heartbeat (migration 0400, contract
 /// `systemModel.status`; docs/wiki-server-execution-design.md §5.3). Exactly one row, id 1: the worker writes
 /// it, the apiserver only reads it. No column holds the endpoint's address or its key.
@@ -8396,6 +8443,9 @@ model WikiModelRequest {
   /// `{ system, prompt, maxTokens }` and its sha256, so a replay proves it is the same call.
   request       Json   @map("request")
   requestSha256 String @map("request_sha256") @db.Char(64)
+  /// What the call was made from, for a replay to read its answer against (0482, contract `modelQueue.material`): the
+  /// maintain job's case file of a session's first question; null on every other call.
+  material Json? @map("material")
   /// `queued` | `running` | `succeeded` | `failed` | `cancelled`.
   state String @default("queued")
   /// The lease: the three together exactly while running, cleared by every settle (a CHECK holds both ways).
