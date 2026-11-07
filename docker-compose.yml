@@ -463,9 +463,8 @@ services:
   # The runner link's gateway (docs/runner-link-design.md §6.1, §15.10; docs/self-hosting.md, "Runner link"): the WebSocket
   # endpoint runners connect to. It checks each connection token with the public half of the apiserver's signing key and
   # reads revoked runner credentials from the apiserver with the gateway secret; it holds no signing key and no database
-  # connection. Until the link is switched over (MODE_HTTP, as LINK_MODE is unset here) it keeps connections, answers
-  # heartbeats and compares what runners mirror to it, and forwards nothing; once switched, it forwards their calls to
-  # the apiserver's internal listener and their live streams to NATS (src/link-gateway/README.md).
+  # connection. It forwards runners' calls to the apiserver's internal listener and their live streams to NATS
+  # (src/link-gateway/README.md).
   #
   # It runs under the runner-link profile. A fresh install, and /upgrade on a deployment with no link, switch that on in
   # .env with RUNNER_LINK_URL=same-origin: runners then reach it through the web gateway's port above, and it speaks plain

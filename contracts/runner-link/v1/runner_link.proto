@@ -457,6 +457,10 @@ message Heartbeat {
   repeated string supported_providers = 5;
   // The rest of today's heartbeat body, part by part, each identified by its digest (§5.7).
   repeated Fact facts = 6;
+  // Names this beat, so that the HeartbeatAck answering it can say so: unique within the process
+  // and increasing, from 1. A runner keeps at most one beat unanswered on a connection, and a late
+  // answer does not end the connection (§15.13). 0 from a runner older than this field.
+  uint64 beat_id = 7;
 }
 
 // One part of what a runner reports about itself on every beat, such as its model catalog (§5.7:
@@ -492,6 +496,12 @@ message HeartbeatAck {
   HintState hints = 4;
   // The runner release the control plane assigns this runner (§7); unset when it assigns none.
   AssignedRelease release = 5;
+  // The beat_id of the Heartbeat this answers. A gateway forwards a connection's beats one at a
+  // time, in order, and answers each with one HeartbeatAck; a beat that comes while another is being
+  // forwarded waits, and a newer one replaces it unanswered. 0 when the Heartbeat carried none, or
+  // from a gateway older than this field: a runner then takes the ack as the answer to its one
+  // unanswered beat on the connection.
+  uint64 beat_id = 6;
 }
 
 // Durable events of one session (§5.8). Delivered at least once and stored once per seq: the

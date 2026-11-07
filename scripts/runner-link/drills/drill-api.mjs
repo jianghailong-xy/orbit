@@ -1,24 +1,23 @@
 #!/usr/bin/env node
-// The API calls rollback-drill.sh, lost-answer-drill.sh, release-outage-drill.sh and mass-disconnect-drill.sh make on the staging stack (README.md beside this file): as its
-// owner, who is also its administrator, or as the drill runner. Each prints one line of JSON and exits non-zero on an
-// answer outside 2xx.
+// The API calls durable-events-drill.sh, lost-answer-drill.sh, release-outage-drill.sh and mass-disconnect-drill.sh make
+// on the staging stack (README.md beside this file): as its owner, or as the drill runner. Each prints one line of JSON
+// and exits non-zero on an answer outside 2xx.
 //
-//   node rollback-drill.mjs <origin> <state dir> switch on|off|get
-//   node rollback-drill.mjs <origin> <state dir> enrollment-token <label>
-//   node rollback-drill.mjs <origin> <state dir> workspace <runner id> <work dir> <name>
-//   node rollback-drill.mjs <origin> <state dir> session <workspace id> <prompt>
-//   node rollback-drill.mjs <origin> <state dir> turn <session id> <content>
-//   node rollback-drill.mjs <origin> <state dir> diff-refresh <session id>
-//   node rollback-drill.mjs <origin> <state dir> runner <runner id>
-//   node rollback-drill.mjs <origin> <state dir> update-now <runner id>
-//   node rollback-drill.mjs <origin> <state dir> release <runner config.json> <latest> <previous>
+//   node drill-api.mjs <origin> <state dir> enrollment-token <label>
+//   node drill-api.mjs <origin> <state dir> workspace <runner id> <work dir> <name>
+//   node drill-api.mjs <origin> <state dir> session <workspace id> <prompt>
+//   node drill-api.mjs <origin> <state dir> turn <session id> <content>
+//   node drill-api.mjs <origin> <state dir> diff-refresh <session id>
+//   node drill-api.mjs <origin> <state dir> runner <runner id>
+//   node drill-api.mjs <origin> <state dir> update-now <runner id>
+//   node drill-api.mjs <origin> <state dir> release <runner config.json> <latest> <previous>
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const [origin, state, command, ...args] = process.argv.slice(2);
 if (!origin || !state || !command) {
-  console.error('usage: rollback-drill.mjs <origin> <state dir> <command> [arguments]');
+  console.error('usage: drill-api.mjs <origin> <state dir> <command> [arguments]');
   process.exit(2);
 }
 
@@ -36,7 +35,7 @@ async function call(method, route, { token, body } = {}) {
     json = { raw: text };
   }
   if (res.status < 200 || res.status >= 300) {
-    console.error(`rollback-drill: ${method} /api${route} answered ${res.status}: ${text}`);
+    console.error(`drill-api: ${method} /api${route} answered ${res.status}: ${text}`);
     process.exit(1);
   }
   return json;
@@ -58,13 +57,6 @@ function toUuid(id) {
 
 let out;
 switch (command) {
-  case 'switch': {
-    const token = await owner();
-    out = args[0] === 'get'
-      ? await call('GET', '/admin/runner-link-required', { token })
-      : await call('PUT', '/admin/runner-link-required', { token, body: { required: args[0] === 'on' } });
-    break;
-  }
   case 'enrollment-token': {
     // One more runner's registration: an enrollment token is good for one.
     const enrollment = await call('POST', '/runners/enrollment-tokens', { token: await owner(), body: { label: args[0] } });
@@ -110,7 +102,7 @@ switch (command) {
     break;
   }
   default:
-    console.error(`rollback-drill: unknown command ${command}`);
+    console.error(`drill-api: unknown command ${command}`);
     process.exit(2);
 }
 console.log(JSON.stringify(out));
