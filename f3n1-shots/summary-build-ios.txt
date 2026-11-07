@@ -1,0 +1,10 @@
+Test Case '-[F3nProbeUITests.SenderShotTests test1TheRowsNameTheSender]' started.
+Test Case '-[F3nProbeUITests.SenderShotTests test1TheRowsNameTheSender]' passed (44.794 seconds).
+Test Case '-[F3nProbeUITests.SenderShotTests test2TheBubbleIsHeadedWithTheSender]' started.
+Test Case '-[F3nProbeUITests.SenderShotTests test2TheBubbleIsHeadedWithTheSender]' passed (30.245 seconds).
+Test Case '-[F3nProbeUITests.SenderShotTests test3NoNameSaysFeishuAlone]' started.
+Test Case '-[F3nProbeUITests.SenderShotTests test3NoNameSaysFeishuAlone]' passed (20.351 seconds).
+	 Executed 3 tests, with 0 failures (0 unexpected) in 95.390 (95.394) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 95.390 (95.395) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 95.390 (95.397) seconds
+** TEST SUCCEEDED **

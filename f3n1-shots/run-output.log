@@ -1,0 +1,29 @@
+==> stub ready after 2s
+==> iPhone FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC
+Test Case '-[F3nProbeUITests.SenderShotTests test1TheRowsNameTheSender]' started.
+Test Case '-[F3nProbeUITests.SenderShotTests test1TheRowsNameTheSender]' passed (44.794 seconds).
+Test Case '-[F3nProbeUITests.SenderShotTests test2TheBubbleIsHeadedWithTheSender]' started.
+Test Case '-[F3nProbeUITests.SenderShotTests test2TheBubbleIsHeadedWithTheSender]' passed (30.245 seconds).
+Test Case '-[F3nProbeUITests.SenderShotTests test3NoNameSaysFeishuAlone]' started.
+Test Case '-[F3nProbeUITests.SenderShotTests test3NoNameSaysFeishuAlone]' passed (20.351 seconds).
+	 Executed 3 tests, with 0 failures (0 unexpected) in 95.390 (95.394) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 95.390 (95.395) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 95.390 (95.397) seconds
+** TEST SUCCEEDED **
+.f3n1-probe/run.sh: line 53:  2891 Terminated: 15          python3 -u stub.py 8765 "$OUT/ios/requests.log" > "$OUT/ios/stub.out" 2>&1
+total 2488
+drwxr-xr-x  15 runner  staff     480 Nov  7 23:45 .
+drwxr-xr-x   3 runner  staff      96 Nov  7 23:29 ..
+drwxr-xr-x   9 runner  staff     288 Nov  7 23:45 attachments
+-rw-r--r--   1 runner  staff  184881 Nov  7 23:43 ios-01-session-list.png
+-rw-r--r--   1 runner  staff  172414 Nov  7 23:43 ios-02-console-bubble.png
+-rw-r--r--   1 runner  staff  164140 Nov  7 23:43 ios-03-console-unnamed.png
+-rw-r--r--   1 runner  staff     704 Nov  7 23:45 not-served.txt
+-rw-r--r--   1 runner  staff    8006 Nov  7 23:43 requests.log
+-rw-r--r--@  1 runner  staff     504 Nov  7 23:43 SenderShotTeststest1TheRowsNameTheSender-notes.txt
+-rw-r--r--@  1 runner  staff     198 Nov  7 23:43 SenderShotTeststest2TheBubbleIsHeadedWithTheSender-notes.txt
+-rw-r--r--@  1 runner  staff       0 Nov  7 23:43 SenderShotTeststest3NoNameSaysFeishuAlone-notes.txt
+-rw-r--r--   1 runner  staff      33 Nov  7 23:29 stub.out
+-rw-r--r--@  1 runner  staff   14878 Nov  7 23:43 tree-console.txt
+-rw-r--r--@  1 runner  staff   14323 Nov  7 23:43 tree-list.txt
+-rw-r--r--   1 runner  staff  680160 Nov  7 23:45 xcodebuild-ios.log

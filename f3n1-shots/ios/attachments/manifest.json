@@ -1,0 +1,71 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "855FAE0B-2897-409F-9865-465B13BF5A02.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-01-session-list_0_D50E878A-754E-4640-8217-2498C7496AF0.png",
+        "timestamp" : 1794094985.526
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "CD8FA7E6-8B87-49A0-B5E1-5799A6672337.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "SenderShotTests/test1TheRowsNameTheSender()",
+    "testIdentifierURL" : "test://com.apple.xcode/F3nProbe/F3nProbeUITests/SenderShotTests/test1TheRowsNameTheSender"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "08FCC05A-D6EA-4F8C-A8AE-D81CEF51ECD4.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-02-console-bubble_0_5E4AAF59-0B50-4E87-A2F1-F76F75E56145.png",
+        "timestamp" : 1794095016.395
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "AEDB15C7-0B9E-4162-A5C8-4EBC4250DA38.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "SenderShotTests/test2TheBubbleIsHeadedWithTheSender()",
+    "testIdentifierURL" : "test://com.apple.xcode/F3nProbe/F3nProbeUITests/SenderShotTests/test2TheBubbleIsHeadedWithTheSender"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "139BE5AE-C763-4011-936C-6DF3D727B14F.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-03-console-unnamed_0_E7CAF763-8894-479D-90D8-05742396E916.png",
+        "timestamp" : 1794095038.728
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "DFA93EBD-D433-4863-9024-CDBD28568E2C.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "SenderShotTests/test3NoNameSaysFeishuAlone()",
+    "testIdentifierURL" : "test://com.apple.xcode/F3nProbe/F3nProbeUITests/SenderShotTests/test3NoNameSaysFeishuAlone"
+  }
+]
