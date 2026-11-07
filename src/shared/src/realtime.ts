@@ -10,6 +10,7 @@ import {
 import type { SessionCapabilities } from './dto';
 import type { ConfirmationUnderReview } from './owner-confirmation-review';
 import type { SessionOwnerItem, SessionWaitingKind } from './project-progress';
+import type { SessionMessageFrom } from './session-message';
 import type { SessionRequestPeer } from './session-request';
 import type { SessionSourceRefusalDetail, SourceRefusalCode, SourceState } from './source';
 
@@ -265,6 +266,11 @@ export interface ControlSessionSummary {
    *  an absent key means an older control plane. */
   lastAssistantText?: string | null;
   lastUserText?: string | null;
+  /** Who sent `lastUserText` when it was another Orbit session (`SessionMessageFrom`): the row then
+   *  names that session instead of saying "You". Null when the account owner sent it, and cleared
+   *  with `lastUserText` — a value, so a client folding this summary into a row drops the sender it
+   *  held; only an absent key, from an older control plane, means "unchanged". */
+  lastUserFrom?: SessionMessageFrom | null;
 }
 
 /** `data` for `session.ended`. */

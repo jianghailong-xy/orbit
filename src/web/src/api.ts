@@ -1028,6 +1028,12 @@ export const completeSession = async (sessionId: string) => {
   }
 };
 
+/** Complete on a DONE or CANCELLED project's row (docs/session-list-projects-design.md §3.6): its
+ *  coordinator and its members still in Open, in every workspace, move to Completed together.
+ *  Answers how many moved; an OPEN project is refused 409 PROJECT_STILL_OPEN. */
+export const completeProjectSessions = (projectId: string) =>
+  api<{ completed: number }>(`/projects/${encodeURIComponent(projectId)}/sessions/complete`, { method: 'POST' });
+
 export const deleteSession = (sessionId: string) =>
   api(`/sessions/${sessionId}`, { method: 'DELETE' });
 

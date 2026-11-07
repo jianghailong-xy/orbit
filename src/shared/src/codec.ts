@@ -243,6 +243,10 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'senderSessionId',
   'fromSessionId',
   'fromTaskId',
+  // The session that sent the message a session row previews (`session.last_user_from_session_id`,
+  // migration 0485): the column behind a row's `lastUserFrom.sessionId`, the same address as
+  // `fromSessionId` above, written by the server from a turn's sender and never from a request.
+  'lastUserFromSessionId',
   // The session a request was asked of (`session_request.to_session_id`, migration 0350) — where the
   // request sits and who answers it, the far end of `fromSessionId` on the same row. An address.
   'toSessionId',

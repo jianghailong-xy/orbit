@@ -217,6 +217,12 @@ test('the owner channel refuses a personal access token door by door and field b
       login: 201,
       observe: async () => (await projectRow(toPause)).pausedAt,
     },
+    // The project is OPEN, so a login is answered by the door's own refusal: PROJECT_STILL_OPEN.
+    {
+      route: 'POST /projects/:id/sessions/complete',
+      path: `/projects/${anyProject}/sessions/complete`,
+      login: 409,
+    },
     {
       route: 'POST /projects/:id/done-requests/:itemId/decline',
       path: `/projects/${anyProject}/done-requests/${nobody()}/decline`,

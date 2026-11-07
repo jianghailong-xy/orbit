@@ -164,6 +164,7 @@ import {
   CLAUDE_REGION_STOPPED_SUBTYPE,
   type ClaudeRegionCheckRequest,
   type ClaudeRegionCheckResponse,
+  type SessionMessageFrom,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
@@ -296,7 +297,11 @@ import {
   assertEngineSessionById as assertEngineSessionRowById,
   SESSION_KIND_LANDING,
 } from '../sessions/engine-session';
-import { appendSessionMessageContext, readBriefSender } from '../sessions/session-message';
+import {
+  appendSessionMessageContext,
+  pendingMessageColumns,
+  readBriefSender,
+} from '../sessions/session-message';
 import { SessionRequestService } from '../sessions/session-request.service';
 import {
   appendSessionRepliesContext,
@@ -801,7 +806,7 @@ async function writeCallToolCalls(tx: Prisma.TransactionClient, writes: readonly
  * The Session columns an ingest writes (ingestSteps' `sessionData`), as writeCallSessions carries them: the column, and
  * how a value of it, sent as text, is read back as the column's type.
  */
-const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 'integer' | 'boolean' | 'timestamp' | 'text[]' | 'jsonb' }> = {
+const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 'uuid' | 'integer' | 'boolean' | 'timestamp' | 'text[]' | 'jsonb' }> = {
   coordinatorContextEpoch: { column: 'coordinator_context_epoch', type: 'integer' },
   coordinatorContextAckKey: { column: 'coordinator_context_ack_key', type: 'text' },
   poolSwitchNotice: { column: 'pool_switch_notice', type: 'text' },
@@ -816,6 +821,8 @@ const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 
   enginePhase: { column: 'engine_phase', type: 'text' },
   enginePhaseSince: { column: 'engine_phase_since', type: 'timestamp' },
   lastUserText: { column: 'last_user_text', type: 'text' },
+  lastUserFromSessionId: { column: 'last_user_from_session_id', type: 'uuid' },
+  lastUserFromTitle: { column: 'last_user_from_title', type: 'text' },
   retryAt: { column: 'retry_at', type: 'timestamp' },
   retryAttempts: { column: 'retry_attempts', type: 'integer' },
   claudeAccount: { column: 'claude_account', type: 'text' },
@@ -830,6 +837,7 @@ const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 
 function ingestedSessionValue(type: (typeof INGESTED_SESSION_COLUMNS)[string]['type'], value: unknown): string | null | undefined {
   switch (type) {
     case 'text':
+    case 'uuid':
       return value === null || typeof value === 'string' ? value : undefined;
     case 'integer':
       return value === null || Number.isSafeInteger(value) ? (value === null ? null : String(value)) : undefined;
@@ -8143,6 +8151,11 @@ export class RunnerApiController {
       // either way, so the stored value stays. Stored full; the list query truncates it
       // (left(…, PREVIEW_LEN)).
       let pendingUserText: string | null | undefined;
+      // Who sent that message, beside it (`lastUserFrom`): the session its card names when another
+      // session sent the turn — the card stored with this very echo, so the row and the transcript
+      // name the same session the same way — and null for the owner's words, the platform's, or an
+      // echo with no turn to read a sender from. Decided wherever pendingUserText is.
+      let pendingUserFrom: SessionMessageFrom | null = null;
       let currentWorkAcknowledged = 0;
       const acknowledgedTurnIds = acknowledgedRuntimeTurnIds(durable);
       if (acknowledgedTurnIds.length > 0) {
@@ -8197,8 +8210,11 @@ export class RunnerApiController {
             ? authoredUserText.get(e.turnId)
             : echoed;
           pendingUserText = text?.trim() || null;
+          const card = e.turnId ? turnCards.get(e.turnId)?.sessionMessage : undefined;
+          pendingUserFrom = card ? { sessionId: card.fromSessionId, title: card.fromTitle } : null;
         } else if (ANSWERS_USER_TURN.has(e.type)) {
           pendingUserText = null;
+          pendingUserFrom = null;
         }
         frontier = { seq: e.seq, tool };
       }
@@ -8267,8 +8283,8 @@ export class RunnerApiController {
         // Moves only when the phase changes — see enginePhaseSinceAfter for why a keepalive must not.
         ...(enginePhaseSince !== undefined ? { enginePhaseSince } : {}),
         // undefined = nothing in this batch either asked or answered; keep the stored
-        // message rather than writing null over it.
-        ...(pendingUserText !== undefined ? { lastUserText: pendingUserText } : {}),
+        // message rather than writing null over it. Its sender is written with it, every time.
+        ...(pendingUserText !== undefined ? pendingMessageColumns(pendingUserText, pendingUserFrom) : {}),
         ...retry,
       });
 
