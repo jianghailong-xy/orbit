@@ -86,6 +86,14 @@ export enum ControlEventType {
    *  the Review queue — and only that; a client may not conclude from its arrival what changed, and
    *  nothing depends on it arriving at all (contract `realtime.correctness`). */
   WIKI_CHANGED = 'wiki.changed',
+  /** The owner's Open list may read differently than it did. USER-SCOPED (see above). `data` is a
+   *  `ControlListChanged`. Sent ONLY to a stream that declared it with
+   *  `GET /api/events?hints=list_changed` (`CONTROL_HINT_LIST_CHANGED`): shipped clients treat a type
+   *  they do not know as "re-read everything", so an undeclared stream never receives it. A hint, not
+   *  a change: the client answers it with a conditional `GET /sessions?view=open&since=<cursor>`,
+   *  which is the truth. At most one per account per second; derived from the Open list's own
+   *  counters and clock thresholds, so it also covers writes that publish no event at all. */
+  SESSIONS_LIST_CHANGED = 'sessions.list_changed',
   /** Reserved generic notification channel — future pushes ride this without a protocol bump. */
   NOTIFICATION = 'notification',
 }
@@ -96,7 +104,7 @@ export interface ControlEvent {
   type: ControlEventType;
   /** The session this event is about — EMPTY for the user-scoped events (`task.list.changed` /
    *  `tag.changed` / `folder.changed` / `provider.changed` / `project.criteria_decisions.changed` /
-   *  `project.changed` / `watch.changed` / `wiki.changed`), which belong to the owner, not to any
+   *  `project.changed` / `watch.changed` / `wiki.changed` / `sessions.list_changed`), which belong to the owner, not to any
    *  one session. Clients must dispatch on `type`, not on the presence of a
    *  session id. */
   sessionId: string;
@@ -105,6 +113,18 @@ export interface ControlEvent {
   ts: string;
   /** Typed per `type` — see the payload interfaces below. */
   data: Record<string, unknown>;
+}
+
+/** The `hints=` value a `GET /api/events` connection declares to receive `sessions.list_changed`.
+ *  Comma-separated with any other hint a later server may learn; unknown values are ignored. */
+export const CONTROL_HINT_LIST_CHANGED = 'list_changed';
+
+/** `data` for `sessions.list_changed`. */
+export interface ControlListChanged {
+  /** The account's Open-list data version as it stood when the hint was sent: the opaque part of the
+   *  ETag the unfiltered Open list is served with (`W/"ol1-<version>"`). A filtered list's ETag is
+   *  derived from it, so a client compares it with nothing but a previous hint's. */
+  version: string;
 }
 
 /** Project membership derived from coordinator, landing, task, context, judgment or root-session

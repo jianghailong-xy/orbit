@@ -90,6 +90,17 @@ export function isUserScopedType(t: ControlEventType): boolean {
   );
 }
 
+// ── `sessions.list_changed` ──
+/*
+ * `sessions.list_changed` is the one control event that never rides the hub: no write publishes it,
+ * so `controlTypeFor` maps no run event to it and `isUserScopedType` leaves it out. `OpenListHints`
+ * (open-list-hints.ts) derives it from the Open list's own counters and clock thresholds, and
+ * `streamForUser` merges it only into a stream that declared `hints=list_changed` — a shipped client
+ * re-reads everything on a type it does not know, so to an undeclared stream it would be a full
+ * re-read every second. `data` is `{ version }`; it is a hint to make a conditional
+ * `GET /sessions?view=open&since=` read, never a change to apply. At most one per account per second.
+ */
+
 /** `data` for `session.error`. Decision Q3: errors carry their own event. `recoverable` is only
  *  true when the runner explicitly flags a mid-turn (non-fatal) error; default false. */
 export function errorPayloadOf(payload: Record<string, unknown>): ControlSessionError {

@@ -149,6 +149,7 @@ export enum ControlEventType {
   PROJECT_CHANGED    = 'project.changed',   // 用户级:data.id = 项目;项目被暂停/继续之后推(Pause project,或旧客户端的 Automatic 开关),只带 id
   WATCH_CHANGED      = 'watch.changed',     // 用户级:data.id = watch;载荷只有 id,不带状态/目标/快照/reason(docs/watch-contract.md §8.1)
   WIKI_CHANGED       = 'wiki.changed',      // 用户级:data.id = wiki space;changeset 落库 / owner 决定之后推,载荷只有 id,不带条目/标题/状态/op/计数(contracts/wiki.contract.json 的 realtime)
+  SESSIONS_LIST_CHANGED = 'sessions.list_changed', // 用户级:data = { version };只发给声明了 ?hints=list_changed 的连接(§4.8)
   // 预留:未来任意通知都走这个泛化类型,不用每次改协议
   NOTIFICATION       = 'notification',
 }
@@ -255,6 +256,37 @@ hub 以 sessionId 为 key,但**owner 级的库**——任务清单、会话标�
   - `GET /api/events` 落在现有 `location /api/` 块,**已自带正确的 SSE 代理**(`proxy_buffering off` + `proxy_read_timeout 3600s` + `Connection ''` + `chunked_transfer_encoding off`)。3600s 读超时对 20s 心跳极宽松,**长连接无需改网关代理配置**。
   - **唯一要补的网关改动**:web 端 `GET /api/events?access_token=…` 会把 token 写进 nginx 访问日志。现有只有 `~ ^/api/runs/[^/]+/events$` 配了 `access_log off`,应把 `/api/events` 也纳入一个 `access_log off` 块(原生 macOS 走 `Authorization` header、URL 不带 token,不受影响)。
 - **鉴权**:复用 JWT。原生 macOS 用 `Authorization: Bearer`;web EventSource 用 `?access_token=` + `@AllowQueryToken()`。每条事件已按 ownerId 过滤,天然租户隔离。
+
+
+### 4.8 `sessions.list_changed`:Open 列表的提示(需声明)
+
+背景与取舍见 [list-freshness-design.md](./list-freshness-design.md) §3。
+
+**声明参数。** 客户端在连接时用查询参数声明自己懂这个提示:
+
+```
+GET /api/events?hints=list_changed
+```
+
+`hints` 是逗号分隔的列表(也可重复给出),目前只认 `list_changed`(`CONTROL_HINT_LIST_CHANGED`),其余值忽略。**没有声明的连接永远收不到 `sessions.list_changed`**:已发布的客户端把未知事件当作"全部重读"(Apple 全量读 Open 列表,Android 重读 5 个列表,Web 重拉会话组),每秒一次的提示会让它们在上线期间读得更多,而不是更少。
+
+**语义。**
+
+- 信封 `{ type: 'sessions.list_changed', sessionId: '', agentId: null, ts, data: { version } }`,用户级(`sessionId` 为空串)。
+- 含义是"该账户的 Open 列表**可能**读出来不一样了",不是变更本身。客户端收到后发一次条件增量读 `GET /sessions?view=open&since=<cursor>`;版本没变时服务端回空 delta、不构建。**正确性只来自那次读**,提示丢了只是晚一点,由客户端的慢兜底读补上。
+- `data.version` 是发送时该账户的 Open 列表数据版本(`readOpenListVersion`),即未带过滤条件的 Open 列表 ETag `W/"ol1-<version>"` 的不透明部分。带过滤条件的 ETag 由它派生,不相等;客户端只拿它和上一条提示比较。
+- 同一账户**每秒至多一条**;版本与上一次告知的相同则不发。
+
+**来源(不依赖任何写路径发布)。** 每个 apiserver 进程对"本进程有声明了提示的在线流"的账户:
+
+1. 每 1 s 用一条语句(`owner_id = ANY($owners)`)读 `open_list_epoch` 的计数和(0484/0487 的计数器覆盖 Open 列表全部源表的写)。某账户的和变了,就算一次版本,变了就发。裸 SQL 写、别的副本的写、不发事件的写都会被覆盖。
+2. 每 15 s 对这些账户都算一次完整版本,覆盖只随时钟翻转的阈值(runner 离线、后台任务变安静、评审窗口、升级期限、分享链接过期)。
+
+实现在 `src/apiserver/src/realtime/open-list-hints.ts`;只读、不写、不加锁。多副本下每个进程只管连在自己身上的流。
+
+**同版本只构建一次。** 一次变化会同时提示该账户的所有设备。`SessionsService.list` / `listOpenSince` 对同一 `(owner, 过滤条件(含 confinedTo 与 limit), version)` 的并发读共享一次构建:在途的读等同一个 promise,构建完成后约 5 s 内的同版本读直接用它(每个读拿一份拷贝)。
+
+**事件摘要每事件只读一次。** `session.created/updated` 的 `ControlSessionSummary`(以及其它需要查库的事件载荷)按 hub 消息读一次,在该账户本进程的所有连接间共享;每个连接拿到的内容与各自读一次时相同。
 
 ---
 

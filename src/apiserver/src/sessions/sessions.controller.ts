@@ -431,8 +431,10 @@ export class SessionsController {
     // was most of production's database time on 2026-10-20. The landing-aware read (the project
     // page's own) is a few rows too: the account-wide version answered only ~5% of its polls with
     // 304, so it now keeps Express's body-hash ETag like the plain one, and pays no version at all.
+    let version: string | undefined;
     if (res && isOpenListView(view) && projectId === undefined) {
-      const etag = openListEtag(await this.sessions.openListVersion(user.userId), {
+      version = await this.sessions.openListVersion(user.userId);
+      const etag = openListEtag(version, {
         runnerId: filters.runnerId,
         workspaceId: filters.workspaceId,
         tagId,
@@ -445,7 +447,8 @@ export class SessionsController {
         return undefined;
       }
     }
-    return this.sessions.list(user.userId, filters);
+    // Built once per version for every read that asks at it (SessionsService.sharedOpenList).
+    return this.sessions.list(user.userId, filters, version);
   }
 
   // Per-workspace Open-session tallies for the nav sidebar's attention badges. Also above
