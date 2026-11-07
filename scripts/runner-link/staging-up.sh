@@ -20,7 +20,6 @@
 #   ORBIT_LINK_STAGING_TLS           files (a staging CA), or acme (Pebble)       files
 #   ORBIT_LINK_STAGING_NATS_PORT     NATS's client port, on the bind address      14222
 #   ORBIT_LINK_STAGING_NATS_MONITOR_PORT  NATS's monitoring, on 127.0.0.1         18222
-#   ORBIT_LINK_STAGING_MODE          http (shadow) or link (forwarding)           http
 #   ORBIT_LINK_STAGING_BACKENDS      apiservers the gateway forwards to: 1 to 16  1
 #   ORBIT_LINK_STAGING_LINK_BACKENDS which of them it forwards to: all, or names  all
 #                                    such as apiserver-b, comma-separated (the web's requests reach apiserver)
@@ -50,7 +49,7 @@ for arg in "$@"; do
   case "$arg" in
     --rotate-cert) rotate=1 ;;
     --no-build) build=0 ;;
-    -h|--help) sed -n '2,42p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,41p' "$0"; exit 0 ;;
     *) die "unknown option $arg (see --help)" ;;
   esac
 done
@@ -68,7 +67,6 @@ tls_mode="${ORBIT_LINK_STAGING_TLS:-$(setting STAGING_TLS files)}"
 nats_port="${ORBIT_LINK_STAGING_NATS_PORT:-$(setting STAGING_NATS_PORT 14222)}"
 nats_monitor_port="${ORBIT_LINK_STAGING_NATS_MONITOR_PORT:-$(setting STAGING_NATS_MONITOR_PORT 18222)}"
 pebble_port="${ORBIT_LINK_STAGING_PEBBLE_PORT:-$(setting STAGING_PEBBLE_MGMT_PORT 15000)}"
-mode="${ORBIT_LINK_STAGING_MODE:-$(setting STAGING_MODE http)}"
 backends="${ORBIT_LINK_STAGING_BACKENDS:-$(setting STAGING_BACKENDS 1)}"
 link_backends="${ORBIT_LINK_STAGING_LINK_BACKENDS:-$(setting STAGING_LINK_BACKENDS all)}"
 loadgen="${ORBIT_LINK_STAGING_LOADGEN:-$(setting STAGING_LOADGEN 0)}"
@@ -84,7 +82,6 @@ merge_calls="${ORBIT_LINK_STAGING_MERGE_CALLS:-$(setting STAGING_MERGE_CALLS_SET
 spread="${ORBIT_LINK_STAGING_SPREAD:-$(setting STAGING_SPREAD 0)}"
 acme_domain="link.orbit-staging.test"
 case "$tls_mode" in files|acme) ;; *) die "ORBIT_LINK_STAGING_TLS must be files or acme, not $tls_mode" ;; esac
-case "$mode" in http|link) ;; *) die "ORBIT_LINK_STAGING_MODE must be http or link, not $mode" ;; esac
 case "$loadgen" in 0|1) ;; *) die "ORBIT_LINK_STAGING_LOADGEN must be 0 or 1, not $loadgen" ;; esac
 case "$spread" in 0|1) ;; *) die "ORBIT_LINK_STAGING_SPREAD must be 0 or 1, not $spread" ;; esac
 [[ "$db_cpus" =~ ^[0-9]+(\.[0-9]+)?$ ]] || die "ORBIT_LINK_STAGING_DB_CPUS must be a number of CPUs, not $db_cpus"
@@ -236,7 +233,6 @@ RUNNER_LINK_PUBLIC_KEY=$public_key
 RUNNER_LINK_GATEWAY_DIR=$gw
 RUNNER_LINK_ACME_DOMAINS=$acme_domains
 STAGING_REPO=$repo
-STAGING_MODE=$mode
 STAGING_BACKENDS=$backends
 STAGING_LINK_BACKENDS=$link_backends
 STAGING_BACKEND_URLS=$backend_urls
@@ -315,7 +311,7 @@ if [ "$backends" -gt 2 ]; then
 else
   rm -f "$generated"
 fi
-log "starting ${services[*]} as project $project, $gateways link gateway node(s) in MODE_${mode^^} over $backends backend(s), merge window $merge_window, merged calls an apiserver $merge_calls, ingest rate $ingest_rate$([ "$gateways" = 1 ] || echo ", the second node's handshakes $handshake_rate/s after a burst of $handshake_burst"), session streams and link tokens to $([ "$spread" = 1 ] && echo "every apiserver" || echo "the first apiserver")"
+log "starting ${services[*]} as project $project, $gateways link gateway node(s) over $backends backend(s), merge window $merge_window, merged calls an apiserver $merge_calls, ingest rate $ingest_rate$([ "$gateways" = 1 ] || echo ", the second node's handshakes $handshake_rate/s after a burst of $handshake_burst"), session streams and link tokens to $([ "$spread" = 1 ] && echo "every apiserver" || echo "the first apiserver")"
 compose "${profiles[@]}" up -d --wait --wait-timeout 1500 "${services[@]}"
 
 # --- Seed and check. --------------------------------------------------------------------------------------------------
@@ -364,7 +360,7 @@ cat <<EOF
   runner link      $link_url
   link metrics     $metrics
   NATS             nats://$bind:$nats_port, monitoring http://127.0.0.1:$nats_monitor_port (nkey users: $secrets/nats_*)
-  link mode        MODE_${mode^^}, forwarding to $backend_urls
+  link forwarding  to $backend_urls
   state            $state             (staging.json describes all of it)
   test client      $here/staging-client.sh -duration 60s
   stop             $here/staging-down.sh

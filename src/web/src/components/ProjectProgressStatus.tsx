@@ -30,6 +30,7 @@ import { decisionReceiptAnchor, type ReceiptPlacement } from '../lib/decisionRec
 import { encodeId } from '../lib/idCodec';
 import { abandonJob } from '../lib/projectMerge';
 import { projectIntegrationQuery, projectOpenItemsQuery, projectPromotionQuery } from '../lib/queries';
+import { pollWhileInFlight, promotionInFlight, streamPoll } from '../lib/listBudget';
 import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import {
   DEFAULT_MAIN_BRANCH,
@@ -2435,14 +2436,14 @@ export function ProjectOpenItems({
   const items = useQuery({
     ...projectOpenItemsQuery(projectId ?? ''),
     enabled: Boolean(projectId),
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
   // The candidate mounted beside this list, for the Review press a row may offer: `?` is the read
   // still on its way, which keeps the old drawable set until it answers.
   const currentPromotion = useQuery({
     ...projectPromotionQuery(projectId ?? ''),
     enabled: Boolean(projectId),
-    refetchInterval: 20_000,
+    refetchInterval: pollWhileInFlight(20_000, (query) => promotionInFlight(query.state.data)),
   });
   const currentPromotionId = currentPromotion.isFetched
     ? currentPromotion.data?.promotionId ?? null

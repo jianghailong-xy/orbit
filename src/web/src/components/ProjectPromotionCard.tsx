@@ -33,6 +33,7 @@ import {
   projectOpenItemsQuery,
   projectPromotionQuery,
 } from '../lib/queries';
+import { integrationInFlight, pollWhileInFlight, promotionInFlight, streamPoll } from '../lib/listBudget';
 import { ago, formatSpan } from '../lib/watches';
 import {
   BLOCKED_BY,
@@ -955,15 +956,17 @@ export function ProjectPromotion({
   asLine?: boolean;
   bare?: boolean;
 }): JSX.Element | null {
+  // No event says when a merge check ends, so a candidate being checked or merged is read on its own
+  // cadence; otherwise the card follows the stream (listBudget).
   const promotion = useQuery({
     ...projectPromotionQuery(projectId ?? ''),
     enabled: Boolean(projectId),
-    refetchInterval: 20_000,
+    refetchInterval: pollWhileInFlight(20_000, (query) => promotionInFlight(query.state.data)),
   });
   const items = useQuery({
     ...projectOpenItemsQuery(projectId ?? ''),
     enabled: Boolean(projectId),
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
   const project = useQuery({
     queryKey: ['project', projectId],
@@ -977,7 +980,7 @@ export function ProjectPromotion({
   const integration = useQuery({
     ...projectIntegrationQuery(projectId ?? ''),
     enabled: Boolean(projectId) && blocked,
-    refetchInterval: blocked ? 20_000 : false,
+    refetchInterval: blocked ? pollWhileInFlight(20_000, (query) => integrationInFlight(query.state.data)) : false,
   });
   const current = promotion.data;
   if (!projectId || !current) return null;

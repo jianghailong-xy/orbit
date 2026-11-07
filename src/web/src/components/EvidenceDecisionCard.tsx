@@ -6,6 +6,7 @@ import { api } from '../api';
 import { decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { citesFiles } from '../lib/evidenceFiles';
 import { pendingDecisionsQuery, taskEvidenceQuery } from '../lib/queries';
+import { streamPoll } from '../lib/listBudget';
 import { CardActionButton, CardActions } from './CardAction';
 import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
 import { PROVENANCE_LABEL } from './CriteriaDecisionCard';
@@ -794,7 +795,7 @@ export function SessionEvidenceDecisionCard({
   const pending = useQuery({
     ...pendingDecisionsQuery(sessionId),
     enabled: Boolean(sessionId),
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
   const queue = pending.data ?? null;
   useEffect(() => {

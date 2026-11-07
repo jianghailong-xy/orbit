@@ -92,8 +92,9 @@ final class ManagedRunnerWiringTests: XCTestCase {
         let configure = try slice(app, from: "sharedPools = SharedPoolsModel(", to: "runnerControl = RunnerControl(")
         XCTAssertTrue(configure.contains("ManagedRunnerModel(baseURL: url, tokenStore: tokenStore)"))
         XCTAssertTrue(configure.contains("consoleRegistry?.managedRunner = managedRunnerModel"))
-        let poll = try slice(app, from: "func startPolling() {", to: "try? await Task.sleep(nanoseconds: 4_000_000_000)")
-        XCTAssertTrue(poll.contains("await self.managedRunner?.refreshIfDue()"))
+        // The app's tick reads it among the floors behind the Open list (`pollFloors`).
+        let poll = try slice(app, from: "private func pollFloors() async {", to: "\n    }")
+        XCTAssertTrue(poll.contains("await managedRunner?.refreshIfDue()"))
         let logout = try slice(app, from: "func logout() {", to: "signedIn = false")
         XCTAssertTrue(logout.contains("managedRunner?.reset()"))
     }

@@ -37,9 +37,10 @@ internal fun watchListPresentation(state: WatchLoadState, isEmpty: Boolean): Wat
 /** The account's watches, behind Following, a watch's detail and the session's Watching strip (iOS `WatchesModel`).
  * One per signed-in handle.
  *
- * The control plane has no watch event, so the list is refetched: when the stream connects, on a short coalesced
- * nudge after an event that can move a target, on a 30s floor while a watch surface is on screen, and after each
- * control. What the server answered is always what's drawn. */
+ * No event carries a watch, so the list is refetched: when the stream connects, on a short coalesced nudge after an
+ * event that can move a target or a watch's own `watch.changed`, on a floor while a watch surface is on screen (a read
+ * at most every 30 s, asked once a minute while the stream is up: WatchFeed), and after each control. What the server
+ * answered is always what's drawn. */
 internal class WatchStore(private val auth: AuthSession, val handle: SessionHandle, private val scope: CoroutineScope,
     private val client: WatchClient = WatchClient(auth, handle), private val clock: () -> Instant = Instant::now) {
 
@@ -107,9 +108,10 @@ internal class WatchStore(private val auth: AuthSession, val handle: SessionHand
     }
 
     /** A session or task moved, and a target with it maybe: refetch shortly, once for a burst. Skipped while nothing
-     * is live, when no target can move; a new watch is left to the floor. */
-    fun nudge() {
-        if (nudgeJob?.isActive == true || current.watches.none { WatchStateMachine.isLive(it.state) }) return
+     * is live, when no target can move — unless a watch itself changed ([anyWatch], `watch.changed`), which is how a new
+     * one comes in before the floor's read. */
+    fun nudge(anyWatch: Boolean = false) {
+        if (nudgeJob?.isActive == true || (!anyWatch && current.watches.none { WatchStateMachine.isLive(it.state) })) return
         nudgeJob = scope.launch {
             delay(NUDGE_DELAY_MS)
             nudgeJob = null

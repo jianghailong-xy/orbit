@@ -38,6 +38,7 @@ import {
   type ReviewChoice,
   type ReviewChoices,
 } from './OwnerConfirmationReview';
+import { streamPoll } from '../lib/listBudget';
 
 /**
  * The card that asks the account owner whether an OWNER_CONFIRMED task is done.
@@ -731,7 +732,7 @@ export function SessionOwnerConfirmationCard({
   const read = useQuery({
     ...ownerConfirmationQuery(taskId ?? ''),
     enabled: Boolean(taskId),
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
   const waiting = ownerConfirmationWaitingIn(read.data, sessionId);
   const answer = useMutation({

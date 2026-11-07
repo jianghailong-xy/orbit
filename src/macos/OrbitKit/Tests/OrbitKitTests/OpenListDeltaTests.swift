@@ -265,6 +265,33 @@ final class OpenListDeltaTests: XCTestCase {
                                          "view=open if-none-match=W/\"e1\"", "view=open&since="])
     }
 
+    /// An event folded into the list since the last full read (`invalidate`) still asks with that
+    /// read's tag (docs/list-freshness-design.md §2.3 A7). A 304 then hands back the tagged list — the
+    /// very list a whole 200 read of the unchanged server answers — instead of ~1.5 MB coming over
+    /// the wire again because one row was written in place.
+    func testAnInvalidatedListStillAsksWithItsTagAndA304HandsBackTheTaggedList() async throws {
+        let script = Script([
+            (404, [:], "{}"),
+            (200, ["ETag": "W/\"e1\""], "[\(row("a")),\(row("b"))]"),
+            (304, [:], ""),
+            (304, [:], ""),
+            (200, ["ETag": "W/\"e1\""], "[\(row("a")),\(row("b"))]"),
+        ])
+        let api = client(script)
+        let reader = OpenListReader(api: api)
+        try await expect(reader, .list([session("a"), session("b")]))
+        reader.adopted()
+        reader.invalidate()   // an event wrote a row in place
+        let afterEvent = try await reader.read()
+        reader.adopted()
+        try await expect(reader, .unchanged)   // adopted again, the list is vouched for
+        let whole = try await api.listOpenSessions(ifNoneMatch: nil)
+        XCTAssertEqual(afterEvent, .list(whole?.sessions ?? []), "the same list a whole read answers")
+        XCTAssertEqual(script.requests, ["view=open&since=", "view=open",
+                                         "view=open if-none-match=W/\"e1\"", "view=open if-none-match=W/\"e1\"",
+                                         "view=open"])
+    }
+
     /// An older server's plain array is the list itself — no second request — and later polls use
     /// the conditional full read.
     func testAnOlderServerIsReadTheOldWay() async throws {

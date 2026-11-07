@@ -184,7 +184,7 @@ describe('targeted supplemental project sessions', () => {
     await publish('P1');
     await advance(400);
     await publish('P1');
-    await advance(499);
+    await advance(999);
     expect(calls).toHaveLength(2);
     await advance(1);
     expect(calls).toEqual([

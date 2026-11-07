@@ -12,6 +12,7 @@ import java.time.ZoneOffset
 import java.util.TimeZone
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.channels.Channel
 import kotlinx.serialization.json.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
@@ -173,7 +174,16 @@ internal object ProjectShell {
         trashed = emptySet(); holdDelete = null; holdMembers = null; attention = null
         quietAttention = null; coordinatorWorking = false
         configRevision = null; automatic = true; maxConcurrentTasks = 2; crossings = null; tasks = null
+        lineIdle = false
+        while (accountEvents.tryReceive().isSuccess) Unit
     }
+
+    /** Nothing on the project's line: no job running or queued, and no `inFlight` (the landing card and the merge's live line are gone). */
+    @Volatile var lineIdle = false
+    /** Account events the account stream sends ([event]), in order. */
+    private val accountEvents = Channel<String>(Channel.UNLIMITED)
+    /** One account event of [type] on the account stream, as the server sends it. */
+    fun event(type: String, sessionId: String = "") { accountEvents.trySend("""{"type":"$type","sessionId":"$sessionId","data":{}}""") }
 
     private fun ago(minutes: Long) = Instant.now().minusSeconds(minutes * 60).toString()
     private val workspaces = """[
@@ -214,7 +224,8 @@ internal object ProjectShell {
     private val listedJobs get() = inFlightJobs?.let { runCatching { Wire.json.parseToJsonElement(it).jsonArray }.getOrNull() }?.filterIsInstance<JsonObject>()
     private val integrating get() = listedJobs?.count { it.text("state") == "RUNNING" } ?: 1
     private val queued get() = listedJobs?.count { it.text("state") == "QUEUED" } ?: 0
-    private val integration get() = """{"line":"PROJECT_BRANCH","ref":"project/launch","integratingCount":$integrating,"queuedCount":$queued,
+    private val integration get() = if (lineIdle) """{"line":"PROJECT_BRANCH","ref":"project/launch","integratingCount":0,"queuedCount":0,"inFlight":null}"""
+        else """{"line":"PROJECT_BRANCH","ref":"project/launch","integratingCount":$integrating,"queuedCount":$queued,
         "inFlight":${if (mergeCheck) """{"kind":"$mergeJobKind","state":"RUNNING","phase":"CHECK","startedAt":"${ago(7)}","heartbeatAt":"${ago(0)}"}"""
             else """{"kind":"LAND_TASK","state":"RUNNING","phase":"CHECK","taskTitle":"Wire the page","startedAt":"${ago(3)}","heartbeatAt":"${ago(0)}"}"""}${
             landTasks?.let { ""","landTasks":$it""" }.orEmpty()}${inFlightJobs?.let { ""","inFlightJobs":$it""" }.orEmpty()}}"""
@@ -387,10 +398,12 @@ internal object ProjectShell {
         landings?.let { runCatching { Wire.json.parseToJsonElement(it).jsonArray }.getOrNull() }
             ?.filterIsInstance<JsonObject>()?.mapNotNull { it.text("id") }.orEmpty())
 
-    /** The streams open and stay quiet: the account is connected, so writes are offered. */
+    /** The streams open and stay quiet but for the account events a test sends ([event]): the account is connected, so writes are
+     * offered. */
     private val events = object : EventTransport {
         override suspend fun stream(request: HttpRequest, onOpen: suspend () -> Unit, onFrame: suspend (SseFrame) -> Unit): Unit {
             onOpen()
+            if (request.api.path == listOf("events")) for (frame in accountEvents) onFrame(SseFrame(frame, null, null))
             awaitCancellation()
         }
     }

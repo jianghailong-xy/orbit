@@ -75,6 +75,7 @@ func samples(t *testing.T) []proto.Message {
 		SessionIds:         []string{"ses-1", "ses-2"},
 		SupportedProviders: []string{"claude", "codex", "cursor"},
 		Facts:              []*linkpb.Fact{fact, {Kind: "repos", Sha256: "2c26b46b68ffc68f"}},
+		BeatId:             17,
 	}
 	heartbeatAck := &linkpb.HeartbeatAck{
 		Mode:          linkpb.Mode_MODE_HTTP,
@@ -82,6 +83,7 @@ func samples(t *testing.T) []proto.Message {
 		WantFacts:     []string{"repos"},
 		Hints:         hints,
 		Release:       release,
+		BeatId:        17,
 	}
 	event := &linkpb.Event{Seq: 41, Type: "assistant", TsUnixMs: 1792900000123, TurnId: "turn-9", PayloadJson: []byte(`{"text":"done"}`)}
 	eventBatch := &linkpb.EventBatch{

@@ -226,24 +226,17 @@ type gatewayMetrics struct {
 	revocations           *gauge
 	revocationFetches     *counter
 	revocationLastSuccess *gauge
-	mode                  *gauge
-	modeFetches           *counter
 	tlsNotAfter           *gauge
 	tlsReloads            *counter
 	tlsHandshakeErrors    *counter
 	rpcs                  *counter
-	shadowPairs           *counter
-	shadowMismatches      *counter
-	shadowUnpaired        *counter
-	shadowEvents          *counter
-	shadowPendingBytes    *gauge
 	hints                 *counter
 	hintsSlow             *counter
 	hintSubscriptions     *gauge
 	natsConnected         *gauge
 	natsReconnects        *counter
 
-	// Forwarding, in MODE_LINK (backend.go, forward.go, heartbeat.go, events.go, live.go).
+	// Forwarding (backend.go, forward.go, heartbeat.go, events.go, live.go).
 	backendCalls      *counter
 	backendRetries    *counter
 	backendDuration   *histogram
@@ -281,7 +274,7 @@ var (
 	disconnectReasons = []string{"client_closed", "connection_lost", "superseded", "ping_timeout", "token_expired", "revoked", "protocol_error", "slow_consumer", "drained", "shutdown", "internal_error"}
 )
 
-func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float64) *gatewayMetrics {
+func newGatewayMetrics(version string, deny *denyList) *gatewayMetrics {
 	m := &gatewayMetrics{
 		connections:       newGauge("link_connections", "Open runner connections: those that were sent Welcome and are not closed yet."),
 		handshakes:        newCounter("link_handshakes_total", "Upgrade requests by outcome; ok is a connection that was sent Welcome.", "result"),
@@ -299,17 +292,10 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 			func() float64 { return float64(deny.size()) }),
 		revocationFetches:     newCounter("link_revocation_fetches_total", "Reads of the apiserver's revocation list, by outcome.", "result"),
 		revocationLastSuccess: newGauge("link_revocation_last_success_timestamp_seconds", "When the revocation list was last read, in Unix seconds."),
-		mode:                  newGauge("link_mode_link", "1 while runners are told MODE_LINK (LINK_MODE=link, or the server's RUNNER_LINK_REQUIRED on), 0 while MODE_HTTP."),
-		modeFetches:           newCounter("link_mode_fetches_total", "Reads of the server's RUNNER_LINK_REQUIRED switch, by outcome.", "result"),
 		tlsNotAfter:           newGauge("link_tls_certificate_not_after_timestamp_seconds", "When the certificate in use expires, in Unix seconds (files TLS mode)."),
 		tlsReloads:            newCounter("link_tls_reloads_total", "Certificate reloads after its files changed, by outcome.", "result"),
 		tlsHandshakeErrors:    newCounter("link_tls_handshake_errors_total", "TLS handshakes that failed."),
 		rpcs:                  newCounter("link_rpcs_total", "Rpc frames by what became of them.", "result"),
-		shadowPairs:           newCounter("link_shadow_pairs_total", "Mirrored HTTP requests compared with their typed frame, by kind and result.", "kind", "result"),
-		shadowMismatches:      newCounter("link_shadow_mismatches_total", "Fields that differed in compared pairs.", "kind", "field"),
-		shadowUnpaired:        newCounter("link_shadow_unpaired_total", "Halves of a mirror that never met their other half, by side and reason.", "side", "reason"),
-		shadowEvents:          newCounter("link_shadow_events_compared_total", "Events compared in mirrored event batches."),
-		shadowPendingBytes:    newGaugeFunc("link_shadow_pending_bytes", "Bytes of mirror halves waiting for their other half.", pendingBytes),
 		hints:                 newCounter("link_hints_total", "Hints received from NATS, by kind and by what became of them.", "kind", "result"),
 		hintsSlow:             newCounter("link_hints_slow_total", "Hints NATS dropped because the relay was not keeping up."),
 		hintSubscriptions:     newGauge("link_hint_subscriptions", "Runners whose hint subject this gateway subscribes to."),
@@ -321,11 +307,11 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 		backendDuration:   newHistogram("link_backend_call_duration_seconds", "From a forwarded call's start to its backend's answer, retries included.", linkDurationBounds...),
 		rpcResults:        newCounter("link_rpc_results_total", "RpcResults of forwarded requests: the route's status class, or the Failure code when it gave no answer.", "result"),
 		rpcDuration:       newHistogram("link_rpc_duration_seconds", "From a forwarded request's start to its route's answer.", linkDurationBounds...),
-		heartbeatForwards: newCounter("link_heartbeat_forwards_total", "Heartbeats in MODE_LINK, by what became of them.", "result"),
+		heartbeatForwards: newCounter("link_heartbeat_forwards_total", "Heartbeats forwarded, by what became of them.", "result"),
 		heartbeatDuration: newHistogram("link_heartbeat_forward_duration_seconds", "From a heartbeat's forwarding to the route's answer.", linkDurationBounds...),
 		heartbeatFacts:    newCounter("link_heartbeat_facts_total", "Heartbeat facts, by how the gateway read them: whole, cached (a digest it held), unknown_digest, invalid_json, digest_mismatch, ignored.", "result"),
-		welcomeLookups:    newCounter("link_welcome_lookups_total", "What the welcome route answered for a Welcome in MODE_LINK; anything but answered sends a Welcome without its sessions and release.", "result"),
-		eventBatches:      newCounter("link_event_batches_total", "Event batches in MODE_LINK, by what became of them.", "result"),
+		welcomeLookups:    newCounter("link_welcome_lookups_total", "What the welcome route answered for a Welcome; anything but answered sends a Welcome without its sessions and release.", "result"),
+		eventBatches:      newCounter("link_event_batches_total", "Event batches, by what became of them.", "result"),
 		eventsStored:      newCounter("link_events_stored_total", "Durable events the ingest route stored and the gateway acknowledged."),
 		eventAckDuration:  newHistogram("link_event_ack_duration_seconds", "From an event batch's arrival to its EventAck.", linkDurationBounds...),
 		mergeCalls:        newCounter("link_event_merge_calls_total", "Merged ingest calls, by outcome: answered (each batch its own answer), alone (every batch forwarded alone instead), failed (no answer, or the database turned the call away: each batch failed as it would have alone).", "result"),
@@ -353,21 +339,11 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 	for _, r := range disconnectReasons {
 		m.disconnects.preset(r)
 	}
-	for _, kind := range []string{"heartbeat", "events"} {
-		m.shadowPairs.preset(kind, "match")
-		m.shadowPairs.preset(kind, "mismatch")
-	}
-	for _, side := range []string{"typed", "raw"} {
-		for _, reason := range []string{"expired", "evicted", "closed"} {
-			m.shadowUnpaired.preset(side, reason)
-		}
-	}
 	for _, r := range []string{"ok", "error", "unauthorized", "not_configured"} {
 		m.revocationFetches.preset(r)
-		m.modeFetches.preset(r)
 	}
 	for _, kind := range []string{"inbox", "claim", "commands"} {
-		for _, result := range []string{"sent", "mode_http", "no_connection", "dropped"} {
+		for _, result := range []string{"sent", "no_connection", "dropped"} {
 			m.hints.preset(kind, result)
 		}
 	}
@@ -401,7 +377,7 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 	for _, r := range []string{"published", "no_watchers", "nats_down"} {
 		m.liveEvents.preset(r)
 	}
-	for _, r := range []string{"answered", "timeout", "dropped", "mode_http", "no_connection"} {
+	for _, r := range []string{"answered", "timeout", "dropped", "no_connection"} {
 		m.prefixRequests.preset(r)
 	}
 	for _, q := range tierNames {
@@ -413,10 +389,9 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 		&gauge{name: "link_gateway_start_time_seconds", help: "When this process started, in Unix seconds.", v: float64(time.Now().Unix())},
 		m.connections, m.handshakes, m.handshakeDuration, m.tokenRefusals, m.disconnects, m.rtt,
 		m.framesReceived, m.framesSent, m.frameDecodeErrors, m.heartbeats, m.draining, m.drainsSent,
-		m.revocations, m.revocationFetches, m.revocationLastSuccess, m.mode, m.modeFetches,
+		m.revocations, m.revocationFetches, m.revocationLastSuccess,
 		m.tlsNotAfter, m.tlsReloads, m.tlsHandshakeErrors,
-		m.rpcs, m.shadowPairs, m.shadowMismatches, m.shadowUnpaired, m.shadowEvents, m.shadowPendingBytes,
-		m.hints, m.hintsSlow, m.hintSubscriptions, m.natsConnected, m.natsReconnects,
+		m.rpcs, m.hints, m.hintsSlow, m.hintSubscriptions, m.natsConnected, m.natsReconnects,
 		m.backendCalls, m.backendRetries, m.backendDuration, m.rpcResults, m.rpcDuration,
 		m.heartbeatForwards, m.heartbeatDuration, m.heartbeatFacts, m.welcomeLookups,
 		m.eventBatches, m.eventsStored, m.eventAckDuration, m.ingestEvents, m.ingestBytes, m.ingestWaiting, m.creditReduced, m.creditChanges,

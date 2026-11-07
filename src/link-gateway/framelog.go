@@ -129,11 +129,17 @@ func summarize(f *linkpb.Frame) string {
 			facts = append(facts, s)
 		}
 		kv("facts", "["+strings.Join(facts, " ")+"]")
+		if id := h.GetBeatId(); id != 0 {
+			kv("beat", id)
+		}
 	case *linkpb.Frame_HeartbeatAck:
 		a := body.HeartbeatAck
 		kv("mode", a.GetMode())
 		kv("reconcile", sized(a.GetReconcileJson()))
 		kv("want_facts", len(a.GetWantFacts()))
+		if id := a.GetBeatId(); id != 0 {
+			kv("beat", id)
+		}
 	case *linkpb.Frame_EventBatch:
 		e := body.EventBatch
 		kv("session", e.GetSessionId())

@@ -12,18 +12,21 @@ import (
 )
 
 // Heartbeats (docs/runner-link-design.md §5.7). A Heartbeat is forwarded to the apiserver's heartbeat route as the
-// body a runner posts over HTTPS today, the exact inverse of the shadow comparison's mapping (README.md, "Shadow
-// comparison"): the typed fields become their members, and each Fact's JSON becomes the member it is named after. The
-// route does everything it does today, the runner's presence included, and its answer, today's HeartbeatResponse,
-// goes back as HeartbeatAck.reconcile_json for the runner to apply as it applies that response today.
+// body a runner posted over HTTPS before the link (README.md, "Heartbeats"): the typed fields become their members, and
+// each Fact's JSON becomes the member it is named after. The route does everything it did then, the runner's presence
+// included, and its answer, the HeartbeatResponse, goes back as HeartbeatAck.reconcile_json for the runner to apply.
 //
 // A Fact may come by digest only, when the runner sent its content before. The connection keeps the last full value of
 // each kind, and a digest it holds is filled from it. A digest it does not hold is named in want_facts, and that beat
 // is not forwarded: an absent heartbeat member has a meaning (it keeps or clears what the server holds), so a body
 // missing one would say something the runner did not. The runner sends those parts whole in its next beat, at once.
 
-// The members a heartbeat's typed fields fill (heartbeatTypedMembers, shadow.go); a Fact of one of these kinds is
-// ignored rather than allowed to replace it.
+// heartbeatTypedMembers are the members of the heartbeat body that a Heartbeat's typed fields fill, or the connection
+// does (status, version): a Fact of one of these kinds is ignored rather than allowed to replace it. Every other member
+// travels as a Fact named after it.
+var heartbeatTypedMembers = map[string]bool{
+	"status": true, "version": true, "leaseOwner": true, "idleCapacity": true, "supervisedSessionIds": true, "draining": true,
+}
 
 // factCache is the last full value of each fact kind a connection's runner sent.
 type factCache struct {
@@ -146,7 +149,8 @@ func (l *linkState) forwardHeartbeat(hb *linkpb.Heartbeat) {
 	}
 	l.noteHeartbeat(hb)
 	members, want := l.facts.resolve(hb.GetFacts(), m)
-	ack := &linkpb.HeartbeatAck{Mode: c.mode}
+	// Every answer names the beat it answers, so the runner can tell it from the answer to another (proto beat_id).
+	ack := &linkpb.HeartbeatAck{Mode: linkpb.Mode_MODE_LINK, BeatId: hb.GetBeatId()}
 	if len(want) > 0 {
 		// Nothing was reconciled: no reconcile_json, and no HintState, which the route was not asked for.
 		m.heartbeatForwards.inc("want_facts")

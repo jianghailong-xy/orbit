@@ -71,7 +71,8 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
     var request by remember(card.key) { mutableStateOf<JsonObject?>(null) }
     var unread by remember(card.key) { mutableStateOf(false) }
     val requestId = card.source.text("requestId").takeIf { card.key.endsWith(":sessionMessage") }
-    LaunchedEffect(resources, requestId, authorized, live?.invalidationRevision) {
+    // Behind the conversation's snapshot reads, as its cards (SessionCardsReads): not on every account event.
+    LaunchedEffect(resources, requestId, authorized, live?.session?.snapshotReads) {
         if (!authorized || requestId == null) { unread = requestId != null; return@LaunchedEffect }
         try { request = CardAuthority(resources!!.auth, resources.handle).get(listOf("session-requests", requestId)) as? JsonObject; unread = false }
         catch (cancel: CancellationException) { throw cancel }

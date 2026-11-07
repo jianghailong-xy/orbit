@@ -1550,7 +1550,9 @@ struct CodexSignInSheet: View {
     /// Ask every couple of seconds until the answer is one the sheet moves on for.
     private func waitForApproval() async {
         while !Task.isCancelled {
-            try? await Task.sleep(for: CodexSignIn.pollInterval)
+            // A sign-in in flight, and the app seen: shown again — back from approving it in the
+            // browser — it asks at once.
+            await VisibilityGate.app.pause(CodexSignIn.pollInterval)
             if Task.isCancelled { return }
             var next: CodexSignIn.Step?
             do {

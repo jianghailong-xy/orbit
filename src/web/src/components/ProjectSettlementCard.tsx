@@ -42,6 +42,7 @@ import { mainBranchName, projectStarted } from '../lib/projectStart';
 import { Alert } from './ui/Alert';
 import { Dialog } from './ui/Dialog';
 import { Textarea } from './ui/Textarea';
+import { streamPoll } from '../lib/listBudget';
 
 /**
  * WHY this project is not DONE — the projection, rendered.
@@ -677,13 +678,13 @@ export function SessionProjectSettlementCard({
     queryKey: ['project', project],
     queryFn: () => api<SettlementProjectDocument>(`/projects/${encodeURIComponent(project)}`),
     enabled: Boolean(projectId) && coordinator,
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
   const openItemsRead = useQuery({
     queryKey: ['project', project, 'open-items'],
     queryFn: () => api<{ doneRequest?: ProjectOpenItemRow | null; startRequest?: ProjectOpenItemRow | null; needsYou?: ProjectOpenItemRow[]; withCoordinator?: ProjectOpenItemRow[] }>(`/projects/${encodeURIComponent(project)}/open-items`),
     enabled: Boolean(projectId) && coordinator,
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
   // A read that has not answered yet is not an answer: there is nothing to draw the card from, and
   // nothing is drawn.
@@ -717,7 +718,7 @@ export function SessionProjectSettlementCard({
     queryKey: acceptanceConfirmationKey(project),
     queryFn: () => readAcceptanceConfirmation(project),
     enabled: Boolean(projectId) && needsStanding,
-    refetchInterval: needsStanding ? 20_000 : false,
+    refetchInterval: needsStanding ? streamPoll(20_000) : false,
   });
   const done = useMutation({
     mutationFn: async () => {
@@ -1175,13 +1176,13 @@ export function ProjectDoneDialog({
     queryKey: ['project', projectId, 'open-items'],
     queryFn: () => api<{ doneRequest?: ProjectOpenItemRow | null; startRequest?: ProjectOpenItemRow | null; needsYou?: ProjectOpenItemRow[]; withCoordinator?: ProjectOpenItemRow[] }>(`/projects/${encodeURIComponent(projectId)}/open-items`),
     enabled: open && Boolean(projectId) && suppliedRow === undefined,
-    refetchInterval: open ? 20_000 : false,
+    refetchInterval: open ? streamPoll(20_000) : false,
   });
   const standingRead = useQuery({
     queryKey: acceptanceConfirmationKey(projectId),
     queryFn: () => readAcceptanceConfirmation(projectId),
     enabled: open && Boolean(projectId),
-    refetchInterval: open ? 20_000 : false,
+    refetchInterval: open ? streamPoll(20_000) : false,
   });
   const [receipt, setReceipt] = useState<ProjectDoneRecord | null>(null);
   const [declineError, setDeclineError] = useState<Error | null>(null);
