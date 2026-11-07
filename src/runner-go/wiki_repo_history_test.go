@@ -148,6 +148,8 @@ type wikiRepoHistoryEntryRead struct {
 	LinesTotal    *int                      `json:"linesTotal"`
 	Diff          *string                   `json:"diff"`
 	DiffTruncated *bool                     `json:"diffTruncated"`
+	Changes       []wikiRepoOpHistoryChange `json:"changes"`
+	ChangesTotal  *int                      `json:"changesTotal"`
 }
 
 func (h *wikiRepoHistoryFixture) history(t *testing.T, entries ...map[string]interface{}) (wikiRepoHistoryRead, wikiRepoOpOutcome) {
@@ -327,6 +329,20 @@ func TestWikiRepoOpHistoryDetailIsWhatTheModelReads(t *testing.T) {
 	if line := log.Lines[2]; line.Path != "src/session/log.ts" || line.Line != 3 || line.Text != "cache_marker 3" {
 		t.Fatalf("the third line reads %+v", line)
 	}
+	// Changes: the three commits that added a line holding the term, newest first, each its own one-line patch.
+	if log.ChangesTotal == nil || *log.ChangesTotal != 3 || len(log.Changes) != 3 {
+		t.Fatalf("changes %+v (total %v), want the three that added the term", log.Changes, log.ChangesTotal)
+	}
+	for i, change := range log.Changes {
+		if change.Sha != h.log[2-i] || !reflect.DeepEqual(change.Terms, []string{"cache_marker"}) || change.Body != "" ||
+			!strings.Contains(change.Diff, fmt.Sprintf("+cache_marker %d\n", 3-i)) || change.DiffTruncated {
+			t.Fatalf("change %d reads %+v", i, change)
+		}
+	}
+	// No terms, no changes.
+	if plain := byID["no-terms"]; plain.Changes == nil || len(plain.Changes) != 0 || *plain.ChangesTotal != 0 {
+		t.Fatalf("an entry with no terms has changes %+v", plain.Changes)
+	}
 
 	// Lines: the first forty of 45, each text cut at 200 characters; the subject likewise; a path the base does
 	// not have counts nothing there.
@@ -398,7 +414,8 @@ func TestWikiRepoOpHistoryDetailIsWhatTheModelReads(t *testing.T) {
 
 	// Every detail key is there, zero or not, after the screen's.
 	for i, keys := range historyKeys(t, outcome) {
-		want := []string{"id", "base", "baseDate", "census", "moved", "changed", "commits", "commitsTotal", "lines", "linesTotal", "diff", "diffTruncated"}
+		want := []string{"id", "base", "baseDate", "census", "moved", "changed", "commits", "commitsTotal", "lines", "linesTotal", "diff", "diffTruncated",
+			"changes", "changesTotal"}
 		if !reflect.DeepEqual(keys, want) {
 			t.Fatalf("entry %d has keys %v, want %v", i, keys, want)
 		}
@@ -546,5 +563,138 @@ func TestWikiRepoOpHistoryOfCommitsTheCheckoutHasRunsNoFetch(t *testing.T) {
 	}
 	if entry := fetched.Entries[1]; entry.Error != "" || entry.Base != third {
 		t.Fatalf("the entry from the fetched commit answered %+v", entry)
+	}
+}
+
+// historyQueueFile is the queue's code: forty rows, the lock on row 20 until the fix puts the claim there, and on
+// row 30 the probe while a probe is in.
+func historyQueueFile(fixed, probe bool) string {
+	var lines []string
+	for i := 1; i <= 40; i++ {
+		lines = append(lines, fmt.Sprintf("row %02d", i))
+	}
+	lines[19] = "const lock = queue_lock(run);"
+	if fixed {
+		lines[19] = "const claim = claimNext(run); // SKIP LOCKED"
+	}
+	if probe {
+		lines[29] = "probe_term(run);"
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func TestWikiRepoOpHistoryReadsPatternsAndTheChangesThatMovedATerm(t *testing.T) {
+	historyAt(t, "2026-09-30T12:00:00Z")
+	f := newWikiRepoOpFixture(t)
+	historyAt(t, "2026-10-01T10:00:00Z")
+	base := f.push(t, "queue: claim under a lock", func() {
+		f.write(t, "src/queue/run.ts", historyQueueFile(false, false))
+		f.write(t, "src/queue/deep/run.spec.ts", "test('queue_lock', () => {});\n")
+	})
+	historyAt(t, "2026-10-02T10:00:00Z")
+	fix := f.push(t, "fix(queue): drop the queue lock\n\nThe lock deadlocked under load; the queue now claims with SKIP LOCKED.", func() {
+		f.write(t, "src/queue/run.ts", historyQueueFile(true, false))
+	})
+	// A note far past a change's limit, with the claim's words once on its first line.
+	historyAt(t, "2026-10-03T10:00:00Z")
+	notes := f.push(t, "docs(queue): notes", func() { f.write(t, "src/queue/notes.md", "SKIP LOCKED\n"+historyBigFile("note")) })
+	// Ten probes in and out: each changes how often the probe occurs, which is the same at the base and the head.
+	var probes []string
+	for i := 1; i <= 10; i++ {
+		historyAt(t, fmt.Sprintf("2026-10-%02dT10:00:00Z", 3+i))
+		message := fmt.Sprintf("probe %d", i)
+		if i == 10 {
+			message += "\n\n" + strings.Repeat("x", 700)
+		}
+		probes = append(probes, f.push(t, message, func() { f.write(t, "src/queue/run.ts", historyQueueFile(true, i%2 == 1)) }))
+	}
+	head := probes[9]
+	outcome := runWikiRepoOp(f.command(t, "history", map[string]interface{}{"to": head, "entries": []map[string]interface{}{
+		{"id": "changes", "from": base, "paths": []string{"src/queue/**"}, "terms": []string{"queue_lock", "probe_term", "SKIP LOCKED"}, "detail": true},
+		// `*` stays within one directory and `**/` crosses any number of them; a pattern is never moved itself.
+		{"id": "one-level", "from": base, "paths": []string{"src/*/run.ts"}, "terms": []string{"queue_lock"}},
+		{"id": "any-depth", "from": base, "paths": []string{"src/**/run.spec.ts"}, "terms": []string{"queue_lock"}},
+		{"id": "added", "from": base, "paths": []string{"src/queue/*.md"}, "terms": []string{"SKIP LOCKED"}},
+		{"id": "nothing", "from": base, "paths": []string{"src/none/**"}, "terms": []string{"queue_lock"}},
+	}}), nil)
+	answer := decodeResult[wikiRepoHistoryRead](t, outcome, "history")
+	byID := map[string]wikiRepoHistoryEntryRead{}
+	for _, entry := range answer.Entries {
+		if entry.Error != "" {
+			t.Fatalf("entry %s was refused: %s", entry.ID, entry.Error)
+		}
+		byID[entry.ID] = entry
+	}
+
+	screens := map[string][]wikiRepoOpHistoryCensus{
+		"one-level": {{Term: "queue_lock", Base: 1, Head: 0}},
+		"any-depth": {{Term: "queue_lock", Base: 1, Head: 1}},
+		"added":     {{Term: "SKIP LOCKED", Base: 0, Head: 1}},
+		"nothing":   {{Term: "queue_lock", Base: 0, Head: 0}},
+	}
+	changed := map[string]bool{"one-level": true, "any-depth": false, "added": true, "nothing": false}
+	for id, census := range screens {
+		entry := byID[id]
+		if !reflect.DeepEqual(entry.Census, census) || len(entry.Moved) != 0 || entry.Changed == nil || *entry.Changed != changed[id] {
+			t.Fatalf("%s: census %+v, moved %v, changed %v; want %+v, nothing moved, changed %v", id, entry.Census, entry.Moved,
+				entry.Changed, census, changed[id])
+		}
+	}
+
+	entry := byID["changes"]
+	if want := []wikiRepoOpHistoryCensus{{Term: "queue_lock", Base: 2, Head: 1}, {Term: "probe_term", Base: 0, Head: 0},
+		{Term: "SKIP LOCKED", Base: 0, Head: 2}}; !reflect.DeepEqual(entry.Census, want) {
+		t.Fatalf("the census under the pattern is %+v, want %+v", entry.Census, want)
+	}
+	if entry.CommitsTotal == nil || *entry.CommitsTotal != 12 || entry.ChangesTotal == nil || *entry.ChangesTotal != 12 {
+		t.Fatalf("commitsTotal %v, changesTotal %v; want 12 and 12", entry.CommitsTotal, entry.ChangesTotal)
+	}
+	// The fix and the note changed terms whose count moved from the base to the head: both are taken, though ten
+	// probes are newer; the six newest probes fill the eight. In git log's order, newest first.
+	want := []string{probes[9], probes[8], probes[7], probes[6], probes[5], probes[4], notes, fix}
+	var got []string
+	for _, change := range entry.Changes {
+		got = append(got, change.Sha)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("the changes are %v, want %v", got, want)
+	}
+	byChange := map[string]wikiRepoOpHistoryChange{}
+	for _, change := range entry.Changes {
+		byChange[change.Sha] = change
+	}
+
+	// The fix: the terms it changed in the entry's order, its body, and its own patch with eight rows of context on
+	// each side of the line it changed — row 12 and row 28, not row 11 or row 29.
+	fixed := byChange[fix]
+	if fixed.Subject != "fix(queue): drop the queue lock" || fixed.Date != "2026-10-02T10:00:00Z" ||
+		!reflect.DeepEqual(fixed.Terms, []string{"queue_lock", "SKIP LOCKED"}) ||
+		fixed.Body != "The lock deadlocked under load; the queue now claims with SKIP LOCKED." || fixed.DiffTruncated {
+		t.Fatalf("the fix reads %+v", fixed)
+	}
+	for _, line := range []string{"--- a/src/queue/run.ts\n", "-const lock = queue_lock(run);\n", "+const claim = claimNext(run); // SKIP LOCKED\n",
+		" row 12\n", " row 28\n"} {
+		if !strings.Contains(fixed.Diff, line) {
+			t.Fatalf("the fix's patch lacks %q:\n%s", line, fixed.Diff)
+		}
+	}
+	// (Git's hunk heading names the line above the hunk, "@@ … @@ row 11": that is not a line of context.)
+	if strings.Contains(fixed.Diff, "\n row 11\n") || strings.Contains(fixed.Diff, "\n row 29\n") || strings.Contains(fixed.Diff, "run.spec.ts") {
+		t.Fatalf("the fix's patch reaches past eight rows of context or into a file it did not change:\n%s", fixed.Diff)
+	}
+	// The note's one hunk passes a change's limit on its own: cut at a line's end within it.
+	note := byChange[notes]
+	if !reflect.DeepEqual(note.Terms, []string{"SKIP LOCKED"}) || !note.DiffTruncated || len(note.Diff) > wikiRepoOpHistoryChangeBytes ||
+		len(note.Diff) < wikiRepoOpHistoryChangeBytes-80 || !strings.HasSuffix(note.Diff, "\n") || !strings.Contains(note.Diff, "+SKIP LOCKED\n") {
+		t.Fatalf("the note's patch is %d bytes (truncated %v):\n%s", len(note.Diff), note.DiffTruncated, note.Diff)
+	}
+	// A probe: the one term it changed; a body past its limit is cut.
+	last := byChange[probes[9]]
+	if !reflect.DeepEqual(last.Terms, []string{"probe_term"}) || last.Body != strings.Repeat("x", wikiRepoOpHistoryBodyRunes) ||
+		!strings.Contains(last.Diff, "-probe_term(run);\n") {
+		t.Fatalf("the last probe reads %+v", last)
+	}
+	if fifth := byChange[probes[4]]; fifth.Body != "" || !strings.Contains(fifth.Diff, "+probe_term(run);\n") {
+		t.Fatalf("the fifth probe, which puts the probe in, reads %+v", fifth)
 	}
 }

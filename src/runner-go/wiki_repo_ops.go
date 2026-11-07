@@ -775,6 +775,15 @@ const (
 	wikiRepoOpHistoryMaxLines    = 40
 	wikiRepoOpHistoryTextRunes   = 200
 	wikiRepoOpHistoryDiffBytes   = 6000
+	// The changes: at most this many commits that changed how often a term occurs, each with its message's body cut
+	// to BodyRunes and its own patch, ChangeContext lines of context on each side, cut to ChangeBytes — and all the
+	// patches together within ChangesBytes. A change is given only while at least ChangeMinBytes of that are left.
+	wikiRepoOpHistoryMaxChanges     = 8
+	wikiRepoOpHistoryBodyRunes      = 600
+	wikiRepoOpHistoryChangeContext  = 8
+	wikiRepoOpHistoryChangeBytes    = 2500
+	wikiRepoOpHistoryChangesBytes   = 12000
+	wikiRepoOpHistoryChangeMinBytes = 500
 )
 
 // wikiRepoOpHistoryItem is one entry a history asks about: where it looks back from — a commit (`from`), or a
@@ -831,6 +840,21 @@ type wikiRepoOpHistoryDetail struct {
 	LinesTotal    int                       `json:"linesTotal"`
 	Diff          string                    `json:"diff"`
 	DiffTruncated bool                      `json:"diffTruncated"`
+	Changes       []wikiRepoOpHistoryChange `json:"changes"`
+	ChangesTotal  int                       `json:"changesTotal"`
+}
+
+// wikiRepoOpHistoryChange is one commit that changed how often a term occurs in the entry's paths, as the model
+// reads it: which terms git log -S found it changed, in the entry's order, its message's body, and its own patch of
+// the paths against its first parent — the hunks that hold a term first. A commit with no parent shows no patch.
+type wikiRepoOpHistoryChange struct {
+	Sha           string   `json:"sha"`
+	Date          string   `json:"date"`
+	Subject       string   `json:"subject"`
+	Terms         []string `json:"terms"`
+	Body          string   `json:"body"`
+	Diff          string   `json:"diff"`
+	DiffTruncated bool     `json:"diffTruncated"`
 }
 
 type wikiRepoOpHistoryCommit struct {
@@ -851,8 +875,10 @@ type wikiRepoOpHistoryLine struct {
 // §2.3 and §3.1). For every entry, between its base and `to`: how many lines of its paths hold each of its terms,
 // which of the paths themselves were added, deleted or renamed, and whether the paths changed at all — the
 // screen, which no model reads. For an entry the model is asked about (`detail`), also the commits that touched
-// its paths, each marked when it changed how often a term occurs, the lines at `to` that hold a term, and the
-// diff, the hunks that mention a term first — what the model judges from.
+// its paths, each marked when it changed how often a term occurs, the lines at `to` that hold a term, the diff,
+// the hunks that mention a term first, and the changes — the marked commits with their messages and their own
+// patches — what the model judges from. A path may be a pattern (wikiRepoOpHistoryPathspec): all of this then
+// covers every file it matches.
 //
 // AN ENTRY'S PROBLEM IS ITS OWN. No base to be found, no path to look at, git failing on one entry's paths:
 // that entry answers with its error, and the others are answered. Only what every entry stands on fails the
@@ -935,13 +961,22 @@ func wikiRepoOpHistoryOne(root, to string, item wikiRepoOpHistoryItem) interface
 		return screen
 	}
 	detail := wikiRepoOpHistoryDetail{wikiRepoOpHistoryScreen: screen}
-	if detail.Commits, detail.CommitsTotal, err = wikiRepoOpHistoryCommits(root, base, to, terms, paths); err != nil {
+	matched, err := wikiRepoOpHistoryPickaxe(root, base, to, terms, paths)
+	if err != nil {
 		return refuse(err.Error())
 	}
+	all, err := wikiRepoOpHistoryLog(root, base, to, matched, paths)
+	if err != nil {
+		return refuse(err.Error())
+	}
+	detail.Commits, detail.CommitsTotal = wikiRepoOpHistoryCommits(all)
 	if detail.Lines, detail.LinesTotal, err = wikiRepoOpHistoryLines(root, to, terms, paths); err != nil {
 		return refuse(err.Error())
 	}
-	if detail.Diff, detail.DiffTruncated, err = wikiRepoOpHistoryDiff(root, base, to, terms, paths); err != nil {
+	if detail.Diff, detail.DiffTruncated, err = wikiRepoOpHistoryPatch(root, base, to, terms, paths, 2, wikiRepoOpHistoryDiffBytes); err != nil {
+		return refuse(err.Error())
+	}
+	if detail.Changes, detail.ChangesTotal, err = wikiRepoOpHistoryChanges(root, all, matched, screen.Census, terms, paths); err != nil {
 		return refuse(err.Error())
 	}
 	return detail
@@ -1043,12 +1078,15 @@ func wikiRepoOpCommitDate(root, sha string) (string, error) {
 	return date, nil
 }
 
-// wikiRepoOpHistoryGit runs one git command over an entry's paths, spelled so that a glob or a leading dash is a
-// path (--literal-pathspecs, and after --), and answers its output and its exit code. `answer` is the one exit
-// besides 0 that is an answer rather than a failure — 1, from a grep that found nothing or a diff --quiet that
-// found a difference — or 0 for none. Any other exit is git failing, in git's own words.
+// wikiRepoOpHistoryGit runs one git command over an entry's paths, each spelled as wikiRepoOpHistoryPathspec says
+// and after --, and answers its output and its exit code. `answer` is the one exit besides 0 that is an answer
+// rather than a failure — 1, from a grep that found nothing or a diff --quiet that found a difference — or 0 for
+// none. Any other exit is git failing, in git's own words.
 func wikiRepoOpHistoryGit(root string, paths []string, answer int, args ...string) ([]byte, int, error) {
-	full := append(append(append([]string{"--literal-pathspecs"}, args...), "--"), paths...)
+	full := append(append([]string{}, args...), "--")
+	for _, path := range paths {
+		full = append(full, wikiRepoOpHistoryPathspec(path))
+	}
 	out, code, stderr, err := wikiAnchorGit(root, wikiRepoOpGitTimeout, full...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("git %s failed: %v", args[0], err)
@@ -1057,6 +1095,17 @@ func wikiRepoOpHistoryGit(root string, paths []string, answer int, args ...strin
 		return nil, 0, fmt.Errorf("git %s exited %d: %s", args[0], code, strings.TrimSpace(stderr))
 	}
 	return out, code, nil
+}
+
+// wikiRepoOpHistoryPathspec is how git is handed one of an entry's paths. A path with a `*`, `?` or `[` in it is a
+// pattern, `:(glob)` — `*` and `?` within one directory, `**/` any number of them, `/**` all under one — as a
+// pitfall's trigger paths (`src/web/src/**/*.tsx`) are written; any other path is just itself, `:(literal)`, so
+// that a leading dash or a colon is part of its name.
+func wikiRepoOpHistoryPathspec(path string) string {
+	if strings.ContainsAny(path, "*?[") {
+		return ":(glob)" + path
+	}
+	return ":(literal)" + path
 }
 
 // wikiRepoOpHistoryCount is how many lines of the paths hold the term at a commit: `git grep -c`, a fixed string
@@ -1083,7 +1132,8 @@ func wikiRepoOpHistoryCount(root, rev, term string, paths []string) (int, error)
 
 // wikiRepoOpHistoryMoved is which of the entry's paths are themselves added, deleted or renamed between the base
 // and `to`: a path is moved when it is exactly — not a directory above — the path of an A, D or T row of
-// `git diff --name-status -M`, either side of an R row, or the new side of a C row. Sorted.
+// `git diff --name-status -M`, either side of an R row, or the new side of a C row. A pattern names no one file, so
+// it is never moved itself. Sorted.
 func wikiRepoOpHistoryMoved(root, base, to string, paths []string) ([]string, error) {
 	out, _, err := wikiRepoOpHistoryGit(root, paths, 0, "diff", "--name-status", "-M", "-z", base, to)
 	if err != nil {
@@ -1123,37 +1173,48 @@ func wikiRepoOpHistoryMoved(root, base, to string, paths []string) ([]string, er
 	return moved, nil
 }
 
-// wikiRepoOpHistoryCommits is the commits from the base to `to` that touched the entry's paths, newest first as
-// git log lists them, and how many there are. A commit is matched when git log -S finds that it changed how many
-// times one of the terms occurs in the paths. At most wikiRepoOpHistoryMaxCommits are kept: every matched one
-// first, newest first, then the newest of the rest — in git log's order still.
-func wikiRepoOpHistoryCommits(root, base, to string, terms, paths []string) ([]wikiRepoOpHistoryCommit, int, error) {
-	out, _, err := wikiRepoOpHistoryGit(root, paths, 0, "log", "--format=%H%x09%cI%x09%s", base+".."+to)
-	if err != nil {
-		return nil, 0, err
-	}
-	matched := map[string]bool{}
+// wikiRepoOpHistoryPickaxe is, for each commit from the base to `to` that git log -S finds changed how many times
+// one of the terms occurs in the paths, the terms it changed, in the order of the terms.
+func wikiRepoOpHistoryPickaxe(root, base, to string, terms, paths []string) (map[string][]string, error) {
+	matched := map[string][]string{}
 	for _, term := range terms {
 		hits, _, err := wikiRepoOpHistoryGit(root, paths, 0, "log", "--format=%H", "-S"+term, base+".."+to)
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 		for _, sha := range strings.Fields(string(hits)) {
-			matched[sha] = true
+			matched[sha] = append(matched[sha], term)
 		}
 	}
-	var all []wikiRepoOpHistoryCommit
+	return matched, nil
+}
+
+// wikiRepoOpHistoryLog is every commit from the base to `to` that touched the entry's paths, newest first as git
+// log lists them, each matched when the pickaxe found it changed how often a term occurs.
+func wikiRepoOpHistoryLog(root, base, to string, matched map[string][]string, paths []string) ([]wikiRepoOpHistoryCommit, error) {
+	out, _, err := wikiRepoOpHistoryGit(root, paths, 0, "log", "--format=%H%x09%cI%x09%s", base+".."+to)
+	if err != nil {
+		return nil, err
+	}
+	all := []wikiRepoOpHistoryCommit{}
 	for _, line := range strings.Split(string(out), "\n") {
 		if line == "" {
 			continue
 		}
 		fields := strings.SplitN(line, "\t", 3)
 		if len(fields) != 3 || !wikiCommitSha.MatchString(fields[0]) {
-			return nil, 0, errors.New("git log answered in a shape this build does not read")
+			return nil, errors.New("git log answered in a shape this build does not read")
 		}
 		all = append(all, wikiRepoOpHistoryCommit{Sha: fields[0], Date: fields[1],
-			Subject: cutRunes(fields[2], wikiRepoOpHistoryTextRunes), Matched: matched[fields[0]]})
+			Subject: cutRunes(fields[2], wikiRepoOpHistoryTextRunes), Matched: len(matched[fields[0]]) > 0})
 	}
+	return all, nil
+}
+
+// wikiRepoOpHistoryCommits is the commits of the log the model reads, and how many there are. At most
+// wikiRepoOpHistoryMaxCommits are kept: every matched one first, newest first, then the newest of the rest — in
+// git log's order still.
+func wikiRepoOpHistoryCommits(all []wikiRepoOpHistoryCommit) ([]wikiRepoOpHistoryCommit, int) {
 	keep := make([]bool, len(all))
 	kept := 0
 	for _, wanted := range []bool{true, false} {
@@ -1170,7 +1231,91 @@ func wikiRepoOpHistoryCommits(root, base, to string, terms, paths []string) ([]w
 			commits = append(commits, all[i])
 		}
 	}
-	return commits, len(all), nil
+	return commits, len(all)
+}
+
+// wikiRepoOpHistoryChanges is the matched commits of the log the model reads in full (docs/wiki-claim-recheck-
+// design.md §3.1), and how many matched commits there are. The ones that changed a term whose count differs
+// between the base and `to` — what moved the screen — are taken first, newest first, then the other matched ones,
+// newest first: at most wikiRepoOpHistoryMaxChanges, while at least wikiRepoOpHistoryChangeMinBytes of the
+// patches' wikiRepoOpHistoryChangesBytes are left, each patch cut to the smaller of wikiRepoOpHistoryChangeBytes
+// and what is left. Those taken are answered in git log's order.
+func wikiRepoOpHistoryChanges(root string, all []wikiRepoOpHistoryCommit, matched map[string][]string,
+	census []wikiRepoOpHistoryCensus, terms, paths []string) ([]wikiRepoOpHistoryChange, int, error) {
+	moved := map[string]bool{}
+	for _, count := range census {
+		if count.Base != count.Head {
+			moved[count.Term] = true
+		}
+	}
+	first := func(sha string) bool {
+		for _, term := range matched[sha] {
+			if moved[term] {
+				return true
+			}
+		}
+		return false
+	}
+	total := 0
+	for _, commit := range all {
+		if commit.Matched {
+			total++
+		}
+	}
+	taken := map[int]wikiRepoOpHistoryChange{}
+	used := 0
+	for _, wanted := range []bool{true, false} {
+		for i, commit := range all {
+			if !commit.Matched || first(commit.Sha) != wanted {
+				continue
+			}
+			room := wikiRepoOpHistoryChangesBytes - used
+			if len(taken) == wikiRepoOpHistoryMaxChanges || room < wikiRepoOpHistoryChangeMinBytes {
+				break
+			}
+			if room > wikiRepoOpHistoryChangeBytes {
+				room = wikiRepoOpHistoryChangeBytes
+			}
+			change, err := wikiRepoOpHistoryChangeOf(root, commit, matched[commit.Sha], terms, paths, room)
+			if err != nil {
+				return nil, 0, err
+			}
+			used += len(change.Diff)
+			taken[i] = change
+		}
+	}
+	changes := []wikiRepoOpHistoryChange{}
+	for i := range all {
+		if change, ok := taken[i]; ok {
+			changes = append(changes, change)
+		}
+	}
+	return changes, total, nil
+}
+
+// wikiRepoOpHistoryChangeOf is one change: the commit, the terms it changed, its message's body and its patch of
+// the paths against its first parent, ChangeContext lines of context on each side, cut to `limit` bytes.
+func wikiRepoOpHistoryChangeOf(root string, commit wikiRepoOpHistoryCommit, changed, terms, paths []string,
+	limit int) (wikiRepoOpHistoryChange, error) {
+	change := wikiRepoOpHistoryChange{Sha: commit.Sha, Date: commit.Date, Subject: commit.Subject,
+		Terms: append([]string{}, changed...)}
+	body, code, stderr, err := wikiAnchorGit(root, wikiRepoOpGitTimeout, "log", "-1", "--format=%b", commit.Sha)
+	if err != nil || code != 0 {
+		return change, fmt.Errorf("git log -1 %s failed: %s", shortWikiHash(commit.Sha),
+			firstNonEmpty(strings.TrimSpace(stderr), errString(err)))
+	}
+	change.Body = cutRunes(strings.TrimSpace(string(body)), wikiRepoOpHistoryBodyRunes)
+	// A commit with no parent — the first of a line — has nothing to be compared with: no patch.
+	parent, code, _, err := wikiAnchorGit(root, wikiRepoOpGitTimeout, "rev-parse", "--verify", "--quiet", commit.Sha+"^1")
+	if err != nil {
+		return change, fmt.Errorf("git rev-parse %s^1 failed: %v", shortWikiHash(commit.Sha), err)
+	}
+	if code != 0 {
+		return change, nil
+	}
+	change.Diff, change.DiffTruncated, err = wikiRepoOpHistoryPatch(root, strings.TrimSpace(string(parent)), commit.Sha,
+		terms, paths, wikiRepoOpHistoryChangeContext, limit)
+	return change, err
 }
 
 // wikiRepoOpHistoryLines is the lines of the entry's paths at `to` that hold a term — `git grep -n`, one line once
@@ -1232,15 +1377,16 @@ type wikiRepoOpHistoryHunk struct {
 	relevant   bool
 }
 
-// wikiRepoOpHistoryDiff is the diff of the entry's paths from the base to `to`, cut to what the model reads: the
-// hunks that mention a term — one of their + or - lines holds it — first, in the order of their files, then the
-// rest, until the next would pass wikiRepoOpHistoryDiffBytes in all. A hunk follows its file's heading, the ---
-// and +++ pair (or git's "Binary files … differ", all a binary file has to show), whenever the hunk before it is
-// another file's, so that no hunk reads as another file's. A first hunk that passes the limit on its own is cut
-// on a line boundary. A file with no hunk — a rename or a mode change and nothing else — shows nothing here: the
-// entry's moved paths and its commits say it. `truncated` says something was left out.
-func wikiRepoOpHistoryDiff(root, base, to string, terms, paths []string) (string, bool, error) {
-	out, _, err := wikiRepoOpHistoryGit(root, paths, 0, "diff", "--no-color", "--no-ext-diff", "-U2", base, to)
+// wikiRepoOpHistoryPatch is the diff of the entry's paths from one commit to another — the base to `to` with 2
+// lines of context, or a change's first parent to it with wikiRepoOpHistoryChangeContext — cut to what the model
+// reads: the hunks that mention a term — one of their + or - lines holds it — first, in the order of their files,
+// then the rest, until the next would pass `limit` bytes in all. A hunk follows its file's heading, the --- and +++
+// pair (or git's "Binary files … differ", all a binary file has to show), whenever the hunk before it is another
+// file's, so that no hunk reads as another file's. A first hunk that passes the limit on its own is cut on a line
+// boundary. A file with no hunk — a rename or a mode change and nothing else — shows nothing here: the entry's
+// moved paths and its commits say it. `truncated` says something was left out.
+func wikiRepoOpHistoryPatch(root, from, to string, terms, paths []string, context, limit int) (string, bool, error) {
+	out, _, err := wikiRepoOpHistoryGit(root, paths, 0, "diff", "--no-color", "--no-ext-diff", fmt.Sprintf("-U%d", context), from, to)
 	if err != nil {
 		return "", false, err
 	}
@@ -1294,10 +1440,10 @@ func wikiRepoOpHistoryDiff(root, base, to string, terms, paths []string) (string
 		if hunk.file != last {
 			piece = headings[hunk.file] + piece
 		}
-		if diff.Len()+len(piece) > wikiRepoOpHistoryDiffBytes {
+		if diff.Len()+len(piece) > limit {
 			if diff.Len() == 0 {
 				// It passes the limit on its own: as much of it as fits, up to the end of a line.
-				piece = piece[:wikiRepoOpHistoryDiffBytes]
+				piece = piece[:limit]
 				diff.WriteString(piece[:strings.LastIndexByte(piece, '\n')+1])
 			}
 			return diff.String(), true, nil
