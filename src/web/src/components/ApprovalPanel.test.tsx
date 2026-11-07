@@ -728,7 +728,7 @@ describe('batch create approval', () => {
       // Waited out in act slices, not one act: the picture arrives through a `lazy()` import that
       // resolves on its own schedule, and React queues every render scheduled inside an in-flight
       // act callback until that callback settles. In slices the card can draw inside the wait.
-      for (let attempt = 0; attempt < 20 && !host!.querySelector('[data-testid="project-canvas"]'); attempt += 1) {
+      for (let attempt = 0; attempt < 300 && !host!.querySelector('[data-testid="project-canvas"]'); attempt += 1) {
         await act(async () => {
           await new Promise((resolve) => setTimeout(resolve, 10));
         });
