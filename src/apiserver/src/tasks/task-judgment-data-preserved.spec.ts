@@ -2761,7 +2761,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // write `open_list_epoch` alone, no preserved row or column is touched, and none of the six preserved
       // triggers/functions is named or replaced, so it is not another writer of the DONE fence. No INSERT, UPDATE or
       // DELETE runs at apply time.
-      '0487_open_list_epoch_shards'],
+      '0487_open_list_epoch_shards',
+      // 0488 (an amend answering a challenge) adds two nullable columns to `wiki_changeset_op`
+      // (`answers_challenge`, a history reference with no foreign key, and `answered_by`) and three CHECKs, and
+      // nothing else. It is not a preserved relation, no `task`, `session`, `project` or `project_acceptance_*`
+      // object nor any of the six preserved triggers/functions is named, and no function, trigger or type is
+      // created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE: every stored op reads NULL in both columns and satisfies the CHECKs as it stands.
+      '0488_wiki_op_answers_challenge'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
