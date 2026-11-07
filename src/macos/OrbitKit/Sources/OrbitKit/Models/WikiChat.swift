@@ -364,7 +364,8 @@ public struct WikiChatContext: Codable, Equatable, Sendable {
     public enum Page: Equatable, Sendable {
         case doc(docSlug: String, sectionKey: String)
         case entry(entryId: String)
-        case plan(docSlug: String)
+        /// A plan page, at one of its document's sections when it shows one (C12).
+        case plan(docSlug: String, sectionKey: String? = nil)
     }
 
     public struct Selection: Codable, Equatable, Sendable {
@@ -399,7 +400,8 @@ public struct WikiChatContext: Codable, Equatable, Sendable {
             case "doc":   page = .doc(docSlug: try p.decode(String.self, forKey: .docSlug),
                                       sectionKey: try p.decode(String.self, forKey: .sectionKey))
             case "entry": page = .entry(entryId: try p.decode(String.self, forKey: .entryId))
-            case "plan":  page = .plan(docSlug: try p.decode(String.self, forKey: .docSlug))
+            case "plan":  page = .plan(docSlug: try p.decode(String.self, forKey: .docSlug),
+                                       sectionKey: try p.decodeIfPresent(String.self, forKey: .sectionKey))
             default:      page = nil
             }
         } else {
@@ -420,9 +422,10 @@ public struct WikiChatContext: Codable, Equatable, Sendable {
             case .entry(let id):
                 try p.encode("entry", forKey: .kind)
                 try p.encode(id, forKey: .entryId)
-            case .plan(let slug):
+            case .plan(let slug, let key):
                 try p.encode("plan", forKey: .kind)
                 try p.encode(slug, forKey: .docSlug)
+                try p.encodeIfPresent(key, forKey: .sectionKey)
             }
         }
         try c.encodeIfPresent(selection, forKey: .selection)
@@ -537,6 +540,44 @@ public struct WikiChatDraftRewrite: Codable, Equatable, Sendable {
     }
 }
 
+/// A plan card's change (contract `chat.drafts.read`, change; C12): the document it puts into the plan against the
+/// version it was drafted on, the document's own fields that change, and each section it adds, changes or removes.
+public struct WikiChatPlanChange: Codable, Equatable, Sendable {
+    public struct Doc: Codable, Equatable, Sendable {
+        public let slug: String
+        public let title: String
+        /// Where the version it was drafted on numbers it ("3.1"); nil for a new one.
+        public let number: String?
+    }
+
+    public struct Category: Codable, Equatable, Sendable {
+        public let key: String
+        public let title: String
+        /// The change opens it: the plan had no such category.
+        public let opens: Bool
+    }
+
+    public struct Section: Codable, Equatable, Sendable {
+        public let key: String
+        public let title: String
+        /// Its place in the document: 2 for `§2`.
+        public let number: Int
+        /// `added`, `changed` or `removed`.
+        public let edit: String
+        /// A changed one's fields that change (`chat.copy.planFields`'s keys).
+        public let fields: [String]
+        /// What it covers as the change has it, when it is added or its covers change.
+        public let covers: String?
+    }
+
+    public let baseVersion: Int
+    public let version: Int?
+    public let doc: Doc
+    public let category: Category
+    public let fields: [String]
+    public let sections: [Section]
+}
+
 /// A card as the owner's door serves it (contract `chat.drafts.read`).
 public struct WikiChatDraftView: Codable, Equatable, Sendable, Identifiable {
     public let id: String
@@ -563,6 +604,8 @@ public struct WikiChatDraftView: Codable, Equatable, Sendable, Identifiable {
     public let undoable: Bool
     public let changesetId: String?
     public let rewrite: WikiChatDraftRewrite?
+    /// A plan card's change (contract `chat.drafts.read`, change; C12); nil on every other card, and on an older server.
+    public let change: WikiChatPlanChange?
     public let createdAt: String?
 
     public init(from decoder: Decoder) throws {
@@ -586,6 +629,7 @@ public struct WikiChatDraftView: Codable, Equatable, Sendable, Identifiable {
         undoable = try c.decodeIfPresent(Bool.self, forKey: .undoable) ?? false
         changesetId = try c.decodeIfPresent(String.self, forKey: .changesetId)
         rewrite = try c.decodeIfPresent(WikiChatDraftRewrite.self, forKey: .rewrite)
+        change = try c.decodeIfPresent(WikiChatPlanChange.self, forKey: .change)
         createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
     }
 

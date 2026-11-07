@@ -51,6 +51,7 @@ const { WIKI_DOC_SECTION_EVENT } = await import('./WikiDirectory');
 
 interface Shared {
   docs: { directory: { read: WikiDocsDirectory }; doc: { read: WikiDocView } };
+  plan: { versions: Record<string, unknown> };
 }
 const SHARED = JSON.parse(
   readFileSync(
@@ -138,6 +139,7 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
   if (path === `${space}/chats`) return reply(200, chats);
   if (path === `${space}/docs`) return reply(200, SHARED.docs.directory.read);
   if (path === `${space}/docs/session-runtime`) return reply(200, DOC);
+  if (path === `${space}/plan`) return reply(200, { spaceId: SPACE_ID, confirmed: SHARED.plan.versions.v1, draft: null, proposals: [], job: null });
   if (path === `${space}/docs/long-read`) return reply(200, LONG);
   if (path === `${space}/entries`) return reply(200, []);
   if (path === `${space}/timeline`) return reply(200, { items: [] });
@@ -230,6 +232,8 @@ async function open(path: string): Promise<void> {
             <Route path="/wiki/:space/t/:topic" element={<WikiPage route="topic" />} />
             <Route path="/wiki/:space/d/:doc" element={<WikiPage route="doc" />} />
             <Route path="/wiki/:space/plan" element={<WikiPage route="plan" />} />
+            <Route path="/wiki/:space/plan/d/:doc" element={<WikiPage route="planDoc" />} />
+            <Route path="/wiki/:space/plan/d/:doc/:section" element={<WikiPage route="planSection" />} />
             <Route path="/wiki/:space/browse" element={<WikiPage route="browse" />} />
             <Route path="/wiki/:space/az" element={<WikiPage route="index" />} />
             <Route path="/wiki/:space/e/:entry" element={<WikiPage route="entry" />} />
@@ -583,6 +587,23 @@ describe('the attachments (design §4.2, board 42 ①)', () => {
     expect(chips()).toEqual(['3.1 §4']);
     expect(sent.body.wikiContext).toEqual({ selection: { docSlug: 'session-runtime', sectionKey: 's7', sentenceIds: ['s7-0-1'] } });
     expect(document.querySelectorAll('.wk-snap')).toHaveLength(0);
+  });
+
+  it('on the plan page attach its document, and the section it shows at one (C12): the page brings the plan to the agent', async () => {
+    await open('/wiki/orbit/plan/d/session-runtime/2?chat=S1chat');
+    expect(chips()).toEqual(['3.1 §2']);
+    await type('Write this one for a first-time reader.');
+    await press(byLabel('Send'));
+    const atSection = writes.find((write) => write.path === '/api/sessions/S1chat/turns/current-work-routing')!;
+    expect(atSection.body.wikiContext).toEqual({ page: { kind: 'plan', docSlug: 'session-runtime', sectionKey: 's3' } });
+
+    writes.length = 0;
+    await open('/wiki/orbit/plan/d/session-runtime?chat=S1chat');
+    expect(chips()).toEqual(['3.1']);
+    await type('Split it.');
+    await press(byLabel('Send'));
+    const atDoc = writes.find((write) => write.path === '/api/sessions/S1chat/turns/current-work-routing')!;
+    expect(atDoc.body.wikiContext).toEqual({ page: { kind: 'plan', docSlug: 'session-runtime' } });
   });
 
   it('cross the quote out, and send nothing when neither is shown', async () => {

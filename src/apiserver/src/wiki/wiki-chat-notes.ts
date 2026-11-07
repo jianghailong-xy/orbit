@@ -57,7 +57,7 @@ export async function appendWikiChatNotes(
   const context = storedContext(delivery.turn.wikiContext);
   if (context?.page?.kind === 'doc') blocks.push(await docPageNote(tx, delivery, context.page));
   if (context?.page?.kind === 'entry') blocks.push(await entryPageNote(tx, delivery, context.page.entryId));
-  if (context?.page?.kind === 'plan') blocks.push(await planPageNote(tx, delivery, context.page.docSlug));
+  if (context?.page?.kind === 'plan') blocks.push(await planPageNote(tx, delivery, context.page));
   if (context?.selection) blocks.push(await selectionNote(tx, delivery, context.selection));
   // What the owner pressed since the agent was last told (contract `chat.notes.drafts`): with this message, never as a
   // turn of its own. Stamped in this delivery's transaction, so a claim rolled back tells the next delivery instead.
@@ -108,20 +108,35 @@ function block(tag: string, attributes: ReadonlyArray<readonly [string, string |
   return [head, ...body, `</${tag}>`].join('\n');
 }
 
-/** The confirmed plan, with what the plan page attaches of a section besides what the documents read numbers. */
+/**
+ * The confirmed plan, with what the plan page attaches of a document besides what the documents read numbers: every
+ * field a plan card's change sends back (contract `agentSurface.chat.draft.params.change`).
+ */
 const PLAN_NOTE_SELECT = {
   ...PLAN_SELECT,
   docs: {
     ...PLAN_SELECT.docs,
     select: {
       ...PLAN_SELECT.docs.select,
+      protected: true,
+      extra: true,
       sections: {
         ...PLAN_SELECT.docs.select.sections,
-        select: { ...PLAN_SELECT.docs.select.sections.select, covers: true, length: true },
+        select: { ...PLAN_SELECT.docs.select.sections.select, covers: true, length: true, sources: true, extra: true },
       },
     },
   },
 } satisfies Prisma.WikiPlanSelect;
+
+/** What a plan page's note tells the agent of a plan card (contract `chat.notes.page.body`, design §6's third row). */
+const PLAN_CARD_HOW = 'To change how this document is planned, draft a plan card: wiki_draft with kind plan, a reason, and as change.doc '
+  + 'this doc as it should read — every field as it is here, the ones you change changed. A writing requirement goes into the '
+  + 'covers of the sections it is for: the writer reads covers, and a section\'s fingerprint holds them, so the next rewrite '
+  + 'keeps the requirement. Nothing changes until the owner applies the card, which confirms and rebuilds the plan.';
+
+/** An object with nothing in it is left out of a definition, as the plan's own reads leave out an empty extra. */
+const extraOf = (extra: unknown): Record<string, unknown> =>
+  extra !== null && typeof extra === 'object' && !Array.isArray(extra) && Object.keys(extra).length > 0 ? { extra } : {};
 
 async function confirmedPlan(tx: Prisma.TransactionClient, delivery: WikiChatDelivery) {
   return tx.wikiPlan.findFirst({
@@ -241,35 +256,50 @@ async function entryPageNote(tx: Prisma.TransactionClient, delivery: WikiChatDel
   );
 }
 
-/** `<orbit_wiki_page of="plan">`: the document's definition in the confirmed plan, which a session cannot read. */
-async function planPageNote(tx: Prisma.TransactionClient, delivery: WikiChatDelivery, docSlug: string): Promise<string> {
+/**
+ * `<orbit_wiki_page of="plan">`: the document's whole definition in the confirmed plan, which a session cannot read —
+ * as a plan card's change takes it (`doc`), with the version, the document's number, the section the page shows, and how
+ * a plan card changes it (contract `chat.notes.page`).
+ */
+async function planPageNote(tx: Prisma.TransactionClient, delivery: WikiChatDelivery, page: { docSlug: string; sectionKey?: string }): Promise<string> {
   const plan = await confirmedPlan(tx, delivery);
-  const planDoc = plan?.docs.find((doc) => doc.slug === docSlug);
+  const planDoc = plan?.docs.find((doc) => doc.slug === page.docSlug);
   if (!plan || !planDoc) {
-    return block(WIKI_CHAT_NOTE_TAGS.page, [['of', 'plan'], ['doc', docSlug], ['slug', docSlug]], [
-      `The plan page the owner had open, document ${docSlug}, is not in this space's confirmed plan any more, so nothing `
+    return block(WIKI_CHAT_NOTE_TAGS.page, [['of', 'plan'], ['doc', page.docSlug], ['slug', page.docSlug]], [
+      `The plan page the owner had open, document ${page.docSlug}, is not in this space's confirmed plan any more, so nothing `
         + 'of it is attached.',
     ]);
   }
   const place = numbering(plan).get(planDoc.slug)!;
+  const index = page.sectionKey === undefined ? -1 : planDoc.sections.findIndex((section) => section.key === page.sectionKey);
+  const shown = index >= 0 ? planDoc.sections[index]! : null;
   const definition = {
     planVersion: plan.version,
     number: place.number,
-    slug: planDoc.slug,
-    title: planDoc.title,
-    category: place.category,
-    question: planDoc.question,
-    audience: planDoc.audience,
-    scopeIn: planDoc.scopeIn,
-    scopeOut: planDoc.scopeOut,
-    length: { min: planDoc.lengthMin, max: planDoc.lengthMax },
-    sections: planDoc.sections.map((section, i) => ({
-      number: i + 1, key: section.key, title: section.title, kind: section.kind, covers: section.covers, length: section.length,
-    })),
+    categoryTitle: place.category.title,
+    ...(shown ? { section: { number: index + 1, key: shown.key, title: shown.title } } : {}),
+    ...(page.sectionKey !== undefined && !shown ? { sectionGone: `The section the owner had open, ${page.sectionKey}, is not in this document any more.` } : {}),
+    howToChange: PLAN_CARD_HOW,
+    doc: {
+      category: planDoc.category,
+      slug: planDoc.slug,
+      title: planDoc.title,
+      question: planDoc.question,
+      audience: planDoc.audience,
+      scopeIn: planDoc.scopeIn,
+      scopeOut: planDoc.scopeOut,
+      length: { min: planDoc.lengthMin, max: planDoc.lengthMax },
+      ...(planDoc.protected ? { protected: true } : {}),
+      ...extraOf(planDoc.extra),
+      sections: planDoc.sections.map((section) => ({
+        key: section.key, title: section.title, kind: section.kind, covers: section.covers, length: section.length, sources: section.sources,
+        ...extraOf(section.extra),
+      })),
+    },
   };
   return block(
     WIKI_CHAT_NOTE_TAGS.page,
-    [['of', 'plan'], ['doc', place.number], ['slug', planDoc.slug]],
+    [['of', 'plan'], ['doc', place.number], ['slug', planDoc.slug], ...(shown ? [['section', index + 1] as const, ['key', shown.key] as const] : [])],
     [JSON.stringify(definition, null, 2)],
   );
 }

@@ -19,6 +19,7 @@ import {
   wikiChatCardActions,
   wikiChatCardTitle,
   wikiChatFabState,
+  wikiChatPlanFace,
   wikiChatResultLine,
   wikiChatRewriteWaits,
   wikiDocChanged,
@@ -389,7 +390,7 @@ export function wikiChatSnap(
 export type WikiChatPage =
   | { kind: 'doc'; docSlug: string; sectionKey: string; label: string }
   | { kind: 'entry'; entryId: string; label: string }
-  | { kind: 'plan'; docSlug: string; label: string };
+  | { kind: 'plan'; docSlug: string; sectionKey?: string; label: string };
 
 /**
  * The composer's attachments (design §4.2): the page, which follows the reader until the message is sent, and
@@ -451,7 +452,7 @@ export function wikiChatContext(state: WikiChatAttachments): WikiChatContext | u
   const context: WikiChatContext = {};
   if (page?.kind === 'doc') context.page = { kind: 'doc', docSlug: page.docSlug, sectionKey: page.sectionKey };
   if (page?.kind === 'entry') context.page = { kind: 'entry', entryId: page.entryId };
-  if (page?.kind === 'plan') context.page = { kind: 'plan', docSlug: page.docSlug };
+  if (page?.kind === 'plan') context.page = { kind: 'plan', docSlug: page.docSlug, ...(page.sectionKey ? { sectionKey: page.sectionKey } : {}) };
   if (quote && quote.sentenceIds.length > 0) {
     context.selection = { docSlug: quote.docSlug, sectionKey: quote.sectionKey, sentenceIds: [...quote.sentenceIds] };
   }
@@ -734,11 +735,19 @@ function sourceLine(source: Record<string, unknown>, chatId: string): string {
   return shortRef ? `${kind} ${shortRef}` : kind;
 }
 
-export function wikiChatCardFace(view: Pick<WikiChatDraftView, 'kind' | 'ops' | 'rationale' | 'rewrites' | 'sessionId'>): WikiChatCardFace {
+export function wikiChatCardFace(
+  view: Pick<WikiChatDraftView, 'kind' | 'ops' | 'rationale' | 'rewrites' | 'sessionId'> & { change?: WikiChatDraftView['change'] },
+): WikiChatCardFace {
   const rows: WikiChatCardFace['rows'] = [];
   const diff: WikiChatCardFace['diff'] = [];
   const sources = new Set<string>();
   let heading: string | null = null;
+  if (view.kind === 'plan' && view.change) {
+    // A plan card says what its change does to the document (`wikiChatPlanFace`, board 42 ④ ③), then the agent's why.
+    const plan = wikiChatPlanFace(view.change);
+    if (view.rationale.trim()) plan.rows.push({ label: 'Why', value: view.rationale.trim() });
+    return { heading: plan.heading, rows: plan.rows, diff, sources: [] };
+  }
   const titleOf = (op: WikiChatDraftOpView): string | null => {
     const draft = (op.payload.entry ?? {}) as Record<string, unknown>;
     const changes = (op.payload.changes ?? {}) as Record<string, unknown>;
@@ -796,6 +805,23 @@ export const WIKI_CHAT_REDO_MESSAGE = WIKI_CHAT_COPY.card.redoMessage;
 export const wikiChatActionLabel = (action: WikiChatAction): string => WIKI_CHAT_COPY.actions[action];
 /** Said when a press is refused, with the server's reason after it. */
 export const WIKI_CHAT_PRESS_FAILED = 'The card couldn’t be pressed';
+
+/**
+ * What a refused press lists under its reason (contract `chat.presses.apply`, C12): each error the plan's gate found in a
+ * plan card's change — or a schema refusal's fields — as the server wrote it, where it is first; nothing for any other
+ * answer. A gate the press fails writes nothing, and the card says why, every error of it.
+ */
+export function wikiChatPressDetails(error: unknown): string[] {
+  if (!(error instanceof ApiError) || (error.code !== 'WIKI_PLAN_GATE' && error.code !== 'WIKI_SCHEMA')) return [];
+  const errors = error.body?.errors;
+  if (!Array.isArray(errors)) return [];
+  return errors.flatMap((one) => {
+    const item = (one ?? {}) as { path?: unknown; message?: unknown };
+    const message = typeof item.message === 'string' ? item.message.trim() : '';
+    if (!message) return [];
+    return [typeof item.path === 'string' && item.path ? `${item.path}: ${message}` : message];
+  });
+}
 
 /** A press refused or lost, said truthfully: the server's reason, a failure of the server, or no connection. */
 export function wikiChatPressError(error: unknown): string {

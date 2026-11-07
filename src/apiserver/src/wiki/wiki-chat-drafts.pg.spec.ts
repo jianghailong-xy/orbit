@@ -26,7 +26,8 @@
  *      either door; and a queued follow job loses the card's press;
  *   8. a card replaces an open card of its chat, and nothing else;
  *   9. a wiki_note's corrects in a chat drafts its challenge as a card;
- *  10. wiki_draft is a chat's alone: its shape, its refusals, its rewrite card, Try again and seen, and chatWaiting;
+ *  10. wiki_draft is a chat's alone: its shape, its refusals (a plan change of no proposal's shape is the plan gate's,
+ *      C12), its rewrite card, Try again and seen, and chatWaiting;
  *      and a follow job's write of a section only undone cards asked for writes nothing (`WikiDocs.store`);
  *  11. the next message tells the agent what was pressed, once (`<orbit_wiki_drafts>`);
  *  12. a card of a chat that ended reads Not applied;
@@ -627,9 +628,10 @@ test('a wiki chat drafts cards, and only the owner presses them', { skip: !URL_,
     assert.deepEqual([excluded.status, excluded.json.code], [403, 'WIKI_SESSION_EXCLUDED'], excluded.text);
     assert.match(excluded.json.message, /works only in a wiki chat/u);
     const chat = await newChat(null);
+    // The plan kind is open (C12, wiki-chat-plan-card.pg.spec.ts holds it): a change of no proposal's shape is refused by the plan's gate.
     const plan = await draft(chat, { kind: 'plan', change: { op: 'edit' }, reason: 'r', idempotencyKey: `plan-${RUN}` });
-    assert.deepEqual([plan.status, plan.json.code, plan.json.errors[0].path], [400, 'WIKI_SCHEMA', 'kind'], 'plan drafts are not open yet');
-    assert.match(plan.json.message, /not open yet/u);
+    assert.deepEqual([plan.status, plan.json.code], [422, 'WIKI_PLAN_GATE'], plan.text);
+    assert.deepEqual(plan.json.errors.map((e: { path: string }) => e.path).sort(), ['change.doc', 'change.op']);
     const unknown = await draft(chat, { ...body, sections: [{ doc: 'sessions-runtime', section: 'overview' }], idempotencyKey: `rw-x-${RUN}` });
     assert.deepEqual([unknown.status, unknown.json.code, unknown.json.errors[0].path], [400, 'WIKI_SCHEMA', 'sections[0]'], 'a section not written yet');
     const blank = await draft(chat, { ...body, replaces: '  ', idempotencyKey: `rw-b-${RUN}` });
@@ -767,8 +769,9 @@ test('a wiki chat drafts cards, and only the owner presses them', { skip: !URL_,
     const read = await card(cards.manual!);
     assert.deepEqual(Object.keys(withoutTwins(read.json) as object), [
       'id', 'sessionId', 'kind', 'state', 'label', 'rationale', 'ops', 'sections', 'rewrites', 'similar', 'tainted', 'replaces', 'replacedBy',
-      'decision', 'decidedAt', 'undoneAt', 'undoable', 'changesetId', 'rewrite', 'createdAt',
+      'decision', 'decidedAt', 'undoneAt', 'undoable', 'changesetId', 'rewrite', 'change', 'createdAt',
     ], 'the contract\'s card, field for field');
+    assert.equal(read.json.change, null, 'an entry card has no plan change');
     assert.deepEqual([read.json.label, read.json.kind, read.json.rewrites.map((r: { where: string }) => r.where)], [
       WIKI_CHAT_COPY.card.changes.replace('{n}', '6'), 'entry', ['1.1 §3', '1.1 §2'],
     ]);

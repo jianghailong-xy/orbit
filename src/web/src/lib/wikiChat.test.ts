@@ -260,6 +260,9 @@ describe('the attachments (design §4.2)', () => {
     expect(wikiChatContext(entry)).toEqual({ page: { kind: 'entry', entryId: 'E1' } });
     const plan = run({ type: 'follow', page: { kind: 'plan', docSlug: 'session-runtime', label: '3.1' } });
     expect(wikiChatContext(plan)).toEqual({ page: { kind: 'plan', docSlug: 'session-runtime' } });
-    for (const state of [entry, plan]) expect(wikiChatContextErrors(wikiChatContext(state))).toEqual([]);
+    // A plan page at one of its document's sections names that section too, so the agent is told which (C12).
+    const planSection = run({ type: 'follow', page: { kind: 'plan', docSlug: 'session-runtime', sectionKey: 'recovery', label: '3.1 §2' } });
+    expect(wikiChatContext(planSection)).toEqual({ page: { kind: 'plan', docSlug: 'session-runtime', sectionKey: 'recovery' } });
+    for (const state of [entry, plan, planSection]) expect(wikiChatContextErrors(wikiChatContext(state))).toEqual([]);
   });
 });

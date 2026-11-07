@@ -203,6 +203,10 @@ struct WikiChatHost: ViewModifier {
         case .wikiPlanDoc(let slug, _)?:
             let number = model.wiki?.docsDirectory?.categories.flatMap { $0.docs ?? [] }.first { $0.slug == slug }?.number
             chat.follow(spaceID: space.id, page: .plan(docSlug: slug, label: number ?? slug))
+        case .wikiPlanSection(let slug, let index, _)?:
+            // At one of the document's sections the page attaches that section too (C12).
+            let number = model.wiki?.docsDirectory?.categories.flatMap { $0.docs ?? [] }.first { $0.slug == slug }?.number
+            chat.follow(spaceID: space.id, page: WikiChatLogic.planPage(slug: slug, index: index, number: number, plan: model.wiki?.plan))
         default:
             chat.follow(spaceID: space.id, page: nil)
         }
@@ -967,7 +971,9 @@ struct WikiDraftCardSlot: View {
             guard let entry = card.ops.compactMap({ $0.entryId ?? $0.entry?["id"]?.stringValue }).first else { return }
             leave { go(.wikiEntry(entryID: entry)) }
         case .openInPlan:
-            leave { go(.wikiPlan(version: nil)) }
+            // A plan card opens its document on the plan page (C12); a card that names none, the plan.
+            let node: NavNode = card.change.map { .wikiPlanDoc(slug: $0.doc.slug, version: nil) } ?? .wikiPlan(version: nil)
+            leave { go(node) }
         case .settings:
             leave { go(.wikiSettings) }
         }

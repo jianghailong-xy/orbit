@@ -140,21 +140,23 @@ Options:
 
 ` + wikiNoteDescription + `
 `,
-	"draft": `orbit wiki draft — draft a rewrite of wiki sections from main, in a wiki chat
+	"draft": `orbit wiki draft — draft a rewrite of wiki sections from main, or a plan change, in a wiki chat
 
 Usage:
   orbit wiki draft --kind rewrite --section DOC/KEY... --reason TEXT --idempotency-key KEY [--replaces ID]
                    [--change JSON] [--json]
 
 Options:
-  --kind KIND              rewrite: sections that lag behind main, written again from it. plan is not
-                           open yet. Required
+  --kind KIND              rewrite: sections that lag behind main, written again from it. plan: a change
+                           to how a document is planned or written, sent as --change. Required
   --section DOC/KEY        A written section of the confirmed plan: the document's slug and the
                            section's key. Repeatable, 1 to ` + fmt.Sprint(wikiDraftSectionsMax) + `
   --reason TEXT            Why, in a sentence or two; the card shows it. Required
   --idempotency-key KEY    Required: the same key with the same request answers with the card it made
   --replaces ID            The open card of this chat that this one replaces
-  --change JSON            plan: the change, as a JSON object shaped as a plan proposal's (not open yet)
+  --change JSON            plan: the change, a JSON object shaped as a plan proposal's: { doc, category? },
+                           the whole document as it should read. A writing requirement goes into the
+                           covers of the sections it is for
   --json
 
 ` + wikiDraftDescription + `
@@ -242,12 +244,12 @@ var wikiCLICapabilities = []cliCapabilitySpec{
 		Argv:  []string{"orbit", "wiki", "draft"},
 		Usage: "orbit wiki draft --kind rewrite --section DOC/KEY... --reason TEXT --idempotency-key KEY [--replaces ID] [--change JSON] [--json]",
 		Arguments: []string{
-			"--kind <" + strings.Join(wikiDraftKinds, "|") + "> (required; plan is not open yet)",
+			"--kind <" + strings.Join(wikiDraftKinds, "|") + "> (required)",
 			"--section <doc/key> (sections; repeatable, 1 to " + fmt.Sprint(wikiDraftSectionsMax) + ")",
 			"--reason <text> (required)",
 			"--idempotency-key <key> (required)",
 			"--replaces <card id>",
-			"--change <json> (plan: the change; not open yet)",
+			"--change <json> (plan: the change, { doc, category? })",
 			"--json",
 		},
 		Mutates:     true,
@@ -450,7 +452,7 @@ func cliWikiNote(args []string, in io.Reader, out io.Writer, ctx cliOrchestratio
 
 func cliWikiDraft(args []string, out io.Writer, ctx cliOrchestrationContext) error {
 	fs := newCLIFlagSet("orbit wiki draft")
-	kind := fs.String("kind", "", "rewrite (plan is not open yet)")
+	kind := fs.String("kind", "", "rewrite, or plan with --change")
 	var sections stringList
 	fs.Var(&sections, "section", "a written section, as doc/key")
 	reason := fs.String("reason", "", "why, in a sentence or two")

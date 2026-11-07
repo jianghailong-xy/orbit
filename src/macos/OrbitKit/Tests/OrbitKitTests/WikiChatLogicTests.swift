@@ -128,6 +128,44 @@ final class WikiChatLogicTests: XCTestCase {
         XCTAssertEqual(WikiChatLogic.context(entry), WikiChatContext(page: .entry(entryId: "E1")))
         let plan = run(.follow(.plan(docSlug: "session-runtime", label: "3.1")))
         XCTAssertEqual(WikiChatLogic.context(plan), WikiChatContext(page: .plan(docSlug: "session-runtime")))
+        // A plan page at one of its document's sections names that section too (C12).
+        let section = run(.follow(.plan(docSlug: "session-runtime", label: "3.1 §2", sectionKey: "recovery")))
+        XCTAssertEqual(WikiChatLogic.context(section), WikiChatContext(page: .plan(docSlug: "session-runtime", sectionKey: "recovery")))
+        XCTAssertEqual(WikiChatLogic.shown(section).page?.label, "3.1 §2")
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        XCTAssertEqual(String(decoding: try encoder.encode(WikiChatContext(page: .plan(docSlug: "d", sectionKey: "s2"))), as: UTF8.self),
+                       #"{"page":{"docSlug":"d","kind":"plan","sectionKey":"s2"}}"#)
+        let read = try JSONDecoder().decode(WikiChatContext.self, from: Data(#"{"page":{"kind":"plan","docSlug":"d","sectionKey":"s2"}}"#.utf8))
+        XCTAssertEqual(read, WikiChatContext(page: .plan(docSlug: "d", sectionKey: "s2")))
+    }
+
+    /// A plan page attaches its document, and at one of its sections that section, by its key in the plan in force
+    /// (C12): the web's `useWikiChatPage`, on a phone and a Mac. A section the plan does not hold attaches the document.
+    func testAPlanPageAttachesTheSectionItShows() throws {
+        let plan = try JSONDecoder().decode(WikiPlanState.self, from: Data(#"""
+        {"confirmed": {"id": "pv4", "version": 4, "status": "confirmed", "docs": [
+          {"id": "d1", "category": "runtime", "slug": "sessions-runtime", "title": "Sessions runtime", "sections": [
+            {"id": "x1", "key": "turn-delivery", "title": "Turn delivery", "kind": "flow"},
+            {"id": "x2", "key": "recovery", "title": "Recovery", "kind": "concepts"}]}]}}
+        """#.utf8))
+        XCTAssertEqual(WikiChatLogic.planPage(slug: "sessions-runtime", index: 1, number: "3.1", plan: plan),
+                       .plan(docSlug: "sessions-runtime", label: "3.1 §2", sectionKey: "recovery"))
+        XCTAssertEqual(WikiChatLogic.planPage(slug: "sessions-runtime", index: nil, number: "3.1", plan: plan),
+                       .plan(docSlug: "sessions-runtime", label: "3.1"))
+        XCTAssertEqual(WikiChatLogic.planPage(slug: "sessions-runtime", index: 7, number: nil, plan: plan),
+                       .plan(docSlug: "sessions-runtime", label: "sessions-runtime"))
+        XCTAssertEqual(WikiChatLogic.planPage(slug: "sessions-runtime", index: 1, number: "3.1", plan: nil),
+                       .plan(docSlug: "sessions-runtime", label: "3.1"), "the plan not read yet: the document alone")
+    }
+
+    /// A press the plan's gate refused says its reason and, a line each, every error the gate found (C12).
+    func testARefusedPressSaysItsReasonThenEveryErrorOfTheGate() {
+        let body = #"{"code":"WIKI_PLAN_GATE","message":"The plan change did not pass the plan's gate (schema): 1 error.","errors":[{"check":"schema","path":"change.doc.sections[1].kind","message":"\"essay\" is not a section kind"}]}"#
+        XCTAssertEqual(WikiChatLogic.pressRefusal(APIError.http(status: 422, body: body)),
+                       "The card couldn’t be pressed: The plan change did not pass the plan's gate (schema): 1 error.\nchange.doc.sections[1].kind: \"essay\" is not a section kind")
+        XCTAssertEqual(WikiChatLogic.pressRefusal(APIError.http(status: 409, body: #"{"message":"It changed since this draft."}"#)),
+                       "The card couldn’t be pressed: It changed since this draft.")
     }
 
     /// The context goes out in the contract's keys and no others (`wikiChatContextErrors` refuses any other), and

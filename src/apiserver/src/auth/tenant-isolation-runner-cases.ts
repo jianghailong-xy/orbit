@@ -1505,9 +1505,12 @@ export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly str
   },
   'POST /runner/wiki/drafts body (the body)': {
     reads: ['body replaces'],
-    reading: 'read field by field (WikiChatDrafts.draftInChat, wiki/wiki-chat-drafts.ts:247): kind, sections (slugs and keys of '
+    reading: 'read field by field (WikiChatDrafts.draftInChat, wiki/wiki-chat-drafts.ts:215): kind, sections (slugs and keys of '
       + 'the calling chat\'s own space), reason and idempotencyKey name no row; the one id is replaces, the card of the '
-      + 'calling chat the new one replaces, read by (id, the caller\'s owner) and refused unless the calling chat drafted it',
+      + 'calling chat the new one replaces, read by (id, the caller\'s owner) and refused unless the calling chat drafted it. '
+      + 'A plan card\'s change (C12) is gated as a proposal is (WikiPlans.resolve, wiki/wiki-plan.ts:1262): the projects '
+      + 'its session conditions name are read among the caller\'s owner\'s own, by id or exact title, and its topics among '
+      + 'the calling chat\'s space\'s, so another account\'s project is no project — a gate error, never a read of it',
   },
   'POST /runner/workspaces body (the body)': {
     reads: ['body runnerId'],

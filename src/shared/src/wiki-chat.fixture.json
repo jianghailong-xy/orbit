@@ -4,7 +4,7 @@
     "§28–§30; docs/wiki-chat-design.md §3–§8): what a card shows and offers in each state, the line under an applied card,",
     "the round button's look, what adds to the Wiki's waiting count, why a follow job waits, which two jobs of a space may",
     "run at once, which sections a card rewrites, the sentence-level comparison See changes draws, what an attachment line",
-    "says, what a message's wikiContext may hold, and the Docs rows of Activity.",
+    "says, what a message's wikiContext may hold, the Docs rows of Activity, and what a plan card's face says (planFaces).",
     "",
     "src/shared/src/wikiChatContract.spec.ts runs every case through src/shared/src/wikiChat.ts, the functions the server",
     "computes its states and counts with. OrbitKit mirrors the client half (the card, the line, the button, the counts,",
@@ -234,6 +234,26 @@
     }
   ],
   "results": [
+    {
+      "name": "a plan card's rebuild that failed (C12): Try again asks for the build again, and there is no Undo",
+      "card": { "kind": "plan", "state": "applied", "undoable": false,
+        "rewrite": { "result": "failed", "reason": null, "sha": "7f3e2a1c9b8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f", "seen": false,
+          "sections": [{ "where": "3.1 §2", "result": "failed" }] } },
+      "line": "Rewrite failed",
+      "actions": ["try_again"],
+      "waits": true,
+      "needsYou": true
+    },
+    {
+      "name": "a plan card's rebuild held: the maintenance names no workspace (C12)",
+      "card": { "kind": "plan", "state": "applied", "undoable": false,
+        "rewrite": { "result": "waiting", "reason": "no_workspace", "sha": null, "seen": false,
+          "sections": [{ "where": "3.1 §2", "result": null }] } },
+      "line": "Rewrite waiting · Maintenance has no workspace",
+      "actions": ["settings"],
+      "waits": true,
+      "needsYou": true
+    },
     {
       "name": "queued or running, before the job named its commit",
       "card": { "kind": "entry", "state": "applied", "undoable": true,
@@ -687,6 +707,7 @@
     { "name": "the page, a document's section", "note": { "kind": "page", "of": "doc", "doc": "3.1", "section": 3 }, "label": "Wiki page · 3.1 §3" },
     { "name": "the page, an entry", "note": { "kind": "page", "of": "entry", "title": "Runner offline detection keeps three missed heartbeats" }, "label": "Wiki entry · Runner offline detection keeps three missed heartbeats" },
     { "name": "the page, the plan's document", "note": { "kind": "page", "of": "plan", "doc": "3.1" }, "label": "Wiki plan · 3.1" },
+    { "name": "the page, a section of the plan's document (C12)", "note": { "kind": "page", "of": "plan", "doc": "3.1", "section": 2 }, "label": "Wiki plan · 3.1 §2" },
     { "name": "a selection (board 42 ②)", "note": { "kind": "selection", "doc": "3.1", "section": 3, "sentences": 1, "sources": 2 }, "label": "Wiki selection · 3.1 §3 · 1 sentence · 2 sources" },
     { "name": "a selection running into the next section", "note": { "kind": "selection", "doc": "3.1", "section": 3, "toSection": 4, "sentences": 3, "sources": 1 }, "label": "Wiki selection · 3.1 §3–§4 · 3 sentences · 1 source" },
     { "name": "what the owner pressed since the agent's last turn", "note": { "kind": "drafts", "applied": 1, "edited": 0, "discarded": 1, "undone": 0 }, "label": "Wiki drafts · 1 applied, 1 discarded" },
@@ -697,6 +718,9 @@
     { "name": "both crossed out", "value": {}, "errors": [] },
     { "name": "an entry open in the drawer", "value": { "page": { "kind": "entry", "entryId": "34UuAT2stjMI2hEFUKr9X" } }, "errors": [] },
     { "name": "the plan page", "value": { "page": { "kind": "plan", "docSlug": "sessions-runtime" } }, "errors": [] },
+    { "name": "the plan page at a section (C12)", "value": { "page": { "kind": "plan", "docSlug": "sessions-runtime", "sectionKey": "turn-delivery" } }, "errors": [] },
+    { "name": "the plan page at a blank section", "value": { "page": { "kind": "plan", "docSlug": "sessions-runtime", "sectionKey": " " } }, "errors": ["wikiContext.page.sectionKey"] },
+    { "name": "an entry page naming a section", "value": { "page": { "kind": "entry", "entryId": "34UuAT2stjMI2hEFUKr9X", "sectionKey": "s" } }, "errors": ["wikiContext.page.sectionKey"] },
     { "name": "twenty sentences", "value": { "selection": { "docSlug": "d", "sectionKey": "s", "sentenceIds": ["s01", "s02", "s03", "s04", "s05", "s06", "s07", "s08", "s09", "s10", "s11", "s12", "s13", "s14", "s15", "s16", "s17", "s18", "s19", "s20"] } }, "errors": [] },
     { "name": "twenty-one sentences", "value": { "selection": { "docSlug": "d", "sectionKey": "s", "sentenceIds": ["s01", "s02", "s03", "s04", "s05", "s06", "s07", "s08", "s09", "s10", "s11", "s12", "s13", "s14", "s15", "s16", "s17", "s18", "s19", "s20", "s21"] } }, "errors": ["wikiContext.selection.sentenceIds"] },
     { "name": "a sentence twice", "value": { "selection": { "docSlug": "d", "sectionKey": "s", "sentenceIds": ["s01", "s01"] } }, "errors": ["wikiContext.selection.sentenceIds"] },
@@ -707,6 +731,85 @@
     { "name": "a page carrying sentences", "value": { "page": { "kind": "doc", "docSlug": "d", "sectionKey": "s", "sentenceIds": ["s01"] } }, "errors": ["wikiContext.page.sentenceIds"] },
     { "name": "a key of its own", "value": { "page": { "kind": "plan", "docSlug": "d" }, "docText": "the whole page" }, "errors": ["wikiContext.docText"] },
     { "name": "not an object", "value": "3.1 §3", "errors": ["wikiContext"] }
+  ],
+  "planFaces": [
+    {
+      "name": "a writing requirement on one section's covers (design §6, third row)",
+      "change": {
+        "baseVersion": 4, "version": null,
+        "doc": { "slug": "sessions-runtime", "title": "Sessions runtime", "number": "3.1" },
+        "category": { "key": "runtime", "title": "Runtime", "opens": false },
+        "fields": [],
+        "sections": [
+          { "key": "turn-delivery", "title": "Turn delivery", "number": 2, "edit": "changed", "fields": ["covers"], "covers": "How a turn reaches the runner, for a first-time reader: the model first, no parameters." }
+        ]
+      },
+      "heading": "3.1 Sessions runtime",
+      "rows": [
+        { "label": "Changes", "value": "§2 Turn delivery (covers)" },
+        { "label": "Covers", "value": "§2 Turn delivery: How a turn reaches the runner, for a first-time reader: the model first, no parameters." }
+      ]
+    },
+    {
+      "name": "the document's own fields, a section added and one removed",
+      "change": {
+        "baseVersion": 4, "version": 5,
+        "doc": { "slug": "sessions-runtime", "title": "How a session runs", "number": "3.1" },
+        "category": { "key": "runtime", "title": "Runtime", "opens": false },
+        "fields": ["title", "audience", "scopeIn"],
+        "sections": [
+          { "key": "s4", "title": "Delivery and heartbeats", "number": 3, "edit": "added", "fields": [], "covers": "How a turn is delivered and kept alive." },
+          { "key": "leases", "title": "Leases", "number": 4, "edit": "changed", "fields": ["title", "kind", "sources"], "covers": null },
+          { "key": "old-inbox", "title": "The old inbox poll", "number": 5, "edit": "removed", "fields": [], "covers": null }
+        ]
+      },
+      "heading": "3.1 How a session runs",
+      "rows": [
+        { "label": "Document", "value": "Changes its title, audience and scope" },
+        { "label": "Adds", "value": "§3 Delivery and heartbeats" },
+        { "label": "Changes", "value": "§4 Leases (title, kind and sources)" },
+        { "label": "Removes", "value": "§5 The old inbox poll" },
+        { "label": "Covers", "value": "§3 Delivery and heartbeats: How a turn is delivered and kept alive." }
+      ]
+    },
+    {
+      "name": "a new document in a category the plan has",
+      "change": {
+        "baseVersion": 4, "version": null,
+        "doc": { "slug": "turn-delivery", "title": "Turn delivery", "number": null },
+        "category": { "key": "runtime", "title": "Runtime", "opens": false },
+        "fields": [],
+        "sections": [
+          { "key": "s1", "title": "Overview", "number": 1, "edit": "added", "fields": [], "covers": "What this document covers." },
+          { "key": "s2", "title": "Heartbeats", "number": 2, "edit": "added", "fields": [], "covers": "How the runner keeps a turn." }
+        ]
+      },
+      "heading": "Turn delivery",
+      "rows": [
+        { "label": "Document", "value": "New document in Runtime" },
+        { "label": "Adds", "value": "§1 Overview · §2 Heartbeats" },
+        { "label": "Covers", "value": "§1 Overview: What this document covers." },
+        { "label": "Covers", "value": "§2 Heartbeats: How the runner keeps a turn." }
+      ]
+    },
+    {
+      "name": "a new document that opens a category",
+      "change": {
+        "baseVersion": 4, "version": null,
+        "doc": { "slug": "runbooks", "title": "Runbooks", "number": null },
+        "category": { "key": "operations", "title": "Operations", "opens": true },
+        "fields": [],
+        "sections": [
+          { "key": "s1", "title": "Restarting the runner", "number": 1, "edit": "added", "fields": [], "covers": "The steps, in order." }
+        ]
+      },
+      "heading": "Runbooks",
+      "rows": [
+        { "label": "Document", "value": "New document in a new category, Operations" },
+        { "label": "Adds", "value": "§1 Restarting the runner" },
+        { "label": "Covers", "value": "§1 Restarting the runner: The steps, in order." }
+      ]
+    }
   ],
   "changes": [
     {

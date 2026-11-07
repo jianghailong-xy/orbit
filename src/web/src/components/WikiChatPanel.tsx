@@ -80,7 +80,7 @@ import {
 import { wikiChatCardNeedsYou } from '@orbit/shared';
 import { wikiEntryPath, type WikiSpaceRow } from '../lib/wiki';
 import { wikiDocSectionPath } from '../lib/wikiDocs';
-import { wikiPlanPath } from '../lib/wikiPlan';
+import { wikiPlanDocPath, wikiPlanPath } from '../lib/wikiPlan';
 import { wikiSettingsPath } from '../lib/wikiReviewMode';
 
 /**
@@ -566,7 +566,7 @@ function WikiChatSession({
       openEntry: (entryId) => navigate(wikiEntryPath(space.slug, entryId)),
       openReview: (changesetId, seq) => navigate(wikiChatReviewPath(space.slug, changesetId, seq)),
       openSettings: () => navigate(wikiSettingsPath(space.slug)),
-      openPlan: () => navigate(wikiPlanPath(space.slug)),
+      openPlan: (docSlug) => navigate(docSlug ? wikiPlanDocPath(space.slug, docSlug) : wikiPlanPath(space.slug)),
       send: (text) => post(text, undefined),
       focus: focusCard,
     }),

@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { createHash, randomUUID } from 'node:crypto';
 import {
@@ -47,6 +47,7 @@ import {
   type WikiPlanVersion,
   type WikiPlanVersionSummary,
   type WikiSupportSpaces,
+  type WikiChatPlanChangeView,
 } from '@orbit/shared';
 import { redactSecrets } from '../common/secret-redaction';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -929,6 +930,24 @@ function docInputOf(doc: PlanDoc): WikiPlanDocInput {
 /** Anything that reads a plan: the Prisma service, or a transaction a writer holds. */
 type PlanReader = Pick<Prisma.TransactionClient, 'wikiPlan'>;
 
+/** What the gate's references are read through (`resolve`): the Prisma service, or a transaction a writer holds. */
+type ReferenceReader = Pick<Prisma.TransactionClient, 'project' | 'wikiTopic' | '$queryRaw'>;
+
+/**
+ * A chat's plan card's change as the card keeps it (contract `agentSurface.chat.draft.plan`, `chat.drafts.kinds.plan`):
+ * shaped as a proposal's change — the document as gated, each section keyed as the press will key it and every project
+ * by its id, and the category it opens or null — with the confirmed version it was drafted against, and once pressed
+ * the version the press made.
+ */
+export interface WikiPlanCardChange {
+  baseVersion: number;
+  version: number | null;
+  doc: WikiPlanDocInput;
+  category: WikiPlanCategory | null;
+  /** The build its press — or its Try again — asked for (a `wiki_plan_job` of kind build), once asked. */
+  build?: string | null;
+}
+
 /**
  * The version of the space's plan the owner confirmed, or WIKI_PLAN_UNCONFIRMED (contract
  * `plan.guard`): what every writer of the space's documents asks before it writes one, so no document
@@ -1242,7 +1261,7 @@ export class WikiPlans {
    * project by its id, or failing that by its exact title — one project, not two — and a topic by its
    * slug among the space's. Each session condition's projects become their ids.
    */
-  private async resolve(walk: Walk, ownerId: string, spaceId: string, plan: PlanContent): Promise<void> {
+  private async resolve(walk: Walk, ownerId: string, spaceId: string, plan: PlanContent, db: ReferenceReader = this.prisma): Promise<void> {
     const asId = (value: string): string | null => {
       try {
         return toUuid(value);
@@ -1254,7 +1273,7 @@ export class WikiPlans {
     const ids = [...new Set(values.map(asId).filter((id): id is string => id !== null))];
     const projects = values.length === 0
       ? []
-      : await this.prisma.project.findMany({
+      : await db.project.findMany({
         where: { ownerId, OR: [{ id: { in: ids } }, { title: { in: values } }] },
         select: { id: true, title: true },
       });
@@ -1277,14 +1296,14 @@ export class WikiPlans {
     const topics = new Set(
       slugs.length === 0
         ? []
-        : (await this.prisma.wikiTopic.findMany({ where: { ownerId, spaceId, slug: { in: slugs } }, select: { slug: true } })).map((t) => t.slug),
+        : (await db.wikiTopic.findMany({ where: { ownerId, spaceId, slug: { in: slugs } }, select: { slug: true } })).map((t) => t.slug),
     );
     const unknown = walk.topics.filter((named) => !topics.has(named.value));
     if (unknown.length > 0) {
       // The space's topics go with each one refused, so the next round has them to name: told only that a topic was
       // none (canary 54755b7b, 10-09; 3b2bd5f2, 10-10, a document's slug), a maintenance run's proposal failed its
       // last rounds on topics it had made up.
-      const brief = wikiPlanTopicsBrief({ topics: await wikiPlanTopics(this.prisma, ownerId, spaceId) });
+      const brief = wikiPlanTopicsBrief({ topics: await wikiPlanTopics(db, ownerId, spaceId) });
       for (const named of unknown) walk.fail('references', named.path, `${quoted(named.value)} is not a topic of this space: ${brief}`);
     }
     for (const doc of plan.docs) {
@@ -1314,98 +1333,108 @@ export class WikiPlans {
   ): Promise<{ version: number; replayed: boolean }> {
     const stored = await withTransactionRetry(
       this.prisma,
-      async (tx) => {
-        await tx.$queryRaw(Prisma.sql`
-          SELECT "id" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`);
-        if (next.idempotency) {
-          const earlier = await storedUnder(tx, ownerId, next.idempotency);
-          if (earlier !== null) return { version: earlier, replayed: true };
-        }
-        const latest = await tx.wikiPlan.findFirst({
-          where: { ownerId, spaceId, status: { in: ['draft', 'confirmed'] } },
-          orderBy: { version: 'desc' },
-          select: { version: true },
-        });
-        if ((latest?.version ?? null) !== expectLatest) {
-          throw stale(
-            `the plan changed while this was prepared: it was built on ${expectLatest === null ? 'no version' : `version ${expectLatest}`}, `
-              + `and the plan now stands at ${latest ? `version ${latest.version}` : 'no version'}. Nothing was stored; read the plan again.`,
-          );
-        }
-        const top = await tx.wikiPlan.aggregate({ where: { ownerId, spaceId }, _max: { version: true } });
-        const number = (top._max.version ?? 0) + 1;
-        const now = new Date();
-        await tx.wikiPlan.updateMany({ where: { ownerId, spaceId, status: 'draft' }, data: { status: 'superseded', supersededAt: now } });
-        const planId = randomUUID();
-        await tx.wikiPlan.create({
-          data: {
-            id: planId,
-            spaceId,
-            ownerId,
-            version: number,
-            status: 'draft',
-            origin: next.origin,
-            baseVersion: next.baseVersion,
-            proposalId: next.proposalId,
-            categories: next.plan.categories as unknown as Prisma.InputJsonValue,
-            newFields: next.plan.newFields as unknown as Prisma.InputJsonValue,
-            docsMin: next.target.min,
-            docsMax: next.target.max,
-            gate: next.gate as unknown as Prisma.InputJsonValue,
-            repoSha: next.repoCheck?.sha ?? null,
-            repoCheck: next.repoCheck === null ? Prisma.DbNull : (next.repoCheck as unknown as Prisma.InputJsonValue),
-            model: next.model,
-            authorSessionId: next.authorSessionId,
-            authorJobId: next.authorJobId ?? null,
-            authorUserId: next.authorUserId,
-            idempotencyKey: next.idempotency?.key ?? null,
-            requestSha256: next.idempotency?.requestSha256 ?? null,
-          },
-          select: { id: true },
-        });
-        const docIds = next.plan.docs.map(() => randomUUID());
-        if (next.plan.docs.length > 0) {
-          await tx.wikiPlanDoc.createMany({
-            data: next.plan.docs.map((doc, position) => ({
-              id: docIds[position],
-              planId,
-              ownerId,
-              position,
-              category: doc.category,
-              slug: doc.slug,
-              title: doc.title,
-              question: doc.question,
-              audience: doc.audience,
-              scopeIn: doc.scopeIn,
-              scopeOut: doc.scopeOut as unknown as Prisma.InputJsonValue,
-              lengthMin: doc.length.min,
-              lengthMax: doc.length.max,
-              protected: doc.protected,
-              extra: doc.extra as Prisma.InputJsonValue,
-            })),
-          });
-          const sections = next.plan.docs.flatMap((doc, d) => doc.sections.map((section, position) => ({
-            docId: docIds[d],
-            ownerId,
-            position,
-            key: section.key!,
-            title: section.title,
-            kind: section.kind,
-            covers: section.covers,
-            length: section.length,
-            sources: section.sources as unknown as Prisma.InputJsonValue,
-            extra: section.extra as Prisma.InputJsonValue,
-          })));
-          if (sections.length > 0) await tx.wikiPlanSection.createMany({ data: sections });
-        }
-        if (after) await after(tx, number);
-        return { version: number, replayed: false };
-      },
+      (tx) => this.storeIn(tx, ownerId, spaceId, expectLatest, next, after),
       loggedRetry(this.logger, 'wiki.storePlanVersion'),
     );
     // A replay changed nothing to announce (contract `realtime.notPublishedWhen`).
     if (!stored.replayed) this.realtime?.publishWikiChanged(ownerId, spaceId);
     return stored;
+  }
+
+  /** `store`'s writes, in a transaction the caller holds: a plan card's press stores and confirms in its own. */
+  private async storeIn(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    spaceId: string,
+    expectLatest: number | null,
+    next: NewVersion,
+    after?: (tx: Prisma.TransactionClient, version: number) => Promise<void>,
+  ): Promise<{ version: number; replayed: boolean }> {
+    await tx.$queryRaw(Prisma.sql`
+      SELECT "id" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`);
+    if (next.idempotency) {
+      const earlier = await storedUnder(tx, ownerId, next.idempotency);
+      if (earlier !== null) return { version: earlier, replayed: true };
+    }
+    const latest = await tx.wikiPlan.findFirst({
+      where: { ownerId, spaceId, status: { in: ['draft', 'confirmed'] } },
+      orderBy: { version: 'desc' },
+      select: { version: true },
+    });
+    if ((latest?.version ?? null) !== expectLatest) {
+      throw stale(
+        `the plan changed while this was prepared: it was built on ${expectLatest === null ? 'no version' : `version ${expectLatest}`}, `
+          + `and the plan now stands at ${latest ? `version ${latest.version}` : 'no version'}. Nothing was stored; read the plan again.`,
+      );
+    }
+    const top = await tx.wikiPlan.aggregate({ where: { ownerId, spaceId }, _max: { version: true } });
+    const number = (top._max.version ?? 0) + 1;
+    const now = new Date();
+    await tx.wikiPlan.updateMany({ where: { ownerId, spaceId, status: 'draft' }, data: { status: 'superseded', supersededAt: now } });
+    const planId = randomUUID();
+    await tx.wikiPlan.create({
+      data: {
+        id: planId,
+        spaceId,
+        ownerId,
+        version: number,
+        status: 'draft',
+        origin: next.origin,
+        baseVersion: next.baseVersion,
+        proposalId: next.proposalId,
+        categories: next.plan.categories as unknown as Prisma.InputJsonValue,
+        newFields: next.plan.newFields as unknown as Prisma.InputJsonValue,
+        docsMin: next.target.min,
+        docsMax: next.target.max,
+        gate: next.gate as unknown as Prisma.InputJsonValue,
+        repoSha: next.repoCheck?.sha ?? null,
+        repoCheck: next.repoCheck === null ? Prisma.DbNull : (next.repoCheck as unknown as Prisma.InputJsonValue),
+        model: next.model,
+        authorSessionId: next.authorSessionId,
+        authorJobId: next.authorJobId ?? null,
+        authorUserId: next.authorUserId,
+        idempotencyKey: next.idempotency?.key ?? null,
+        requestSha256: next.idempotency?.requestSha256 ?? null,
+      },
+      select: { id: true },
+    });
+    const docIds = next.plan.docs.map(() => randomUUID());
+    if (next.plan.docs.length > 0) {
+      await tx.wikiPlanDoc.createMany({
+        data: next.plan.docs.map((doc, position) => ({
+          id: docIds[position],
+          planId,
+          ownerId,
+          position,
+          category: doc.category,
+          slug: doc.slug,
+          title: doc.title,
+          question: doc.question,
+          audience: doc.audience,
+          scopeIn: doc.scopeIn,
+          scopeOut: doc.scopeOut as unknown as Prisma.InputJsonValue,
+          lengthMin: doc.length.min,
+          lengthMax: doc.length.max,
+          protected: doc.protected,
+          extra: doc.extra as Prisma.InputJsonValue,
+        })),
+      });
+      const sections = next.plan.docs.flatMap((doc, d) => doc.sections.map((section, position) => ({
+        docId: docIds[d],
+        ownerId,
+        position,
+        key: section.key!,
+        title: section.title,
+        kind: section.kind,
+        covers: section.covers,
+        length: section.length,
+        sources: section.sources as unknown as Prisma.InputJsonValue,
+        extra: section.extra as Prisma.InputJsonValue,
+      })));
+      if (sections.length > 0) await tx.wikiPlanSection.createMany({ data: sections });
+    }
+    if (after) await after(tx, number);
+    return { version: number, replayed: false };
   }
 
   /**
@@ -1563,24 +1592,27 @@ export class WikiPlans {
     await this.requireSpace(ownerId, spaceId);
     await withTransactionRetry(
       this.prisma,
-      async (tx) => {
-        await tx.$queryRaw(Prisma.sql`
-          SELECT "id" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`);
-        const row = await tx.wikiPlan.findFirst({ where: { ownerId, spaceId, version }, select: { id: true, status: true } });
-        if (!row) throw new NotFoundException('no such version of this plan');
-        if (row.status !== 'draft') {
-          throw stale(`version ${version} is ${row.status === 'confirmed' ? 'already the confirmed plan' : 'superseded by a newer version'}: only the space's draft is confirmed`);
-        }
-        const now = new Date();
-        // The one in force steps down first: a space has one confirmed version at a time.
-        await tx.wikiPlan.updateMany({ where: { ownerId, spaceId, status: 'confirmed' }, data: { status: 'superseded', supersededAt: now } });
-        await tx.wikiPlan.update({ where: { id: row.id }, data: { status: 'confirmed', confirmedByUserId: ownerId, confirmedAt: now } });
-      },
+      (tx) => this.confirmIn(tx, ownerId, spaceId, version),
       loggedRetry(this.logger, 'wiki.confirmPlan'),
     );
     await this.buildAfterConfirmation(ownerId, spaceId, version);
     this.realtime?.publishWikiChanged(ownerId, spaceId);
     return this.version(ownerId, spaceId, version);
+  }
+
+  /** `confirm`'s writes, in a transaction the caller holds: a plan card's press confirms the version it stored. */
+  private async confirmIn(tx: Prisma.TransactionClient, ownerId: string, spaceId: string, version: number): Promise<void> {
+    await tx.$queryRaw(Prisma.sql`
+      SELECT "id" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`);
+    const row = await tx.wikiPlan.findFirst({ where: { ownerId, spaceId, version }, select: { id: true, status: true } });
+    if (!row) throw new NotFoundException('no such version of this plan');
+    if (row.status !== 'draft') {
+      throw stale(`version ${version} is ${row.status === 'confirmed' ? 'already the confirmed plan' : 'superseded by a newer version'}: only the space's draft is confirmed`);
+    }
+    const now = new Date();
+    // The one in force steps down first: a space has one confirmed version at a time.
+    await tx.wikiPlan.updateMany({ where: { ownerId, spaceId, status: 'confirmed' }, data: { status: 'superseded', supersededAt: now } });
+    await tx.wikiPlan.update({ where: { id: row.id }, data: { status: 'confirmed', confirmedByUserId: ownerId, confirmedAt: now } });
   }
 
   /** The build a confirmation asks for. Logged, never thrown: the confirmation stands. */
@@ -1622,18 +1654,7 @@ export class WikiPlans {
     }
     const reason = walk.text(raw.reason, 'reason', WIKI_PLAN_RULES.reasonMaxChars, true);
     const facts = this.factsOf(walk, raw.facts);
-    const change = raw.change && typeof raw.change === 'object' && !Array.isArray(raw.change) ? (raw.change as Record<string, unknown>) : null;
-    if (!change) walk.fail('schema', 'change', 'must be an object: { doc, category }');
-    for (const key of Object.keys(change ?? {})) {
-      if (!['doc', 'category'].includes(key)) walk.fail('schema', `change.${key}`, `${quoted(key)} is not a field of a change: doc, category`);
-    }
-    const doc = change ? walk.doc(change.doc, 'change.doc') : null;
-    const category = change?.category === undefined || change?.category === null ? null : walk.category(change.category, 'change.category');
-    const opens = category !== null && !base.categories.some((c) => c.key === category.key);
-    if (category && !opens) {
-      walk.fail('schema', 'change.category.key', `${quoted(category.key)} is already a category of the plan: leave category out, and file the document under it`);
-    }
-    const plan = doc ? applyChange(base, doc, opens ? category : null) : base;
+    const { doc, category, plan } = walkChange(walk, base, raw.change);
     checkWhole(walk, plan, 'plan.');
     await this.resolve(walk, ownerId, spaceId, plan);
     await this.checkFacts(walk, ownerId, spaceId, facts);
@@ -1790,6 +1811,124 @@ export class WikiPlans {
     );
     const accepted = await this.prisma.wikiPlanProposal.findFirstOrThrow({ where: { id: proposalId }, select: PROPOSAL_SELECT });
     return { proposal: proposalView(accepted), draft: await this.version(ownerId, spaceId, number) };
+  }
+
+  // ── A chat's plan card (contract `agentSurface.chat.draft.plan`, `chat.presses.apply`; C12) ──────────
+
+  /**
+   * A plan card's change as wiki_draft sends it (contract `agentSurface.chat.draft.plan`), gated against the version in
+   * force as a maintenance run's proposal is — schema, references, document count and protection — and answered as the
+   * card keeps it. Its errors go back to the agent that wrote it (`plan.gate.author`): WIKI_PLAN_GATE with each path from
+   * the request's root; WIKI_PLAN_UNCONFIRMED with no confirmed plan; WIKI_PLAN_STALE while a draft of the plan waits for
+   * the owner, since a press confirms what it is built on and the owner has not seen that draft. Writes nothing.
+   */
+  async checkCardChange(ownerId: string, spaceId: string, value: unknown): Promise<WikiPlanCardChange> {
+    const confirmed = await requireConfirmedPlan(this.prisma, { ownerId, spaceId });
+    const latest = await this.latest(this.prisma, ownerId, spaceId);
+    if (latest && latest.version !== confirmed.version) {
+      throw stale(
+        `this space's plan has a draft the owner has not confirmed (version ${latest.version}), and a plan card changes the version in force `
+          + `(version ${confirmed.version}): the owner confirms or redrafts that draft on the Plan page first. Nothing was made.`,
+      );
+    }
+    const row = await this.prisma.wikiPlan.findFirstOrThrow({ where: { id: confirmed.id }, select: VERSION_SELECT });
+    const gated = await this.gateCardChange(this.prisma, ownerId, spaceId, row, value, 'The plan change');
+    return { baseVersion: confirmed.version, version: null, doc: docInputOf(gated.doc), category: gated.category };
+  }
+
+  /**
+   * A plan card's press (contract `chat.presses.apply`), in the press's own transaction once it holds the card: under the
+   * space row's lock the plan must still stand at the version the card was drafted on — another stored since is
+   * WIKI_REVISION_CONFLICT; the change is applied to it and gated again, as an accepted proposal is
+   * (`plan.proposals.accept`); the result is stored as a new version of origin owner, as the owner's edit is, and
+   * confirmed, the version in force superseded. A refusal throws, and the caller's transaction writes nothing. Answers
+   * the version made: its build is the caller's to ask for once that transaction commits (`buildAfterCardPress`).
+   */
+  async applyCardChangeIn(tx: Prisma.TransactionClient, card: { ownerId: string; spaceId: string; change: WikiPlanCardChange }): Promise<{ version: number }> {
+    const { ownerId, spaceId, change } = card;
+    await tx.$queryRaw(Prisma.sql`
+      SELECT "id" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`);
+    const base = await this.latest(tx, ownerId, spaceId);
+    if (!base || base.status !== 'confirmed' || base.version !== change.baseVersion) {
+      throw new WikiRefusalError({
+        code: 'WIKI_REVISION_CONFLICT',
+        message: `the plan moved off version ${change.baseVersion}, which this card was drafted on: it stands at `
+          + `${base ? `version ${base.version} (${base.status})` : 'no version'} now, so nothing was applied. Ask the chat to draft it again from `
+          + 'the plan as it is (Redo).',
+      });
+    }
+    const gated = await this.gateCardChange(tx, ownerId, spaceId, base, { doc: change.doc, ...(change.category ? { category: change.category } : {}) },
+      `This plan change, applied to version ${base.version},`);
+    const { version } = await this.storeIn(tx, ownerId, spaceId, base.version, {
+      origin: 'owner',
+      baseVersion: base.version,
+      proposalId: null,
+      plan: gated.plan,
+      target: gated.target,
+      gate: report(gated.plan, gated.target, true, notesOf(base.gate)),
+      repoCheck: carriedRepoCheck(base.repoCheck as unknown as WikiPlanRepoCheck | null, gated.base, gated.plan),
+      model: null,
+      authorSessionId: null,
+      authorUserId: ownerId,
+    });
+    await this.confirmIn(tx, ownerId, spaceId, version);
+    return { version };
+  }
+
+  /**
+   * What a plan card's press asks for once its transaction commits: the build of the version it confirmed, as a
+   * confirmation asks for one — logged, never thrown, the press standing. Answers the build asked for, or null.
+   */
+  async buildAfterCardPress(ownerId: string, spaceId: string, version: number): Promise<string | null> {
+    try {
+      const answer = await requestWikiPlanBuild(this.prisma, { ownerId, spaceId, version, requestedByUserId: ownerId });
+      return answer.jobId;
+    } catch (error) {
+      this.logger.warn(`the build of version ${version} of a space's plan, which a plan card's press confirmed, was not asked for: ${(error as Error).message}`);
+      return null;
+    } finally {
+      this.realtime?.publishWikiChanged(ownerId, spaceId);
+    }
+  }
+
+  /**
+   * A plan card's Try again (contract `chat.presses.retry`): the documents of the version its press confirmed asked for
+   * again, as the plan page's rebuild asks (`plan.jobs.rebuild`), while that version is in force; once another is, a 409.
+   */
+  async rebuildForCard(ownerId: string, spaceId: string, version: number): Promise<WikiPlanBuildResult> {
+    const row = await this.prisma.wikiPlan.findFirst({ where: { ownerId, spaceId, version }, select: { status: true } });
+    if (row?.status !== 'confirmed') {
+      throw new ConflictException(`version ${version} of the plan, which this card's press confirmed, is no longer the one in force: `
+        + 'the documents are built from the version in force, and nothing was asked for');
+    }
+    const answer = await requestWikiPlanRebuild(this.prisma, { ownerId, spaceId, version, trigger: 'owner', requestedByUserId: ownerId, support: null });
+    return this.buildAnswer(ownerId, spaceId, answer.jobId, answer.created);
+  }
+
+  /**
+   * A plan card's change walked against a version, as a proposal's is (`plan.proposals.accept`): schema, the plan's own
+   * references and the ones a session condition names (read through `db`), the document count and protection, and the
+   * sections keyed as the version they change keys them. Refused WIKI_PLAN_GATE with every error.
+   */
+  private async gateCardChange(
+    db: ReferenceReader,
+    ownerId: string,
+    spaceId: string,
+    row: VersionRow,
+    value: unknown,
+    what: string,
+  ): Promise<{ doc: PlanDoc; category: PlanCategory | null; plan: PlanContent; base: PlanContent; target: { min: number; max: number } }> {
+    const base = contentOf(row);
+    const walk = new Walk(declaredOf(base.newFields));
+    const { doc, category, plan } = walkChange(walk, base, value);
+    checkWhole(walk, plan, 'plan.');
+    await this.resolve(walk, ownerId, spaceId, plan, db);
+    const target = { min: row.docsMin, max: row.docsMax };
+    checkDocCount(walk, plan, base.docs.length, target, 'plan.docs');
+    checkProtected(walk, plan, base, 'plan.');
+    if (walk.errors.length > 0 || !doc) throw gateRefusal(walk.errors, what);
+    assignKeys(plan, base);
+    return { doc, category, plan, base, target };
   }
 
   // ── The plan's jobs (contract `plan.jobs`) ────────────────────────────────────────────────────
@@ -2043,6 +2182,86 @@ function jobEndOf(body: unknown): WikiPlanJobEnd {
     draft: object(raw.draft, 'draft', WIKI_PLAN_JOB_RULES.draftMaxBytes),
     attempt: attempt as number | null,
   };
+}
+
+/**
+ * A change shaped as a proposal's (contract `plan.proposals`): the document as it should read — one of the plan's by its
+ * slug, or a new one — and the category it opens when it needs one the plan does not have, walked against `base` into
+ * the plan it makes. Everything wrong goes into the walk, at paths from `change`. A maintenance run's proposal and a
+ * chat's plan card are walked by this one function, so the two are held to the same shape.
+ */
+function walkChange(walk: Walk, base: PlanContent, value: unknown): { doc: PlanDoc | null; category: PlanCategory | null; plan: PlanContent } {
+  const change = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+  if (!change) walk.fail('schema', 'change', 'must be an object: { doc, category }');
+  for (const key of Object.keys(change ?? {})) {
+    if (!['doc', 'category'].includes(key)) walk.fail('schema', `change.${key}`, `${quoted(key)} is not a field of a change: doc, category`);
+  }
+  const doc = change ? walk.doc(change.doc, 'change.doc') : null;
+  const category = change?.category === undefined || change?.category === null ? null : walk.category(change.category, 'change.category');
+  const opens = category !== null && !base.categories.some((c) => c.key === category.key);
+  if (category && !opens) {
+    walk.fail('schema', 'change.category.key', `${quoted(category.key)} is already a category of the plan: leave category out, and file the document under it`);
+  }
+  return { doc, category: opens ? category : null, plan: doc ? applyChange(base, doc, opens ? category : null) : base };
+}
+
+/** A document's number in a plan, as the documents read numbers it (`numbering` in wiki-docs.ts): "3.1"; null when it has none. */
+function docNumberIn(plan: Pick<PlanContent, 'categories' | 'docs'>, slug: string): string | null {
+  const at = plan.docs.findIndex((doc) => doc.slug === slug);
+  if (at < 0) return null;
+  const { category } = plan.docs[at];
+  const index = plan.categories.findIndex((one) => one.key === category);
+  const n = plan.docs.slice(0, at + 1).filter((doc) => doc.category === category).length;
+  return `${index < 0 ? plan.categories.length + 1 : index + 1}.${n}`;
+}
+
+const DOC_FIELDS = ['category', 'title', 'question', 'audience', 'scopeIn', 'scopeOut', 'length'] as const;
+const SECTION_FIELDS = ['title', 'kind', 'covers', 'length', 'sources'] as const;
+const same = (a: unknown, b: unknown): boolean => JSON.stringify(canonical(a ?? null)) === JSON.stringify(canonical(b ?? null));
+
+/**
+ * What a plan card's change does to the version it was drafted on (contract `chat.drafts.read`, change): the document's
+ * own fields that change, and each section it adds, changes — with the fields that change — or removes, matched by key,
+ * in the document's new order and the removed ones after; a section's covers with it when it is added or its covers
+ * change. Both sides are read as the gate reads them (`contentOf`, `docInputOf`), so a section the change copies as it
+ * was is no change.
+ */
+export function wikiPlanCardChangeOf(base: { categories: unknown; docs: VersionRow['docs'] } | null, change: WikiPlanCardChange): WikiChatPlanChangeView {
+  const plan = base ? contentOf({ categories: base.categories, newFields: [], docs: base.docs } as unknown as VersionRow) : { categories: [], docs: [], newFields: [] };
+  const before = plan.docs.find((doc) => doc.slug === change.doc.slug) ?? null;
+  const next = change.doc as unknown as { slug: string; title: string; category: string; sections: Array<{ key?: string; title: string } & Record<string, unknown>> } & Record<string, unknown>;
+  const fields = before ? DOC_FIELDS.filter((field) => !same((before as unknown as Record<string, unknown>)[field], next[field])) : [];
+  const sections: WikiChatPlanChangeView['sections'] = [];
+  next.sections.forEach((section, i) => {
+    const key = section.key ?? `s${i + 1}`;
+    const was = before?.sections.find((one) => one.key === key) ?? null;
+    if (!was) {
+      sections.push({ key, title: section.title, number: i + 1, edit: 'added', fields: [], covers: String(section.covers ?? '') });
+      return;
+    }
+    const changed = SECTION_FIELDS.filter((field) => !same((was as unknown as Record<string, unknown>)[field], section[field]));
+    if (changed.length > 0) {
+      sections.push({ key, title: section.title, number: i + 1, edit: 'changed', fields: changed, covers: changed.includes('covers') ? String(section.covers ?? '') : null });
+    }
+  });
+  const kept = new Set(next.sections.map((section, i) => section.key ?? `s${i + 1}`));
+  before?.sections.forEach((section, i) => {
+    if (section.key !== null && !kept.has(section.key)) sections.push({ key: section.key, title: section.title, number: i + 1, edit: 'removed', fields: [], covers: null });
+  });
+  const category = plan.categories.find((one) => one.key === next.category);
+  return {
+    baseVersion: change.baseVersion,
+    version: change.version,
+    doc: { slug: next.slug, title: next.title, number: before ? docNumberIn(plan, next.slug) : null },
+    category: { key: next.category, title: category?.title ?? change.category?.title ?? next.category, opens: change.category !== null },
+    fields,
+    sections,
+  };
+}
+
+/** The version a plan card was drafted on, as `wikiPlanCardChangeOf` reads it; null for one that is gone. */
+export async function wikiPlanCardBase(db: PlanReader, ownerId: string, spaceId: string, version: number): Promise<{ categories: unknown; docs: VersionRow['docs'] } | null> {
+  return db.wikiPlan.findFirst({ where: { ownerId, spaceId, version }, select: { categories: true, docs: VERSION_SELECT.docs } });
 }
 
 /** The plan with one document put in: in place of the one of its slug, or after the last of its category. */

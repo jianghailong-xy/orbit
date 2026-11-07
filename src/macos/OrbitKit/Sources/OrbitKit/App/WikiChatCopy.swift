@@ -64,6 +64,24 @@ public enum WikiChatCopy {
     public static let cardUndone = "Undone"
     public static let cardRedoMessage = "This draft no longer applies: what it changes has changed since. Draft it again from what is there now."
 
+    // MARK: a plan card's face (contract `chat.copy.card.plan*`, `chat.copy.planFields`; C12)
+
+    public static let cardPlanDocument = "Document"
+    public static let cardPlanNewDoc = "New document in {category}"
+    public static let cardPlanNewCategory = "New document in a new category, {category}"
+    public static let cardPlanDocFields = "Changes its {fields}"
+    public static let cardPlanAdds = "Adds"
+    public static let cardPlanChanges = "Changes"
+    public static let cardPlanRemoves = "Removes"
+    public static let cardPlanCovers = "Covers"
+    public static let cardPlanSectionFields = "{section} ({fields})"
+    public static let cardPlanSectionCovers = "{section}: {covers}"
+    /// The words a plan card says a document's or a section's field by (`chat.copy.planFields`).
+    public static let planFields: [String: String] = [
+        "category": "category", "title": "title", "question": "question", "audience": "audience", "scopeIn": "scope",
+        "scopeOut": "what it leaves out", "length": "length", "kind": "kind", "covers": "covers", "sources": "sources",
+    ]
+
     // MARK: what a card offers (contract `chat.copy.actions`)
 
     public static let actionApply = "Apply"
@@ -258,6 +276,10 @@ public enum WikiChatCopy {
             "card.webNote": cardWebNote, "card.applied": cardApplied, "card.appliedInReview": cardAppliedInReview,
             "card.appliedInReviewNote": cardAppliedInReviewNote, "card.discarded": cardDiscarded,
             "card.notApplied": cardNotApplied, "card.undone": cardUndone, "card.redoMessage": cardRedoMessage,
+            "card.planDocument": cardPlanDocument, "card.planNewDoc": cardPlanNewDoc, "card.planNewCategory": cardPlanNewCategory,
+            "card.planDocFields": cardPlanDocFields, "card.planAdds": cardPlanAdds, "card.planChanges": cardPlanChanges,
+            "card.planRemoves": cardPlanRemoves, "card.planCovers": cardPlanCovers, "card.planSectionFields": cardPlanSectionFields,
+            "card.planSectionCovers": cardPlanSectionCovers,
             "result.rewriting": resultRewriting, "result.rewritingFrom": resultRewritingFrom,
             "result.waiting": resultWaiting, "result.failed": resultFailed, "result.updatedLead": resultUpdatedLead,
             "result.sentenceOne": resultSentenceOne, "result.sentenceMany": resultSentenceMany,
@@ -274,6 +296,7 @@ public enum WikiChatCopy {
             "reasons.maintenance": reasonMaintenance, "reasons.build": reasonBuild, "reasons.merge": reasonMerge,
             "reasons.landing": reasonLanding, "reasons.chat": reasonChat, "reasons.restore": reasonRestore,
         ]
+        for (field, word) in planFields { table["planFields.\(field)"] = word }
         for action in WikiChatAction.allCases { table["actions.\(action.rawValue)"] = Self.action(action) }
         for reason in WikiDocsFollowWaiting.allCases where reason != .unknown {
             table["waiting.\(reason.rawValue)"] = waitingReason(reason)

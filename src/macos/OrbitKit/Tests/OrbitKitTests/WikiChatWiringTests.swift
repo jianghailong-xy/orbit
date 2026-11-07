@@ -237,9 +237,14 @@ final class WikiChatWiringTests: XCTestCase {
         assertOrder(slot, ["case .section(let doc, let key): leave { go(.wikiDoc(slug: doc, section: key)) }",
                            "case .entry(let id):             leave { go(.wikiEntry(entryID: id)) }",
                            "case .review:                    leave { go(.wikiReview) }"], "what a card's links open")
-        // A press that did not go is said in its card, in the web's words.
+        // A press that did not go is said in its card, in the web's words — a plan card's change the plan's gate refused
+        // with every error the gate found under the reason (C12).
         let model = code(try source("WikiChatModel.swift"))
-        XCTAssertTrue(model.contains("if press != .seen { pressFailures[key] = WikiChatLogic.pressError(error) }"))
+        XCTAssertTrue(model.contains("if press != .seen { pressFailures[key] = WikiChatLogic.pressRefusal(error) }"))
+        // A plan card opens its document on the plan page (C12), as the web's Open in Plan does.
+        assertOrder(slot, ["case .openInPlan:",
+                           "let node: NavNode = card.change.map { .wikiPlanDoc(slug: $0.doc.slug, version: nil) } ?? .wikiPlan(version: nil)",
+                           "leave { go(node) }"], "Open in Plan")
         XCTAssertTrue(model.contains("return WikiChatLogic.pressError(error)"), "Edit's refusal")
         XCTAssertTrue(model.contains("guard WikiChatLogic.needsSeen(card) else { return }"))
         // Edit sends only what changed, under the web's words.
@@ -248,6 +253,18 @@ final class WikiChatWiringTests: XCTestCase {
                            ".navigationTitle(WikiChatCopy.editTitle)", "Button(WikiChatCopy.cancel) { dismiss() }",
                            "Button(WikiChatCopy.actionApply) {", ".disabled(saving || edits.isEmpty || blank)"], "Edit")
         XCTAssertTrue(edit.contains("private var edits: [WikiChatEditRequest.Op] { WikiChatLogic.editOps(card, words: words) }"))
+    }
+
+    /// A plan page attaches its document, and at one of its sections that section too (C12), by the logic the web's
+    /// page hook mirrors (`WikiChatLogic.planPage`).
+    func testAPlanPageAttachesItsDocumentAndTheSectionItShows() throws {
+        let views = code(try source("Views/WikiChatViews.swift"))
+        let follow = try slice(views, from: "private func follow(_ node: NavNode?, chat: WikiChatModel, space: WikiSpace) {",
+                               to: "private func presented<Page: View>(")
+        assertOrder(follow, ["case .wikiPlanDoc(let slug, _)?:", "chat.follow(spaceID: space.id, page: .plan(docSlug: slug, label: number ?? slug))",
+                             "case .wikiPlanSection(let slug, let index, _)?:",
+                             "chat.follow(spaceID: space.id, page: WikiChatLogic.planPage(slug: slug, index: index, number: number, plan: model.wiki?.plan))"],
+                    "the plan page's chip")
     }
 
     /// A section written since the reader last looked wears Updated beside its title, its new sentences a green

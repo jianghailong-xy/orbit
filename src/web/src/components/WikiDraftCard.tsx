@@ -18,7 +18,7 @@ import { Textarea } from './ui/Textarea';
 import { wikiChatDraftQuery, wikiSpacesQuery } from '../lib/queries';
 import { wikiEntryPath } from '../lib/wiki';
 import { wikiDocSectionPath } from '../lib/wikiDocs';
-import { wikiPlanPath } from '../lib/wikiPlan';
+import { wikiPlanDocPath, wikiPlanPath } from '../lib/wikiPlan';
 import { wikiSettingsPath } from '../lib/wikiReviewMode';
 import {
   WIKI_CHAT_ACTION_PRESS,
@@ -42,6 +42,7 @@ import {
   wikiChatCardLook,
   wikiChatInReviewOp,
   wikiChatNeedsSeen,
+  wikiChatPressDetails,
   wikiChatPressError,
   wikiChatResultLook,
   wikiReviewItemAnchor,
@@ -66,7 +67,8 @@ export interface WikiDraftCardHost {
   /** The entry's item in Review, for an applied card whose challenge waits there. */
   openReview: (changesetId: string | null, seq: number | null) => void;
   openSettings: () => void;
-  openPlan: () => void;
+  /** The plan page — at a plan card's document, when it names one. */
+  openPlan: (docSlug?: string) => void;
   /** The owner's next message in this chat: Redo sends the contract's sentence (`chat.drafts.states.changed`). */
   send: (text: string) => Promise<void>;
   /** The card the round button or Activity opened the chat at: it scrolls itself into view. */
@@ -106,7 +108,7 @@ export function useWikiChatSessionCards(sessionId: string | null, spaceId: strin
       openEntry: (entryId) => beside(wikiEntryPath(slug, entryId)),
       openReview: (changesetId, seq) => beside(wikiChatReviewPath(slug, changesetId, seq)),
       openSettings: () => navigate(wikiSettingsPath(slug)),
-      openPlan: () => beside(wikiPlanPath(slug)),
+      openPlan: (docSlug) => beside(docSlug ? wikiPlanDocPath(slug, docSlug) : wikiPlanPath(slug)),
       send: async (text) => {
         await sendWikiChatTurn(sessionId, text, undefined);
       },
@@ -150,7 +152,8 @@ function WikiDraftCardView({ view, host }: { view: WikiChatDraftView; host: Wiki
   const result = wikiChatResultLook(view);
   const open = view.state === 'draft' || view.state === 'changed';
   const [busy, setBusy] = useState<WikiChatAction | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
+  // A press refused: the server's reason, and — a plan card's change the plan's gate refused — every error it found.
+  const [failed, setFailed] = useState<{ line: string; details: string[] } | null>(null);
   const [editing, setEditing] = useState(false);
   const [seeing, setSeeing] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -209,7 +212,7 @@ function WikiDraftCardView({ view, host }: { view: WikiChatDraftView; host: Wiki
       return;
     }
     if (action === 'settings') return host.openSettings();
-    if (action === 'open_in_plan') return host.openPlan();
+    if (action === 'open_in_plan') return host.openPlan(view.change?.doc.slug);
     setBusy(action);
     try {
       if (action === 'redo') await host.send(WIKI_CHAT_REDO_MESSAGE);
@@ -218,7 +221,7 @@ function WikiDraftCardView({ view, host }: { view: WikiChatDraftView; host: Wiki
         if (kind) await press(kind);
       }
     } catch (error) {
-      setFailed(wikiChatPressError(error));
+      setFailed({ line: wikiChatPressError(error), details: wikiChatPressDetails(error) });
     } finally {
       setBusy(null);
     }
@@ -331,7 +334,14 @@ function WikiDraftCardView({ view, host }: { view: WikiChatDraftView; host: Wiki
         )}
         {failed && (
           <div className="wk-draft-failed" role="alert">
-            {failed}
+            {failed.line}
+            {failed.details.length > 0 && (
+              <ul className="wk-draft-failed-list">
+                {failed.details.map((detail) => (
+                  <li key={detail}>{detail}</li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
       </div>

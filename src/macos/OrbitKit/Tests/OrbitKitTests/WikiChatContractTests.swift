@@ -86,6 +86,15 @@ final class WikiChatContractTests: XCTestCase {
         let heading: String?
     }
 
+    /// A plan card's face (C12): its change as the card read serves it, and the heading and rows it says.
+    private struct PlanFaceCase: Decodable {
+        struct Row: Decodable, Equatable { let label: String; let value: String }
+        let name: String
+        let change: WikiChatPlanChange
+        let heading: String
+        let rows: [Row]
+    }
+
     private struct Fixture: Decodable {
         let cards: [CardCase]
         let results: [ResultCase]
@@ -93,6 +102,7 @@ final class WikiChatContractTests: XCTestCase {
         let waiting: [WaitingCase]
         let notes: [NoteCase]
         let changes: [ChangeCase]
+        let planFaces: [PlanFaceCase]
     }
 
     private func fixture() throws -> Fixture {
@@ -191,6 +201,7 @@ final class WikiChatContractTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(cases.waiting.count, 1)
         XCTAssertGreaterThanOrEqual(cases.notes.count, 6)
         XCTAssertGreaterThanOrEqual(cases.changes.count, 5)
+        XCTAssertGreaterThanOrEqual(cases.planFaces.count, 3)
         // Every state a card can be in has a case.
         XCTAssertEqual(Set(cases.cards.map(\.state)), Set(WikiChatDraftState.allCases.filter { $0 != .unknown }))
         // Every rewrite result an applied card can show has a case.
@@ -260,6 +271,16 @@ final class WikiChatContractTests: XCTestCase {
         }
     }
 
+    /// A plan card's face (C12, `wikiChatPlanFace`): the document, what of it changes, and the covers it writes — the
+    /// same heading and rows the web draws from the same change.
+    func testEveryPlanCardFaceIsTheFixtures() throws {
+        for test in try fixture().planFaces {
+            let face = WikiChatLogic.planFace(test.change)
+            XCTAssertEqual(face.heading, test.heading, test.name)
+            XCTAssertEqual(face.rows.map { PlanFaceCase.Row(label: $0.label, value: $0.value) }, test.rows, test.name)
+        }
+    }
+
     /// The Docs rows of Activity and See changes' heading.
     func testEveryDocsRowIsTheFixtures() throws {
         for test in try fixture().changes {
@@ -294,7 +315,7 @@ final class WikiChatContractTests: XCTestCase {
             switch value["of"]?.stringValue {
             case "doc":   return text(value["doc"]).flatMap { doc in text(value["section"]).map { .pageDoc(doc: doc, section: $0) } }
             case "entry": return text(value["title"]).map { .pageEntry(title: $0) }
-            case "plan":  return text(value["doc"]).map { .pagePlan(doc: $0) }
+            case "plan":  return text(value["doc"]).map { .pagePlan(doc: $0, section: text(value["section"])) }
             default:      return nil
             }
         case "selection":

@@ -629,8 +629,9 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
     const [, planBlock] = plan.content.split('Split this page.\n\n');
     assert.match(planBlock, /^<orbit_wiki_page of="plan" doc="1.1" slug="sessions-runtime">\n/u);
     const definition = JSON.parse(planBlock.split('\n').slice(1, -1).join('\n'));
-    assert.deepEqual(definition.sections.map((s: { key: string; covers: string }) => [s.key, s.covers]),
+    assert.deepEqual(definition.doc.sections.map((s: { key: string; covers: string }) => [s.key, s.covers]),
       planSections.map((s) => [s.key, s.covers]), 'what each section covers: the page brings the plan, which a session cannot read');
+    assert.equal(definition.doc.slug, 'sessions-runtime', 'the document as a plan card\'s change takes it (C12)');
     await answered(plan.turnId);
   });
 

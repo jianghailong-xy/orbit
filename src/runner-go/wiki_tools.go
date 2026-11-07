@@ -46,7 +46,7 @@ const (
 )
 
 // wikiDraftKinds is what wiki_draft drafts (contract `agentSurface.chat.draft.params.kind`): a rewrite of sections from
-// main, or a plan change. The plan kind arrives with the plan card, and the server refuses it until then.
+// main, or a plan change (the plan card, C12), whose change is the whole document as it should read.
 var wikiDraftKinds = []string{"rewrite", "plan"}
 
 // wikiEntryKinds is contracts/wiki.contract.json kinds, in the order the contract lists them. The
@@ -408,7 +408,7 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 				"kind": map[string]interface{}{
 					"type":        "string",
 					"enum":        wikiDraftKinds,
-					"description": "rewrite: these sections lag behind main and are written again from it. plan: a change to how the documents are planned (not open yet: the server refuses it).",
+					"description": "rewrite: these sections lag behind main and are written again from it. plan: a change to how a document is planned or written, sent as change.",
 				},
 				"sections": map[string]interface{}{
 					"type":     "array",
@@ -420,7 +420,10 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 					}, "doc", "section"),
 					"description": "rewrite: 1 to " + strconv.Itoa(wikiDraftSectionsMax) + " written sections of the confirmed plan, each { doc, section }.",
 				},
-				"change": map[string]interface{}{"type": "object", "description": "plan: the change, shaped as a plan proposal's."},
+				"change": map[string]interface{}{"type": "object", "description": "plan: the change, shaped as a plan proposal's: { doc, category? } — " +
+					"the whole document as it should read (the plan page attaches it), and the category it opens when it needs one the plan " +
+					"does not have. A writing requirement goes into the covers of the sections it is for: the writer reads covers, so the " +
+					"next rewrite keeps it."},
 				"reason": map[string]interface{}{
 					"type":        "string",
 					"description": "Why, in a sentence or two: what lags behind main, or what the plan should do. The card shows it.",
@@ -771,7 +774,8 @@ func wikiNoteBody(args map[string]interface{}) (map[string]interface{}, error) {
 
 // wikiDraftBody reads wiki_draft's arguments into the door's body. What the contract bounds is said here before it is
 // sent — the kind, one to five sections each with its document and its key, a reason and a key; the server holds the
-// rest (each section a written one of the confirmed plan, the plan kind not open yet) and names each field it refuses.
+// rest (each section a written one of the confirmed plan, a plan change gated as a proposal is) and names each field
+// it refuses.
 func wikiDraftBody(args map[string]interface{}) (map[string]interface{}, error) {
 	kind := strings.ToLower(strings.TrimSpace(getString(args, "kind")))
 	if !contains(wikiDraftKinds, kind) {
@@ -1111,6 +1115,10 @@ func describeWikiDraft(answer wikiDraftAnswer) string {
 	var out strings.Builder
 	if answer.Replayed {
 		fmt.Fprintf(&out, "This request already made card %s under this idempotencyKey, and this is that answer; nothing was drafted twice.", answer.DraftID)
+	} else if answer.Kind == "plan" {
+		fmt.Fprintf(&out, "Drafted card %s (plan) for the owner of this wiki chat. Nothing was written: the owner presses the card, and "+
+			"only then is the plan changed, confirmed and its documents rebuilt. Never call it applied; pass replaces: %s when you revise it.",
+			answer.DraftID, answer.DraftID)
 	} else {
 		fmt.Fprintf(&out, "Drafted card %s (%s) for the owner of this wiki chat. Nothing was written: the owner presses the card, and "+
 			"only then are the sections rewritten. Never call it applied; pass replaces: %s when you revise it.", answer.DraftID, answer.Kind, answer.DraftID)

@@ -19,7 +19,7 @@ import { WIKI_DOC_SECTION_EVENT } from './WikiDirectory';
 import { WikiChatFab } from './WikiChatFab';
 import { WikiChatPanel } from './WikiChatPanel';
 import { routeId } from '../lib/idCodec';
-import { wikiChatDraftsQuery, wikiChatsQuery, wikiDocQuery, wikiDocsQuery, wikiEntryQuery } from '../lib/queries';
+import { wikiChatDraftsQuery, wikiChatsQuery, wikiDocQuery, wikiDocsQuery, wikiEntryQuery, wikiPlanQuery } from '../lib/queries';
 import {
   WIKI_CHAT_ASK,
   WIKI_CHAT_FOCUS_NEEDS_YOU,
@@ -267,9 +267,12 @@ function useWikiChatPage(space: WikiSpaceRow, route: string): WikiChatPage | nul
   const params = useParams();
   const docSlug = route === 'doc' ? (params.doc ?? null) : null;
   const planSlug = route === 'planDoc' || route === 'planSection' ? (params.doc ?? null) : null;
+  // A plan page at one of its document's sections (`…/plan/d/<doc>/<n>`) attaches that section too (C12).
+  const planIndex = route === 'planSection' && /^\d+$/u.test(params.section ?? '') ? Number(params.section) : null;
   const entryId = route === 'entry' ? (routeId(params.entry) ?? params.entry ?? null) : null;
   const doc = useQuery(wikiDocQuery(docSlug ? space.id : null, docSlug));
   const docs = useQuery(wikiDocsQuery(planSlug ? space.id : null));
+  const plan = useQuery({ ...wikiPlanQuery(space.id), enabled: planIndex !== null });
   const entry = useQuery(wikiEntryQuery(entryId));
   const [section, setSection] = useState<{ slug: string; key: string } | null>(null);
   useEffect(() => {
@@ -292,6 +295,10 @@ function useWikiChatPage(space: WikiSpaceRow, route: string): WikiChatPage | nul
     }
     return null;
   }, [docs.data, planSlug]);
+  // The section by its number in the plan in force: the plan read the note is written from.
+  const planSection = planIndex !== null
+    ? (plan.data?.confirmed?.docs.find((one) => one.slug === planSlug)?.sections[planIndex - 1]?.key ?? null)
+    : null;
 
   return useMemo<WikiChatPage | null>(() => {
     if (docSlug && view) {
@@ -300,9 +307,12 @@ function useWikiChatPage(space: WikiSpaceRow, route: string): WikiChatPage | nul
       return { kind: 'doc', docSlug, sectionKey: current.key, label: wikiChatWhere(view.number, current.number) };
     }
     if (entryId && entryTitle) return { kind: 'entry', entryId, label: entryTitle };
+    if (planSlug && planSection && planIndex !== null) {
+      return { kind: 'plan', docSlug: planSlug, sectionKey: planSection, label: wikiChatWhere(planNumber ?? planSlug, planIndex) };
+    }
     if (planSlug) return { kind: 'plan', docSlug: planSlug, label: planNumber ?? planSlug };
     return null;
-  }, [docSlug, view, sectionKey, entryId, entryTitle, planSlug, planNumber]);
+  }, [docSlug, view, sectionKey, entryId, entryTitle, planSlug, planNumber, planSection, planIndex]);
 }
 
 // ── Asking about a selection (design §2 step 2, board 42 ① ②) ─────────────────────────────────────

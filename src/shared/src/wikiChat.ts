@@ -174,6 +174,28 @@ export const WIKI_CHAT_COPY = {
     notApplied: 'Not applied',
     undone: 'Undone',
     redoMessage: 'This draft no longer applies: what it changes has changed since. Draft it again from what is there now.',
+    planDocument: 'Document',
+    planNewDoc: 'New document in {category}',
+    planNewCategory: 'New document in a new category, {category}',
+    planDocFields: 'Changes its {fields}',
+    planAdds: 'Adds',
+    planChanges: 'Changes',
+    planRemoves: 'Removes',
+    planCovers: 'Covers',
+    planSectionFields: '{section} ({fields})',
+    planSectionCovers: '{section}: {covers}',
+  },
+  planFields: {
+    category: 'category',
+    title: 'title',
+    question: 'question',
+    audience: 'audience',
+    scopeIn: 'scope',
+    scopeOut: 'what it leaves out',
+    length: 'length',
+    kind: 'kind',
+    covers: 'covers',
+    sources: 'sources',
   },
   actions: {
     apply: 'Apply',
@@ -419,7 +441,8 @@ export function wikiChatWaiting(cards: readonly WikiChatCard[]): number {
 /**
  * Whether Undo can take a card back (contract `chat.presses.undo`): an applied entry card every op of which is an add or
  * an amend — the two a revert takes back; a supersede and a retire end a lineage, and a reinforce or a challenge is
- * answered as any other, the challenge in Review — and an applied rewrite card. A plan card's is C12's.
+ * answered as any other, the challenge in Review — and an applied rewrite card. A plan card never is: the plan keeps
+ * every version, and the owner changes it again on the Plan page.
  */
 export function wikiChatDraftUndoable(kind: WikiChatDraftKind, state: WikiChatDraftState, ops: readonly WikiChatDraftOp[]): boolean {
   if (state !== 'applied') return false;
@@ -489,7 +512,87 @@ export interface WikiChatDraftView {
   undoable: boolean;
   changesetId: string | null;
   rewrite: WikiChatDraftRewriteView | null;
+  /** A plan card's change (contract `chat.drafts.read`, change); null on every other card. */
+  change: WikiChatPlanChangeView | null;
   createdAt: string;
+}
+
+/** A field of a plan document or section that a plan card's change can change (contract `chat.copy.planFields`). */
+export type WikiChatPlanField = keyof typeof WIKI_CHAT_COPY.planFields;
+
+/** One section a plan card adds, changes or removes (contract `chat.drafts.read`, change.sections). */
+export interface WikiChatPlanSectionChange {
+  key: string;
+  title: string;
+  /** Its place in the document, as the change has it — as it was, for a removed one: 2 for `§2`. */
+  number: number;
+  edit: 'added' | 'changed' | 'removed';
+  /** A changed section's fields that change, in the schema's order. */
+  fields: WikiChatPlanField[];
+  /** What it covers as the change has it, when it is added or its covers change: where a writing requirement goes. */
+  covers: string | null;
+}
+
+/**
+ * A plan card's change (contract `chat.drafts.read`, change): the document it puts into the plan — one of the plan's by
+ * its slug, or a new one — against the confirmed version it was drafted on, and the version its press made.
+ */
+export interface WikiChatPlanChangeView {
+  /** The confirmed version the card was drafted on. */
+  baseVersion: number;
+  /** The version its press made and confirmed; null until it is pressed. */
+  version: number | null;
+  /** The document; `number` is where the version it was drafted on numbers it ("3.1"), null for a new one. */
+  doc: { slug: string; title: string; number: string | null };
+  /** The category a new document goes in, and whether the change opens it. */
+  category: { key: string; title: string; opens: boolean };
+  /** The document's own fields that change, in the schema's order (none for a new one). */
+  fields: WikiChatPlanField[];
+  /** The sections it adds or changes, in the document's new order, then the ones it removes. */
+  sections: WikiChatPlanSectionChange[];
+}
+
+/** One row of a card's face: its label and what it says. */
+export interface WikiChatFaceRow {
+  label: string;
+  value: string;
+}
+
+/**
+ * What a plan card says on its face (board 42 ④ ③, `chat.drafts.kinds.plan`): the document as its heading — "3.1
+ * Sessions runtime", or a new one's title — then a row for a new document, one for the document's own fields that
+ * change, one each for the sections it adds, changes and removes, and one for each section whose covers it writes: what
+ * the writer reads, so a writing requirement there holds at the next rewrite (design §6, third row).
+ */
+export function wikiChatPlanFace(change: WikiChatPlanChangeView): { heading: string; rows: WikiChatFaceRow[] } {
+  const { card, planFields } = WIKI_CHAT_COPY;
+  const fields = (names: readonly WikiChatPlanField[]) => listed(names.map((name) => planFields[name]));
+  const section = (one: WikiChatPlanSectionChange) => `§${one.number} ${one.title}`;
+  const rows: WikiChatFaceRow[] = [];
+  if (change.doc.number === null) {
+    rows.push({
+      label: card.planDocument,
+      value: fill(change.category.opens ? card.planNewCategory : card.planNewDoc, { category: change.category.title }),
+    });
+  } else if (change.fields.length > 0) {
+    rows.push({ label: card.planDocument, value: fill(card.planDocFields, { fields: fields(change.fields) }) });
+  }
+  const of = (edit: WikiChatPlanSectionChange['edit']) => change.sections.filter((one) => one.edit === edit);
+  if (of('added').length > 0) rows.push({ label: card.planAdds, value: of('added').map(section).join(' · ') });
+  if (of('changed').length > 0) {
+    rows.push({
+      label: card.planChanges,
+      value: of('changed').map((one) => fill(card.planSectionFields, { section: section(one), fields: fields(one.fields) })).join(' · '),
+    });
+  }
+  if (of('removed').length > 0) rows.push({ label: card.planRemoves, value: of('removed').map(section).join(' · ') });
+  for (const one of change.sections) {
+    if (one.covers !== null && one.edit !== 'removed') {
+      rows.push({ label: card.planCovers, value: fill(card.planSectionCovers, { section: section(one), covers: one.covers }) });
+    }
+  }
+  const heading = change.doc.number === null ? change.doc.title : `${change.doc.number} ${change.doc.title}`;
+  return { heading, rows };
 }
 
 /** One op of a drafting call's answer in a chat (contract `agentSurface.chat.propose`): drafted, or why not. */
@@ -908,7 +1011,7 @@ export type WikiChatNote =
   | { kind: 'chat' }
   | { kind: 'page'; of: 'doc'; doc: string; section: number | string }
   | { kind: 'page'; of: 'entry'; title: string }
-  | { kind: 'page'; of: 'plan'; doc: string }
+  | { kind: 'page'; of: 'plan'; doc: string; section?: number | string }
   | { kind: 'selection'; doc: string; section: number | string; toSection?: number | string; sentences: number; sources: number }
   | { kind: 'drafts'; applied: number; edited: number; discarded: number; undone: number };
 
@@ -922,7 +1025,7 @@ export function wikiChatNoteLabel(note: WikiChatNote): string {
     case 'page':
       if (note.of === 'doc') return fill(notes.pageDoc, { where: wikiChatWhere(note.doc, note.section) });
       if (note.of === 'entry') return fill(notes.pageEntry, { title: note.title });
-      return fill(notes.pagePlan, { doc: note.doc });
+      return fill(notes.pagePlan, { doc: note.section !== undefined ? wikiChatWhere(note.doc, note.section) : note.doc });
     case 'selection': {
       const where = note.toSection !== undefined && String(note.toSection) !== String(note.section)
         ? `${wikiChatWhere(note.doc, note.section)}–§${note.toSection}`
@@ -977,7 +1080,7 @@ export function parseWikiChatNoteTag(block: string): WikiChatNote | null {
       const of = text('of');
       if (of === 'doc' && doc && section) return { kind: 'page', of, doc, section };
       if (of === 'entry' && (text('title') ?? text('entry')) !== undefined) return { kind: 'page', of, title: (text('title') ?? text('entry'))! };
-      if (of === 'plan' && doc) return { kind: 'page', of, doc };
+      if (of === 'plan' && doc) return { kind: 'page', of, doc, ...(section ? { section } : {}) };
       return null;
     }
     case WIKI_CHAT_NOTE_TAGS.selection: {
@@ -1060,7 +1163,10 @@ export interface WikiChatCreateAnswer {
 
 /** What a chat message may attach (contract `chat.notes.wikiContext`): the page, a selection, either or both. */
 export interface WikiChatContext {
-  page?: { kind: 'doc'; docSlug: string; sectionKey: string } | { kind: 'entry'; entryId: string } | { kind: 'plan'; docSlug: string };
+  page?:
+    | { kind: 'doc'; docSlug: string; sectionKey: string }
+    | { kind: 'entry'; entryId: string }
+    | { kind: 'plan'; docSlug: string; sectionKey?: string };
   selection?: { docSlug: string; sectionKey: string; sentenceIds: string[] };
 }
 
@@ -1069,6 +1175,9 @@ const PAGE_KEYS: Record<string, readonly string[]> = {
   entry: ['kind', 'entryId'],
   plan: ['kind', 'docSlug'],
 };
+
+/** What a page of a kind may carry besides: a plan page the section it shows (C12). */
+const PAGE_OPTIONAL_KEYS: Record<string, readonly string[]> = { doc: [], entry: [], plan: ['sectionKey'] };
 
 /**
  * The paths of what is wrong with a message's wikiContext, as validateWikiSources names them: an unknown key, a
@@ -1087,8 +1196,10 @@ export function wikiChatContextErrors(value: unknown): string[] {
       errors.push('wikiContext.page.kind');
     } else {
       const keys = PAGE_KEYS[page.kind]!;
-      for (const key of Object.keys(page)) if (!keys.includes(key)) errors.push(`wikiContext.page.${key}`);
+      const optional = PAGE_OPTIONAL_KEYS[page.kind]!;
+      for (const key of Object.keys(page)) if (!keys.includes(key) && !optional.includes(key)) errors.push(`wikiContext.page.${key}`);
       for (const key of keys.filter((k) => k !== 'kind')) if (!text(page[key])) errors.push(`wikiContext.page.${key}`);
+      for (const key of optional) if (page[key] !== undefined && !text(page[key])) errors.push(`wikiContext.page.${key}`);
     }
   }
   if (value.selection !== undefined) {

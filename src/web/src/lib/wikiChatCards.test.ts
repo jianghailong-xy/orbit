@@ -8,6 +8,8 @@ import {
   wikiChatDraftIdOf,
   wikiChatDraftingCall,
   wikiChatNeedsSeen,
+  wikiChatPressDetails,
+  wikiChatPressError,
   wikiChatResultLook,
   wikiChatSendError,
 } from './wikiChat';
@@ -272,6 +274,51 @@ describe('what a message that did not go says (C8 review)', () => {
     }
     expect(wikiChatSendError(new TypeError('Failed to fetch'))).toBe(WIKI_CHAT_SEND_FAILED);
     expect(WIKI_CHAT_SEND_FAILED).toMatch(/Check the connection/u);
+  });
+});
+
+describe('a plan card (C12): its face, and a press the plan’s gate refused', () => {
+  const change: NonNullable<WikiChatDraftView['change']> = {
+    baseVersion: 4,
+    version: null,
+    doc: { slug: 'sessions-runtime', title: 'Sessions runtime', number: '3.1' },
+    category: { key: 'runtime', title: 'Runtime', opens: false },
+    fields: ['audience'],
+    sections: [
+      { key: 'recovery', title: 'Recovery', number: 2, edit: 'changed', fields: ['covers', 'sources'], covers: 'For a first-time reader.' },
+      { key: 'old', title: 'The old poll', number: 4, edit: 'removed', fields: [], covers: null },
+    ],
+  };
+
+  it('says the document, what of it changes and the covers it writes, then why: no entry\'s rows', () => {
+    const face = wikiChatCardFace(card({ kind: 'plan', label: 'Plan change', change, rationale: 'Written for newcomers.' }));
+    expect(face).toEqual({
+      heading: '3.1 Sessions runtime',
+      rows: [
+        { label: 'Document', value: 'Changes its audience' },
+        { label: 'Changes', value: '§2 Recovery (covers and sources)' },
+        { label: 'Removes', value: '§4 The old poll' },
+        { label: 'Covers', value: '§2 Recovery: For a first-time reader.' },
+        { label: 'Why', value: 'Written for newcomers.' },
+      ],
+      diff: [],
+      sources: [],
+    });
+    // A plan card the server served without its change (an older one) says only why, as any card does.
+    expect(wikiChatCardFace(card({ kind: 'plan', label: 'Plan change' })).rows).toEqual([{ label: 'Why', value: 'To ride out one gateway restart.' }]);
+  });
+
+  it('lists every error the gate found under the press\'s reason, and nothing for any other refusal', () => {
+    const gate = new ApiError("The plan change did not pass the plan's gate (schema, protected): 2 errors.", 422, 'WIKI_PLAN_GATE', {
+      errors: [
+        { check: 'schema', path: 'change.doc.sections[1].kind', message: '"essay" is not a section kind' },
+        { check: 'protected', path: 'plan.docs[1]', message: 'runbooks is protected' },
+      ],
+    });
+    expect(wikiChatPressError(gate)).toBe("The card couldn’t be pressed: The plan change did not pass the plan's gate (schema, protected): 2 errors.");
+    expect(wikiChatPressDetails(gate)).toEqual(['change.doc.sections[1].kind: "essay" is not a section kind', 'plan.docs[1]: runbooks is protected']);
+    expect(wikiChatPressDetails(new ApiError('this card is applied', 409))).toEqual([]);
+    expect(wikiChatPressDetails(new TypeError('Failed to fetch'))).toEqual([]);
   });
 });
 

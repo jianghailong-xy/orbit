@@ -321,7 +321,8 @@ public enum WikiChatLogic {
         case chat
         case pageDoc(doc: String, section: String)
         case pageEntry(title: String)
-        case pagePlan(doc: String)
+        /// A plan page; `section` when it shows one of its document's sections (C12).
+        case pagePlan(doc: String, section: String? = nil)
         case selection(doc: String, section: String, toSection: String?, sentences: Int, sources: Int)
         case drafts(applied: Int, edited: Int, discarded: Int, undone: Int)
     }
@@ -341,8 +342,8 @@ public enum WikiChatLogic {
             return fill(WikiChatCopy.notePageDoc, ["where": place(doc: doc, section: section)])
         case .pageEntry(let title):
             return fill(WikiChatCopy.notePageEntry, ["title": title])
-        case .pagePlan(let doc):
-            return fill(WikiChatCopy.notePagePlan, ["doc": doc])
+        case .pagePlan(let doc, let section):
+            return fill(WikiChatCopy.notePagePlan, ["doc": section.map { place(doc: doc, section: $0) } ?? doc])
         case .selection(let doc, let section, let to, let sentences, let sources):
             let at = to.map { $0 != section ? "\(place(doc: doc, section: section))–§\($0)" : place(doc: doc, section: section) }
                 ?? place(doc: doc, section: section)
@@ -391,7 +392,7 @@ public enum WikiChatLogic {
                 return .pageEntry(title: title)
             case "plan":
                 guard let doc else { return nil }
-                return .pagePlan(doc: doc)
+                return .pagePlan(doc: doc, section: section)
             default:
                 return nil
             }
@@ -493,11 +494,12 @@ public enum WikiChatLogic {
     public enum Page: Equatable, Sendable {
         case doc(docSlug: String, sectionKey: String, label: String)
         case entry(entryId: String, label: String)
-        case plan(docSlug: String, label: String)
+        /// A plan page, at one of its document's sections when it shows one (C12).
+        case plan(docSlug: String, label: String, sectionKey: String? = nil)
 
         public var label: String {
             switch self {
-            case .doc(_, _, let label), .entry(_, let label), .plan(_, let label): return label
+            case .doc(_, _, let label), .entry(_, let label), .plan(_, let label, _): return label
             }
         }
     }
@@ -572,6 +574,15 @@ public enum WikiChatLogic {
         (state.pageCrossed ? nil : state.page, state.quote)
     }
 
+    /// The page a plan page attaches (design §4.2, C12, the web's `useWikiChatPage`): its document, and — at one of its
+    /// sections (`index`, 0-based) — that section too, by its key in the plan in force, the one the note is read from.
+    public static func planPage(slug: String, index: Int?, number: String?, plan: WikiPlanState?) -> Page {
+        let doc = number ?? slug
+        guard let index, let sections = plan?.confirmed?.docs?.first(where: { $0.slug == slug })?.sections,
+              sections.indices.contains(index) else { return .plan(docSlug: slug, label: doc) }
+        return .plan(docSlug: slug, label: place(doc: doc, section: String(index + 1)), sectionKey: sections[index].key)
+    }
+
     /// The message's `wikiContext`, frozen from what the composer shows (`wikiChatContext`); nil when it shows neither.
     public static func context(_ state: Attachments) -> WikiChatContext? {
         let (page, quote) = shown(state)
@@ -579,7 +590,7 @@ public enum WikiChatLogic {
         switch page {
         case .doc(let slug, let key, _)?: context.page = .doc(docSlug: slug, sectionKey: key)
         case .entry(let id, _)?:          context.page = .entry(entryId: id)
-        case .plan(let slug, _)?:         context.page = .plan(docSlug: slug)
+        case .plan(let slug, _, let key)?: context.page = .plan(docSlug: slug, sectionKey: key)
         case nil:                         break
         }
         if let quote, !quote.sentenceIds.isEmpty {
@@ -785,6 +796,15 @@ public enum WikiChatLogic {
         var diff: [CardFace.DiffLine] = []
         var sources: [String] = []
         var heading: String?
+        if card.kind == .plan, let change = card.change {
+            // A plan card says what its change does to the document (`wikiChatPlanFace`, board 42 ④ ③), then why.
+            let plan = planFace(change)
+            rows = plan.rows
+            if let why = card.rationale?.trimmingCharacters(in: .whitespacesAndNewlines), !why.isEmpty {
+                rows.append(.init(label: WikiChatCopy.faceWhy, value: why))
+            }
+            return CardFace(heading: plan.heading, rows: rows, diff: [], sources: [])
+        }
         func titleOf(_ op: WikiChatDraftOpView) -> String? {
             faceText(op.payload?["entry"]?["title"]) ?? faceText(op.payload?["changes"]?["title"]) ?? faceText(op.entry?["title"])
         }
@@ -825,6 +845,38 @@ public enum WikiChatLogic {
             }
         }
         return CardFace(heading: heading, rows: rows, diff: diff, sources: sources)
+    }
+
+    /// What a plan card says on its face (`wikiChatPlanFace`, C12): the document as its heading, then a row for a new
+    /// document, one for the document's own fields that change, one each for the sections it adds, changes and removes,
+    /// and one for each section whose covers it writes — where a writing requirement goes (design §6, third row).
+    public static func planFace(_ change: WikiChatPlanChange) -> (heading: String, rows: [CardFace.Row]) {
+        func fields(_ names: [String]) -> String { listed(names.map { WikiChatCopy.planFields[$0] ?? $0 }) }
+        func section(_ one: WikiChatPlanChange.Section) -> String { "§\(one.number) \(one.title)" }
+        var rows: [CardFace.Row] = []
+        if change.doc.number == nil {
+            let template = change.category.opens ? WikiChatCopy.cardPlanNewCategory : WikiChatCopy.cardPlanNewDoc
+            rows.append(.init(label: WikiChatCopy.cardPlanDocument, value: fill(template, ["category": change.category.title])))
+        } else if !change.fields.isEmpty {
+            rows.append(.init(label: WikiChatCopy.cardPlanDocument, value: fill(WikiChatCopy.cardPlanDocFields, ["fields": fields(change.fields)])))
+        }
+        func of(_ edit: String) -> [WikiChatPlanChange.Section] { change.sections.filter { $0.edit == edit } }
+        if !of("added").isEmpty {
+            rows.append(.init(label: WikiChatCopy.cardPlanAdds, value: of("added").map(section).joined(separator: " · ")))
+        }
+        if !of("changed").isEmpty {
+            let changed = of("changed").map { fill(WikiChatCopy.cardPlanSectionFields, ["section": section($0), "fields": fields($0.fields)]) }
+            rows.append(.init(label: WikiChatCopy.cardPlanChanges, value: changed.joined(separator: " · ")))
+        }
+        if !of("removed").isEmpty {
+            rows.append(.init(label: WikiChatCopy.cardPlanRemoves, value: of("removed").map(section).joined(separator: " · ")))
+        }
+        for one in change.sections where one.edit != "removed" {
+            guard let covers = one.covers else { continue }
+            rows.append(.init(label: WikiChatCopy.cardPlanCovers, value: fill(WikiChatCopy.cardPlanSectionCovers, ["section": section(one), "covers": covers])))
+        }
+        let heading = change.doc.number.map { "\($0) \(change.doc.title)" } ?? change.doc.title
+        return (heading, rows)
     }
 
     /// A source as the card's Sources row names it: the chat's own words first-hand, else its kind and where it points
@@ -876,6 +928,25 @@ public enum WikiChatLogic {
             return WikiChatCopy.pressRefused("HTTP 401")
         default:
             return WikiChatCopy.pressUnsent
+        }
+    }
+
+    /// What a card says of a press that did not go: its reason (`pressError`), then each error the gate found, a line each.
+    public static func pressRefusal(_ error: Error) -> String {
+        ([pressError(error)] + pressDetails(error)).joined(separator: "\n")
+    }
+
+    /// What a refused press lists under its reason (`wikiChatPressDetails`, C12): each error the plan's gate found in a
+    /// plan card's change — or a schema refusal's fields — as the server wrote it, where it is first; nothing else.
+    public static func pressDetails(_ error: Error) -> [String] {
+        guard case APIError.http(_, let body) = error, let data = body?.data(using: .utf8),
+              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let code = json["code"] as? String, code == "WIKI_PLAN_GATE" || code == "WIKI_SCHEMA",
+              let errors = json["errors"] as? [[String: Any]] else { return [] }
+        return errors.compactMap { one in
+            guard let message = (one["message"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !message.isEmpty else { return nil }
+            if let path = one["path"] as? String, !path.isEmpty { return "\(path): \(message)" }
+            return message
         }
     }
 

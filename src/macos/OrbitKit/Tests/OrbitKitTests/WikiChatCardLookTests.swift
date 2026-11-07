@@ -197,6 +197,78 @@ final class WikiChatCardLookTests: XCTestCase {
         XCTAssertEqual(WikiChatLogic.faceLabel("whyNot"), "Why not")
     }
 
+    // MARK: a plan card (C12, design §6's third row, board 42 ④ ③)
+
+    private static let planChange: [String: Any] = [
+        "baseVersion": 4, "version": NSNull(),
+        "doc": ["slug": "sessions-runtime", "title": "Sessions runtime", "number": "3.1"],
+        "category": ["key": "runtime", "title": "Runtime", "opens": false],
+        "fields": [],
+        "sections": [["key": "recovery", "title": "Recovery", "number": 2, "edit": "changed", "fields": ["covers"],
+                      "covers": "What survives a respawn, for a first-time reader: the model first."]],
+    ]
+
+    /// The face says what the change does to the document — the section it changes and the covers it writes — then
+    /// why; the buttons are Apply & rebuild, Open in Plan and Discard; an applied one offers no Undo, only its rebuild's.
+    func testAPlanCardSaysWhatItsChangeDoesAndOffersApplyAndRebuild() throws {
+        let rewrites: [[String: Any]] = [["doc": "sessions-runtime", "key": "recovery", "where": "3.1 §2", "title": "Recovery"]]
+        let open = try card(["kind": "plan", "label": "Plan change", "rationale": "Written for a first-time reader.", "rewrites": rewrites,
+                             "sections": rewrites, "change": Self.planChange])
+        let face = WikiChatLogic.cardFace(open)
+        XCTAssertEqual(face.heading, "3.1 Sessions runtime")
+        XCTAssertEqual(face.rows, [
+            .init(label: "Changes", value: "§2 Recovery (covers)"),
+            .init(label: "Covers", value: "§2 Recovery: What survives a respawn, for a first-time reader: the model first."),
+            .init(label: "Why", value: "Written for a first-time reader."),
+        ])
+        XCTAssertEqual(open.change?.sections.first?.covers, "What survives a respawn, for a first-time reader: the model first.")
+        let look = WikiChatLogic.cardLook(open)
+        XCTAssertEqual(look.title, "Draft · Plan change")
+        XCTAssertEqual(look.actions, [.applyRebuild, .openInPlan, .discard])
+
+        var applied = Self.planChange
+        applied["version"] = 5
+        let pressed = try card(["kind": "plan", "label": "Plan change", "state": "applied", "decision": "applied", "rewrites": rewrites,
+                                "change": applied, "rewrite": rewrite(["result": "failed", "sections": [
+                                    ["doc": "sessions-runtime", "key": "recovery", "where": "3.1 §2", "result": "failed", "changed": NSNull(), "versionId": NSNull()],
+                                ]])])
+        let after = WikiChatLogic.cardLook(pressed)
+        XCTAssertEqual([after.title, after.actions.map(\.rawValue).joined(separator: ","), after.rewriteActions.map(\.rawValue).joined(separator: ",")],
+                       ["Applied · Confirmed by you", "", "try_again"], "no Undo for a plan card: the plan keeps every version")
+        XCTAssertEqual(pressed.change?.version, 5)
+        XCTAssertEqual(WikiChatLogic.resultLook(pressed)?.line, "Rewrite failed")
+
+        // A plan card from a server that served no change says only why, as any card does.
+        let older = WikiChatLogic.cardFace(try card(["kind": "plan", "label": "Plan change"]))
+        XCTAssertEqual(older.rows, [.init(label: "Why", value: "To ride out one gateway restart.")])
+    }
+
+    /// A new document says so, and the category it opens.
+    func testAPlanCardsNewDocumentSaysItsCategory() throws {
+        var change = Self.planChange
+        change["doc"] = ["slug": "runbooks", "title": "Runbooks", "number": NSNull()]
+        change["category"] = ["key": "operations", "title": "Operations", "opens": true]
+        change["sections"] = [["key": "s1", "title": "Restarting the runner", "number": 1, "edit": "added", "fields": [], "covers": "The steps, in order."]]
+        let face = WikiChatLogic.cardFace(try card(["kind": "plan", "label": "Plan change", "rationale": " ", "change": change]))
+        XCTAssertEqual(face.heading, "Runbooks")
+        XCTAssertEqual(face.rows, [
+            .init(label: "Document", value: "New document in a new category, Operations"),
+            .init(label: "Adds", value: "§1 Restarting the runner"),
+            .init(label: "Covers", value: "§1 Restarting the runner: The steps, in order."),
+        ])
+    }
+
+    /// A press the plan's gate refused lists every error the gate found under its reason, as the web's card does.
+    func testAPressThePlansGateRefusedListsEveryError() {
+        let body = #"{"code":"WIKI_PLAN_GATE","message":"This plan change, applied to version 4, did not pass the plan's gate (references): 1 error.","errors":[{"check":"references","path":"change.doc.sections[2].sources.sessions.projects[0]","message":"no project of this account has that id"}]}"#
+        let refused = APIError.http(status: 422, body: body)
+        XCTAssertEqual(WikiChatLogic.pressError(refused),
+                       "The card couldn’t be pressed: This plan change, applied to version 4, did not pass the plan's gate (references): 1 error.")
+        XCTAssertEqual(WikiChatLogic.pressDetails(refused), ["change.doc.sections[2].sources.sessions.projects[0]: no project of this account has that id"])
+        XCTAssertEqual(WikiChatLogic.pressDetails(APIError.http(status: 409, body: #"{"message":"this card is applied"}"#)), [])
+        XCTAssertEqual(WikiChatLogic.pressDetails(URLError(.notConnectedToInternet)), [])
+    }
+
     // MARK: the line under an applied card, for every result (design §8.3)
 
     func testTheLineUnderAnAppliedCardForEveryResult() throws {

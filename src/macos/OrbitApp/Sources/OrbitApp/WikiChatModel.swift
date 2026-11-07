@@ -418,7 +418,8 @@ final class WikiChatModel {
         do {
             store(try await api.pressWikiChatDraft(card.id, press).draft)
         } catch {
-            if press != .seen { pressFailures[key] = WikiChatLogic.pressError(error) }
+            // A plan card's change the plan's gate refused says every error under the reason (C12).
+            if press != .seen { pressFailures[key] = WikiChatLogic.pressRefusal(error) }
             await loadCard(card.id)
         }
         if let space = spaceID { await load(spaceID: space) }

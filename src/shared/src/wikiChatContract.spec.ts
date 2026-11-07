@@ -26,6 +26,7 @@ import {
   type WikiChatDraftOp,
   type WikiChatFabChat,
   type WikiChatNote,
+  type WikiChatPlanChangeView,
   type WikiChatRewritesInput,
   type WikiDocChange,
   type WikiDocsFollowFacts,
@@ -39,6 +40,7 @@ import {
   wikiChatFabCounts,
   wikiChatFabState,
   wikiChatNoteLabel,
+  wikiChatPlanFace,
   wikiChatResultLine,
   wikiChatRewrites,
   wikiChatRewriteWaits,
@@ -177,7 +179,11 @@ describe('wiki chat contract', () => {
     expect(draft.cli).toBe('orbit wiki draft');
     expect(surface.doors.runner.routes).toContain(draft.route);
     expect(draft.who).toMatch(/WIKI_SESSION_EXCLUDED/u);
-    expect(draft.plan).toMatch(/WIKI_SCHEMA at kind/u);
+    // The plan kind opened with the plan card (C12): gated as a proposal is, its errors back to the agent that wrote it.
+    expect(draft.plan).toMatch(/opened with the plan card \(C12/u);
+    for (const said of ['WIKI_PLAN_GATE', 'WIKI_PLAN_UNCONFIRMED', 'WIKI_PLAN_STALE', 'plan.gate.author', 'covers']) expect(draft.plan).toContain(said);
+    expect(draft.params.change).toMatch(/\{ doc, category\? \}/u);
+    expect(draft.params.change).toMatch(/a writing requirement goes into the covers of the sections it is for/u);
     expect(draft.description).toMatch(/Works only in a wiki chat\.$/u);
     expect(draft.description).toMatch(/never call a draft applied/u);
     for (const tool of [draft.tool, ...surface.tools]) expect(tool).not.toMatch(/accept|confirm|decide|delete|doc/u);
@@ -220,6 +226,13 @@ describe('wiki chat contract', () => {
     expect(chat.presses.undo).toMatch(/revert:<changeset id>/u);
     expect(chat.presses.undo).toMatch(/docs\.versions\.restore/u);
     expect(chat.presses.undo).toMatch(/every op is an add or an amend/u);
+    // A plan card's press (C12): the plan's own edit, confirmation and build, all or nothing, and no Undo.
+    for (const door of ['plan.routes.edit', 'plan.routes.confirm', 'plan.jobs.request', 'plan.proposals.accept']) expect(chat.presses.apply).toContain(door);
+    expect(chat.presses.apply).toMatch(/nothing is written — no version, no confirmation, no build and no press/u);
+    expect(chat.presses.undo).toMatch(/A plan card never is/u);
+    expect(chat.presses.retry).toMatch(/plan\.jobs\.rebuild/u);
+    expect(chat.drafts.read).toContain('changesetId, rewrite, change, createdAt');
+    expect(chat.drafts.results.plan).toMatch(/kind build, of the version the press confirmed/u);
     const modes = CONTRACT.reviewModes.chat;
     expect(modes.rule).toMatch(/in manual, tiered and automatic alike/u);
     expect(modes.rule).toMatch(/no verification even in automatic/u);
@@ -294,7 +307,7 @@ describe('wiki chat contract', () => {
       WIKI_CHAT_COPY.panel.mergeNote, WIKI_CHAT_COPY.card.wouldRewrite, WIKI_CHAT_COPY.card.replacedNote,
       WIKI_CHAT_COPY.card.webNote, WIKI_CHAT_COPY.card.yourMessage, WIKI_CHAT_COPY.card.rewrites, WIKI_CHAT_COPY.card.sources,
       WIKI_CHAT_COPY.card.sectionUpdated, WIKI_CHAT_COPY.actions.rewrite, WIKI_CHAT_COPY.actions.open_in_plan,
-      WIKI_CHAT_COPY.actions.settings, WIKI_CHAT_COPY.fab.needsYouOne,
+      WIKI_CHAT_COPY.actions.settings, WIKI_CHAT_COPY.fab.needsYouOne, WIKI_CHAT_COPY.card.planCovers,
     ]) {
       expect(BOARD, sentence).toContain(sentence.replace('&', '&amp;'));
     }
@@ -424,7 +437,7 @@ describe('wiki chat contract', () => {
 
 describe('wiki chat vectors', () => {
   it('names every case once, and covers every state, result, look, reason and note', () => {
-    for (const group of ['cards', 'results', 'fab', 'waiting', 'followWaiting', 'rewrites', 'sentenceDiff', 'notes', 'contexts', 'changes']) {
+    for (const group of ['cards', 'results', 'fab', 'waiting', 'followWaiting', 'rewrites', 'sentenceDiff', 'notes', 'contexts', 'changes', 'planFaces']) {
       const cases = FIXTURE[group] as Array<{ name: string }>;
       expect(cases.length, group).toBeGreaterThan(0);
       expect(new Set(names(cases)).size, `${group} names a case twice`).toBe(cases.length);
@@ -500,6 +513,11 @@ describe('wiki chat vectors', () => {
   it.each(cases('contexts'))('wikiContext: %s', (_name, vector) => {
     const v = vector as { value: WikiChatContext | unknown; errors: string[] };
     expect(wikiChatContextErrors(v.value).sort()).toEqual([...v.errors].sort());
+  });
+
+  it.each(cases('planFaces'))('plan card face: %s', (_name, vector) => {
+    const v = vector as { change: WikiChatPlanChangeView; heading: string; rows: unknown[] };
+    expect(wikiChatPlanFace(v.change)).toEqual({ heading: v.heading, rows: v.rows });
   });
 
   it.each(cases('changes'))('Docs row: %s', (_name, vector) => {
