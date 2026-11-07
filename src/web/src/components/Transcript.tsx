@@ -35,7 +35,7 @@ import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { formatThinkingDuration, formatThinkingSize } from '../lib/thinkingDraft';
 import { checkDuration } from '../lib/checkDuration';
 import { quotaWindowKind } from '../lib/quotaWindow';
-import { Fragment, createContext, isValidElement, memo, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { Fragment, createContext, isValidElement, memo, useContext, useEffect, useId, useMemo, useReducer, useRef, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import {
   AgentProvider,
@@ -422,25 +422,30 @@ function useFullPayload(seq: number, truncated: boolean | undefined, want: boole
 }
 
 // ── session-wide image preview ──────────────────────────────────────────────
-// Every image thumbnail in the transcript (user-sent, durable attachment, tool
-// result) registers here so one full-screen lightbox can page across all of them
-// with the left/right arrows — clicking any thumbnail opens the group at that
-// image. Order is by event `seq`, not mount order: durable attachments resolve
-// their blobs asynchronously and scroll-up paging prepends older turns, so
-// registration order ≠ visual order; sorting by seq keeps the pager in transcript
-// order regardless. A thumbnail registers only once its src is ready (an
+// Every image the transcript draws (user-sent, durable attachment, tool result, a
+// reply's own Markdown picture) registers here so one full-screen lightbox can page
+// across all of them with the left/right arrows — clicking any thumbnail opens the
+// group at that image. Order is where each is drawn on the page, read at click
+// time, not mount order: durable attachments resolve their blobs asynchronously
+// and scroll-up paging prepends older turns, so registration order ≠ visual order.
+// Reading the page also spares a picture knowing which event it belongs to, which
+// a Markdown picture does not. A thumbnail registers only once its src is ready (an
 // attachment registers after its blob resolves), so the pager never shows a blank
-// slide. When this context is absent (the composer's unsent previews, the static
-// HTML export) ChatImage falls back to its own standalone single-image preview.
+// slide. When this context is absent (the composer's unsent previews, a queued
+// turn, the static HTML export) ChatImage falls back to its own standalone
+// single-image preview.
 type PreviewRegistry = {
-  register: (key: string, order: number, src: string, alt: string) => void;
+  register: (key: string, element: Element, src: string, alt: string) => void;
   unregister: (key: string) => void;
   open: (key: string) => void;
 };
 const ImagePreviewContext = createContext<PreviewRegistry | null>(null);
 
+// `Node` here is the transcript's own type, so the DOM's constant is read off the element.
+const drawnBefore = (a: Element, b: Element) => (a.compareDocumentPosition(b) & a.DOCUMENT_POSITION_FOLLOWING) !== 0;
+
 function ImagePreviewProvider({ children }: { children: ReactNode }) {
-  const entries = useRef(new Map<string, { order: number; item: ImagePreviewItem }>());
+  const entries = useRef(new Map<string, { element: Element; item: ImagePreviewItem }>());
   const [state, setState] = useState<{ open: boolean; current: number; items: ImagePreviewItem[] }>({
     open: false,
     current: 0,
@@ -448,16 +453,16 @@ function ImagePreviewProvider({ children }: { children: ReactNode }) {
   });
   const registry = useMemo<PreviewRegistry>(
     () => ({
-      register: (key, order, src, alt) => {
-        entries.current.set(key, { order, item: { src, alt } });
+      register: (key, element, src, alt) => {
+        entries.current.set(key, { element, item: { src, alt } });
       },
       unregister: (key) => {
         entries.current.delete(key);
       },
-      // Snapshot the images in seq order at click time and open the group at the
+      // Snapshot the images in page order at click time and open the group at the
       // clicked one; images arriving mid-preview needn't join the frozen set.
       open: (key) => {
-        const sorted = [...entries.current.entries()].sort((a, b) => a[1].order - b[1].order);
+        const sorted = [...entries.current.entries()].sort((a, b) => (drawnBefore(a[1].element, b[1].element) ? -1 : 1));
         const current = sorted.findIndex(([k]) => k === key);
         if (current < 0) return;
         setState({ open: true, current, items: sorted.map(([, v]) => v.item) });
@@ -2752,7 +2757,10 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   // of it looks like a block. Copying and the length cap follow the typed text for the same reason:
   // neither should be measured against a block nobody wrote.
   const typed = node.text;
-  const note = useControlPlaneNote(node.note ? { kind: describeNote(node.note), text: node.note } : null);
+  // A note that names nothing — a wiki chat's first message sent with neither page nor selection, which
+  // carries only the chat's words to its agent — draws no line: nothing was attached by the person.
+  const noteKind = node.note ? describeNote(node.note) : '';
+  const note = useControlPlaneNote(node.note && noteKind ? { kind: noteKind, text: node.note } : null);
   const longText = typed.length > USER_BUBBLE_TRUNCATE;
   const shownText = longText && !expanded && !exp ? typed.slice(0, USER_BUBBLE_TRUNCATE) : typed;
   const copy = () => {
@@ -2843,14 +2851,14 @@ function TurnAttachments({ node }: { node: TextNode }) {
       {localImgs && (
         <div className="chat-images">
           {localImgs.map((im, i) => (
-            <ChatImage key={i} src={im.url} previewKey={`u${node.seq}-l${i}`} order={node.seq * 1e4 + i} />
+            <ChatImage key={i} src={im.url} />
           ))}
         </div>
       )}
       {imgRefs.length > 0 && (
         <div className="chat-images">
-          {imgRefs.map((r, i) => (
-            <AttachmentImage key={r.id} id={r.id} previewKey={`u${node.seq}-a${r.id}`} order={node.seq * 1e4 + i} />
+          {imgRefs.map((r) => (
+            <AttachmentImage key={r.id} id={r.id} />
           ))}
         </div>
       )}
@@ -2950,16 +2958,12 @@ export function relTime(iso: string): string {
 // object URL, revoking it on unmount. Stays blank until loaded (and on error).
 export function AttachmentImage({
   id,
-  previewKey,
-  order,
   // The composer draws the same stored image at chip size when one is handed back out of a
   // message, and the tray above it as a row's thumbnail, so each says which it is asking for rather
   // than restyling a transcript image.
   variant = 'transcript',
 }: {
   id: string;
-  previewKey?: string;
-  order?: number;
   variant?: 'transcript' | 'chip' | 'tray';
 }) {
   const className = variant === 'chip' ? 'composer-attach-thumb' : variant === 'tray' ? 'pending-tray-thumb' : 'chat-image';
@@ -2969,8 +2973,6 @@ export function AttachmentImage({
       className={className}
       alt="Image sent by user"
       loadingClassName={`${className} chat-image-loading`}
-      previewKey={previewKey}
-      order={order}
       // A chip and a tray's row are too small to say it, and hold what a person just sent.
       saysExpired={variant === 'transcript'}
     />
@@ -3041,16 +3043,12 @@ function ResolvedAttachmentImage({
   className,
   alt,
   loadingClassName,
-  previewKey,
-  order,
   saysExpired = true,
 }: {
   id: string;
   className: string;
   alt: string;
   loadingClassName: string;
-  previewKey?: string;
-  order?: number;
   saysExpired?: boolean;
 }) {
   const resolve = useContext(AttachmentResolverContext);
@@ -3085,7 +3083,7 @@ function ResolvedAttachmentImage({
   }
   if (saysExpired && expired?.id === id) return <AttachmentExpiredTile at={expired.at} name={alt} />;
   if (!url) return <span className={loadingClassName} />;
-  return <ChatImage src={url} className={className} alt={alt} previewKey={previewKey} order={order} />;
+  return <ChatImage src={url} className={className} alt={alt} />;
 }
 
 // A non-image file the user sent: a chip that downloads the blob on click (the download
@@ -3159,16 +3157,10 @@ export function ChatImage({
   src,
   className = 'chat-image',
   alt = 'Image sent by user',
-  previewKey,
-  order,
 }: {
   src: string;
   className?: string;
   alt?: string;
-  // When set (and inside the transcript's ImagePreviewProvider) this image joins the
-  // session-wide left/right preview group under this stable key, ordered by `order`.
-  previewKey?: string;
-  order?: number;
 }) {
   const exp = useContext(ExportCtx);
   const registry = useContext(ImagePreviewContext);
@@ -3176,12 +3168,8 @@ export function ChatImage({
   // plain <img> (the src is already the full-resolution data URL).
   if (exp) return <img className={className} src={src} alt={alt} />;
   // In the transcript: join the shared left/right pager (see ImagePreviewProvider).
-  if (registry && previewKey !== undefined && order !== undefined) {
-    return (
-      <GroupedChatImage registry={registry} previewKey={previewKey} order={order} src={src} className={className} alt={alt} />
-    );
-  }
-  // Standalone (the composer's unsent previews): its own single-image preview.
+  if (registry) return <GroupedChatImage registry={registry} src={src} className={className} alt={alt} />;
+  // Standalone (the composer's unsent previews, a queued turn): its own single-image preview.
   return (
     <Image
       className={className}
@@ -3196,30 +3184,28 @@ export function ChatImage({
   );
 }
 
-// A transcript thumbnail wired into the session-wide preview group: registers its src on
-// mount (re-registering if the src changes, e.g. an object URL is replaced), unregisters on
-// unmount, and opens the group at this image on click.
+// A transcript thumbnail wired into the session-wide preview group: registers its src and its
+// button, which says where it is drawn, on mount (re-registering if the src changes, e.g. an
+// object URL is replaced), unregisters on unmount, and opens the group at this image on click.
 function GroupedChatImage({
   registry,
-  previewKey,
-  order,
   src,
   className,
   alt,
 }: {
   registry: PreviewRegistry;
-  previewKey: string;
-  order: number;
   src: string;
   className: string;
   alt: string;
 }) {
+  const key = useId();
+  const button = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    registry.register(previewKey, order, src, alt);
-    return () => registry.unregister(previewKey);
-  }, [registry, previewKey, order, src, alt]);
+    registry.register(key, button.current!, src, alt);
+    return () => registry.unregister(key);
+  }, [registry, key, src, alt]);
   return (
-    <button type="button" className="chat-image-btn" onClick={() => registry.open(previewKey)}>
+    <button ref={button} type="button" className="chat-image-btn" onClick={() => registry.open(key)}>
       <img className={className} src={src} alt={alt} />
       <span className="chat-image-mask">
         <EyeOutlined /> Preview
@@ -4507,7 +4493,7 @@ function ToolResult({
       {images.length > 0 && (
         <div className="chat-images">
           {images.map((src, i) => (
-            <ChatImage key={i} src={src} previewKey={`r${seq}-${i}`} order={seq * 1e4 + i} />
+            <ChatImage key={i} src={src} />
           ))}
         </div>
       )}

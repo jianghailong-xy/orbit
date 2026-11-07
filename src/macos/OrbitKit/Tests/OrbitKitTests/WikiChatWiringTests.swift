@@ -210,7 +210,7 @@ final class WikiChatWiringTests: XCTestCase {
         let card = try slice(views, from: "struct WikiDraftCardView: View {", to: "struct WikiDraftEditForm: View {")
         assertOrder(card, ["let look = WikiChatLogic.cardLook(card)", "let face = WikiChatLogic.cardFace(card)",
                            "stateLine(look)", "if let note = look.note {", "if look.inReview {", "Button(note) { open(.review) }",
-                           "if card.tainted {", "if let heading = face.heading {", "if isOpen {", "fields(face)",
+                           "Text(note)", "if card.tainted {", "if let heading = face.heading {", "if isOpen {", "fields(face)",
                            "buttons(look)", "if let failed {", "if let result = WikiChatLogic.resultLook(card) {",
                            "resultLine(result, actions: look.rewriteActions)"], "the card's parts, board 42 ⑤")
         assertOrder(card, ["Text(look.title.uppercased())", "ForEach(Array(face.diff.enumerated()), id: \\.offset)",

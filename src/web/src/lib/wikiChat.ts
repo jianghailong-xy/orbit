@@ -440,6 +440,42 @@ function samePage(a: WikiChatPage | null, b: WikiChatPage | null): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+/**
+ * Which section of a document the page attaches (design §4.2): the one nearest the top of the reading, as the page
+ * announces it — except on a page opened at a section's anchor (`#sec-<key>`, where the directory's and the index's
+ * section rows land; C15), which attaches that section. The jump to an anchor puts its heading at the top of the
+ * window, but a last section cannot scroll that far, and the reading's top is still the section before it. So the
+ * first section the page announces after the anchor is only where the jump landed; once the reading moves off it, the
+ * reader has scrolled, and from then on the page follows the reading as before.
+ */
+export interface WikiChatReading {
+  /** The section nearest the top of the reading, as the page last announced it. */
+  read: { slug: string; key: string } | null;
+  /** The section the address's anchor names, while it holds; `landed` is the section the jump to it showed. */
+  anchor: { slug: string; key: string; landed: string | null } | null;
+}
+
+export type WikiChatReadingAction =
+  | { type: 'anchor'; slug: string | null; key: string | null }
+  | { type: 'read'; slug: string; key: string };
+
+export function wikiChatReading(state: WikiChatReading, action: WikiChatReadingAction): WikiChatReading {
+  if (action.type === 'anchor') {
+    return { ...state, anchor: action.slug && action.key ? { slug: action.slug, key: action.key, landed: null } : null };
+  }
+  const read = { slug: action.slug, key: action.key };
+  const { anchor } = state;
+  if (!anchor || anchor.slug !== action.slug) return { read, anchor };
+  if (anchor.landed === null) return { read, anchor: { ...anchor, landed: action.key } };
+  return { read, anchor: anchor.landed === action.key ? anchor : null };
+}
+
+/** The section a document's page attaches: the anchor's while it holds, else the reading's, else the document's first. */
+export function wikiChatPageSection(state: WikiChatReading, slug: string, keys: readonly string[]): string | null {
+  for (const at of [state.anchor, state.read]) if (at && at.slug === slug && keys.includes(at.key)) return at.key;
+  return keys[0] ?? null;
+}
+
 /** What the composer shows, which is exactly what the message sends. */
 export function wikiChatShown(state: WikiChatAttachments): { page: WikiChatPage | null; quote: WikiChatQuote | null } {
   return { page: state.pageCrossed ? null : state.page, quote: state.quote };
@@ -621,8 +657,8 @@ export interface WikiChatCardLook {
   /** A settled card is drawn flat (board 42 ③ ④'s quiet cards). */
   quiet: boolean;
   /**
-   * The line under the title a state carries: `A newer draft took over.`, the In Review note, or — an applied plan card
-   * the plan moved on from — why it can no longer be undone (`wikiChatPlanMovedNote`, C17).
+   * The line under the title a state carries: `A newer draft took over.`, the In Review note, an undone rewrite's, or — an
+   * applied plan card the plan moved on from — why it can no longer be undone (`wikiChatPlanMovedNote`, C17).
    */
   note: string | null;
   /** Applied with a challenge still waiting in Review (`wikiChatAppliedInReview`): its note opens that item. */
@@ -631,6 +667,21 @@ export interface WikiChatCardLook {
   actions: WikiChatAction[];
   /** The buttons of the line under an applied card: Settings, Try again, See changes. */
   rewriteActions: WikiChatAction[];
+}
+
+/**
+ * The note on an undone Rewrite from main card (design §8.4, owner 11-07): the Undo puts back the version before the
+ * card's, written at an older commit, and the next maintenance run writes the section from main again when main has
+ * changed a file it draws on — a reason, so not a rewrite for nothing, and said on the card rather than left silent.
+ */
+export const WIKI_CHAT_UNDONE_REWRITE_NOTE = 'If main has changed the files this section draws on, the next maintenance run writes it from main again.';
+
+/** The line under a card's title a state carries (design §7.3, §8.4). */
+function cardNote(view: Pick<WikiChatDraftView, 'kind' | 'state' | 'undoable'>, inReview: boolean): string | null {
+  if (inReview) return WIKI_CHAT_COPY.card.appliedInReviewNote;
+  if (view.state === 'replaced') return WIKI_CHAT_COPY.card.replacedNote;
+  if (view.state === 'undone' && view.kind === 'rewrite') return WIKI_CHAT_UNDONE_REWRITE_NOTE;
+  return wikiChatPlanMovedNote(view);
 }
 
 const STATE_TONE: Record<WikiChatDraftView['state'], WikiChatTone> = {
@@ -650,11 +701,7 @@ export function wikiChatCardLook(view: Pick<WikiChatDraftView, 'kind' | 'state' 
     title: wikiChatCardTitle(view.state, view.label, inReview),
     tone: inReview ? 'amber' : STATE_TONE[view.state],
     quiet: view.state !== 'draft' && view.state !== 'changed',
-    note: inReview
-      ? WIKI_CHAT_COPY.card.appliedInReviewNote
-      : view.state === 'replaced'
-        ? WIKI_CHAT_COPY.card.replacedNote
-        : wikiChatPlanMovedNote(view),
+    note: cardNote(view, inReview),
     inReview,
     actions: all.filter((action) => !REWRITE_ACTIONS.includes(action)),
     rewriteActions: all.filter((action) => REWRITE_ACTIONS.includes(action)),

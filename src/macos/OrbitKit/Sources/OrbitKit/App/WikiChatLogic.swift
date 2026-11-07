@@ -688,8 +688,8 @@ public enum WikiChatLogic {
         public let tone: Tone
         /// A settled card is drawn flat (board 42 ③ ④'s quiet cards).
         public let quiet: Bool
-        /// The line under the title a state carries: `A newer draft took over.`, the In Review note, or an applied plan
-        /// card's that can no longer be undone (`planMovedNote`).
+        /// The line under the title a state carries: `A newer draft took over.`, the In Review note, an undone
+        /// rewrite's (`cardUndoneRewriteNote`), or an applied plan card's that can no longer be undone (`planMovedNote`).
         public let note: String?
         /// Applied with a challenge still waiting in Review: its note opens that item.
         public let inReview: Bool
@@ -709,11 +709,20 @@ public enum WikiChatLogic {
             title: cardTitle(card.state, label: card.label, inReview: inReview),
             tone: inReview ? .amber : tone(card.state),
             quiet: card.state != .draft && card.state != .changed,
-            note: inReview ? WikiChatCopy.cardAppliedInReviewNote
-                : card.state == .replaced ? WikiChatCopy.cardReplacedNote : planMovedNote(card.card),
+            note: cardNote(card, inReview: inReview),
             inReview: inReview,
             actions: all.filter { !rewriteLineActions.contains($0) },
             rewriteActions: all.filter { rewriteLineActions.contains($0) })
+    }
+
+    /// The line under a card's title a state carries (design §7.3, §8.4; the web's `cardNote`): an undone Rewrite from
+    /// main says the next maintenance run writes the section from main again when main has changed its files, and an
+    /// applied plan card the plan moved on from says why it can no longer be undone (`planMovedNote`, C17).
+    static func cardNote(_ card: WikiChatDraftView, inReview: Bool) -> String? {
+        if inReview { return WikiChatCopy.cardAppliedInReviewNote }
+        if card.state == .replaced { return WikiChatCopy.cardReplacedNote }
+        if card.state == .undone && card.kind == .rewrite { return WikiChatCopy.cardUndoneRewriteNote }
+        return planMovedNote(card.card)
     }
 
     /// The tone of the line under an applied card (`wikiChatResultLook`).

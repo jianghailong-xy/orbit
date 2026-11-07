@@ -442,6 +442,26 @@ describe('the panel (design §4.1, board 42 ①)', () => {
     expect(document.querySelector('.wk-chat-host.is-open .wk-drawer')).toBeTruthy();
   });
 
+  it('shows a message’s attachment line whole: a line of its own under the bubble, wrapped, the copy and time under it (C15)', () => {
+    // jsdom lays nothing out, so the rule is read as text; the C15 screenshots measure it in a browser at 400 wide.
+    const css = readFileSync(resolve(__dirname, '../index.css'), 'utf8');
+    const rule = (selector: string): string => {
+      const at = css.indexOf(`${selector} {`);
+      expect(at, selector).toBeGreaterThanOrEqual(0);
+      return css.slice(at, css.indexOf('}', at));
+    };
+    // The session page keeps its one line, run out into the free gutter left of the bubble.
+    expect(rule('.chat-user-meta')).toContain('white-space: nowrap');
+    // The panel's body is a scroll box, which cuts off what runs past its left edge: there the row wraps…
+    const row = rule('.wk-chat-body .chat-user-meta');
+    for (const part of ['flex-wrap: wrap', 'height: auto', 'min-height: 18px']) expect(row).toContain(part);
+    // …the attachment line first, on a line of its own, its words wrapping…
+    const line = rule('.wk-chat-body .chat-user-meta > .chat-injected-head');
+    for (const part of ['order: -1', 'flex: 1 1 100%', 'white-space: normal']) expect(line).toContain(part);
+    // …and the dot that led from the time into it goes with it.
+    expect(rule('.wk-chat-body .chat-user-meta > .chat-meta-sep:has(+ .chat-injected-head)')).toContain('display: none');
+  });
+
   it('lists the space’s chats under its title and switches to one', async () => {
     chats = {
       ...chats,
@@ -587,6 +607,41 @@ describe('the attachments (design §4.2, board 42 ①)', () => {
     expect(chips()).toEqual(['3.1 §4']);
     expect(sent.body.wikiContext).toEqual({ selection: { docSlug: 'session-runtime', sectionKey: 's7', sentenceIds: ['s7-0-1'] } });
     expect(document.querySelectorAll('.wk-snap')).toHaveLength(0);
+  });
+
+  it('opened at a section’s anchor attach that section, though the last one cannot scroll to the top; scrolling on follows the reading (C15)', async () => {
+    const reading = (key: string) =>
+      act(async () => window.dispatchEvent(new CustomEvent(WIKI_DOC_SECTION_EVENT, { detail: { slug: 'session-runtime', key } })));
+    await open('/wiki/orbit/d/session-runtime?chat=S1chat#sec-s9');
+    expect(chips()).toEqual(['3.1 §4']);
+    // The jump to the last section lands with §3 nearest the top of the reading, and says so again as it settles.
+    await reading('s7');
+    await reading('s7');
+    expect(chips()).toEqual(['3.1 §4']);
+    await type('Is this still true?');
+    await press(byLabel('Send'));
+    const sent = writes.find((write) => write.path === '/api/sessions/S1chat/turns/current-work-routing')!;
+    expect(sent.body.wikiContext).toEqual({ page: { kind: 'doc', docSlug: 'session-runtime', sectionKey: 's9' } });
+    // Then the reader scrolls: the page follows the reading as it did before.
+    await reading('s3');
+    expect(chips()).toEqual(['3.1 §2']);
+    await reading('s7');
+    expect(chips()).toEqual(['3.1 §3']);
+    expect(where()).toBe('/wiki/orbit/d/session-runtime?chat=S1chat');
+  });
+
+  it('take a section row’s anchor the same way: the directory opens the last section, and that is what goes (C15)', async () => {
+    const reading = (key: string) =>
+      act(async () => window.dispatchEvent(new CustomEvent(WIKI_DOC_SECTION_EVENT, { detail: { slug: 'session-runtime', key } })));
+    await open('/wiki/orbit/d/session-runtime?chat=S1chat');
+    await reading('s1');
+    expect(chips()).toEqual(['3.1 §1']);
+    await press(document.querySelector('a[href="/wiki/orbit/d/session-runtime#sec-s9"]'));
+    expect(chips()).toEqual(['3.1 §4']);
+    await reading('s7');
+    expect(chips()).toEqual(['3.1 §4']);
+    await reading('s3');
+    expect(chips()).toEqual(['3.1 §2']);
   });
 
   it('on the plan page attach its document, and the section it shows at one (C12): the page brings the plan to the agent', async () => {
