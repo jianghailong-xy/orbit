@@ -232,6 +232,10 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     val project = sidebar.firstOrNull { it.text("id")?.let(SessionProjectGrouping::key) == SessionProjectGrouping.key(projectId) }
     val currentData by rememberUpdatedState(data)
     val currentProject by rememberUpdatedState(project)
+    // What the sidebar's row said — Open, and started — when the start and the ending were last read by it: a poll that ran before
+    // the row arrived read them by no row. Null until the first of those reads.
+    val gate = project?.let { it.text("status") to ProjectDoc.started(it) }
+    var gateRead by remember(handle, projectId) { mutableStateOf<List<Pair<String?, Boolean?>?>?>(null) }
     val scope = rememberCoroutineScope()
     var now by remember { mutableStateOf(Instant.now()) }
     var refreshing by remember { mutableStateOf(false) }
@@ -307,6 +311,7 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     /** The start row's read, while the sidebar says nobody has started the project. A read that fails keeps the last answer. */
     suspend fun loadStart() {
         val row = currentProject
+        gateRead = listOf(row?.let { it.text("status") to ProjectDoc.started(it) })
         if (row?.text("status") != "OPEN" || ProjectDoc.started(row) != false) { state.openItems = null; return }
         val items = try { projects.openItems(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
         if (items != null) state.openItems = items
@@ -341,6 +346,12 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     // nothing. The members are read whole once; after that the Open ones are the app's Open list's and only Completed is read again.
     PagePoll(app, handle, PagePolls.PROJECT_EVENTS, projectId) {
         coroutineScope { launch { pollMembers() }; launch { loadStart() }; launch { loadDone() } }
+    }
+    // The row came after the page's read, or moved since: the start and the ending are read again by what it says now, once, rather
+    // than a minute later by the next poll.
+    LaunchedEffect(gate) {
+        val read = gateRead ?: return@LaunchedEffect
+        if (read.single() != gate) coroutineScope { launch { loadStart() }; launch { loadDone() } }
     }
     // The landing card and the merge into main. A landing publishes no event (§2.9 LS6): while the line says a job is in flight they
     // are read every 4 s, as a running landing's page reads it (§2.7a); with none, as the rest of the page.
