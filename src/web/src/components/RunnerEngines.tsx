@@ -441,7 +441,7 @@ function QuotaCell({ kind, quota, next, signIn = true }: { kind: RowKind; quota:
               {row.groupLabel && <div className="re-quota-head">{row.groupLabel}</div>}
               <div className="re-quota-head">
                 <b>{row.label}</b>
-                <span>{row.percent}%{row.remaining ? ' remaining' : ''}</span>
+                <span>{row.headline ?? `${row.percent}%${row.remaining ? ' remaining' : ''}`}</span>
               </div>
               <div className={`runner-util ${planUsageRowSpent(row) ? 'spent' : row.nearLimit ? 'full' : ''}`}>
                 <span className="runner-util-fill" style={{ width: `${planUsageRowSpent(row) ? 100 : row.percent}%` }} />

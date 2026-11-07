@@ -367,14 +367,14 @@ export const WIKI_DECIDED_EDITED = 'Accepted with your edits';
 export const WIKI_DECIDED_REJECTED = 'Rejected';
 export const WIKI_DECIDED_RETIRED = 'Retired';
 export const WIKI_DECIDED_KEPT = 'Kept';
-export const WIKI_DECIDED_RECONFIRMED = 'Re-confirmed';
 export const WIKI_DECIDED_AMENDED = 'Amended';
 export function wikiDecidedToast(op: string, action: WikiDecideAction): string {
   switch (action) {
     case 'edit':
       return WIKI_DECIDED_EDITED;
     case 'reconfirm':
-      return WIKI_DECIDED_RECONFIRMED;
+      // A challenge's Keep: the toast says the button's word, so a press meant as Retire reads as what it did.
+      return WIKI_DECIDED_KEPT;
     case 'amend':
       return WIKI_DECIDED_AMENDED;
     case 'retire':
@@ -425,6 +425,11 @@ export const wikiComparedWith = (count: number): string => `compared with ${coun
 export const WIKI_SIMILAR_ENTRIES = 'Similar entries';
 export const WIKI_AFTER_RETIRE =
   'Agents stop getting this entry. It stays in History, struck through, and points to the entry that replaced it.';
+/** Retire…'s dialog, on an entry's page and on a challenge's card: what retiring does, and that it is final
+ *  (contract `reviewModes.effect.rule`: no revert or Reject brings a retired lineage back). */
+export const WIKI_RETIRE_NOTE =
+  'Agents stop getting this entry. It stays in History, struck through, and the reason goes on the record. This cannot be undone.';
+export const WIKI_RETIRE_REASON_PLACEHOLDER = 'Why it no longer holds';
 export const WIKI_WEB_DERIVED = 'Web-derived';
 /**
  * What the amber warning says. No page count: how many pages a session read is not on the wire — the

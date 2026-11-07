@@ -87,15 +87,17 @@ export function PlanUsageIndicator({
         </div>
       )}
       {rows.map((row) => {
-        const { key, label, groupLabel, window, percent, nearLimit, remaining } = row;
+        const { key, label, groupLabel, window, percent, nearLimit, remaining, headline } = row;
         const spent = planUsageRowSpent(row);
+        const reading = headline ?? `${percent}%${remaining ? ' remaining' : ''}`;
         return (
           <div className="cu-row" key={key}>
             {groupLabel && <div className="cu-label">{groupLabel}</div>}
             <div className="cu-head">
               <span className="cu-label">{label}</span>
-              {/* An Antigravity bucket counts what is left, as agy does: said so, or 100% reads spent. */}
-              <span className="cu-pct">{percent}%{remaining ? ' remaining' : ''}</span>
+              {/* An Antigravity bucket counts what is left, as agy does: said so, or 100% reads spent.
+                  Cursor's included allowance prefers "$12.34 left" when Cursor sent cents. */}
+              <span className="cu-pct">{reading}</span>
             </div>
             <div className={`runner-util ${spent ? 'spent' : nearLimit ? 'full' : ''}`}>
               <span className="runner-util-fill" style={{ width: `${spent ? 100 : percent}%` }} />
@@ -133,7 +135,7 @@ export function PlanUsageIndicator({
             ref={trigger}
             type="button"
             className={`composer-pill composer-usage ${planUsageRowSpent(primary) ? 'spent' : primary.nearLimit ? 'full' : ''}`}
-            aria-label={`Plan usage ${primary.percent}%${primary.remaining ? ' left' : ''}${credit.busy ? ', reset in progress' : ''}`}
+            aria-label={`Plan usage ${primary.headline ?? `${primary.percent}%${primary.remaining ? ' left' : ''}`}${credit.busy ? ', reset in progress' : ''}`}
           >
             <span className="composer-usage-bar">
               <span
@@ -141,7 +143,9 @@ export function PlanUsageIndicator({
                 style={{ width: `${planUsageRowSpent(primary) ? 100 : primary.percent}%` }}
               />
             </span>
-            <span className="composer-usage-pct">{primary.percent}%{primary.remaining ? ' left' : ''}</span>
+            <span className="composer-usage-pct">
+              {primary.headline ?? `${primary.percent}%${primary.remaining ? ' left' : ''}`}
+            </span>
             {credit.busy && <span className="composer-usage-resetting" aria-hidden="true" />}
           </button>
         }

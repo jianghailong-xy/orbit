@@ -348,11 +348,25 @@ public enum CursorRuntime {
                                     windowDurationMins: mins)
         }
         var reading: PlanUsageWindow?
-        if let used = included.percentUsed, used.isFinite, used > 0 {
+        if let allowance = included.limitCents, allowance.isFinite, allowance > 0,
+           let remaining = included.remainingCents, remaining.isFinite {
+            let used = max(0, min(100, ((allowance - remaining) / allowance) * 100))
+            reading = PlanUsageWindow(utilization: used, resetsAt: resets == nil ? nil : included.resetsAt,
+                                      windowDurationMins: mins)
+        } else if let used = included.percentUsed, used.isFinite, used > 0 {
             reading = PlanUsageWindow(utilization: used, resetsAt: resets == nil ? nil : included.resetsAt,
                                       windowDurationMins: mins)
         }
         return (limit, reading)
+    }
+
+    /// Cursor's included-allowance cents as "$12.34 left" (web `cursorCentsLeftLabel`).
+    public static func centsLeftLabel(_ cents: Double) -> String {
+        let dollars = max(0, cents) / 100
+        if dollars.rounded() == dollars {
+            return "$\(Int(dollars)) left"
+        }
+        return String(format: "$%.2f left", dollars)
     }
 
     /// What an account's line says where Cursor reports no share of its usage (board iOS 2 ③): no number

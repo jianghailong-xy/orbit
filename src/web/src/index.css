@@ -12822,6 +12822,16 @@ button.chat-jump-start:hover {
 .card-action--accent:hover:not(:disabled) {
   background: var(--brand-border);
 }
+/* The answer that cannot be undone (a challenge's Retire…), in the danger tone the product's other irreversible
+   buttons wear (`orbit-button-danger`), and never filled: no answer on a challenge card is the card's own. */
+.card-action--danger {
+  background: var(--bg-raised);
+  color: var(--orbit-control-error);
+  border-color: var(--orbit-control-error);
+}
+.card-action--danger:hover:not(:disabled) {
+  background: var(--orbit-control-error-bg);
+}
 .approval-rule {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
@@ -24937,6 +24947,9 @@ button.project-open-item-action:disabled {
 .wk-tl-acts button { padding: 0; border: 0; background: transparent; font: inherit; color: var(--brand); cursor: pointer; }
 .wk-tl-acts button.danger { color: var(--error); }
 .wk-challenge-line .dim { color: var(--text-3); }
+/* A challenge's After row: one line per answer, its word first; Retire's word in the tone of its button. */
+.wk-challenge-after > div + div { margin-top: 4px; }
+.wk-challenge-after .wk-danger { color: var(--orbit-control-error); }
 /* A phone has no pointer to hover with: a run's row is the way in, and Reject is on the entry. */
 @media (max-width: 600px) {
   .wk-tl-acts { display: none; }
