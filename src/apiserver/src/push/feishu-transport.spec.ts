@@ -77,7 +77,10 @@ test('an approval reaches Feishu with no device: one card for the stretch, its a
   (push as unknown as { claimApprovalAlert: () => Promise<boolean> }).claimApprovalAlert = async () => ++claims === 1;
 
   await push.notifyApprovalRequest(sessionId, first, 'Bash');
+
+  await push.feishuIdle();
   await push.notifyApprovalRequest(sessionId, second, 'Write');
+  await push.feishuIdle();
 
   assert.equal(posted.length, 1, 'one card for the stretch');
   assert.equal(posted[0].spec.collapseKey, `approval-${first}`);
@@ -109,6 +112,7 @@ test('a settlement reaches Feishu: Finished / Failed, one card per settlement, a
     const { transport, posted } = fakeFeishu(prisma);
     const push = new PushService(prisma as never, NO_DEVICES, transport);
     await push.notifySessionSettled(sessionId);
+    await push.feishuIdle();
     assert.equal(posted.length, 1, kind);
     assert.equal(posted[0].spec.kind, kind);
     assert.equal(posted[0].spec.collapseKey, `settled-${sessionId}-7`);
@@ -124,6 +128,7 @@ test('a settlement reaches Feishu: Finished / Failed, one card per settlement, a
       error: null, recapText: null, owner: { preferences: prefs },
     });
     await push.notifySessionSettled(sessionId);
+    await push.feishuIdle();
     assert.equal(posted.length, 1, 'notifySessionFinished off: no card either');
   }
 });
@@ -174,7 +179,9 @@ test('an owner item reaches Feishu: one card per item, announced again into the 
   const { transport, posted } = fakeFeishu(prisma);
   const push = new PushService(prisma as never, NO_DEVICES, transport);
   await push.notifyOwnerItem(itemId);
+  await push.feishuIdle();
   await push.notifyOwnerItem(itemId);
+  await push.feishuIdle();
   assert.equal(posted.length, 2);
   assert.deepEqual(posted.map((p) => p.spec.collapseKey), [`owner-item-${itemId}`, `owner-item-${itemId}`], 'one card: the second updates it');
   assert.equal(posted[0].spec.openItemId, itemId);
@@ -200,15 +207,25 @@ test('every other kind reaches Feishu as its kind in words and its title', async
   const { transport, posted } = fakeFeishu(prisma);
   const push = new PushService(prisma as never, NO_DEVICES, transport);
   await push.notifyEngineSignedOut(randomUUID(), 'claude');
+  await push.feishuIdle();
   await push.notifyClaudeRegionBlocked(randomUUID(), 'HK');
+  await push.feishuIdle();
   await push.notifyConfirmationProblems(randomUUID());
+  await push.feishuIdle();
   await push.notifyWatchMatched({ ownerId: OWNER, watchId: 'w1', generation: 2, reason: 'TASK_DONE' });
+  await push.feishuIdle();
   await push.notifyLoopMissed({ ownerId: OWNER, sessionId, title: 'Nightly', missed: { loopId: 'l1', ticks: 2, alertedAt: new Date(0) }, reason: 'RUNNER_OFFLINE' });
+  await push.feishuIdle();
   await push.notifyLoopMissed({ ownerId: OWNER, sessionId, title: 'Nightly', missed: { wakeupId: 'k1' }, reason: 'SESSION_FAILED' });
+  await push.feishuIdle();
   await push.notifyWikiReviewModeTripped({ ownerId: OWNER, spaceId: 's1', title: 'Docs', rejected: 3, window: 5 });
+  await push.feishuIdle();
   await push.notifyWikiVerificationTripped({ ownerId: OWNER, spaceId: 's1', title: 'Docs', unsupported: 3, window: 5 });
+  await push.feishuIdle();
   await push.notifyWikiMemoryWritesQuiet({ ownerId: OWNER, spaceId: 's1', title: 'Docs', runs: 4 });
+  await push.feishuIdle();
   await push.notifyWikiMaintenanceFailing({ ownerId: OWNER, spaceId: 's1', title: 'Docs', failures: 3, lastError: 'boom' });
+  await push.feishuIdle();
 
   const seen = posted.map((p) => [p.card!.header.title.content, p.card!.header.subtitle.content]);
   assert.deepEqual(seen, [
@@ -237,6 +254,7 @@ test('no Feishu target and no device: nothing is drawn, as before', async () => 
   const { transport, posted } = fakeFeishu(prisma, null);
   const push = new PushService(prisma as never, NO_DEVICES, transport);
   await push.notifyEngineSignedOut(randomUUID(), 'codex');
+  await push.feishuIdle();
   assert.equal(posted.length, 0);
 });
 
@@ -338,5 +356,30 @@ test('a transport that throws costs the devices nothing', async () => {
   const push = new PushService(prisma as never, config, transport);
   (push as unknown as { deliver: (t: unknown, body: string) => Promise<number> }).deliver = async (_t, body) => { sent.push(body); return 1; };
   await push.notifySessionSettled(sessionId);
+  await push.feishuIdle();
   assert.equal(sent.length, 1, 'the banner went out');
+});
+
+test('an alert whose caller awaits it is not held by Feishu: the devices are, Feishu is not', async () => {
+  const sent: string[] = [];
+  const prisma = {
+    deviceToken: { findMany: async () => [{ id: 'd', token: 'device', platform: 'ios', bundleId: 'io.orbitd.app', environment: 'sandbox', loginSessionId: null }] },
+  };
+  const config = { get: (key: string) => ({ APNS_KEY_ID: 'k', APNS_TEAM_ID: 't', APNS_KEY: Buffer.from('x').toString('base64') })[key] } as unknown as ConfigService;
+  // An outbound that never answers, as Feishu does in an outage until every attempt has timed out.
+  let started = 0;
+  const never = new Promise<FeishuSendResult>(() => undefined);
+  const transport = {
+    target: async () => TARGET,
+    post: async () => { started += 1; await never; return true; },
+  } as unknown as FeishuTransport;
+  const push = new PushService(prisma as never, config, transport);
+  (push as unknown as { deliver: (t: unknown, body: string) => Promise<number> }).deliver = async (_t, body) => { sent.push(body); return 1; };
+  const outcome = await Promise.race([
+    push.notifyWatchMatched({ ownerId: OWNER, watchId: 'w', generation: 1, reason: 'TASK_DONE' }).then(() => 'resolved'),
+    new Promise((resolve) => setTimeout(() => resolve('held'), 1_000)),
+  ]);
+  assert.equal(outcome, 'resolved', 'the watch delivery drain is not held by Feishu');
+  assert.equal(sent.length, 1, 'the device was alerted');
+  assert.equal(started, 1, 'and the Feishu card was started');
 });

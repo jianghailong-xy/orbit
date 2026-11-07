@@ -33,6 +33,13 @@ export const FEISHU_OWNER_REPLIES = {
   disconnected:
     "You're no longer the owner of this Orbit bot. Orbit stops sending you alerts here; the app stays connected. To connect again, generate a new code in Orbit.",
   test: 'This is a test message from Orbit. Your alerts will arrive here.',
+  /** A direct message from someone other than the owner (§7.3). */
+  stranger: 'This bot only takes direct messages from its owner.',
+  /** A direct message while nobody is the owner yet (§7.3): how to become it. */
+  noOwner:
+    'This bot has no owner yet. To become its owner, generate a code in Orbit (Settings → Feishu → Connect your Feishu account) and send it here.',
+  /** The toast for a click on a card by someone other than the owner, e.g. on a forwarded card (§7.4). */
+  strangerCard: 'Only the owner of this bot can answer this card.',
 } as const;
 
 /** The characters a code is made of: no 0/O, 1/I, so it can be read off a screen and typed. */
@@ -216,12 +223,18 @@ export class FeishuOwnerService {
     }, loggedRetry(this.logger, 'feishuOwner.claimCode'));
   }
 
-  private async reply(app: FeishuOwnerApp, message: FeishuTextMessage, words: string): Promise<FeishuSendResult | null> {
+  private reply(app: FeishuOwnerApp, message: FeishuTextMessage, words: string): Promise<FeishuSendResult | null> {
+    return this.replyTo(app, message.messageId, words);
+  }
+
+  /** A text reply to one message, as the app; null when its secret no longer decrypts. Writes nothing. */
+  async replyTo(app: FeishuOwnerApp, messageId: string, words: string): Promise<FeishuSendResult | null> {
     const credentials = credentialsOf(app);
     if (!credentials) return null;
-    // Keyed on the message answered and what the answer says: the same event processed again answers once (instruction 15).
-    const result = await this.outbound.reply(credentials, message.messageId, text(words), {
-      uuid: feishuDedupeUuid('owner-reply', app.appId, message.messageId, words),
+    // Keyed on the app, the message answered and what the answer says: the same event processed again, or a retry whose
+    // request got through, is one reply to Feishu (project instruction 15).
+    const result = await this.outbound.reply(credentials, messageId, text(words), {
+      uuid: feishuDedupeUuid('owner-reply', app.appId, messageId, words),
     });
     if (!result.ok) this.logger.warn(`feishu app ${app.appId}: a reply was not delivered (code ${result.feishuCode ?? result.status})`);
     return result;

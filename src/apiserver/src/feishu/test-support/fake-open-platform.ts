@@ -78,6 +78,8 @@ export interface FakeRequest {
   body: unknown;
   /** When it arrived (Date.now()). */
   at: number;
+  /** A message send or reply: the message_id it was answered with — a repeat of a `uuid` gets the first one's. */
+  answeredWith?: string;
 }
 
 /** What a route answers: an HTTP status, a JSON body, and any headers beside the content type. */
@@ -140,9 +142,13 @@ export class FakeOpenPlatform {
         const uuid = (request.body as { uuid?: unknown } | null)?.uuid;
         const key = typeof uuid === 'string' && request.method === 'POST' ? `${app.platform}:${app.appId}:${uuid}` : null;
         const known = key ? this.byUuid.get(key) : undefined;
-        if (known) return { status: 200, body: { code: 0, msg: 'success', data: { message_id: known } } };
+        if (known) {
+          request.answeredWith = known;
+          return { status: 200, body: { code: 0, msg: 'success', data: { message_id: known } } };
+        }
         this.messages.push(request);
         const messageId = `om_fake_${randomBytes(8).toString('hex')}`;
+        if (request.method === 'POST') request.answeredWith = messageId;
         if (key) this.byUuid.set(key, messageId);
         return { status: 200, body: { code: 0, msg: 'success', data: { message_id: messageId } } };
       });

@@ -262,6 +262,7 @@ test('one stretch of approvals is one Feishu card, between two apiserver process
     const before = fake.messages.length;
     const requestsBefore = fake.requestsTo('/open-apis/im/v1/messages').length;
     await push.notifyApprovalRequest(s, id, 'Bash');
+    await push.feishuIdle();
     const tried = fake.requestsTo('/open-apis/im/v1/messages').slice(requestsBefore);
     assert.equal(tried.length, 2, 'sent, its answer lost, sent again');
     const uuids = tried.map((r) => (r.body as { uuid?: string }).uuid);

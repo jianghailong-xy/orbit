@@ -37,7 +37,10 @@ test('each event type goes to its branch, with who acted and the message it name
 test("the router acts as the account the app belongs to, with a FEISHU credential, and logs no message text", async () => {
   const prisma = { feishuApp: { findUnique: async ({ where }: { where: { appId: string } }) => (where.appId === 'cli_a' ? { ownerId: 'user-a' } : null) } };
   const handed: unknown[] = [];
-  const owner = { handleMessage: async (_app: unknown, m: unknown) => { handed.push(m); return false; } };
+  const owner = {
+    handleMessage: async (_app: unknown, m: unknown) => { handed.push(m); return false; },
+    replyTo: async () => null,
+  };
   const router = new FeishuRouter(prisma as never, owner as never);
   const logged: string[] = [];
   (router as unknown as { logger: { log: (m: string) => void } }).logger = { log: (m) => logged.push(m) };
@@ -47,8 +50,51 @@ test("the router acts as the account the app belongs to, with a FEISHU credentia
     actor: { userId: 'user-a', credential: { kind: 'FEISHU', appId: 'cli_a', openId: 'ou_sender', messageId: 'om_1' } },
   });
   assert.equal(await router.route({ appId: 'cli_gone', eventId: 'ev-2', eventType: 'im.message.receive_v1', payload: message('p2p') }), null);
-  assert.ok(logged.length === 2 && logged.every((line) => !line.includes('secret words')));
+  assert.ok(logged.length === 3 && logged.every((line) => !line.includes('secret words')));
   assert.deepEqual(handed, [{ chatType: 'p2p', openId: 'ou_sender', messageId: 'om_1', text: 'secret words' }], 'a text message is offered to the owner branch');
+});
+
+test('only the owner is served: a stranger\'s direct message gets one sentence, a stranger\'s card click a toast', async () => {
+  let ownerOpenId: string | null = null;
+  const prisma = { feishuApp: { findUnique: async () => ({ ownerId: 'user-a', appId: 'cli_a', ownerOpenId }) } };
+  const replies: Array<[string, string]> = [];
+  let code = false;
+  const owner = {
+    handleMessage: async () => code,
+    replyTo: async (_app: unknown, messageId: string, words: string) => { replies.push([messageId, words]); return null; },
+  };
+  const router = new FeishuRouter(prisma as never, owner as never);
+  (router as unknown as { logger: { log: () => void } }).logger = { log: () => undefined };
+  const dm = (payload: unknown = message('p2p')) => router.route({ appId: 'cli_a', eventId: 'ev', eventType: 'im.message.receive_v1', payload });
+  const click = (openId: string) => router.route({
+    appId: 'cli_a', eventId: 'ev', eventType: 'card.action.trigger',
+    payload: { event: { operator: { open_id: openId }, context: { open_message_id: 'om_card' } } },
+  });
+  const toast = { toast: { type: 'error', content: 'Only the owner of this bot can answer this card.' } };
+
+  // Nobody is the owner yet: how to become it; a click by anyone is refused.
+  await dm();
+  assert.deepEqual(replies.splice(0), [['om_1', FEISHU_OWNER_REPLIES.noOwner]]);
+  assert.deepEqual((await click('ou_sender'))?.answer, toast);
+
+  ownerOpenId = 'ou_owner';
+  await dm();
+  const image = message('p2p');
+  image.event.message.message_type = 'image';
+  await dm(image);
+  assert.deepEqual(replies.splice(0), [['om_1', 'This bot only takes direct messages from its owner.'], ['om_1', 'This bot only takes direct messages from its owner.']]);
+  assert.deepEqual((await click('ou_sender'))?.answer, toast);
+  assert.deepEqual((await click(''))?.answer, toast);
+  assert.equal((await click('ou_owner'))?.answer, undefined, "the owner's click passes the check");
+
+  // An owner code is the owner branch's to answer, from anyone; the owner's own message is not refused.
+  code = true;
+  await dm();
+  code = false;
+  const own = message('p2p');
+  own.event.sender.sender_id.open_id = 'ou_owner';
+  await dm(own);
+  assert.deepEqual(replies, []);
 });
 
 test('an owner code: 8 characters of an alphabet without 0/O/1/I, with a digit; typed loosely, read strictly', () => {

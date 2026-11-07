@@ -105,6 +105,8 @@ export class PushService {
   // idempotent so a rare cross-replica double-send is harmless. See docs/cross-platform-badge-sync.md.
   private readonly badgeState = new Map<string, BadgeState>();
   private readonly syncTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Feishu cards started in the background and not settled yet (`background`). */
+  private readonly feishuInFlight = new Set<Promise<unknown>>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -123,6 +125,22 @@ export class PushService {
 
   private get apnsEnabled(): boolean {
     return Boolean(this.keyId && this.teamId && this.p8);
+  }
+
+  /**
+   * Start a Feishu card without waiting for it. FeishuTransport never throws, and with a Feishu outage one card can take
+   * its three attempts and their waits (§6.3): a caller that awaits an alert — the watch delivery drain, a request — must
+   * not be held by that, nor see APNs/FCM wait on it. Only notifyAgentMessage, which reports whether Feishu took it, awaits.
+   */
+  private background(work: Promise<unknown> | null | false): void {
+    if (!work) return;
+    const tracked = work.catch(() => undefined).finally(() => this.feishuInFlight.delete(tracked));
+    this.feishuInFlight.add(tracked);
+  }
+
+  /** Resolves once every Feishu card started so far has been sent, updated or given up on (specs; a drain at shutdown). */
+  async feishuIdle(): Promise<void> {
+    while (this.feishuInFlight.size > 0) await Promise.allSettled([...this.feishuInFlight]);
   }
 
   /** APNs, FCM or Feishu can carry an alert (§6.1). Whether this account has a device or a bound app is `channels`'. */
@@ -223,7 +241,7 @@ export class PushService {
       if (!(await this.claimApprovalAlert(sessionId, approvalId))) {
         // Feishu shows the stretch on one card, each approval with its own buttons (§6.2): one that did not open the
         // stretch is added to the card the opening one sent, rather than sending a second.
-        if (feishu && this.feishu) await this.feishu.joinApprovalStretch(feishu, sessionId, approvalId);
+        if (feishu && this.feishu) this.background(this.feishu.joinApprovalStretch(feishu, sessionId, approvalId));
         return;
       }
       const badge = ids.length;
@@ -240,10 +258,9 @@ export class PushService {
         kind: 'approval',
       });
 
-      await Promise.all([
-        this.deliver(tokens, body, 'alert', '10'),
-        feishu && this.feishu ? this.feishu.post(feishu, this.feishu.approvalCard(feishu, sessionId, approvalId)) : null,
-      ]);
+      this.background(feishu && this.feishu ? this.feishu.post(feishu, this.feishu.approvalCard(feishu, sessionId, approvalId)) : null);
+
+      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`push notify failed: ${(err as Error).message}`);
     }
@@ -325,10 +342,9 @@ export class PushService {
         kind: 'engine-signed-out',
       });
 
-      await Promise.all([
-        this.deliver(tokens, body, 'alert', '10'),
-        this.feishuOther(feishu, { kind: 'engine-signed-out', ...alert }),
-      ]);
+      this.background(this.feishuOther(feishu, { kind: 'engine-signed-out', ...alert }));
+
+      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`engine sign-out notify failed: ${(err as Error).message}`);
     }
@@ -369,10 +385,9 @@ export class PushService {
         kind: 'claude-region-blocked',
       });
 
-      await Promise.all([
-        this.deliver(tokens, body, 'alert', '10'),
-        this.feishuOther(feishu, { kind: 'claude-region-blocked', ...alert }),
-      ]);
+      this.background(this.feishuOther(feishu, { kind: 'claude-region-blocked', ...alert }));
+
+      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`Claude region notify failed: ${(err as Error).message}`);
     }
@@ -442,10 +457,8 @@ export class PushService {
       // Collapse on the session: the two triggers can both fire for one settlement (a runner
       // finalize the reaper also force-finalizes), and APNs replaces a same-id banner instead
       // of stacking a second one. Cheaper and more robust than remembering what we've sent.
-      await Promise.all([
-        this.deliver(tokens, body, 'alert', '10', `settled-${sessionId}`),
-        feishu ? this.feishuSettled(feishu, sessionId, session.title, alert) : null,
-      ]);
+      this.background(feishu ? this.feishuSettled(feishu, sessionId, session.title, alert) : null);
+      await this.deliver(tokens, body, 'alert', '10', `settled-${sessionId}`);
     } catch (err) {
       this.log.warn(`settle notify failed: ${(err as Error).message}`);
     }
@@ -698,9 +711,7 @@ export class PushService {
       // Collapse on the item: an item can be pushed twice — handed to the owner and then escalated
       // again, or re-announced by a replica that raced — and APNs replaces the delivered banner
       // instead of stacking a second one about the same waiting thing.
-      await Promise.all([
-        this.deliver(tokens, body, 'alert', '10', `owner-item-${itemId}`),
-        feishu && this.feishu
+      this.background(feishu && this.feishu
           ? this.feishu.post(feishu, {
             // The same grain as the banner: an item announced again updates its card (§6.2).
             collapseKey: `owner-item-${itemId}`,
@@ -710,8 +721,8 @@ export class PushService {
             openUrl: orbitUrl({ sessionId: item.project?.coordinatorSessionId, projectId: item.projectId }),
             render: async () => ({ kind: 'owner-item', projectTitle: item.project?.title ?? null, alert }),
           })
-          : null,
-      ]);
+          : null);
+      await this.deliver(tokens, body, 'alert', '10', `owner-item-${itemId}`);
     } catch (err) {
       this.log.warn(`owner item notify failed: ${(err as Error).message}`);
     }
@@ -776,13 +787,11 @@ export class PushService {
         taskID: record.taskId,
         recordID: recordId,
       });
-      await Promise.all([
-        this.deliver(tokens, body, 'alert', '10', `confirmation-problems-${recordId}`),
-        this.feishuOther(feishu, {
+      this.background(this.feishuOther(feishu, {
           kind: 'confirmation-problems', ...alert, collapseId: `confirmation-problems-${recordId}`,
           sessionId: record.review.request.sessionId,
-        }),
-      ]);
+        }));
+      await this.deliver(tokens, body, 'alert', '10', `confirmation-problems-${recordId}`);
     } catch (err) {
       this.log.warn(`confirmation problems notify failed: ${(err as Error).message}`);
     }
@@ -817,12 +826,10 @@ export class PushService {
         generation: input.generation,
         kind: 'watch-matched',
       });
-      await Promise.all([
-        this.deliver(tokens, body, 'alert', '10', `watch-${input.watchId}-${input.generation}`),
-        this.feishuOther(feishu, {
+      this.background(this.feishuOther(feishu, {
           kind: 'watch-matched', title: 'Watch matched', body: input.reason, collapseId: `watch-${input.watchId}-${input.generation}`,
-        }),
-      ]);
+        }));
+      await this.deliver(tokens, body, 'alert', '10', `watch-${input.watchId}-${input.generation}`);
     } catch (err) {
       this.log.warn(`watch notify failed: ${(err as Error).message}`);
     }
@@ -871,12 +878,10 @@ export class PushService {
         sessionID: input.sessionId, // OrbitKit Notifications.keySession — routes the tap to this session
         kind: 'loopId' in missed ? 'loop-missed' : 'wakeup-dropped',
       });
-      await Promise.all([
-        this.deliver(tokens, body, 'alert', '10', collapseId),
-        this.feishuOther(feishu, {
+      this.background(this.feishuOther(feishu, {
           kind: 'loopId' in missed ? 'loop-missed' : 'wakeup-dropped', ...alert, collapseId, sessionId: input.sessionId,
-        }),
-      ]);
+        }));
+      await this.deliver(tokens, body, 'alert', '10', collapseId);
     } catch (err) {
       this.log.warn(`wakeup missed notify failed: ${(err as Error).message}`);
     }
@@ -915,7 +920,8 @@ export class PushService {
         wikiSpaceID: input.spaceId,
         kind: 'wiki-review-mode-manual',
       });
-      await Promise.all([this.deliver(tokens, body, 'alert', '10'), this.feishuOfPush(feishu, body)]);
+      this.background(this.feishuOfPush(feishu, body));
+      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki review-mode notify failed: ${(err as Error).message}`);
     }
@@ -954,7 +960,8 @@ export class PushService {
         wikiSpaceID: input.spaceId,
         kind: 'wiki-review-mode-tiered',
       });
-      await Promise.all([this.deliver(tokens, body, 'alert', '10'), this.feishuOfPush(feishu, body)]);
+      this.background(this.feishuOfPush(feishu, body));
+      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki verification notify failed: ${(err as Error).message}`);
     }
@@ -989,7 +996,8 @@ export class PushService {
         wikiSpaceID: input.spaceId,
         kind: 'wiki-maintenance-failing',
       });
-      await Promise.all([this.deliver(tokens, body, 'alert', '10'), this.feishuOfPush(feishu, body)]);
+      this.background(this.feishuOfPush(feishu, body));
+      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki memory writes notify failed: ${(err as Error).message}`);
     }
@@ -1020,7 +1028,8 @@ export class PushService {
         wikiSpaceID: input.spaceId,
         kind: 'wiki-maintenance-failing',
       });
-      await Promise.all([this.deliver(tokens, body, 'alert', '10'), this.feishuOfPush(feishu, body)]);
+      this.background(this.feishuOfPush(feishu, body));
+      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki maintenance notify failed: ${(err as Error).message}`);
     }

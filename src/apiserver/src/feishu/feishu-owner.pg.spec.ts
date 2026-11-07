@@ -15,8 +15,8 @@
  *       name read from the contact API — deletes the code row, and is answered `You're connected as the owner of this
  *       Orbit bot.`; the same event processed twice binds once; a name Feishu does not give is left empty;
  *   (6) the test message reaches the fake open platform, addressed to the owner's open_id;
- *   (7) `disconnect` from someone else changes nothing; from the owner it clears the identity, and DELETE
- *       /api/integrations/feishu/owner does the same; the app stays connected either way;
+ *   (7) `disconnect` from someone else changes nothing and is answered as any stranger's message is; from the owner it
+ *       clears the identity, and DELETE /api/integrations/feishu/owner does the same; the app stays connected either way;
  *   (8) no log, stored row or answer other than the generating route's carries a code.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/feishu/feishu-owner.pg.spec.ts
@@ -303,7 +303,7 @@ test('Feishu owner identity: only a one-time code from Settings, sent in a direc
   await t.test('(7) disconnect: from someone else nothing; from the owner, or DELETE owner, the identity is cleared', async () => {
     const stranger = await say(MALLORY, 'disconnect');
     assert.equal((await app()).ownerOpenId, ALICE);
-    assert.deepEqual(stranger.replies(), [], 'not the owner: this branch does not act on it');
+    assert.deepEqual(stranger.replies(), [FEISHU_OWNER_REPLIES.stranger], 'not the owner: refused (§7.3)');
 
     const own = await say(ALICE, ' Disconnect ');
     let row = await app();

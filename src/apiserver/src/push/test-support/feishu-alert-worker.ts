@@ -25,6 +25,8 @@ async function main(): Promise<void> {
     if (verb === 'exit') break;
     if (verb !== 'go') continue;
     await Promise.all(ids!.split(',').map((id) => push.notifyApprovalRequest(sessionId!, id, 'Bash')));
+    // The cards are started in the background (PushService.background); `done` is said once they are settled.
+    await push.feishuIdle();
     process.stdout.write('done\n');
   }
   await (db as unknown as { $disconnect(): Promise<void> }).$disconnect();
