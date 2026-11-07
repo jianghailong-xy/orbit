@@ -2799,6 +2799,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // no function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence. No
       // INSERT, UPDATE or DELETE: the table starts empty.
       '0495_feishu_message',
+      // 0496 is one new table for the Feishu bot integration (docs/feishu-bot-design.md §8.1): `feishu_chat_route`, the
+      // group chats an account connected, with its primary key, unique indexes on (app_id, chat_id) and ticket_hash,
+      // indexes on owner_id and workspace_id, five CHECKs, and foreign keys to `user`, `feishu_app` (app_id) and
+      // `workspace` (all ON DELETE CASCADE). It is not a preserved relation, no `task`, `session`, `project` or
+      // `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function, trigger
+      // or type is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE: the table starts empty.
+      '0496_feishu_chat_route',
       // 0498 replaces one CHECK of `feishu_message` (docs/feishu-bot-design.md §6.2, task F1-5): status gains CLOSED. It
       // is not a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six
       // preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it is

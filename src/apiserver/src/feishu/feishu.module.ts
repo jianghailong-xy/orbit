@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AdminRoleGuard } from '../users/admin-role.guard';
 import { FeishuAdminController } from './feishu-admin.controller';
 import { FeishuAppService } from './feishu-app.service';
+import { FeishuChatRouteService } from './feishu-chat-route.service';
 import { FeishuController } from './feishu.controller';
 import { FeishuInboxService } from './feishu-inbox.service';
 import { FeishuLinkService } from './feishu-link.service';
@@ -17,7 +18,7 @@ import { FeishuRouter } from './feishu-router';
 @Module({
   controllers: [FeishuController, FeishuAdminController],
   // AdminRoleGuard depends only on the global PrismaService, so it is provided here too (UsersModule does not export it).
-  providers: [FeishuAppService, AdminRoleGuard, FeishuRouter, FeishuInboxService, FeishuLinkService, FeishuOutbound, FeishuOwnerService],
+  providers: [FeishuAppService, AdminRoleGuard, FeishuRouter, FeishuInboxService, FeishuLinkService, FeishuOutbound, FeishuOwnerService, FeishuChatRouteService],
   exports: [FeishuAppService, FeishuOutbound],
 })
 export class FeishuModule {}

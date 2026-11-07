@@ -267,7 +267,10 @@ test('Feishu long connections: one per app on every apiserver, and each event pr
     assert.deepEqual(row.payload, message('ev-twice'));
     await sleep(TIMING.inboxPollMs * 10);
     assert.equal((await inbox(X.appId, 'ev-twice')).length, 1);
-    assert.equal(count(logs(), 'feishu event ev-twice of app'), 2, 'one route and one redelivery, across both processes');
+    // The app has no owner, so routing the message also logs its refusal (F1-2): once, since it is routed once.
+    const refused = `feishu event ev-twice of app ${X.appId}: a direct message from someone other than the owner, refused`;
+    assert.equal(count(logs(), refused), 1);
+    assert.equal(count(logs(), 'feishu event ev-twice of app') - 1, 2, 'one route and one redelivery, across both processes');
     assert.equal(count(logs(), `feishu event ev-twice of app ${X.appId} routed as DIRECT_MESSAGE for account ${a.id}`), 1);
     assert.equal(count(logs(), 'feishu event ev-twice of app ' + X.appId + ' was delivered again'), 1);
 

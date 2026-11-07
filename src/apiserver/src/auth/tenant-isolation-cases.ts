@@ -120,6 +120,8 @@ export interface Tenant {
   wikiChatId: string;
   wikiChatDraftId: string;
   wikiTopicSlug: string;
+  /** A Feishu group connected to the account's app (docs/feishu-bot-design.md §8.1). */
+  feishuChatRouteId: string;
   /** For /admin/*: a user an administrator acts on (with a profile photo), one of its tokens, a global provider. */
   adminSubjectId: string;
   adminSubjectTokenId: string;
@@ -144,6 +146,7 @@ export interface Tenant {
     trashedWikiSpaceId: string;
     tagId: string;
     shareLinkId: string;
+    feishuChatRouteId: string;
     listId: string;
     taskId: string;
   };
@@ -239,6 +242,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'DELETE /admin/users/:id/identities/google': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
   // The subject has no Feishu app connected: the administrator is answered that there was none to remove.
   'DELETE /admin/users/:id/feishu': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
+  // A Feishu group the account connected (§8.1): changed, and the spare one removed.
+  'PATCH /integrations/feishu/chats/:id': { request: (of) => ({ params: { id: of.feishuChatRouteId }, body: { maxConcurrentSessions: 3 } }) },
+  'DELETE /integrations/feishu/chats/:id': { request: (of) => ({ params: { id: of.spare.feishuChatRouteId } }) },
   'PATCH /admin/providers/:id': { request: (of) => ({ params: { id: of.adminProviderId }, body: { label: 'renamed by the census' } }) },
   // The wiki's support routes (contract `plan.jobs.rebuild.support`): the member's spaces read, and the administrator's
   // own space's build asked for — answered WIKI_RUNNER_EXECUTES under the census's default executor, and refused 403
@@ -930,6 +936,14 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   },
 
   // ── projects ─────────────────────────────────────────────────────────────────────────────────
+  // Connecting a Feishu group: the workspace is read before the ticket, so A's is answered as one that names nothing
+  // (404), and B's own reaches the ticket check (409, the census holds no live ticket).
+  'POST /integrations/feishu/chats/confirm body workspaceId': {
+    request: (of) => ({
+      params: {},
+      body: { ticket: 'census-ticket', workspaceId: of.workspaceId, permissionMode: 'default', allowedOpenIds: [], maxConcurrentSessions: 2, sessionsPerDay: 20 },
+    }),
+  },
   'POST /projects body workspaceId': { request: (of) => ({ params: {}, body: { title: 'census project', workspaceId: of.workspaceId } }) },
   'POST /projects body coordinatorAgentId': {
     request: (of) => ({ params: {}, body: { title: 'census project', coordinatorAgentId: of.workspaceId } }),
