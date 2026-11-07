@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -61,7 +62,7 @@ func checkEngineRg(h engineHealth, servicePath string) engineRg {
 	switch engineRgShell(h.spec.bin) {
 	case rgShellOwn:
 		if rg, ok := lookPathIn("rg", servicePath); ok {
-			return engineRg{checked: true, path: rg}
+			return engineRg{checked: true, path: rg, source: managedRgSource(rg)}
 		}
 		return engineRg{checked: true, path: "rg", source: h.spec.name + "'s own"}
 	case rgShellCodex:
@@ -73,11 +74,21 @@ func checkEngineRg(h engineHealth, servicePath string) engineRg {
 			return engineRg{checked: true, path: rg, source: "Codex's own"}
 		}
 		if login {
-			return engineRg{checked: true, path: loginShellRg(shell, servicePath), shell: shell + " -l (a login shell)"}
+			rg := loginShellRg(shell, servicePath)
+			return engineRg{checked: true, path: rg, source: managedRgSource(rg), shell: shell + " -l (a login shell)"}
 		}
 	}
 	rg, _ := lookPathIn("rg", servicePath)
-	return engineRg{checked: true, path: rg, shell: shell + " on the runner's PATH"}
+	return engineRg{checked: true, path: rg, source: managedRgSource(rg), shell: shell + " on the runner's PATH"}
+}
+
+// managedRgSource names Orbit's own rg (managed_rg.go) when that is the rg at path, which the runner's PATH reaches
+// only where nothing before it has one.
+func managedRgSource(path string) string {
+	if rg, err := managedRgPath(); err == nil && path == rg {
+		return "Orbit's own"
+	}
+	return ""
 }
 
 // loginShellRg is what `command -v rg` prints in shell as a login shell, on the account's own home and the
@@ -161,5 +172,10 @@ func printEngineRg(healths []engineHealth) {
 		fmt.Println("    sudo apt install ripgrep   (Debian, Ubuntu)")
 		fmt.Println("    sudo dnf install ripgrep   (Fedora)")
 		fmt.Println("    brew install ripgrep       (macOS)")
+		if _, err := managedRgPath(); errors.Is(err, errManagedRgMissing) {
+			fmt.Println("  Orbit's own ripgrep, last on every engine's PATH, is not installed here yet. A runner that may")
+			fmt.Println("  install engines by itself (`orbit register` without --no-auto-install-engines) downloads it")
+			fmt.Println("  when it starts, and tries again every 30 minutes if that fails; its log says why.")
+		}
 	}
 }

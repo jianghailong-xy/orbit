@@ -28,13 +28,21 @@ func userCredentialEnvKey(key string) bool {
 // depend on every caller having done so first. An environment built from nothing has no credential to
 // drop and says envRunnerChild itself; TestAgentEnvironmentsWithholdUserCredentials holds every place
 // that builds one to both.
+//
+// Its PATH, when it has one, ends in Orbit's own ripgrep directory (managed_rg.go), a PATH the agent's
+// configuration sets included: that is the PATH the engine's command shell starts from.
 func runnerChildEnv(env []string) []string {
 	kept := make([]string, 0, len(env)+1)
+	hasPath := false
 	for _, entry := range env {
 		key, _, _ := strings.Cut(entry, "=")
 		if !userCredentialEnvKey(key) && !strings.EqualFold(key, envRunnerChild) {
 			kept = append(kept, entry)
+			hasPath = hasPath || key == "PATH"
 		}
+	}
+	if hasPath {
+		kept = envWithValue(kept, "PATH", pathWithManagedRgLast(envValue(kept, "PATH")))
 	}
 	return append(kept, envRunnerChild+"=1")
 }
