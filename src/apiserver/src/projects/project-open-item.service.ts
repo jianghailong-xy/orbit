@@ -71,6 +71,7 @@ import {
   landingLineOf,
   openItemMessage,
   openItemOwed,
+  openItemVisible,
   openItemTurnId,
   openItemsNoLongerOwed,
   ownerAnswerMessage,
@@ -3121,7 +3122,13 @@ export class ProjectOpenItemService {
       },
     });
     const settled = await openItemsNoLongerOwed(this.prisma, open.map((row) => row.id));
-    const rows = open.filter((row) => !settled.has(row.id));
+    const hidden = open.some((row) => row.assignee === 'COORDINATOR')
+      ? new Set((await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          SELECT item."id" FROM "project_open_item" item
+           WHERE item."project_id" = ${projectId}::uuid AND item."state" = 'OPEN'
+             AND NOT ${openItemVisible('item')}`)).map((row) => row.id))
+      : new Set<string>();
+    const rows = open.filter((row) => !settled.has(row.id) && !hidden.has(row.id));
     const keys = rows.flatMap((row) => row.deliveries);
     // §4.7 H5: what the coordinator closed in the last day — handled, or superseded by the item its
     // failed rerun opened — so the card a conversation drew for it is seen to end rather than vanish.

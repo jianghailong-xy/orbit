@@ -3341,6 +3341,10 @@ export const EXCLUDED_SOURCES: readonly ExcludedSource[] = [
     why: 'A PostgreSQL-spec fixture helper. It seeds a goal and one acceptance criterion so a fixture has a real completion contract, and is not reachable from an application module or HTTP route.',
   },
   {
+    path: 'test-support/open-item-delivery.ts',
+    why: 'A PostgreSQL-spec fixture helper that stamps receipt on product-created ITEM turns for tests of post-delivery behavior. Imported only by disposable database specs, never by an application path.',
+  },
+  {
     path: 'test-support/dequeue-under-lease.ts',
     why: 'A PostgreSQL-spec fixture helper for the specs that drive the inbox without a supervisor in front of it. It writes the session\'s lease generation a takeover and an activation would have written, in a transaction that declares what the database asks of a lease write. It is not reachable from an application path.',
   },

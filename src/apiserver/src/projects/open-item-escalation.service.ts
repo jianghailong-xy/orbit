@@ -15,6 +15,7 @@ import {
   LANDING_UNOBSERVED_KIND,
   OPEN_ITEM_TURN_PREFIX,
   openItemOwed,
+  openItemDeliveredAt,
 } from './project-open-item';
 import { PROJECT_LIVE_SESSION_STATUS_SQL } from './live-session-status';
 
@@ -169,9 +170,8 @@ export interface ReconciledOpenItem {
  * that it is taking too long — that card reached an owner on 2026-10-08 about a fix that had landed
  * and been merged into main two hours earlier.
  *
- * The clock is for the coordinator that cannot ask: one that never answered the item (stuck in an
- * earlier turn, never handed it), or one that answered and is now down, ended, replaced or switched
- * off. For those it follows concrete progress on this item. An item is opened with `escalate_at`
+ * Before the ITEM delivery is taken, there is no deadline. Once delivered, the frozen window
+ * starts at delivered_at and follows concrete progress on this item. An item is opened with `escalate_at`
  * equal to `waiting_since + the project's frozen window` (§4.1, X-E2). The latest progress fact (the
  * answered delivery turn, a task linked as a fix, the linked task's work session, or an integration
  * handling job) moves that deadline by one window. A generic conversation turn is not progress on
@@ -186,6 +186,7 @@ export interface ReconciledOpenItem {
 export function escalatesAt(alias: string): Prisma.Sql {
   const item = Prisma.raw(`"${alias}"`);
   return Prisma.sql`CASE
+    WHEN ${openItemDeliveredAt(alias)} IS NULL THEN NULL
     -- A live concrete fix owns the clock. The item remains OPEN, but it is not handed to the owner
     -- while the task/session or the coordinator's integration retry is still in flight.
     WHEN EXISTS (
@@ -237,7 +238,7 @@ export function escalatesAt(alias: string): Prisma.Sql {
     )
     THEN NULL
     ELSE GREATEST(
-      ${item}."escalate_at",
+      ${openItemDeliveredAt(alias)} + (${item}."escalate_at" - ${item}."waiting_since"),
       COALESCE((
         SELECT max(progress."at") + (${item}."escalate_at" - ${item}."waiting_since")
           FROM (
