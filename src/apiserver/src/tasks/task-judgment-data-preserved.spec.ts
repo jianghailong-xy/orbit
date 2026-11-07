@@ -2732,7 +2732,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // DO block. It is not a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of
       // the six preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so
       // it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: the table starts empty.
-      '0483_wiki_chat_draft'],
+      '0483_wiki_chat_draft',
+      // 0484 makes the Open list's data version cheap: a new `open_list_epoch` table, four
+      // statement-level bump functions (`open_list_bump_owner`, `open_list_bump_via_project`,
+      // `open_list_bump_via_session`, `open_list_bump_session`), their triggers on 29 tables
+      // (including `task`, `session` and `conversation_turn`), three indexes on `session`, and a
+      // nullable `task_completion_evidence.review_turn_at`, backfilled once from the matching
+      // review turn and thereafter stamped by a trigger on `conversation_turn` inserts. The bump
+      // triggers write `open_list_epoch`, never the table they are on, and the one UPDATE writes
+      // `review_turn_at` alone: no preserved row or column is touched, none of the six preserved
+      // triggers/functions is named or replaced, and no preserved object is dropped, so it is not
+      // another writer of the DONE fence.
+      '0484_open_list_epoch'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
