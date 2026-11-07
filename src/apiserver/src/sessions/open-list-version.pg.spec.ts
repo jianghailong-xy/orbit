@@ -11,6 +11,7 @@ import {
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { readOpenListVersion } from './open-list-version';
+import { EVIDENCE_REVIEW_TURN_KEY_PREFIX } from './watch-turn-key';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
 
@@ -209,7 +210,28 @@ test('every source the Open list row shows moves its version', { skip }, async (
   });
   await changes(f, 'session given a task', () =>
     db.session.update({ where: { id: f.sessionId }, data: { taskId: task.id } }));
+  // An unanswered turn moves currentTurnStartedAt; its table carries the counter.
+  await changes(f, 'an unanswered turn arrives', () => db.conversationTurn.create({
+    data: {
+      sessionId: f.sessionId, seq: 1, clientTurnId: `turn-${randomUUID()}`, kind: 'message',
+      content: 'hello', status: 'IN_FLIGHT', deliveredAt: new Date(),
+    },
+  }));
   await changes(f, 'task renamed', () => db.task.update({ where: { id: task.id }, data: { title: 'olv task 2' } }));
+  // The counter is bumped by the table itself, so a write that never goes through Prisma's
+  // updatedAt still moves it.
+  await changes(f, 'task title by raw SQL, updated_at untouched', () =>
+    db.$executeRaw`UPDATE task SET title = 'olv task 3' WHERE id = ${task.id}::uuid`);
+  // One statement over more than one row: the trigger is statement-level and must bump once for
+  // the statement, not once per row, and must not stop at the first row's owner.
+  const secondTask = await db.task.create({
+    data: {
+      ownerId: f.ownerId, title: 'olv task second', creatorType: 'USER', creatorId: f.ownerId,
+      completionCriterion: 'OWNER_CONFIRMED',
+    },
+  });
+  await changes(f, 'two tasks renamed in one statement', () =>
+    db.task.updateMany({ where: { id: { in: [task.id, secondTask.id] } }, data: { title: 'bulk renamed' } }));
   const project = await db.project.create({ data: { ownerId: f.ownerId, title: 'olv project' } });
   await changes(f, 'session made a coordinator', () =>
     db.project.update({ where: { id: project.id }, data: { coordinatorSessionId: f.sessionId } }));
@@ -266,11 +288,112 @@ test('a threshold the clock passes moves the version with no write', { skip }, a
   assert.equal(after.listed, 1);
 });
 
+/**
+ * The evidence-review hold ends 30 minutes after its turn was delivered. The delivery moment is
+ * stamped onto the evidence row by migration 0484's trigger (the probe no longer joins the turn
+ * and the task to find it), so this case also pins the trigger's prefix to the TypeScript constant
+ * that SQL cannot import: a change to one without the other is red here.
+ */
+test('an evidence-review window closing moves the version with no write', { skip }, async (t) => {
+  const f = await fixture(t);
+  const now = Date.now();
+  const task = await f.db.task.create({
+    data: {
+      ownerId: f.ownerId, title: 'olv evidence task', creatorType: 'USER', creatorId: f.ownerId,
+      completionCriterion: 'EVIDENCE_JUDGMENT', creatorSessionId: f.sessionId,
+    },
+  });
+  const evidence = await f.db.taskCompletionEvidence.create({
+    data: {
+      taskId: task.id, ownerId: f.ownerId, actorType: 'USER', actorId: f.ownerId,
+      sourceSessionId: randomUUID(), criterionRevision: 'a'.repeat(64),
+      criterion: { completionCriterion: 'EVIDENCE_JUDGMENT' }, evidence: { artifact: 'olv' },
+      evidenceDigest: 'b'.repeat(64), revision: 1n,
+    },
+  });
+  const delivered = new Date(now - 1_800_000 + 60_000); // the window closes a minute from now
+  await f.db.conversationTurn.create({
+    data: {
+      sessionId: f.sessionId, seq: 1, kind: 'message', status: 'IN_FLIGHT',
+      clientTurnId: `${EVIDENCE_REVIEW_TURN_KEY_PREFIX}${evidence.id}`,
+      deliveredAt: delivered, createdAt: delivered,
+    },
+  });
+  const stamped = await f.db.taskCompletionEvidence.findUniqueOrThrow({ where: { id: evidence.id } });
+  assert.equal(stamped.reviewTurnAt?.getTime(), delivered.getTime(),
+    'the delivery turn did not stamp the evidence row (the trigger and the prefix have drifted)');
+  // Keep the runner online across the comparison, so only the review window moves.
+  await f.db.runner.update({ where: { id: f.runnerId }, data: { lastHeartbeatAt: new Date(now + 3_600_000) } });
+  assert.notEqual(
+    await readOpenListVersion(f.db as never, f.ownerId, now),
+    await readOpenListVersion(f.db as never, f.ownerId, now + 120_000),
+    'an evidence-review window closing by the clock alone did not move the version',
+  );
+});
+
+/**
+ * The version reads counters instead of rows (migration 0484), so a source whose table has no
+ * triggers is a source that silently stops invalidating. This is the list of tables the probe's
+ * counters cover; a new source added to the row must add its table here and in the migration.
+ */
+test('every counter source has its table triggers', { skip }, async (t) => {
+  const f = await fixture(t);
+  const rows = await f.db.$queryRaw<Array<{ tbl: string; def: string }>>`
+    SELECT tgrelid::regclass::text AS tbl, pg_get_triggerdef(oid) AS def
+      FROM pg_trigger WHERE NOT tgisinternal AND tgname LIKE '%open_list_epoch%'`;
+  const actual = new Set(rows.map(({ tbl, def }) => {
+    const table = tbl.replace(/^public\./, '');
+    const source = /open_list_bump_(?:owner|via_project|via_session)\('([^']+)'\)/.exec(def)?.[1];
+    return `${table}:${source ?? (table === 'session' ? 'session|landing' : '?')}`;
+  }));
+  const expected = new Set([
+    'approval:approval',
+    'conversation_turn:conversation_turn',
+    'project:project',
+    'project_acceptance_criterion_definition:criterion_definition',
+    'project_codebase:codebase',
+    'project_coordinator_wake:coordinator_wake',
+    'project_criteria_authorship:criteria_authorship',
+    'project_criteria_decision:criteria_decision',
+    'project_integration_job:integration_job',
+    'project_landing:landing',
+    'project_open_item:project_open_item',
+    'project_promotion:promotion',
+    'project_ratified_action_commit:ratified_commit',
+    'project_ratified_action_intent:ratified_intent',
+    'project_standard_set_confirmation:standard_set_confirmation',
+    'project_task_status_count:task_status_count',
+    'session:session|landing',
+    'session_merge_receipt:merge_receipt',
+    'session_request:session_request',
+    'session_tag:session_tag',
+    'session_tag_link:session_tag_link',
+    'task:task',
+    'task_completion_evidence:completion_evidence',
+    'task_evidence_decision:evidence_decision',
+    'task_owner_confirmation_claim:confirmation_claim',
+    'task_owner_confirmation_request:confirmation_request',
+    'task_owner_confirmation_review:confirmation_review',
+    'task_owner_confirmation_review_record:confirmation_review_record',
+    'task_owner_decision:owner_decision',
+    'workspace:workspace',
+  ]);
+  assert.deepEqual([...actual].sort(), [...expected].sort());
+});
+
 test("another account's writes leave this account's version alone", { skip }, async (t) => {
   const mine = await fixture(t);
   const theirs = await fixture(t);
+  const theirTask = await theirs.db.task.create({
+    data: {
+      ownerId: theirs.ownerId, title: 'theirs', creatorType: 'USER', creatorId: theirs.ownerId,
+      completionCriterion: 'OWNER_CONFIRMED',
+    },
+  });
   const before = await readOpenListVersion(mine.db as never, mine.ownerId);
   await theirs.db.session.update({ where: { id: theirs.sessionId }, data: { title: 'theirs' } });
+  assert.equal(await readOpenListVersion(mine.db as never, mine.ownerId), before);
+  await theirs.db.task.update({ where: { id: theirTask.id }, data: { title: 'theirs renamed' } });
   assert.equal(await readOpenListVersion(mine.db as never, mine.ownerId), before);
 });
 
