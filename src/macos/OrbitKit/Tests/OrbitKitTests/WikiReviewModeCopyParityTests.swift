@@ -176,21 +176,51 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                 let addGroup: String
             }
             let workspaces: Workspaces
-            struct Delete: Decodable {
+            /// Trash (docs/mocks/wiki-trash). Two of its words are the web's alone and are not read here: a count's
+            /// `settings`, the line under its card, where the native page draws a Trash row; and the page's `close`, its
+            /// dialog's, where the native page is pushed.
+            struct Trash: Decodable {
                 struct Named: Decodable { let name: String; let text: String }
                 struct ComesBack: Decodable { let repository: String; let text: String }
                 struct Body: Decodable { let entries: Int?; let documents: Int; let text: String }
-                let note: String
+                struct Count: Decodable { let wikis: Int; let empty: String; let row: String }
+                struct Page: Decodable {
+                    struct Row: Decodable { let deletedAt: String; let purgeAt: String; let entries: Int; let text: String }
+                    struct Purge: Decodable {
+                        struct Body: Decodable { let entries: Int; let text: String }
+                        let question: String
+                        let confirm: String
+                        let failedNative: String
+                        let bodies: [Body]
+                    }
+                    let title: String
+                    let lead: String
+                    let empty: String
+                    let restore: String
+                    let deletePermanently: String
+                    let deleteSwipe: String
+                    let rows: [Row]
+                    let restored: Named
+                    let restoreFailedNative: String
+                    let purge: Purge
+                }
+                let title: String
                 let open: String
                 let confirm: String
+                let note: String
+                let leaves: String
                 let kept: String
                 let failedNative: String
                 let question: Named
-                let deleted: Named
+                let moved: Named
                 let comesBack: ComesBack
                 let bodies: [Body]
+                let openTrash: String
+                let counts: [Count]
+                let page: Page
+                let pickerItem: String
             }
-            let delete: Delete
+            let trash: Trash
             let reviewModeHint: String
             let lead: String
             let defaultTag: String
@@ -325,22 +355,6 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         XCTAssertEqual(WikiModeCopy.workspacesEmpty, settings.workspaces.empty)
         XCTAssertEqual(WikiModeCopy.addWorkspace, settings.workspaces.add)
         XCTAssertEqual(WikiModeCopy.addWorkspaceGroup, settings.workspaces.addGroup)
-        XCTAssertEqual(WikiModeCopy.deleteNote, settings.delete.note)
-        XCTAssertEqual(WikiModeCopy.deleteOpen, settings.delete.open)
-        XCTAssertEqual(WikiModeCopy.deleteConfirm, settings.delete.confirm)
-        XCTAssertEqual(WikiModeCopy.deleteKept, settings.delete.kept)
-        XCTAssertEqual(WikiModeCopy.deleteFailed, settings.delete.failedNative)
-        XCTAssertEqual(WikiModeCopy.deleteQuestion(settings.delete.question.name), settings.delete.question.text)
-        XCTAssertEqual(WikiModeCopy.deleted(settings.delete.deleted.name), settings.delete.deleted.text)
-        XCTAssertEqual(WikiModeCopy.deleteComesBack(settings.delete.comesBack.repository), settings.delete.comesBack.text)
-        XCTAssertFalse(settings.delete.bodies.isEmpty)
-        for body in settings.delete.bodies {
-            XCTAssertEqual(WikiModeCopy.deleteBody(entries: body.entries, documents: body.documents), body.text)
-        }
-        XCTAssertEqual(WikiModeCopy.deleteMessage(entries: nil, documents: 0, repository: "github.com/acme/shop"),
-                       [WikiModeCopy.deleteBody(entries: nil, documents: 0), settings.delete.comesBack.text, settings.delete.kept].joined(separator: "\n\n"))
-        XCTAssertEqual(WikiModeCopy.deleteMessage(entries: 2606, documents: 0, repository: nil),
-                       [WikiModeCopy.deleteBody(entries: 2606, documents: 0), settings.delete.kept].joined(separator: "\n\n"))
         XCTAssertEqual(WikiModeCopy.reviewModeHint, settings.reviewModeHint)
         XCTAssertEqual(WikiModeCopy.reviewModeLead, settings.lead)
         XCTAssertEqual(WikiModeCopy.modeDefault, settings.defaultTag)
@@ -389,6 +403,60 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         for row in maintenance.workspaceLabels {
             let runner = row.workspace.runner.flatMap { $0.displayName ?? $0.name }
             XCTAssertEqual(WikiModeLogic.workspaceLabel(name: row.workspace.name, runner: runner), row.says)
+        }
+    }
+
+    /// Trash's words (docs/mocks/wiki-trash), every case of the fixture's: the foot of the page and the question Move to
+    /// Trash asks, the ways to Trash, and Trash itself — its rows' dates in en-US's short month, in the reader's zone.
+    func testTrashSaysTheFixturesWords() throws {
+        let trash = try fixture().settings.trash
+        XCTAssertEqual([WikiModeCopy.trashTitle, WikiModeCopy.trashOpen, WikiModeCopy.trashConfirm, WikiModeCopy.trashNote,
+                        WikiModeCopy.trashLeaves, WikiModeCopy.trashKept, WikiModeCopy.trashFailed],
+                       [trash.title, trash.open, trash.confirm, trash.note, trash.leaves, trash.kept, trash.failedNative])
+        XCTAssertEqual(WikiModeCopy.trashQuestion(trash.question.name), trash.question.text)
+        XCTAssertEqual(WikiModeCopy.movedToTrash(trash.moved.name), trash.moved.text)
+        XCTAssertEqual(WikiModeCopy.trashComesBack(trash.comesBack.repository), trash.comesBack.text)
+        XCTAssertFalse(trash.bodies.isEmpty)
+        for body in trash.bodies {
+            XCTAssertEqual(WikiModeCopy.trashBody(entries: body.entries, documents: body.documents), body.text,
+                           "\(String(describing: body.entries)) entries, \(body.documents) documents")
+        }
+        // The question's message, as board ② draws it: that it leaves now, what Trash keeps, what a repository's wiki
+        // does meanwhile — only for one with a repository — and what stays.
+        XCTAssertEqual(WikiModeCopy.trashMessage(entries: 11138, documents: 0, repository: nil),
+                       [trash.leaves, WikiModeCopy.trashBody(entries: 11138, documents: 0), trash.kept].joined(separator: "\n\n"))
+        XCTAssertEqual(WikiModeCopy.trashMessage(entries: nil, documents: 0, repository: trash.comesBack.repository),
+                       [trash.leaves, WikiModeCopy.trashBody(entries: nil, documents: 0), trash.comesBack.text, trash.kept]
+                        .joined(separator: "\n\n"))
+
+        XCTAssertEqual(WikiModeCopy.trashOpenTrash, trash.openTrash)
+        XCTAssertEqual(WikiModeCopy.trashPickerItem, trash.pickerItem)
+        XCTAssertFalse(trash.counts.isEmpty)
+        for count in trash.counts {
+            XCTAssertEqual(WikiModeCopy.trashHoldsWhenEmpty(count.wikis), count.empty)
+            XCTAssertEqual(WikiModeCopy.trashRowCount(count.wikis), count.row)
+        }
+
+        let page = trash.page
+        XCTAssertEqual([WikiModeCopy.trashPageTitle, WikiModeCopy.trashPageLead, WikiModeCopy.trashPageEmpty, WikiModeCopy.trashRestore,
+                        WikiModeCopy.trashDeletePermanently, WikiModeCopy.trashDeleteSwipe, WikiModeCopy.trashRestoreFailed],
+                       [page.title, page.lead, page.empty, page.restore, page.deletePermanently, page.deleteSwipe, page.restoreFailedNative])
+        XCTAssertFalse(page.rows.isEmpty)
+        for row in page.rows {
+            XCTAssertEqual(WikiModeCopy.trashRowLine(deletedAt: row.deletedAt, purgeAt: row.purgeAt, entries: row.entries, timeZone: utc),
+                           row.text)
+        }
+        // The reader's own day: 12:00 and 12:30 UTC on Dec 31 are already Jan 1 at UTC+13.
+        let last = try XCTUnwrap(page.rows.last)
+        XCTAssertEqual(WikiModeCopy.trashRowLine(deletedAt: last.deletedAt, purgeAt: last.purgeAt, entries: last.entries,
+                                                 timeZone: try XCTUnwrap(TimeZone(secondsFromGMT: 13 * 3600))),
+                       "Moved to Trash Jan 1, 2027 · 0 entries · deleted for good Jan 1, 2027")
+        XCTAssertEqual(WikiModeCopy.restored(page.restored.name), page.restored.text)
+        XCTAssertEqual([WikiModeCopy.trashPurgeQuestion, WikiModeCopy.trashPurgeConfirm, WikiModeCopy.trashPurgeFailed],
+                       [page.purge.question, page.purge.confirm, page.purge.failedNative])
+        XCTAssertFalse(page.purge.bodies.isEmpty)
+        for body in page.purge.bodies {
+            XCTAssertEqual(WikiModeCopy.trashPurgeBody(entries: body.entries), body.text)
         }
     }
 
@@ -543,11 +611,20 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
             ("WIKI_MAINTENANCE_EDIT", WikiModeCopy.maintenanceEdit),
             ("WIKI_SAVE", WikiModeCopy.save),
             ("WIKI_NO_WORKSPACE", WikiModeCopy.noWorkspace),
-            ("WIKI_DELETE_TITLE", WikiModeCopy.deleteTitle),
-            ("WIKI_DELETE_NOTE", WikiModeCopy.deleteNote),
-            ("WIKI_DELETE_OPEN", WikiModeCopy.deleteOpen),
-            ("WIKI_DELETE_CONFIRM", WikiModeCopy.deleteConfirm),
-            ("WIKI_DELETE_KEPT", WikiModeCopy.deleteKept),
+            ("WIKI_TRASH_TITLE", WikiModeCopy.trashTitle),
+            ("WIKI_TRASH_OPEN", WikiModeCopy.trashOpen),
+            ("WIKI_TRASH_CONFIRM", WikiModeCopy.trashConfirm),
+            ("WIKI_TRASH_NOTE", WikiModeCopy.trashNote),
+            ("WIKI_TRASH_LEAVES", WikiModeCopy.trashLeaves),
+            ("WIKI_TRASH_KEPT", WikiModeCopy.trashKept),
+            ("WIKI_TRASH_OPEN_TRASH", WikiModeCopy.trashOpenTrash),
+            ("WIKI_TRASH_PAGE_TITLE", WikiModeCopy.trashPageTitle),
+            ("WIKI_TRASH_PAGE_LEAD", WikiModeCopy.trashPageLead),
+            ("WIKI_TRASH_PAGE_EMPTY", WikiModeCopy.trashPageEmpty),
+            ("WIKI_TRASH_RESTORE", WikiModeCopy.trashRestore),
+            ("WIKI_TRASH_DELETE_PERMANENTLY", WikiModeCopy.trashDeletePermanently),
+            ("WIKI_TRASH_PURGE_QUESTION", WikiModeCopy.trashPurgeQuestion),
+            ("WIKI_TRASH_PURGE_CONFIRM", WikiModeCopy.trashPurgeConfirm),
             ("WIKI_CONFIRM", WikiModeCopy.confirm),
             ("WIKI_CONFIRMED", WikiModeCopy.confirmed),
             ("WIKI_REJECTED", WikiModeCopy.rejected),
@@ -603,7 +680,7 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
             assertSays(origins, "\(origin.rawValue): '\(WikiModeCopy.originWord(origin))'", in: Self.lib)
         }
         assertSays(origins, "maintenance: WIKI_HISTORY_MAINTENANCE", in: Self.lib)
-        assertSays(lib, "export const WIKI_SETTINGS_SECTIONS = [WIKI_REVIEW_MODE, WIKI_WORKSPACES, WIKI_MAINTENANCE, WIKI_DELETE_TITLE] as const;", in: Self.lib)
+        assertSays(lib, "export const WIKI_SETTINGS_SECTIONS = [WIKI_REVIEW_MODE, WIKI_WORKSPACES, WIKI_MAINTENANCE, WIKI_TRASH_TITLE] as const;", in: Self.lib)
         // The sentences built around a value.
         assertSays(lib, "(runs === 1 ? '1 run a day' : `${runs} ${WIKI_RUNS_A_DAY}`)", in: Self.lib)
         assertSays(lib, "days === null ? WIKI_LOOKBACK_ALL : days === 0 ? WIKI_LOOKBACK_NOW : days === 1 ? 'Last 1 day' : `Last ${days} ${WIKI_LOOKBACK_UNIT}`",
@@ -685,16 +762,20 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                            "Text(WikiModeCopy.maintenanceNoteServer)", "Text(WikiModeCopy.privacyNote)",
                            "} else if !maintenance.enabled {",
                            "WikiModeCopy.maintenanceEdit + \"…\"", "WikiModeCopy.turnOff",
-                           "case .delete:", "Button(WikiModeCopy.deleteOpen, role: .destructive, action: actions.delete)",
-                           "Text(WikiModeCopy.deleteNote)"], "the native page's sections")
-        // The question comes first, and the page goes as soon as the wiki does.
-        let deleting = try slice(native, from: "struct WikiSettingsView: View {", to: "private func workspaceLabel(_ id: String)")
-        assertOrder(deleting, ["wiki.entryCount(space)", ".orbitConfirmation(WikiModeCopy.deleteQuestion(",
-                             "Button(WikiModeCopy.deleteConfirm, role: .destructive) { delete(space, from: wiki) }",
-                             "Button(WikiModeCopy.cancel, role: .cancel)", "WikiModeCopy.deleteMessage(",
-                             ".alert(WikiModeCopy.deleteFailed", "delete: { confirmingDelete = true }",
-                             "WikiModeCopy.deleted(name(of: space, in: wiki))", "wiki.deleteSpace(space)", "model.nav.pop()", "model.showToast(said)"],
-                    "the native page asks before it deletes")
+                           "case .trash:", "Button(WikiModeCopy.trashOpen, role: .destructive, action: actions.moveToTrash)",
+                           "Text(WikiModeCopy.trashNote)", "if trashed > 0 { trashRow }",
+                           "Button(action: actions.openTrash)", "Text(WikiModeCopy.trashRowCount(trashed))",
+                           "Image(systemName: \"chevron.forward\")", "Text(WikiModeCopy.trashPageTitle)"], "the native page's sections")
+        // The question comes first, and the page goes as soon as the wiki does; the Trash row pushes Trash over the page.
+        let moving = try slice(native, from: "struct WikiSettingsView: View {", to: "private func workspaceLabel(_ id: String)")
+        assertOrder(moving, ["trashed: wiki.trash.count", "wiki.entryCount(space)", ".orbitConfirmation(WikiModeCopy.trashQuestion(",
+                             "Button(WikiModeCopy.trashConfirm, role: .destructive) { moveToTrash(space, from: wiki) }",
+                             "Button(WikiModeCopy.cancel, role: .cancel)", "WikiModeCopy.trashMessage(",
+                             ".alert(WikiModeCopy.trashFailed", "moveToTrash: { confirmingMove = true }",
+                             "openTrash: { model.push(.wikiTrash) }",
+                             "WikiModeCopy.movedToTrash(name(of: space, in: wiki))", "wiki.moveSpaceToTrash(space)", "model.nav.pop()",
+                             "model.showToast(said)"],
+                    "the native page asks before it moves the wiki to Trash")
         XCTAssertFalse(arms.contains("provider"), "the native page still shows a provider")
         let row = try slice(nativePage, from: "private func modeRow(", to: "private func fallbackBanner(")
         assertOrder(row, ["WikiModeCopy.modeLabel(value)", "WikiModeCopy.modeDefault", "WikiModeCopy.modeNote(value)",
@@ -843,6 +924,68 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         let pane = try slice(screens, from: "struct WikiDetailPane: View {", to: "struct WikiEntryView: View {")
         assertOrder(pane, ["model.nav.wikiReviewOnTop", "model.nav.wikiSettingsOnTop", "WikiSettingsView()",
                            "model.nav.selectedWikiRunID", "WikiRunView(changesetID: run)"], "the wide shells' detail pane")
+    }
+
+    /// Trash at the native end (docs/mocks/wiki-trash ②): one page, pushed from Wiki settings' Trash row, the space menu's
+    /// Trash under Manage spaces and the empty Wiki's Open Trash; a row is the wiki's name over its line; an iOS swipe
+    /// shows Delete and Restore, a Mac right-click Restore and Delete permanently…; Delete asks first; and a refusal is
+    /// the server's own sentence. The list is read beside the wikis, so every way to it comes and goes with them.
+    func testTrashIsOnePageEveryWayToItPushes() throws {
+        let file = try native("Views/WikiTrashView.swift")
+        let page = try slice(file, from: "struct WikiTrashPage: View {", to: "private func row(")
+        assertOrder(page, ["if rows.isEmpty {", "Text(WikiModeCopy.trashPageEmpty)", "ForEach(rows) { row in self.row(row) }",
+                           "Text(WikiModeCopy.trashPageLead)", ".navigationTitle(WikiModeCopy.trashPageTitle)", ".disabled(busy)"],
+                    "Trash's page: its rows, then how long a wiki stays")
+        let row = try slice(file, from: "private func row(_ row: WikiTrashRow) -> some View {", to: "struct WikiTrashView: View {")
+        assertOrder(row, ["Text(row.title)", "WikiModeCopy.trashRowLine(deletedAt: row.deletedAt, purgeAt: row.purgeAt, entries: row.entries)",
+                          "#if os(iOS)", "#else", "#endif", ".orbitConfirmation(WikiModeCopy.trashPurgeQuestion,",
+                          "Button(WikiModeCopy.trashPurgeConfirm, role: .destructive) { actions.purge(row) }",
+                          "Button(WikiModeCopy.cancel, role: .cancel)", "Text(WikiModeCopy.trashPurgeBody(entries: row.entries))"],
+                    "a row in Trash, and the question its Delete asks")
+        let swipe = try slice(row, from: "#if os(iOS)", to: "#else")
+        assertOrder(swipe, [".swipeActions(edge: .trailing, allowsFullSwipe: false)", "Button(WikiModeCopy.trashDeleteSwipe) { purging = row }",
+                            ".tint(.red)", "Button(WikiModeCopy.trashRestore) { actions.restore(row) }", ".tint(.blue)"],
+                    "the iOS swipe: Delete outermost, then Restore")
+        XCTAssertFalse(swipe.contains("role: .destructive"), "the swipe's Delete only asks")
+        let menu = try slice(row, from: "#else", to: "#endif")
+        assertOrder(menu, [".contextMenu {", "Button(WikiModeCopy.trashRestore) { actions.restore(row) }",
+                           "Button(WikiModeCopy.trashDeletePermanently, role: .destructive) { purging = row }"], "the Mac's right-click")
+        let screen = try slice(file, from: "struct WikiTrashView: View {", to: "private func actions(")
+        assertOrder(screen, ["WikiTrashPage(rows: wiki.trash, busy: wiki.busy, actions: actions(wiki))", ".task { await wiki.loadTrash() }",
+                             ".alert(noticeTitle,"], "Trash's screen")
+        let presses = try slice(file, from: "private func actions(_ wiki: WikiModel) -> WikiTrashActions {",
+                                to: "noticeTitle = WikiModeCopy.trashPurgeFailed")
+        assertOrder(presses, ["let said = WikiModeCopy.restored(row.title)", "await wiki.restoreSpace(row, restored: { model.showToast(said) })",
+                              "noticeTitle = WikiModeCopy.trashRestoreFailed", "await wiki.purgeSpace(row)"],
+                    "a restore says so where the app says what a press did, and a refusal says why")
+
+        let view = try native("Views/WikiView.swift")
+        let picker = try slice(view, from: "struct WikiSpacePicker: View {", to: "private extension View {")
+        assertOrder(picker, ["Label(WikiCopy.manageSpaces, systemImage: \"gearshape\")", "if trashed > 0 {", "Button(action: openTrash)",
+                             "Label(WikiModeCopy.trashPickerItem, systemImage: \"trash\")"], "the space menu's Trash, under Manage spaces")
+        let home = try slice(view, from: "struct WikiHomePage: View {", to: "struct WikiSpacePicker: View {")
+        assertSays(home, "trashed: trashed, openTrash: actions.openTrash)", in: "WikiView.swift")
+        let first = try slice(view, from: "struct WikiFirstStartPage: View {", to: "struct WikiSpacePicker: View {")
+        assertOrder(first, ["WikiStartSection(card: card, act: act)", "if trashed > 0 {", "Button(WikiModeCopy.trashOpenTrash, action: openTrash)",
+                            "Text(WikiModeCopy.trashHoldsWhenEmpty(trashed))"], "the empty Wiki's way to Trash, under its card")
+        let screens = try native("Views/WikiScreens.swift")
+        for wiring in ["trashed: wiki.trash.count,", "openTrash: { open(.wikiTrash) },",
+                       "WikiFirstStartPage(card: WikiStartLogic.firstCard(workspaces: workspaces), trashed: wiki.trash.count,",
+                       "openTrash: { model.push(.wikiTrash) }) { _ in creating = true }"] {
+            assertSays(screens, wiring, in: "WikiScreens.swift")
+        }
+        let pane = try slice(screens, from: "struct WikiDetailPane: View {", to: "struct WikiDisabledNote: View {")
+        assertOrder(pane, ["model.nav.wikiSettingsOnTop", "WikiSettingsView()", "model.nav.wikiTrashOnTop", "WikiTrashView()"],
+                    "the wide shells' detail pane")
+        assertSays(try native("Views/WikiContentsColumn.swift"), "trashed: wiki.trash.count, openTrash: { open(.wikiTrash) })",
+                   in: "WikiContentsColumn.swift")
+        XCTAssertTrue(try native("Views/CompactShell.swift").contains("case .wikiTrash:              WikiTrashView()"))
+
+        let model = try native("WikiModel.swift")
+        let spaces = try slice(model, from: "func loadSpaces() async {", to: "func loadHome() async {")
+        assertOrder(spaces, ["let trashRead = Task { await loadTrash() }", "try await api.wikiSpaces()", "await trashRead.value",
+                             "try await api.wikiTrash().spaces", "} catch APIError.http(let status, _) where status == 404 {"],
+                    "Trash read beside the wikis")
     }
 
     /// A challenge's line and answers at both ends: which anchor broke and how, then Re-confirm, Amend, Retire.

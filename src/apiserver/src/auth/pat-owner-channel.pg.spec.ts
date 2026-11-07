@@ -302,8 +302,13 @@ test('the owner channel refuses a personal access token door by door and field b
       login: 200,
       observe: () => db.wikiSpaceWorkspace.count({ where: { workspaceId, spaceId, leftOutAt: null } }),
     },
-    // A space nobody has: a login that got past the door would delete the wiki the cases around it read.
+    // A space nobody has: a login that got past the door would move the wiki the cases around it read to Trash.
     { route: 'DELETE /wiki/spaces/:id', path: `/wiki/spaces/${nobody()}`, login: 404 },
+    // The Trash (contract `space.trash`): a restore of the wiki in use answers it as it is; a permanent delete of a wiki
+    // nobody has is the 404; the Trash's list is the owner's too.
+    { route: 'POST /wiki/spaces/:id/restore', path: `/wiki/spaces/${spaceId}/restore`, login: 200 },
+    { route: 'DELETE /wiki/spaces/:id/purge', path: `/wiki/spaces/${nobody()}/purge`, login: 404 },
+    { route: 'GET /wiki/trash', path: '/wiki/trash', login: 200 },
     { route: 'GET /wiki/changesets/:id', path: `/wiki/changesets/${nobody()}`, login: 404 },
     { route: 'GET /wiki/spaces/:id/plan', path: `/wiki/spaces/${spaceId}/plan`, login: 200 },
     { route: 'GET /wiki/spaces/:id/plan/versions', path: `/wiki/spaces/${spaceId}/plan/versions`, login: 200 },

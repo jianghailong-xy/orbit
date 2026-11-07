@@ -218,33 +218,62 @@ internal object WikiModeCopy {
     const val addWorkspace = "Add workspace…"
     const val addWorkspaceGroup = "Workspaces with no repository"
 
-    // Delete wiki (docs/mocks/wiki-delete, iOS `WikiModeCopy`).
-    const val deleteTitle = "Delete this wiki"
-    const val deleteNote = "Its entries, documents and history are permanently deleted."
-    const val deleteOpen = "Delete wiki…"
-    const val deleteConfirm = "Delete wiki"
-    const val deleteKept = "Workspaces and sessions are kept."
+    // The wiki's Trash (docs/mocks/wiki-trash, the web's `WIKI_TRASH_*`): the foot of Wiki settings, the question Move to
+    // Trash asks, the ways to Trash, and Trash itself.
+    const val trashTitle = "Move to Trash"
+    const val trashNote = "It stays in Trash for 365 days and can be restored until then."
+    const val trashOpen = "Move to Trash…"
+    const val trashConfirm = "Move to Trash"
+    const val trashLeaves = "It leaves your wikis now, and sessions stop reading it."
+    const val trashKept = "Workspaces and sessions are kept."
     /** What an alert titles a refusal; the web says one inside its dialog, with no title. */
-    const val deleteFailed = "Couldn't delete the wiki"
-    fun deleteQuestion(name: String) = "Delete wiki “$name”?"
-    fun deleted(name: String) = "Deleted wiki “$name”"
-    /** What a wiki with a repository does after it: the next session on the repository makes it again. */
-    fun deleteComesBack(repository: String) = "The next session on $repository to use the wiki starts a new, empty one."
-    /** What the question says it takes. [entries] is null when the health read has not answered: the sentence still
-     * says what goes, with no number in it. */
-    fun deleteBody(entries: Int?, documents: Int): String {
-        fun counted(count: Int, one: String, many: String) = "${"%,d".format(java.util.Locale.US, count)} ${if (count == 1) one else many}"
+    const val trashFailed = "Couldn't move the wiki to Trash"
+    fun trashQuestion(name: String) = "Move wiki “$name” to Trash?"
+    fun movedToTrash(name: String) = "Moved wiki “$name” to Trash"
+    /** What a wiki with a repository does while it is in Trash: the next session on the repository makes a new one. */
+    fun trashComesBack(repository: String) = "Until you restore it, the next session on $repository to use the wiki starts a new, empty one."
+    private fun counted(count: Int, one: String, many: String) = "${WikiArticleCopy.count(count)} ${if (count == 1) one else many}"
+    /** What the question says Trash keeps. [entries] is null when the health read has not answered: the sentence still
+     * says what stays, with no number in it. */
+    fun trashBody(entries: Int?, documents: Int): String {
         val things = buildList {
             if (entries == null) add("entries") else if (entries > 0) add(counted(entries, "entry", "entries"))
             if (documents > 0) add(counted(documents, "document", "documents"))
         }
-        val whose = if (entries == 1 && documents == 0) "its" else "their"
-        val subject = if (things.isEmpty()) "Its history" else "Its ${things.joinToString(", ")} and $whose history"
+        val one = things.size == 1 && ((entries == 1 && documents == 0) || (entries == 0 && documents == 1))
+        val subject = if (things.isEmpty()) "It stays" else "Its ${things.joinToString(" and ")} ${if (one) "stays" else "stay"}"
+        return "$subject in Trash for 365 days: restore it any time until then. After that it is deleted for good."
+    }
+    /** The question's whole message: that it leaves now, what Trash keeps, what a repository's wiki does meanwhile, and
+     * what stays. */
+    fun trashMessage(entries: Int?, documents: Int, repository: String?) =
+        listOfNotNull(trashLeaves, trashBody(entries, documents), repository?.let(::trashComesBack), trashKept).joinToString("\n\n")
+    /** The way to Trash from the first-wiki card, when no wiki is left: `1 wiki is in Trash.`, then Open Trash. */
+    const val openTrash = "Open Trash"
+    fun trashHoldsWhenEmpty(wikis: Int) = "${counted(wikis, "wiki", "wikis")} ${if (wikis == 1) "is" else "are"} in Trash."
+    /** The settings page's Trash row, beside its name. */
+    fun trashRowCount(wikis: Int) = counted(wikis, "wiki", "wikis")
+    /** Trash's own name: the page's title, the settings page's row and the space picker's item. */
+    const val trash = "Trash"
+    const val trashLead = "A wiki stays here for 365 days after it was moved, then it is deleted for good."
+    const val trashEmpty = "Trash is empty."
+    const val restore = "Restore"
+    const val deletePermanently = "Delete permanently…"
+    fun restored(name: String) = "Restored wiki “$name”"
+    const val restoreFailed = "Couldn't restore the wiki"
+    /** One wiki's line in Trash: when it was moved, what it holds, and when it goes — each day in the reader's time zone. */
+    fun trashRowLine(deletedAt: String?, purgeAt: String?, entries: Int, zone: ZoneId = ZoneId.systemDefault()): String {
+        fun day(iso: String?) = iso?.let { WikiModeLogic.monthDayYear(it, zone) }.orEmpty()
+        return "Moved to Trash ${day(deletedAt)} · ${counted(entries, "entry", "entries")} · deleted for good ${day(purgeAt)}"
+    }
+    const val purgeQuestion = "Delete permanently?"
+    const val purgeConfirm = "Delete permanently"
+    const val purgeFailed = "Couldn't delete the wiki"
+    /** What Delete permanently says it takes, as the sessions' Trash says it of a session. */
+    fun purgeBody(entries: Int): String {
+        val subject = if (entries == 0) "Its history" else "Its ${counted(entries, "entry", "entries")} and ${if (entries == 1) "its" else "their"} history"
         return "$subject will be permanently deleted. This cannot be undone."
     }
-    /** The question's whole message: what goes, what a repository's wiki does next, and what stays. */
-    fun deleteMessage(entries: Int?, documents: Int, repository: String?) =
-        listOfNotNull(deleteBody(entries, documents), repository?.let(::deleteComesBack), deleteKept).joinToString("\n\n")
     fun modeLabel(mode: String?) = when (mode) { "manual" -> "Manual"; "tiered" -> "Tiered"; "automatic" -> "Automatic"; else -> "" }
     fun modeNote(mode: String?) = when (mode) {
         "manual" -> "Every change from sessions, maintenance and imports waits for you in Review."

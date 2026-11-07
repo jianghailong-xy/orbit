@@ -2732,7 +2732,23 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // DO block. It is not a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of
       // the six preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so
       // it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: the table starts empty.
-      '0483_wiki_chat_draft'],
+      '0483_wiki_chat_draft',
+      // 0484 (the Open list's per-owner counters, 55b932057) is read against every claim above. It creates the table
+      // `open_list_epoch` and five trigger functions; puts statement-level AFTER INSERT/UPDATE/DELETE triggers on the
+      // tables the Open list reads, the preserved `task`, `project`, `session`, `session_merge_receipt`,
+      // `task_completion_evidence` and `project_acceptance_criterion_definition` among them, and one row-level AFTER
+      // INSERT trigger on `conversation_turn`; adds three indexes to `session`; and adds one nullable column to the
+      // preserved `task_completion_evidence`, `review_turn_at`, which its one UPDATE backfills and that row trigger keeps.
+      // Four of its functions write `open_list_epoch` alone and the fifth only `review_turn_at`: no other column of a
+      // preserved row is written, and none is deleted. It drops nothing, names none of the six preserved
+      // triggers/functions, and none of its functions writes `task.status`, so it is not another writer of the DONE
+      // fence. (Accounted for when 0486 landed beside it: 55b932057 had landed without its line here.)
+      '0484_open_list_epoch',
+      // 0486 (the wiki's Trash) adds five columns, a CHECK and a partial index to `wiki_space` alone, in one DO block that
+      // asks for the table's lock 2 s at a time. It is not a preserved relation, no `task`, `session`, `project` or
+      // `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function, trigger or
+      // type is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '0486_wiki_space_trash'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -60,6 +60,7 @@ import type {
   WikiSpaceHealth,
   WikiSpaceWorkspaces,
   WikiSystemModelRead,
+  WikiTrash,
 } from '@orbit/shared';
 import type {
   WikiChangeset,
@@ -1182,6 +1183,24 @@ export const wikiSpaceWorkspacesQuery = (spaceId: string) =>
  * Every Wiki view wears the line and the server counts the backlog afresh for each read, so moving from
  * view to view reuses a read for half a minute; a wiki write (`wiki.changed`) re-reads it at once.
  */
+/**
+ * The owner's wikis in Trash (contract `space.trash.list`), newest move first: the sidebar's Trash row, the line under
+ * Wiki settings' last card and the first-wiki card's. Under the `wiki` root, so `wiki.changed` refreshes it with the rest.
+ */
+export const wikiTrashQuery = () =>
+  queryOptions({
+    queryKey: ['wiki', 'trash'] as const,
+    queryFn: async (): Promise<WikiTrash | null> => {
+      try {
+        return await api<WikiTrash>('/wiki/trash');
+      } catch (error) {
+        if (isWikiDisabled(error)) return null;
+        throw error;
+      }
+    },
+    staleTime: 30_000,
+  });
+
 export const wikiHealthQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'health'] as const,

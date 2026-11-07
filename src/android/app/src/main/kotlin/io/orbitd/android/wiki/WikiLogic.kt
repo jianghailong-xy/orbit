@@ -477,7 +477,7 @@ internal data class WikiHomeContent(val space: WikiSpace, val spaces: List<WikiS
 
 internal object WikiModeLogic {
     /** The settings page's sections, top to bottom — the web's order (`WIKI_SETTINGS_SECTIONS`). */
-    enum class SettingsSection(val title: String) { REVIEW_MODE(WikiModeCopy.reviewMode), WORKSPACES(WikiModeCopy.workspaces), MAINTENANCE(WikiModeCopy.maintenance), DELETE(WikiModeCopy.deleteTitle) }
+    enum class SettingsSection(val title: String) { REVIEW_MODE(WikiModeCopy.reviewMode), WORKSPACES(WikiModeCopy.workspaces), MAINTENANCE(WikiModeCopy.maintenance), TRASH(WikiModeCopy.trashTitle) }
     val modes = listOf("manual", "tiered", "automatic")
     const val defaultMode = "tiered"
     fun mode(settings: WikiSpaceSettings?): String = settings?.reviewMode?.takeIf { it in modes } ?: "manual"
@@ -497,6 +497,11 @@ internal object WikiModeLogic {
     fun monthDay(iso: String, zone: ZoneId = ZoneId.systemDefault()): String? {
         val at = RelativeTime.parse(iso)?.atZone(zone) ?: return null
         return "${months[at.monthValue - 1]} ${at.dayOfMonth}"
+    }
+    /** A day with its year, as Trash dates its rows: `Nov 7, 2026`. */
+    fun monthDayYear(iso: String, zone: ZoneId = ZoneId.systemDefault()): String? {
+        val at = RelativeTime.parse(iso)?.atZone(zone) ?: return null
+        return "${months[at.monthValue - 1]} ${at.dayOfMonth}, ${at.year}"
     }
     fun runWhen(iso: String, zone: ZoneId = ZoneId.systemDefault()): String {
         val at = RelativeTime.parse(iso)?.atZone(zone) ?: return ""

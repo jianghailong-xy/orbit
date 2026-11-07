@@ -45,9 +45,10 @@ import {
   wikiLookbackLabel,
   wikiModeFallback,
   wikiRunsADay,
-  WIKI_DELETE_NOTE,
-  WIKI_DELETE_OPEN,
-  WIKI_DELETE_TITLE,
+  WIKI_TRASH_NOTE,
+  WIKI_TRASH_OPEN,
+  WIKI_TRASH_TITLE,
+  wikiTrashHolds,
   WIKI_WORKSPACE_LEFT_OUT,
   WIKI_WORKSPACES,
   WIKI_WORKSPACES_EMPTY,
@@ -57,7 +58,7 @@ import {
   wikiWorkspaceLabel,
 } from '../lib/wikiReviewMode';
 import { addWikiWorkspace, leaveWikiWorkspaceOut, updateWikiSpace, useWikiWrite, type WikiSpaceUpdate } from '../lib/wikiWrites';
-import { useDeleteWiki } from './WikiDeleteDialog';
+import { WikiTrashLink, useMoveWikiToTrash } from './WikiTrashDialog';
 import { WikiModelLine, WikiPrivacyNote } from './WikiSystemModel';
 import { WikiSetUpDialog } from './WikiSetUpDialog';
 import { Button } from './ui/Button';
@@ -192,7 +193,7 @@ export function WikiSettingsPage({ space }: { space: WikiSpaceRow }) {
         )}
       </Card>
 
-      <WikiDeleteCard space={space} />
+      <WikiTrashCard space={space} />
 
       {setUp && (
         <WikiSetUpDialog space={space} onClose={() => setSetUp(false)} />
@@ -201,18 +202,22 @@ export function WikiSettingsPage({ space }: { space: WikiSpaceRow }) {
   );
 }
 
-/** The last card of the page (docs/mocks/wiki-delete): it asks first, as nothing else on this page does. */
-function WikiDeleteCard({ space }: { space: WikiSpaceRow }) {
+/**
+ * The last card of the page (docs/mocks/wiki-trash): it asks first, as nothing else on this page does, and under it the
+ * way to Trash while anything is in it.
+ */
+function WikiTrashCard({ space }: { space: WikiSpaceRow }) {
   const navigate = useNavigate();
   const spaces = useQuery(wikiSpacesQuery());
-  const [ask, confirmation] = useDeleteWiki(() => navigate(WIKI_PATH));
+  const [ask, confirmation] = useMoveWikiToTrash(() => navigate(WIKI_PATH));
   const name = wikiSpaceNames(spaces.data ?? []).get(space.id) ?? space.title;
   return (
-    <Card className="wk-settings-card" title={WIKI_DELETE_TITLE}>
+    <Card className="wk-settings-card" title={WIKI_TRASH_TITLE}>
       <div className="wk-delete">
-        <div className="wk-maint-d">{WIKI_DELETE_NOTE}</div>
-        <Button danger onClick={() => ask(space, name)}>{WIKI_DELETE_OPEN}</Button>
+        <div className="wk-maint-d">{WIKI_TRASH_NOTE}</div>
+        <Button danger onClick={() => ask(space, name)}>{WIKI_TRASH_OPEN}</Button>
       </div>
+      <WikiTrashLink sentence={wikiTrashHolds} className="wk-trash-link-card" />
       {confirmation}
     </Card>
   );

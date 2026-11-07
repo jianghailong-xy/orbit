@@ -371,7 +371,12 @@ function visibilitySql(request: WikiSearchRequest): Prisma.Sql {
 /** Everything that decides which entries a request may see, in one parenthesized predicate. */
 function hardFilterSql(request: WikiSearchRequest): Prisma.Sql {
   const parts: Prisma.Sql[] = [Prisma.sql`e."owner_id" = ${request.ownerId}::uuid`, visibilitySql(request)];
+  // One space is one its caller found in use; every space is every one of the owner's not in Trash (contract `space.trash`).
   if (request.spaceId) parts.push(Prisma.sql`e."space_id" = ${request.spaceId}::uuid`);
+  else {
+    parts.push(Prisma.sql`e."space_id" IN (
+      SELECT s."id" FROM "wiki_space" s WHERE s."owner_id" = ${request.ownerId}::uuid AND s."deleted_at" IS NULL)`);
+  }
   if (request.kinds?.length) parts.push(Prisma.sql`e."kind" = ANY(${textArray(request.kinds)})`);
   if (request.topic) parts.push(Prisma.sql`e."topics" @> ARRAY[${request.topic}]::text[]`);
   if (request.trust?.length) parts.push(Prisma.sql`e."trust" = ANY(${textArray(request.trust)})`);

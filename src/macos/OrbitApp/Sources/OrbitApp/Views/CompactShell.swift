@@ -381,6 +381,7 @@ private struct CompactSections: View {
                         case .wikiReview:             WikiReviewView()
                         case .wikiActivity:           WikiActivityView()
                         case .wikiSettings:           WikiSettingsView()
+                        case .wikiTrash:              WikiTrashView()
                         case .wikiRun(let changesetID): WikiRunView(changesetID: changesetID)
                         case .wikiJob(let jobID):     WikiJobView(jobID: jobID)
                         case .wikiArticle(let topic, let part):

@@ -47,7 +47,7 @@ export class WikiRunReads {
             + 'applied is what wiki_search and wiki_get return, and taking it back is the owner\'s.',
       });
     }
-    const row = await this.prisma.wikiChangeset.findFirst({ where: { id: changesetId, ownerId }, select: CHANGESET_SELECT });
+    const row = await this.prisma.wikiChangeset.findFirst({ where: { id: changesetId, ownerId, space: { deletedAt: null } }, select: CHANGESET_SELECT });
     if (!row) throw new NotFoundException('no such changeset');
     const named = [...new Set(row.ops.flatMap((op) => [op.entryId, op.resultEntryId]).filter((id): id is string => id !== null))];
     const entries = named.length === 0

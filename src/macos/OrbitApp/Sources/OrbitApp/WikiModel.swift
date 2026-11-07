@@ -42,6 +42,9 @@ final class WikiModel {
     private(set) var busy = false
     /// Wiki settings' Workspaces section, by space id.
     private(set) var spaceWorkspaces: [String: WikiSpaceWorkspaces] = [:]
+    /// The wikis in Trash, the newest move first (docs/mocks/wiki-trash): read with the spaces, and what draws a way to
+    /// Trash while it holds any — Wiki settings' Trash row, the space menu's Trash, the empty Wiki's line.
+    private(set) var trash: [WikiTrashRow] = []
     /// The space on screen's articles (criterion 10): its category directory, its A–Z index, the
     /// articles read so far and the ones it has none of yet, and each read topic's entries — all of
     /// the space `articlesSpaceID` names, and dropped when another space is picked.
@@ -203,6 +206,9 @@ final class WikiModel {
 
     func loadSpaces() async {
         spacesState.begin()
+        // Trash beside the list, through a task handle, not `async let` (d22b276cc): whatever reads the wikis again
+        // reads the ways to Trash again with them.
+        let trashRead = Task { await loadTrash() }
         do {
             let list = try await api.wikiSpaces()
             if list != spaces { spaces = list }
@@ -215,6 +221,20 @@ final class WikiModel {
             spacesState.succeed()
         } catch {
             spacesState.fail()
+        }
+        await trashRead.value
+    }
+
+    /// The wikis in Trash (contract `space.trash.list`). A 404 is the wiki off for the account, or a control plane from
+    /// before Trash: nothing in it. Any other failure keeps what is on screen.
+    func loadTrash() async {
+        do {
+            let read = try await api.wikiTrash().spaces
+            if read != trash { trash = read }
+        } catch APIError.http(let status, _) where status == 404 {
+            if !trash.isEmpty { trash = [] }
+        } catch {
+            // The next read of the wikis reads it again.
         }
     }
 
@@ -523,7 +543,8 @@ final class WikiModel {
     /// What is loaded, read again — what the control plane's reconnect asks for too. Of the entry pages,
     /// only the ones on screen: the others are read when they next appear.
     func reloadLoaded() async {
-        if homeSpaceID != nil || homeState.hasLoaded {
+        // With no wiki left the home reads nothing, the list included: read the list, and Trash with it, instead.
+        if currentSpace != nil, homeSpaceID != nil || homeState.hasLoaded {
             await loadHome()
         } else {
             await loadSpaces()
@@ -850,24 +871,61 @@ final class WikiModel {
         }
     }
 
-    /// How many entries a space's delete would take, for the question it asks; nil when the read fails.
+    /// How many entries a space keeps in Trash, for the question Move to Trash asks; nil when the read fails.
     func entryCount(_ space: WikiSpace) async -> Int? {
         try? await api.wikiHealth(spaceID: space.id).entries
     }
 
-    /// Delete a wiki for good (contract `space.delete`). `leave` runs the moment it is gone, before the wikis are read
-    /// again, so the page that asked never draws the next wiki's settings. Nil on success, else the sentence to show.
-    func deleteSpace(_ space: WikiSpace, leave: () -> Void) async -> String? {
+    /// Move a wiki to Trash (contract `space.trash`), where it is kept 365 days. `leave` runs the moment it is gone, before
+    /// the wikis are read again, so the page that asked never draws the next wiki's settings. Nil on success, else the
+    /// sentence to show.
+    func moveSpaceToTrash(_ space: WikiSpace, leave: () -> Void) async -> String? {
         busy = true
         defer { busy = false }
         do {
-            try await api.deleteWikiSpace(space.id)
+            _ = try await api.moveWikiSpaceToTrash(space.id)
         } catch {
             return Self.refusal(error)
         }
         leave()
         spaceWorkspaces[space.id] = nil
         await reloadAfterWrite()
+        return nil
+    }
+
+    // MARK: Trash (docs/mocks/wiki-trash)
+
+    /// Restore (contract `space.trash.restore`): the wiki is back among the wikis with its name, settings and all it held.
+    /// Its row leaves Trash and `restored` runs the moment the server says so, before the wikis are read again. Nil on
+    /// success, else the sentence to show — the server's own when a newer wiki holds its repository.
+    func restoreSpace(_ row: WikiTrashRow, restored: () -> Void) async -> String? {
+        busy = true
+        defer { busy = false }
+        do {
+            _ = try await api.restoreWikiSpace(row.id)
+        } catch {
+            await loadTrash()
+            return Self.refusal(error)
+        }
+        trash.removeAll { $0.id == row.id }
+        restored()
+        await reloadAfterWrite()
+        return nil
+    }
+
+    /// Delete permanently (contract `space.trash.purge`): the row leaves Trash at once, and the server deletes what the
+    /// wiki held in the background. Nil on success, else the sentence to show.
+    func purgeSpace(_ row: WikiTrashRow) async -> String? {
+        busy = true
+        defer { busy = false }
+        do {
+            try await api.purgeWikiSpace(row.id)
+        } catch {
+            await loadTrash()
+            return Self.refusal(error)
+        }
+        trash.removeAll { $0.id == row.id }
+        await loadTrash()
         return nil
     }
 

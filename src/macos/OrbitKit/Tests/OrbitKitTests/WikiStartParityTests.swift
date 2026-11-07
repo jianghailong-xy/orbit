@@ -682,13 +682,14 @@ final class WikiStartParityTests: XCTestCase {
     func testAnAccountWithNoWikiGetsTheCard() throws {
         let card = try web(Self.card)
         assertSays(card, "const card = wikiStartFirstCard(!read || choices.some((choice) => choice.repository !== null));", in: Self.card)
-        assertSays(card, "<WikiStartSteps card={card} busy={false} onAction={() => setCreating(true)} />", in: Self.card)
+        assertSays(card, "<WikiStartSteps card={card} busy={false} onAction={() => setCreating(true)}", in: Self.card)
 
         let screens = try native("Views/WikiScreens.swift")
         let placeholder = try slice(screens, from: "struct WikiHomePlaceholder: View {", to: "struct WikiDetailPane: View {")
         assertOrder(placeholder, ["} else if wiki.spacesState.hasLoaded && wiki.spaces.isEmpty {", "WikiFirstStartScreen(wiki: wiki)",
                                   "model.wikiWorkspacesLoading || model.wikiWorkspaceChoices.contains { $0.repository != nil }",
-                                  "WikiFirstStartPage(card: WikiStartLogic.firstCard(workspaces: workspaces)) { _ in creating = true }",
+                                  "WikiFirstStartPage(card: WikiStartLogic.firstCard(workspaces: workspaces), trashed: wiki.trash.count,",
+                                  "openTrash: { model.push(.wikiTrash) }) { _ in creating = true }",
                                   ".sheet(isPresented: $creating) { WikiCreateSheet(wiki: wiki) }"], "the no-wiki page")
         XCTAssertFalse(screens.contains("WikiCopy.noSpaces"), "the no-wiki page says the card, not the sentence")
         let view = try native("Views/WikiView.swift")

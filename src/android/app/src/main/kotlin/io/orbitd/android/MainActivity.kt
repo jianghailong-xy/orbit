@@ -388,7 +388,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.WIKI, Destination.WIKI_ENTRY, Destination.WIKI_BROWSE, Destination.WIKI_INDEX,
                                 Destination.WIKI_ARTICLE, Destination.WIKI_DOC, Destination.WIKI_REVIEW, Destination.WIKI_SETTINGS,
                                 Destination.WIKI_RUN, Destination.WIKI_JOB, Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION,
-                                Destination.WIKI_ACTIVITY ->
+                                Destination.WIKI_ACTIVITY, Destination.WIKI_TRASH ->
                                     WikiDestination(app, signedIn.handle, route, data, ::open) { change -> navigation = change(navigation) }
                                 Destination.WATCH -> WatchDestination(app, signedIn.handle, route,
                                     navigate = { change -> navigation = change(navigation) }, open = ::open)
@@ -447,6 +447,7 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.WIKI_REVIEW -> "Review"
     Destination.WIKI_ACTIVITY -> "Activity"
     Destination.WIKI_SETTINGS -> "Wiki settings"
+    Destination.WIKI_TRASH -> "Trash"
     Destination.WIKI_RUN -> "Maintenance"
     Destination.WIKI_JOB -> "Run"
     Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION -> "Wiki plan"

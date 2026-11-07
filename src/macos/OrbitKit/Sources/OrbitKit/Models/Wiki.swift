@@ -414,6 +414,42 @@ public struct WikiWorkspaceAddRequest: Encodable, Sendable {
     }
 }
 
+/// What `DELETE /wiki/spaces/:id` answers (contract `space.trash`): the wiki is in Trash from `deletedAt`, and is
+/// deleted for good at `purgeAt` (ISO 8601), 365 days on.
+public struct WikiTrashMove: Codable, Equatable, Sendable {
+    public let spaceId: String
+    public let deletedAt: String
+    public let purgeAt: String
+}
+
+/// One wiki in Trash, as `GET /wiki/trash` lists it (contract `space.trash.list`): the slug and the repository it had,
+/// which a restore gives back, when it was moved and when it is deleted for good (ISO 8601), and its active entries.
+public struct WikiTrashRow: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let slug: String
+    public let title: String
+    public let repoUrlNorm: String?
+    public let deletedAt: String
+    public let purgeAt: String
+    public let entries: Int
+
+    public init(id: String, slug: String, title: String, repoUrlNorm: String? = nil, deletedAt: String, purgeAt: String,
+                entries: Int) {
+        self.id = id
+        self.slug = slug
+        self.title = title
+        self.repoUrlNorm = repoUrlNorm
+        self.deletedAt = deletedAt
+        self.purgeAt = purgeAt
+        self.entries = entries
+    }
+}
+
+/// `GET /wiki/trash`: the owner's wikis in Trash, the newest move first.
+public struct WikiTrash: Codable, Equatable, Sendable {
+    public let spaces: [WikiTrashRow]
+}
+
 public struct WikiSpace: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let slug: String

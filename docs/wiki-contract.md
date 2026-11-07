@@ -221,12 +221,16 @@ pg spec 用执行计划钉住了这一点。它声明为 IMMUTABLE（里面的 `
   - 这两个写入都只属于 owner：带会话头回 `WIKI_OWNER_CHANNEL_ONLY`，个人访问令牌回 `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，因为谁在 space 里就是谁能读它的条目。两者都不动游标：加入的 workspace 从 space 当前的水位往后读。
   - 会话所在 workspace 不在任何 space 时返回 `WIKI_SPACE_UNBOUND`，并用一句话说明怎么绑；被留在外面的 workspace 返回同一个码，并说明这一点。项目通过其 codebase 的仓库地址找到 space，没有单独的表。
   - Wiki 设置的 Workspaces 卡（web、macOS/iOS、Android，在 Review mode 和 Maintenance 之间，效果图 38）读 `GET /api/wiki/spaces/:id/workspaces`：`{ workspaces, addable }`，每行 `{ id, name, runner, inWiki }`。`workspaces` 是这个仓库上、或这个 space 的行点名的活 workspace，按名字排（不分大小写），切开关时行不跳，被留在外面的留在列表里，`inWiki` 为 false。`addable` 是 `Add workspace…` 能加的：没有仓库、也不在任何 wiki 里（被别的 space 留在外面的算不在）。
-- **删除**（`space.delete`）：`DELETE /api/wiki/spaces/:id` 永久删除一个 wiki，回 `{ spaceId }`；别人的或已经没有的回普通 404。
-  - 只属于 owner：带会话头回 `WIKI_OWNER_CHANNEL_ONLY`，个人访问令牌回 `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，没有 agent 工具和 CLI 命令。
-  - 一个事务里按外键删掉 space 下的全部内容，包括公开链接；不能撤销，失败时什么都不少。Workspace、会话、任务和项目不动；文字里的 `orbit-wiki:` 链接从此指向不存在的内容。
-  - 不等、也不拒绝在跑的作业：作业行随 space 一起没了，它按租约写的都匹配不到行，下一次需要 space 的写入失败，这次尝试就结束，也没有行可以重排。仓库操作的结果回 404，runner 当作操作已不存在。
-  - 有仓库的 wiki 会被这个仓库下一个调 wiki 工具的会话重新建出来，是空的，和任何新 space 一样请求 plan 的初稿；它的 workspace 行随旧 space 没了，留在外面的标记也一样。没有仓库的不会回来，绑在它上面的会话回 `WIKI_SPACE_UNBOUND`。
-  - 入口：web 在侧栏的 wiki 行和 Wiki 设置页底部，macOS/iOS 和 Android 在 Wiki 设置页底部；都先确认，写明 wiki 的名字和要删的条目数、文档数（效果图 `docs/mocks/wiki-delete`）。
+- **回收站**（`space.trash`，迁移 0486，效果图 `docs/mocks/wiki-trash`，owner 2026-11-07 定）：删除 wiki 改为移进回收站，保留 365 天，期间可以恢复；到期或 owner 永久删除后，在后台分批删掉。
+  - `DELETE /api/wiki/spaces/:id` 移进回收站，回 `{ spaceId, deletedAt, purgeAt }`；别人的、已在回收站的或已经没有的回普通 404。四个回收站路由都只属于 owner：带会话头回 `WIKI_OWNER_CHANNEL_ONLY`，个人访问令牌回 `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，没有 agent 工具和 CLI 命令。
+  - 移进去是一个很短的事务：锁住这一行，写 `deleted_at` 和 `purge_at`（365 天后），原 slug 和仓库存进 `trashed_slug`、`trashed_repo_url_norm`，slug 换成按 id 生成的占位、仓库置空，维护关掉，未结束的 `wiki_job` 和 `wiki_plan_job` 删掉。其余行一行不动。
+  - 回收站里的 wiki 在任何入口都当作不存在：列表、各页面、按它或它里面东西的 id 读、跨 wiki 搜索、Review 队列、链接卡片、会话的 wiki 工具、各个调度。公开链接暂停（`PAUSED` / `IN_TRASH`，访客 404），恢复后自动重新打开。
+  - 会话：指向回收站里 wiki 的 `wiki_space_workspace` 行在它在回收站期间不起作用。有仓库的 workspace，会话用这个仓库当前在用的 wiki，没有就按 `binding.automatic` 建一个空的，workspace 的行随之指向新 wiki；没有仓库的 workspace 回 `WIKI_SPACE_UNBOUND`，说明 wiki 在回收站里。
+  - `POST /api/wiki/spaces/:id/restore` 恢复，回这个 wiki（同 `GET /api/wiki/spaces/:id`）：slug 回原样，被在用的 wiki 占了就加 `-2`、`-3`…；仓库回原样，被在用的 wiki 占着就回 409，原话是 “A newer wiki for <repo> is in your wikis now. Move it to Trash first, then restore this one.”；设置回原样但维护保持关闭；内容、公开链接都回来，期间没进别的 wiki 的 workspace 也回来。在用的 wiki 原样回答；已到期或已经没有的回 404。
+  - `DELETE /api/wiki/spaces/:id/purge` 永久删除，回 `{ spaceId }`：`purge_at` 改成现在，马上离开回收站；不在回收站的回 404。真正的删除由 `WikiTrashPurge` 在跑单例清扫的进程上每分钟做一次：租约拿下一个到期的 wiki，每条语句删一批（条目连同它们的 supersede 链，然后按目录里指向 `wiki_space` 的外键逐表删，最后删 wiki 本身），一次最多 30 秒，中断后下一次接着删。
+  - `GET /api/wiki/trash` 列出回收站：`{ spaces: [{ id, slug, title, repoUrlNorm, deletedAt, purgeAt, entries }] }`，最近移进的在前，slug 和仓库是原来的，`entries` 是在用条目数。
+  - Workspace、会话、任务和项目全程不动。文字里的 `orbit-wiki:` 链接在永久删除之后指向不存在的内容。
+  - 入口：web 在侧栏 wiki 行的 ⋯ 和 Wiki 设置页底部（Move to Trash…）；侧栏 Wiki 组最后一行、设置页最后一张卡片和首个 wiki 的引导卡片通向回收站弹窗。macOS/iOS 和 Android 在 Wiki 设置页底部，加上 wiki 选择器里 Manage spaces 下面一项和引导卡片里一句。都先确认，写明 wiki 的名字和回收站保留什么。
 - **设置**（`settings` jsonb，缺省的键按默认值读）：
   - `push`，默认开（owner 2026-09-25 拍板：推送默认开，每个 space 可以关）；
   - `autoAcceptReinforce`，默认开：非 owner 的 reinforce 立即生效；关掉后进 Review；
