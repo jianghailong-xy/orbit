@@ -3780,7 +3780,7 @@ export class SessionsService {
         -- Who sent it, when another session did (0485): the row names that session, not "You".
         s.last_user_from_session_id AS "lastUserFromSessionId",
         s.last_user_from_title AS "lastUserFromTitle",
-        -- Or that Orbit wrote it (0488), with the notification card its line is written from.
+        -- Or that Orbit wrote it (0491), with the notification card its line is written from.
         s.last_user_from_orbit AS "lastUserFromOrbit",
         -- The rolling recap (0418), clipped like the previews above. A session with no recap yet
         -- answers nulls, which is what the row falls back from to lastAssistantText.

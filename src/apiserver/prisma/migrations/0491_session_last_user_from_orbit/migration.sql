@@ -1,4 +1,4 @@
--- 0488 — that the message a session row previews is Orbit's own, so the row can say "Orbit: …"
+-- 0491 — that the message a session row previews is Orbit's own, so the row can say "Orbit: …"
 -- instead of "You: …" for words nobody typed (docs/session-list-projects-design.md §3.5, owner
 -- 2026-11-07).
 --

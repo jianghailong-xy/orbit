@@ -1386,7 +1386,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         // them would leave every row on screen previewing the turn before the one just finished.
         lastAssistantText: true,
         lastUserText: true,
-        // Who sent lastUserText, when another session did (0485), or that Orbit did (0488).
+        // Who sent lastUserText, when another session did (0485), or that Orbit did (0491).
         lastUserFromSessionId: true,
         lastUserFromTitle: true,
         lastUserFromOrbit: true,
