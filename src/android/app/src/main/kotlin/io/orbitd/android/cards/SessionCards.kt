@@ -219,12 +219,7 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                 val preview = CardPreviews.preview(card)
                 val fresh = cards.fresh(session, card)
                 val result = results[card.key]?.takeIf { it.binding == card.binding } ?: CardActionState()
-                // Decide it myself opens a revision waiting for the coordinator into its evidence card, here in place, and that
-                // card is what is pressed (`CoordinatorQueue`).
-                var decidingMyself by rememberSaveable { mutableStateOf(false) }
-                val drawn = (if (decidingMyself) CoordinatorQueue.decideMyself(card) else null) ?: card
-                val submit = { verb: CardVerb, input: CardInput ->
-                    if (verb == CardVerb.DECIDE_MYSELF) decidingMyself = true else cards.submit(drawn, verb, input) }
+                val submit = { verb: CardVerb, input: CardInput -> cards.submit(card, verb, input) }
                 when {
                     // A08-13: a question that has ended is the record it became, replayed in its review.
                     card.family == CardFamily.QUESTION_RECORD -> QuestionRecordCard(card) { cards.open(card.key) }
@@ -240,7 +235,7 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                     // A08-17: an exception that became the owner's, or a pause, is its own card (iOS `OwnerItemCardView`).
                     card.family == CardFamily.EXCEPTION -> ExceptionCard(card, fresh, result, mergeCard, open, discuss,
                         review = { promotion -> CardFocus.request(session.id, "promotion:$promotion") }, main = coordinatedMain, submit = submit)
-                    else -> CompositionLocalProvider(LocalEvidenceFiles provides cards.evidenceFiles) { BusinessCard(drawn, fresh, result, open, discuss, submit) }
+                    else -> CompositionLocalProvider(LocalEvidenceFiles provides cards.evidenceFiles) { BusinessCard(card, fresh, result, open, discuss, submit) }
                 }
             }
         } }

@@ -98,7 +98,7 @@ public enum OwnerConfirmationNotReviewedReason: String, Codable, Equatable, Send
     case reviewerStopped = "REVIEWER_STOPPED"
     case noCoordinator = "NO_COORDINATOR"
     case automaticOff = "AUTOMATIC_OFF"
-    case coordinatorPaused = "COORDINATOR_PAUSED"
+    case pausedCoordinator = "COORDINATOR_PAUSED"
     case unreachable = "UNREACHABLE"
     case unknown = "UNKNOWN"
 
@@ -534,7 +534,7 @@ public extension OwnerConfirmations {
         case .timedOut?: why = noAnswerWithin(reviewWindowWords(windowSeconds))
         case .reviewerEnded?: why = notReviewedReviewerEnded
         case .reviewerStopped?: why = notReviewedReviewerStopped
-        case .coordinatorPaused?: why = notReviewedCoordinatorPaused
+        case .pausedCoordinator?: why = notReviewedCoordinatorPaused
         case .automaticOff?: why = notReviewedAutomaticOff
         case .noCoordinator?: why = notReviewedNoCoordinator
         case .unreachable?: why = notReviewedUnreachable
