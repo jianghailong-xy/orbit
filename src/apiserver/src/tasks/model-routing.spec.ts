@@ -687,3 +687,30 @@ test('reason tags identify coordinator, rule, escalation and every not-routed ex
     assert.ok(decision.reasons.some((reason) => /^\[not-routed\]/.test(reason)), JSON.stringify(decision));
   }
 });
+
+test('Optimize For floors only missing hints, with the same escalation and pin precedence', () => {
+  for (const [optimizeFor, bounded, abstained] of [
+    ['cost', 'S', null], ['balance', 'M', 'M'], ['intelligence', 'L', 'L'],
+  ] as const) {
+    const value = input();
+    value.optimizeFor = optimizeFor;
+    value.task.modelHint = null;
+    value.features = { completionCriterion: 'EXECUTABLE', hasAcceptanceCommand: true, dependents: 0, promptChars: 100 };
+    const before = JSON.stringify(value);
+    assert.equal(routeTaskRun(value).level, bounded);
+    assert.equal(JSON.stringify(value), before, 'routing does not mutate its snapshot');
+    value.features = { isForeman: true };
+    assert.equal(routeTaskRun(value).level, 'L', 'mode floors never lower the rule tier');
+    value.features = {};
+    assert.equal(routeTaskRun(value).level, abstained);
+    value.task.modelHint = 'S';
+    assert.equal(routeTaskRun(value).level, 'S');
+    value.history = [{ ordinal: 1, status: 'FAILED', quotaFailure: false, level: 'M' }];
+    assert.equal(routeTaskRun(value).level, 'L');
+    value.history = [{ ordinal: 1, status: 'FAILED', quotaFailure: false, level: 'XL' }];
+    assert.equal(routeTaskRun(value).level, 'XL');
+    value.task.model = 'pinned';
+    assert.equal(routeTaskRun(value).model, 'pinned');
+    assert.equal(routeTaskRun(value).level, null);
+  }
+});

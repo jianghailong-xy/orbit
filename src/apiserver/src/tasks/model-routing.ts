@@ -113,7 +113,10 @@ export function inferRuleTier(features: ModelRoutingFeatures = {}): {
   return { level, source: 'rule', reasons: [`[rule] Rule inference — ${body}`] };
 }
 
+export type ModelRoutingOptimizeFor = 'cost' | 'balance' | 'intelligence';
+
 export interface ModelRoutingInput {
+  optimizeFor?: ModelRoutingOptimizeFor;
   features?: ModelRoutingFeatures;
   task: {
     /** The task's engine pin: like a provider pin, it keeps the run on its engine. */
@@ -285,6 +288,12 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
   const rule = task.modelHint ? null : inferRuleTier(input.features);
   let level = task.modelHint ?? rule?.level ?? null;
   const reasons: string[] = rule?.level ? [...rule.reasons] : [];
+  const mode = input.optimizeFor ?? 'cost';
+  const floor = mode === 'balance' ? 'M' : mode === 'intelligence' ? 'L' : null;
+  if (!task.modelHint && floor && (!level || MODEL_ROUTING_LEVELS.indexOf(level) < MODEL_ROUTING_LEVELS.indexOf(floor))) {
+    level = floor;
+    reasons.push(`[default] Tier ${floor}: ${mode === 'balance' ? 'Balance' : 'Intelligence'} minimum for a task without a suggestion`);
+  }
   const lastLevel = last ? priorLevel(last, runtime) : null;
   const failure = last?.outcome && last.outcome !== 'OK'
     ? last.outcome

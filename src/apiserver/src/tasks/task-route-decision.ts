@@ -66,7 +66,7 @@ export function taskRouteReads(prisma: PrismaService, ownerId: string, now: Date
     workspace: (id: string) => once(`workspace:${id}`, () => prisma.workspace.findFirst({
       where: { id, ownerId },
       select: {
-        runnerId: true, effort: true, modelRouting: true, modelRoutingProviders: true,
+        runnerId: true, effort: true, modelRouting: true, modelRoutingProviders: true, modelRoutingOptimizeFor: true,
         env: true, codexAccount: true, claudeAccount: true,
       },
     })),
@@ -448,7 +448,10 @@ export async function planTaskRunRoute(
     dependents,
     promptChars: prompt.length,
   };
+  const optimizeFor = agent?.modelRoutingOptimizeFor === 'balance' ? 'balance'
+    : agent?.modelRoutingOptimizeFor === 'intelligence' ? 'intelligence' : 'cost';
   const decision = routeTaskRun({
+    optimizeFor,
     features: structuralFeatures,
     task: {
       engine: task.engine ?? null,
@@ -508,6 +511,7 @@ export async function planTaskRunRoute(
     features: {
       modelHint,
       ...structuralFeatures,
+      optimizeFor,
       priorRuns: history.length,
       priorFailures: history
         .filter((run) => run.outcome !== 'OK' && !run.quotaFailure && !run.capacityFailure).length,
