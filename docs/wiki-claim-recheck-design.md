@@ -1,7 +1,8 @@
 # Wiki claim recheck: a change on main re-checks what an entry says
 
 Status: approved by the owner 2026-11-06 (D1–D4 as recommended); implemented on branch `orbit/task-a-wiki-b45864`,
-not deployed. The measurement did not reach its 80% bar (§7.1).
+not deployed. Three measurements, none passed: rounds 1 and 2 under the 80% bar (§7.1), round 3 under the rewritten
+criterion (§7.2).
 
 ## 0. Summary
 
@@ -303,6 +304,50 @@ What the misses say:
 
 Before this goes live, a next iteration would read glob paths as globs, give a first check more history around the
 commits that changed a term's count, and measure again on a fresh sample. Nothing here is deployed.
+
+### 7.2 Round 3 (2026-11-07): the owner's iteration and a fresh sample
+
+The owner reopened the task on 2026-11-07 with criterion 2 rewritten: gold is what both raters conclude; every gold
+`fixed` or `obsolete` entry must be called `fixed` or `obsolete`; gold `holds` entries called `fixed` or `obsolete` at
+most 5%; `unsure` is reported apart and is not an error; both named cases are still caught. The iteration followed
+the directions above (task comment `34tDr5nGL9GrHQR5BKyOz`): patterns read as patterns (§2.1, §3.1), the changes —
+the commits that changed a term's count read whole (§3.1, §3.2) — and unsure counted apart. Trying it on rounds 1 and
+2's 60 entries (development data only) added two changes: the oldest matched commits first, and an example's name
+read as an example (§3.2).
+
+Method (task comment `34tFqi1dpVuQ9RnkbrGnR`, before the sample was drawn): the recheck at `e436dbddb`; main
+`dfd54fca6` merged in and as the head; 30 new active pitfalls whose paths changed after they were written, drawn by
+sha256 of a new seed, none from rounds 1 and 2; two blind Opus raters, each with the packet inline in its prompt and
+four labels; production ran one read-only export (orbit-prod session `34tEQgs2GpsX2QOg6yc0D`) and nothing else, so
+the history ran on HPC through the branch's Go operation (its Python port gave the same answer) and the asks went to
+the vLLM server production's System model tunnels to, with production's settings.
+
+Results (task comments `34tHAyqeP4qL5dkbhXdee` for the sealed ratings, `34tHE74Z8voac8lDHrxuC` for the readings):
+
+| | Round 3 (e436dbddb) | Bar |
+| --- | --- | --- |
+| Raters agreeing | 29/30 (kappa 0.84): 26 holds, 3 fixed or obsolete | — |
+| Real fixes called fixed or obsolete | **2 of 3**; the third called holds | all |
+| Gold holds called fixed or obsolete | **3 of 26 = 11.5%** | at most 5% |
+| Unsure | 4, all on gold holds, each a second ask that disagreed | reported |
+| `34ZfFGATAFiBBi9qmqPF7` / `34s2IFZlpqkEDdbKZwcj3` | fixed (wrong when recorded) / obsolete | both caught |
+
+Criterion 2 is not met. What the errors say, read after the fact:
+- **The entry's own fix again.** Two of the three false alarms name the commit that applied the fix the entry itself
+  records (unknown usage omitted; the dispatchers answer `/api/auth/methods` with 404). The reading rule of round 2 did
+  not hold the model back, and taking the oldest commits first (§3.1) likely put such commits in front of it more often.
+- **A term that was never there.** The third names a constraint that never occurred in the entry's file (0 -> 0); the
+  model read its absence as obsolete. The constraint lives in a migration the entry does not name.
+- **A fix outside the entry's files.** The missed fix raised vitest's timeout in `src/web/vite.config.ts`, a file the
+  entry does not name, before the entry was written. The recheck reads an entry's own paths only; the development data
+  had another such case (a CI entry fixed in Swift code).
+- **The screen** would have ranked all three real fixes 3, below 14 of the 26 holds entries.
+- No sampled entry named a pattern path, so the round did not test that change.
+
+What would have to change before this goes live is not another wording of the question. A commit that does what the
+entry's own fix field says, before or after the recording (one of the two landed 18 days after it), has to be told
+apart from a fix of the problem without leaning on the model's judgement; and a fix made outside the entry's paths is
+out of the recheck's reach as designed. Nothing here is deployed.
 
 ## 8. What needs the owner
 
