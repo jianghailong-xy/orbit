@@ -47,7 +47,8 @@ export const FEISHU_ALLOWED_ACTIONS: readonly FeishuAllowedAction[] = [
     access: 'WRITE',
     condition:
       'The owner’s click on Allow once or Deny of a tool-permission approval while approvalsInFeishu is on: only allow / deny, never'
-      + ' rememberRules or startAfterCreate; recorded with credentialKind=FEISHU, the clicker’s open_id and the card’s message_id.',
+      + ' rememberRules or startAfterCreate; recorded with credentialKind=FEISHU, the clicker’s open_id and the card’s message_id.'
+      + ' Also the owner’s submitted answer form of an AskUserQuestion approval (F2-2), only in FULL detail: an allow with answers.',
   },
 ];
 

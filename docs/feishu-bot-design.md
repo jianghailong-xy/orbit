@@ -382,6 +382,15 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
   `POST /open-apis/interactive/v1/card/update` 补卡一次（30 分钟内）。落地的 FEISHU 决定在同一事务里另记一行 Activity
   （`feishu.approval.decided`，credential_kind FEISHU，payload 带 sessionId、approvalId、behavior、appId、openId、messageId）；
   重放的事件、过期卡的点击不再记。
+- 实现（F2-2）：提问卡在 FULL 且 `approvalsInFeishu` 开着时，每个问题画一个表单项：问题的 header（没有就用问题本身）、
+  单选 `select_static` 或多选 `multi_select_static`（选项的 value 是它在 agent 列表里的序号），加一个 `input` 让主人自己写；
+  表单项的 name 为 `a<卡上第几条>_q<第几个问题>`（`_other` 是自填框），因为飞书要求 name 在卡内唯一。点 Submit 回
+  `question.answer`：`FeishuCardActions` 按审批行自己的 input 把序号换回 agent 写的标签，拼成与 Web 相同的 `QuestionAnswers`
+  （问题文本 → 标签），多选的自填答案排在所选之后，单选的自填答案取代所选（Web 的表单两者只留一个，卡上分不出先后，以手写的为准），
+  再以 `{ behavior: 'allow', answers }` 调 `decideApproval`，toast `Answer sent.`。有问题既没选也没写：回
+  `Answer every question, then submit.`，零写入。TITLES_ONLY 下卡上没有表单，点名提问的 `question.answer` 回
+  `This question is answered in Orbit. Open it in Orbit to answer.`，零写入；Allow once / Deny 点名提问、表单点名工具审批，都回
+  `Answer this in Orbit.`。幂等与过期的判定同上。
 
 ### 7.5 会话的回复回到飞书
 
