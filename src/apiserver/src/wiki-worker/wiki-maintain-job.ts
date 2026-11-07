@@ -745,10 +745,10 @@ class WikiMaintainRun {
     const { prisma } = this.deps;
     const { job } = this.jobContext;
     const space = await prisma.wikiSpace.findFirst({
-      where: { id: job.spaceId, ownerId: job.ownerId },
+      where: { id: job.spaceId, ownerId: job.ownerId, deletedAt: null },
       select: { id: true, title: true, repoUrlNorm: true, rootCommitSha: true, settings: true },
     });
-    if (!space) throw new WikiJobContentError('the space this run maintains is gone');
+    if (!space) throw new WikiJobContentError('the space this run maintains is gone, or in Trash');
     const settings = space.settings as Record<string, unknown> | null;
     const maintenance = (settings?.maintenance ?? {}) as { workspaceId?: string | null };
     const reviewMode = ((settings?.reviewMode as WikiReviewMode | undefined) ?? 'tiered');

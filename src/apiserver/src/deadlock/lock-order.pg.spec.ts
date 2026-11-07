@@ -52,6 +52,13 @@ function edges(outcome: ScenarioOutcome): string[] {
 }
 
 /**
+ * Every Session write also bumps its account's Open-list counter (0484), so the counter's table is in each
+ * set below. It is on no wait path: since 0487 a bump takes only a counter row no other transaction holds
+ * (LOCK_ORDER_COMPATIBLE in common/lock-order.ts; open-list-version.pg.spec.ts makes two such writers meet).
+ */
+const OPEN_LIST_COUNTER = 'open_list_epoch';
+
+/**
  * The canonical lock order, against a real fully-migrated PostgreSQL.
  *
  * Two things are proven here, and they are different claims:
@@ -93,9 +100,9 @@ test('the canonical lock order holds from both directions', { skip: !URL, timeou
       const afterFirst = await heldRelations(admin, pid);
       assert.deepEqual(
         afterFirst,
-        ['session'],
-        'one write takes the Session row and nothing else — SELECT … FOR UPDATE does not arm the ' +
-          're-check, because it leaves the tuple\'s xmin alone',
+        [OPEN_LIST_COUNTER, 'session'],
+        'one write takes the Session row (and its Open-list counter) and nothing else — SELECT … FOR UPDATE ' +
+          'does not arm the re-check, because it leaves the tuple\'s xmin alone',
       );
 
       // The second write of the same row. Nothing about any foreign key column changed, and yet:
@@ -291,7 +298,7 @@ test('the canonical lock order holds from both directions', { skip: !URL, timeou
       for (const step of mergedIngestStatements(ids)) await probe.query(step.sql, step.values);
       assert.deepEqual(
         await heldRelations(admin, rows[0].pid),
-        ['run_event', 'session'],
+        [OPEN_LIST_COUNTER, 'run_event', 'session'],
         'both sessions locked, each written once with its event: no user, workspace, runner or task lock (I3)',
       );
     } finally {
@@ -319,7 +326,7 @@ test('the canonical lock order holds from both directions', { skip: !URL, timeou
       // The capacity fence is declared `UPDATE OF status, task_id, deleted_at` and the event
       // source `UPDATE OF status, deleted_at, merge_status`; a batch write names none of them, so
       // rank 40 stays out of the hottest transaction in the system entirely.
-      assert.deepEqual(await heldRelations(admin, rows[0].pid), ['session']);
+      assert.deepEqual(await heldRelations(admin, rows[0].pid), [OPEN_LIST_COUNTER, 'session']);
     } finally {
       await probe.query('ROLLBACK').catch(() => undefined);
       await probe.end().catch(() => undefined);

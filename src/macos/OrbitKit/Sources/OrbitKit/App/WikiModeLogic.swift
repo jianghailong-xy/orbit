@@ -34,30 +34,25 @@ public enum WikiModeCopy {
     public static let addWorkspace = "Add workspace…"                             // WIKI_ADD_WORKSPACE
     public static let addWorkspaceGroup = "Workspaces with no repository"         // WIKI_ADD_WORKSPACE_GROUP
 
-    // MARK: Delete wiki (docs/mocks/wiki-delete)
+    // MARK: Trash (docs/mocks/wiki-trash): the foot of the page, the question Move to Trash asks, and Trash itself
 
-    public static let deleteTitle = "Delete this wiki"                            // WIKI_DELETE_TITLE
-    public static let deleteNote = "Its entries, documents and history are permanently deleted." // WIKI_DELETE_NOTE
-    public static let deleteOpen = "Delete wiki…"                                 // WIKI_DELETE_OPEN
-    public static let deleteConfirm = "Delete wiki"                               // WIKI_DELETE_CONFIRM
-    public static let deleteKept = "Workspaces and sessions are kept."            // WIKI_DELETE_KEPT
+    public static let trashTitle = "Move to Trash"                                // WIKI_TRASH_TITLE
+    public static let trashOpen = "Move to Trash…"                                // WIKI_TRASH_OPEN
+    public static let trashConfirm = "Move to Trash"                              // WIKI_TRASH_CONFIRM
+    public static let trashNote = "It stays in Trash for 365 days and can be restored until then."   // WIKI_TRASH_NOTE
+    public static let trashLeaves = "It leaves your wikis now, and sessions stop reading it."        // WIKI_TRASH_LEAVES
+    public static let trashKept = "Workspaces and sessions are kept."             // WIKI_TRASH_KEPT
     /// What an alert titles a refusal; the web says one inside its dialog, with no title.
-    public static let deleteFailed = "Couldn't delete the wiki"
-    public static func deleteQuestion(_ name: String) -> String { "Delete wiki “\(name)”?" }
-    public static func deleted(_ name: String) -> String { "Deleted wiki “\(name)”" }
-    /// What a wiki with a repository does after it: the next session on the repository makes it again.
-    public static func deleteComesBack(_ repository: String) -> String {
-        "The next session on \(repository) to use the wiki starts a new, empty one."
+    public static let trashFailed = "Couldn't move the wiki to Trash"
+    public static func trashQuestion(_ name: String) -> String { "Move wiki “\(name)” to Trash?" }
+    public static func movedToTrash(_ name: String) -> String { "Moved wiki “\(name)” to Trash" }
+    /// What a wiki with a repository does while it is in Trash: the next session on the repository makes a new one.
+    public static func trashComesBack(_ repository: String) -> String {
+        "Until you restore it, the next session on \(repository) to use the wiki starts a new, empty one."
     }
-    /// What the question says it takes (`wikiDeleteBody`). `entries` is nil when the health read has not answered:
-    /// the sentence still says what goes, with no number in it.
-    public static func deleteBody(entries: Int?, documents: Int) -> String {
-        let counted = { (count: Int, one: String, many: String) -> String in
-            let format = NumberFormatter()
-            format.numberStyle = .decimal
-            format.locale = Locale(identifier: "en_US")
-            return "\(format.string(from: NSNumber(value: count)) ?? String(count)) \(count == 1 ? one : many)"
-        }
+    /// What the question says Trash keeps (`wikiTrashBody`). `entries` is nil when the health read has not answered:
+    /// the sentence still says what stays, with no number in it.
+    public static func trashBody(entries: Int?, documents: Int) -> String {
         var things: [String] = []
         if let entries {
             if entries > 0 { things.append(counted(entries, "entry", "entries")) }
@@ -65,15 +60,63 @@ public enum WikiModeCopy {
             things.append("entries")
         }
         if documents > 0 { things.append(counted(documents, "document", "documents")) }
-        let whose = entries == 1 && documents == 0 ? "its" : "their"
-        let subject = things.isEmpty ? "Its history" : "Its \(things.joined(separator: ", ")) and \(whose) history"
-        return "\(subject) will be permanently deleted. This cannot be undone."
+        // A single entry, or a single document, and nothing else: `stays`.
+        let one = (entries == 1 && documents == 0) || (entries == 0 && documents == 1)
+        let subject = things.isEmpty ? "It stays" : "Its \(things.joined(separator: " and ")) \(one ? "stays" : "stay")"
+        return "\(subject) in Trash for 365 days: restore it any time until then. After that it is deleted for good."
     }
-    /// The question's whole message: what goes, what a repository's wiki does next, and what stays.
-    public static func deleteMessage(entries: Int?, documents: Int, repository: String?) -> String {
-        [deleteBody(entries: entries, documents: documents), repository.map(deleteComesBack), deleteKept]
+    /// The question's whole message: that it leaves at once, what Trash keeps, what a repository's wiki does meanwhile,
+    /// and what stays.
+    public static func trashMessage(entries: Int?, documents: Int, repository: String?) -> String {
+        [trashLeaves, trashBody(entries: entries, documents: documents), repository.map(trashComesBack), trashKept]
             .compactMap { $0 }
             .joined(separator: "\n\n")
+    }
+
+    // The ways to Trash: Wiki settings' row, the space menu's item, and the empty Wiki's line.
+    public static let trashOpenTrash = "Open Trash"                               // WIKI_TRASH_OPEN_TRASH
+    /// `1 wiki is in Trash.`, where the Wiki says it has none (`wikiTrashHoldsWhenEmpty`).
+    public static func trashHoldsWhenEmpty(_ wikis: Int) -> String {
+        "\(counted(wikis, "wiki", "wikis")) \(wikis == 1 ? "is" : "are") in Trash."
+    }
+    /// `1 wiki`, beside the word Trash on Wiki settings' row (`wikiTrashRowCount`).
+    public static func trashRowCount(_ wikis: Int) -> String { counted(wikis, "wiki", "wikis") }
+    /// The space menu's item, under Manage spaces.
+    public static let trashPickerItem = "Trash"
+
+    // Trash itself.
+    public static let trashPageTitle = "Trash"                                    // WIKI_TRASH_PAGE_TITLE
+    public static let trashPageLead = "A wiki stays here for 365 days after it was moved, then it is deleted for good."   // WIKI_TRASH_PAGE_LEAD
+    public static let trashPageEmpty = "Trash is empty."                          // WIKI_TRASH_PAGE_EMPTY
+    public static let trashRestore = "Restore"                                    // WIKI_TRASH_RESTORE
+    public static let trashDeletePermanently = "Delete permanently…"              // WIKI_TRASH_DELETE_PERMANENTLY
+    /// A row's swipe on iOS: the same press as the Mac menu's Delete permanently…, which asks first.
+    public static let trashDeleteSwipe = "Delete"
+    public static func restored(_ name: String) -> String { "Restored wiki “\(name)”" }   // wikiRestored
+    /// What an alert titles a refused restore; its message is the server's own sentence.
+    public static let trashRestoreFailed = "Couldn't restore the wiki"
+    /// One wiki's line in Trash (`wikiTrashRowLine`): when it was moved, what it holds, and when it goes.
+    public static func trashRowLine(deletedAt: String, purgeAt: String, entries: Int, timeZone: TimeZone = .current) -> String {
+        let moved = WikiModeLogic.monthDayYear(deletedAt, timeZone: timeZone) ?? ""
+        let purged = WikiModeLogic.monthDayYear(purgeAt, timeZone: timeZone) ?? ""
+        return "Moved to Trash \(moved) · \(counted(entries, "entry", "entries")) · deleted for good \(purged)"
+    }
+    public static let trashPurgeQuestion = "Delete permanently?"                  // WIKI_TRASH_PURGE_QUESTION
+    public static let trashPurgeConfirm = "Delete permanently"                    // WIKI_TRASH_PURGE_CONFIRM
+    /// What an alert titles a refused permanent delete.
+    public static let trashPurgeFailed = "Couldn't delete the wiki"
+    /// What Delete permanently says it takes (`wikiTrashPurgeBody`), as the session Trash's own question does.
+    public static func trashPurgeBody(entries: Int) -> String {
+        let subject = entries == 0 ? "Its history" : "Its \(counted(entries, "entry", "entries")) and \(entries == 1 ? "its" : "their") history"
+        return "\(subject) will be permanently deleted. This cannot be undone."
+    }
+
+    /// `11,138 entries`, `1 entry`: a count in en-US digits and its noun (the web's `counted`).
+    private static func counted(_ count: Int, _ one: String, _ many: String) -> String {
+        let format = NumberFormatter()
+        format.numberStyle = .decimal
+        format.locale = Locale(identifier: "en_US")
+        return "\(format.string(from: NSNumber(value: count)) ?? String(count)) \(count == 1 ? one : many)"
     }
 
     /// A mode's name (`WIKI_MODE_LABELS`). Empty for one this build does not know.
@@ -223,14 +266,14 @@ public enum WikiModeLogic {
 
     /// The settings page's sections, top to bottom — the web's order (`WIKI_SETTINGS_SECTIONS`).
     public enum SettingsSection: String, CaseIterable, Sendable {
-        case reviewMode, workspaces, maintenance, delete
+        case reviewMode, workspaces, maintenance, trash
 
         public var title: String {
             switch self {
             case .reviewMode:  return WikiModeCopy.reviewMode
             case .workspaces:  return WikiModeCopy.workspaces
             case .maintenance: return WikiModeCopy.maintenance
-            case .delete:      return WikiModeCopy.deleteTitle
+            case .trash:       return WikiModeCopy.trashTitle
             }
         }
     }
@@ -274,6 +317,13 @@ public enum WikiModeLogic {
     public static func monthDay(_ iso: String, timeZone: TimeZone = .current) -> String? {
         guard let parts = components(iso, timeZone: timeZone), let month = parts.month, let day = parts.day else { return nil }
         return "\(months[month - 1]) \(day)"
+    }
+
+    /// `Nov 7, 2026`: a day in Trash (`trashDate`), the en-US short month in the reader's time zone.
+    public static func monthDayYear(_ iso: String, timeZone: TimeZone = .current) -> String? {
+        guard let parts = components(iso, timeZone: timeZone), let month = parts.month, let day = parts.day,
+              let year = parts.year else { return nil }
+        return "\(months[month - 1]) \(day), \(year)"
     }
 
     /// `Sep 28, 07:41`: when a run was recorded (`wikiRunWhen`).

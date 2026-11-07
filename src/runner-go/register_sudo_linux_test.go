@@ -20,7 +20,8 @@ import (
 // installed to run as c2b ORBIT_HOME=/root/.orbit, which c2b cannot enter, so the runner exited at
 // every start while register said it was online. Under sudo, register is c2b's own registration: it
 // runs as c2b, as `sudo -H -u c2b` starts it, and the config it writes and the ORBIT_HOME of the unit it
-// installs are both in c2b's home.
+// installs are both in c2b's home. So is the PATH that unit runs with: it ends in c2b's own Orbit ripgrep
+// directory, and nothing of root's is on it.
 //
 // The test runs `orbit register` as typed, as a root this process pretends to be, against a stub
 // control plane, with the unit directory, the broker socket and sudo, systemctl and journalctl in
@@ -40,6 +41,9 @@ func TestRegisterUnderSudoKeepsTheRunnerInTheAccountsHome(t *testing.T) {
 		t.Setenv(k, "")
 		os.Unsetenv(k)
 	}
+	// What main does for root's own commands: root's engine directories first on PATH, and Orbit's ripgrep
+	// directory in root's runner home last.
+	t.Setenv("PATH", runnerEnginePath(rootHome, os.Getenv("PATH")))
 	prevEUID, prevCurrent, prevLookup := processEUID, currentUser, lookupUser
 	t.Cleanup(func() { processEUID, currentUser, lookupUser = prevEUID, prevCurrent, prevLookup })
 	processEUID = func() int { return 0 }
@@ -118,6 +122,19 @@ func TestRegisterUnderSudoKeepsTheRunnerInTheAccountsHome(t *testing.T) {
 		if !strings.Contains(string(unit), want) {
 			t.Errorf("c2b's unit lacks %q:\n%s", strings.TrimSpace(want), unit)
 		}
+	}
+	var unitPath string
+	for _, line := range strings.Split(string(unit), "\n") {
+		if path, ok := strings.CutPrefix(line, "Environment=PATH="); ok {
+			unitPath = path
+		}
+	}
+	entries := strings.Split(unitPath, ":")
+	if want := filepath.Join(accountOrbit, "tools", "ripgrep", managedRgVersion); entries[len(entries)-1] != want {
+		t.Errorf("c2b's unit runs with PATH=%s, want it to end in c2b's own %s", unitPath, want)
+	}
+	if strings.Contains(unitPath, rootHome) {
+		t.Errorf("c2b's unit runs with PATH=%s, which names root's own directories", unitPath)
 	}
 	for _, want := range []string{"✓ Background service started as c2b (runs at boot).", "✓ Setup complete — c2b-load-2 is online."} {
 		if !strings.Contains(out, want) {

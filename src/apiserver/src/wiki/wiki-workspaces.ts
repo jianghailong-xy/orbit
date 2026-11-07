@@ -28,10 +28,14 @@ interface OwnerWorkspace {
 
 const repositoryOf = (repoUrl: string | null): string | null => (repoUrl ? normalizeRepoUrl(repoUrl) : null);
 
-/** Every row the owner's workspaces have, whatever space it names. */
+/**
+ * Every row the owner's workspaces have, whatever space in use it names. A row naming a wiki in Trash says nothing while it
+ * is there (contract `space.trash`): its workspace is where its repository puts it, or in no wiki, and the row speaks again
+ * if the wiki is restored before the workspace joins another.
+ */
 async function rowsOf(db: Db, ownerId: string) {
   return db.wikiSpaceWorkspace.findMany({
-    where: { ownerId },
+    where: { ownerId, space: { deletedAt: null } },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: { spaceId: true, workspaceId: true, leftOutAt: true },
   });

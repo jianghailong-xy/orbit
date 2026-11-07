@@ -111,7 +111,8 @@ async function joinFact(
 ): Promise<WikiDocsFollowQueued | null> {
   const { ownerId, spaceId, fact } = input;
   const space = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-    SELECT "id" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`);
+    SELECT "id" FROM "wiki_space"
+     WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid AND "deleted_at" IS NULL FOR NO KEY UPDATE`);
   if (space.length === 0) return null;
   if (fact.kind !== 'press') {
     const seen = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`

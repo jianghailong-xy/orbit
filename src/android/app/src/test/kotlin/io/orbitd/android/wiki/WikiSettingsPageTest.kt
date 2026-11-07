@@ -35,7 +35,8 @@ class WikiSettingsPageTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val route = OrbitRoute(Destination.WIKI_SETTINGS)
     private val calls = mutableListOf<String>()
-    private val actions = WikiSettingsActions(delete = { calls += "delete" }, setMode = { calls += "mode $it" }, setSpotChecks = { calls += "spot checks $it" },
+    private val actions = WikiSettingsActions(moveToTrash = { calls += "move to trash" }, openTrash = { calls += "open trash" },
+        setMode = { calls += "mode $it" }, setSpotChecks = { calls += "spot checks $it" },
         setWorkspace = { id, inWiki -> calls += "workspace $id $inWiki" }, setUp = { calls += "set up" }, turnOff = { calls += "turn off" })
 
     @Before fun quiet() { OrbitToasts.clear() }
@@ -150,10 +151,16 @@ class WikiSettingsPageTest {
 
     private var spaceRead = """{"id":"sp1","slug":"orbit","settings":{"reviewMode":"automatic"}}"""
     private var patchAnswer: Pair<Int, String> = 200 to "{}"
-    private var deleteAnswer: Pair<Int, String> = 200 to "{}"
+    private var moveAnswer: Pair<Int, String> = 200 to """{"spaceId":"sp1","deletedAt":"2026-11-07T12:00:00.000Z","purgeAt":"2027-11-07T12:00:00.000Z"}"""
     /** `GET /wiki/spaces/sp1/health`; a failed read is what the question has to say something without a number for. */
     private var healthAnswer: Pair<Int, String> = 200 to """{"spaceId":"sp1","entries":2606,"maintenance":{}}"""
+    /** What Trash held before the page opened, as `GET /wiki/trash` lists it; the wiki the page moves there joins it. Null
+     * answers 404, as a server from before Trash. */
+    private var trashHeld: List<String>? = emptyList()
+    private fun trashed(id: String, title: String) =
+        """{"id":"$id","slug":"$id","title":"$title","repoUrlNorm":null,"deletedAt":"2026-11-07T12:00:00.000Z","purgeAt":"2027-11-07T12:00:00.000Z","entries":3}"""
     private var backs = 0
+    private val pushed = mutableListOf<OrbitRoute>()
     /** `GET /wiki/system-model`: what every server since P11 answers — the server executes the account's wiki. A control
      * plane before P9 answers 404. */
     private var systemModelAnswer: Pair<Int, String> = 200 to """{"state":"up","model":"qwen3.8-27b-fp8","since":"2026-10-08T06:00:00.000Z","checkedAt":"2026-10-08T06:29:55.000Z","workerSeenAt":"2026-10-08T06:29:55.000Z","executor":{"mode":"server","serverExecutes":true}}"""
@@ -164,7 +171,10 @@ class WikiSettingsPageTest {
     private val rig = WikiTestRig { request -> answer(request) }
     private fun answer(request: ApiRequest): Pair<Int, String>? = when {
         request.method == HttpMethod.PATCH -> patchAnswer
-        request.method == HttpMethod.DELETE -> deleteAnswer.also { if (it.first == 200) spaceGone = true }
+        request.method == HttpMethod.DELETE -> moveAnswer.also { if (it.first == 200) spaceGone = true }
+        request.path == listOf("wiki", "trash") -> trashHeld?.let { held ->
+            200 to """{"spaces":[${(listOfNotNull(trashed("sp1", "orbit").takeIf { spaceGone }) + held).joinToString(",")}]}"""
+        }
         request.path == listOf("wiki", "spaces", "sp1", "health") -> healthAnswer
         request.path == listOf("wiki", "system-model") -> systemModelAnswer
         request.path == listOf("wiki", "spaces") -> 200 to if (spaceGone) "[]" else "[$spaceRead]"
@@ -173,10 +183,11 @@ class WikiSettingsPageTest {
         request.path == listOf("runners") -> 200 to """[{"id":"r1","name":"host-1","displayName":"Mac mini","online":true},{"id":"r2","name":"wikova","displayName":null,"online":true}]"""
         else -> null
     }
-    private fun screen() {
+    private fun screen(): WikiStore {
         val store = rig.store()
-        val nav = WikiNav({}, { backs += 1 }, "https://wiki.test") {}
+        val nav = WikiNav({ pushed += it }, { backs += 1 }, "https://wiki.test") {}
         show { WikiSettingsScreen(store, route, DirectoryData(), nav) }
+        return store
     }
     private fun patches() = rig.requests.filter { it.method == HttpMethod.PATCH }.map { rig.line(it) + " " + rig.body(it) }
     /** The maintenance card's rows, top to bottom, by the name on their left. */
@@ -301,70 +312,108 @@ class WikiSettingsPageTest {
         assertEquals(WikiCopy.settingsSaved, OrbitToasts.feed.value.transient?.message)
     }
 
-    private fun deletes() = rig.requests.filter { it.method == HttpMethod.DELETE }.map { rig.line(it) }
-    private fun pressDeleteWiki() {
-        compose.onNodeWithTag("wiki-settings-page").performScrollToNode(hasTestTag("wiki-settings-delete-open"))
-        compose.onNodeWithTag("wiki-settings-delete-open").performClick()
+    private fun moves() = rig.requests.filter { it.method == HttpMethod.DELETE }.map { rig.line(it) }
+    private fun pressMoveToTrash() {
+        compose.onNodeWithTag("wiki-settings-page").performScrollToNode(hasTestTag("wiki-settings-move-to-trash-open"))
+        compose.onNodeWithTag("wiki-settings-move-to-trash-open").performClick()
         compose.waitForIdle()
     }
 
-    @Test fun deleteIsTheLastThingOnThePageAndOnlyAsks() {
+    @Test fun moveToTrashIsTheLastSectionAndOnlyAsks() {
         show { WikiSettingsPage(route, space("""{"reviewMode":"tiered"}"""), actions = actions) }
-        compose.onNodeWithTag("wiki-settings-page").performScrollToNode(hasTestTag("wiki-settings-delete-open"))
-        says("wiki-settings-delete", WikiModeCopy.deleteOpen)
-        compose.onNodeWithText(WikiModeCopy.deleteNote).assertExists()
-        compose.onNodeWithTag("wiki-settings-delete-open").performClick()
-        assertEquals(listOf("delete"), calls)
+        compose.onNodeWithTag("wiki-settings-page").performScrollToNode(hasTestTag("wiki-settings-move-to-trash-open"))
+        compose.onNode(isHeading() and hasText(WikiModeCopy.trashTitle)).assertExists()
+        says("wiki-settings-move-to-trash", WikiModeCopy.trashOpen)
+        compose.onNodeWithText(WikiModeCopy.trashNote).assertExists()
+        // With nothing in Trash, the page has no way to it.
+        compose.onAllNodesWithTag("wiki-settings-trash").assertCountEquals(0)
+        compose.onNodeWithTag("wiki-settings-move-to-trash-open").performClick()
+        assertEquals(listOf("move to trash"), calls)
     }
 
-    @Test fun deleteAsksFirstNamingTheWikiAndHowMuchGoesAndCancelDeletesNothing() {
+    /** The way to Trash is a row of the last section, under its note, with no heading of its own: the page's sections stay
+     * the fixture's four. */
+    @Test fun whileTrashHoldsAWikiItsRowIsUnderTheNoteAndOpensIt() {
+        show { WikiSettingsPage(route, space("{}"), actions = actions, trashed = 3) }
+        compose.onNodeWithTag("wiki-settings-page").performScrollToNode(hasTestTag("wiki-settings-trash"))
+        says("wiki-settings-trash", WikiModeCopy.trash, "3 wikis")
+        assertTrue(compose.onNodeWithTag("wiki-settings-trash").fetchSemanticsNode().positionInRoot.y >
+            compose.onNodeWithText(WikiModeCopy.trashNote).fetchSemanticsNode().positionInRoot.y)
+        compose.onAllNodes(isHeading() and hasText(WikiModeCopy.trash)).assertCountEquals(0)
+        compose.onNodeWithTag("wiki-settings-trash").performClick()
+        assertEquals(listOf("open trash"), calls)
+    }
+
+    @Test fun moveToTrashAsksFirstNamingTheWikiWhatTrashKeepsAndCancelMovesNothing() {
         spaceRead = """{"id":"sp1","slug":"orbit-vllm-preview","title":"orbit · vLLM preview","docs":{"written":14,"total":14},"settings":{}}"""
         screen()
-        pressDeleteWiki()
-        compose.onNodeWithText("Delete wiki “orbit · vLLM preview”?").assertExists()
-        compose.onNodeWithText("Its 2,606 entries, 14 documents and their history will be permanently deleted. This cannot be undone.\n\nWorkspaces and sessions are kept.").assertExists()
-        assertEquals(emptyList<String>(), deletes())
-        compose.onNodeWithTag("wiki-delete-cancel").performClick()
+        pressMoveToTrash()
+        compose.onNodeWithText("Move wiki “orbit · vLLM preview” to Trash?").assertExists()
+        compose.onNodeWithText("It leaves your wikis now, and sessions stop reading it.\n\nIts 2,606 entries and 14 documents stay in Trash for 365 days: " +
+            "restore it any time until then. After that it is deleted for good.\n\nWorkspaces and sessions are kept.").assertExists()
+        compose.onNodeWithTag("wiki-move-to-trash-confirm").assertTextEquals(WikiModeCopy.trashConfirm)
+        assertEquals(emptyList<String>(), moves())
+        compose.onNodeWithTag("wiki-move-to-trash-cancel").performClick()
         compose.waitForIdle()
-        compose.onNodeWithTag("wiki-delete-dialog").assertDoesNotExist()
-        assertEquals(emptyList<String>(), deletes())
+        compose.onNodeWithTag("wiki-move-to-trash-dialog").assertDoesNotExist()
+        assertEquals(emptyList<String>(), moves())
         assertEquals(0, backs)
     }
 
-    @Test fun aWikiWithARepositorySaysItComesBackAndAFailedCountSaysNoNumber() {
+    @Test fun aWikiWithARepositorySaysWhatItsSessionsDoUntilItIsRestoredAndAFailedCountSaysNoNumber() {
         spaceRead = """{"id":"sp1","slug":"orbit","repoUrlNorm":"github.com/orbit/orbit","settings":{}}"""
         healthAnswer = 500 to "{}"
         screen()
-        pressDeleteWiki()
-        compose.onNodeWithText("Its entries and their history will be permanently deleted. This cannot be undone.\n\nThe next session on github.com/orbit/orbit to use the wiki starts a new, empty one.\n\nWorkspaces and sessions are kept.").assertExists()
+        pressMoveToTrash()
+        compose.onNodeWithText("It leaves your wikis now, and sessions stop reading it.\n\nIts entries stay in Trash for 365 days: restore it any time " +
+            "until then. After that it is deleted for good.\n\nUntil you restore it, the next session on github.com/orbit/orbit to use the wiki " +
+            "starts a new, empty one.\n\nWorkspaces and sessions are kept.").assertExists()
     }
 
-    @Test fun deleteWritesOnceLeavesThePageAndSaysSo() {
+    @Test fun moveToTrashWritesOnceLeavesThePageAndSaysSo() {
         spaceRead = """{"id":"sp1","slug":"orbit","title":"orbit","settings":{}}"""
-        screen()
-        pressDeleteWiki()
-        compose.onNodeWithTag("wiki-delete-confirm").performClick()
+        val store = screen()
+        pressMoveToTrash()
+        compose.onNodeWithTag("wiki-move-to-trash-confirm").performClick()
         compose.waitForIdle()
-        assertEquals(listOf("DELETE /api/wiki/spaces/sp1"), deletes())
+        assertEquals(listOf("DELETE /api/wiki/spaces/sp1"), moves())
         assertEquals(1, backs)
-        assertEquals("Deleted wiki “orbit”", OrbitToasts.feed.value.transient?.message)
-        // The wikis are read again, and the one that went is off the list.
-        compose.waitUntil(5_000) { rig.requests.count { it.path == listOf("wiki", "spaces") } >= 2 }
+        assertEquals("Moved wiki “orbit” to Trash", OrbitToasts.feed.value.transient?.message)
+        // The wikis and Trash are read again: the one that went is off the first and in the second.
+        compose.waitUntil(5_000) { rig.requests.count { it.path == listOf("wiki", "spaces") } >= 2 && rig.requests.count { it.path == listOf("wiki", "trash") } >= 2 }
+        assertEquals(emptyList<WikiSpace>(), store.state.value.spaces)
+        assertEquals(listOf("sp1"), store.state.value.trash.map { it.id })
     }
 
-    @Test fun aRefusedDeleteSaysWhyAndStaysOnThePage() {
+    @Test fun aRefusedMoveSaysWhyAndStaysOnThePage() {
         spaceRead = """{"id":"sp1","slug":"orbit","title":"orbit","settings":{}}"""
-        deleteAnswer = 503 to """{"code":"TRANSIENT_DB_CONFLICT","message":"The server was busy. Nothing was deleted."}"""
+        moveAnswer = 503 to """{"code":"TRANSIENT_DB_CONFLICT","message":"The server was busy. Nothing was moved."}"""
         screen()
-        pressDeleteWiki()
-        compose.onNodeWithTag("wiki-delete-confirm").performClick()
+        pressMoveToTrash()
+        compose.onNodeWithTag("wiki-move-to-trash-confirm").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("Couldn't delete the wiki").assertExists()
-        compose.onNodeWithText("The server was busy. Nothing was deleted.").assertExists()
+        compose.onNodeWithText("Couldn't move the wiki to Trash").assertExists()
+        compose.onNodeWithText("The server was busy. Nothing was moved.").assertExists()
         compose.onNodeWithTag("wiki-refusal-ok").performClick()
         assertEquals(0, backs)
         compose.onNodeWithTag("wiki-settings-page").assertExists()
         assertNull(OrbitToasts.feed.value.transient)
+    }
+
+    /** Trash's own read draws the row and its count, and a server from before Trash (a 404) draws no way to it. */
+    @Test fun theTrashRowCountsWhatTrashsReadListsAndOpensTrash() {
+        trashHeld = listOf(trashed("sp7", "wikova"))
+        screen()
+        compose.onNodeWithTag("wiki-settings-page").performScrollToNode(hasTestTag("wiki-settings-trash"))
+        says("wiki-settings-trash", WikiModeCopy.trash, "1 wiki")
+        compose.onNodeWithTag("wiki-settings-trash").performClick()
+        assertEquals(listOf(OrbitRoute(Destination.WIKI_TRASH)), pushed)
+        trashHeld = null
+        val reads = rig.requests.count { it.path == listOf("wiki", "trash") }
+        screen()
+        assertTrue("the page read Trash", rig.requests.count { it.path == listOf("wiki", "trash") } > reads)
+        compose.onNodeWithTag("wiki-settings-page").performScrollToNode(hasTestTag("wiki-settings-move-to-trash-open"))
+        compose.onAllNodesWithTag("wiki-settings-trash").assertCountEquals(0)
     }
 
     @Test fun aRefusedSetUpSaysWhyAndKeepsTheForm() {

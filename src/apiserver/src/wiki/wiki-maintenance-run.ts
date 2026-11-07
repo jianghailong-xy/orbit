@@ -189,7 +189,7 @@ export async function considerWikiMaintenance(
     why,
   });
   const space = await prisma.wikiSpace.findFirst({
-    where: { id: spaceId, ownerId },
+    where: { id: spaceId, ownerId, deletedAt: null },
     select: { id: true, settings: true },
   });
   if (!space) return no('off');
@@ -304,7 +304,8 @@ class MaintenanceJobWriter {
       this.prisma,
       async (tx) => {
         const [space] = await tx.$queryRaw<Array<{ id: string }>>`
-          SELECT "id" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`;
+          SELECT "id" FROM "wiki_space"
+           WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid AND "deleted_at" IS NULL FOR NO KEY UPDATE`;
         if (!space) return { why: 'off' } as const;
         if (await unfinishedMaintainJob(tx, ownerId, spaceId, input.endingJobId)) return { why: 'unfinished' } as const;
         if ((await wikiMaintenanceRunsToday(tx, ownerId, spaceId, now)).remaining <= 0) return { why: 'daily_limit_reached' } as const;
@@ -367,7 +368,8 @@ class MaintenanceJobWriter {
       this.prisma,
       async (tx) => {
         const [space] = await tx.$queryRaw<Array<{ id: string }>>`
-          SELECT "id" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`;
+          SELECT "id" FROM "wiki_space"
+           WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid AND "deleted_at" IS NULL FOR NO KEY UPDATE`;
         if (!space || await unfinishedMaintainJob(tx, ownerId, spaceId)) return null;
         const runId = randomUUID();
         const jobId = randomUUID();
@@ -419,7 +421,7 @@ export async function requestWikiBackfill(prisma: PrismaService, request: WikiBa
   if (ids.length === 0) return no('name at least one session');
   if (ids.length > WIKI_BACKFILL.sessionsMax) return no(`one backfill names at most ${WIKI_BACKFILL.sessionsMax} sessions, and this names ${ids.length}`);
   if (new Set(ids).size !== ids.length) return no('a session is named twice');
-  const space = await prisma.wikiSpace.findFirst({ where: { id: request.spaceId }, select: { id: true, ownerId: true, settings: true } });
+  const space = await prisma.wikiSpace.findFirst({ where: { id: request.spaceId, deletedAt: null }, select: { id: true, ownerId: true, settings: true } });
   if (!space) return no('no such wiki space');
   const { ownerId } = space;
   const settings = wikiMaintenanceSettings((space.settings as Record<string, unknown> | null)?.maintenance);
@@ -521,7 +523,7 @@ export async function wikiMaintenanceRunsToday(
   spaceId: string,
   now: Date = new Date(),
 ): Promise<{ limit: number; used: number; remaining: number; since: string }> {
-  const space = await db.wikiSpace.findFirst({ where: { id: spaceId, ownerId }, select: { settings: true } });
+  const space = await db.wikiSpace.findFirst({ where: { id: spaceId, ownerId, deletedAt: null }, select: { settings: true } });
   if (!space) throw new NotFoundException('no such wiki space');
   const stored = space.settings !== null && typeof space.settings === 'object' && !Array.isArray(space.settings)
     ? (space.settings as Record<string, unknown>).maintenance
@@ -670,7 +672,7 @@ export class WikiMaintenanceTrigger implements OnModuleInit, OnModuleDestroy {
   async evaluate(ownerId: string, hint: WikiMaintenanceHint, now: Date = new Date()): Promise<WikiMaintenanceTriggerOutcome[]> {
     if (!wikiOnFor(currentWikiRollout(), ownerId)) return [];
     const spaces = await this.prisma.wikiSpace.findMany({
-      where: { ownerId, settings: { path: ['maintenance', 'enabled'], equals: true } },
+      where: { ownerId, deletedAt: null, settings: { path: ['maintenance', 'enabled'], equals: true } },
       select: { id: true },
       orderBy: { id: 'asc' },
     });

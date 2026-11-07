@@ -43,6 +43,12 @@ private struct SessionRowActions: ViewModifier {
     /// Hands this row to the list, which owns the Move panel's sheet. Read on iOS only — see
     /// `moveAction`.
     let onMove: (() -> Void)?
+    /// Opens the sessions page of the project this row belongs to, where the list has no row for that
+    /// project: a member in a workspace its coordinator does not run in (owner 2026-11-07,
+    /// docs/mocks/project-rows-by-workspace, option A). The long press's Sessions, since the progress
+    /// mark that says so is too small to press on a phone. Such a member is a row of its own, so it also
+    /// moves on its own. `nil` everywhere else.
+    let onSessions: (() -> Void)?
     /// Gates the irreversible "Delete Permanently" behind a confirmation (Trash only), mirroring
     /// web's modal. Per-row state: only the row whose button was tapped presents the dialog.
     @State private var confirmPurge = false
@@ -100,6 +106,12 @@ private struct SessionRowActions: ViewModifier {
     }
 
     @ViewBuilder private var menu: some View {
+        // The project's sessions, in a group of their own above this session's actions.
+        if let onSessions {
+            Section {
+                Button(action: onSessions) { Label(SessionProjectCopy.sessions, systemImage: "list.bullet") }
+            }
+        }
         // Rename stays out of the swipe actions — it opens an editor rather than performing
         // the action, which is not what a swipe promises. Trash matches web, where the
         // header title isn't editable for a trashed session.
@@ -152,7 +164,8 @@ private struct SessionRowActions: ViewModifier {
     private var moveAction: RowSwipeAction? {
         #if os(iOS)
         guard !isTrash, let onMove else { return nil }
-        if let membership = session.projectMembership, membership.role != .coordinator { return nil }
+        // A member moves with its project's row, unless the list has no row for that project here.
+        if onSessions == nil, let membership = session.projectMembership, membership.role != .coordinator { return nil }
         return RowSwipeAction(title: "Move", systemImage: "folder", tint: .indigo, perform: onMove)
         #else
         return nil
@@ -208,11 +221,12 @@ extension View {
     /// `onTag`, when provided, adds a "Tags…" context-menu item that opens the list-owned tag picker.
     /// `onShare`, when provided, adds Share to the swipe and the menu on iOS, outside Trash; it hands
     /// the row to the list that presents the share panel. `onMove` does the same for Move and the
-    /// Move panel.
+    /// Move panel. `onSessions`, for a member whose project has no row in the list, adds Sessions to
+    /// the menu and lets the member move on its own.
     func sessionRowActions(_ session: Session, scope: SessionView? = nil,
                            onTag: (() -> Void)? = nil, onShare: (() -> Void)? = nil,
-                           onMove: (() -> Void)? = nil) -> some View {
+                           onMove: (() -> Void)? = nil, onSessions: (() -> Void)? = nil) -> some View {
         modifier(SessionRowActions(session: session, scope: scope, onTag: onTag, onShare: onShare,
-                                   onMove: onMove))
+                                   onMove: onMove, onSessions: onSessions))
     }
 }

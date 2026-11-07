@@ -563,6 +563,10 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'toolCallId',
   'authorUserId',
   'authorToolCallId',
+  // The challenge an amend answers (migration 0488): the opId the session was shown on its challenge
+  // and hands back, so it is an address like `changesetOpId` — no foreign key (a history reference that
+  // outlives the op it names), decoded on the way in, never a fence.
+  'answersChallenge',
   // The entry a duplicate verdict named (migration 0312): the column, and the op's `verification`
   // read's `duplicateOf`, which is how a verifier names it back. An address like `resultEntryId`,
   // with no foreign key on purpose (the trail outlives the entry), so it may 404 — never a fence.

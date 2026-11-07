@@ -225,7 +225,7 @@ final class WikiLogicTests: XCTestCase {
             nav.path = [frame]
             XCTAssertEqual(nav.wikiContentsAt, at)
         }
-        for frame in [NavNode.wikiActivity, .wikiReview, .wikiSettings] {
+        for frame in [NavNode.wikiActivity, .wikiReview, .wikiSettings, .wikiTrash] {
             nav.path = [frame]
             XCTAssertNil(nav.wikiContentsAt, "\(frame) is no row of the directory")
         }

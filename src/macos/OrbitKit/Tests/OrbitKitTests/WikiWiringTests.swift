@@ -258,7 +258,7 @@ final class WikiWiringTests: XCTestCase {
         }
         let header = try slice(page, from: "private var header: some View {", to: "private func band(_ band: WikiLogic.HomeBand) -> some View {")
         assertOrder(header, ["Text(WikiCopy.title)", ".font(.largeTitle.bold())",
-                             "WikiSpacePicker(space: space, spaces: spaces, pick: actions.pickSpace, manage: actions.openSettings)"],
+                             "WikiSpacePicker(space: space, spaces: spaces, pick: actions.pickSpace, manage: actions.openSettings,"],
                     "the header")
         XCTAssertTrue(page.contains("TextField(WikiCopy.searchPlaceholder, text: $query)"))
         XCTAssertTrue(page.contains(".redacted(reason: .placeholder)"), "grey bars while the first read is out")

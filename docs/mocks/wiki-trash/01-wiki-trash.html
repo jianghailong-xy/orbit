@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Wiki 回收站 · 设计图</title>
+<link rel="stylesheet" href="../../../src/web/src/components/ui/root.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/reset.css">
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../wiki/phone-mock.css">
+<link rel="stylesheet" href="../wiki/wiki-p2.css">
+<style>
+html, body { background: #e6e8ec; }
+body.m { margin: 0; padding: 0; display: block; }
+.b-part { width: 1600px; margin: 20px; padding: 28px 34px 34px; background: #e6e8ec; box-sizing: border-box; font-family: "Inter", "Noto Sans CJK SC", sans-serif; color: #24272e; }
+.b-part h1 { margin: 0 0 8px; font-size: 25px; line-height: 1.3; font-weight: 700; }
+.b-lede { margin: 0 0 12px; max-width: 1480px; font-size: 14px; line-height: 1.72; color: #4a5160; }
+.b-lede b { color: #24272e; }
+.b-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin: 0 0 10px; font-size: 12.5px; color: #5d6472; }
+.pb-band { margin: 26px 0 14px; font-size: 16px; }
+.pb-band:first-of-type { margin-top: 14px; }
+
+.b-row { display: flex; align-items: flex-start; gap: 26px; }
+.b-col { display: flex; flex-direction: column; gap: 18px; }
+.b-fig { margin: 0; flex: none; }
+.b-fig figcaption { margin: 0 0 7px; font-size: 13px; line-height: 1.45; color: #5d6472; }
+.b-fig figcaption b { color: #24272e; font-weight: 600; }
+.b-shot { position: relative; line-height: 0; border-radius: 10px; box-shadow: 0 0 0 1px rgba(30, 36, 48, .12); background: #fff; }
+.b-shot img { display: block; width: 100%; border-radius: 10px; }
+.b-ring { position: absolute; border: 1.8px dashed #e8710a; border-radius: 8px; pointer-events: none; box-sizing: border-box; }
+.b-badge { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #e8710a; color: #fff; font: 700 12.5px/22px "Inter", sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+
+.b-note { flex: 1 1 0; min-width: 0; font-size: 13.5px; line-height: 1.68; color: #33373f; }
+.b-note p { margin: 0 0 11px; }
+.b-note b { color: #1d2026; }
+.b-note .en { font-family: "Inter", sans-serif; color: #1d2026; }
+.b-n { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin-right: 6px; border-radius: 50%; background: #e8710a; color: #fff; font: 700 12px/20px "Inter", sans-serif; vertical-align: 1px; }
+
+/* iOS at three quarters, as the phones beside it. */
+.b-fig .pb-ios.full { zoom: .74; }
+.b-ios-card-mark { outline: 2.4px dashed #e8710a; outline-offset: 3px; }
+.b-set-f-end { padding-bottom: 12px; }
+
+/* Android, drawn from WikiSettingsScreen.kt and the workspace form's AlertDialog. */
+.an { position: relative; width: 298px; height: 646px; overflow: hidden; border-radius: 26px; background: #f7f7f9; box-shadow: 0 0 0 1px rgba(30, 36, 48, .16); font-family: "Inter", sans-serif; color: #1c1c1f; }
+.an-status { display: flex; justify-content: space-between; padding: 9px 20px 0; font-size: 11px; color: #3c3c43; }
+.an-bar { display: flex; align-items: center; gap: 14px; padding: 15px 15px 11px; font-size: 16.5px; font-weight: 500; }
+.an-bar svg { width: 19px; height: 19px; }
+.an-h { padding: 15px 19px 6px; font-size: 13px; font-weight: 600; color: #4f4f58; }
+.an-card { margin: 0 13px; border-radius: 12px; background: #fff; box-shadow: 0 0 0 .5px rgba(0, 0, 0, .08); }
+.an-r { display: flex; justify-content: space-between; align-items: center; min-height: 44px; padding: 0 14px; font-size: 13.5px; }
+.an-r + .an-r { border-top: 1px solid #eeeef1; }
+.an-r .v { color: #70707a; }
+.an-r.tint { color: #2e6aff; }
+.an-r.red { color: #e5383b; font-weight: 500; }
+.an-f { padding: 7px 21px 0; font-size: 11.5px; line-height: 1.5; color: #70707a; }
+.an-dim { position: absolute; inset: 0; background: rgba(0, 0, 0, .32); }
+.an-dialog { position: absolute; left: 22px; right: 22px; top: 158px; padding: 20px 20px 12px; border-radius: 24px; background: #fff; box-shadow: 0 12px 40px rgba(0, 0, 0, .25); }
+.an-dialog h4 { margin: 0 0 10px; font-size: 18px; line-height: 1.32; font-weight: 500; }
+.an-dialog p { margin: 0 0 9px; font-size: 13px; line-height: 1.5; color: #4f4f58; }
+.an-dialog .btns { display: flex; justify-content: flex-end; gap: 4px; margin-top: 12px; }
+.an-dialog .btns span { padding: 7px 10px; font-size: 13.5px; font-weight: 500; color: #2e6aff; }
+.an-dialog .btns span.red { color: #e5383b; }
+
+/* The rule tables and the decisions. */
+.b-part table.rt { width: 100%; border-collapse: collapse; font-size: 13.5px; line-height: 1.6; background: #fff; border-radius: 10px; overflow: hidden; }
+table.rt th, table.rt td { padding: 9px 13px; border-bottom: 1px solid #e8eaee; text-align: left; vertical-align: top; }
+table.rt tr:last-child td { border-bottom: 0; }
+table.rt th { background: #f3f4f6; font-weight: 600; color: #33373f; white-space: nowrap; }
+table.rt td:first-child { color: #33373f; white-space: nowrap; font-weight: 600; }
+table.rt code, .b-files code, .b-note code, .b-dec code { font: 12px/1.4 "DejaVu Sans Mono", monospace; background: #eef0f3; border-radius: 4px; padding: 0 4px; overflow-wrap: anywhere; }
+table.rt .en, .b-dec .en { font-family: "Inter", sans-serif; }
+.b-todo { color: #b4570a; font-weight: 600; }
+
+.b-dec { margin: 0 0 16px; padding: 15px 18px 16px; border-radius: 12px; background: #fff; }
+.b-dec h3 { margin: 0 0 4px; font-size: 15.5px; line-height: 1.45; font-weight: 700; }
+.b-dec .why { margin: 0 0 10px; font-size: 13.5px; line-height: 1.65; color: #4a5160; }
+.b-opts { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 12px; }
+.b-opt { padding: 11px 13px; border-radius: 9px; background: #f5f6f8; font-size: 13.5px; line-height: 1.65; color: #3a3e47; }
+.b-opt.rec { background: #eaf1ff; box-shadow: inset 0 0 0 1.4px #5b8cff; }
+.b-opt b { display: block; margin-bottom: 3px; color: #1d2026; }
+.b-opt .tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 5px; background: #2e6aff; color: #fff; font-size: 11.5px; font-weight: 600; line-height: 18px; vertical-align: 1px; }
+.b-files { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.b-files div { padding: 12px 14px; border-radius: 10px; background: #fff; font-size: 13px; line-height: 1.75; color: #3a3e47; }
+.b-files b { display: block; margin-bottom: 3px; color: #1d2026; }
+</style>
+
+<style>
+.b-cap-n { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin-right: 6px; border-radius: 50%; background: #e8710a; color: #fff; font: 700 12px/20px "Inter", sans-serif; vertical-align: 1px; }
+.io-swipe { display: flex; }
+.io-swipe .row { flex: 1; min-width: 0; }
+.io-swipe .act { width: 88px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 15px; font-weight: 600; }
+.io-swipe .act.blue { background: #2E6AFF; }
+.io-swipe .act.red { background: #FF373C; }
+.an-r .sub { display: block; font-size: 11.5px; color: #70707a; margin-top: 2px; }
+.an-btns { display: flex; gap: 6px; padding: 0 14px 10px; }
+.an-btns span { padding: 6px 10px; border-radius: 16px; font-size: 13px; font-weight: 500; color: #2e6aff; }
+.an-btns span.red { color: #e5383b; }
+</style>
+</head>
+<body class="m">
+<div class="pb-sheet" style="display:none"></div>
+<script src="../wiki/phone-mock-antd.js"></script>
+<script src="../wiki/phone-mock.js"></script>
+
+<section class="b-part">
+  <h1>Wiki 回收站 · ① 网页</h1>
+  <p class="b-lede">你定了：删除改成<b>先移进回收站，保留 365 天，期间可以恢复</b>，到期再在后台分批清除。点下去时服务端只做一次标记，确认框马上关；不会再像这次一样转一分多钟最后回滚。这一页用<b>线上这版真实网页</b>截图（9dced799a 的构建），新的文案、回收站入口和回收站列表是截图时写在真实页面上的，用的是页面自己的组件和类名。数字是示意。</p>
+  <div class="b-legend"><span class="pb-tag con">Orbit 一致性</span>沿用会话回收站的说法 <span class="pb-tag new">新词</span>新增的界面文案 <span class="pb-tag ask">要你拍板</span>见第 ③ 页</div>
+
+  <div class="pb-band"><span class="pb-bn">1</span>移进回收站 <small>· 入口不变，叫法和说明变了</small></div>
+  <div class="b-row">
+    <figure class="b-fig" style="width:330px"><figcaption><b>侧栏 ⋯ 菜单</b> · 原来的 Delete wiki…</figcaption><div class="b-shot"><img src="shots/menu.png"></div></figure>
+    <figure class="b-fig" style="width:600px"><figcaption><b>确认框</b> · 没有仓库的 wiki</figcaption><div class="b-shot"><img src="shots/confirm.png"></div></figure>
+    <figure class="b-fig" style="width:430px"><figcaption><b>有仓库的 wiki</b> · 多一句会建新的</figcaption><div class="b-shot"><img src="shots/confirm-repo.png"></div></figure>
+  </div>
+  <div class="b-note" style="margin-top:14px">
+    <p><span class="b-cap-n">1</span><b>叫法和会话一致：</b>菜单、确认框、按钮都叫 <span class="en">Move to Trash</span>，按钮仍是红色，和会话的 <span class="en">Move to Trash?</span> 一样（<span class="pb-tag ask">拍板 1</span>）。<span class="pb-tag con">Orbit 一致性</span></p>
+    <p><span class="b-cap-n">2</span><b>说清楚三件事：</b>马上从列表消失、会话不再读它；数据留 365 天、期间随时能恢复；过期才彻底删除。<span class="pb-tag new">新词</span><span class="en">Move wiki “…” to Trash? · It leaves your wikis now, and sessions stop reading it. · Its N entries stay in Trash for 365 days: restore it any time until then. After that it is deleted for good.</span></p>
+    <p><span class="b-cap-n">3</span><b>有仓库的 wiki：</b>它在回收站期间，这个仓库的会话一用 wiki 就会建一个新的空 wiki（你上次定的规则不变）。所以多一句，也就有了第 ③ 页的「恢复冲突」。<span class="pb-tag new">新词</span><span class="en">Until you restore it, the next session on … to use the wiki starts a new, empty one.</span></p>
+  </div>
+
+  <div class="pb-band"><span class="pb-bn">2</span>移完之后，回收站在哪 <small>· 三处入口（<span class="pb-tag ask" style="margin:0">拍板 2</span>）</small></div>
+  <div class="b-row">
+    <figure class="b-fig" style="width:600px"><figcaption><b>马上关闭</b> · 提示一句，侧栏多一行 Trash</figcaption><div class="b-shot"><img src="shots/toast.png"></div></figure>
+    <figure class="b-fig" style="width:330px"><figcaption><b>侧栏</b> · Wiki 组最后一行，有东西才出现</figcaption><div class="b-shot"><img src="shots/sidebar.png"></div></figure>
+    <div class="b-col">
+      <figure class="b-fig" style="width:430px"><figcaption><b>Wiki 设置底部</b> · 卡片改名，下面链到回收站</figcaption><div class="b-shot"><img src="shots/settings.png"></div></figure>
+      <figure class="b-fig" style="width:430px"><figcaption><b>一个 wiki 都不剩时</b> · 引导卡片里一句</figcaption><div class="b-shot"><img src="shots/empty.png"></div></figure>
+    </div>
+  </div>
+  <div class="b-note" style="margin-top:14px">
+    <p><span class="b-cap-n">4</span><b>侧栏 Wiki 组末尾的 <span class="en">Trash</span> 行，灰字，右边是件数；</b>回收站空着时不出现，平时不占地方。<span class="pb-tag new">新词</span><span class="en">Moved wiki “…” to Trash · Trash</span></p>
+    <p><span class="b-cap-n">5</span><b>设置页和空状态各留一个入口：</b>删掉最后一个 wiki 后侧栏 Wiki 组会整个消失，引导卡片里那一句是唯一能找回的地方。<span class="pb-tag new">新词</span><span class="en">It stays in Trash for 365 days and can be restored until then. · Trash holds 1 wiki. Open Trash · 1 wiki is in Trash. Open Trash</span></p>
+  </div>
+
+  <div class="pb-band"><span class="pb-bn">3</span>回收站 <small>· 一个弹窗，不新开页面</small></div>
+  <div class="b-row">
+    <figure class="b-fig" style="width:520px"><figcaption><b>回收站</b> · 每个 wiki 一行，写明哪天彻底删除</figcaption><div class="b-shot"><img src="shots/trash.png"></div></figure>
+    <figure class="b-fig" style="width:520px"><figcaption><b>恢复被拒</b> · 同一仓库已经有新的 wiki（<span class="pb-tag ask" style="margin:0">拍板 3</span>）</figcaption><div class="b-shot"><img src="shots/trash-conflict.png"></div></figure>
+    <figure class="b-fig" style="width:430px"><figcaption><b>Delete permanently…</b>（<span class="pb-tag ask" style="margin:0">拍板 4</span>）</figcaption><div class="b-shot"><img src="shots/purge.png"></div></figure>
+  </div>
+  <div class="b-note" style="margin-top:14px">
+    <p><span class="b-cap-n">6</span><b>弹窗而不是页面：</b>wiki 的地址是 <code>/wiki/&lt;名字&gt;</code>，单开一个 <code>/wiki/trash</code> 会和叫 trash 的 wiki 撞名。每行：名字、哪天移进来、多少条、哪天彻底删除；右边 <span class="en">Restore</span> 和 <span class="en">Delete permanently…</span>，和会话回收站同样两件事。<span class="pb-tag con">Orbit 一致性</span><span class="pb-tag new">新词</span><span class="en">Trash · A wiki stays here for 365 days after it was moved, then it is deleted for good. · Moved to Trash … · deleted for good … · Restore</span></p>
+    <p><span class="b-cap-n">7</span><b>恢复后：</b>回到侧栏原来的位置，名字、设置、条目、文档、公开链接都回来；维护保持关闭，要你重新打开（见第 ③ 页规则）。<span class="pb-tag new">新词</span><span class="en">Restored wiki “…”</span></p>
+    <p><span class="b-cap-n">8</span><b>永久删除</b>用会话回收站那句：<span class="en">Delete permanently? · Its N entries and their history will be permanently deleted. This cannot be undone.</span> 点下去同样马上返回，数据在后台分批清掉。<span class="pb-tag con">Orbit 一致性</span></p>
+  </div>
+</section>
+
+<section class="b-part">
+  <h1>Wiki 回收站 · ② iOS / macOS 和 Android</h1>
+  <p class="b-lede">手绘，文案和网页逐字相同。原生端没有侧栏 wiki 行，入口是 <b>Wiki 设置页底部</b>，以及没有 wiki 时的空状态；两个以上 wiki 时，标题旁 wiki 选择器底部的 <span class="en">Manage spaces</span> 下面再加一项 <span class="en">Trash</span>。回收站是一个推进去的页面，iOS 左滑一行出 <span class="en">Restore</span> 和 <span class="en">Delete</span>。</p>
+  <div class="b-row" style="gap:20px;margin-top:18px">
+    <figure class="b-fig">
+      <figcaption><b>iOS</b> · Wiki 设置页滚到底</figcaption>
+      <div class="pb-ios full grouped"><div data-ios="status"></div>
+        <div class="io-nav"><span class="io-glass l"><svg class="sf "><use href="#sf-back"/></svg></span><div class="io-navtitle"><b>Wiki settings</b></div></div>
+        <div class="io-set-h">Maintenance</div>
+        <div class="io-card">
+          <div class="io-lrow"><span class="lb">Wiki maintenance</span><span class="v">Off</span></div>
+          <div class="io-lrow tint"><span class="lb">Set up…</span></div>
+        </div>
+        <div class="io-set-f">Keeps the wiki up to date from sessions, tasks and receipts as they settle.</div>
+        <div class="io-card" style="margin-top:30px;border-radius:26px">
+          <div class="io-lrow red"><span class="lb">Move to Trash…</span></div>
+        </div>
+        <div class="io-set-f">It stays in Trash for 365 days and can be restored until then.</div>
+        <div class="io-card" style="margin-top:22px;border-radius:26px">
+          <div class="io-lrow"><span class="lb">Trash</span><span class="v">1 wiki</span><svg class="sf chev"><use href="#sf-chev-r"/></svg></div>
+        </div>
+      </div>
+    </figure>
+    <figure class="b-fig">
+      <figcaption><b>iOS</b> · 回收站，左滑一行</figcaption>
+      <div class="pb-ios full grouped"><div data-ios="status"></div>
+        <div class="io-nav"><span class="io-glass l"><svg class="sf "><use href="#sf-back"/></svg></span><div class="io-navtitle"><b>Trash</b></div></div>
+        <div class="io-card" style="margin-top:14px;border-radius:26px;overflow:hidden">
+          <div class="io-swipe"><div class="io-lrow row" style="transform:translateX(-12px)"><span class="lb"><span style="display:block;font-size:17px">orbit · vLLM preview</span><span style="display:block;font-size:13px;color:#8A8A8D">Moved to Trash Nov 7, 2026 · 11,138 entries</span><span style="display:block;font-size:13px;color:#8A8A8D">Deleted for good Nov 7, 2027</span></span></div><span class="act blue">Restore</span><span class="act red">Delete</span></div>
+        </div>
+        <div class="io-set-f">A wiki stays here for 365 days after it was moved, then it is deleted for good.</div>
+      </div>
+    </figure>
+    <figure class="b-fig">
+      <figcaption><b>iOS</b> · 移进回收站的确认（alert）</figcaption>
+      <div class="pb-ios full grouped"><div data-ios="status"></div>
+        <div class="io-nav"><span class="io-glass l"><svg class="sf "><use href="#sf-back"/></svg></span><div class="io-navtitle"><b>Wiki settings</b></div></div>
+        <div class="io-card" style="margin-top:30px;border-radius:26px"><div class="io-lrow red"><span class="lb">Move to Trash…</span></div></div>
+        <div class="io-dimbg"></div>
+        <div class="io-alert" style="top:230px"><b>Move wiki “orbit · vLLM preview” to Trash?</b><p>It leaves your wikis now, and sessions stop reading it.</p><p>Its 11,138 entries stay in Trash for 365 days: restore it any time until then. After that it is deleted for good.</p><p>Workspaces and sessions are kept.</p><div class="btns"><span>Cancel</span><span class="red">Move to Trash</span></div></div>
+      </div>
+    </figure>
+  </div>
+  <div class="b-row" style="gap:20px;margin-top:22px;align-items:flex-start">
+    <figure class="b-fig">
+      <figcaption><b>Android</b> · Wiki 设置页滚到底</figcaption>
+      <div class="an">
+        <div class="an-status"><span>9:41</span><span>▾ ▮</span></div>
+        <div class="an-bar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12H5M11 5l-7 7 7 7"/></svg>Wiki settings</div>
+        <div class="an-h">Maintenance</div>
+        <div class="an-card"><div class="an-r"><span>Wiki maintenance</span><span class="v">Off</span></div><div class="an-r tint">Set up…</div></div>
+        <div class="an-h">Move to Trash</div>
+        <div class="an-card"><div class="an-r red">Move to Trash…</div></div>
+        <div class="an-f">It stays in Trash for 365 days and can be restored until then.</div>
+        <div class="an-h">Trash</div>
+        <div class="an-card"><div class="an-r"><span>Trash</span><span class="v">1 wiki ›</span></div></div>
+      </div>
+    </figure>
+    <figure class="b-fig">
+      <figcaption><b>Android</b> · 回收站</figcaption>
+      <div class="an">
+        <div class="an-status"><span>9:41</span><span>▾ ▮</span></div>
+        <div class="an-bar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12H5M11 5l-7 7 7 7"/></svg>Trash</div>
+        <div class="an-f" style="padding-top:10px">A wiki stays here for 365 days after it was moved, then it is deleted for good.</div>
+        <div class="an-card" style="margin-top:12px">
+          <div class="an-r" style="min-height:58px"><span>orbit · vLLM preview<span class="sub">Moved to Trash Nov 7, 2026 · 11,138 entries · deleted for good Nov 7, 2027</span></span></div>
+          <div class="an-btns"><span>Restore</span><span class="red">Delete permanently…</span></div>
+        </div>
+      </div>
+    </figure>
+    <div class="b-note" style="padding-top:26px">
+      <p><b>iOS / macOS：</b>设置页最后两节：红字 <span class="en">Move to Trash…</span> 加一句 footer，再下面一行 <span class="en">Trash</span>（有东西才出现），推进去是回收站页。确认和永久删除都走现成的 <code>orbitConfirmation</code>（手机 alert，iPad/macOS 是 confirmationDialog）。macOS 在行上右键出同样两项。<span class="pb-tag con">Orbit 一致性</span></p>
+      <p><b>Android：</b>结构相同，一行下面两个文字按钮；确认用 <code>AlertDialog</code>，和 <span class="en">Delete agent</span>、会话的 <span class="en">Delete Permanently</span> 同款。<span class="pb-tag con">Orbit 一致性</span></p>
+      <p><b>没有 wiki 时：</b>各端空状态里同一句 <span class="en">1 wiki is in Trash. Open Trash</span>。</p>
+      <p><b>恢复被拒：</b>原生端弹 alert，标题 <span class="en">Couldn't restore the wiki</span>，内容就是服务端那句原因。<span class="pb-tag new">新词</span></p>
+    </div>
+  </div>
+</section>
+
+<section class="b-part">
+  <h1>Wiki 回收站 · ③ 要你拍板的事和规则</h1>
+  <div class="pb-band"><span class="pb-bn">1</span>要你拍板 <small>· 蓝框是我的推荐；回复“按推荐”就够了</small></div>
+
+  <div class="b-dec">
+    <h3>拍板 1 · 叫什么？</h3>
+    <div class="b-opts">
+      <div class="b-opt rec"><b>A Move to Trash<span class="tag">推荐</span></b>菜单、确认框、按钮都叫 <span class="en">Move to Trash</span>，和会话回收站一个说法；“Delete permanently”只留给回收站里真正删掉的那一步。</div>
+      <div class="b-opt"><b>B 仍叫 Delete wiki…</b>只把说明改成会留 365 天。改动更少，但“删除”和“还能恢复”放在一起，容易让人以为已经没了。</div>
+    </div>
+  </div>
+
+  <div class="b-dec">
+    <h3>拍板 2 · 回收站入口放哪？</h3>
+    <div class="b-opts">
+      <div class="b-opt rec"><b>A 三处<span class="tag">推荐</span></b>网页侧栏 Wiki 组末尾的 <span class="en">Trash</span> 行（有东西才出现）、各端 Wiki 设置页底部、没有 wiki 时的空状态；原生端再加 wiki 选择器底部一项。在哪删的，就在哪能找回来。</div>
+      <div class="b-opt"><b>B 只放设置页和空状态</b>侧栏不变。更少占地方，但要先进某个 wiki 的设置页才能看到回收站。</div>
+    </div>
+  </div>
+
+  <div class="b-dec">
+    <h3>拍板 3 · 恢复时，同一个仓库已经有新的 wiki 了怎么办？</h3>
+    <p class="why">有仓库的 wiki 在回收站期间，仓库的会话一用 wiki 就会建新的（你上次定的）。两个 wiki 不能对应同一个仓库。</p>
+    <div class="b-opts">
+      <div class="b-opt rec"><b>A 拒绝，说明原因<span class="tag">推荐</span></b>提示先把新的那个移进回收站，再恢复旧的。不会有任何东西被悄悄换掉。</div>
+      <div class="b-opt"><b>B 恢复时自动把新的移进回收站</b>一步完成，但新 wiki 里这段时间学到的东西会跟着消失，只是还能再恢复回来。</div>
+    </div>
+  </div>
+
+  <div class="b-dec">
+    <h3>拍板 4 · 回收站里能不能提前彻底删除？</h3>
+    <div class="b-opts">
+      <div class="b-opt rec"><b>A 能，Delete permanently…<span class="tag">推荐</span></b>和会话回收站一样；比如这个 preview 你不想让它在库里放一年。点下去马上返回，后台分批删。</div>
+      <div class="b-opt"><b>B 不能</b>只能等满 365 天。最难误删，但占用的空间要放满一年。</div>
+    </div>
+  </div>
+
+  <div class="pb-band"><span class="pb-bn">2</span>规则 <small>· 图上看不出来、实现时要守住的</small></div>
+  <table class="rt">
+    <tr><th>情况</th><th>结果</th></tr>
+    <tr><td>移进回收站</td><td>一次很短的写入：wiki 打上删除时间，立即返回。所有读写入口都把它当成不存在：列表、各页面、会话的 wiki 工具、维护、计划、分享链接的公开页。它在跑的作业取消。</td></tr>
+    <tr><td>会话</td><td>没有仓库的 wiki：绑在它上面的会话调 wiki 工具，回现有的 <code>WIKI_SPACE_UNBOUND</code>。有仓库的 wiki：这个仓库的会话会建一个新的空 wiki（你上次定的）。</td></tr>
+    <tr><td>公开链接</td><td>在回收站期间暂停，恢复后自动重新打开。和会话回收站一样。</td></tr>
+    <tr><td>恢复</td><td>回到原来的名字、设置、条目、文档。workspace 回到它里面，除非期间已经进了别的 wiki。<b>维护保持关闭</b>，要你重新打开：否则恢复的一刻会去补一年的记录。名字被新 wiki 占了，就换一个空闲的地址，比如加 <code>-2</code>。</td></tr>
+    <tr><td>满 365 天 / 永久删除</td><td>在后台分小批删除：每批几百条，每批一个短事务。负载高时只是慢一点，不会超时，也不会长时间锁住数据；服务重启后接着删。永久删除点下去马上从回收站消失。</td></tr>
+    <tr><td>谁能操作</td><td>和现在一样，只有你本人：Agent 会话和访问令牌都会被拒，也不提供 MCP 工具或 CLI 命令。</td></tr>
+    <tr><td>数据库</td><td>wiki 加删除时间；名字和仓库的唯一约束只算没删除的，好让新 wiki 能建出来。每个读 wiki 的入口都要排除已删除的：加一个普查测试，以后新入口漏了会红。</td></tr>
+    <tr><td>这次失败的删除</td><td>没删掉任何东西：事务超过 60 秒被回滚，preview wiki 原样还在。新做法上线后，它会在你点下去的一瞬间进回收站。</td></tr>
+  </table>
+</section>
+
+<script>window.drawMarks = () => {};</script>
+</body>
+</html>

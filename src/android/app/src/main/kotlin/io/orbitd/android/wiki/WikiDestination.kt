@@ -95,6 +95,7 @@ fun WikiDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRo
             Destination.WIKI_RUN -> WikiRunScreen(store, route, nav)
             Destination.WIKI_JOB -> WikiJobScreen(store, route)
             Destination.WIKI_SETTINGS -> WikiSettingsScreen(store, route, data, nav)
+            Destination.WIKI_TRASH -> WikiTrashScreen(store, route)
             Destination.WIKI_ARTICLE -> WikiArticleScreen(store, route, data, nav)
             Destination.WIKI_BROWSE -> WikiBrowseScreen(store, route, data, nav)
             Destination.WIKI_INDEX -> WikiIndexScreen(store, route, data, nav)

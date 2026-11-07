@@ -72,6 +72,7 @@ let docs: WikiDocsDirectory = NO_DOCS;
 let articles: unknown = NO_ARTICLES;
 let plan: unknown = NO_PLAN;
 let workspaces: unknown[] | null = WORKSPACES;
+let trashed: unknown[] = [];
 let refusal: string | null = null;
 let writes: Array<{ method: string; path: string; body: unknown }> = [];
 const session = new Map<string, string>();
@@ -99,6 +100,7 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
     return reply(200, spaces[0] ?? {});
   }
   if (path === '/api/wiki/spaces') return reply(200, spaces);
+  if (path === '/api/wiki/trash') return reply(200, { spaces: trashed });
   if (path === base) return reply(200, spaces[0]);
   if (path === `${base}/docs`) return reply(200, docs);
   if (path === `${base}/articles`) return reply(200, articles);
@@ -295,6 +297,26 @@ describe('the home of a wiki with nothing to read', () => {
 describe('the Wiki of an account with no wiki', () => {
   beforeEach(() => {
     spaces = [];
+    trashed = [];
+  });
+
+  it('says nothing of Trash while it is empty (docs/mocks/wiki-trash)', async () => {
+    await open('/wiki');
+    expect(words(card())).not.toContain('Open Trash');
+  });
+
+  it('leads to the wikis in Trash under its lead, while there are any, and opens Trash where the reader is', async () => {
+    trashed = [{
+      id: 'gone', slug: 'gone', title: 'gone', repoUrlNorm: null,
+      deletedAt: '2026-11-07T12:00:00.000Z', purgeAt: '2027-11-07T12:00:00.000Z', entries: 2,
+    }];
+    await open('/wiki');
+    expect(words(card()!.querySelector('.wk-start-h'))).toContain('1 wiki is in Trash. Open Trash');
+    await press(button('Open Trash'));
+    expect(words(document.querySelector('.wk-trash-dialog .wk-trash-line'))).toBe(
+      'Moved to Trash Nov 7, 2026 · 2 entries · deleted for good Nov 7, 2027',
+    );
+    expect(where()).toBe('/wiki');
   });
 
   it('is the same card: the first step makes one, and the page says nothing of spaces', async () => {

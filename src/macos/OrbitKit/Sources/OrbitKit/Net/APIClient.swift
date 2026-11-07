@@ -1298,9 +1298,24 @@ public final class APIClient: @unchecked Sendable {
     public func leaveWikiWorkspaceOut(spaceID: String, workspaceID: String) async throws {
         try await deleteRaw("wiki/spaces/\(spaceID)/workspaces/\(workspaceID)")
     }
-    /// `DELETE /wiki/spaces/:id`: delete a wiki and all it holds, for good. Refused to every session.
-    public func deleteWikiSpace(_ id: String) async throws {
-        try await deleteRaw("wiki/spaces/\(id)")
+    /// `DELETE /wiki/spaces/:id`: move a wiki to Trash, where it is kept 365 days (contract `space.trash`). Refused to
+    /// every session, as the three Trash calls below are.
+    public func moveWikiSpaceToTrash(_ id: String) async throws -> WikiTrashMove {
+        try await delete("wiki/spaces/\(id)")
+    }
+    /// `POST /wiki/spaces/:id/restore`: bring a wiki back from Trash; answers it as `GET /wiki/spaces/:id` does. A 409's
+    /// message says which newer wiki holds its repository, and what to do.
+    public func restoreWikiSpace(_ id: String) async throws -> WikiSpace {
+        try await postEmpty("wiki/spaces/\(id)/restore")
+    }
+    /// `DELETE /wiki/spaces/:id/purge`: delete a wiki in Trash for good. It leaves Trash at once; the server deletes what
+    /// it holds in the background.
+    public func purgeWikiSpace(_ id: String) async throws {
+        try await deleteRaw("wiki/spaces/\(id)/purge")
+    }
+    /// `GET /wiki/trash`: the owner's wikis in Trash, the newest move first (contract `space.trash.list`).
+    public func wikiTrash() async throws -> WikiTrash {
+        try await get("wiki/trash")
     }
     /// `POST /wiki/entries/:id/confirm`: the owner vouching for what a review mode applied — the entry
     /// becomes Confirmed and is pushed from then on.
