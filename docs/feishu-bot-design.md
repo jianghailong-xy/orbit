@@ -378,6 +378,18 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
   turn 的确认永远不等飞书，也不会因为飞书失败（§1.3 第 6 条）。
 - 只回传正文，不回传工具输出与文件。不做逐字流式。
 
+落地（F2-4，`feishu/feishu-outbox.ts`、`feishu/feishu-outbox-register.ts`，迁移 0501）：
+
+- turn-complete 在提交之后（`finalized.applied && !steer`）调 `registerFeishuReply`：一条 `INSERT … SELECT`，取会话
+  `last_spoken_at` 最新的那条 `feishu_thread`，和该 turn 在 `run_event` 里 seq 最大、非子 agent（无 `parentToolUseId`）、
+  非空的 assistant 文本；两者缺一就不写。`feishu_outbox.turn_id` 唯一，重发的 turn-complete 不再写；出错只记日志。
+- worker 每个副本都跑，`FOR UPDATE SKIP LOCKED` 认领、`due_at` 兼作租约；同一会话里更早的行没发完，后面的行等着，保证顺序。
+  回复发给那条链的根消息：链所在的 chat 有 `feishu_chat_route` 就是群，`reply_in_thread`、只有正文；否则是私聊，附 Open in Orbit。
+  飞书 uuid 为 `feishuDedupeUuid('session-reply', appId, 行 id)`。两种详情模式都发。
+- 失败：没接通或 5xx 记 `FAILED` 与 `last_error`，5 秒起翻倍、最长 10 分钟，共 12 次后 `GAVE_UP`；飞书明确拒绝立即 `GAVE_UP`；
+  应用关了或 Secret 解不开也 `GAVE_UP`。该应用任一条回复发成功时，它其余 `FAILED` 的行立刻到期，恢复后马上补发。
+  已发或放弃 7 天的行由 leader 删除。
+
 ## 8. 群聊派活
 
 ### 8.1 接入一个群
