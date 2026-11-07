@@ -212,7 +212,7 @@ apiserver 要能出站访问 `open.feishu.cn`（或 `open.larksuite.com`）的 H
 
 1. Settings → Feishu → **Connect your Feishu account**（只接受 LOGIN，PAT 以 `ACCOUNT` 拒绝）。服务端生成一次性绑定码
    （8 位、10 分钟、只能用一次，库里只存哈希）。页面显示绑定码和 **Open the bot in Feishu**（飞书 applink，直达机器人私聊）。
-2. 用户在**私聊**里把码发给机器人；在群里发的码不受理。事件里的发送者 open_id 由飞书认证。码对得上，发送者就成为主人，码作废。
+2. 用户在**私聊**里把码发给机器人；在群里发的码不受理，并且立即作废（群里的人都看到了）。重新生成码会作废本账号之前的码。事件里的发送者 open_id 由飞书认证。码对得上，发送者就成为主人，码作废。
 3. 机器人回 `You're connected as the owner of this Orbit bot.`；设置页经控制面流显示主人的飞书名字。
 
 - 码只在本账号自己的应用上有效。剩下的风险是码泄露给同租户的人、被他抢先发出：他会成为主人，能收提醒、能答审批。
