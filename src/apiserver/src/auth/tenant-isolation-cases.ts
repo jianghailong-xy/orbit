@@ -235,6 +235,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'PATCH /admin/users/:id/disabled': { request: (of) => ({ params: { id: of.adminSubjectId }, body: { disabled: true } }) },
   // The subject has no Google account linked: the administrator is answered its sign-in methods as they are.
   'DELETE /admin/users/:id/identities/google': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
+  // The subject has no Feishu app connected: the administrator is answered that there was none to remove.
+  'DELETE /admin/users/:id/feishu': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
   'PATCH /admin/providers/:id': { request: (of) => ({ params: { id: of.adminProviderId }, body: { label: 'renamed by the census' } }) },
   // The wiki's support routes (contract `plan.jobs.rebuild.support`): the member's spaces read, and the administrator's
   // own space's build asked for — answered WIKI_RUNNER_EXECUTES under the census's default executor, and refused 403

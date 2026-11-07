@@ -2756,7 +2756,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // write `open_list_epoch` alone, no preserved row or column is touched, and none of the six preserved
       // triggers/functions is named or replaced, so it is not another writer of the DONE fence. No INSERT, UPDATE or
       // DELETE runs at apply time.
-      '0487_open_list_epoch_shards'],
+      '0487_open_list_epoch_shards',
+      // 0489 is two new tables for the Feishu bot integration (docs/feishu-bot-design.md §4.1): `feishu_app`, each account's
+      // own app, with its primary key, two unique indexes (owner_id, app_id), CHECKs and foreign keys to `user` (ON DELETE
+      // CASCADE) and `workspace` (ON DELETE SET NULL), and `feishu_deployment_setting`, the administrators' switch, of at
+      // most one row (`feishu_deployment_setting_one_row_chk`, `id` = 1) with no foreign key. Neither is a preserved
+      // relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved
+      // triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it is not another
+      // writer of the DONE fence. No INSERT, UPDATE or DELETE: both tables start empty.
+      '0489_feishu_app'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

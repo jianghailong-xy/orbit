@@ -363,6 +363,9 @@ model User {
   /// The cell serving this account's runners, once one asked for a link token (migration 0443).
   tenantCell       TenantCell?
 
+  /// The account's own Feishu (Lark) app, when it connected one (migration 0489).
+  feishuApp        FeishuApp?
+
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
 }
@@ -1294,6 +1297,8 @@ model Workspace {
   managedRunnerDefault ManagedRunner? @relation("ManagedRunnerDefaultWorkspace")
   /// The wiki repository operations read in this workspace's checkout (migration 0402).
   wikiRepoOps WikiRepoOp[]
+  /// The Feishu app whose direct-message sessions open here, when its owner chose this one (migration 0489).
+  feishuAppDefaults FeishuApp[]
 
   /// The key a wiki binding's composite foreign key names (migration 0307), so a space can only be
   /// bound to its own owner's workspaces. `id` alone is already unique.
@@ -8629,4 +8634,65 @@ model WikiRepoFile {
   @@unique([spaceId, sha, path], map: "wiki_repo_file_space_sha_path_key")
   @@index([spaceId, sha], map: "wiki_repo_file_space_sha_idx")
   @@map("wiki_repo_file")
+}
+
+/// An account's own Feishu (Lark) self-built app (docs/feishu-bot-design.md §4.1, migration 0489): at most one per
+/// account, and an app reaches at most one account of this deployment, because an app's long connection has one
+/// consumer (§3.2). The account's Settings → Integrations → Feishu writes it (feishu/feishu-app.service.ts), and only
+/// after Feishu traded these credentials for a tenant_access_token; an administrator can remove it.
+///
+/// The App Secret is kept encrypted as a model provider's API key is (providers/provider-crypto.ts), and no response
+/// carries it in either form: the settings answer `hasSecret` and `secretUnreadable`. Another App ID or platform is
+/// another app, so it replaces the row, and the owner's identity, the status and whatever later hangs off the old app
+/// go with it. Two CHECKs carry the closed sets and cannot be spelled here: `feishu_app_platform_chk` and
+/// `feishu_app_message_detail_chk`.
+model FeishuApp {
+  id                 String     @id @default(uuid(7)) @db.Uuid
+  ownerId            String     @unique(map: "feishu_app_owner_id_key") @map("owner_id") @db.Uuid
+  owner              User       @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "feishu_app_owner_id_fkey")
+  /// `FEISHU` (open.feishu.cn) | `LARK` (open.larksuite.com).
+  platform           String
+  /// The app's App ID (`cli_…`).
+  appId              String     @unique(map: "feishu_app_app_id_key") @map("app_id")
+  /// AES-256-GCM ciphertext of the App Secret ("iv:tag:ct", each base64).
+  appSecretEnc       String     @map("app_secret_enc")
+  /// The app's own switch: off, Orbit neither connects it nor sends through it.
+  enabled            Boolean    @default(true)
+  /// `TITLES_ONLY` | `FULL`: what an alert card carries (§6.4).
+  messageDetail      String     @default("TITLES_ONLY") @map("message_detail")
+  /// Whether tool approvals can be answered on the owner's cards (§7.2).
+  approvalsInFeishu  Boolean    @default(true) @map("approvals_in_feishu")
+  /// Where a session started in the owner's direct messages opens (§7.3).
+  defaultWorkspaceId String?    @map("default_workspace_id") @db.Uuid
+  defaultWorkspace   Workspace? @relation(fields: [defaultWorkspaceId], references: [id], onDelete: SetNull, map: "feishu_app_default_workspace_id_fkey")
+  /// The owner's open_id in this app, once they bound it (§5); open_ids are per app.
+  ownerOpenId        String?    @map("owner_open_id")
+  /// Read when the owner bound it, for display only.
+  ownerName          String?    @map("owner_name")
+  /// Read once connected.
+  botName            String?    @map("bot_name")
+  lastConnectedAt    DateTime?  @map("last_connected_at") @db.Timestamptz(3)
+  lastEventAt        DateTime?  @map("last_event_at") @db.Timestamptz(3)
+  /// Feishu's error code and message, never a credential.
+  lastError          String?    @map("last_error")
+  createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("feishu_app")
+}
+
+/// The administrators' switch "Allow accounts to connect Feishu bots" (docs/feishu-bot-design.md §4.1, migration
+/// 0489): at most one row, id 1, written only by an administrator through PUT /api/admin/integrations/feishu
+/// (feishu/feishu-app.service.ts). While `allowed` is false no account connects an app; the apps already saved stay.
+/// No row is the same as a row that allows it: the switch is on by default. `feishu_deployment_setting_one_row_chk`
+/// (`id` = 1) lives only in the migration.
+model FeishuDeploymentSetting {
+  id          Int      @id @default(1) @db.SmallInt
+  allowed     Boolean
+  /// When `allowed` was last switched.
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+  /// The administrator who switched it. An id rather than a relation, so deleting them writes nothing here.
+  updatedById String?  @map("updated_by_id") @db.Uuid
+
+  @@map("feishu_deployment_setting")
 }
