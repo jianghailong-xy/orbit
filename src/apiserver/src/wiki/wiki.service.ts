@@ -394,6 +394,12 @@ interface PreparedOp {
    * to press and the entry out of the push forever.
    */
   waitsForOwner: boolean;
+  /**
+   * The pending challenge of the same entry this amend answers (`answersChallenge`, contract
+   * `reviewModes.challenge`): written on the op's row, and closed when the amend takes effect. Null for
+   * every other op, and for an amend that names none.
+   */
+  answersChallenge: string | null;
   sources: ResolvedSource[];
   draft: PreparedDraft | null;
   changes: WikiEntryChanges | null;
@@ -1786,6 +1792,11 @@ export class WikiService {
     if (errors.length > 0) {
       return refuse('WIKI_SCHEMA', 'the op does not have the shape this contract gives it', errors);
     }
+    // And the challenge an amend names must be one it can answer (contract `reviewModes.challenge`): a
+    // pending challenge of the very entry it changes, named by an id that decodes to it.
+    const answersChallenge = opName === 'amend'
+      ? await this.answeredChallenge(tx, principal.ownerId, seq, op, target?.id ?? null)
+      : null;
     const writtenKind = opName === 'add' || opName === 'supersede' ? draftKind(op.entry) : targetKind;
 
     // 2. Only the owner writes a kind that only the owner writes (kinds.<kind>.ownerOnlyOps). A chat's op is not refused
@@ -1878,6 +1889,7 @@ export class WikiService {
         byMode: null,
         spotCheck: false,
         waitsForOwner: true,
+        answersChallenge,
         sources,
         draft: draft ? preparedDraft(draft) : null,
         changes: (redacted.value.changes ?? null) as WikiEntryChanges | null,
@@ -1956,10 +1968,47 @@ export class WikiService {
       byMode: decided.byMode,
       spotCheck: false,
       waitsForOwner,
+      answersChallenge,
       sources,
       draft: draft ? preparedDraft(draft) : null,
       changes: (redacted.value.changes ?? null) as WikiEntryChanges | null,
     };
+  }
+
+  /**
+   * The challenge an amend names in `answersChallenge` (contract `reviewModes.challenge`): one op, a
+   * challenge, of the very entry this amend changes, and still pending. Anything else is refused for its
+   * shape, and the op writes nothing — an amend that names a challenge it cannot answer was written
+   * against a world that has moved. An amend naming none answers none.
+   */
+  private async answeredChallenge(
+    tx: Tx,
+    ownerId: string,
+    seq: number,
+    op: Record<string, unknown>,
+    entryId: string | null,
+  ): Promise<string | null> {
+    const named = op.answersChallenge;
+    if (named === undefined || named === null) return null;
+    const at = `ops[${seq}].answersChallenge`;
+    if (typeof named !== 'string' || !isDecodableId(named)) {
+      return refuse('WIKI_SCHEMA', `${at} names no op: hand back the opId of the challenge this amend answers`, [
+        { path: at, message: 'names no op' },
+      ]);
+    }
+    const challenge = await tx.wikiChangesetOp.findFirst({
+      where: { id: toUuid(named), ownerId },
+      select: { id: true, op: true, entryId: true, decision: true },
+    });
+    if (challenge?.op !== 'challenge' || challenge.decision !== 'pending' || entryId === null || challenge.entryId !== entryId) {
+      return refuse(
+        'WIKI_SCHEMA',
+        `${at} names no pending challenge of this entry: an amend answers a challenge of the very entry it changes, `
+          + 'and only while that challenge waits for one',
+        [{ path: at, message: 'names no pending challenge of this entry' }],
+      );
+    }
+    return challenge.id;
   }
 
   /** Record one prepared op: its row, its effect, and the answer its caller reads. */
@@ -1993,6 +2042,7 @@ export class WikiService {
               payload: prepared.payload as Prisma.InputJsonValue,
               similar: prepared.similar as unknown as Prisma.InputJsonValue,
               tainted: prepared.tainted,
+              answersChallenge: prepared.answersChallenge,
               decision: prepared.verifying ? 'verifying' : 'pending',
               // What Automatic took is not applied yet: its verdict names the mode when it applies it.
               appliedByMode: prepared.applied ? (prepared.byMode?.mode ?? null) : null,
@@ -4507,6 +4557,9 @@ export class WikiService {
           throw new WikiConflict(revisionConflict(0, current, target.currentRevision, instruction.payload));
         }
         await this.insertRevision(tx, ownerId, target.id, revision, { ...merged, kind: target.kind as WikiKind }, instruction.sources, author);
+        // The challenge this amend named is answered by the fact that the amend took effect, and closed
+        // before the flags are recomputed so `challenged` clears in this same write.
+        await this.closeAnsweredChallenge(tx, ownerId, target.id, author);
         await this.recomputeFlags(tx, ownerId, target.id);
         return { entryId: target.id, revision };
       }
@@ -4617,6 +4670,44 @@ export class WikiService {
         return { entryId: instruction.entryId!, revision };
       }
     }
+  }
+
+  /**
+   * Close the challenge an amend answered, now that the amend has taken effect (contract
+   * `reviewModes.challenge`). This is the one place the three paths that apply an amend meet — the
+   * owner's decision, Tiered applying it as it records, Automatic applying it on its verdict — because
+   * all three end in `applyOp`.
+   *
+   * Only the op row the amend wrote is read, so the amend a challenge's own answer writes closes
+   * nothing here: its op row is the challenge, which `answerChallenge` answers itself. A challenge
+   * already decided, of another entry, or of an entry no longer active is left as it is, and nothing is
+   * refused: the amend stands either way.
+   */
+  private async closeAnsweredChallenge(tx: Tx, ownerId: string, entryId: string, author: WikiAuthor): Promise<void> {
+    if (!author.changesetOpId) return;
+    const op = await tx.wikiChangesetOp.findFirst({
+      where: { id: author.changesetOpId, ownerId },
+      select: { op: true, answersChallenge: true },
+    });
+    if (!op || op.op !== 'amend' || !op.answersChallenge) return;
+    const entry = await tx.wikiEntry.findFirst({ where: { id: entryId, ownerId }, select: { status: true } });
+    if (entry?.status !== 'active') return;
+    const challenge = await tx.wikiChangesetOp.findFirst({
+      where: { id: op.answersChallenge, ownerId, entryId, op: 'challenge' },
+      select: { changesetId: true },
+    });
+    if (!challenge) return;
+    const closed = await tx.wikiChangesetOp.updateMany({
+      where: { id: op.answersChallenge, ownerId, entryId, op: 'challenge', decision: 'pending' },
+      data: {
+        decision: 'edited',
+        answeredBy: author.authorKind === 'owner' ? 'owner' : 'agent',
+        decidedAt: new Date(),
+      },
+    });
+    // The challenge's own changeset is settled by the answer as any changeset's last decision settles it,
+    // even though the decision came from another changeset's amend.
+    if (closed.count === 1) await this.settleChangeset(tx, ownerId, challenge.changesetId);
   }
 
   /**
@@ -5734,7 +5825,7 @@ export class WikiService {
 const OP_KEYS: Readonly<Record<WikiOp, readonly string[]>> = {
   add: ['op', 'entry', 'sources'],
   reinforce: ['op', 'entryId', 'sources'],
-  amend: ['op', 'entryId', 'baseRevision', 'changes', 'sources'],
+  amend: ['op', 'entryId', 'baseRevision', 'changes', 'sources', 'answersChallenge'],
   supersede: ['op', 'entryId', 'baseRevision', 'entry', 'sources'],
   retire: ['op', 'entryId', 'baseRevision', 'reason', 'sources'],
   challenge: ['op', 'entryId', 'reason', 'sources'],

@@ -9,6 +9,7 @@ import {
   WIKI_ANCHOR_STATES,
   WIKI_ANCHOR_TYPES,
   WIKI_ANCHOR_RULES,
+  WIKI_ANSWERED_BY,
   WIKI_AUTHOR_KINDS,
   WIKI_CHALLENGE_ANSWERS,
   WIKI_CHANGESET_ORIGINS,
@@ -1259,6 +1260,20 @@ describe('wiki contract', () => {
     for (const answer of WIKI_CHALLENGE_ANSWERS) expect(WIKI_DECIDE_ACTIONS).toContain(answer);
     expect(CONTRACT.ops.challenge.does).toMatch(/Re-confirm, Amend or Retire/u);
     expect(CONTRACT.effectPolicy.decide.challengeAnswers).toMatch(/anchorRules\.verify\.answers/u);
+    // A challenge has a second answer since P1: an amend that names it, and only then (reviewModes.challenge).
+    const challenge = CONTRACT.reviewModes.challenge;
+    expect(keysOf(challenge)).toEqual(['answeredBy', 'answer', 'answersChallenge', 'readAsOwner']);
+    expect(challenge.answeredBy).toEqual([...WIKI_ANSWERED_BY]);
+    expect(challenge.answersChallenge).toMatch(/refused WIKI_SCHEMA/u);
+    expect(challenge.answer).toMatch(/an amend that names none leaves it pending/u);
+    // The field is an amend's alone, and it answers one challenge rather than any op.
+    expect(keysOf(CONTRACT.ops.amend.keys)).toContain('answersChallenge');
+    for (const op of WIKI_OPS.filter((one) => one !== 'amend')) {
+      expect(keysOf(CONTRACT.ops[op].keys), `${op} carries answersChallenge`).not.toContain('answersChallenge');
+    }
+    // And it is part of the op's row, with the same no-foreign-key rule as a verdict's trail.
+    expect(CONTRACT.storage.answersChallenge).toMatch(/no foreign key/u);
+    expect(existsSync(path.join(ROOT, CONTRACT.storage.answersChallengeMigration))).toBe(true);
     // Tiered's pitfall reads what a check writes.
     expect(CONTRACT.reviewModes.tiered.auto.machineVerified.pitfall).toMatch(/anchor_state verified/u);
     expect(verify.tiered).toMatch(/pitfallMinSessions/u);
