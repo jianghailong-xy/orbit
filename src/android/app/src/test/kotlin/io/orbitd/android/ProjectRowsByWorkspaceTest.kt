@@ -144,11 +144,12 @@ class ProjectRowsByWorkspaceTest {
      * Sessions nor Move…: only the coordinator moves a project's row (A05-6). */
     @Test fun anUnmarkedMembersMenuHasNeitherSessionsNorMove() {
         show(prod)
+        val handle = ((compose.activity.application as OrbitApplication).session.state.value as AuthState.SignedIn).handle
+        val api = DirectoryApi(object : OrbitApi {
+            override suspend fun request(handle: SessionHandle, request: ApiRequest) = ApiResponse(200, "{}".encodeToByteArray())
+        }, handle)
         compose.activityRule.scenario.onActivity { activity -> activity.setContent { OrbitTheme {
-            DirectoryActionDialog(DirectoryDialog.SessionMenu(open[2], SessionView.OPEN), DirectoryApi(object : OrbitApi {
-                override suspend fun request(handle: SessionHandle, request: ApiRequest) = ApiResponse(200, "{}".encodeToByteArray())
-            }, ((activity.application as OrbitApplication).session.state.value as AuthState.SignedIn).handle),
-                DirectoryData(ready = true, fresh = true), {}, onChanged = {})
+            DirectoryActionDialog(DirectoryDialog.SessionMenu(open[2], SessionView.OPEN), api, DirectoryData(ready = true, fresh = true), {}, onChanged = {})
         } } }
         compose.waitUntil(10_000) { exists(inDialog("Rename")) }
         assertEquals(listOf("Rename", "Pin", "Tags…", "Complete", "Share…", "Move to Trash", "Close"), dialogButtons())
