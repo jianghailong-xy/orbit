@@ -81,6 +81,7 @@
 - 哪些算 Orbit 的：消息的 key 在平台自己的命名空间里（`isOrbitAuthoredTurn`：给 coordinator 的事实通知、criteria 提议的答复、watch 匹配的唤醒、owner 的回答转给 coordinator、例外条目的投递、项目开始、交给暂停中的运行的任务 brief、确认复核与退回、证据退回的说明），或对话里把这条画成平台自己的卡片——这一条补上任务运行开场的 brief：它和人开的会话同用 `initial-<id>`，只能靠 `taskStart` 卡片分开。后台作业唤醒和定时唤醒不带正文，不写 `lastUserText`，行上没有这一行。
 - 通知卡片：给 coordinator 的事实通知与 criteria 提议的答复带 `coordinatorDelivery`（对话里画成一行的那张卡片，`coordinator-delivery-card.ts`）。排队时就一起记下（同一事务里 wake 先绑到这条消息），runner 回显时按回显存下的卡片再写一次，两次是同一张；老的投递路径先写消息、后绑 wake，排队时还没有卡片，先按第一行写，回显时补上。
 - 客户端：有 `lastUserFromOrbit` 时写 `Orbit: <一句话>`（§6）。有卡片时这一句就是对话里那条通知的英文句子（web `coordinatorDeliverySentence`、OrbitKit `CoordinatorDeliveryCard.sentence`、Android `CoordinatorDeliveryLine.sentence`，卡片按对话的读法读）；没有卡片、或卡片这个版本读不出（后来的服务器新加的 kind）时，用消息的第一行（第一条非空行，按预览去掉 markdown）。owner 自己发的仍写 `You: …`，别的会话发来的仍写会话名。`Orbit` 这个词三端一字不差（web `SENT_BY_ORBIT`、OrbitKit `SessionLine.orbit`、Android `SessionLineCopy.orbit`），对照测试缺项会红。
+- 还没覆盖（11-07，另立任务）：自动重试和失败卡片上的 Retry 重发一条失败的消息时用 `auto-retry:` 开头的 key，`isOrbitAuthoredTurn` 有意不算它是平台写的（重发 owner 的话仍是 owner 的），于是重发的平台消息在行上仍写 `You:`，对话里也画成 owner 的气泡；平台用自己写的开场 prompt 开的会话（coordinator 开场、判断会话、清单控制台、@ 提及回复）没有卡片，和人开的会话同用 `initial-<id>`，行上也仍写 `You:`。
 
 ### 3.6 做完的项目一起完成（owner 11-07）
 
