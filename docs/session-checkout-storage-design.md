@@ -145,10 +145,10 @@ The runner judges pressure against the storage it may use:
   checkout is never refused for want of room: when nothing more can go, it is made all the same, and the log says how
   far short of the floor that leaves the budget. Every door that makes a session checkout (a new session, a pinned run,
   `restoreAbsentCheckout`) runs on the claim loop, as the sweep does. The room is made only once the sweeper is armed.
-  Its look at resting checkouts does not wait out the hour that follows a look that found nothing
-  (`resumableSweepWait`): a new checkout under the budget's floor is the change that wait assumes has not happened. It
-  still goes through the one door to that half (`sweepResumable`) and within its 60-second budget, and a look of its own
-  that finds nothing starts the wait for the schedule. Without a budget, a checkout is made as before.
+  Its look at resting checkouts goes ahead even while the schedule waits after a look that found nothing (below): a new
+  checkout under the budget's floor is the change that wait assumes has not happened. It still goes through the one
+  door to that half (`sweepResumable`) and within its 60-second budget, and a look of its own that finds nothing starts
+  the wait for the schedule. Without a budget, a checkout is made as before.
 - **Resting checkouts under a budget** (owner decision, 2026-11-06). Below a budget's floor (`underBudgetFloor`),
   `gcResumableCheckouts` may take a resting session's checkout however recently it was written, oldest last write
   first. A commit on the session's own branch counts as kept there, pushed or not: the branch and its commits stay in
@@ -162,6 +162,22 @@ The runner judges pressure against the storage it may use:
   goes. Its branch and base ref stay, and the sweep's 60-second budget holds. The checkout comes back on the session's
   next claim (`restoreAbsentCheckout`). Without a budget, two weeks unwritten (`resumableCheckoutIdle`) and a remote
   for every commit stand.
+- **The schedule's look below a budget's floor** (task `34t1SUWPpB9sH8NpIHKxO`). After a look at resting checkouts
+  that finds nothing, the schedule leaves them alone for an hour (`resumableSweepWait`), which only free space back
+  above the floor ends early. Below a usable budget's floor that is too long. The lab rerun (task
+  `34svcSfRHWvxLUdvci2xG`) saw the volume stay under its floor for 59 minutes with a resting checkout that could go,
+  because the look had found nothing while that session's engine was still warm, and builds or installs in the
+  checkouts could take the volume to its limit meanwhile. There the wait is 7.5 minutes (`resumableBudgetSweepWait`,
+  one and a half sweep intervals, counted like the hour from the end of the look), and a reading judged on a newer
+  measurement of the budget than the look's ends it sooner. The channel measures the volume about every two minutes,
+  and the relay keeps a measurement's time while its figures stay the same, so a newer one means the volume's usage
+  has moved. So the schedule's next sweep, five minutes on, looks again only if the volume has been measured since,
+  and the one after, ten minutes on, looks either way, with half an interval to spare on both sides for a claim loop
+  that comes round late and a look that took a while. A measurement that came in while the look ran is one its last
+  reading saw, and is no newer. A budget that comes in under its floor during an hour's wait ends that wait too: the
+  look that started it went by the machine's rules, which keep checkouts a budget's floor does not. The look still
+  goes through `sweepResumable`, the one door to that half, within its 60-second budget, and the wait is still only in
+  memory. Above the floor nothing looks, as before, and room ends any wait. Without a usable budget the hour stands.
 - **A session's branch while its checkout is away.** Nothing in the runner deletes or prunes a local branch. No call
   deletes a ref under `refs/heads/`. Its `git branch -f` calls move a merge target forward, to a commit that holds its
   old tip, or move an integration line. `git worktree prune` removes only the records of checkouts that are gone, and
