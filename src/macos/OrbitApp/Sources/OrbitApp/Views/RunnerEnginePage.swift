@@ -38,6 +38,8 @@ private struct RunnerEngineContent: View {
     let runners: RunnersModel
     let runner: Runner
     let engine: String
+    /// Whether the app can be seen, which the page's poll reads (`ViewPoll`).
+    @Environment(AppModel.self) private var model
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass

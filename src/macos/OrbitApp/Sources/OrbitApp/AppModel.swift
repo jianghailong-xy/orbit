@@ -1091,7 +1091,7 @@ final class AppModel {
     /// cancels the sleep. Cancelling the poll itself ends it as well.
     private func pollSleep(until wake: Date?) async {
         let seconds = wake.map { max(0, $0.timeIntervalSinceNow) } ?? 3_600
-        let sleeper = Task { try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)) }
+        let sleeper = Task { _ = try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)) }
         pollSleeper = sleeper
         await withTaskCancellationHandler {
             await sleeper.value
