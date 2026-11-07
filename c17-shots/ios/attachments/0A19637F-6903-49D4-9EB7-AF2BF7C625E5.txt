@@ -1,0 +1,2 @@
+ios-5a-plan-draft-section-3: in view after 8 drag(s) at (36.666666666666664, 298.0, 197.33333333333331, 24.0)
+ios-5a-plan-draft: the panel's head after the drag: 48 label="Runner 离线判定的原因" value="" frame=(16.0, 84.83333333333334, 179.33333333333334, 20.33333333333333) hittable=false

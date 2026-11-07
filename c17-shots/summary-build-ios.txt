@@ -1,0 +1,12 @@
+Test Case '-[C11ProbeUITests.WikiChatShotTests testPlanCardApplied]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testPlanCardApplied]' passed (227.308 seconds).
+Test Case '-[C11ProbeUITests.WikiChatShotTests testPlanCardDraft]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testPlanCardDraft]' passed (112.323 seconds).
+Test Case '-[C11ProbeUITests.WikiChatShotTests testPlanCardMoved]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testPlanCardMoved]' passed (92.232 seconds).
+Test Case '-[C11ProbeUITests.WikiChatShotTests testPlanCardUndone]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testPlanCardUndone]' passed (69.508 seconds).
+	 Executed 4 tests, with 0 failures (0 unexpected) in 501.371 (501.382) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 501.371 (501.385) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 501.371 (501.387) seconds
+** TEST SUCCEEDED **

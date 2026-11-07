@@ -1,0 +1,284 @@
+Attributes: Application, 0x114b908c0, pid: 27161, label: 'C11Probe'
+Element subtree:
+ →Application, 0x114b908c0, pid: 27161, label: 'C11Probe'
+    Window (Main), 0x114b90a00, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x114b90b40, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x114b90c80, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x114b90dc0, {{-402.0, -874.0}, {1206.0, 2622.0}}
+          Other, 0x114b90f00, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x114b91040, {{0.0, 0.0}, {402.0, 874.0}}
+              StaticText, 0x114b91180, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x114b912c0, {{251.7, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              CollectionView, 0x114b91400, {{0.0, 128.0}, {305.7, 746.0}}
+                Other, 0x114b91540, {{0.0, -1364.0}, {305.7, 3206.0}}
+                Cell, 0x114b91680, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x114b917c0, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x114b91900, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x114b91a40, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x114b91b80, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x114b91cc0, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x114b91e00, {{0.0, 128.0}, {305.3, 44.3}}
+                        Button, 0x114b91f40, {{0.0, 128.0}, {305.3, 44.3}}, label: 'Projects'
+                          Image, 0x114b92080, {{26.3, 142.3}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x114b921c0, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x114b92300, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x114b92440, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x114b92580, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x114b926c0, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x114b92800, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x114b92940, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x114b92a80, {{0.0, 172.3}, {305.3, 44.3}}
+                        Button, 0x114b92bc0, {{0.0, 172.3}, {305.3, 44.3}}, label: 'Tasks'
+                          Image, 0x114b92d00, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x114b92e40, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x114b92f80, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x114b930c0, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x114b93200, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x114b93340, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x114b93480, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x114b935c0, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x114b93700, {{0.0, 216.7}, {305.3, 44.3}}
+                        Button, 0x114b93840, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki'
+                          Image, 0x114b93980, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x114b93ac0, {{58.0, 228.7}, {34.3, 20.3}}, label: 'Wiki'
+                Cell, 0x114b93c00, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x114b93d40, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x114b93e80, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x113d76940, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x113d74140, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x113d743c0, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x113d75900, {{0.0, 261.0}, {305.3, 44.7}}
+                        StaticText, 0x113d757c0, {{0.0, 261.0}, {305.3, 44.7}}, label: 'Workspaces'
+                Cell, 0x113d75e00, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x113d77980, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x113d77340, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x113d77480, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x113d775c0, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x113d77700, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x113d75f40, {{0.0, 305.7}, {305.3, 44.3}}
+                        Button, 0x113d74500, {{0.0, 305.7}, {305.3, 44.3}}, label: 'orbit-develop,  · HPC'
+                          Other, 0x113d75a40, {{24.7, 320.0}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x114b9c000, {{24.7, 320.0}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x114b9c140, {{58.0, 317.7}, {103.0, 20.3}}, label: 'orbit-develop'
+                          StaticText, 0x114b9c280, {{161.0, 317.7}, {47.7, 20.3}}, label: ' · HPC'
+                Other, 0x114b9c3c0, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x114b9c500, {{299.3, 649.7}, {3.0, 221.3}}
+                Other, 0x114b9c640, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x114b9c780, {{299.3, 649.7}, {3.0, 221.3}}
+              Button, 0x114b9c8c0, {{10.0, 788.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x114b9ca00, {{31.0, 801.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x114b9cb40, {{57.0, 799.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x114b9cc80, {{251.7, 788.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x114b9cdc0, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x114b9cf00, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI29PresentationHosting'
+                  Button, 0x114b9d040, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Back'
+                  Other, 0x114b9d180, {{346.0, 66.0}, {36.0, 36.0}}, identifier: 'list.bullet', label: 'Contents'
+                    Other, 0x114b9d2c0, {{346.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x114b9d400, {{348.3, 66.0}, {31.3, 36.0}}, identifier: 'list.bullet', label: 'Contents'
+                Other, 0x114b9d540, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x114b9d680, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x114b9d7c0, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x114b9d900, {{0.0, 0.0}, {402.0, 874.0}}
+                        CollectionView, 0x114b9da40, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x114b9db80, {{0.0, -2652.0}, {402.0, 6580.0}}
+                          Cell, 0x114b9dcc0, {{0.0, -148.3}, {402.0, 156.0}}
+                            Other, 0x114b9de00, {{0.0, -148.3}, {402.0, 156.0}}
+                              Other, 0x114b9df40, {{0.0, -148.3}, {402.0, 156.0}}
+                            Other, 0x114b9e080, {{0.0, -148.3}, {402.0, 156.0}}
+                              Other, 0x114b9e1c0, {{0.0, -148.3}, {402.0, 156.0}}
+                                Other, 0x114b9e300, {{0.0, -148.3}, {402.0, 156.0}}
+                                  StaticText, 0x114b9e440, {{0.0, -148.3}, {402.0, 156.0}}, label: 'Orbit 中的 session 被定义为一个 agent runtime 与 runner 绑定的可恢复多轮会话。[1][2] 投递层采用 lease 模型，将 PENDING 转为 IN_FLIGHT 并设置过期时间。[9] 本篇聚焦运行模型与传输机制。 '
+                                    Link, 0x114b9e580, {{276.7, -107.0}, {13.7, 26.4}}, identifier: 'orbit-footnote://note?n=1', label: '[1]'
+                                    Link, 0x114b9e6c0, {{290.4, -107.0}, {15.2, 26.4}}, identifier: 'orbit-footnote://note?n=2', label: '[2]'
+                                    Link, 0x114b9e800, {{134.0, -54.3}, {15.6, 26.4}}, identifier: 'orbit-footnote://note?n=9', label: '[9]'
+                          Other, 0x114b9e940, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x114b9ea80, {{0.0, 0.0}, {402.0, 170.8}}
+                          Other, 0x114b9ebc0, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x114b9ed00, {{0.0, 0.0}, {402.0, 170.8}}
+                              Image, 0x114b9ee40, {{-120.0, -166.0}, {642.0, 332.0}}, identifier: 'AdditionalDimmingOverlay'
+                              Other, 0x114b9ef80, {{0.0, 0.0}, {402.0, 170.8}}
+                                Other, 0x114b9f0c0, {{0.0, 0.0}, {402.0, 170.8}}
+                              Other, 0x114b9f200, {{0.0, 0.0}, {402.0, 170.8}}
+                                Other, 0x114b9f340, {{0.0, 0.0}, {402.0, 170.8}}
+                                Other, 0x114b9f480, {{0.0, 0.0}, {402.0, 170.8}}
+                          Cell, 0x114b9f5c0, {{0.0, 7.7}, {402.0, 68.0}}
+                            Other, 0x114b9f700, {{0.0, 7.7}, {402.0, 68.0}}
+                              Other, 0x114b9f840, {{0.0, 7.7}, {402.0, 68.0}}
+                            Other, 0x114b9f980, {{0.0, 7.7}, {402.0, 68.0}}
+                              Other, 0x114b9fac0, {{0.0, 7.7}, {402.0, 68.0}}
+                                Other, 0x114b9fc00, {{0.0, 7.7}, {402.0, 68.0}}
+                                  StaticText, 0x114b9fd40, {{16.0, 36.7}, {12.0, 24.0}}, label: '2'
+                                  StaticText, 0x114b9fe80, {{36.0, 36.7}, {76.7, 24.0}}, label: '已知的坑'
+                                  Image, 0x114ba0000, {{132.0, 45.0}, {17.3, 14.3}}, identifier: 'arrow.triangle.2.circlepath', label: 'Syncing'
+                                  StaticText, 0x114ba0140, {{132.0, 45.0}, {124.0, 14.3}}, label: 'Rewrite pending'
+                          Cell, 0x114ba0280, {{0.0, 75.7}, {402.0, 261.3}}
+                            Other, 0x114ba03c0, {{0.0, 75.7}, {402.0, 261.3}}
+                              Other, 0x114ba0500, {{0.0, 75.7}, {402.0, 261.3}}
+                            Other, 0x114ba0640, {{0.0, 75.7}, {402.0, 261.3}}
+                              Other, 0x114ba0780, {{0.0, 75.7}, {402.0, 261.3}}
+                                Other, 0x114ba08c0, {{0.0, 75.7}, {402.0, 261.3}}
+                                  StaticText, 0x114ba0a00, {{0.0, 75.7}, {402.0, 261.3}}, label: 'session 启动窗口内的竞态：客户端消息可能先于 session 在 runner 本地 pool 中落地。[28] 若 runner 在此窗口内因自更新或 lease-loss 触发 detach，合并请求恒被拒为 superseded。[28][30] 修复后，准入放行、mergeToMain 正常执行并留下 MERGED 回执。[30]  Withdrawn  启用 WebSocket 需要新增 nginx location 与 Go WS 客户端，并依赖外部 TLS 终端允许 Upgrade。  No source  '
+                                    Link, 0x114ba0b40, {{296.0, 117.0}, {22.3, 26.4}}, identifier: 'orbit-footnote://note?n=28', label: '[28]'
+                                    Link, 0x114ba0c80, {{346.6, 169.7}, {22.3, 26.4}}, identifier: 'orbit-footnote://note?n=28', label: '[28]'
+                                    Link, 0x114ba0dc0, {{16.0, 196.1}, {22.5, 26.4}}, identifier: 'orbit-footnote://note?n=30', label: '[30]'
+                                    Link, 0x114ba0f00, {{188.9, 222.6}, {22.5, 26.4}}, identifier: 'orbit-footnote://note?n=30', label: '[30]'
+                                    Link, 0x114ba1040, {{215.7, 222.6}, {65.0, 26.4}}, identifier: 'orbit-mark://mark?section=s2&block=0&sentence=2', label: ' Withdrawn '
+                                    Link, 0x114ba1180, {{16.0, 275.3}, {370.0, 46.6}}, identifier: 'orbit-mark://mark?section=s2&block=0&sentence=3', label: ' No source '
+                          Cell, 0x114ba12c0, {{0.0, 337.0}, {402.0, 68.0}}
+                            Other, 0x114ba1400, {{0.0, 337.0}, {402.0, 68.0}}
+                              Other, 0x114ba1540, {{0.0, 337.0}, {402.0, 68.0}}
+                            Other, 0x114ba1680, {{0.0, 337.0}, {402.0, 68.0}}
+                              Other, 0x114ba17c0, {{0.0, 337.0}, {402.0, 68.0}}
+                                Other, 0x114ba1900, {{0.0, 337.0}, {402.0, 68.0}}
+                                  StaticText, 0x114ba1a40, {{16.0, 366.0}, {12.7, 24.0}}, label: '3'
+                                  StaticText, 0x114ba1b80, {{36.7, 366.0}, {197.3, 24.0}}, label: 'turn 投递与 inbox 领取'
+                          Cell, 0x114ba1cc0, {{0.0, 405.0}, {402.0, 129.3}}
+                            Other, 0x114ba1e00, {{0.0, 405.0}, {402.0, 129.3}}
+                              Other, 0x114ba1f40, {{0.0, 405.0}, {402.0, 129.3}}
+                            Other, 0x114ba2080, {{0.0, 405.0}, {402.0, 129.3}}
+                              Other, 0x114ba21c0, {{0.0, 405.0}, {402.0, 129.3}}
+                                Other, 0x114ba2300, {{0.0, 405.0}, {402.0, 129.3}}
+                                  StaticText, 0x114ba2440, {{0.0, 405.0}, {402.0, 129.3}}, label: '心跳机制用于控制面探测失联的 runner。 Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。[5][12] '
+                                    Link, 0x114ba2580, {{49.7, 498.9}, {15.4, 20.4}}, identifier: 'orbit-footnote://note?n=5', label: '[5]'
+                                    Link, 0x114ba26c0, {{65.1, 498.9}, {20.4, 20.4}}, identifier: 'orbit-footnote://note?n=12', label: '[12]'
+                          Cell, 0x114ba2800, {{0.0, 534.3}, {402.0, 103.3}}
+                            Other, 0x114ba2940, {{0.0, 534.3}, {402.0, 103.3}}
+                              Other, 0x114ba2a80, {{0.0, 534.3}, {402.0, 103.3}}
+                            Other, 0x114ba2bc0, {{0.0, 534.3}, {402.0, 103.3}}
+                              Other, 0x114ba2d00, {{0.0, 534.3}, {402.0, 103.3}}
+                                Other, 0x114ba2e40, {{0.0, 534.3}, {402.0, 103.3}}
+                                  StaticText, 0x114ba2f80, {{0.0, 534.3}, {402.0, 103.3}}, label: '选择 long-poll 而非 WebSocket 的原因包括：runner 仅支持出站 HTTP、网关 nginx 配置限制 WebSocket 握手。[2] '
+                                    Link, 0x114ba30c0, {{157.9, 601.9}, {15.2, 20.4}}, identifier: 'orbit-footnote://note?n=2', label: '[2]'
+                          Cell, 0x114ba3200, {{0.0, 637.7}, {402.0, 68.0}}
+                            Other, 0x114ba3340, {{0.0, 637.7}, {402.0, 68.0}}
+                              Other, 0x114ba3480, {{0.0, 637.7}, {402.0, 68.0}}
+                            Other, 0x114ba35c0, {{0.0, 637.7}, {402.0, 68.0}}
+                              Other, 0x114ba3700, {{0.0, 637.7}, {402.0, 68.0}}
+                                Other, 0x114ba3840, {{0.0, 637.7}, {402.0, 68.0}}
+                                  StaticText, 0x114ba3980, {{16.0, 666.7}, {13.0, 24.0}}, label: '4'
+                                  StaticText, 0x114ba3ac0, {{37.0, 666.7}, {38.3, 24.0}}, label: '约定'
+                          Cell, 0x114ba3c00, {{0.0, 705.7}, {402.0, 129.7}}
+                            Other, 0x114ba3d40, {{0.0, 705.7}, {402.0, 129.7}}
+                              Other, 0x114ba3e80, {{0.0, 705.7}, {402.0, 129.7}}
+                            Other, 0x114ba8000, {{0.0, 705.7}, {402.0, 129.7}}
+                              Other, 0x114ba8140, {{0.0, 705.7}, {402.0, 129.7}}
+                                Other, 0x114ba8280, {{0.0, 705.7}, {402.0, 129.7}}
+                                  StaticText, 0x114ba83c0, {{0.0, 705.7}, {402.0, 129.7}}, label: 'runner-go 全量测试必须在 runner 宿主上执行，不能直接在引擎 Bash 里跑。[39] runner 一旦 drain 就会杀掉后台作业，唤醒可能不送达。[44] 长命令放在当前轮次内等待。[45][46][47] '
+                                    Link, 0x114ba8500, {{230.9, 747.0}, {22.6, 26.4}}, identifier: 'orbit-footnote://note?n=39', label: '[39]'
+                                    Link, 0x114ba8640, {{345.1, 773.4}, {22.8, 26.4}}, identifier: 'orbit-footnote://note?n=44', label: '[44]'
+                                    Link, 0x114ba8780, {{235.1, 799.8}, {22.5, 20.4}}, identifier: 'orbit-footnote://note?n=45', label: '[45]'
+                                    Link, 0x114ba88c0, {{257.6, 799.8}, {22.7, 20.4}}, identifier: 'orbit-footnote://note?n=46', label: '[46]'
+                                    Link, 0x114ba8a00, {{280.3, 799.8}, {22.0, 20.4}}, identifier: 'orbit-footnote://note?n=47', label: '[47]'
+                          Cell, 0x114ba8b40, {{0.0, 835.3}, {402.0, 66.0}}
+                            Other, 0x114ba8c80, {{0.0, 835.3}, {402.0, 66.0}}
+                              Other, 0x114ba8dc0, {{0.0, 835.3}, {402.0, 66.0}}
+                            Other, 0x114ba8f00, {{0.0, 835.3}, {402.0, 66.0}}
+                              Other, 0x114ba9040, {{0.0, 835.3}, {402.0, 66.0}}
+                                Other, 0x114ba9180, {{0.0, 835.3}, {402.0, 66.0}}
+                                  StaticText, 0x114ba92c0, {{16.0, 868.3}, {74.0, 18.0}}, label: 'Footnotes'
+                                  StaticText, 0x114ba9400, {{96.0, 870.3}, {282.0, 15.7}}, label: '12 · 5 session quotes · 4 code & doc quotes · 1 task quote · 1 record quote · 1 note'
+                          Other, 0x114ba9540, {{369.0, 116.0}, {30.0, 696.0}}, label: 'Vertical scroll bar, 5 pages', value: 43%
+                            Other, 0x114ba9680, {{396.0, 340.0}, {3.0, 189.7}}
+                          Other, 0x114ba97c0, {{369.0, 116.0}, {30.0, 696.0}}, label: 'Vertical scroll bar, 5 pages', value: 43%
+                            Other, 0x114ba9900, {{396.0, 340.0}, {3.0, 189.7}}
+                Other, 0x114ba9a40, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x114ba9b80, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x114ba9cc0, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x114ba9e00, {{-402.0, -874.0}, {1206.0, 2622.0}}
+        Other, 0x114ba9f40, {{0.0, 62.0}, {402.0, 812.0}}
+          Button, 0x114baa080, {{163.0, 57.0}, {76.0, 25.0}}, label: 'Sheet Grabber', value: Expanded
+          Other, 0x114baa1c0, {{0.0, 62.0}, {402.0, 812.0}}
+            Other, 0x114baa300, {{0.0, 62.0}, {402.0, 812.0}}
+              Other, 0x114baa440, {{0.0, 62.0}, {402.0, 812.0}}
+                Other, 0x114baa580, {{0.0, 62.0}, {402.0, 812.0}}
+                  Button, 0x114baa6c0, {{16.0, 85.0}, {179.3, 20.3}}, label: 'Runner 离线判定的原因'
+                    Button, 0x114baa800, {{16.0, 85.0}, {179.3, 20.3}}
+                      StaticText, 0x114baa940, {{16.0, 84.8}, {179.3, 20.3}}, label: 'Runner 离线判定的原因'
+                  Button, 0x114baaa80, {{316.0, 80.0}, {30.0, 30.0}}, identifier: 'arrow.right', label: 'Open as a full session'
+                  Button, 0x114baabc0, {{356.0, 80.0}, {30.0, 30.0}}, identifier: 'xmark', label: 'Hide chat'
+                  Other, 0x114baad00, {{0.0, 120.3}, {402.0, 623.7}}
+                  CollectionView, 0x114baae40, {{0.0, 120.3}, {402.0, 623.7}}
+                    Other, 0x114baaf80, {{0.0, -768.3}, {402.0, 2351.0}}
+                    Cell, 0x114bab0c0, {{0.0, 120.3}, {402.0, 97.0}}
+                      Other, 0x114bab200, {{0.0, 120.3}, {402.0, 97.0}}
+                        Other, 0x114bab340, {{0.0, 120.3}, {402.0, 97.0}}
+                          Other, 0x114bab480, {{0.0, 120.3}, {402.0, 97.0}}
+                      Other, 0x114bab5c0, {{0.0, 120.3}, {402.0, 97.0}}
+                        Other, 0x114bab700, {{0.0, 120.3}, {402.0, 97.0}}
+                          Other, 0x114bab840, {{0.0, 120.3}, {402.0, 97.0}}
+                            TextView, 0x114bab980, {{104.0, 134.3}, {270.0, 50.0}}, value: 这句少了原因：留三次心跳的余量，是为...
+                              TextView, 0x114babac0, {{104.0, 134.3}, {270.0, 49.3}}, label: '这句少了原因：留三次心跳的余量，是为了扛住一次网关重启。'
+                              Other, 0x114babc00, {{341.0, 134.3}, {30.0, 50.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                Other, 0x114babd40, {{368.0, 145.3}, {3.0, 36.0}}
+                              Other, 0x114babe80, {{104.0, 156.3}, {270.0, 25.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                Other, 0x114bac000, {{107.0, 178.3}, {264.0, 3.0}}
+                            Button, 0x114bac140, {{312.3, 196.0}, {28.0, 15.0}}, identifier: 'doc.on.doc', label: 'Copy'
+                            StaticText, 0x114bac280, {{346.3, 196.7}, {39.7, 13.3}}, label: '8m ago'
+                    Cell, 0x114bac3c0, {{0.0, 217.3}, {402.0, 62.0}}
+                      Other, 0x114bac500, {{0.0, 217.3}, {402.0, 62.0}}
+                        Other, 0x114bac640, {{0.0, 217.3}, {402.0, 62.0}}
+                          Other, 0x114bac780, {{0.0, 217.3}, {402.0, 62.0}}
+                      Other, 0x114bac8c0, {{0.0, 217.3}, {402.0, 62.0}}
+                        Other, 0x114baca00, {{0.0, 217.3}, {402.0, 62.0}}
+                          Other, 0x114bacb40, {{0.0, 217.3}, {402.0, 62.0}}
+                            TextView, 0x114bacc80, {{16.0, 223.3}, {354.0, 50.0}}, value: 拆成一张卡：§3 移到新开的一篇，3...
+                              TextView, 0x114bacdc0, {{16.0, 223.3}, {354.0, 49.3}}, label: '拆成一张卡：§3 移到新开的一篇，3.1 的总览写给第一次读的人。'
+                              Other, 0x114bacf00, {{337.0, 223.3}, {30.0, 50.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                Other, 0x114bad040, {{364.0, 232.3}, {3.0, 38.0}}
+                              Other, 0x114bad180, {{16.0, 245.3}, {354.0, 25.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                Other, 0x114bad2c0, {{19.0, 267.3}, {348.0, 3.0}}
+                    Cell, 0x114bad400, {{0.0, 279.3}, {402.0, 393.7}}
+                      Other, 0x114bad540, {{0.0, 279.3}, {402.0, 393.7}}
+                        Other, 0x114bad680, {{0.0, 279.3}, {402.0, 393.7}}
+                          Other, 0x114bad7c0, {{0.0, 279.3}, {402.0, 393.7}}
+                      Other, 0x114bad900, {{0.0, 279.3}, {402.0, 393.7}}
+                        Other, 0x114bada40, {{0.0, 279.3}, {402.0, 393.7}}
+                          Other, 0x114badb80, {{0.0, 279.3}, {402.0, 393.7}}
+                            Other, 0x114badcc0, {{16.0, 285.3}, {370.0, 381.7}}, identifier: 'wiki-chat-card'
+                              StaticText, 0x114bade00, {{28.0, 297.3}, {136.0, 13.3}}, label: 'DRAFT · PLAN CHANGE'
+                              StaticText, 0x114badf40, {{28.0, 318.7}, {325.7, 42.3}}, label: '3.1 会话运行模型与长连接 · 3.3 turn 投递与心跳'
+                              StaticText, 0x114bae080, {{28.0, 369.0}, {39.7, 15.7}}, label: 'Moves'
+                              StaticText, 0x114bae1c0, {{102.7, 369.0}, {220.0, 33.7}}, label: '3.1 §3 turn 投递与 inbox 领取 → new document 3.3'
+                              StaticText, 0x114bae300, {{28.0, 408.7}, {53.3, 15.7}}, label: 'Changes'
+                              StaticText, 0x114bae440, {{102.7, 408.7}, {117.0, 15.7}}, label: '3.1 §1 总览 (covers)'
+                              StaticText, 0x114bae580, {{28.0, 430.3}, {42.3, 15.7}}, label: 'Covers'
+                              StaticText, 0x114bae6c0, {{102.7, 430.3}, {264.7, 33.7}}, label: '3.1 §1 总览: 写给第一次读的人：先讲模型，再讲参数。'
+                              StaticText, 0x114bae800, {{28.0, 470.0}, {62.7, 15.7}}, label: 'Document'
+                              StaticText, 0x114bae940, {{102.7, 470.0}, {165.3, 15.7}}, label: '3.3 · New document in 会话'
+                              StaticText, 0x114baea80, {{28.0, 491.7}, {27.0, 15.7}}, label: 'Why'
+                              StaticText, 0x114baebc0, {{102.7, 491.7}, {260.7, 33.7}}, label: '3.1 太长：投递与心跳拆成单独一篇，3.1 写给第一次读的人。'
+                              StaticText, 0x114baed00, {{28.0, 531.3}, {52.3, 15.7}}, label: 'Rewrites'
+                              Button, 0x114baee40, {{102.7, 531.3}, {17.0, 15.7}}, label: '3.1'
+                              StaticText, 0x114baef80, {{119.7, 531.3}, {11.0, 15.7}}, label: ' · '
+                              Button, 0x114baf0c0, {{130.7, 531.3}, {19.3, 15.7}}, label: '3.3'
+                              Button, 0x114baf200, {{28.0, 559.0}, {346.0, 44.0}}, identifier: 'wiki-chat-card-apply_rebuild', label: 'Apply & rebuild'
+                              Button, 0x114baf340, {{28.0, 611.0}, {169.0, 44.0}}, identifier: 'wiki-chat-card-open_in_plan', label: 'Open in Plan'
+                              Button, 0x114baf480, {{205.0, 611.0}, {169.0, 44.0}}, identifier: 'wiki-chat-card-discard', label: 'Discard'
+                    Cell, 0x114baf5c0, {{0.0, 673.0}, {402.0, 21.0}}
+                      Other, 0x114baf700, {{0.0, 673.0}, {402.0, 21.0}}
+                        Other, 0x114baf840, {{0.0, 673.0}, {402.0, 21.0}}
+                          Other, 0x114baf980, {{0.0, 673.0}, {402.0, 21.0}}
+                      Other, 0x114bafac0, {{0.0, 673.0}, {402.0, 21.0}}
+                        Other, 0x114bafc00, {{0.0, 673.0}, {402.0, 21.0}}
+                          Other, 0x114bafd40, {{0.0, 673.0}, {402.0, 21.0}}
+                            Other, 0x114bafe80, {{0.0, 673.0}, {402.0, 21.0}}
+                    Other, 0x114bb0000, {{369.0, 120.3}, {30.0, 623.7}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                      Other, 0x114bb0140, {{396.0, 125.3}, {3.0, 567.7}}
+                    Other, 0x114bb0280, {{369.0, 120.3}, {30.0, 623.7}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                      Other, 0x114bb03c0, {{396.0, 125.3}, {3.0, 567.7}}
+                  ScrollView, 0x114bb0500, {{26.0, 758.0}, {356.0, 24.0}}
+                    Other, 0x114bb0640, {{26.0, 758.0}, {87.3, 24.0}}
+                      Image, 0x114bb0780, {{35.3, 765.0}, {12.0, 10.0}}, identifier: 'wiki-chat-page-chip', label: 'Bookmark'
+                      StaticText, 0x114bb08c0, {{52.7, 762.2}, {36.7, 15.7}}, identifier: 'wiki-chat-page-chip', label: '3.1 §3'
+                      Button, 0x114bb0a00, {{96.7, 765.3}, {9.3, 9.3}}, identifier: 'wiki-chat-page-chip', label: 'Remove 3.1 §3'
+                  TextField, 0x114bb0b40, {{26.0, 794.0}, {318.0, 22.0}}, identifier: 'wiki-chat-input', placeholderValue: 'Reply, or say what to change in the draft'
+                    Other, 0x114bb0c80, {{30.0, 802.0}, {310.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                      Other, 0x114bb0dc0, {{29.0, 810.0}, {312.0, 3.0}}
+                  Button, 0x114bb0f00, {{352.0, 792.0}, {30.0, 30.0}}, identifier: 'wiki-chat-send', label: 'Send', Disabled
+Path to element:
+ →Application, 0x114b908c0, pid: 27161, label: 'C11Probe'
+Query chain:
+ →Find: Target Application 'io.orbitd.c11probe'
+  Output: {
+    Application, 0x114bb1040, pid: 27161, label: 'C11Probe'
+  }

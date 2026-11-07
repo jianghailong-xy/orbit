@@ -1,0 +1,71 @@
+==> iPhone FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC: iPhone 17 Pro (FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC) (Shutdown) 
+==> stub ready on 127.0.0.1:8765 (pid 6536, after 2s)
+==> ios
+Test Case '-[C11ProbeUITests.WikiChatShotTests testPlanCardApplied]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testPlanCardApplied]' passed (227.308 seconds).
+Test Case '-[C11ProbeUITests.WikiChatShotTests testPlanCardDraft]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testPlanCardDraft]' passed (112.323 seconds).
+Test Case '-[C11ProbeUITests.WikiChatShotTests testPlanCardMoved]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testPlanCardMoved]' passed (92.232 seconds).
+Test Case '-[C11ProbeUITests.WikiChatShotTests testPlanCardUndone]' started.
+Test Case '-[C11ProbeUITests.WikiChatShotTests testPlanCardUndone]' passed (69.508 seconds).
+	 Executed 4 tests, with 0 failures (0 unexpected) in 501.371 (501.382) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 501.371 (501.385) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 501.371 (501.387) seconds
+** TEST SUCCEEDED **
+.c17-probe/run.sh: line 133:  6536 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.c17-probe/shots:
+total 0
+drwxr-xr-x   5 runner  staff   160 Nov  7 04:57 .
+drwxr-xr-x  17 runner  staff   544 Nov  7 04:59 ..
+drwxr-xr-x  35 runner  staff  1120 Nov  7 05:14 ios
+drwxr-xr-x   2 runner  staff    64 Nov  7 04:57 ipad
+drwxr-xr-x   2 runner  staff    64 Nov  7 04:57 mac
+
+/Users/runner/work/orbit/orbit/.c17-probe/shots/ios:
+total 4912
+drwxr-xr-x  35 runner  staff    1120 Nov  7 05:14 .
+drwxr-xr-x   5 runner  staff     160 Nov  7 04:57 ..
+drwxr-xr-x  23 runner  staff     736 Nov  7 05:14 attachments
+-rw-r--r--   1 runner  staff   12322 Nov  7 05:14 compiled-ios.txt
+-rw-r--r--   1 runner  staff     262 Nov  7 05:14 Complete Issue Description.txt
+-rw-r--r--   1 runner  staff      46 Nov  7 05:14 diagnostics-ios.txt
+-rw-r--r--   1 runner  staff  155943 Nov  7 05:11 ios-5a-plan-draft-card.png
+-rw-r--r--   1 runner  staff  318468 Nov  7 05:11 ios-5a-plan-draft.png
+-rw-r--r--   1 runner  staff   72223 Nov  7 05:09 ios-5b-plan-applied-card.png
+-rw-r--r--   1 runner  staff  262064 Nov  7 05:09 ios-5b-plan-applied.png
+-rw-r--r--   1 runner  staff   81736 Nov  7 05:12 ios-5c-plan-moved-card.png
+-rw-r--r--   1 runner  staff  281710 Nov  7 05:12 ios-5c-plan-moved.png
+-rw-r--r--   1 runner  staff   31389 Nov  7 05:13 ios-5d-plan-undone-card.png
+-rw-r--r--   1 runner  staff  228322 Nov  7 05:13 ios-5d-plan-undone.png
+-rw-r--r--   1 runner  staff    2404 Nov  7 05:14 not-served.txt
+-rw-r--r--   1 runner  staff   30089 Nov  7 05:13 requests.log
+-rw-r--r--   1 runner  staff      49 Nov  7 04:58 requests.log.out
+-rw-r--r--   1 runner  staff   26989 Nov  7 05:14 tree-ios-5a-plan-draft-tree
+-rw-r--r--@  1 runner  staff   26989 Nov  7 05:11 tree-ios-5a-plan-draft-tree.txt
+-rw-r--r--   1 runner  staff   25904 Nov  7 05:14 tree-ios-5b-plan-applied-tree
+-rw-r--r--@  1 runner  staff   25904 Nov  7 05:09 tree-ios-5b-plan-applied-tree.txt
+-rw-r--r--   1 runner  staff   26316 Nov  7 05:14 tree-ios-5c-plan-moved-tree
+-rw-r--r--@  1 runner  staff   26316 Nov  7 05:12 tree-ios-5c-plan-moved-tree.txt
+-rw-r--r--   1 runner  staff   24985 Nov  7 05:14 tree-ios-5d-plan-undone-tree
+-rw-r--r--@  1 runner  staff   24985 Nov  7 05:13 tree-ios-5d-plan-undone-tree.txt
+-rw-r--r--   1 runner  staff     338 Nov  7 05:14 WikiChatShotTeststestPlanCardApplied-notes
+-rw-r--r--@  1 runner  staff     338 Nov  7 05:09 WikiChatShotTeststestPlanCardApplied-notes.txt
+-rw-r--r--   1 runner  staff     296 Nov  7 05:14 WikiChatShotTeststestPlanCardDraft-notes
+-rw-r--r--@  1 runner  staff     296 Nov  7 05:11 WikiChatShotTeststestPlanCardDraft-notes.txt
+-rw-r--r--   1 runner  staff     296 Nov  7 05:14 WikiChatShotTeststestPlanCardMoved-notes
+-rw-r--r--@  1 runner  staff     296 Nov  7 05:12 WikiChatShotTeststestPlanCardMoved-notes.txt
+-rw-r--r--   1 runner  staff     298 Nov  7 05:14 WikiChatShotTeststestPlanCardUndone-notes
+-rw-r--r--@  1 runner  staff     298 Nov  7 05:13 WikiChatShotTeststestPlanCardUndone-notes.txt
+-rw-r--r--   1 runner  staff     692 Nov  7 05:14 writes.txt
+-rw-r--r--   1 runner  staff  740900 Nov  7 05:14 xcodebuild-ios.log
+
+/Users/runner/work/orbit/orbit/.c17-probe/shots/ipad:
+total 0
+drwxr-xr-x  2 runner  staff   64 Nov  7 04:57 .
+drwxr-xr-x  5 runner  staff  160 Nov  7 04:57 ..
+
+/Users/runner/work/orbit/orbit/.c17-probe/shots/mac:
+total 0
+drwxr-xr-x  2 runner  staff   64 Nov  7 04:57 .
+drwxr-xr-x  5 runner  staff  160 Nov  7 04:57 ..
