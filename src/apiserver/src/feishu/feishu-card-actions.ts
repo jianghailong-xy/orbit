@@ -2,7 +2,8 @@ import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { FeishuTransport } from '../push/feishu-transport';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
-import { approvalClass, FEISHU_CARD_ACTIONS, type FeishuCard } from './cards/feishu-cards';
+import type { QuestionAnswers } from '@orbit/shared';
+import { approvalClass, FEISHU_CARD_ACTIONS, parseQuestionField, questionsOf, type FeishuCard } from './cards/feishu-cards';
 import { FeishuOutbound } from './feishu-outbound';
 import { FeishuRouter, type FeishuActor, type InboundEvent } from './feishu-router';
 
@@ -10,13 +11,19 @@ import { FeishuRouter, type FeishuActor, type InboundEvent } from './feishu-rout
 export const FEISHU_CARD_REPLIES = {
   allowed: 'Allowed.',
   denied: 'Denied.',
+  /** The owner's answers to the agent's question went to it (§7.2). */
+  answered: 'Answer sent.',
+  /** A submitted question form that leaves a question with neither a pick nor typed text. */
+  incomplete: 'Answer every question, then submit.',
+  /** Answering a question needs the question on the card, which only FULL draws (§6.4, §7.2). */
+  questionHidden: 'This question is answered in Orbit. Open it in Orbit to answer.',
   /** The approval was answered elsewhere, its turn ended, or it is no longer there (§7.4). */
   stale: 'Already answered in Orbit.',
   /** `approvalsInFeishu` is off (§7.2): the card is answered in Orbit. */
   off: 'Answering approvals in Feishu is turned off. Open it in Orbit to answer.',
   /** "Always allow" widens a standing grant, which stays in the app (§7.2, decision 1). */
   remember: '"Always allow" is not available in Feishu. Open it in Orbit to choose it.',
-  /** Anything else on a card: Orbit's own confirmation cards, owner items, questions (§7.2). */
+  /** Anything else on a card: Orbit's own confirmation cards, owner items (§7.2). */
   openInOrbit: 'Answer this in Orbit.',
 } as const;
 
@@ -40,6 +47,44 @@ export function clickOf(payload: unknown): { value: Json; formValue: Json; token
   return { value: obj(action.value), formValue: obj(action.form_value), token: str(event.token) };
 }
 
+/**
+ * The answers a submitted question form gives, in the web app's shape (`QuestionAnswers`: question text → the labels
+ * chosen), read against the approval's own input: each option's value on the card is its place in the agent's list,
+ * so the labels are the agent's own and a value that names no option is no answer. As in the web app's form, a typed
+ * answer joins a multi-select question's picks, and on a single-select question takes the place of the pick (the
+ * web form lets only one of them stand; a card cannot tell which came last, so the one typed by hand wins). Null when
+ * a question is left with neither, or the input holds no question: nothing is sent.
+ */
+export function answersFromForm(input: unknown, formValue: Record<string, unknown>): QuestionAnswers | null {
+  const questions = questionsOf(input);
+  if (questions.length === 0) return null;
+  const picked = new Map<number, string[]>();
+  const typed = new Map<number, string>();
+  for (const [name, value] of Object.entries(formValue)) {
+    const field = parseQuestionField(name);
+    if (!field) continue;
+    if (field.other) {
+      if (typeof value === 'string' && value.trim() !== '') typed.set(field.question, value.trim());
+      continue;
+    }
+    const values = Array.isArray(value) ? value : [value];
+    picked.set(field.question, values.filter((v): v is string => typeof v === 'string'));
+  }
+  const answers: QuestionAnswers = {};
+  for (const [index, q] of questions.entries()) {
+    const labels: string[] = [];
+    for (const v of picked.get(index) ?? []) {
+      const label = /^\d+$/.test(v) ? q.options[Number(v)]?.label : undefined;
+      if (label !== undefined && !labels.includes(label)) labels.push(label);
+    }
+    const own = typed.get(index);
+    const chosen = own === undefined ? labels : q.multiSelect ? [...labels, own] : [own];
+    if (chosen.length === 0) return null;
+    answers[q.question] = chosen;
+  }
+  return answers;
+}
+
 /** Whether a click asks for more than a plain allow or deny: any trace of "always allow" in what it sends. */
 function asksToRemember(click: { value: Json; formValue: Json }): boolean {
   return ['rememberRules', 'rememberRule', 'remember'].some((key) => key in click.value || key in click.formValue);
@@ -47,14 +92,17 @@ function asksToRemember(click: { value: Json; formValue: Json }): boolean {
 
 /**
  * The owner's clicks on alert cards (docs/feishu-bot-design.md §7.2, §7.4; decision 1). FeishuRouter has already
- * checked that the clicker is the app's owner; this answers Allow once and Deny on a tool-permission approval with
- * `SessionsService.decideApproval`, acting as the app's account with the FEISHU credential (who clicked, on which card),
- * and nothing else:
+ * checked that the clicker is the app's owner; this answers Allow once and Deny on a tool-permission approval, and the
+ * answer form of the agent's question (AskUserQuestion, F2-2), with `SessionsService.decideApproval`, acting as the
+ * app's account with the FEISHU credential (who clicked, on which card), and nothing else:
  *
  *   - `approvalsInFeishu` off: refused, nothing written; the card is answered in Orbit;
  *   - a click that carries "always allow" (`rememberRules`): refused, nothing written — a standing grant stays in the app;
- *   - Orbit's own confirmation cards, owner items, questions: no button for them is drawn (cards/feishu-cards.ts), and
- *     a click naming one is refused all the same;
+ *   - Orbit's own confirmation cards and owner items: no button for them is drawn (cards/feishu-cards.ts), and a click
+ *     naming one is refused all the same; Allow once or Deny naming a question, or the form naming a tool, likewise;
+ *   - the question's form outside FULL (the default card does not show the question, §6.4): refused, nothing written;
+ *     a form leaving a question unanswered: refused, nothing written. Otherwise its answers (`answersFromForm`, the
+ *     web app's `QuestionAnswers`) go with an allow, as the web app's question form sends them;
  *   - an approval answered elsewhere, whose turn ended, or that is not this account's: `Already answered in Orbit.`,
  *     and the card is drawn as it stands — the same answer whether the approval exists or not;
  *   - otherwise the decision, exactly what the web app's decision route writes, recorded as FEISHU with the clicker's
@@ -91,26 +139,37 @@ export class FeishuCardActions implements OnModuleInit {
       this.logger.log(`feishu event ${event.eventId} of app ${event.appId}: a click asking to always allow, refused`);
       return { toast: { type: 'error', content: FEISHU_CARD_REPLIES.remember } };
     }
-    if ((action !== FEISHU_CARD_ACTIONS.allow && action !== FEISHU_CARD_ACTIONS.deny) || !approvalId) {
+    const answering = action === FEISHU_CARD_ACTIONS.answer;
+    if ((action !== FEISHU_CARD_ACTIONS.allow && action !== FEISHU_CARD_ACTIONS.deny && !answering) || !approvalId) {
       return { toast: { type: 'info', content: FEISHU_CARD_REPLIES.openInOrbit } };
     }
-    const app = await this.prisma.feishuApp.findUnique({ where: { appId: event.appId }, select: { approvalsInFeishu: true } });
+    const app = await this.prisma.feishuApp.findUnique({
+      where: { appId: event.appId },
+      select: { approvalsInFeishu: true, messageDetail: true },
+    });
     if (!app?.approvalsInFeishu) return { toast: { type: 'info', content: FEISHU_CARD_REPLIES.off } };
+    // The question is on the card only in FULL (§6.4), so only there is it answered on the card (§7.2).
+    if (answering && app.messageDetail !== 'FULL') return { toast: { type: 'info', content: FEISHU_CARD_REPLIES.questionHidden } };
 
     // Only this account's approval: another account's is answered exactly as one that does not exist.
     const approval = await this.prisma.approval.findFirst({
       where: { id: approvalId, session: { ownerId: actor.userId } },
-      select: { id: true, sessionId: true, toolName: true },
+      select: { id: true, sessionId: true, toolName: true, input: true },
     });
-    if (approval && approvalClass(approval.toolName) !== 'tool') {
+    // Allow once and Deny answer a tool permission; the form answers the agent's question; nothing answers the rest.
+    if (approval && approvalClass(approval.toolName) !== (answering ? 'question' : 'tool')) {
       return { toast: { type: 'info', content: FEISHU_CARD_REPLIES.openInOrbit } };
     }
-    const behavior = action === FEISHU_CARD_ACTIONS.allow ? 'allow' : 'deny';
+    const answers = answering && approval ? answersFromForm(approval.input, click.formValue) : null;
+    if (answering && approval && !answers) return { toast: { type: 'error', content: FEISHU_CARD_REPLIES.incomplete } };
+    const behavior = answering || action === FEISHU_CARD_ACTIONS.allow ? 'allow' : 'deny';
     let decided = false;
     if (approval) {
       const answerable = await this.sessions.listApprovals(actor.userId, approval.sessionId, 'PENDING');
       if (answerable.some((a) => a.id === approval.id)) {
-        await this.sessions.decideApproval(actor.userId, approval.sessionId, approval.id, { behavior }, actor.credential);
+        await this.sessions.decideApproval(
+          actor.userId, approval.sessionId, approval.id, answers ? { behavior, answers } : { behavior }, actor.credential,
+        );
       }
       // Whether the decision on the row is this click's: it landed now, or when this same event was handled before.
       const row = await this.prisma.approval.findUnique({
@@ -122,11 +181,13 @@ export class FeishuCardActions implements OnModuleInit {
         && row.decidedFeishuOpenId === actor.credential.openId
         && row.decidedFeishuMessageId === (messageId ?? null);
     }
+    const what = answering ? 'answer' : behavior;
     this.logger.log(
-      `feishu event ${event.eventId} of app ${event.appId}: the owner's ${behavior} ${decided ? 'was recorded' : 'found the approval already answered'}`,
+      `feishu event ${event.eventId} of app ${event.appId}: the owner's ${what} ${decided ? 'was recorded' : 'found the approval already answered'}`,
     );
+    const done = answering ? FEISHU_CARD_REPLIES.answered : behavior === 'allow' ? FEISHU_CARD_REPLIES.allowed : FEISHU_CARD_REPLIES.denied;
     const toast: FeishuCardAnswer['toast'] = decided
-      ? { type: 'success', content: behavior === 'allow' ? FEISHU_CARD_REPLIES.allowed : FEISHU_CARD_REPLIES.denied }
+      ? { type: 'success', content: done }
       : { type: 'info', content: FEISHU_CARD_REPLIES.stale };
     const card = messageId ? await this.drawCard(actor.userId, messageId, approval?.sessionId ?? null) : null;
     return card ? { toast, card: { type: 'raw', data: card } } : { toast };
