@@ -13,8 +13,10 @@ import { createHash } from 'node:crypto';
  * is already whole — on the mapped rows, by content. A cursor names a snapshot of what the caller
  * was last sent (each row's content hash, and the order); the next read is the same full query,
  * answered with only the rows whose hash moved, the ids that left, and the order when it changed.
- * The database cost is the full read's; what this saves is the wire, the decode and the client's
- * per-poll rework.
+ * A read that builds pays the full read's database cost; what the delta saves there is the wire,
+ * the decode and the client's per-poll rework. A snapshot also keeps the data version read before
+ * its rows were built, and a read that finds that version still standing is answered with an empty
+ * delta without building anything (`unchanged`).
  *
  * Snapshots live in this process only. A cursor this process does not hold — too old, evicted,
  * issued before a restart, or for another scope — is answered with the whole list (`full: true`)
@@ -38,6 +40,8 @@ type Snapshot = {
   scope: string;
   order: string[];
   hashes: Map<string, string>;
+  /** The scoped data version (`openListEtag`) read before these rows were built, if the read had one. */
+  version?: string;
   usedAt: number;
 };
 
@@ -64,6 +68,8 @@ export class OpenListDeltaStore {
     since: string | undefined,
     /** What of a row counts as a change; the whole row unless the caller says otherwise. */
     fingerprint: (row: T) => unknown = (row) => row,
+    /** The version read before `rows` were built, which `unchanged` compares the next read's with. */
+    version?: string,
   ): OpenListDelta<T> {
     const now = this.now();
     this.sweep(now);
@@ -72,8 +78,7 @@ export class OpenListDeltaStore {
     const cursor = cursorOf(scope, order, hashes);
 
     let snapshots = this.owners.get(ownerId);
-    const base = since ? snapshots?.get(since) : undefined;
-    const usable = base && base.scope === scope && now - base.usedAt <= this.ttlMs ? base : undefined;
+    const usable = this.held(snapshots, scope, since, now);
 
     if (!snapshots) {
       snapshots = new Map();
@@ -86,8 +91,10 @@ export class OpenListDeltaStore {
       usable.usedAt = now;
       snapshots.set(since!, usable);
     }
+    // A device on the same list may have recorded another version under this cursor. Each was read
+    // before its own build of these same rows, so either is safe to keep; this read's replaces it.
     snapshots.delete(cursor);
-    snapshots.set(cursor, { scope, order, hashes, usedAt: now });
+    snapshots.set(cursor, { scope, order, hashes, version, usedAt: now });
     while (snapshots.size > this.perOwner) snapshots.delete(snapshots.keys().next().value!);
 
     if (!usable) return { full: true, sessions: rows, cursor };
@@ -99,6 +106,32 @@ export class OpenListDeltaStore {
     return sameOrder
       ? { full: false, upserts, removedIds, cursor }
       : { full: false, upserts, removedIds, order, cursor };
+  }
+
+  /**
+   * Whether the list `since` names still stands: its snapshot is held for this owner and scope and
+   * was built at `version`, which the caller read just now, before building anything. The caller
+   * then answers an empty delta under the same cursor and builds nothing. The stored version was
+   * read before the snapshot's rows were built, so it can lag them (one more build later) but never
+   * cover a write they miss. A hit marks the snapshot used, as a read marks its base, so a list
+   * that stays unchanged keeps its cursor past the TTL.
+   */
+  unchanged(ownerId: string, scope: string, since: string, version: string): boolean {
+    const now = this.now();
+    this.sweep(now);
+    const snapshots = this.owners.get(ownerId);
+    const base = this.held(snapshots, scope, since, now);
+    if (!snapshots || !base || base.version !== version) return false;
+    snapshots.delete(since);
+    base.usedAt = now;
+    snapshots.set(since, base);
+    return true;
+  }
+
+  /** The snapshot `since` names, if it is this scope's and has not expired. */
+  private held(snapshots: Map<string, Snapshot> | undefined, scope: string, since: string | undefined, now: number) {
+    const base = since ? snapshots?.get(since) : undefined;
+    return base && base.scope === scope && now - base.usedAt <= this.ttlMs ? base : undefined;
   }
 
   /** Drop expired snapshots, and owners left with none — at most once a minute. */

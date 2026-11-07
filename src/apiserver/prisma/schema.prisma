@@ -7418,6 +7418,16 @@ model WikiSpace {
   settings      Json    @default("{}")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  /// The Trash (0486, contract `space.trash`): when the wiki was moved there; when it is due to be deleted for good,
+  /// 365 days later or the moment the owner asked; the purge holding it; and the slug and repository it had. A wiki in
+  /// Trash has a placeholder slug and no repository, so a new one can take both and nothing that finds a wiki by them
+  /// finds it. All NULL for a wiki in use. `wiki_space_trash_chk` holds them together, and the partial index
+  /// `wiki_space_purge_idx` (purge_at WHERE deleted_at IS NOT NULL) lives in the migration alone.
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(3)
+  purgeAt            DateTime? @map("purge_at") @db.Timestamptz(3)
+  purgeLeaseUntil    DateTime? @map("purge_lease_until") @db.Timestamptz(3)
+  trashedSlug        String?   @map("trashed_slug")
+  trashedRepoUrlNorm String?   @map("trashed_repo_url_norm")
 
   workspaces WikiSpaceWorkspace[]
   notes      WikiNote[]

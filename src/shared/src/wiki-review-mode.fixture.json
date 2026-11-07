@@ -28,7 +28,7 @@
       "Review mode",
       "Workspaces",
       "Maintenance",
-      "Delete this wiki"
+      "Move to Trash"
     ],
     "workspaces": {
       "lead": "Agents in these workspaces read this wiki, and maintenance learns from their sessions.",
@@ -39,25 +39,60 @@
       "add": "Add workspace…",
       "addGroup": "Workspaces with no repository"
     },
-    "delete": {
-      "note": "Its entries, documents and history are permanently deleted.",
-      "open": "Delete wiki…",
-      "confirm": "Delete wiki",
+    "trash": {
+      "title": "Move to Trash",
+      "open": "Move to Trash…",
+      "confirm": "Move to Trash",
+      "note": "It stays in Trash for 365 days and can be restored until then.",
+      "leaves": "It leaves your wikis now, and sessions stop reading it.",
       "kept": "Workspaces and sessions are kept.",
-      "failedNative": "Couldn't delete the wiki",
-      "question": { "name": "orbit · vLLM preview", "text": "Delete wiki “orbit · vLLM preview”?" },
-      "deleted": { "name": "orbit · vLLM preview", "text": "Deleted wiki “orbit · vLLM preview”" },
-      "comesBack": { "repository": "github.com/acme/shop", "text": "The next session on github.com/acme/shop to use the wiki starts a new, empty one." },
+      "failedNative": "Couldn't move the wiki to Trash",
+      "question": { "name": "orbit · vLLM preview", "text": "Move wiki “orbit · vLLM preview” to Trash?" },
+      "moved": { "name": "orbit · vLLM preview", "text": "Moved wiki “orbit · vLLM preview” to Trash" },
+      "comesBack": { "repository": "github.com/acme/shop", "text": "Until you restore it, the next session on github.com/acme/shop to use the wiki starts a new, empty one." },
       "bodies": [
-        { "entries": 2606, "documents": 0, "text": "Its 2,606 entries and their history will be permanently deleted. This cannot be undone." },
-        { "entries": 5120, "documents": 30, "text": "Its 5,120 entries, 30 documents and their history will be permanently deleted. This cannot be undone." },
-        { "entries": 1, "documents": 0, "text": "Its 1 entry and its history will be permanently deleted. This cannot be undone." },
-        { "entries": 1, "documents": 1, "text": "Its 1 entry, 1 document and their history will be permanently deleted. This cannot be undone." },
-        { "entries": 0, "documents": 2, "text": "Its 2 documents and their history will be permanently deleted. This cannot be undone." },
-        { "entries": 0, "documents": 0, "text": "Its history will be permanently deleted. This cannot be undone." },
-        { "entries": null, "documents": 0, "text": "Its entries and their history will be permanently deleted. This cannot be undone." },
-        { "entries": null, "documents": 14, "text": "Its entries, 14 documents and their history will be permanently deleted. This cannot be undone." }
-      ]
+        { "entries": 11138, "documents": 0, "text": "Its 11,138 entries stay in Trash for 365 days: restore it any time until then. After that it is deleted for good." },
+        { "entries": 5120, "documents": 30, "text": "Its 5,120 entries and 30 documents stay in Trash for 365 days: restore it any time until then. After that it is deleted for good." },
+        { "entries": 1, "documents": 0, "text": "Its 1 entry stays in Trash for 365 days: restore it any time until then. After that it is deleted for good." },
+        { "entries": 1, "documents": 1, "text": "Its 1 entry and 1 document stay in Trash for 365 days: restore it any time until then. After that it is deleted for good." },
+        { "entries": 0, "documents": 1, "text": "Its 1 document stays in Trash for 365 days: restore it any time until then. After that it is deleted for good." },
+        { "entries": 0, "documents": 2, "text": "Its 2 documents stay in Trash for 365 days: restore it any time until then. After that it is deleted for good." },
+        { "entries": 0, "documents": 0, "text": "It stays in Trash for 365 days: restore it any time until then. After that it is deleted for good." },
+        { "entries": null, "documents": 0, "text": "Its entries stay in Trash for 365 days: restore it any time until then. After that it is deleted for good." },
+        { "entries": null, "documents": 14, "text": "Its entries and 14 documents stay in Trash for 365 days: restore it any time until then. After that it is deleted for good." }
+      ],
+      "openTrash": "Open Trash",
+      "counts": [
+        { "wikis": 1, "settings": "Trash holds 1 wiki.", "empty": "1 wiki is in Trash.", "row": "1 wiki" },
+        { "wikis": 3, "settings": "Trash holds 3 wikis.", "empty": "3 wikis are in Trash.", "row": "3 wikis" }
+      ],
+      "page": {
+        "title": "Trash",
+        "lead": "A wiki stays here for 365 days after it was moved, then it is deleted for good.",
+        "empty": "Trash is empty.",
+        "restore": "Restore",
+        "deletePermanently": "Delete permanently…",
+        "deleteSwipe": "Delete",
+        "close": "Close",
+        "rows": [
+          { "deletedAt": "2026-11-07T12:00:00.000Z", "purgeAt": "2027-11-07T12:00:00.000Z", "entries": 11138, "text": "Moved to Trash Nov 7, 2026 · 11,138 entries · deleted for good Nov 7, 2027" },
+          { "deletedAt": "2026-02-01T12:00:00.000Z", "purgeAt": "2027-02-01T12:00:00.000Z", "entries": 1, "text": "Moved to Trash Feb 1, 2026 · 1 entry · deleted for good Feb 1, 2027" },
+          { "deletedAt": "2026-12-31T12:00:00.000Z", "purgeAt": "2026-12-31T12:30:00.000Z", "entries": 0, "text": "Moved to Trash Dec 31, 2026 · 0 entries · deleted for good Dec 31, 2026" }
+        ],
+        "restored": { "name": "orbit · vLLM preview", "text": "Restored wiki “orbit · vLLM preview”" },
+        "restoreFailedNative": "Couldn't restore the wiki",
+        "purge": {
+          "question": "Delete permanently?",
+          "confirm": "Delete permanently",
+          "failedNative": "Couldn't delete the wiki",
+          "bodies": [
+            { "entries": 11138, "text": "Its 11,138 entries and their history will be permanently deleted. This cannot be undone." },
+            { "entries": 1, "text": "Its 1 entry and its history will be permanently deleted. This cannot be undone." },
+            { "entries": 0, "text": "Its history will be permanently deleted. This cannot be undone." }
+          ]
+        }
+      },
+      "pickerItem": "Trash"
     },
     "reviewModeHint": "Only you can switch it",
     "lead": "Who has to look at a change before agents get it.",

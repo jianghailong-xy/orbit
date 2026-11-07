@@ -102,6 +102,9 @@ public enum NavNode: Hashable, Sendable {
     case wikiActivity
     /// The space's Wiki settings — its review mode and maintenance — pushed from the home's gear.
     case wikiSettings
+    /// Trash (docs/mocks/wiki-trash): the wikis moved there, each to restore or delete for good. Pushed from Wiki
+    /// settings' Trash row, the space menu's Trash and the empty Wiki's Open Trash.
+    case wikiTrash
     /// One run: what a maintenance run, an import or a session's proposal applied at once, pushed
     /// from its row in Recently changed.
     case wikiRun(changesetID: String)
@@ -320,6 +323,12 @@ public struct NavState: Equatable, Sendable {
     /// Whether the Wiki settings are the page on top of the Wiki section's stack.
     public var wikiSettingsOnTop: Bool {
         if case .wikiSettings = path.last { return true }
+        return false
+    }
+
+    /// Whether Trash is the page on top of the Wiki section's stack.
+    public var wikiTrashOnTop: Bool {
+        if case .wikiTrash = path.last { return true }
         return false
     }
 
