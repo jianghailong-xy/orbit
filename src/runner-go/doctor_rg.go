@@ -173,9 +173,9 @@ func printEngineRg(healths []engineHealth) {
 		fmt.Println("    sudo dnf install ripgrep   (Fedora)")
 		fmt.Println("    brew install ripgrep       (macOS)")
 		if _, err := managedRgPath(); errors.Is(err, errManagedRgMissing) {
-			fmt.Println("  Orbit's own ripgrep, which goes last on every engine's PATH, is not installed here: the runner")
-			fmt.Println("  installs it only where it may install engines by itself (`orbit register` without")
-			fmt.Println("  --no-auto-install-engines).")
+			fmt.Println("  Orbit's own ripgrep, last on every engine's PATH, is not installed here yet. A runner that may")
+			fmt.Println("  install engines by itself (`orbit register` without --no-auto-install-engines) downloads it")
+			fmt.Println("  when it starts, and tries again every 30 minutes if that fails; its log says why.")
 		}
 	}
 }

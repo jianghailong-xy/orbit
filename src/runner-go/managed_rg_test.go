@@ -145,19 +145,26 @@ func TestManagedRgInstallsThePinnedBuild(t *testing.T) {
 	}
 }
 
-// Bytes that are not the pinned archive — another archive, one byte more, none at all — publish nothing, and the
-// stage they were checked in is removed.
+// Bytes that are not the pinned archive — another archive, one byte more, as many bytes but other ones, none at all —
+// are refused by the pinned check itself, publish nothing, and the stage they were checked in is removed.
 func TestManagedRgRefusesAnythingButThePinnedArchive(t *testing.T) {
 	pinned := fakeRgArchive(t, "echo 'ripgrep "+managedRgVersion+"'")
-	for name, served := range map[string][]byte{
-		"another archive": fakeRgArchive(t, "echo 'ripgrep "+managedRgVersion+" (rev other)'"),
-		"one byte more":   append(append([]byte{}, pinned...), 0),
-		"not found":       nil,
+	otherBytes := append([]byte{}, pinned...)
+	otherBytes[len(otherBytes)/2] ^= 0xff
+	const mismatch = "does not match its pinned size and SHA-256"
+	for name, c := range map[string]struct {
+		served []byte
+		want   string
+	}{
+		"another archive":           {fakeRgArchive(t, "echo 'ripgrep "+managedRgVersion+" (rev other)'"), mismatch},
+		"one byte more":             {append(append([]byte{}, pinned...), 0), mismatch},
+		"as many bytes, other ones": {otherBytes, mismatch},
+		"not found":                 {nil, "404"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			newManagedRgRig(t, pinned, served)
-			if _, err := installManagedRg(context.Background(), nil); err == nil {
-				t.Fatal("the install succeeded")
+			newManagedRgRig(t, pinned, c.served)
+			if _, err := installManagedRg(context.Background(), nil); err == nil || !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("install = %v, want it refused with %q", err, c.want)
 			}
 			if _, err := managedRgPath(); !errors.Is(err, errManagedRgMissing) {
 				t.Fatalf("after a refused archive managedRgPath = %v, want errManagedRgMissing", err)

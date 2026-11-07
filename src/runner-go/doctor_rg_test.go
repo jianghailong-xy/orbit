@@ -215,7 +215,7 @@ func TestDoctorNamesOrbitsOwnRg(t *testing.T) {
 	kimi := installedEngine(t, providerKimi, "/opt/kimi/bin/kimi")
 	kimi.rg = checkEngineRg(kimi, servicePath)
 	out := captureRunnerStdout(t, func() { printEngineRg([]engineHealth{kimi}) })
-	if !strings.Contains(out, "✗ Kimi Code — rg not found") || !strings.Contains(out, "Orbit's own ripgrep, which goes last on every engine's PATH, is not installed here") {
+	if !strings.Contains(out, "✗ Kimi Code — rg not found") || !strings.Contains(out, "Orbit's own ripgrep, last on every engine's PATH, is not installed here yet") {
 		t.Fatalf("before Orbit's rg is installed doctor printed:\n%s", out)
 	}
 
@@ -239,7 +239,7 @@ func TestDoctorNamesOrbitsOwnRg(t *testing.T) {
 	pathResettingLoginShell(t, t.TempDir())
 	codex.rg = checkEngineRg(codex, servicePath)
 	out = captureRunnerStdout(t, func() { printEngineRg([]engineHealth{codex}) })
-	if !strings.Contains(out, "✗ Codex — rg not found in "+os.Getenv("SHELL")+" -l (a login shell)") || strings.Contains(out, "is not installed here") {
+	if !strings.Contains(out, "✗ Codex — rg not found in "+os.Getenv("SHELL")+" -l (a login shell)") || strings.Contains(out, "is not installed here yet") {
 		t.Fatalf("with Orbit's rg installed and a login shell that resets PATH doctor printed:\n%s", out)
 	}
 
