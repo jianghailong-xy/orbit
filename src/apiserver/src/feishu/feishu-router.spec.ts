@@ -42,7 +42,7 @@ test("the router acts as the account the app belongs to, with a FEISHU credentia
     replyTo: async () => null,
   };
   const direct = { handleMessage: async () => undefined, handleCardAction: async () => null };
-  const router = new FeishuRouter(prisma as never, owner as never, direct as never);
+  const router = new FeishuRouter(prisma as never, owner as never, { handleGroupMessage: async () => undefined, botRemoved: async () => undefined } as never, direct as never);
   const logged: string[] = [];
   (router as unknown as { logger: { log: (m: string) => void } }).logger = { log: (m) => logged.push(m) };
   const decision = await router.route({ appId: 'cli_a', eventId: 'ev-1', eventType: 'im.message.receive_v1', payload: message('p2p') });
@@ -69,7 +69,7 @@ test('only the owner is served: a stranger\'s direct message gets one sentence, 
     handleMessage: async (_app: unknown, actor: { credential: { openId: string } }) => { directed.push(actor.credential.openId); },
     handleCardAction: async () => null,
   };
-  const router = new FeishuRouter(prisma as never, owner as never, direct as never);
+  const router = new FeishuRouter(prisma as never, owner as never, { handleGroupMessage: async () => undefined, botRemoved: async () => undefined } as never, direct as never);
   (router as unknown as { logger: { log: () => void } }).logger = { log: () => undefined };
   const dm = (payload: unknown = message('p2p')) => router.route({ appId: 'cli_a', eventId: 'ev', eventType: 'im.message.receive_v1', payload });
   const click = (openId: string) => router.route({

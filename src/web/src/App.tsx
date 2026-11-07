@@ -29,6 +29,7 @@ import { RunnerDetailPage } from './pages/RunnerDetailPage';
 import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedLinksPage } from './pages/SharedLinksPage';
 import { AccessTokensPage } from './pages/AccessTokensPage';
+import { FeishuConnectGroupPage } from './pages/FeishuConnectGroupPage';
 import { FeishuIntegrationPage } from './pages/FeishuIntegrationPage';
 import { SharedLinkPage, SharedProjectTaskRoute } from './pages/SharedLinkPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
@@ -226,6 +227,15 @@ export function App() {
               element={
                 <DocView>
                   <FeishuIntegrationPage />
+                </DocView>
+              }
+            />
+            {/* Connecting a Feishu group, opened from the bot's card with its one-time ticket (docs/feishu-bot-design.md §8.1). */}
+            <Route
+              path="settings/integrations/feishu/connect-group"
+              element={
+                <DocView>
+                  <FeishuConnectGroupPage />
                 </DocView>
               }
             />

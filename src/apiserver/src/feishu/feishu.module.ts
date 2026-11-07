@@ -4,6 +4,7 @@ import { SessionsModule } from '../sessions/sessions.module';
 import { AdminRoleGuard } from '../users/admin-role.guard';
 import { FeishuAdminController } from './feishu-admin.controller';
 import { FeishuAppService } from './feishu-app.service';
+import { FeishuChatRouteService } from './feishu-chat-route.service';
 import { FeishuController } from './feishu.controller';
 import { FeishuDirectService } from './feishu-direct.service';
 import { FeishuInboxService } from './feishu-inbox.service';
@@ -25,7 +26,7 @@ import { FeishuRouter } from './feishu-router';
   imports: [forwardRef(() => SessionsModule), forwardRef(() => PushModule)],
   controllers: [FeishuController, FeishuAdminController],
   // AdminRoleGuard depends only on the global PrismaService, so it is provided here too (UsersModule does not export it).
-  providers: [FeishuAppService, AdminRoleGuard, FeishuRouter, FeishuInboxService, FeishuLinkService, FeishuOutbound, FeishuOwnerService, FeishuDirectService],
+  providers: [FeishuAppService, AdminRoleGuard, FeishuRouter, FeishuInboxService, FeishuLinkService, FeishuOutbound, FeishuOwnerService, FeishuChatRouteService, FeishuDirectService],
   exports: [FeishuAppService, FeishuOutbound],
 })
 export class FeishuModule {}

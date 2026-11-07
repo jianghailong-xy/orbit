@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
+import { FeishuChatRouteService } from './feishu-chat-route.service';
 import { FeishuDirectService } from './feishu-direct.service';
 import { FEISHU_OWNER_REPLIES, FeishuOwnerService, type FeishuTextMessage } from './feishu-owner.service';
 
@@ -69,6 +70,12 @@ export function classify(eventType: string, payload: unknown): { route: FeishuRo
   }
 }
 
+/** The chat a message event was sent in, or the bot was removed from: `event.message.chat_id` or `event.chat_id`. */
+export function chatIdOf(payload: unknown): string | undefined {
+  const event = obj(obj(payload).event);
+  return str(obj(event.message).chat_id) ?? str(event.chat_id);
+}
+
 /**
  * The text of a message event, with where it was sent and by whom; null for anything that is not a text message. In a
  * group, the @mention placeholders (`@_user_1`) are dropped. Pure; exported for its spec.
@@ -111,13 +118,14 @@ export class FeishuRouter {
   constructor(
     private readonly prisma: PrismaService,
     private readonly owner: FeishuOwnerService,
+    private readonly chats: FeishuChatRouteService,
     private readonly direct: FeishuDirectService,
   ) {}
 
   async route(event: InboundEvent): Promise<RouteDecision | null> {
     const app = await this.prisma.feishuApp.findUnique({
       where: { appId: event.appId },
-      select: { ownerId: true, appId: true, platform: true, appSecretEnc: true, ownerOpenId: true, defaultWorkspaceId: true },
+      select: { ownerId: true, appId: true, platform: true, appSecretEnc: true, ownerOpenId: true, botName: true, defaultWorkspaceId: true },
     });
     if (!app) {
       this.logger.log(`feishu event ${event.eventId} of app ${event.appId} dropped: the app is no longer connected`);
@@ -147,7 +155,13 @@ export class FeishuRouter {
       } else if (route === 'DIRECT_MESSAGE') {
         await this.direct.handleMessage(app, actor, event.eventId, event.payload);
       }
+      // A group: `connect`, or a mention in a group that cannot run it (§8.1).
+      const chatId = chatIdOf(event.payload);
+      if (route === 'GROUP_MENTION' && messageId && openId && chatId) {
+        await this.chats.handleGroupMessage(app, { eventId: event.eventId, chatId, messageId, openId, text: message?.text ?? '' });
+      }
     }
+    if (route === 'BOT_REMOVED_FROM_CHAT') await this.chats.botRemoved(event.appId, chatIdOf(event.payload) ?? '');
     return { route, actor };
   }
 }

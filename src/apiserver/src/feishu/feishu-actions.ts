@@ -48,6 +48,7 @@ export const FEISHU_INFRASTRUCTURE = [
   'FeishuRouter',
   'FeishuOutbound',
   'FeishuOwnerService',
+  'FeishuChatRouteService',
   'FeishuDirectService',
   'ControlPlaneLeader',
 ] as const;

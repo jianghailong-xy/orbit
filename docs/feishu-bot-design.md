@@ -268,7 +268,7 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
   谁拿到行上的租约（`lease_token` / `lease_until`）谁按库里此刻的内容画卡、发送或 PATCH，记下 `rendered_revision` 后放手并再看一次，
   所以两个 apiserver 同时通告只发一张卡。没认领到 `claimApprovalAlert` 的审批只给这一段的卡加一（`joinApprovalStretch`），
   卡上列出会话里所有仍待批的审批。
-- 实现（F1-5，无迁移）：`PushService.reconcileBadge` 每次对账（不论角标动没动）都调 `FeishuTransport.closeSettled`，
+- 实现（F1-5，迁移 0498：feishu_message 的 status 增加 CLOSED）：`PushService.reconcileBadge` 每次对账（不论角标动没动）都调 `FeishuTransport.closeSettled`，
   `scheduleBadgeSync` 在只有飞书可用时也运行。看的是 14 天内发出、状态 `SENT` 的审批卡与 owner item 卡：审批卡在其会话仍在
   needs-you 且所列审批还有待批时成立（少了几条就按此刻待批的重画一遍），否则改成终态；owner item 卡在事项不再 OPEN 时改。
   改卡在行的租约下、且要求每次通告都已画过（`rendered_revision = revision`），用卡上次画的 alert 加终态一行重画、去掉按钮，
@@ -391,6 +391,13 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
    - 上限：同时进行的会话数、每天新开的会话数（同项目的 `sessionBudgetPerDay`）。
 4. 确认是**所有者通道**动作（加进 `pat-owner-channel-routes.ts`，PAT 403），因为它让别人能在你的机器上启动 agent。
 5. 机器人被移出群（`im.chat.member.bot.deleted_v1`）时路由停用。
+6. 实现细节（F3-1）：`feishu_chat_route` 以 `(app_id, chat_id)` 唯一（同一个群可以分别接入不同账号的应用）。主人发 connect 时就建好这一行，
+   只存 ticket 的 SHA-256、发 connect 的 open_id 与过期时间（30 分钟），`confirmed_at` 为空；确认用一条带条件的 UPDATE 写入选择并清掉
+   ticket，所以 ticket 只能用一次，且发 connect 的人必须仍是主人。ticket 由 appId 与 event_id 派生，同一事件处理两次得到同一 ticket、
+   同一张卡（飞书 uuid 去重），已用过的 ticket 不会被重放的事件重新打开。未确认或已停用的群里 @机器人 只回一句英文说明，不开会话。
+   connect 只受理主人，且群不能是外部群（`GET /open-apis/im/v1/chats/:chat_id` 的 `external`）。
+   确认页的「指定的人」按名字勾选：服务端用 ticket 对应的群读 `GET /open-apis/im/v1/chats/:chat_id/members`（open_id，逐页），
+   列出主人以外的成员；读不到时只能选「群里所有人」。存的仍是 open_id。
 
 ### 8.2 一条群消息的路径（决定 4：每单一个话题）
 

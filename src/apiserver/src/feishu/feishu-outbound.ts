@@ -97,6 +97,26 @@ export class FeishuOutbound {
     });
   }
 
+  /**
+   * `GET /open-apis/im/v1/chats/:chat_id`: a group's name, and whether it is external (has people from another
+   * organization, §8.1). Null when Feishu does not say — the permission not granted, the bot not in the group, Feishu
+   * unreachable.
+   */
+  async chatInfo(app: FeishuAppCredentials, chatId: string): Promise<{ name: string | null; external: boolean } | null> {
+    try {
+      const answer = (await feishuClient(app).request({
+        method: 'GET',
+        url: `open-apis/im/v1/chats/${encodeURIComponent(chatId)}`,
+      })) as { code?: unknown; data?: { name?: unknown; external?: unknown } } | null;
+      if (answer?.code !== 0 || !answer.data) return null;
+      const name = typeof answer.data.name === 'string' && answer.data.name.trim() !== '' ? answer.data.name.trim().slice(0, 200) : null;
+      return { name, external: answer.data.external === true };
+    } catch {
+      this.logger.log(`feishu app ${app.appId}: a group's information could not be read`);
+      return null;
+    }
+  }
+
   /** `PATCH /open-apis/im/v1/messages/:message_id`: replace a card the bot sent (§6.2). */
   updateCard(app: FeishuAppCredentials, messageId: string, card: unknown): Promise<FeishuSendResult> {
     return this.call(app, {
@@ -121,6 +141,37 @@ export class FeishuOutbound {
       return typeof name === 'string' && name.trim() !== '' ? name.trim().slice(0, 200) : null;
     } catch {
       this.logger.log(`feishu app ${app.appId}: a user's name could not be read`);
+      return null;
+    }
+  }
+
+  /**
+   * `GET /open-apis/im/v1/chats/:chat_id/members` (open_id): the people in a group, by name, for the confirm page's
+   * allowed-senders picker (§8.1). At most 1000 of them, 100 a page. Null when Feishu does not say
+   * (the permission not granted, the bot not in the group, Feishu unreachable).
+   */
+  async chatMembers(app: FeishuAppCredentials, chatId: string): Promise<Array<{ openId: string; name: string | null }> | null> {
+    const members: Array<{ openId: string; name: string | null }> = [];
+    let pageToken: string | undefined;
+    try {
+      for (let page = 0; page < 10; page++) {
+        const answer = (await feishuClient(app).request({
+          method: 'GET',
+          url: `open-apis/im/v1/chats/${encodeURIComponent(chatId)}/members`,
+          params: { member_id_type: 'open_id', page_size: '100', ...(pageToken ? { page_token: pageToken } : {}) },
+        })) as { code?: unknown; data?: { items?: unknown; has_more?: unknown; page_token?: unknown } } | null;
+        if (answer?.code !== 0 || !answer.data) return null;
+        for (const item of Array.isArray(answer.data.items) ? answer.data.items : []) {
+          const { member_id: openId, name } = (item ?? {}) as { member_id?: unknown; name?: unknown };
+          if (typeof openId !== 'string' || openId === '') continue;
+          members.push({ openId, name: typeof name === 'string' && name.trim() !== '' ? name.trim().slice(0, 200) : null });
+        }
+        pageToken = typeof answer.data.page_token === 'string' && answer.data.page_token !== '' ? answer.data.page_token : undefined;
+        if (answer.data.has_more !== true || !pageToken) break;
+      }
+      return members;
+    } catch {
+      this.logger.log(`feishu app ${app.appId}: a group's members could not be read`);
       return null;
     }
   }
