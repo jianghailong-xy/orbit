@@ -160,6 +160,27 @@ test('only the owner can fetch an existing changed file and an offline runner qu
   assert.deepEqual(f.woken, [], 'a refused request wakes no runner');
 });
 
+// A reply names a file the way the agent worked with it, relative to the checkout. The artifact
+// door reads that spelling through the runner too — and unlike the changed-file preview, it does
+// not require the file to still be on the run's changed list, which a reply outlives.
+test('a transcript\'s checkout-relative path is read out of the checkout, changed file or not', async () => {
+  const f = fixture();
+  let asked = '';
+  f.onRead(async (turn) => {
+    asked = turn.content;
+    const upload = f.addAttachment({ data: Buffer.from('the mock') });
+    await f.result(turn.id, { status: 'uploaded', attachmentId: upload.id });
+  });
+  const path = 'docs/mocks/card.png';
+  assert.equal(f.session.changedFiles.some((file) => file.path === path), false, 'not a changed file');
+
+  const result = await f.service.getLegacyArtifactForOwner(OWNER, SESSION, path);
+  assert.equal(result.data.toString(), 'the mock');
+  assert.equal(result.mimeType, 'image/png');
+  assert.deepEqual(JSON.parse(asked), { source: 'worktree', path });
+  assert.deepEqual(f.woken, [RUNNER]);
+});
+
 test('same-basename files and repeated previews fetch fresh request-scoped bytes, then remove only their temporary upload', async () => {
   const f = fixture();
   const transcriptImage = f.addAttachment({ data: Buffer.from('old transcript image'), createdAt: new Date(0) });

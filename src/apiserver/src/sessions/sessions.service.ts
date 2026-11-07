@@ -5178,7 +5178,18 @@ export class SessionsService {
     if (!session.assignedRunner || !runnerIsOnline(session.assignedRunner)) {
       throw new HttpException('The runner is offline. Try again when it is online.', HttpStatus.SERVICE_UNAVAILABLE);
     }
+    return this.readWorktreeArtifact(ownerId, id, filePath, session.assignedRunner.id);
+  }
 
+  /** The bytes of one file in the session's checkout, read by its runner. The caller has already
+   *  decided the path is one this session may read and that the runner is online; this only asks
+   *  and waits for the answer. */
+  private async readWorktreeArtifact(
+    ownerId: string,
+    id: string,
+    filePath: string,
+    runnerId: string,
+  ): Promise<{ data: Buffer; mimeType: string; disposition: string }> {
     // A new request always reads fresh bytes, including two files with the same basename.
     const content = { source: 'worktree' as const, path: filePath };
     const turn = await this.insertTurn(id, {
@@ -5187,7 +5198,7 @@ export class SessionsService {
     // The runner's heartbeat hands the request over. Have it beat now rather than at its next 30s
     // tick, as a Merge or a Commit does: whoever opened the file is watching it load. Over the runner
     // link the same wake marks the runner changed and hints it.
-    this.realtime.notifyRunnerWake(session.assignedRunner.id);
+    this.realtime.notifyRunnerWake(runnerId);
     const deadline = Date.now() + 40_000;
     while (true) {
       const result = await this.prisma.conversationTurn.findFirst({
@@ -5246,12 +5257,42 @@ export class SessionsService {
     id: string,
     rawPath: string | undefined,
   ): Promise<{ data: Buffer; mimeType: string; disposition: string }> {
+    // A reply can name a file the way an agent works with one — relative to the checkout it is in
+    // (`docs/mocks/x.png`). The runner rewrites such a link to an attachment when its upload lands,
+    // but a reply that lost that upload still holds the path in the transcript; this is what reads
+    // it back. The legacy branch below only knows absolute paths into the two `.orbit` directories.
+    if (isWorktreeArtifactPath(rawPath)) {
+      return this.getWorktreeArtifactForTranscript(ownerId, id, rawPath);
+    }
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       select: { id: true },
     });
     if (!session) throw new NotFoundException('session not found');
     return this.getLegacyArtifact(session.id, rawPath);
+  }
+
+  /** A relative path from a transcript, read out of the session's checkout by its runner. Unlike
+   *  the changed-file preview, it does not require the file to still be listed as changed: a reply
+   *  outlives the run, and the checkout outlives its list. The path must be one the transcript
+   *  actually names, as the legacy door requires, so this cannot be used to walk the checkout. */
+  private async getWorktreeArtifactForTranscript(
+    ownerId: string,
+    id: string,
+    filePath: string,
+  ): Promise<{ data: Buffer; mimeType: string; disposition: string }> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: { id: true, assignedRunner: { select: { id: true, status: true, ...RUNNER_BEATS } } },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    if (!(await runEventPayloadMentions(this.prisma, id, filePath))) {
+      throw new NotFoundException('artifact not found');
+    }
+    if (!session.assignedRunner || !runnerIsOnline(session.assignedRunner)) {
+      throw new HttpException('The runner is offline. Try again when it is online.', HttpStatus.SERVICE_UNAVAILABLE);
+    }
+    return this.readWorktreeArtifact(ownerId, id, filePath, session.assignedRunner.id);
   }
 
   /**

@@ -106,12 +106,13 @@ func addSessionCheckout(sessionID, repoRoot, wtPath, rev string, args ...string)
 			room.made(wtPath)
 		}
 	}()
+	// The two log lines, `checkout cloned` and `checkout plain: <reason>`, keep their form (clone_checkout.go).
 	if why := whyNotCloned(repoRoot); why != "" {
-		logln(fmt.Sprintf("session %s — plain checkout: %s", sessionID, why))
+		logln(fmt.Sprintf("session %s — checkout plain: %s", sessionID, why))
 	} else {
 		cloned, added, err := makeSessionCheckout(sessionID, repoRoot, wtPath, rev, declared, true, args)
 		if err == nil {
-			logln(fmt.Sprintf("session %s — cloned checkout: %d files cloned from %s", sessionID, cloned, repoRoot))
+			logln(fmt.Sprintf("session %s — checkout cloned: %d files from %s", sessionID, cloned, repoRoot))
 			return true, nil
 		}
 		// `worktree add` itself failing is no clone's doing: a plain checkout would fail the same way, and its error
@@ -119,7 +120,7 @@ func addSessionCheckout(sessionID, repoRoot, wtPath, rev string, args ...string)
 		if !added {
 			return false, err
 		}
-		logln(fmt.Sprintf("session %s — plain checkout: cloning it from %s failed, so git writes it instead: %v", sessionID, repoRoot, err))
+		logln(fmt.Sprintf("session %s — checkout plain: %s; git writes it instead", sessionID, whyCloneFailed(repoRoot, err)))
 		args = plainAfterFailedClone(args)
 	}
 	_, _, err = makeSessionCheckout(sessionID, repoRoot, wtPath, rev, declared, false, args)

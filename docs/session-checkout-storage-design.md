@@ -145,10 +145,10 @@ The runner judges pressure against the storage it may use:
   checkout is never refused for want of room: when nothing more can go, it is made all the same, and the log says how
   far short of the floor that leaves the budget. Every door that makes a session checkout (a new session, a pinned run,
   `restoreAbsentCheckout`) runs on the claim loop, as the sweep does. The room is made only once the sweeper is armed.
-  Its look at resting checkouts does not wait out the hour that follows a look that found nothing
-  (`resumableSweepWait`): a new checkout under the budget's floor is the change that wait assumes has not happened. It
-  still goes through the one door to that half (`sweepResumable`) and within its 60-second budget, and a look of its own
-  that finds nothing starts the wait for the schedule. Without a budget, a checkout is made as before.
+  Its look at resting checkouts goes ahead even while the schedule waits after a look that found nothing (below): a new
+  checkout under the budget's floor is the change that wait assumes has not happened. It still goes through the one
+  door to that half (`sweepResumable`) and within its 60-second budget, and a look of its own that finds nothing starts
+  the wait for the schedule. Without a budget, a checkout is made as before.
 - **Resting checkouts under a budget** (owner decision, 2026-11-06). Below a budget's floor (`underBudgetFloor`),
   `gcResumableCheckouts` may take a resting session's checkout however recently it was written, oldest last write
   first. A commit on the session's own branch counts as kept there, pushed or not: the branch and its commits stay in
@@ -162,6 +162,22 @@ The runner judges pressure against the storage it may use:
   goes. Its branch and base ref stay, and the sweep's 60-second budget holds. The checkout comes back on the session's
   next claim (`restoreAbsentCheckout`). Without a budget, two weeks unwritten (`resumableCheckoutIdle`) and a remote
   for every commit stand.
+- **The schedule's look below a budget's floor** (task `34t1SUWPpB9sH8NpIHKxO`). After a look at resting checkouts
+  that finds nothing, the schedule leaves them alone for an hour (`resumableSweepWait`), which only free space back
+  above the floor ends early. Below a usable budget's floor that is too long. The lab rerun (task
+  `34svcSfRHWvxLUdvci2xG`) saw the volume stay under its floor for 59 minutes with a resting checkout that could go,
+  because the look had found nothing while that session's engine was still warm, and builds or installs in the
+  checkouts could take the volume to its limit meanwhile. There the wait is 7.5 minutes (`resumableBudgetSweepWait`,
+  one and a half sweep intervals, counted like the hour from the end of the look), and a reading judged on a newer
+  measurement of the budget than the look's ends it sooner. The channel measures the volume about every two minutes,
+  and the relay keeps a measurement's time while its figures stay the same, so a newer one means the volume's usage
+  has moved. So the schedule's next sweep, five minutes on, looks again only if the volume has been measured since,
+  and the one after, ten minutes on, looks either way, with half an interval to spare on both sides for a claim loop
+  that comes round late and a look that took a while. A measurement that came in while the look ran is one its last
+  reading saw, and is no newer. A budget that comes in under its floor during an hour's wait ends that wait too: the
+  look that started it went by the machine's rules, which keep checkouts a budget's floor does not. The look still
+  goes through `sweepResumable`, the one door to that half, within its 60-second budget, and the wait is still only in
+  memory. Above the floor nothing looks, as before, and room ends any wait. Without a usable budget the hour stands.
 - **A session's branch while its checkout is away.** Nothing in the runner deletes or prunes a local branch. No call
   deletes a ref under `refs/heads/`. Its `git branch -f` calls move a merge target forward, to a commit that holds its
   old tip, or move an integration line. `git worktree prune` removes only the records of checkouts that are gone, and
@@ -219,11 +235,13 @@ the worktrees root, or the clone fails with `EXDEV`.
 3. `git reset -q --hard <base>`. This rehashes the clones once, rewrites any file whose content differs (template edits
    in progress, a base other than the template's `HEAD`), and checks out anything missing. Correctness therefore never
    depends on the template being clean.
-4. On any error, remove the partial checkout and fall back to `git worktree add` with a normal checkout. Report which
-   path was taken in the runner log and in the session's isolation status.
+4. On any error, remove the partial checkout and fall back to `git worktree add` with a normal checkout. Log which
+   path was taken and why, `checkout cloned` or `checkout plain: <reason>`, and keep it with the session in the runner
+   (`ClaimedSession.CheckoutCreation`). The isolation status the runner reports stays `worktree` either way: that is
+   the one value the control plane takes for a session with a checkout of its own.
 
 **As implemented** (`src/runner-go/clone_checkout.go`; `addSessionCheckout` in `sparse_checkout.go`, which every door
-above goes through). Two of the steps changed. Both changes were measured with git 2.47.3.
+above goes through). Steps 1 to 3 changed; the changes to steps 1 and 3 were measured with git 2.47.3.
 
 - **Step 1 builds the index instead of copying it.** A copy of the template's index carries the template's marks into
   the checkout: a file marked assume-unchanged keeps the mark, so the session's edits to it never show in status or
@@ -242,9 +260,19 @@ above goes through). Two of the steps changed. Both changes were measured with g
   attempt made with `-b` is used as it stands. A failure of `git worktree add` itself is returned unchanged, since a
   plain checkout would fail the same way.
 - **The probe** runs at start and before each checkout, once per device. A template on another device is not tried.
-- **The log** names the path taken and why. The isolation status the runner reports stays `worktree`, the one value the
-  control plane takes for a session with a checkout of its own. How the checkout was made is kept beside it, in the
-  runner (`ClaimedSession.CheckoutCreation`).
+- **The log** has one line per checkout, in a form that stays the same so that operators can search for it:
+  `session <id> — checkout cloned: <n> files from <workspace>`, or `session <id> — checkout plain: <reason>: <detail>`.
+  The reason is one of these:
+  - `probe failed (<errno>)`
+  - `another filesystem (EXDEV)`
+  - `unreadable workspace (<errno>)`
+  - `clone failed (<errno>)`, for the first file
+  - `clone failed midway (<errno>)`, after others were cloned
+  - `clone failed (git)`
+
+  An errno goes by its name: `EOPNOTSUPP` on a Linux filesystem that cannot clone, `ENOTSUP` from macOS. When the
+  worktrees root is probed, it gets a line of its own: `checkouts: cloned: ...` or
+  `checkouts: plain: probe failed (<errno>): ...`.
 - **On darwin** the clone is `unix.Clonefile` from `golang.org/x/sys` v0.30.0 (`docs/dependency-security.md`).
 
 **Cost.** Step 3 rehashes the checked-out bytes: 15–17 s for the full Orbit tree in the experiments, and about 1 s with
@@ -288,6 +316,9 @@ P1 does not depend on P2 or P3. P3 benefits from P2 (smaller rehash) but does no
   hash. The 32 retained checkouts are kept for these directories already.
 - Physical accounting in the channel (D3 B), and `xfs` PVCs (D4 B).
 - Default floors for self-registered runners.
+- Show in the apps how a session's checkout was made: cloned, or plain and why. The runner keeps this
+  (`ClaimedSession.CheckoutCreation`) but reports only `worktree`, which the control plane compares exactly, so showing
+  it needs an apiserver change and a client change.
 
 ## 11. Test plan
 

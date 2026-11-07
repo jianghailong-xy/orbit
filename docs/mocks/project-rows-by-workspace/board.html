@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>会话列表里的项目：别的 Workspace 里那一行、做完的项目、“You:”</title>
+<link rel="stylesheet" href="../session-list-projects/web.css">
+<style>
+  body { padding: 20px 18px 30px; }
+  .b-part { padding: 26px 30px 8px; margin-bottom: 30px; }
+  .b-part h2.b-h { font-size: 21px; letter-spacing: -.015em; margin: 0 0 6px; display: flex; gap: 10px; align-items: center; }
+  .b-sub { color: #4a4a52; margin: 0 0 20px; width: 1464px; }
+  .b-grid { display: grid; grid-template-columns: 700px 64px 700px; row-gap: 30px; align-items: start; }
+  .b-frame { margin: 0; }
+  .b-frame figcaption { font-size: 14px; color: #3a3a40; font-weight: 650; margin: 0 0 9px; display: flex; gap: 8px; align-items: center; min-height: 24px; }
+  .b-shot { position: relative; border-radius: 12px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 10px 30px rgba(0,0,0,.08); }
+  .b-shot img { display: block; width: 100%; height: auto; border-radius: 12px; }
+  .b-zoom .b-shot { overflow: hidden; }
+  .b-zoom .b-shot img { position: absolute; max-width: none; border-radius: 0; }
+  .b-ring { position: absolute; border: 2px dashed #f5222d; border-radius: 9px; pointer-events: none; }
+  .b-badge { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #f5222d; color: #fff;
+             font: 600 12px/22px Inter, -apple-system, sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+  .b-arrow { align-self: center; text-align: center; color: #6a6a72; font-size: 13px; line-height: 1.4; padding-top: 30px; }
+  .b-arrow .b-big { display: block; font-size: 26px; color: #3a3a40; line-height: 1.1; }
+  .b-key { display: inline-block; border: 1px solid #c4c4cc; border-bottom-width: 2px; border-radius: 6px; padding: 0 7px;
+           font: 600 13px/21px Inter, -apple-system, sans-serif; background: #fff; color: #16161a; }
+  .b-notes { width: 1464px; columns: 2; column-gap: 48px; }
+  .b-notes li { break-inside: avoid; }
+  .b-opt { background: #fff; border-radius: 16px; padding: 14px 18px 8px; margin: 0 0 16px; box-shadow: 0 1px 0 rgba(0,0,0,.05); }
+  .b-opt.b-rec { box-shadow: 0 0 0 2px #52c41a inset; }
+  .b-opt h3 { font-size: 15.5px; margin: 0 0 4px; display: flex; gap: 8px; align-items: center; }
+  .b-opt p { margin: 4px 0 8px; font-size: 14px; color: #2a2a30; }
+  .b-pro::before { content: '＋ '; color: #1d6b31; font-weight: 700; }
+  .b-con::before { content: '－ '; color: #b42318; font-weight: 700; }
+  .tag.rec { background: #d7f2dd; color: #1d6b31; }
+  .tag.no { background: #fde2e2; color: #9b1c1c; }
+  .tag.now { background: #ffe1dc; color: #8f1d13; }
+  .b-box { width: 1464px; margin-top: 22px; }
+  .b-cell .box { margin: 0; }
+  .b-box td b, .b-cell td b { color: #b42318; }
+  .b-stack > * + * { margin-top: 18px; }
+  .b-phones img { display: block; width: 1464px; height: auto; }
+  ol.b-land { margin: 0; padding-left: 22px; width: 1464px; font-size: 14.5px; line-height: 1.65; }
+  ol.b-land li { margin: 0 0 10px; }
+  pre.b-patch { width: 1464px; margin: 14px 0 0; padding: 14px 18px; border-radius: 12px; background: #1f1f24; color: #dedee4;
+                font: 12.5px/1.55 "DejaVu Sans Mono", ui-monospace, monospace; white-space: pre; overflow: hidden; }
+  pre.b-patch .a { color: #95de64; } pre.b-patch .c { color: #8a8a92; }
+</style>
+<script src="marks.js"></script>
+</head>
+<body>
+
+<section id="part-1" class="b-part">
+  <h1>会话列表里的项目：别的 Workspace 里那一行、做完的项目、“You:”</h1>
+  <p class="lede" style="width:1464px">你问「在 orbit-prod 里按上下键，这个项目被跳过，是否符合预期」：符合 10-17 定的规则——在 coordinator 不在的 Workspace 里，项目这一行按文件夹行处理。可它看上去就是 coordinator。这张板给两个改法（A 推荐、B 备选），再加两处和选哪个无关的小毛病（④ ⑤），最后是 iPhone 和落地。每张图都是真实 Web 控制台的截图：vite 加假数据，今天 = main 555696299；A、B 是同一棵树打上补丁（<code>prototype-*.patch</code>，tsc 通过）。会话名、项目名是示例；红色虚线和数字是标注。</p>
+
+  <h2 class="b-h"><span class="tag now">① 今天</span>orbit-prod 里这一行，一行五种说法</h2>
+  <div class="b-grid">
+    <figure class="b-frame" data-shot="t-prod" data-marks=":project">
+      <figcaption>orbit-prod 里选中「证书轮换脚本」；项目的 coordinator 在 orbit-develop</figcaption>
+      <div class="b-shot"><img src="shots/t-prod.png" alt=""></div>
+    </figure>
+    <div class="b-arrow"><span class="b-big">→</span><span class="b-key">↓</span></div>
+    <figure class="b-frame" data-shot="t-prod-down" data-marks="4:project:l,5:next:l">
+      <figcaption>按 <span class="b-key">↓</span>：跨过项目这一行</figcaption>
+      <div class="b-shot"><img src="shots/t-prod-down.png" alt=""></div>
+    </figure>
+    <figure class="b-frame b-zoom" data-shot="t-prod" data-zoom="project" data-marks="1:pTitle,1:pPill,2:pLine,3:pTime">
+      <figcaption>放大：上图里圈出的那一行</figcaption>
+      <div class="b-shot"><img src="shots/t-prod.png" alt=""></div>
+    </figure>
+    <div></div>
+    <div class="b-cell">
+      <div class="box">
+        <h2>这一行每一部分说的是谁</h2>
+        <table>
+          <tr><td>标题、进度、第 2 行</td><td>整个项目；第 2 行是 orbit-develop 里 coordinator 的话</td></tr>
+          <tr><td>状态点、时间</td><td>只算 orbit-prod 里的成员会话</td></tr>
+          <tr><td>点击</td><td>项目会话页，所有 Workspace 的全部成员</td></tr>
+          <tr><td>↑ / ↓、默认打开</td><td>跨过，当文件夹行</td></tr>
+          <tr><td>Open Session、Pin、Move…</td><td>orbit-develop 的 coordinator</td></tr>
+        </table>
+      </div>
+    </div>
+    <figure class="b-frame" data-shot="t-prod-menu" data-marks="6:mOpen+mPinMove:l">
+      <figcaption>这一行的 ⋯ 菜单</figcaption>
+      <div class="b-shot"><img src="shots/t-prod-menu.png" alt=""></div>
+    </figure>
+    <div></div>
+    <figure class="b-frame" data-shot="t-prod-click" data-marks="7:check+deploy:l">
+      <figcaption>点这一行：项目会话页</figcaption>
+      <div class="b-shot"><img src="shots/t-prod-click.png" alt=""></div>
+    </figure>
+  </div>
+  <ul class="notes b-notes">
+    <li class="n" data-n="1">标题、<i>10/12</i>：整个项目。</li>
+    <li class="n" data-n="2">第 2 行是 coordinator 在 orbit-develop 的话。这句 “You: Replay closed at 412/430…” 还不是你写的，是执行会话发给 coordinator 的汇报（见 ⑤）。</li>
+    <li class="n" data-n="3"><i>22m ago</i>、不转圈：只算 orbit-prod 里那两个成员会话。coordinator 这时正在转圈，这一行看不出来。</li>
+    <li class="n" data-n="4">按 ↓，这一行被跨过：在 coordinator 不在的 Workspace 里，它算文件夹行（10-17 的规则）。</li>
+    <li class="n" data-n="5">落在下一条「清理旧的预览环境」。你问的就是这一下。</li>
+    <li class="n" data-n="6">菜单里的 Open Session、Pin、Move… 都作用在 orbit-develop 的 coordinator 上：在这里点 Pin，orbit-develop 那边也置顶。</li>
+    <li class="n" data-n="7">点进去是整个项目的 11 条会话；orbit-prod 的两条混在中间，行上看不出是哪个 Workspace 的。</li>
+    <li><b>真实数据</b>：你最近 200 个任务里，14 个派到了 orbit-prod，分属 4 个项目，这 4 个项目的 coordinator 都在 orbit-develop。项目在哪儿跑过东西，哪儿就有这样一行。</li>
+  </ul>
+</section>
+
+<section id="part-2" class="b-part">
+  <h2 class="b-h"><span class="tag rec">② 建议 A</span>项目只在 coordinator 所在的 Workspace 占一行</h2>
+  <p class="b-sub">别的 Workspace 里没有项目行：项目在这里的会话照普通会话显示，第 2 行开头带项目的进度小标签。orbit-develop 一切照旧。下面的图是打了 <code>prototype-a.patch</code> 的真实页面。</p>
+  <div class="b-grid">
+    <figure class="b-frame" data-shot="a-prod" data-marks="1:check+deploy:l,3:c6:l">
+      <figcaption>orbit-prod，同一时刻、同一份数据</figcaption>
+      <div class="b-shot"><img src="shots/a-prod.png" alt=""></div>
+    </figure>
+    <div class="b-arrow"><span class="b-big">→</span><span class="b-key">↓</span></div>
+    <figure class="b-frame" data-shot="a-prod-down" data-marks="4:check:l,5:head:o">
+      <figcaption>按 <span class="b-key">↓</span>：到「生产只读核查：新索引」</figcaption>
+      <div class="b-shot"><img src="shots/a-prod-down.png" alt=""></div>
+    </figure>
+    <figure class="b-frame b-zoom" data-shot="t-prod" data-zoom="project" data-marks="">
+      <figcaption>放大 · 今天：orbit-prod 里的项目行</figcaption>
+      <div class="b-shot"><img src="shots/t-prod.png" alt=""></div>
+    </figure>
+    <div class="b-arrow"><span class="b-big">→</span></div>
+    <figure class="b-frame b-zoom" data-shot="a-prod" data-zoom="check+deploy" data-marks="2:checkMark,2:deployMark">
+      <figcaption>放大 · A：换成项目在这里的两条会话</figcaption>
+      <div class="b-shot"><img src="shots/a-prod.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" data-shot="a-mark-click" data-marks="6:coord:l">
+      <figcaption>点那条会话上的进度小标签：项目会话页</figcaption>
+      <div class="b-shot"><img src="shots/a-mark-click.png" alt=""></div>
+    </figure>
+    <div></div>
+    <figure class="b-frame" data-shot="a-dev" data-marks="7:project:l">
+      <figcaption>orbit-develop（不变）</figcaption>
+      <div class="b-shot"><img src="shots/a-dev.png" alt=""></div>
+    </figure>
+  </div>
+  <ul class="notes b-notes">
+    <li class="n" data-n="1">项目在 orbit-prod 的两条会话各占一行，标题、时间、第 2 行都是它们自己的。</li>
+    <li class="n" data-n="2">进度小标签说明它属于一个项目，悬停写 <i>Part of 搜索服务迁移到新索引 · open its sessions</i>。行上不写项目名：放不下。</li>
+    <li class="n" data-n="3">coordinator 就在 orbit-prod 的项目（这里是已做完的那个）仍是一行。规则只看 coordinator 在哪。</li>
+    <li class="n" data-n="4">↓ 落在成员会话上，打开它，列表留在 orbit-prod。方向键和默认打开不再有例外：10-17 那条规则可以删掉。</li>
+    <li class="n" data-n="5">右栏就是那条会话。10-17 板上方案 B 的两个缺点（右栏和行标题对不上；成员多时只到得了最新那条）都没有了：每条成员各占一行。</li>
+    <li class="n" data-n="6">点小标签进项目会话页，coordinator 在 <b>Coordinator</b> 一节。侧栏的 Projects 也照旧进这一页。</li>
+    <li class="n" data-n="7">coordinator 所在的 orbit-develop 不变：项目一行就是 coordinator，↓ 走到它就打开 coordinator，执行会话收在后面。</li>
+  </ul>
+  <div class="box b-box">
+    <h2>规则（三端一样）</h2>
+    <table>
+      <tr><th style="width:250px"></th><th>coordinator 所在的 Workspace（orbit-develop）</th><th>别的 Workspace（orbit-prod）</th></tr>
+      <tr><td>列表里</td><td>项目一行，代表 coordinator（不变）</td><td><b>没有项目行</b>；成员会话各占一行，带进度小标签（改）</td></tr>
+      <tr><td>↑ / ↓、默认打开</td><td>走到项目行就是 coordinator（不变）</td><td>和普通会话一样（改：不再跨过）</td></tr>
+      <tr><td>Pin、Move…、Complete</td><td>项目行上作用在 coordinator（不变）</td><td>作用在那条会话自己（改）</td></tr>
+      <tr><td>进度小标签</td><td>项目行的一部分，点了进项目会话页（不变）</td><td>点了进项目会话页（新）</td></tr>
+      <tr><td>Completed 视图</td><td>项目一行收着完成的成员（不变）</td><td>完成的成员平铺，带小标签（改）</td></tr>
+      <tr><td>没有 coordinator 的项目</td><td colspan="2">照今天：每个有成员的 Workspace 一行，像文件夹行</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="part-3" class="b-part">
+  <h2 class="b-h"><span class="tag web">③ 备选 B · 待定，要你拍板</span>保留项目行，让它只说这个 Workspace 的事</h2>
+  <div class="b-grid">
+    <div class="b-stack">
+      <figure class="b-frame" data-shot="b-prod" data-marks=":project">
+        <figcaption>方案 B：orbit-prod（打了 <code>prototype-b.patch</code>）</figcaption>
+        <div class="b-shot"><img src="shots/b-prod.png" alt=""></div>
+      </figure>
+      <figure class="b-frame b-zoom" data-shot="b-prod" data-zoom="project" data-marks="1:pLine">
+        <figcaption>放大</figcaption>
+        <div class="b-shot"><img src="shots/b-prod.png" alt=""></div>
+      </figure>
+    </div>
+    <div></div>
+    <div>
+      <div class="b-opt b-rec">
+        <h3><span class="tag rec">推荐</span>方案 A · 项目只在 coordinator 所在的 Workspace 占一行（②）</h3>
+        <p class="b-pro">列表里永远是你看着的这个 Workspace 的东西；生产部署这类会话在 orbit-prod 一眼就看到，键盘也走得到。</p>
+        <p class="b-pro">删掉一条例外（方向键、默认打开），而不是再加一条。</p>
+        <p class="b-con">一个项目大批任务派到别的 Workspace 时，那边多几行：Open 里只有在跑、在等的（执行会话做完自动进 Completed，还受并发上限约束），Completed 里会平铺。</p>
+        <p class="b-con">推翻 10-04 定的「每个有成员的 Workspace 都出现项目条目」；Web、iOS（OrbitKit）、Android 三端都要改。</p>
+      </div>
+      <div class="b-opt">
+        <h3>方案 B · 项目行留着，第 2 行只说这里（左图）</h3>
+        <p class="b-pro"><span style="color:#f5222d;font-weight:650">①</span> 写 <i>2 sessions in orbit-prod</i>；这里有成员在等你时，照旧用琥珀色写那一条。改动小。</p>
+        <p class="b-con">键盘仍然到不了这一行；还是两种项目行，长得一样，规则不同。</p>
+        <p class="b-con">点进去要只列 orbit-prod 的成员，项目会话页得多一种筛选（这张图没做）。</p>
+      </div>
+      <div class="b-opt">
+        <h3><span class="tag no">不推荐</span>维持今天（10-17 的规则）</h3>
+        <p class="b-con">就是 ① 里的五种说法；这次的疑问还会再出现。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="part-4" class="b-part">
+  <h2 class="b-h"><span class="tag new">④ 和 A/B 无关</span>做完的项目一直留在 Open 里</h2>
+  <div class="b-grid">
+    <figure class="b-frame" data-shot="t-dev-done" data-marks="1:done5+done4:l">
+      <figcaption>今天：orbit-develop 往下翻，两个 DONE 的项目还在 Open</figcaption>
+      <div class="b-shot"><img src="shots/t-dev-done.png" alt=""></div>
+    </figure>
+    <div class="b-arrow"><span class="b-big">→</span>⋯</div>
+    <figure class="b-frame" data-shot="a-done-menu" data-marks="2:mComplete:l">
+      <figcaption>建议：做完的项目，菜单第一项是 Complete</figcaption>
+      <div class="b-shot"><img src="shots/a-done-menu.png" alt=""></div>
+    </figure>
+  </div>
+  <ul class="notes b-notes">
+    <li class="n" data-n="1"><b>真实数据</b>：你最近 7 个 DONE 的项目，6 个的 coordinator 还在 Open；其中 5 个已经约三到五天没有新回合。它们一直占着 Open 列表的行。</li>
+    <li class="n" data-n="2">项目 DONE 或 CANCELLED 后，项目行的菜单第一项是 <b>Complete</b>：把 coordinator 和这个项目还在 Open 的会话一起移进 Completed。iOS、Android 长按同样加。</li>
+    <li>当初条目菜单故意不放 Complete（设计文档 §4.3：「完成 coordinator 会影响整个项目，要在对话里做」）。项目做完以后，这个理由就不成立了。</li>
+    <li>不自动移走：有的 coordinator 在项目 DONE 后还在干活（比如还在盯磁盘的那个），由你决定什么时候收。</li>
+    <li>原型里 Complete 只完成 coordinator；成员一起走，要服务端一个口子（或客户端逐条完成），见「落地」。</li>
+  </ul>
+</section>
+
+<section id="part-5" class="b-part">
+  <h2 class="b-h"><span class="tag new">⑤ 和 A/B 无关</span>“You:” 只留给你自己发的消息</h2>
+  <div class="b-grid">
+    <figure class="b-frame" data-shot="t-dev" data-marks=":project">
+      <figcaption>今天：orbit-develop 里的项目行</figcaption>
+      <div class="b-shot"><img src="shots/t-dev.png" alt=""></div>
+    </figure>
+    <div class="b-arrow"><span class="b-big">→</span></div>
+    <figure class="b-frame" data-shot="a-dev" data-marks=":project">
+      <figcaption>建议：写发消息的那个会话</figcaption>
+      <div class="b-shot"><img src="shots/a-dev.png" alt=""></div>
+    </figure>
+    <figure class="b-frame b-zoom" data-shot="t-dev" data-zoom="project" data-marks="1:pLine">
+      <figcaption>放大 · 今天</figcaption>
+      <div class="b-shot"><img src="shots/t-dev.png" alt=""></div>
+    </figure>
+    <div class="b-arrow"><span class="b-big">→</span></div>
+    <figure class="b-frame b-zoom" data-shot="a-dev" data-zoom="project" data-marks="2:pLine">
+      <figcaption>放大 · 建议</figcaption>
+      <div class="b-shot"><img src="shots/a-dev.png" alt=""></div>
+    </figure>
+  </div>
+  <ul class="notes b-notes">
+    <li class="n" data-n="1">“You: Replay closed at 412/430…” 是执行会话「T7 回放对比」发给 coordinator 的汇报，你没写过。服务端把任何发进会话、还没回的消息都记成 <code>lastUserText</code>，别的会话发来的也一样；三端的行一律在前面写 “You:”。coordinator 收到的大多是这种汇报，所以项目行常常顶着你没说过的话。</li>
+    <li class="n" data-n="2">改成 <i>T7 回放对比: Replay closed…</i>：只有你自己发的才写 “You:”。对话里早就分清了：这种消息画成「From &lt;会话名&gt;」卡片，脚注 <i>Sent by another Orbit session, not by you</i>。</li>
+    <li>服务端：会话行多一个 <code>lastUserFrom</code>（发消息会话的 id 和标题），没有就是你。列表、详情、推送摘要三处一起带。</li>
+    <li>另一种写法 <i>From T7 回放对比: …</i> 和卡片一字不差，但多占 5 个字符，窄栏里汇报本身就看不到了。推荐不带 From。</li>
+  </ul>
+</section>
+
+<section id="part-6" class="b-part">
+  <h2 class="b-h"><span class="tag n">⑥ iPhone</span>同一时刻的 orbit-prod：今天 / A / B</h2>
+  <p class="b-sub">照 iPhone 现在的一行版式画（Pro Max 440pt、暗色，owner 10-22 定的行：没有标签胶囊，项目行留进度小标签）。Android 跟 iOS 同一套规则。④ 的 Complete 进长按菜单；⑤ 的写法三端一字不差。</p>
+  <div class="b-phones"><img src="shots/ios-1.png" alt=""></div>
+</section>
+
+<section id="part-7" class="b-part">
+  <h2 class="b-h"><span class="tag n">落地</span>按代价排</h2>
+  <ol class="b-land">
+    <li><b>A，Web，约半天。</b><code>sessionProjects.ts</code> 的 <code>sessionProjectListing</code> 只在 coordinator 所在的 Workspace 合成项目行；别处的成员留在普通行里，带 <code>projectMark</code>；<code>WorkspaceView.tsx</code> 在这种行上画进度小标签，点它进项目会话页（<code>prototype-a.patch</code>，两个文件 +64 −8）。10-17 加的 <code>entrySession</code> 例外随之不再需要。测试：orbit-prod 里成员是普通行、↓ 落在它上面、点小标签进项目会话页；orbit-develop 不变；Completed 视图同一条规则。</li>
+    <li><b>A，iOS + Android，各约半天。</b>OrbitKit <code>SessionProjectGrouping</code>（iOS、macOS 共用）和 Android <code>SessionProjects.kt</code> 同一条规则；行上画进度小标签；长按菜单加 <i>Sessions</i>（进项目会话页）。</li>
+    <li><b>⑤，服务端 + 三端，约半天。</b><code>sessions.service.ts</code> 里写 <code>lastUserText</code> 的三处同时记下发送方（那几处已经有 <code>senderSessionId</code>）；列表、详情、<code>buildSessionSummary</code> 带出 <code>lastUserFrom</code>；三端的 “You:” 各改一行（<code>prototype-sender.patch</code>）。</li>
+    <li><b>④，服务端 + 三端，约半天。</b>菜单项见 <code>prototype-complete.patch</code>；成员一起进 Completed，需要服务端一个口子，或客户端逐条调 Complete。</li>
+    <li><b>设计文档。</b><code>docs/session-list-projects-design.md</code> §4.3、§4.4 改成新规则：删掉 10-17 的跨过规则，写明「别的 Workspace 没有项目行」、做完的项目可以 Complete、“You:” 只指你自己。</li>
+  </ol>
+  <pre class="b-patch"><span class="c">// prototype-a.patch · src/web/src/lib/sessionProjects.ts（摘录）</span>
+<span class="a">+  // A project is a row only in the workspace its coordinator runs in. Anywhere else its members are</span>
+<span class="a">+  // that workspace's own rows, each marked with the project (owner 2026-11-07, option A).</span>
+<span class="a">+  const elsewhere = (session: T): boolean => {</span>
+<span class="a">+    const id = session.projectMembership?.projectId;</span>
+<span class="a">+    const home = id ? coordinators.get(id)?.workspace?.id : null;</span>
+<span class="a">+    return !!opts.workspaceId && !!home && home !== opts.workspaceId;</span>
+<span class="a">+  };</span>
+   for (const session of sessions) {
+     const id = session.projectMembership?.projectId;
+<span class="a">+    if (!id || elsewhere(session)) continue;   // not grouped here …</span>
+     …
+<span class="a">+  const loose = sessions.filter((session) =>                   // … so it stays an ordinary row,</span>
+<span class="a">+    (!session.projectMembership || elsewhere(session)) && inScope(session.folderId));</span>
+<span class="a">+  … { ...session, kind: 'session', projectMark: { projectId, title, status, taskCounts, runningCount } }  // marked</span></pre>
+  <p class="foot" style="width:1464px">截图：真实 Web 控制台，vite 加假数据，窗口 1080×800，时钟停在 10:20。今天 = main 555696299；A = 同一棵树打上 <code>prototype-a.patch</code>、<code>prototype-complete.patch</code>、<code>prototype-sender.patch</code>；B = 打上 <code>prototype-b.patch</code>。<code>capture/</code> 里是拍图的脚本和假数据，<code>ios.html</code> 画 ⑥ 的三台手机。会话名和项目名是示例；两处「真实数据」来自你账号里最近 200 个任务和它们的项目。</p>
+</section>
+
+<script>
+  // Numbered marks over each shot, from the boxes the capture kit measured (marks.js). A key may join
+  // several boxes with '+' into one ring; an empty number draws the ring alone. A figure with
+  // data-zoom shows only that box (padded), magnified to the figure's width.
+  window.drawMarks = () => {
+    const union = (boxes) => {
+      const x0 = Math.min(...boxes.map((b) => b[0])), y0 = Math.min(...boxes.map((b) => b[1]));
+      return [x0, y0, Math.max(...boxes.map((b) => b[0] + b[2])) - x0, Math.max(...boxes.map((b) => b[1] + b[3])) - y0];
+    };
+    for (const fig of document.querySelectorAll('[data-shot]')) {
+      const m = window.SHOT_MARKS[fig.dataset.shot];
+      const holder = fig.querySelector('.b-shot');
+      holder.querySelectorAll('.b-ring, .b-badge').forEach((e) => e.remove());
+      let ox = 0, oy = 0, scale = holder.clientWidth / m.w;
+      if (fig.dataset.zoom) {
+        const c = union(fig.dataset.zoom.split('+').map((k) => m.boxes[k]));
+        const crop = [c[0] - 10, c[1] - 8, c[2] + 20, c[3] + 16];
+        scale = holder.clientWidth / crop[2];
+        [ox, oy] = crop;
+        holder.style.height = `${crop[3] * scale}px`;
+        Object.assign(holder.querySelector('img').style, { width: `${m.w * scale}px`, left: `${-ox * scale}px`, top: `${-oy * scale}px` });
+      }
+      for (const spec of (fig.dataset.marks || '').split(',').filter(Boolean)) {
+        const [n, key, at] = spec.split(':');
+        const parts = key.split('+').map((k) => m.boxes[k]);
+        if (parts.some((b) => !b)) { console.error('missing box', fig.dataset.shot, key); continue; }
+        const b = union(parts);
+        const pad = 3;
+        const x = (b[0] - ox) * scale - pad, y = (b[1] - oy) * scale - pad;
+        const w = b[2] * scale + 2 * pad, h = b[3] * scale + 2 * pad;
+        const ring = document.createElement('div');
+        ring.className = 'b-ring';
+        Object.assign(ring.style, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` });
+        holder.append(ring);
+        if (!n) continue;
+        const badge = document.createElement('div');
+        badge.className = 'b-badge';
+        badge.textContent = n;
+        // Top-left corner by default; 'l' straddles the ring's left edge at mid-height, 'o' sits just
+        // outside it — for rows whose corner would cover a label, and titles whose corner is their first word.
+        const left = at === 'l' ? x - 11 : at === 'o' ? x - 26 : x - 12;
+        const top = at === 'l' || at === 'o' ? y + h / 2 - 11 : y - 12;
+        Object.assign(badge.style, { left: `${Math.max(-8, left)}px`, top: `${Math.max(-8, top)}px` });
+        holder.append(badge);
+      }
+    }
+  };
+  window.addEventListener('load', () => window.drawMarks());
+</script>
+</body></html>

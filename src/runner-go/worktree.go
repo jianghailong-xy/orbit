@@ -3065,6 +3065,12 @@ func (p worktreeGCPressure) underBudgetFloor() bool {
 	return p.budget != nil && p.belowFloor()
 }
 
+// measuredAfter reports whether this reading was judged on a storage budget measured after at.
+func (p worktreeGCPressure) measuredAfter(at time.Time) bool {
+	measured, ok := p.budget.measuredAt()
+	return ok && measured.After(at)
+}
+
 // resumableIdle is how long nothing may have been written in a resting session's checkout before a sweep may take
 // it: resumableCheckoutIdle, or no time at all under a storage budget's floor (underBudgetFloor).
 func resumableIdle(underBudget bool) time.Duration {
@@ -3082,10 +3088,20 @@ const checkoutProbeTimeout = 30 * time.Second
 // take (worktreeSweeper.sweepResumable). A look runs on the claim loop, about 28 seconds over 149 checkouts at a
 // load of about 21, and on a host that stays under its floor with nothing to take, every five minutes would be
 // one message in eleven waiting behind it. What it finds changes slowly: a checkout has to go two weeks unwritten.
-// The wait stands under a storage budget's floor too, where a checkout need not (underBudgetFloor), except for a sweep
-// run to make room for a new checkout (worktreeSweeper.makeRoom): that checkout is the change the wait assumes has
-// not happened.
+// Under a storage budget's floor, where a checkout need not (underBudgetFloor), the wait is resumableBudgetSweepWait,
+// and a sweep run to make room for a new checkout (worktreeSweeper.makeRoom) does not wait at all: that checkout is
+// the change the wait assumes has not happened.
 const resumableSweepWait = time.Hour
+
+// resumableBudgetSweepWait is the wait after a look that found nothing under a storage budget's floor, where a newer
+// measurement of the budget ends it sooner (worktreeSweeper.sweepResumable). An hour is too long there: a resting
+// checkout may go as soon as its session's engine has gone cold, which nothing tells the sweep, and builds and installs
+// in the checkouts can take the volume to its limit meanwhile. The channel measures the volume every couple of
+// minutes, and a measurement keeps its time for as long as the figures stay the same, so a newer one says the volume's
+// usage has moved. Half as long again as worktreeGCInterval: the schedule's next sweep does not look unless such a
+// measurement has come, and the one after it looks either way, with half an interval to spare on both sides for a
+// claim loop that comes round late and a sweep that took a while.
+const resumableBudgetSweepWait = worktreeGCInterval + worktreeGCInterval/2
 
 // resumableSweepBudget is how long one gcResumableCheckouts may go on taking checkouts, on the claim loop. It is
 // read between checkouts and never during one, so a sweep can pass it by as much as the checkout it is on takes.
@@ -3416,16 +3432,17 @@ func (t *Transport) worktreesResumable(ids []string) (map[string]string, error) 
 //
 // It reports whether it looked and found nothing: the rule kept every checkout and the disk is still under its
 // floor. A git command that failed or timed out on a checkout is the rule keeping it (checkoutHasNothingToLose),
-// and a look it could not finish is not this (reclaimResumableCheckout).
-func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPressure) bool {
+// and a look it could not finish is not this (reclaimResumableCheckout). With that it answers the reading that
+// found the disk still under its floor, which says how long the wait that follows is (worktreeSweeper.sweepResumable).
+func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPressure) (bool, worktreeGCPressure) {
 	pressure = pressure.again()
 	if !pressure.belowFloor() {
-		return false
+		return false, pressure
 	}
 	root := worktreesDir()
 	entries, err := os.ReadDir(root)
 	if err != nil {
-		return false
+		return false, pressure
 	}
 	var names []string
 	for _, e := range entries {
@@ -3436,12 +3453,12 @@ func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPr
 	resumable, err := t.worktreesResumable(names)
 	if err != nil {
 		logln("gc: worktrees-removable query failed, keeping every resumable checkout:", err)
-		return false
+		return false, pressure
 	}
 	occupied, err := occupiedCheckouts(root)
 	if err != nil {
 		logln("gc: cannot tell what else is in a checkout here, keeping every resumable checkout:", err)
-		return false
+		return false, pressure
 	}
 	type candidate struct {
 		name      string
@@ -3468,7 +3485,7 @@ func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPr
 		if !spending.IsZero() && now.Sub(spending) >= resumableSweepBudget {
 			logln(fmt.Sprintf("gc: stopping this sweep of resumable checkouts after %s, its budget is %s; the next sweep goes on with the oldest of the %d left",
 				now.Sub(spending).Round(time.Second), resumableSweepBudget, len(candidates)-i))
-			return false
+			return false, pressure
 		}
 		taken, err := reclaimResumableCheckout(t, pool, root, c.name, pressure.storage, pressure.underBudgetFloor())
 		if (taken || err != nil) && spending.IsZero() {
@@ -3478,10 +3495,14 @@ func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPr
 			continue
 		}
 		if pressure = pressure.again(); !pressure.belowFloor() {
-			return false
+			return false, pressure
 		}
 	}
-	return spending.IsZero() && pressure.again().belowFloor()
+	if !spending.IsZero() {
+		return false, pressure
+	}
+	pressure = pressure.again()
+	return pressure.belowFloor(), pressure
 }
 
 // reclaimResumableCheckout judges one checkout a second time and removes it. The session's branch stays,
