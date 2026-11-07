@@ -50,5 +50,10 @@ seconds apart, with identical argv, cwd, command payload and environment, and di
 
 No shell-visible toolCallId or approval flag was observed. This is an observation about these runs,
 not a proof that no internal CLI state contains a call identifier. The broker mechanism in §8.5 is a
-proposed design, not a tested implementation. It deliberately requires an execution-bound approval
-when the existing ACP permission cannot be correlated unambiguously; a text-hash grant is insufficient.
+proposed design, not a tested implementation. It uses exact-match, count-limited grants keyed by
+conversation, cwd and the complete command bytes, created only for a person/card-path ALLOWED response
+before allow-once is sent. A trusted wrapper atomically consumes one matching grant and decides how
+to execute; no second approval card is required. Identical commands may consume the same key's
+approvals in either order, but unsandboxed executions must not exceed approvals. See §8.5 for caller
+validation, fd-5 replay, expiry, lost replies and the default sandboxed behavior. A hash alone, without
+exact-key verification and an atomic count, is insufficient.
