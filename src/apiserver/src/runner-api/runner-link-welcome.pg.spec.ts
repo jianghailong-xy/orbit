@@ -75,6 +75,7 @@ import { listenForRunnerLinkCalls } from './runner-link-call';
 import { readRunnerLink, RUNNER_LINK, runnerLinkCredential, signRunnerLinkToken, type RunnerLinkState } from './runner-link-token';
 import { RunnerLinkWelcomeController } from './runner-link-welcome.controller';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
+import { assignRunnerRelease, loadRunnerReleasePolicy, RUNNER_RELEASE_POLICY_FILE } from './runner-release';
 import { RunnerReleaseController } from './runner-release.controller';
 import { RunnerReleaseFeed } from './runner-release-feed';
 import '../test-support/daemon-routes-over-http';
@@ -489,7 +490,12 @@ test('the link Welcome: each session\'s durable seq and lease, and the release t
     const assigned = await send(door.httpsPort, 'GET', `/api/runner/release?latest=${LATEST}&previous=${PREVIOUS}`, viaHttps());
     assert.equal(assigned.status, 200, JSON.stringify(assigned.body));
     const expected = { version: assigned.body.version, rollback: assigned.body.rollback };
-    assert.deepEqual(expected, { version: LATEST, rollback: false }, 'runner-release.json assigns the latest to every runner');
+    // The repository's runner-release.json may stage a rollout, and this runner's place in it comes from its random id.
+    const pointer = loadRunnerReleasePolicy(RUNNER_RELEASE_POLICY_FILE);
+    assert.ok('policy' in pointer);
+    const assignment = assignRunnerRelease(runnerId, { latest: LATEST, previous: PREVIOUS }, pointer.policy);
+    assert.deepEqual(expected, assignment && { version: assignment.version, rollback: assignment.rollback },
+      'the release runner-release.json assigns this runner');
 
     const answer = await welcome([mine]);
     assert.deepEqual(stateOf(answer), [[mine, 0, true]]);
