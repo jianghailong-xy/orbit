@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"slices"
 	"sync"
 	"testing"
@@ -13,7 +14,7 @@ import (
 	"orbit/link-gateway/linkpb"
 )
 
-// A gateway in MODE_LINK and the apiserver instances it forwards to: each backend is an httptest server that records
+// A gateway and the apiserver instances it forwards to: each backend is an httptest server that records
 // every call and answers it with the test's handler, standing in for the internal listener of
 // src/apiserver/src/runner-api/runner-link-call.ts.
 
@@ -131,17 +132,26 @@ func cutQuery(p string) (string, string, bool) {
 	return p, "", false
 }
 
+// jsonEqual says whether a and b are the same JSON value: member order, whitespace, escapes and how a number is
+// spelled do not count.
+func jsonEqual(a, b []byte) bool {
+	var x, y any
+	if json.Unmarshal(a, &x) != nil || json.Unmarshal(b, &y) != nil {
+		return false
+	}
+	return reflect.DeepEqual(x, y)
+}
+
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
 }
 
-// newLinkHarness is a gateway in MODE_LINK forwarding to backends, in order.
+// newLinkHarness is a gateway forwarding to backends, in order.
 func newLinkHarness(t *testing.T, backends []*fakeBackend, mutate func(*config)) *harness {
 	t.Helper()
 	return newHarness(t, func(c *config) {
-		c.Mode = linkpb.Mode_MODE_LINK
 		for _, b := range backends {
 			c.InternalAPIURLs = append(c.InternalAPIURLs, b.url())
 		}

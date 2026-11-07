@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"orbit/link-gateway/linkpb"
 )
 
 // Fixed by the design rather than configured (docs/runner-link-design.md §5.1, §5.7, §6.1). They are fields of
@@ -20,7 +18,6 @@ const (
 	maxMergeBatches          = 256
 	maxFrameBytes            = 256 << 10
 	defaultHeartbeatInterval = 30 * time.Second
-	defaultModeInterval      = time.Second
 	defaultPingInterval      = 20 * time.Second
 	defaultPingTimeout       = 60 * time.Second
 	defaultMaxConnsPerRunner = 2
@@ -48,13 +45,10 @@ type config struct {
 	PublicKeys []ed25519.PublicKey
 	CellID     string
 
-	// APIURL is the apiserver's base address; the gateway reads the revoked credentials from it with GatewayToken, and
-	// the RUNNER_LINK_REQUIRED switch (mode.go).
+	// APIURL is the apiserver's base address; the gateway reads the revoked credentials from it with GatewayToken.
 	APIURL             string
 	GatewayToken       string
 	RevocationInterval time.Duration
-	// ModeInterval is how often the switch is read; a field only so that tests can shorten it.
-	ModeInterval time.Duration
 
 	HeartbeatInterval time.Duration
 	PingInterval      time.Duration
@@ -85,14 +79,8 @@ type config struct {
 	// either way) or "off".
 	FrameLog string
 
-	// Mode is LINK_MODE. MODE_LINK (link) pins what Welcome and HeartbeatAck tell runners, whatever the server's
-	// RUNNER_LINK_REQUIRED switch says: the staging drills. MODE_HTTP (http, the default) is what they are told until
-	// that switch is on, and again once it is off (mode.go). The mode decides whether a connection's work is forwarded
-	// (MODE_LINK) or only compared (MODE_HTTP, the shadow period).
-	Mode linkpb.Mode
-
 	// InternalAPIURLs are the apiserver's internal listeners for runner link calls (RUNNER_LINK_INTERNAL_PORT), one per
-	// apiserver instance: the backends every forwarded call goes to (backend.go). Required in MODE_LINK.
+	// apiserver instance: the backends every forwarded call goes to (backend.go). Required.
 	InternalAPIURLs []string
 	// RPCTimeout bounds one forwarded call to a backend, retries included.
 	RPCTimeout time.Duration
@@ -250,7 +238,6 @@ func configFromEnv(getenv func(string) string) (config, error) {
 		APIURL:             strings.TrimRight(str("LINK_API_URL", ""), "/"),
 		GatewayToken:       str("LINK_GATEWAY_TOKEN", ""),
 		RevocationInterval: dur("LINK_REVOCATION_INTERVAL", 30*time.Second),
-		ModeInterval:       defaultModeInterval,
 		HeartbeatInterval:  defaultHeartbeatInterval,
 		PingInterval:       defaultPingInterval,
 		PingTimeout:        defaultPingTimeout,
@@ -270,7 +257,6 @@ func configFromEnv(getenv func(string) string) (config, error) {
 		NATSURL:            str("LINK_NATS_URL", ""),
 		NATSSeed:           strings.TrimSpace(getenv("LINK_NATS_SEED")),
 		FrameLog:           str("LINK_FRAME_LOG", "lifecycle"),
-		Mode:               linkpb.Mode_MODE_HTTP,
 		InternalAPIURLs:    splitList(getenv("LINK_INTERNAL_API_URLS")),
 		RPCTimeout:         dur("LINK_RPC_TIMEOUT", 60*time.Second),
 		link:               defaultLinkTuning(),
@@ -311,14 +297,6 @@ func configFromEnv(getenv func(string) string) (config, error) {
 	c.link.HighWater = c.link.MaxQueued.half()
 	c.link.LowWater = c.link.HighWater.half()
 	c.DrillIngestRate = num("LINK_DRILL_INGEST_RATE", 0)
-
-	switch mode := str("LINK_MODE", "http"); mode {
-	case "http":
-	case "link":
-		c.Mode = linkpb.Mode_MODE_LINK
-	default:
-		problems = append(problems, fmt.Sprintf("LINK_MODE=%q is not http or link", mode))
-	}
 
 	if c.TLSMode == "" {
 		c.TLSMode = "files"
@@ -379,8 +357,8 @@ func configFromEnv(getenv func(string) string) (config, error) {
 			problems = append(problems, fmt.Sprintf("LINK_INTERNAL_API_URLS: %q is not an http:// or https:// address without a path", raw))
 		}
 	}
-	if c.Mode == linkpb.Mode_MODE_LINK && len(c.InternalAPIURLs) == 0 {
-		problems = append(problems, "LINK_MODE=link needs LINK_INTERNAL_API_URLS: the apiserver's internal listener (RUNNER_LINK_INTERNAL_PORT) that runner calls are forwarded to")
+	if len(c.InternalAPIURLs) == 0 {
+		problems = append(problems, "LINK_INTERNAL_API_URLS is required: the apiserver's internal listener (RUNNER_LINK_INTERNAL_PORT) that runner calls are forwarded to")
 	}
 	for i, raw := range c.InternalAPIURLs {
 		c.InternalAPIURLs[i] = strings.TrimRight(raw, "/")

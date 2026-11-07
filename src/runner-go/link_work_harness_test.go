@@ -15,6 +15,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -54,11 +55,29 @@ type fakeWorkGateway struct {
 	// ingest, when set, stores the EventBatches and records the LiveBatches its connections carry
 	// (link_events_harness_test.go); unset, they go unanswered.
 	ingest *fakeIngest
+	// beatDelay, when set, is how long the heartbeat route takes to answer a beat. Each connection's beats are then
+	// forwarded one at a time, as the real gateway forwards them (src/link-gateway/heartbeat.go): a beat that comes
+	// while another is out waits, and a newer one replaces it unanswered (superseded counts those).
+	beatDelay time.Duration
+	// oldAcks makes it a gateway older than HeartbeatAck.beat_id: its acks name no beat.
+	oldAcks bool
+	// beforeAck, when set, runs just before a beat's HeartbeatAck is sent.
+	beforeAck func(c *fakeWorkConn, hb *linkpb.Heartbeat)
 
-	conns    []*fakeWorkConn
-	upgrades []time.Time
-	rpcs     []fakeWorkRPC
-	beats    []fakeWorkBeat
+	conns      []*fakeWorkConn
+	upgrades   []time.Time
+	rpcs       []fakeWorkRPC
+	beats      []fakeWorkBeat
+	arrivals   []fakeWorkBeatAt // every beat as it came, answered or not
+	answers    []fakeWorkBeatAt // every beat as it was answered
+	superseded int
+}
+
+// fakeWorkBeatAt is a beat by its id, on a connection, at a time.
+type fakeWorkBeatAt struct {
+	conn string
+	id   uint64
+	at   time.Time
 }
 
 type fakeWorkConn struct {
@@ -76,6 +95,11 @@ type fakeWorkConn struct {
 	writeMu    sync.Mutex
 	outID      uint64
 	facts      map[string]fakeWorkFact // what a connection's beats sent whole, by kind
+	// beatq holds the beat waiting for the connection's heartbeat worker, once beats are answered late (beatDelay).
+	beatq    chan *linkpb.Heartbeat
+	beatOnce sync.Once
+	// stall, while set, keeps the reading loop from reading, and so from answering pings, until it is closed.
+	stall atomic.Pointer[chan struct{}]
 }
 
 type fakeWorkFact struct {
@@ -213,15 +237,20 @@ func (g *fakeWorkGateway) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	g.mu.Unlock()
 	c.send(&linkpb.Frame{Body: &linkpb.Frame_Welcome{Welcome: welcome}})
-	// The newest connection of a process takes its traffic; the older one is closed (README, Handshake).
+	// The newest connection of a process takes its traffic; the older one is closed (README, Handshake), on a goroutine
+	// of its own as the gateway's writer closes it: an older connection whose path is dead takes the close handshake's
+	// whole timeout, which must not keep this one from being read.
 	for _, o := range older {
-		o.closeWith(linkpb.CloseCode_CLOSE_CODE_SUPERSEDED, "a newer connection of this process took over", 0)
+		go o.closeWith(linkpb.CloseCode_CLOSE_CODE_SUPERSEDED, "a newer connection of this process took over", 0)
 	}
 	// A token that expires ends its connection (README, Connections).
 	if exp := fakeLinkTokenExpiry(c.token); !exp.IsZero() {
 		time.AfterFunc(time.Until(exp), func() { c.closeWith(linkpb.CloseCode_CLOSE_CODE_UNAUTHENTICATED, "the link token expired", 0) })
 	}
 	for {
+		if stall := c.stall.Load(); stall != nil {
+			<-*stall
+		}
 		f, err := read()
 		if err != nil {
 			g.mu.Lock()
@@ -244,9 +273,56 @@ func (g *fakeWorkGateway) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// onBeat answers a beat as the real gateway does (heartbeat.go): a digest it does not hold is asked for, and a beat
-// it can fill in is forwarded.
+// onBeat takes a beat as the real gateway does (heartbeat.go): answered at once, or, when the route is slow
+// (beatDelay), forwarded by the connection's heartbeat worker, one beat at a time.
 func (g *fakeWorkGateway) onBeat(c *fakeWorkConn, hb *linkpb.Heartbeat) {
+	g.mu.Lock()
+	g.arrivals = append(g.arrivals, fakeWorkBeatAt{conn: c.id, id: hb.GetBeatId(), at: time.Now()})
+	delay := g.beatDelay
+	g.mu.Unlock()
+	if delay <= 0 {
+		g.answerBeat(c, hb)
+		return
+	}
+	c.beatOnce.Do(func() {
+		c.beatq = make(chan *linkpb.Heartbeat, 1)
+		go func() {
+			for {
+				select {
+				case <-c.done:
+					return
+				case hb := <-c.beatq:
+					g.mu.Lock()
+					delay := g.beatDelay
+					g.mu.Unlock()
+					select {
+					case <-c.done:
+						return
+					case <-time.After(delay):
+					}
+					g.answerBeat(c, hb)
+				}
+			}
+		}()
+	})
+	for {
+		select {
+		case c.beatq <- hb:
+			return
+		default:
+		}
+		select {
+		case <-c.beatq:
+			g.mu.Lock()
+			g.superseded++
+			g.mu.Unlock()
+		default:
+		}
+	}
+}
+
+// answerBeat answers a beat: a digest it does not hold is asked for, and a beat it can fill in is forwarded.
+func (g *fakeWorkGateway) answerBeat(c *fakeWorkConn, hb *linkpb.Heartbeat) {
 	g.mu.Lock()
 	mode := g.mode
 	members := map[string]json.RawMessage{}
@@ -267,11 +343,19 @@ func (g *fakeWorkGateway) onBeat(c *fakeWorkConn, hb *linkpb.Heartbeat) {
 		members[f.GetKind()] = f.GetJson()
 	}
 	ack := &linkpb.HeartbeatAck{Mode: mode}
+	if !g.oldAcks {
+		ack.BeatId = hb.GetBeatId()
+	}
+	g.answers = append(g.answers, fakeWorkBeatAt{conn: c.id, id: hb.GetBeatId(), at: time.Now()})
 	beat := fakeWorkBeat{conn: c.id, frame: proto.Clone(hb).(*linkpb.Heartbeat), want: want}
+	before := g.beforeAck
 	if len(want) > 0 || mode != linkpb.Mode_MODE_LINK {
 		ack.WantFacts = want
 		g.beats = append(g.beats, beat)
 		g.mu.Unlock()
+		if before != nil {
+			before(c, hb)
+		}
 		c.send(&linkpb.Frame{Body: &linkpb.Frame_HeartbeatAck{HeartbeatAck: ack}})
 		return
 	}
@@ -292,6 +376,9 @@ func (g *fakeWorkGateway) onBeat(c *fakeWorkConn, hb *linkpb.Heartbeat) {
 		ack.ReconcileJson = reconcile(c, members)
 	}
 	ack.Hints, ack.Release = hints, release
+	if before != nil {
+		before(c, hb)
+	}
 	c.send(&linkpb.Frame{Body: &linkpb.Frame_HeartbeatAck{HeartbeatAck: ack}})
 }
 

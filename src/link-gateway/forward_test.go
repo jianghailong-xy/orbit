@@ -260,7 +260,6 @@ func TestACallThatReachedNoBackendIsSentAgainOnTheNextWhateverItIs(t *testing.T)
 		writeJSON(w, 200, map[string]string{"stored": "yes"})
 	})
 	h := newHarness(t, func(c *config) {
-		c.Mode = linkpb.Mode_MODE_LINK
 		c.InternalAPIURLs = []string{deadBackend(t), alive.url()}
 		c.link.RetryBudget, c.link.BackendDownFor = 2*time.Second, time.Minute
 	})
@@ -288,7 +287,6 @@ func TestACallThatReachedNoBackendIsSentAgainOnTheNextWhateverItIs(t *testing.T)
 
 func TestNoBackendAnsweringIsARetryableFailure(t *testing.T) {
 	h := newHarness(t, func(c *config) {
-		c.Mode = linkpb.Mode_MODE_LINK
 		c.InternalAPIURLs = []string{deadBackend(t), deadBackend(t)}
 		c.link.RetryBudget = 500 * time.Millisecond
 	})
@@ -355,6 +353,7 @@ func TestTheLinkSettingsAreChecked(t *testing.T) {
 	base := map[string]string{
 		"LINK_PUBLIC_KEYS": publicPEM(t, keys.pub), "LINK_GATEWAY_TOKEN": strings.Repeat("g", 32),
 		"LINK_API_URL": "http://apiserver:3000", "LINK_TLS_MODE": "off",
+		"LINK_INTERNAL_API_URLS": "http://apiserver:3001/, http://apiserver-b:3001",
 	}
 	read := func(extra map[string]string) (config, error) {
 		env := map[string]string{}
@@ -366,18 +365,22 @@ func TestTheLinkSettingsAreChecked(t *testing.T) {
 		}
 		return configFromEnv(func(k string) string { return env[k] })
 	}
-	if c, err := read(nil); err != nil || c.Mode != linkpb.Mode_MODE_HTTP {
-		t.Fatalf("by default: %v, %v", c.Mode, err)
+	c, err := read(nil)
+	if err != nil || strings.Join(c.InternalAPIURLs, " ") != "http://apiserver:3001 http://apiserver-b:3001" {
+		t.Fatalf("backends: %v, %v", c.InternalAPIURLs, err)
 	}
-	if _, err := read(map[string]string{"LINK_MODE": "link"}); err == nil || !strings.Contains(err.Error(), "LINK_INTERNAL_API_URLS") {
-		t.Fatalf("link mode without backends: %v", err)
+	// Without the internal listener there is nowhere to forward runners' calls to.
+	if _, err := read(map[string]string{"LINK_INTERNAL_API_URLS": ""}); err == nil || !strings.Contains(err.Error(), "LINK_INTERNAL_API_URLS is required") {
+		t.Fatalf("no backends: %v", err)
 	}
-	c, err := read(map[string]string{"LINK_MODE": "link", "LINK_INTERNAL_API_URLS": "http://apiserver:3001/, http://apiserver-b:3001"})
-	if err != nil || c.Mode != linkpb.Mode_MODE_LINK || strings.Join(c.InternalAPIURLs, " ") != "http://apiserver:3001 http://apiserver-b:3001" {
-		t.Fatalf("link mode: %v %v, %v", c.Mode, c.InternalAPIURLs, err)
+	// LINK_MODE pinned the mode during the shadow period. It is no longer read: a deployment that still sets it starts,
+	// and tells runners MODE_LINK as every gateway now does.
+	for _, mode := range []string{"http", "link", "shadow"} {
+		if _, err := read(map[string]string{"LINK_MODE": mode}); err != nil {
+			t.Errorf("LINK_MODE=%s: %v", mode, err)
+		}
 	}
 	for _, bad := range []map[string]string{
-		{"LINK_MODE": "shadow"},
 		{"LINK_INTERNAL_API_URLS": "apiserver:3001"},
 		{"LINK_INTERNAL_API_URLS": "http://apiserver:3001/api"},
 		{"LINK_NATS_URL": "nats://user:secret@nats:4222"},
