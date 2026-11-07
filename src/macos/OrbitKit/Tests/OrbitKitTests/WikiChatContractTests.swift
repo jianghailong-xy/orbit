@@ -267,8 +267,30 @@ final class WikiChatContractTests: XCTestCase {
             XCTAssertEqual(WikiChatLogic.noteLabel(note), test.label, test.name)
             let tag = Self.openingTag(test.note)
             XCTAssertEqual(WikiChatLogic.parseNoteTag(tag + "\nbody\n</x>"), note, "\(test.name): \(tag)")
+            // The chat's words to its agent are not something the owner attached, so the line under a message does
+            // not name them (board 42 ①, C15): its fixture label is `noteLabel`'s, held above, and not the line's.
+            // `testAChatsFirstMessageNamesOnlyThePageAndTheSelection` holds what the line says for that block.
+            if note == .chat { continue }
             XCTAssertEqual(describeNote(tag + "\nbody\n" + "</" + Self.tagName(test.note) + ">"), test.label, test.name)
         }
+    }
+
+    /// A chat's first message carries the chat's words to its agent, then the page and the selection, in delivery's
+    /// order. Its line lists what the owner attached — the page and the selection, as board 42 ① shows it — and not
+    /// those words; sent with neither, it names nothing (C15, the web's `describeNote`). The block is the contract's
+    /// own text, which the shared spec holds to `WIKI_CHAT_PROMPT`, the block delivery appends.
+    func testAChatsFirstMessageNamesOnlyThePageAndTheSelection() throws {
+        let rules = try XCTUnwrap(try contract()["chat"]?["notes"]?["chat"]?["text"]?.stringValue)
+        let page = "<orbit_wiki_page of=\"doc\" doc=\"3.1\" slug=\"sessions-runtime\" section=\"3\" key=\"turn-delivery\" "
+            + "repoSha=\"7f3e2a1c0d9b\">\n3.1 Sessions runtime · §3 Turn delivery\nThe runner leases one turn at a time.\n"
+            + "</orbit_wiki_page>"
+        let selection = "<orbit_wiki_selection doc=\"3.1\" slug=\"sessions-runtime\" section=\"3\" key=\"turn-delivery\" "
+            + "sentences=\"1\" sources=\"2\" repoSha=\"7f3e2a1c0d9b\">\n§3 Turn delivery\nThe runner leases one turn at a time.\n"
+            + "  - src/runner-go/inbox.go@7f3e2a1c0d9b#L10-40\n</orbit_wiki_selection>"
+        XCTAssertEqual(describeNote("\n\n\(rules)\n\n\(page)\n\n\(selection)"),
+                       "Wiki page · 3.1 §3, Wiki selection · 3.1 §3 · 1 sentence · 2 sources")
+        XCTAssertEqual(describeNote("\n\n\(rules)\n\n\(selection)"), "Wiki selection · 3.1 §3 · 1 sentence · 2 sources")
+        XCTAssertEqual(describeNote("\n\n\(rules)"), "")
     }
 
     /// A plan card's face (C12, `wikiChatPlanFace`): the document, what of it changes, and the covers it writes — the
