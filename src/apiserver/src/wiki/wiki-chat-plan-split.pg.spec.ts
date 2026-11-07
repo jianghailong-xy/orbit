@@ -683,10 +683,15 @@ test('a plan card of two documents: a split gated as one edit, one press, its re
   });
 
   // ── 7 ─────────────────────────────────────────────────────────────────────────────────────────────────────────
-  /** Backends waiting on the space row's lock, as `lockSpaceInUse` takes it. */
+  /**
+   * A press or an Undo waiting on the space row: a backend that holds a card (#lockCard's FOR UPDATE of wiki_chat_draft)
+   * and waits on a lock of wiki_space — whatever the lock's own text, and no background writer of the space, none of
+   * which holds a card.
+   */
   const waitingOnSpace = async () => Number((await sql.query(
-    `SELECT count(*)::int AS n FROM pg_stat_activity
-      WHERE "wait_event_type" = 'Lock' AND "query" LIKE '%FROM "wiki_space"%' AND "query" LIKE '%"deleted_at" IS NULL%' AND "query" LIKE '%FOR NO KEY UPDATE%'`)).rows[0].n);
+    `SELECT count(*)::int AS n FROM pg_stat_activity a
+      WHERE a."wait_event_type" = 'Lock' AND a."query" LIKE '%FROM "wiki_space"%' AND a."query" LIKE '%FOR NO KEY UPDATE%'
+        AND EXISTS (SELECT 1 FROM pg_locks l WHERE l."pid" = a."pid" AND l."granted" AND l."mode" = 'RowShareLock' AND l."relation" = '"wiki_chat_draft"'::regclass)`)).rows[0].n);
   /**
    * The wiki moved to Trash by its own writer (`moveWikiSpaceToTrash`), whose transaction is held open until the press has
    * its card and waits on the space's row — then committed.
