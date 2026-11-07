@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>02 · 提案：质疑卡的回答写清条目会怎样、能不能撤回</title>
+<link rel="stylesheet" href="board.css">
+<script src="marks.js"></script>
+<style>
+  .b-pair { display: flex; gap: 18px; align-items: flex-start; }
+  .b-pair .b-frame figcaption { min-height: 44px; }
+</style>
+</head>
+<body>
+
+<h1>02 · 提案：质疑卡的回答写清「条目会怎样、能不能撤回」</h1>
+<p class="lede">同一棵树、同一份数据、同一张卡（01 里那张 sum_cache_read）。<b>Web 的提案是真实页面</b>：只改了这张卡的三个按钮、加了 After 一行，再截图，其余都是真实渲染。<b>iPhone 和 Android 的提案画在各自的真实截图上</b>，只换了按钮区、加了 After 一行，颜色取自截图本身。</p>
+<p class="lede"><span class="tag rec">不另起交互</span> 用的都是产品里已有的东西：<b>Keep</b> 是 Review 的 Retire 卡已有的词（toast 已有 “Kept”）；<b>After</b> 一行是 Retire 卡已有的写法；<b>Retire…</b> 打开的是条目页已有的 Retire… 对话框（三端都有：说明后果、写理由、红色 Retire）；红色是产品已有的 danger 样式，和跨项目卡的 Refuse… 一样。服务端和契约里的回答不变（<code>reconfirm</code> / <code>amend</code> / <code>retire</code>），只改界面上的字和样子。</p>
+
+<section class="b-part">
+  <h2>Web 桌面：卡底</h2>
+  <div class="b-pair">
+    <figure class="b-frame" style="width:640px">
+      <figcaption><span class="tag now">现在</span> 卡底，1440 宽</figcaption>
+      <div class="b-shot" data-w="720"><img src="shots/web-desk-foot.png" alt="">
+        <div class="b-ring" data-box="15,56.6,103.1,34.4"></div>
+        <div class="b-ring" data-box="128.1,56.6,157,34.4"></div>
+      </div>
+    </figure>
+    <figure class="b-frame" style="width:640px">
+      <figcaption><span class="tag rec">提案</span> 同一张卡（真实页面里改的）</figcaption>
+      <div class="b-shot" data-w="720"><img src="shots/web-desk-foot-prop.png" alt="">
+        <div class="b-ring b-g" data-box="121,38.6,582,76.8"></div><div class="b-badge b-g" data-box="121,38.6,582,76.8" data-side="right">1</div>
+        <div class="b-ring b-g" data-box="15,138.4,65.3,34.4"></div><div class="b-badge b-g" data-box="15,138.4,65.3,34.4">2</div>
+        <div class="b-ring b-g" data-box="189.2,138.4,80.7,34.4"></div><div class="b-badge b-g" data-box="189.2,138.4,80.7,34.4" data-side="right">3</div>
+      </div>
+    </figure>
+  </div>
+  <ul class="b-notes" style="width:1560px">
+    <li class="n g" data-n="1"><b>After 一行</b>，写在按钮正上方，三个回答各一句：Keep 之后 agent 会重新拿到它，以后还能退役；Amend 之后 agent 拿到你的版本；<b>Retire 之后 agent 不再拿到，而且 This cannot be undone</b>（这句是 wiki 自己删 space 时已有的说法）。decision 类条目没有 Amend 那句（见 D5）。</li>
+    <li class="n g" data-n="2"><b>Re-confirm 改叫 Keep，不再是实心主按钮。</b>三个回答分量一样，没有一个替你选好；按钮名就是结果：Keep（留下）对 Retire（退役），和 Retire 卡的 Retire / Keep 同一对词。</li>
+    <li class="n g" data-n="3"><b>Retire… 用红色，带「…」，排最后。</b>「…」在产品里的意思是「先问你一句」：按下先打开 Retire… 对话框（下面），不是直接退役。</li>
+  </ul>
+</section>
+
+<section class="b-part">
+  <h2>手机：卡底（三端）</h2>
+  <p class="b-sub">竖排满宽的回答栈不变（09-25 的决定），只是不再有实心的主按钮，Retire… 是红色、在最下面。</p>
+  <div class="b-row" id="phone-pairs">
+    <figure class="b-frame" style="width:250px">
+      <figcaption><span class="tag now">现在</span> Web 手机</figcaption>
+      <div class="b-shot" data-w="358"><img src="shots/web-phone-foot.png" alt=""><div class="b-ring" data-box="15,87.6,328,42.4"></div></div>
+    </figure>
+    <figure class="b-frame" style="width:250px">
+      <figcaption><span class="tag rec">提案</span> Web 手机</figcaption>
+      <div class="b-shot" data-w="358"><img src="shots/web-phone-foot-prop.png" alt="">
+        <div class="b-ring b-g" data-box="17,69.6,324,172.6"></div><div class="b-badge b-g" data-box="17,69.6,324,172.6" data-side="right">1</div>
+        <div class="b-ring b-g" data-box="15,370,328,42.4"></div><div class="b-badge b-g" data-box="15,370,328,42.4" data-side="right">3</div>
+      </div>
+    </figure>
+    <figure class="b-frame" style="width:250px">
+      <figcaption><span class="tag now">现在</span> iPhone<span class="b-dim">模拟器的真实画面</span></figcaption>
+      <div class="b-shot" data-w="1206"><img src="shots/iphone-foot.png" alt=""><div class="b-ring" data-box="90,128,1026,103"></div></div>
+    </figure>
+    <figure class="b-frame" style="width:250px">
+      <figcaption><span class="tag rec">提案</span> iPhone<span class="b-dim">上面一行是真实画面，下面照它的颜色和尺寸画</span></figcaption>
+      <div class="b-shot" data-w="1206"><img src="shots/iphone-foot-prop.png" alt="">
+        <div class="b-ring b-g" data-box="90,125,1026,488"></div><div class="b-badge b-g" data-box="90,125,1026,488" data-side="right">1</div>
+        <div class="b-ring b-g" data-box="90,906,1026,103"></div><div class="b-badge b-g" data-box="90,906,1026,103" data-side="right">3</div>
+      </div>
+    </figure>
+    <figure class="b-frame" style="width:250px">
+      <figcaption><span class="tag now">现在</span> Android<span class="b-dim">API 36 模拟器的真实画面</span></figcaption>
+      <div class="b-shot" data-w="1080"><img src="shots/android-foot.png" alt=""><div class="b-ring" data-box="80,87,920,125"></div></div>
+    </figure>
+    <figure class="b-frame" style="width:250px">
+      <figcaption><span class="tag rec">提案</span> Android<span class="b-dim">上面一行是真实画面，下面照它的颜色和尺寸画</span></figcaption>
+      <div class="b-shot" data-w="1080"><img src="shots/android-foot-prop.png" alt="">
+        <div class="b-ring b-g" data-box="79,92,922,392"></div><div class="b-badge b-g" data-box="79,92,922,392" data-side="right">1</div>
+        <div class="b-ring b-g" data-box="79,831,922,126"></div><div class="b-badge b-g" data-box="79,831,922,126" data-side="right">3</div>
+      </div>
+    </figure>
+  </div>
+</section>
+
+<section class="b-part">
+  <h2>按 Retire… 之后：先确认</h2>
+  <p class="b-sub">和条目页的 Retire… 是同一个对话框、同样的字，只多了一句 “This cannot be undone.”，理由框里先填好这条质疑的理由（可以改；服务端的 decide 本来就收 <code>note</code>，不用改服务端）。焦点先在 Cancel，红色的 Retire 才退役。</p>
+  <div class="b-row">
+    <figure class="b-frame" style="width:470px">
+      <figcaption><span class="tag rec">提案</span> Web 桌面<span class="b-dim">Review 页上弹出；对话框是页面自己的 Dialog</span></figcaption>
+      <div class="b-shot" data-w="520"><img src="shots/web-prop-retire-dialog.png" alt="">
+        <div class="b-ring b-g" data-box="24,48,472,44"></div><div class="b-badge b-g" data-box="24,48,472,44" data-side="right">4</div>
+        <div class="b-ring b-g" data-box="24,108,472,150"></div><div class="b-badge b-g" data-box="24,108,472,150" data-side="right">5</div>
+      </div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption><span class="tag rec">提案</span> Web 手机</figcaption>
+      <div class="b-shot b-phone" data-w="390"><img src="shots/web-phone-prop-retire-dialog.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption><span class="tag now">已有</span> iPhone<span class="b-dim">条目页的这个 alert（真实画面，理由是手打的）；从质疑卡打开时用它，理由预填，说明加一句</span></figcaption>
+      <div class="b-shot b-phone" data-w="402"><img src="shots/iphone-entry-retire-alert.png" alt=""><div class="b-ring b-g" data-box="68,218,265,64"></div><div class="b-badge b-g" data-box="68,218,265,64" data-side="right">4</div></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption><span class="tag rec">提案</span> Android<span class="b-dim">条目页的 AlertDialog，照真实对话框的颜色画</span></figcaption>
+      <div class="b-shot b-phone" data-w="1080"><img src="shots/android-prop-retire-dialog.png" alt=""></div>
+    </figure>
+  </div>
+  <ul class="b-notes" style="width:1560px">
+    <li class="n g" data-n="4"><b>说明</b>：“Agents stop getting this entry. It stays in History, struck through, and the reason goes on the record. This cannot be undone.” 前两句是条目页现有的原文，三端相同。</li>
+    <li class="n g" data-n="5"><b>理由</b>预填质疑自己的理由，记进退役记录。现在 Review 里直接按 Retire 时，服务端写的是 “Retired in answer to a challenge: …” 加同一段理由，所以记录内容不变，只是你能先看到、能改。</li>
+  </ul>
+</section>
+
+<section class="b-part">
+  <h2>按下之后</h2>
+  <div class="b-row">
+    <figure class="b-frame" style="width:520px">
+      <figcaption><span class="tag rec">提案</span> Web 桌面，按 Keep 后 700 ms<span class="b-dim">toast 用按钮上的词：Kept（Amend → Amended，Retire → Retired）</span></figcaption>
+      <div class="b-shot" data-w="1110"><img src="shots/web-desk-prop-after.png" alt=""><div class="b-ring b-g" data-box="735,15,357,55"></div><div class="b-badge b-g" data-box="735,15,357,55">6</div></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption><span class="tag now">现在</span> Web 手机<span class="b-dim">下一张停在原处</span></figcaption>
+      <div class="b-shot b-phone" data-w="390"><img src="shots/web-phone-press-250ms.png" alt=""><div class="b-ring" data-box="31,454,328,42"></div></div>
+    </figure>
+    <figure class="b-frame" style="width:230px">
+      <figcaption><span class="tag rec">提案</span> Web 手机<span class="b-dim">下一张从它的顶上开始</span></figcaption>
+      <div class="b-shot b-phone" data-w="390"><img src="shots/web-phone-prop-after.png" alt=""><div class="b-ring b-g" data-box="17,116,356,400"></div><div class="b-badge b-g" data-box="17,116,356,400" data-side="right">7</div></div>
+    </figure>
+    
+    
+  </div>
+  <ul class="b-notes" style="width:1560px">
+    <li class="n g" data-n="6"><b>toast 的词和按钮一样。</b>现在是 “Re-confirmed”。改成 “Kept” 之后，按错时一眼就能看出来：想退役，看到的却是 Kept。</li>
+    <li class="n g" data-n="7"><b>手机上，下一张从它的顶上开始</b>：先看到它的头和琥珀色的理由，要往下滑才到按钮，手指下面不再是下一张的按钮。桌面不变（卡在列表里，按钮不会落到指针下）。</li>
+  </ul>
+</section>
+
+<section class="b-part">
+  <h2>要你定的</h2>
+  <div class="b-opts">
+    <div class="b-opt b-rec"><h4><span class="tag rec">推荐</span> D1 按钮名就是结果</h4>
+      <p>Re-confirm → <b>Keep</b>，Amend → <b>Amend…</b>，Retire → <b>Retire…</b>。toast 跟着改：Kept、Amended、Retired。</p>
+      <p class="b-con">备选：保留 “Re-confirm”，只加 After 一行。词本身的歧义还在。</p></div>
+    <div class="b-opt b-rec"><h4><span class="tag rec">推荐</span> D2 质疑卡没有实心主按钮</h4>
+      <p>三个一样分量，Retire… 用红色排最后。理由：Review 里实心按钮的意思一直是「照提议做」，质疑卡上没有一个回答等于「照提议做」，所以不放。</p>
+      <p class="b-con">备选：Keep 仍实心（保持 09-25 的「主按钮在最上」）。按错的习惯会留下。</p></div>
+    <div class="b-opt b-rec"><h4><span class="tag rec">推荐</span> D3 Retire… 先确认</h4>
+      <p>用条目页已有的 Retire… 对话框，理由预填质疑的理由，焦点在 Cancel。三端都已有这个对话框。</p>
+      <p class="b-con">备选：卡内就地问一句（像跨项目卡的 Refuse… → “Yes, refuse”）。少一层弹窗，但改不了理由。</p></div>
+    <div class="b-opt b-rec"><h4><span class="tag rec">推荐</span> D4 按下之后</h4>
+      <p>手机上下一张从它的顶上开始；toast 用按钮上的词。不加撤回：Keep 之后本来就能在条目页退役，Retire 按契约回不去，对话框和 After 都写明了。</p>
+      <p class="b-con">备选：照 11-02 审批 sheet 的做法，答完的卡先变成「Kept · 刚刚由你回答」的记录，约 2 秒再离开。多一个状态要三端实现和测。</p></div>
+    <div class="b-opt b-rec"><h4><span class="tag rec">推荐</span> D5 decision 类条目不给 Amend…</h4>
+      <p>契约规定 decision 只能被取代、不能改写（<code>KIND_SPECS.decision.amendable = false</code>），现在按 Amend 会被服务端拒绝。claims 那条（decision）就是这样。</p>
+      <p class="b-con">备选：保持现状，按了再报错。</p></div>
+    <div class="b-opt"><h4>完成标准（请你定）</h4>
+      <p>建议：三端的质疑卡都按 D1–D5 实现；web 用真栈、iPhone 用模拟器、Android 用模拟器各截一张，和这张图逐项对照；web vitest、OrbitKit 对照测试、Android 单测全绿；Mac / iOS 构建过 CI。</p></div>
+  </div>
+</section>
+
+<section class="b-part">
+  <h2>界面文案（英文，三端相同）</h2>
+  <table class="b-table">
+    <tr><th>位置</th><th>现在</th><th>提案</th></tr>
+    <tr><td>回答 1</td><td>Re-confirm（实心）</td><td>Keep</td></tr>
+    <tr><td>回答 2</td><td>Amend</td><td>Amend…（decision 类条目不显示）</td></tr>
+    <tr><td>回答 3</td><td>Retire</td><td>Retire…（红色）</td></tr>
+    <tr><td>After · Keep</td><td>—</td><td>Agents get this entry again. You can still retire it later.</td></tr>
+    <tr><td>After · Amend</td><td>—</td><td>Agents get your version, and its anchors are checked again.</td></tr>
+    <tr><td>After · Retire</td><td>—</td><td>Agents stop getting it. This cannot be undone.</td></tr>
+    <tr><td>Retire… 对话框说明</td><td>（条目页现有）Agents stop getting this entry. It stays in History, struck through, and the reason goes on the record.</td><td>同一句，后面加 “This cannot be undone.”（条目页的对话框也加）</td></tr>
+    <tr><td>Retire… 理由框</td><td>（条目页现有）空，提示 “Why it no longer holds”</td><td>从质疑进来时预填质疑的理由</td></tr>
+    <tr><td>toast</td><td>Re-confirmed</td><td>Kept</td></tr>
+    <tr><td>wiki 聊天卡的提示</td><td>Re-confirm, amend or retire the entry in Review.</td><td>Keep, amend or retire the entry in Review.（契约 <code>chat.copy.card.appliedInReviewNote</code>）</td></tr>
+    <tr><td>不变</td><td colspan="2">卡下的 “Agents stop getting this entry until you answer.”；服务端的回答名 <code>reconfirm</code> / <code>amend</code> / <code>retire</code>；Retire 卡的 Retire / Keep</td></tr>
+  </table>
+  <p class="b-sub" style="margin-top:14px">你同意之后再动产品代码：web 的 Review 卡和文案，OrbitKit 文案和对照测试，OrbitApp 的卡和对话框，Android 的卡和对话框，契约里那句聊天卡提示和 docs。三端一起改，各跑相关测试，再各截一张真实画面和这张图对照。</p>
+</section>
+
+</body></html>

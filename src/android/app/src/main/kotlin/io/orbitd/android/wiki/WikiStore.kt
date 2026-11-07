@@ -640,13 +640,14 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
      * what the server recorded for the op: `conflict` (the entry moved past it, or is no longer active) and
      * `withdrawn` applied nothing, and say so — but a challenge's Retire is recorded `withdrawn` when it went
      * through (see [WikiLogic.decisionRefusal]). An op that went through leaves the queue at once (`answered`),
-     * and the reads catch the queue, the drawer's count and the home page up behind it. */
+     * and the reads catch the queue, the drawer's count and the home page up behind it. [note] goes on the record with
+     * the answer: a challenge's Retire… says why. */
     suspend fun decide(card: WikiLogic.ReviewCard, action: String, reason: String? = null,
-        edited: JsonObject? = null): String? {
+        edited: JsonObject? = null, note: String? = null): String? {
         val subject = WikiLogic.knownTitle(card, card.op.entryId?.let { current.detail(it)?.entry })
         return owned({ refusal -> notice(refusal, WikiLogic.decidedToast(card.op.op, action), subject) }) {
             val refusal = try {
-                val answer = client.decide(card.changeset.id, card.op.id, action, edited, reason)
+                val answer = client.decide(card.changeset.id, card.op.id, action, edited, reason, note)
                 outdate(REVIEW, SPACES, HOME, ACTIVITY)
                 WikiLogic.decisionRefusal(WikiLogic.recordedDecision(answer, card.op.id), card.op.op, action)
             } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { reloadAfterWrite(); return@owned wikiRefusal(error) }

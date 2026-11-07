@@ -251,9 +251,18 @@ public enum WikiModeCopy {
 
     // MARK: a challenge's answers
 
-    public static let reconfirm = "Re-confirm"                                    // WIKI_RECONFIRM
+    // The answers say what becomes of the entry (owner, 2026-11-07, docs/mocks/wiki-challenge-answers): Keep is
+    // `reconfirm`, and the two that ask first end in an ellipsis. None of them is the card's filled answer. `amend`
+    // and `retire` stay the words of the form and the dialog those two open, and of the After row.
+    public static let reconfirm = "Keep"                                          // WIKI_RECONFIRM
     public static let amend = "Amend"                                             // WIKI_AMEND
+    public static let amendAnswer = "Amend…"                                      // WIKI_AMEND_ANSWER
     public static let retire = "Retire"                                           // WIKI_RETIRE
+    public static let retireAnswer = "Retire…"                                    // WIKI_RETIRE_ANSWER
+    /// The After row above the answers: what each one does to the entry, and that Retire cannot be undone.
+    public static let afterKeep = "Agents get this entry again. You can still retire it later."   // WIKI_CHALLENGE_AFTER_KEEP
+    public static let afterAmend = "Agents get your version, and its anchors are checked again."  // WIKI_CHALLENGE_AFTER_AMEND
+    public static let afterRetire = "Agents stop getting it. This cannot be undone."              // WIKI_CHALLENGE_AFTER_RETIRE
     public static let challengeWaits = "Agents stop getting this entry until you answer."   // WIKI_CHALLENGE_WAITS
     public static let challenged = "Challenged"                                   // WIKI_CHALLENGED
     public static let amendNote = "Your version replaces the entry, and its anchors are checked again."
@@ -624,5 +633,35 @@ public enum WikiModeLogic {
             .filter { $0.state == .changed || $0.state == .missing }
             .sorted { ($0.at ?? "") > ($1.at ?? "") }
             .first?.ref
+    }
+
+    /// Whether a challenge can be answered with Amend…: every kind but a decision, which is superseded and never
+    /// amended (contract `kinds.decision.amendable`: the server refuses its amend with WIKI_SCHEMA). An entry not
+    /// read yet, or of a kind this build does not know, keeps the answer and leaves the refusal to the server.
+    public static func amendable(_ kind: WikiEntryKind?) -> Bool {
+        kind != .decision
+    }
+
+    /// One line of a challenge's After row: an answer's word and what it does to the entry.
+    public struct AfterLine: Equatable, Sendable {
+        public let answer: String
+        public let effect: String
+        /// Retire's line, whose word is drawn in the destructive colour.
+        public let destructive: Bool
+
+        public init(answer: String, effect: String, destructive: Bool = false) {
+            self.answer = answer
+            self.effect = effect
+            self.destructive = destructive
+        }
+    }
+
+    /// The After row above a challenge's answers, in their order: Keep, Amend (only when the kind can be amended),
+    /// Retire — so a decision's card says two.
+    public static func challengeAfter(kind: WikiEntryKind?) -> [AfterLine] {
+        var lines = [AfterLine(answer: WikiModeCopy.reconfirm, effect: WikiModeCopy.afterKeep)]
+        if amendable(kind) { lines.append(AfterLine(answer: WikiModeCopy.amend, effect: WikiModeCopy.afterAmend)) }
+        lines.append(AfterLine(answer: WikiModeCopy.retire, effect: WikiModeCopy.afterRetire, destructive: true))
+        return lines
     }
 }
