@@ -69,7 +69,7 @@ enum class CardVerb(val label: String) {
     CONFIRM_MERGE("Merge"), DECLINE_MERGE("Not now"), CANCEL_MERGE("Cancel merge"),
     WIKI_ACCEPT("Accept"), WIKI_EDIT("Save edit"), WIKI_REJECT("Reject"), WIKI_CONFIRM("Confirm entry"),
     WIKI_REVERT("Revert run"), WIKI_REJECT_ENTRY("Reject entry"), PLAN_CONFIRM("Confirm plan"), PLAN_ACCEPT("Accept proposal"), PLAN_REJECT("Reject proposal"),
-    WIKI_RECONFIRM("Re-confirm entry"), WIKI_AMEND("Amend entry"), WIKI_RETIRE("Retire entry"),
+    WIKI_RECONFIRM("Keep entry"), WIKI_AMEND("Amend entry"), WIKI_RETIRE("Retire entry"),
     WATCH_PAUSE("Pause watch"), WATCH_RESUME("Resume watch"), WATCH_CANCEL("Cancel watch"),
     REOPEN_TASK("Reopen"), DECIDE_MYSELF("Decide it myself"),
 }

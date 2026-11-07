@@ -73,7 +73,7 @@ internal fun UsageWindowRow(row: UsageRow, resets: String?, withGroup: Boolean =
         if (withGroup) row.groupLabel?.let { Text(it, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)) }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(row.label, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold))
-            Text("${row.percent}%${if (row.remaining) " remaining" else ""}", style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+            Text(row.reading, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
         }
         Gauge(row.gaugeFraction, if (row.spent) Ink.red else if (row.nearLimit) Ink.amber else MaterialTheme.colorScheme.primary)
         resets?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = if (row.nearLimit) Ink.amber else Ink.muted) }

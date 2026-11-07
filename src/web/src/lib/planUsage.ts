@@ -17,6 +17,8 @@ export interface PlanUsageDisplayRow {
   percent: number;
   nearLimit: boolean;
   remaining?: boolean;
+  /** Replaces the percent text when set (Cursor included usage as "$12.34 left"). */
+  headline?: string;
 }
 
 export interface PlanUsageSectionInfo {
@@ -241,22 +243,71 @@ function codexRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
   });
 }
 
+/** Cursor's included-allowance cents as "$12.34 left" (whole dollars when exact). */
+export function cursorCentsLeftLabel(cents: number): string {
+  const dollars = Math.max(0, cents) / 100;
+  const text = Number.isInteger(dollars) ? dollars.toFixed(0) : dollars.toFixed(2);
+  return `$${text} left`;
+}
+
 /**
  * A Cursor CLI account's included usage (PlanUsageIncludedUsage) as rows: one window, its period's —
- * a paid plan's week, else the billing month — and only while Cursor reports some of it used. Its 0% is
- * no reading (docs/cursor-runtime-contract.md §11: the Free plan's requests and Auto never move it), so
- * an account with none has no row, and every reader says "Usage unavailable" rather than draw 0%.
- * Whether the account is spent is not a reading at all but a turn that met the limit (cursorUsageLimit).
+ * a paid plan's week, else the billing month. Prefer Cursor's dollar remaining/limit when present
+ * (including a true $0 left or a full allowance). Else fall back to percentUsed above 0 — its 0% is
+ * no reading (docs/cursor-runtime-contract.md §11: Free requests and Auto never move it), so an
+ * account with neither dollars nor a percent has no row, and every reader says "Usage unavailable"
+ * rather than draw 0%. Whether the account is spent is not a reading but a turn that met the limit
+ * (cursorUsageLimit).
  */
 function cursorRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
   const included = usage.includedUsage;
-  const used = included?.percentUsed;
-  if (!included || typeof used !== 'number' || !Number.isFinite(used) || used <= 0) return [];
+  if (!included) return [];
+  const label = included.period === 'weekly' ? 'Weekly limit' : 'Monthly limit';
+  const resets = included.resetsAt ? { resetsAt: included.resetsAt } : {};
+  const allowance = included.limitCents;
+  const remaining = included.remainingCents;
+  if (
+    typeof allowance === 'number' &&
+    Number.isFinite(allowance) &&
+    allowance > 0 &&
+    typeof remaining === 'number' &&
+    Number.isFinite(remaining)
+  ) {
+    const used = Math.max(0, Math.min(100, ((allowance - remaining) / allowance) * 100));
+    const left = Math.max(0, Math.min(100, (remaining / allowance) * 100));
+    return [
+      {
+        key: 'included',
+        label,
+        window: { utilization: used, ...resets },
+        percent: clampPercent(left),
+        nearLimit: used >= 90,
+        remaining: true,
+        headline: cursorCentsLeftLabel(remaining),
+      },
+    ];
+  }
+  if (typeof remaining === 'number' && Number.isFinite(remaining)) {
+    // Cursor named how much is left but not the allowance — show the dollars, no bar share.
+    return [
+      {
+        key: 'included',
+        label,
+        window: { utilization: 0, ...resets },
+        percent: 0,
+        nearLimit: remaining <= 0,
+        remaining: true,
+        headline: cursorCentsLeftLabel(remaining),
+      },
+    ];
+  }
+  const used = included.percentUsed;
+  if (typeof used !== 'number' || !Number.isFinite(used) || used <= 0) return [];
   return [
     {
       key: 'included',
-      label: included.period === 'weekly' ? 'Weekly limit' : 'Monthly limit',
-      window: { utilization: used, ...(included.resetsAt ? { resetsAt: included.resetsAt } : {}) },
+      label,
+      window: { utilization: used, ...resets },
       percent: clampPercent(used),
       nearLimit: used >= 90,
     },

@@ -236,7 +236,7 @@ private fun AccountPoolPage(pool: Pool, now: Long, pause: suspend (PoolMember, I
                         }
                         quota?.let { row ->
                             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("${row.percent}%", style = MaterialTheme.typography.bodySmall, color = Ink.muted)
+                                Text(row.reading, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                                 Gauge(row.percent / 100f, if (row.percent >= 90) Ink.amber else MaterialTheme.colorScheme.primary, Modifier.width(96.dp))
                                 Text(row.label, style = MaterialTheme.typography.labelSmall, color = Ink.muted)
                             }
