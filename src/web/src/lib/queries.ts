@@ -84,6 +84,7 @@ import {
 } from './taskPages';
 import { mergeWatches } from './watches';
 import { integrationInFlight, pollWhileInFlight, streamPoll, streamStaleTime } from './listBudget';
+import { readOpenList, type OpenListAnswer } from './openListDelta';
 
 export type { ConfiguredProvider };
 
@@ -289,16 +290,23 @@ async function fetchSessions(
   tagId: string | null,
   limit: number | null,
 ): Promise<SessionListItem[]> {
-  const path = (requestedView: string | null): string => {
+  const path = (requestedView: string | null, since?: string): string => {
     const qs = new URLSearchParams();
     if (runnerId) qs.set('runnerId', runnerId);
     if (workspaceId) qs.set('workspaceId', workspaceId);
     if (requestedView) qs.set('view', requestedView);
     if (tagId) qs.set('tagId', tagId);
     if (limit) qs.set('limit', String(limit));
+    if (since !== undefined) qs.set('since', since);
     const suffix = qs.toString();
     return `/sessions${suffix ? `?${suffix}` : ''}`;
   };
+  // A whole Open list is read as a delta against the copy this scope last read (lib/openListDelta).
+  // A page is not: the delta read answers the whole scope and has no page size.
+  if (view === 'open' && !limit) {
+    return readOpenList(JSON.stringify([runnerId, workspaceId, tagId]), (since) =>
+      api<OpenListAnswer<SessionListItem>>(path(view, since)));
+  }
   const rows = await api<SessionListItem[]>(path(view));
   if (!view || view === 'open') return rows;
   const expected = view === 'completed' ? 'COMPLETED' : 'TRASH';
@@ -694,7 +702,8 @@ export const projectCoordinatorStatusQuery = (projectId: string) =>
     queryKey: ['project', projectId, 'coordinator', 'status'] as const,
     queryFn: () =>
       api<CoordinatorStatus>(`/projects/${encodeURIComponent(projectId)}/coordinator/status`),
-    refetchInterval: 15_000,
+    // Project and member-session events refresh it (useControlPlane); this is the safety read.
+    refetchInterval: streamPoll(15_000),
   });
 
 /** One entry of the blocking-root leaderboard: an unfinished task and how much unfinished work
@@ -788,9 +797,11 @@ export const projectReadyToRunQuery = (projectId: string, limit = 5) =>
       api<ProjectReadyToRun>(
         `/projects/${encodeURIComponent(projectId)}/panorama/ready?limit=${limit}`,
       ),
+    // Task, project and member-session events refresh it (useControlPlane); this is the safety read,
+    // and the outage backoff while the stream is down, no faster than its old cadence.
     refetchInterval: (query) => {
       const data = query.state.data;
-      return (data?.queuedCount ?? 0) + (data?.runningCount ?? 0) > 0 ? 5_000 : 15_000;
+      return streamPoll((data?.queuedCount ?? 0) + (data?.runningCount ?? 0) > 0 ? 5_000 : 15_000)(query);
     },
   });
 
@@ -811,7 +822,7 @@ export const projectDependencyGraphQuery = (projectId: string) =>
       api<ProjectDependencyGraphResponse>(
         `/projects/${encodeURIComponent(projectId)}/dependency-graph`,
       ),
-    refetchInterval: 30_000,
+    refetchInterval: streamPoll(30_000),
   });
 
 // ── Unit L7: the attribution boundary, and the two writes that cross it ───────────────────────

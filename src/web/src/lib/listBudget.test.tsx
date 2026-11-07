@@ -367,7 +367,6 @@ describe('R5: an event reads only the lists it is about', () => {
     const from = mark();
 
     await publish('notification', { title: 'Hello' });
-    await publish('sessions.list_changed', { version: 'v2' });
     await publish('runner.changed', { id: 'R1' });
     await advance(5_000);
     expect(h.calls.slice(from).map((call) => call.path), 'an unmapped event read a list').toEqual([]);

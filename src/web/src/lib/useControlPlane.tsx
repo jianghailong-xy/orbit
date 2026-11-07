@@ -20,6 +20,11 @@ const PROJECTS_REFRESH_DEBOUNCE_MS = 2_000;
 // where 5s of staleness costs nothing, so refetching it faster than that is strictly more work than
 // the poll this stream replaced.
 const LISTS_MIN_INTERVAL_MS = 5_000;
+// The project page's panorama reads (the header, the chain strip, ready-to-run, the dependency
+// graph, the coordinator's status) are read on the events that can move them at most this often:
+// `task.changed` names no project, so while a run writes tasks every one of them may have moved, and
+// read on each window they would be read far more often than the polls they replace.
+const PROJECT_PAGE_MIN_INTERVAL_MS = 5_000;
 // The server pings ~every 20s (EventsController keepalive); 45s of total silence means the socket
 // went half-dead without firing onerror. EventSource has no read timeout, so we watch for it.
 const WATCHDOG_SILENCE_MS = 45_000;
@@ -61,6 +66,16 @@ export function useRefreshSessionLists(): () => void {
   }, [qc, viaStream]);
 }
 
+/** An Open list query (`sessionsQuery`, view Open or the server's default, which is Open). */
+const isOpenList = (queryKey: readonly unknown[]): boolean =>
+  queryKey[0] === 'sessions' && queryKey.length === 6 && (queryKey[3] === 'open' || queryKey[3] === null);
+
+/** A read of a project page's panorama: what useControlPlane re-reads on the events that move it. */
+const isProjectPageRead = (queryKey: readonly unknown[], projectId: string): boolean =>
+  queryKey[0] === 'project' &&
+  (!projectId || queryKey[1] === projectId) &&
+  (queryKey[2] === 'panorama' || queryKey[2] === 'dependency-graph' || queryKey[2] === 'coordinator');
+
 /** The ids a `task.changed` names: `taskIds`, and `taskId` from an older server. */
 const taskIdsOf = (data: { taskId?: unknown; taskIds?: unknown } | null | undefined): string[] => [
   ...(Array.isArray(data?.taskIds) ? data.taskIds.filter((id): id is string => typeof id === 'string') : []),
@@ -92,6 +107,15 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
     let listsTimer: ReturnType<typeof setTimeout> | undefined;
     let projectsTimer: ReturnType<typeof setTimeout> | undefined;
+    let projectPagesTimer: ReturnType<typeof setTimeout> | undefined;
+    let projectPagesReadAt = -Infinity;
+    // The projects whose page reads are due ('' for every project).
+    const projectPagesDue = new Set<string>();
+    // Whether this connection has delivered a `sessions.list_changed`. The server sends the first
+    // within a second of a connection that declared the hint (docs/realtime-control-plane-stream.md
+    // §4.8); from then on that hint is what reads the Open lists, and no other event reads them. Until
+    // then (a server that predates the hint), every session event reads them as it always did.
+    let hinted = false;
     const projectSessionTimers = new Map<string, ReturnType<typeof setTimeout>>();
     let listsRefetchedAt = 0;
     let stopped = false;
@@ -163,11 +187,43 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       }
     });
 
+    // The session lists an event moves. Once the stream carries the Open list's hint, the Open lists
+    // and the tallies drawn from them are left to it (refetchOpenList): every write to what an Open
+    // row draws moves the version the hint carries, so the event that accompanies it would only read
+    // them a second time. Completed and Trash have no hint, and are still read on the event.
     const refetchSessions = (): void => {
+      if (hinted) {
+        refresh({ predicate: ({ queryKey }) => queryKey[0] === 'sessions' && !isOpenList(queryKey) });
+        return;
+      }
       refresh({ queryKey: ['sessions'] });
       // The sidebar's per-workspace tallies are derived from the same rows, but keyed apart so the
       // list's optimistic edits can't touch them — so they need their own invalidation here.
       refresh({ queryKey: ['session-counts'] });
+    };
+    // `sessions.list_changed`: the Open list may read differently now. Each Open list on screen is
+    // read once, as a delta against its own copy (lib/openListDelta), which the server answers empty
+    // without building anything when nothing it shows moved. Before this connection's first hint the
+    // session group reads the Open lists (refetchSessions), so this reads nothing then: a write's
+    // read, or a reconnect's, would otherwise read each of them twice.
+    const refetchOpenList = (): void => {
+      if (!hinted) return;
+      refresh({ predicate: ({ queryKey }) => isOpenList(queryKey) });
+      refresh({ queryKey: ['session-counts'] });
+    };
+    // The project pages on screen: the events below name the project, or ('') every project. One
+    // read per PROJECT_PAGE_MIN_INTERVAL_MS at most, and never sooner than the coalescing window.
+    const refetchProjectPages = (projectId: string): void => {
+      projectPagesDue.add(projectId);
+      if (projectPagesTimer) return;
+      const wait = Math.max(REFRESH_DEBOUNCE_MS, PROJECT_PAGE_MIN_INTERVAL_MS - (Date.now() - projectPagesReadAt));
+      projectPagesTimer = setTimeout(() => {
+        projectPagesTimer = undefined;
+        projectPagesReadAt = Date.now();
+        const due = [...projectPagesDue];
+        projectPagesDue.clear();
+        refresh({ predicate: ({ queryKey }) => due.some((id) => isProjectPageRead(queryKey, id)) });
+      }, wait);
     };
     // The lists index, rate-limited to one refetch per LISTS_MIN_INTERVAL_MS. Leading —
     // an idle tab still reflects a single task change immediately — then at most one trailing
@@ -309,6 +365,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     };
     const REFETCH: Record<string, () => void> = {
       sessions: refetchSessions,
+      openList: refetchOpenList,
       tasks: refetchTasks,
       workspaces: refetchWorkspaces,
       tags: refetchTags,
@@ -326,6 +383,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     // refresh that too — and a held criteria proposal does for the same reason, since its
     // coordinator's row counts it in pendingApprovals. The watches are not here: see watchFollows.
     const groupsFor = (type: string): string[] => {
+      if (type === 'sessions.list_changed') return ['openList'];
       if (type === 'task.changed') return ['tasks', 'decisions'];
       if (type.startsWith('task.')) return ['tasks']; // incl. task.list.changed
       // A workspace made or edited (an agent's workspace_create/workspace_update) arrives as
@@ -390,6 +448,8 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     };
     refreshSessionListsRef.current = () => {
       pending.add('sessions');
+      // The server's hint for the write joins this read in the window.
+      pending.add('openList');
       openWindow();
     };
     // What a stream that opened after a gap reads again (W6): the lists and details on screen, a few
@@ -411,6 +471,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         // the gap would otherwise wait out its poll.
         refetchCriteriaDecisions('');
         refresh({ queryKey: ['project-sessions'] });
+        refresh({ predicate: ({ queryKey }) => isProjectPageRead(queryKey, '') });
       } finally {
         answered = null;
       }
@@ -431,8 +492,10 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     };
     function connect(): void {
       dropped = false;
+      hinted = false;
       lastMsgAt = Date.now();
-      es = new EventSource(`/api/events?access_token=${encodeURIComponent(getToken() ?? '')}`);
+      // `hints=list_changed` asks for the Open list's hint (docs/realtime-control-plane-stream.md §4.8).
+      es = new EventSource(`/api/events?access_token=${encodeURIComponent(getToken() ?? '')}&hints=list_changed`);
       es.onopen = () => {
         lastMsgAt = Date.now();
         setLive(true);
@@ -474,6 +537,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         // along as an optional extra rather than a requirement, because the user-scoped library
         // events (tag/provider/task-list) legitimately carry none.
         if (!ev?.type || ev.type === 'ping') return;
+        if (ev.type === 'sessions.list_changed') hinted = true;
         const projectId = ev.data?.projectMembership?.projectId;
         const id = ev.data?.id;
         if (ev.type === 'session.updated' || ev.type === 'session.created' || ev.type === 'session.ended') {
@@ -503,7 +567,14 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
             }
           }
         }
-        if (ev.type === 'project.changed' && typeof id === 'string' && id) scheduleProjectSessions(id);
+        if (ev.type === 'project.changed' && typeof id === 'string' && id) {
+          scheduleProjectSessions(id);
+          refetchProjectPages(id);
+        }
+        // What moves a project page's panorama: its own change, a member session's, and any task's
+        // (`task.changed` names tasks, not their project).
+        if (ev.type.startsWith('session.') && typeof projectId === 'string' && projectId) refetchProjectPages(projectId);
+        if (ev.type === 'task.changed') refetchProjectPages('');
         // The session an event is about: the envelope's, or a session event's own id from a peer
         // that leaves the envelope's empty. An approval's id is the approval's.
         const subject = ev.sessionId || (ev.type.startsWith('session.') && typeof id === 'string' ? id : '');
@@ -564,6 +635,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       if (refreshTimer) clearTimeout(refreshTimer);
       if (listsTimer) clearTimeout(listsTimer);
       if (projectsTimer) clearTimeout(projectsTimer);
+      if (projectPagesTimer) clearTimeout(projectPagesTimer);
       for (const timer of projectSessionTimers.values()) clearTimeout(timer);
       unsubscribeCache();
       queued.clear();

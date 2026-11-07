@@ -11,6 +11,7 @@ import {
   type ProjectManualReady,
 } from '@orbit/shared';
 import { api } from '../api';
+import { streamPoll } from '../lib/listBudget';
 import { DEFAULT_MAIN_BRANCH, mainBranchName } from '../lib/projectStart';
 import { projectIntegrationQuery, projectReadyToRunQuery } from '../lib/queries';
 import { LandingJobsSheet } from './LandingJobsSheet';
@@ -108,7 +109,7 @@ export const projectPanoramaQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId, 'panorama'] as const,
     queryFn: () => api<ProjectPanorama>(`/projects/${encodeURIComponent(projectId)}/panorama`),
-    refetchInterval: 30_000,
+    refetchInterval: streamPoll(30_000),
   });
 
 /** The shapes, in the order they are drawn. Names describe the mark, not the status it stands for. */

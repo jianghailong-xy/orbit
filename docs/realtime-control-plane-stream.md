@@ -332,6 +332,10 @@ GET /api/events?hints=list_changed
   §4.5 的"快照 + 跟随"在这里落地为 `onopen` 里对每组各拉一次。
 - 连上后列表**停掉 `refetchInterval`**:`useControlPlaneLive()` 是那些查询的轮询开关,断流即
   自动恢复轮询,所以没有该端点的老服务器照常工作(§7 的优雅回退在这里落地为一个布尔)。
+- Open 列表(§4.8):流以 `?hints=list_changed` 声明提示。本连接收到第一条 `sessions.list_changed`
+  后,Open 列表与 `session-counts` 只在提示上读(1 s 合并,同一列表至多一个读在途),其它事件不再读它们;
+  整份(无 `limit`)的 Open 列表用 `since=` 增量读,delta 应用在服务端上次给的基底上(`lib/openListDelta.ts`)。
+  项目页 panorama 的读由 `project.changed`、成员会话事件与 `task.changed` 驱动(≥ 5 s 一次),兜底 60 s。
 - 看门狗与原生端同构:服务端每 ~20s 一个 ping,**45s 无任何消息**判定半死并重连
   (`EventSource` 没有读超时,`onerror` 不一定触发)。
 
