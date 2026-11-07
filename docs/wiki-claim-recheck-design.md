@@ -1,7 +1,7 @@
 # Wiki claim recheck: a change on main re-checks what an entry says
 
-Status: draft for the owner's review, 2026-11-06, task `34snwipJZpZ7fBMfDPhqH`. Nothing is implemented yet.
-Decisions D1–D4 (§9) are open; each has a recommended default.
+Status: approved by the owner 2026-11-06 (D1–D4 as recommended); implemented on branch `orbit/task-a-wiki-b45864`,
+not deployed. The measurement did not reach its 80% bar (§7.1).
 
 ## 0. Summary
 
@@ -256,6 +256,32 @@ model directly instead of through the queue.
 
 The replay asks about every sampled entry, so it measures the question and the two asks (§3), not the screen. The
 report says separately which rank the screen would have given each sampled entry and each named case.
+
+### 7.1 Results (2026-11-06 and 11-07): the 80% bar was not met
+
+| | Round 1 (99f4b760f) | Round 2 (e365ca495) |
+| --- | --- | --- |
+| Raters agreeing | 30/30 (kappa 1.00): 25 holds, 3 fixed, 2 obsolete | 24/30 (kappa 0.32): 22 holds, 2 fixed |
+| Recheck = gold | **17/30 = 56.7%** | **17/24 = 70.8%** |
+| holds called fixed or obsolete | 4 fixed | 1 obsolete |
+| holds called unsure | 6 | 6 |
+| fixed or obsolete missed | 3 fixed called holds | 0 |
+| `34ZfFGATAFiBBi9qmqPF7` / `34s2IFZlpqkEDdbKZwcj3` | fixed (wrong when recorded) / obsolete | fixed (wrong when recorded) / obsolete |
+
+Task comments `34tAEF209cmYgKyBHTtlv` and `34tBOKTR5TNf57r6LyoCV` hold the details. Production stayed read-only both
+times: orbit-prod session `34suBpsw6k2yKTA5GGVHq`, `orbit-wiki-worker`, a `default_transaction_read_only` connection whose
+write probe was refused, and the System model called directly, so no queue row or wiki row was written.
+
+What the misses say:
+- **Round 1's four false "fixed"** named the entry's own recorded fix, which a first check's look-back includes. Round
+  2's question (commits split where the entry was recorded, reading rules) removed them.
+- **`unsure` is the larger loss in both rounds** (6 of each). Two round-2 entries name glob paths that the runner reads
+  literally; two had more history than 20 commits and a 6,000-byte diff show; two were second asks that split. The
+  measurement counts unsure as a miss, though in the product it acts on nothing, exactly as holds does.
+- **A vanished term is not always stale:** one entry's test file was deleted while the lesson stayed current.
+
+Before this goes live, a next iteration would read glob paths as globs, give a first check more history around the
+commits that changed a term's count, and measure again on a fresh sample. Nothing here is deployed.
 
 ## 8. What needs the owner
 
