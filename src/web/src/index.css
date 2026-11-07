@@ -26761,14 +26761,21 @@ button.agent-progress-agent:hover {
 .wk-chat-body .chat-user-meta > .chat-meta-sep:has(+ .chat-injected-head) { display: none; }
 .wk-chat-empty { margin: 34px 16px; text-align: center; font-size: 13.5px; line-height: 1.7; color: var(--text-2); }
 /* The panel's composer is the session page's (board 43): its box 12px in from the panel's edges, as the short one it
-   replaced was — 374 wide in the default panel, where its toolbar keeps one line. Should the panel be dragged narrower,
-   what gives way is what has a name, as on a phone (the 600px block of .composer-toolbar): the model's name ellipsizes
-   before the mode, the effort, the gauges or Send would shrink — board 43 ⑥ is what squeezing them all looks like. */
-.wk-chat-composer { flex: none; margin: 2px 12px 12px; }
+   replaced was — 374 wide in the default panel, where its toolbar keeps one line as it is. Dragged narrower (to 320),
+   the toolbar does what the session page's does on a phone (the 600px block of .composer-toolbar): tighter gaps, the
+   gauges as shapes only, and if that is still not enough, the model's name gives way before the mode, the effort, the
+   gauges or Send would shrink — board 43 ⑥ is what squeezing them all looks like. */
+.wk-chat-composer { flex: none; margin: 2px 12px 12px; container: wk-chat-composer / inline-size; }
 .wk-chat-composer .composer-toolbar > .composer-pill,
 .wk-chat-composer .composer-toolbar > .composer-usage,
 .wk-chat-composer .composer-toolbar > .orbit-button { flex: none; }
 .wk-chat-composer .composer-toolbar > .composer-model-pill { min-width: 0; flex-shrink: 1; }
+@container wk-chat-composer (max-width: 359px) {
+  .wk-chat-composer .composer-toolbar { gap: 2px; padding: 4px 11.43px 7px; }
+  .wk-chat-composer .composer-toolbar .composer-pill:not(.composer-model-pill) { padding-left: 3px; }
+  .wk-chat-composer .composer-toolbar .composer-usage-pct { display: none; }
+  .wk-chat-composer .composer-toolbar .composer-usage { padding-right: 3px; }
+}
 /* The page and the selection lead the composer's attachment row, drawn as its file chips are (board 43 ④); the quote
    opens with the selection's amber bar. */
 .wk-chat-composer .wk-chat-chip { min-width: 0; max-width: 100%; box-sizing: border-box; }
