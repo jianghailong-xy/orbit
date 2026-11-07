@@ -24,7 +24,9 @@
  *      and the card reads Wiki updated; the next build leaves it as it is: the requirement held;
  *   6. a draft of the plan waiting for the owner refuses a plan card WIKI_PLAN_STALE; Undo is refused; Try again asks for
  *      a failed build again while its version is in force, and not once another is;
- *   7. the next message tells the agent the version the press made.
+ *   7. the next message tells the agent the version the press made;
+ *   8. the wiki moved to Trash (contract `space.trash`), a plan card's press is the plain 404 and stores no version of the
+ *      plan, nor confirms one.
  *
  * Not destructive: every row belongs to the account this run creates.
  */
@@ -583,5 +585,23 @@ test('a plan card: the page brings the plan, the gate answers the agent, one pre
     }, 'Thanks.'));
     assert.match(note ?? '', /<orbit_wiki_drafts applied="1" edited="0" discarded="0" undone="0">/u);
     assert.match(note ?? '', new RegExp(`- ${pub(cardA)} Plan change: applied by the owner\\. It made version 2 of the plan from version 1 and confirmed it`, 'u'));
+  });
+
+  // ── 8 ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('8. a plan card of a wiki in Trash: its press is the plain 404, and stores no version of the plan', async () => {
+    // A card drafted on the version in force (3), which its press would edit and confirm.
+    const drafted = await draft({ kind: 'plan', reason: 'Say how long a respawn takes.', change: { doc: withCovers('What survives a respawn, and how long it takes.') }, idempotencyKey: `plan-d-${RUN}` });
+    assert.equal(drafted.status, 200, drafted.text);
+    const cardD = toUuid(drafted.json.draftId);
+    assert.deepEqual([(await draftRow(cardD)).change.baseVersion, (await card(cardD)).json.state], [3, 'draft']);
+    const trashed = await api('DELETE', `/api/wiki/spaces/${pub(spaceId)}`, ownerToken);
+    assert.equal(trashed.status, 200, trashed.text);
+    const writes = await planWrites();
+    assert.deepEqual([writes.versions, writes.confirmed], [3, [3]], 'the plan as the Trash found it');
+    const pressed = await press(cardD, 'apply');
+    assert.equal(pressed.status, 404, pressed.text);
+    assert.deepEqual(await planWrites(), writes, 'no version stored, none confirmed, no build asked for');
+    const row = await draftRow(cardD);
+    assert.deepEqual([row.decision, row.decided_at, row.change.version], [null, null, null], 'and the card was not pressed');
   });
 });
