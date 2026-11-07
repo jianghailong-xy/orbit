@@ -345,6 +345,8 @@ interface ResolvedSource {
    * A tool call of the calling session's own that is not stored yet (contract `sourceInput.toolUseId`): the runner
    * delivers a turn's calls in batches, so a call made a moment before can be cited before its row exists. It is kept by
    * the tool_use_id it was cited by, its quote unverified, and stored nowhere until the op settles, which resolves it again.
+   * So is one stored without its result yet, whose quote is not in what is stored of it (contract `sourceInput.pending`):
+   * the result comes in a later batch, and the settle checks the quote against the whole record.
    */
   pending?: boolean;
 }
@@ -1815,9 +1817,10 @@ export class WikiService {
     }
 
     // 3. Every source resolves among the owner's own rows, and every quote is in the text it cites. A session's own call
-    //    not stored yet resolves pending where something ahead of the op resolves it again: a card's press, and for any
-    //    other op but a challenge — whose flag is written at once — the owner's decision. A press resolves it as of the
-    //    card it presses (contract `sourceInput.toolUseId`).
+    //    not stored yet — or stored without its result yet, for a quote not in what is stored — resolves pending where
+    //    something ahead of the op resolves it again: a card's press, and for any other op but a challenge — whose flag
+    //    is written at once — the owner's decision. A press resolves it as of the card it presses (contract
+    //    `sourceInput.toolUseId`, `sourceInput.pending`).
     const found = await this.resolveSources(tx, principal, rawOpSources(op), {
       required: requiresSource(opName, principal),
       path: `ops[${seq}].sources`,
@@ -2073,7 +2076,8 @@ export class WikiService {
           draft: prepared.draft,
           changes: prepared.changes,
           payload: prepared.payload,
-          // A source that resolved pending names no row yet: the owner's decision stores it once it does (`settledSources`).
+          // A source that resolved pending names no row yet, or a quote not checked yet: the owner's decision stores it once
+          // it resolves (`settledSources`).
           sources: restored?.sources ?? prepared.sources.filter((source) => source.pending !== true),
           tainted: prepared.tainted,
           proposed: !prepared.applied,
@@ -4831,7 +4835,8 @@ export class WikiService {
    * words verbatim. The literals that takes are read here when the caller has none to give.
    *
    * `path` is where the sources sit in the request, which is how a refusal names the one it is about.
-   * `pending` is a first sight that lets the calling session's own call not stored yet resolve pending;
+   * `pending` is a first sight that lets the calling session's own call not stored yet resolve pending,
+   * and its own call stored without its result yet too, for a quote that is not in what is stored of it;
    * `settles` is the id of the row the op was first recorded as — its changeset op, or the card a press
    * presses — when this resolves it again to settle it (contract `sourceInput.toolUseId`).
    */
@@ -4876,6 +4881,7 @@ export class WikiService {
       }
       const quote = source.quote ?? null;
       let verified = false;
+      let pending = found.pending === true;
       if (quote !== null) {
         if (found.text === null) {
           // Real, but its text is not this database's to read: the calling session's current turn or call may
@@ -4885,15 +4891,20 @@ export class WikiService {
           verified = true;
         } else {
           literals ??= await this.envLiterals(tx, principal.ownerId);
-          if (!quoteHoldsRedacted(found.text, quote, literals)) {
+          if (quoteHoldsRedacted(found.text, quote, literals)) {
+            // The record's words as the redactor leaves them, and not verbatim: kept unverified, as `prepareOp` keeps a
+            // quote its redaction changed.
+            verified = false;
+          } else if (found.resultPending) {
+            // The calling session's own call, stored without its result yet: the quote may be in the result, which the
+            // op's settle reads with the rest of the record. Unverified until then, as a call not stored yet is.
+            pending = true;
+          } else {
             return refuse(
               'WIKI_QUOTE_NOT_FOUND',
               `sources[${index}].quote is not in the record it cites: quote the record's own words, or leave the quote out`,
             );
           }
-          // The record's words as the redactor leaves them, and not verbatim: kept unverified, as `prepareOp` keeps a
-          // quote its redaction changed.
-          verified = false;
         }
       }
       resolved.push({
@@ -4905,7 +4916,7 @@ export class WikiService {
         tainted: found.tainted,
         ownerWords: found.ownerWords,
         sessionId: found.sessionId,
-        ...(found.pending ? { pending: true } : {}),
+        ...(pending ? { pending: true } : {}),
       });
     }
     return { resolved };
@@ -4927,8 +4938,9 @@ export class WikiService {
    * not private: whatever holds a position to its record reads the record through here.
    *
    * `resolving` is a submission's own reading of a tool call (`resolveSources`): at its first sight the calling
-   * session's own call not stored yet is `pending`, and when it settles an op another session's call counts only
-   * if it was stored before `storedBefore`. Every other reader leaves it out and reads as ever.
+   * session's own call not stored yet is `pending`, and its own call stored without its result yet is
+   * `resultPending`; when it settles an op another session's call counts only if it was stored before
+   * `storedBefore`. Every other reader leaves it out and reads as ever.
    */
   async sourceText(
     tx: Tx,
@@ -4948,6 +4960,11 @@ export class WikiService {
     evidenceClass: WikiEvidenceClass | null;
     /** The calling session's own call not stored yet, kept by the tool_use_id it was cited by (`ResolvedSource.pending`). */
     pending?: boolean;
+    /**
+     * The calling session's own call stored without its result yet, at a first sight while the engine is generating for
+     * it: `text` is its input alone, and a quote not in it may be in the result (`ResolvedSource.pending`).
+     */
+    resultPending?: boolean;
   } | null> {
     if (!(WIKI_SOURCE_KINDS as readonly string[]).includes(source.kind)) return null;
     const ownerScoped = { session: { ownerId: principal.ownerId } };
@@ -5018,20 +5035,20 @@ export class WikiService {
       }
       case 'tool_call': {
         if (source.ref === undefined) return null;
-        const { call, uncarried } = await this.citedToolCall(tx, principal, source.ref, ref, resolving.storedBefore);
+        const { call, uncarried, own } = await this.citedToolCall(tx, principal, source.ref, ref, resolving.storedBefore);
         if (!call) {
           // A tool_use_id no session of this owner's carries, cited by a session at a first sight while the engine is
           // generating for it: its own call, which the runner has not delivered yet. Never a row's id, which only a stored
           // row has, and never a session between turns, whose calls are all delivered. It cannot be told from a call no
           // session made, nor from another account's — and must not be, across accounts — so the op's settle tells.
           if (!resolving.pending || !principal.sessionId || ref !== null || !uncarried) return null;
-          const generating = await tx.session.findFirst({
-            where: { id: principal.sessionId, ownerId: principal.ownerId, ...GENERATING_SESSION_FILTER },
-            select: { id: true },
-          });
-          if (!generating) return null;
+          if (!(await this.generatingFor(tx, principal))) return null;
           return { ref: source.ref, text: null, tainted: false, ownerWords: false, sessionId: principal.sessionId, evidenceClass: null, pending: true };
         }
+        // The calling session's own call, cited at a first sight while the engine is generating for it, before the runner
+        // has delivered its result: the tool_use came in one batch and its result comes in a later one. Never another
+        // session's call, nor a call named by its row id, and never a session between turns, whose results are all in.
+        const resultPending = resolving.pending === true && own && call.finishedAt === null && (await this.generatingFor(tx, principal));
         return {
           ref: call.id,
           // The call and its result together (`toolCallText`): a quote of the command is as much the
@@ -5041,6 +5058,7 @@ export class WikiService {
           ownerWords: false,
           sessionId: call.sessionId,
           evidenceClass: wikiEvidenceClass({ kind: 'tool_call', toolName: call.name, command: callCommand(call.input) }),
+          ...(resultPending ? { resultPending: true } : {}),
         };
       }
       case 'task': {
@@ -5177,14 +5195,15 @@ export class WikiService {
    * `storedBefore`, when this settles an op, is the id of the row the op was first recorded as: another
    * session's call counts only if it was stored before that — uuid(7), so the id order is the order the rows
    * were written in — since what was cited pending then can only be the calling session's own call. `uncarried`
-   * says no session of this owner's carries the tool_use_id, as against two that do.
+   * says no session of this owner's carries the tool_use_id, as against two that do; `own`, that the calling
+   * session's own lookup found the call.
    */
   private async citedToolCall(tx: Tx, principal: WikiPrincipal, ref: string, id: string | null, storedBefore?: string) {
-    const select = { id: true, name: true, input: true, output: true, sessionId: true } as const;
+    const select = { id: true, name: true, input: true, output: true, sessionId: true, finishedAt: true } as const;
     const ownerScoped = { session: { ownerId: principal.ownerId } };
     if (id) {
       const call = await tx.toolCall.findFirst({ where: { id, ...ownerScoped }, select });
-      if (call) return { call, uncarried: false };
+      if (call) return { call, uncarried: false, own: false };
     }
     if (principal.sessionId) {
       const own = await tx.toolCall.findFirst({
@@ -5192,7 +5211,7 @@ export class WikiService {
         orderBy: { id: 'asc' },
         select,
       });
-      if (own) return { call: own, uncarried: false };
+      if (own) return { call: own, uncarried: false, own: true };
     }
     const stored = storedBefore ? { id: { lt: storedBefore } } : {};
     const carriers = await tx.toolCall.groupBy({
@@ -5201,13 +5220,27 @@ export class WikiService {
       orderBy: { sessionId: 'asc' },
       take: 2,
     });
-    if (carriers.length !== 1) return { call: null, uncarried: carriers.length === 0 };
+    if (carriers.length !== 1) return { call: null, uncarried: carriers.length === 0, own: false };
     const call = await tx.toolCall.findFirst({
       where: { sessionId: carriers[0].sessionId, toolUseId: ref, ...stored },
       orderBy: { id: 'asc' },
       select,
     });
-    return { call, uncarried: false };
+    return { call, uncarried: false, own: false };
+  }
+
+  /**
+   * Is the engine generating for the calling session now (common/session-generating.ts): a turn running, dispatched or
+   * one the runtime started itself? Only then can a call of its, or a call's result, still be on its way: a session
+   * between turns has had all of them delivered.
+   */
+  private async generatingFor(tx: Tx, principal: WikiPrincipal): Promise<boolean> {
+    if (!principal.sessionId) return false;
+    const generating = await tx.session.findFirst({
+      where: { id: principal.sessionId, ownerId: principal.ownerId, ...GENERATING_SESSION_FILTER },
+      select: { id: true },
+    });
+    return generating !== null;
   }
 
   /** Was this session reading the web? A tool call that fetched or searched is the mark (§4.1 step 9). */

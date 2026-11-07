@@ -1,8 +1,8 @@
 /**
  * What settles a source a chat's card or a session's op cites (contracts/wiki.contract.json `sourceRules.quote`,
- * `sourceInput.toolUseId`; docs/wiki-contract.md §5; wiki chat project task C14, from task C10's findings 1 and 2), held
- * against the production apiserver — `build/main.js`, the whole AppModule — over a real PostgreSQL that
- * `scripts/run-pg-spec.sh` migrates from empty:
+ * `sourceInput.toolUseId`, `sourceInput.pending`; docs/wiki-contract.md §5; wiki chat project tasks C14, from task C10's
+ * findings 1 and 2, and C20), held against the production apiserver — `build/main.js`, the whole AppModule — over a real
+ * PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty:
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-source-settle.pg.spec.ts
  *
@@ -24,7 +24,14 @@
  *      in another of the owner's sessions or in another account's, at the press and at the Accept; one that two sessions
  *      carry, a row id that names no call, a challenge's call not stored yet, and any call no session carries cited by a
  *      session the engine is not generating for, at once. A call another session had stored before the card resolves, as
- *      it always did.
+ *      it always did;
+ *   5. a quote of the output of a call stored without its result — the runner stores a tool_use as a row with its input,
+ *      and its tool_result fills output and finished_at a batch later — cited by a chat and by an ordinary session whose
+ *      turn is running: the card is made, and the op waits for the owner in Manual, Tiered and Automatic alike, a
+ *      reinforce too, with nothing stored for the source; the press, the card's Edit, Review's Accept and Edit read the
+ *      whole record — refused while the result is not stored, verified once it holds the quote, and refused with nothing
+ *      written when it does not. A quote of what is stored (the command) is verified at once and waits for nothing; a
+ *      challenge's, another session's call, a call named by its row id and a session between turns are refused at once.
  *
  * Not destructive: every row belongs to accounts this run creates.
  */
@@ -158,12 +165,21 @@ test('a source is settled where its op is: a redacted quote applies, a call not 
   };
   const propose = (sessionId: string, ops: unknown[], key: string) => api('POST', '/api/runner/wiki/changesets', hpc.token,
     { ops, rationale: 'What the session read.', idempotencyKey: `${key}-${RUN}` }, { 'x-orbit-session-id': pub(sessionId) });
-  const press = (draftId: string) => api('POST', `/api/wiki/chat-drafts/${pub(draftId)}/apply`, ownerToken, {});
+  const press = (draftId: string, what = 'apply', body: unknown = {}) =>
+    api('POST', `/api/wiki/chat-drafts/${pub(draftId)}/${what}`, ownerToken, body);
   const accept = (changesetId: string, opId: string) => api('POST', `/api/wiki/changesets/${pub(changesetId)}/decide`, ownerToken,
     { decisions: [{ opId: pub(opId), action: 'accept' }] });
-  /** A call the runner delivered: stored as the event ingestion stores one, a uuid(7) row of the session's. */
+  /** A call the runner delivered: stored as the event ingestion stores one, a uuid(7) row of the session's, its result in. */
   const storeCall = (sessionId: string, toolUseId: string, output: string, command = 'cat src/runner/enroll.ts') =>
-    prisma.toolCall.create({ data: { sessionId, name: 'Bash', toolUseId, input: { command }, output, isError: false }, select: { id: true } });
+    prisma.toolCall.create({ data: { sessionId, name: 'Bash', toolUseId, input: { command }, output, isError: false, finishedAt: new Date() }, select: { id: true } });
+  /** A call whose tool_use the runner delivered and whose tool_result it has not yet: the row with its input, no output. */
+  const startCall = (sessionId: string, toolUseId: string, command = 'cat lease.conf') =>
+    prisma.toolCall.create({ data: { sessionId, name: 'Bash', toolUseId, input: { command }, isError: false }, select: { id: true } });
+  /** Its tool_result delivered, as writeToolCalls stores one: output, is_error and finished_at on the call's rows. */
+  const finishCall = async (sessionId: string, toolUseId: string, output: string) => {
+    const filled = await prisma.toolCall.updateMany({ where: { sessionId, toolUseId }, data: { output, isError: false, finishedAt: new Date() } });
+    assert.equal(filled.count, 1, `${toolUseId}: its one row filled`);
+  };
   const add = (title: string, sources: unknown[]) => ({
     op: 'add',
     entry: { kind: 'concept', title, summary: `${title}, as the session read it.`, fields: { definition: `${title}.`, boundaries: 'Enrollment only.' } },
@@ -446,5 +462,182 @@ test('a source is settled where its op is: a redacted quote applies, a call not 
     assert.equal(applied.status, 200, applied.text);
     const [entryId] = await appliedEntries(control);
     assert.deepEqual(await sourcesOf(entryId!), [{ kind: 'tool_call', ref: stored.id, quote: LEASE_QUOTE, verified: true }]);
+  });
+
+  // ── 5 ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('5. a quote of the output of a call stored without its result waits for the settle: in a chat and in an ordinary session', async () => {
+    const cite = (title: string, ref: string, quote: string) => [add(title, [{ kind: 'tool_call', ref, quote }])];
+    const decide = (changesetId: string, decision: Record<string, unknown>) =>
+      api('POST', `/api/wiki/changesets/${pub(changesetId)}/decide`, ownerToken, { decisions: [decision] });
+    const FABRICATED = 'lease_seconds = 999';
+    /** What the ingestion's first batch left: a uuid(7) row with the call's input, and no result. */
+    const started = async (sessionId: string, ref: string) => {
+      const row = await startCall(sessionId, ref);
+      assert.match(row.id, /^[0-9a-f]{8}-[0-9a-f]{4}-7/u, 'a uuid(7) id, as the ingestion writes one');
+      const stored = (await sql.query(`SELECT "output", "finished_at" FROM "tool_call" WHERE "id" = $1::uuid`, [row.id])).rows[0];
+      assert.deepEqual(stored, { output: null, finished_at: null }, 'no result stored yet');
+      return row;
+    };
+
+    // A chat: the card is made; a press before the result is stored is refused, and the press after it verifies the quote.
+    await setMode('manual');
+    const chat = await newChat();
+    const chatRef = `toolu_result_chat_${RUN}`;
+    const chatCall = await started(chat, chatRef);
+    let before = await writes();
+    const draftId = drafted(await propose(chat, cite('Leases last two minutes', chatRef, LEASE_QUOTE), 'result-chat'),
+      'a quote of a result not stored yet');
+    assert.deepEqual(await writes(), { ...before, cards: before.cards + 1 }, 'a card, and nothing of the wiki');
+    before = await writes();
+    refused(await press(draftId), 'WIKI_QUOTE_NOT_FOUND', 'a press before the result is stored');
+    assert.deepEqual(await writes(), before, 'nothing written');
+    assert.equal((await draftRow(draftId)).decision, null, 'the card is still a draft');
+    await finishCall(chat, chatRef, LEASE_OUTPUT);
+    const applied = await press(draftId);
+    assert.equal(applied.status, 200, `once the result is stored, the press verifies the quote: ${applied.text}`);
+    const [chatEntry] = await appliedEntries(draftId);
+    assert.deepEqual(await sourcesOf(chatEntry!), [{ kind: 'tool_call', ref: chatCall.id, quote: LEASE_QUOTE, verified: true }],
+      "the call's row id, and its quote verified against the whole record");
+
+    // The card's Edit settles it the same way: the owner's revision rests on the call, its quote verified.
+    const editRef = `toolu_result_edit_${RUN}`;
+    const editCall = await started(chat, editRef);
+    const editCard = drafted(await propose(chat, cite('Reclaim waits a lease', editRef, LEASE_QUOTE), 'result-edit'), 'a card to edit');
+    await finishCall(chat, editRef, LEASE_OUTPUT);
+    const edited = await press(editCard, 'edit', { ops: [{ seq: 0, changes: { title: 'Reclaim waits one lease' } }] });
+    assert.equal(edited.status, 200, edited.text);
+    assert.deepEqual([edited.json.draft.state, edited.json.draft.decision], ['applied', 'edited']);
+    const [editEntry] = await appliedEntries(editCard);
+    assert.deepEqual(await sourcesOf(editEntry!, 2), [{ kind: 'tool_call', ref: editCall.id, quote: LEASE_QUOTE, verified: true }]);
+
+    // A quote the result does not hold: the card is made, and its press and its Edit refuse it once the result is in.
+    const fabRef = `toolu_result_fab_chat_${RUN}`;
+    await started(chat, fabRef);
+    const fabCard = drafted(await propose(chat, cite('Leases last a long time', fabRef, FABRICATED), 'result-fab-chat'),
+      'a quote of a result not stored yet, which it will not hold');
+    await finishCall(chat, fabRef, LEASE_OUTPUT);
+    before = await writes();
+    refused(await press(fabCard), 'WIKI_QUOTE_NOT_FOUND', 'the press of a quote the result does not hold');
+    refused(await press(fabCard, 'edit', { ops: [{ seq: 0, changes: { title: 'Leases last long' } }] }), 'WIKI_QUOTE_NOT_FOUND',
+      'its Edit');
+    assert.deepEqual(await writes(), before, 'nothing written');
+    assert.equal((await draftRow(fabCard)).decision, null, 'the card is still a draft');
+
+    // An ordinary session in Manual: the op waits, nothing is stored for the source, and the Accept settles it.
+    const plain = await ordinarySession();
+    const plainRef = `toolu_result_plain_${RUN}`;
+    const plainCall = await started(plain, plainRef);
+    const proposed = await propose(plain, cite('A reclaim waits one lease', plainRef, LEASE_QUOTE), 'result-plain');
+    assert.equal(proposed.status, 200, proposed.text);
+    assert.deepEqual([proposed.json.ops[0].status, proposed.json.ops[0].waitsFor], ['pending', undefined], 'it waits for the owner');
+    const plainEntry = toUuid(proposed.json.ops[0].entryId);
+    const changesetId = toUuid(proposed.json.changesetId);
+    const opId = toUuid(proposed.json.ops[0].opId);
+    assert.deepEqual(await sourcesOf(plainEntry), [], 'nothing is stored for a quote not checked yet');
+    before = await writes();
+    refused(await accept(changesetId, opId), 'WIKI_QUOTE_NOT_FOUND', 'an Accept before the result is stored');
+    assert.deepEqual(await writes(), before, 'nothing written');
+    assert.equal((await opRow(opId)).decision, 'pending', 'the op still waits');
+    await finishCall(plain, plainRef, LEASE_OUTPUT);
+    const accepted = await accept(changesetId, opId);
+    assert.equal(accepted.status, 200, `once the result is stored, the Accept verifies the quote: ${accepted.text}`);
+    const entry = await entryRow(plainEntry);
+    assert.deepEqual([entry.status, entry.trust, entry.unsupported], ['active', 'confirmed', false], 'live, and resting on its source');
+    assert.deepEqual(await sourcesOf(plainEntry), [{ kind: 'tool_call', ref: plainCall.id, quote: LEASE_QUOTE, verified: true }],
+      'revision 1 holds it now: the row id, its quote verified');
+
+    // Review's Edit settles it as the Accept does.
+    const reviewRef = `toolu_result_review_edit_${RUN}`;
+    const reviewCall = await started(plain, reviewRef);
+    const toEdit = await propose(plain, cite('Reclaim comes after a lease', reviewRef, LEASE_QUOTE), 'result-review-edit');
+    assert.equal(toEdit.status, 200, toEdit.text);
+    assert.equal(toEdit.json.ops[0].status, 'pending');
+    await finishCall(plain, reviewRef, LEASE_OUTPUT);
+    const reviewEdited = await decide(toUuid(toEdit.json.changesetId), { opId: toEdit.json.ops[0].opId, action: 'edit', edited: { title: 'Reclaim comes after one lease' } });
+    assert.equal(reviewEdited.status, 200, reviewEdited.text);
+    assert.deepEqual(await sourcesOf(toUuid(toEdit.json.ops[0].entryId), 2), [{ kind: 'tool_call', ref: reviewCall.id, quote: LEASE_QUOTE, verified: true }],
+      "the owner's revision rests on the call, its quote verified");
+
+    // A quote the result does not hold, in Review: refused at the Accept and at the Edit once the result is in.
+    const fabPlainRef = `toolu_result_fab_plain_${RUN}`;
+    await started(plain, fabPlainRef);
+    const fab = await propose(plain, cite('Leases last a long while', fabPlainRef, FABRICATED), 'result-fab-plain');
+    assert.equal(fab.status, 200, fab.text);
+    assert.equal(fab.json.ops[0].status, 'pending');
+    const fabOp = toUuid(fab.json.ops[0].opId);
+    await finishCall(plain, fabPlainRef, LEASE_OUTPUT);
+    before = await writes();
+    refused(await accept(toUuid(fab.json.changesetId), fabOp), 'WIKI_QUOTE_NOT_FOUND', 'the Accept of a quote the result does not hold');
+    refused(await decide(toUuid(fab.json.changesetId), { opId: pub(fabOp), action: 'edit', edited: { title: 'Leases last long' } }),
+      'WIKI_QUOTE_NOT_FOUND', 'its Edit');
+    assert.deepEqual(await writes(), before, 'nothing written');
+    assert.equal((await opRow(fabOp)).decision, 'pending', 'the op still waits');
+
+    // A reinforce the effect policy applies at once waits too.
+    const leaseEntry = await ownerAdd('Lease length');
+    const reinforceRef = `toolu_result_reinforce_${RUN}`;
+    const reinforceCall = await started(plain, reinforceRef);
+    const reinforce = await propose(plain, [{ op: 'reinforce', entryId: pub(leaseEntry), sources: [{ kind: 'tool_call', ref: reinforceRef, quote: LEASE_QUOTE }] }], 'result-reinforce');
+    assert.equal(reinforce.status, 200, reinforce.text);
+    assert.equal(reinforce.json.ops[0].status, 'pending', 'held for the owner, where a reinforce otherwise applies at once');
+    assert.deepEqual(await sourcesOf(leaseEntry), [], 'nothing added yet');
+    await finishCall(plain, reinforceRef, LEASE_OUTPUT);
+    const reinforced = await accept(toUuid(reinforce.json.changesetId), toUuid(reinforce.json.ops[0].opId));
+    assert.equal(reinforced.status, 200, reinforced.text);
+    assert.deepEqual(await sourcesOf(leaseEntry), [{ kind: 'tool_call', ref: reinforceCall.id, quote: LEASE_QUOTE, verified: true }]);
+
+    // Tiered and Automatic: a quote of what is stored — the command — is verified at once and the op is the mode's; one of
+    // the output waits for the owner, with nothing applied by the mode, beside it or alone.
+    for (const mode of MODES.slice(1)) {
+      await setMode(mode);
+      const session = await ordinarySession();
+      const ref = `toolu_result_${mode}_${RUN}`;
+      const call = await started(session, ref);
+      const commandQuote = { kind: 'tool_call', ref, quote: 'cat lease.conf' };
+      const asEver = await propose(session, [add(`The lease file in ${mode}`, [commandQuote])], `result-command-${mode}`);
+      assert.equal(asEver.status, 200, asEver.text);
+      assert.deepEqual([asEver.json.ops[0].status, asEver.json.ops[0].waitsFor], mode === 'tiered' ? ['applied', undefined] : ['pending', 'verification'],
+        `${mode}: a quote of its command is the mode's, as a stored call's`);
+      assert.deepEqual(await sourcesOf(toUuid(asEver.json.ops[0].entryId)), [{ kind: 'tool_call', ref: call.id, quote: 'cat lease.conf', verified: true }],
+        `${mode}: verified and stored at once`);
+      const held = await propose(session, [add(`Lease seconds in ${mode}`, [commandQuote, { kind: 'tool_call', ref, quote: LEASE_QUOTE }])], `result-output-${mode}`);
+      assert.equal(held.status, 200, held.text);
+      assert.deepEqual([held.json.ops[0].status, held.json.ops[0].waitsFor], ['pending', undefined], `${mode}: a quote of its output waits for the owner`);
+      const heldOp = await opRow(toUuid(held.json.ops[0].opId));
+      assert.deepEqual([heldOp.decision, heldOp.applied_by_mode], ['pending', null], `${mode}: nothing applied by the mode`);
+      const heldEntry = toUuid(held.json.ops[0].entryId);
+      assert.deepEqual(await sourcesOf(heldEntry), [{ kind: 'tool_call', ref: call.id, quote: 'cat lease.conf', verified: true }],
+        `${mode}: the command's quote stored, the output's not yet`);
+      await finishCall(session, ref, LEASE_OUTPUT);
+      const settled = await accept(toUuid(held.json.changesetId), toUuid(held.json.ops[0].opId));
+      assert.equal(settled.status, 200, `${mode}: ${settled.text}`);
+      assert.deepEqual(await sourcesOf(heldEntry), [
+        { kind: 'tool_call', ref: call.id, quote: 'cat lease.conf', verified: true },
+        { kind: 'tool_call', ref: call.id, quote: LEASE_QUOTE, verified: true },
+      ], `${mode}: the output's quote added at the Accept, verified`);
+    }
+
+    // At once, as ever: a challenge's quote of a result not stored yet — its flag is written at once, and nothing settles
+    // its sources afterwards; another session's call; the session's own call named by its row id; and a session the
+    // engine is not generating for, which has had every result delivered.
+    await setMode('manual');
+    const challenged = await ownerAdd('Lease length, as the owner put it');
+    const challengeRef = `toolu_result_challenge_${RUN}`;
+    await started(plain, challengeRef);
+    refusedAtOnce(await propose(plain, [{ op: 'challenge', entryId: pub(challenged), reason: 'The session read otherwise.', sources: [{ kind: 'tool_call', ref: challengeRef, quote: LEASE_QUOTE }] }], 'result-challenge'),
+      'WIKI_QUOTE_NOT_FOUND', "a challenge's quote of a result not stored yet");
+    assert.equal((await entryRow(challenged)).challenged, false, 'no flag');
+    const other = await ordinarySession();
+    await started(other, `toolu_result_elsewhere_${RUN}`);
+    refusedAtOnce(await propose(plain, cite('Leases, as another session read them', `toolu_result_elsewhere_${RUN}`, LEASE_QUOTE), 'result-elsewhere'),
+      'WIKI_QUOTE_NOT_FOUND', "another session's call without its result");
+    const byRow = await started(plain, `toolu_result_by_row_${RUN}`);
+    refusedAtOnce(await propose(plain, cite('Leases, by the row', byRow.id, LEASE_QUOTE), 'result-by-row'),
+      'WIKI_QUOTE_NOT_FOUND', 'its own call named by its row id');
+    for (const [sessionId, what] of [[await newChat(true), 'chat'], [await ordinarySession(ownerToken, wsPlain, true), 'plain']] as const) {
+      await started(sessionId, `toolu_result_idle_${what}_${RUN}`);
+      refusedAtOnce(await propose(sessionId, cite(`Leases, idle ${what}`, `toolu_result_idle_${what}_${RUN}`, LEASE_QUOTE), `result-idle-${what}`),
+        'WIKI_QUOTE_NOT_FOUND', `a ${what} session with no turn running`);
+    }
   });
 });

@@ -377,9 +377,17 @@ JSON 的 `kinds.<kind>.fields` 与 TS 的 `KIND_SPECS[kind].fields` 用同一套
   写入的先后）就已入库才算数。所以后来出现在别的会话、别的账户里，或者始终没出现的 tool_use_id，结算时一律
   `WIKI_SOURCE_UNRESOLVED`，什么都不写。接受后，add / supersede 的第 1 版补上这条出处（存行 id）；amend、reinforce 接受时
   本来就写全部出处。初见时，别的账户的调用和还没入库的调用分不出来，也不该分得出来。
+- **调用已入库、结果还没入库**（契约 `sourceInput.pending`，C20）：runner 把一次调用分两步存（`runner-api.controller.ts` 的
+  `writeToolCalls`）：tool_use 建行，只有 input；tool_result 在后一批事件里补上 `output` 和 `finished_at`。两批之间引这次调用
+  输出里的话，在已入库的文字（只有命令）里找不到，此前当场 `WIKI_QUOTE_NOT_FOUND`——C10 发现的同一个时序，晚了一批。
+  调用方会话自己的调用（由调用方会话那一步按 tool_use_id 找到；按行 id 找到的、别的会话的都不算）、结果还没入库
+  （`finished_at` 为空）、条件同上一条（引擎正为它生成；聊天里任何 op，其他会话除 challenge 以外的 op）时，不在已入库文字里的
+  引文也先记为**待核实**：不验，出处不落库，op 一律等 owner。结算时拿整条记录（含结果）核：核到了记 verified；核不到——包括
+  那时结果仍没入库——就 `WIKI_QUOTE_NOT_FOUND`，什么都不写。引在已入库文字里的话（比如命令）照旧当场核实，不等。
 - **校验**（T3）：每个出处都要在本 owner 的行里解析出来，否则 `WIKI_SOURCE_UNRESOLVED`，`errors[]` 按 path 点名那条出处，
   消息里说这种 kind 的 ref 该填什么；引文做空白归一化后必须是原文子串，
-  否则 `WIKI_QUOTE_NOT_FOUND`；非 owner 的 add / amend / supersede / reinforce 至少带一个出处，owner 自己写的可以不带。
+  否则 `WIKI_QUOTE_NOT_FOUND`（上面两条记为待核实的，结算时再核）；非 owner 的 add / amend / supersede / reinforce 至少带一个
+  出处，owner 自己写的可以不带。
 - **脱敏形式的引文**（契约 `sourceRules.quote`，C14）：共享脱敏器（带 owner 的 `workspace.env` 值）原样放过的引文——卡片和 op
   存的引文脱敏后就是这样，按键和决定结算时读回来的也是它——也到按同样规则脱敏后的原文里找，找到算数，但记为未验证
   （`quote_verified` 为 false：不是原文逐字）。C10 的卡片把 `ENROLLMENT_TOKEN_TTL_MS = 900_000` 存成 `… = [redacted]`，此前
