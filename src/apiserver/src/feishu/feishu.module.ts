@@ -7,6 +7,7 @@ import { FeishuAppService } from './feishu-app.service';
 import { FeishuChatRouteService } from './feishu-chat-route.service';
 import { FeishuController } from './feishu.controller';
 import { FeishuDirectService } from './feishu-direct.service';
+import { FeishuGroupService } from './feishu-group.service';
 import { FeishuInboxService } from './feishu-inbox.service';
 import { FeishuLinkService } from './feishu-link.service';
 import { FeishuOutbound } from './feishu-outbound';
@@ -20,7 +21,8 @@ import { FeishuRouter } from './feishu-router';
  * (FeishuInboxService), the router its events go through (FeishuRouter), the outbound client (FeishuOutbound), and the
  * outbox a session's replies go back to Feishu through (FeishuOutboxService).
  *
- * The owner's direct messages open sessions and send turns (FeishuDirectService), so this module imports SessionsModule
+ * The owner's direct messages, and requests in connected groups, open sessions and send turns (FeishuDirectService,
+ * FeishuGroupService), so this module imports SessionsModule
  * and PushModule; both reach back here (PushModule imports this one for FeishuTransport, SessionsModule through
  * CoordinatorJudgmentModule → PushModule), so the imports are forwardRef, as are the two injections.
  */
@@ -28,7 +30,7 @@ import { FeishuRouter } from './feishu-router';
   imports: [forwardRef(() => SessionsModule), forwardRef(() => PushModule)],
   controllers: [FeishuController, FeishuAdminController],
   // AdminRoleGuard depends only on the global PrismaService, so it is provided here too (UsersModule does not export it).
-  providers: [FeishuAppService, AdminRoleGuard, FeishuRouter, FeishuInboxService, FeishuLinkService, FeishuOutbound, FeishuOwnerService, FeishuChatRouteService, FeishuDirectService, FeishuOutboxService],
+  providers: [FeishuAppService, AdminRoleGuard, FeishuRouter, FeishuInboxService, FeishuLinkService, FeishuOutbound, FeishuOwnerService, FeishuChatRouteService, FeishuDirectService, FeishuGroupService, FeishuOutboxService],
   // FeishuRouter for the card actions (feishu-actions.module.ts), which register with it.
   exports: [FeishuAppService, FeishuOutbound, FeishuRouter],
 })
