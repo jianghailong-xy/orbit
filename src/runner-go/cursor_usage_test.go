@@ -440,6 +440,34 @@ func TestCursorUsageUnavailableIsNeverZero(t *testing.T) {
 			t.Fatalf("snapshot = %s, want Cursor's 0%% left out", wire)
 		}
 	})
+	t.Run("remaining-and-limit-cents", func(t *testing.T) {
+		// Dollar fields Cursor's dashboard sends once included spend is under way (PaceBar /
+		// OpenUsage): remaining and limit in cents. A present limit with no remaining is exhausted
+		// (proto3 omits zero), not "Cursor hid the field".
+		period := []byte(`{
+			"billingCycleStart":"1794015136338","billingCycleEnd":"1794619936338",
+			"planUsage":{"totalPercentUsed":15.48,"remaining":16778,"limit":40000}
+		}`)
+		plan := []byte(`{"planInfo":{"planName":"Ultra","includedUsagePeriod":"INCLUDED_USAGE_PERIOD_MONTHLY","includedUsageResetsAt":"1794619936338"}}`)
+		usage, err := parseCursorPlanUsage(period, plan)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := usage.IncludedUsage
+		if got == nil || got.PercentUsed != 15.48 || got.RemainingCents == nil || *got.RemainingCents != 16778 ||
+			got.LimitCents == nil || *got.LimitCents != 40000 || got.Period != "monthly" {
+			t.Fatalf("included = %+v, want remaining 16778 / limit 40000 / 15.48%%", got)
+		}
+		exhaustedPeriod := []byte(`{"billingCycleStart":"1","billingCycleEnd":"2","planUsage":{"totalPercentUsed":100,"limit":40000}}`)
+		exhausted, err := parseCursorPlanUsage(exhaustedPeriod, plan)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if exhausted.IncludedUsage == nil || exhausted.IncludedUsage.RemainingCents == nil || *exhausted.IncludedUsage.RemainingCents != 0 ||
+			exhausted.IncludedUsage.LimitCents == nil || *exhausted.IncludedUsage.LimitCents != 40000 {
+			t.Fatalf("exhausted = %+v, want remaining 0 beside limit 40000", exhausted.IncludedUsage)
+		}
+	})
 }
 
 // A session's turn that met Cursor's usage limit is kept for the account the session ran on — Default, or

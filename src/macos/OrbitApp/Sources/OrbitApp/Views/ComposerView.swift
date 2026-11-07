@@ -2011,8 +2011,8 @@ private struct PlanUsageIndicator: View {
         if let row = usage.bindingRow(model: model) {
             let pct = row.percent
             // An Antigravity bucket counts what is left, as agy does: said so, or 100% would read spent
-            // (web parity).
-            let left = row.remaining ? " left" : ""
+            // (web parity). Cursor's included allowance prefers "$12.34 left" when Cursor sent cents.
+            let reading = row.headline ?? "\(pct)%\(row.remaining ? " left" : "")"
             Button { showDetail.toggle() } label: {
                 HStack(spacing: 5) {
                     UsageBar(percent: pct, warn: row.remaining ? row.nearLimit : nil, spent: row.spent)
@@ -2021,13 +2021,13 @@ private struct PlanUsageIndicator: View {
                         // fixedSize keeps the pill at its ideal width: an unbounded Text is the most
                         // flexible view in the toolbar, so without this a tight row wraps "12%" onto
                         // two lines instead of truncating the (lineLimit-1) model name.
-                        Text(verbatim: "\(pct)%\(left)").foregroundStyle(.secondary).fixedSize()
+                        Text(verbatim: reading).foregroundStyle(.secondary).fixedSize()
                     }
                 }
             }
             .buttonStyle(.plain)
-            .help("Plan usage \(pct)%\(left)")
-            .accessibilityLabel("Plan usage \(pct)%\(left)")
+            .help("Plan usage \(reading)")
+            .accessibilityLabel("Plan usage \(reading)")
             .modifier(PlanUsageDetailPresentation(isPresented: $showDetail, usage: usage,
                                                    account: account, resetConsole: resetConsole))
         }
@@ -2382,7 +2382,7 @@ private struct PlanUsageDetailRows: View {
                     HStack {
                         Text(row.label)
                         Spacer()
-                        Text(verbatim: "\(row.percent)%\(row.remaining ? " remaining" : "")").foregroundStyle(.secondary)
+                        Text(verbatim: row.headline ?? "\(row.percent)%\(row.remaining ? " remaining" : "")").foregroundStyle(.secondary)
                     }
                     .font(compact ? .caption : .subheadline)
                     UsageBar(percent: row.percent, warn: row.remaining ? row.nearLimit : nil, spent: row.spent)

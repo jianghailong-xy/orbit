@@ -280,8 +280,13 @@ internal object EngineAccounts {
             if (resets != null && resets > reached) put("resetsAt", included.str("resetsAt"))
             mins?.let { put("windowDurationMins", it) }
         }
-        val used = included.dbl("percentUsed")?.takeIf { it.isFinite() && it > 0 }
-        val reading = used?.let {
+        val allowance = included.dbl("limitCents")?.takeIf { it.isFinite() && it > 0 }
+        val remainingCents = included.dbl("remainingCents")?.takeIf { it.isFinite() }
+        val usedFromCents = if (allowance != null && remainingCents != null) {
+            ((allowance - remainingCents) / allowance * 100).coerceIn(0.0, 100.0)
+        } else null
+        val used = usedFromCents ?: included.dbl("percentUsed")?.takeIf { it.isFinite() && it > 0 }
+        val reading = used?.takeIf { usedFromCents != null || it > 0 }?.let {
             buildJsonObject {
                 put("utilization", it)
                 if (resets != null) put("resetsAt", included.str("resetsAt"))
@@ -385,8 +390,15 @@ internal data class AttentionItem(val kind: String, val tone: String, val short:
 internal data class RunnerDisk(val freeBytes: Long, val totalBytes: Long, val usedPercent: Int)
 
 /** One quota window. [remaining]: an Antigravity bucket, whose percent says what is left, as agy says it; `utilization`
- * stays the share used every other window speaks in. */
-internal data class UsageRow(val key: String, val label: String, val groupLabel: String?, val window: JsonObject, val remaining: Boolean = false) {
+ * stays the share used every other window speaks in. [headline] replaces the percent text when set (Cursor "$12.34 left"). */
+internal data class UsageRow(
+    val key: String,
+    val label: String,
+    val groupLabel: String?,
+    val window: JsonObject,
+    val remaining: Boolean = false,
+    val headline: String? = null,
+) {
     val utilization get() = window.dbl("utilization") ?: 0.0
     val percent get() = Math.round(if (remaining) 100 - utilization else utilization).toInt().coerceIn(0, 100)
     /** At or past 90% used, judged on the reading rather than its rounding. */
@@ -396,6 +408,8 @@ internal data class UsageRow(val key: String, val label: String, val groupLabel:
     val spent get() = utilization >= 100
     /** How much of the gauge is filled: all of it once spent. */
     val gaugeFraction get() = if (spent) 1f else percent / 100f
+    /** What the gauge's number says: Cursor's dollar remaining when named, else the percent. */
+    val reading get() = headline ?: "$percent%${if (remaining) " remaining" else ""}"
 }
 
 internal fun JsonObject.str(name: String): String? = (this[name] as? JsonPrimitive)?.contentOrNull
@@ -1342,18 +1356,36 @@ internal fun accountSnapshotReported(usage: JsonObject?, account: String): JsonO
 internal fun kimiNoQuotaLimit(snapshot: JsonObject?): Boolean =
     snapshot != null && snapshot.str("provider") == "kimi" && EngineAccounts.windows(snapshot).isEmpty()
 
+/** Cursor's included-allowance cents as "$12.34 left" (web `cursorCentsLeftLabel`). */
+internal fun cursorCentsLeftLabel(cents: Double): String {
+    val dollars = maxOf(0.0, cents) / 100.0
+    val text = if (dollars % 1.0 == 0.0) dollars.toInt().toString() else String.format("%.2f", dollars)
+    return "$$text left"
+}
+
 /**
- * A Cursor CLI account's included usage as rows (web cursorRows): one window, its period's — a paid plan's week, else the billing month —
- * and only while Cursor reports some of it used. Its 0% is no reading (docs/cursor-runtime-contract.md §11: the Free plan's requests and
- * Auto never move it), so an account with none has no row, and every reader says "Usage unavailable" rather than draw 0%. Whether the
- * account is spent is not a reading at all but a turn that met the limit ([cursorUsageLimit]).
+ * A Cursor CLI account's included usage as rows (web cursorRows): one window, its period's — a paid plan's week, else the billing month.
+ * Prefer remaining/limit cents when Cursor sent them; else percentUsed above 0. Its bare 0% is no reading
+ * (docs/cursor-runtime-contract.md §11), so an account with neither has no row and every reader says "Usage unavailable".
+ * Whether the account is spent is not a reading at all but a turn that met the limit ([cursorUsageLimit]).
  */
 private fun cursorUsageRows(snapshot: JsonObject): List<UsageRow> {
     val included = snapshot.obj("includedUsage") ?: return emptyList()
+    val label = if (included.str("period") == "weekly") "Weekly limit" else "Monthly limit"
+    fun window(utilization: Double) = buildJsonObject {
+        put("utilization", utilization); included.str("resetsAt")?.let { put("resetsAt", it) }
+    }
+    val allowance = included.dbl("limitCents")?.takeIf { it.isFinite() && it > 0 }
+    val remaining = included.dbl("remainingCents")?.takeIf { it.isFinite() }
+    if (allowance != null && remaining != null) {
+        val used = ((allowance - remaining) / allowance * 100).coerceIn(0.0, 100.0)
+        return listOf(UsageRow("included", label, null, window(used), remaining = true, headline = cursorCentsLeftLabel(remaining)))
+    }
+    if (remaining != null) {
+        return listOf(UsageRow("included", label, null, window(0.0), remaining = true, headline = cursorCentsLeftLabel(remaining)))
+    }
     val used = included.dbl("percentUsed")?.takeIf { it.isFinite() && it > 0 } ?: return emptyList()
-    return listOf(UsageRow("included", if (included.str("period") == "weekly") "Weekly limit" else "Monthly limit", null, buildJsonObject {
-        put("utilization", used); included.str("resetsAt")?.let { put("resetsAt", it) }
-    }))
+    return listOf(UsageRow("included", label, null, window(used)))
 }
 
 /**
