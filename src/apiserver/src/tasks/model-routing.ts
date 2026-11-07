@@ -260,7 +260,7 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
     effort: baseline.effort,
     policyVersion: MODEL_ROUTING_POLICY_VERSION,
     level: null,
-    reasons,
+    reasons: reasons.map((reason) => reason.startsWith('[') ? reason : `[not-routed] ${reason}`),
   });
   if (task.model != null) return unchanged([`Task pin: ${task.model}`]);
   if (
@@ -293,24 +293,24 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
     const next = Math.min(MODEL_ROUTING_LEVELS.indexOf(lastLevel) + 1, 3);
     level = MODEL_ROUTING_LEVELS[Math.max(next, level ? MODEL_ROUTING_LEVELS.indexOf(level) : 0)];
     reasons.push(
-      `Tier ${level} — ${level === lastLevel ? 'already the highest tier after' : 'raised after'} ` +
+      `[escalate] Tier ${level} — ${level === lastLevel ? 'already the highest tier after' : 'raised after'} ` +
       `run ${last.ordinal} (${lastLevel}) ${FAILURE_WORDING[failure]}`,
     );
     if (!last.level) {
       const label = runnerCatalogRow(last.runtime ?? runtime, last.model ?? '', environment.modelCatalog)?.label
         ?? last.model ?? runtime;
       reasons.push(
-        `Run ${last.ordinal} used ${label}` +
+        `[escalate] Run ${last.ordinal} used ${label}` +
         `${last.effort ? ` · ${last.effort}` : ''}, which counts as tier ${lastLevel}`,
       );
     }
     if (task.modelHint && MODEL_ROUTING_LEVELS.indexOf(task.modelHint) > next) {
-      reasons.push(`Coordinator suggested tier ${task.modelHint}${task.modelHintReason ? `: ${task.modelHintReason}` : ''}`);
+      reasons.push(`[coordinator] Coordinator suggested tier ${task.modelHint}${task.modelHintReason ? `: ${task.modelHintReason}` : ''}`);
     }
   } else if (task.modelHint) {
-    reasons.push(`Tier ${level}: suggested by the coordinator${task.modelHintReason ? ` — ${task.modelHintReason}` : ''}`);
+    reasons.push(`[coordinator] Tier ${level}: suggested by the coordinator${task.modelHintReason ? ` — ${task.modelHintReason}` : ''}`);
   } else if (!level) {
-    reasons.push("No suggestion — keeps the agent's model, as today");
+    reasons.push("[not-routed] No suggestion — keeps the agent's model, as today");
   }
   reasons.push(...skipped);
   if (!level) {
