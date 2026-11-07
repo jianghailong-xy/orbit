@@ -50,7 +50,8 @@ final class AntigravityGoogleClientTests: XCTestCase {
             XCTAssertNotNil(EngineAuth.antigravityLoginHint(runner.antigravity?.googleLogin))
         }
         XCTAssertEqual(EngineAuth.antigravityLoginHint(.unsupportedPlatform), "Google sign-in is not supported on macOS runners yet. Use a Gemini API key.")
-        XCTAssertNil(RunnerPageFormat.engineStatus(try XCTUnwrap(data["unknown"]?.engines?.first)))
+        XCTAssertEqual(RunnerPageFormat.engineStatus(try XCTUnwrap(data["unknown"]?.engines?.first))?.text,
+                       "Couldn’t check")
         XCTAssertEqual(RunnerPageFormat.engineStatus(try XCTUnwrap(data["env-key"]?.engines?.first))?.text, "env key")
     }
 

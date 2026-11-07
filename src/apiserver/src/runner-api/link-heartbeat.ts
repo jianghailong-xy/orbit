@@ -152,7 +152,7 @@ export const HEARTBEAT_DELIVERIES = {
   },
   artifactRequests: {
     how: 'MARKED',
-    writers: ['sessions/sessions.service.ts#getWorktreeFileForOwner', 'sessions/sessions.service.ts#enqueueLegacyArtifactRequest'],
+    writers: ['sessions/sessions.service.ts#readWorktreeArtifact', 'sessions/sessions.service.ts#enqueueLegacyArtifactRequest'],
     pending: 'every full answer carries a request until its turn is answered',
   },
   loginRequest: {

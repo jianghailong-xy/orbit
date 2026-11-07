@@ -3314,6 +3314,16 @@ function looksLikeImagePath(src: string): boolean {
   return /\.(?:png|jpe?g|gif|webp|heic|heif|bmp|tiff?)$/i.test(src.split(/[?#]/)[0] ?? src);
 }
 
+// A file named the way an agent names one while it works: relative to the checkout
+// (`docs/mocks/x.png`). Not a URL, not a site path, and not a home-relative one; the extension is
+// what says the reader meant a picture (see looksLikeImagePath). The runner uploads such a link
+// when it can, but a reply whose upload was lost still carries the path — and the artifact route
+// can read it back out of the checkout.
+function isCheckoutRelativeImageSrc(src: string): boolean {
+  return looksLikeImagePath(src) && !/[?#]/.test(src)
+    && !/^(?:[a-z][a-z0-9+.-]*:|\/|\\|~)/i.test(src);
+}
+
 // Source references often add `:line` (or `:line-line`) after the file name. It is useful to the
 // reader, but the artifact route and the runner need the path without that location hint.
 function artifactPathFromLink(src: string): string {
@@ -3359,6 +3369,9 @@ function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }
         <code>{fileLabel(src)}</code>
       </span>
     );
+  }
+  if (typeof src === 'string' && isCheckoutRelativeImageSrc(src)) {
+    return <LocalArtifactImage artifactPath={src} alt={typeof alt === 'string' ? alt : 'Image'} />;
   }
   return <img {...rest} className="md-image" src={src} alt={alt ?? ''} />;
 }

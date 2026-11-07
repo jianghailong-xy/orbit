@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -613,7 +614,7 @@ func TestEveryDoorClonesASessionCheckoutFromTheWorkspacesCheckout(t *testing.T) 
 				if got.creation != checkoutCloned {
 					t.Fatalf("the checkout should be cloned, was made %q:\n%s", got.creation, logs)
 				}
-				if want := fmt.Sprintf("— cloned checkout: %d files cloned from %s", fixtureFilesCloned(sparse), realPath(repo)); !strings.Contains(logs, want) {
+				if want := fmt.Sprintf("— checkout cloned: %d files from %s", fixtureFilesCloned(sparse), realPath(repo)); !strings.Contains(logs, want) {
 					t.Errorf("the log should say the checkout was cloned (%q), got:\n%s", want, logs)
 				}
 				requireLikeAPlainCheckout(t, repo, got.path)
@@ -648,14 +649,14 @@ func requireLeftOut(t *testing.T, path string, names ...string) {
 func TestAFailedCloneFallsBackToAPlainCheckout(t *testing.T) {
 	failures := []struct {
 		name    string
-		errno   syscall.Errno
+		reason  string // how the log line names it
 		cloned  int
 		failure func(made int) error
 	}{
 		// The filesystem turns cloning down after the probe passed: a path under the template on another mount, say.
-		{"EOPNOTSUPP", syscall.EOPNOTSUPP, 0, func(int) error { return syscall.EOPNOTSUPP }},
-		{"EXDEV", syscall.EXDEV, 0, func(int) error { return syscall.EXDEV }},
-		{"a failure midway", syscall.EIO, 3, func(made int) error {
+		{"EOPNOTSUPP", "clone failed (EOPNOTSUPP): the first file, ", 0, func(int) error { return syscall.EOPNOTSUPP }},
+		{"EXDEV", "clone failed (EXDEV): the first file, ", 0, func(int) error { return syscall.EXDEV }},
+		{"a failure midway", "clone failed midway (EIO): ", 3, func(made int) error {
 			if made == 3 {
 				return syscall.EIO
 			}
@@ -680,8 +681,12 @@ func TestAFailedCloneFallsBackToAPlainCheckout(t *testing.T) {
 					if got.creation != checkoutPlain {
 						t.Fatalf("the checkout should be plain, was made %q:\n%s", got.creation, logs)
 					}
-					if want := "— plain checkout: cloning it from " + realPath(repo) + " failed, so git writes it instead: cloning "; !strings.Contains(logs, want) || !strings.Contains(logs, failure.errno.Error()) {
-						t.Errorf("the log should say why the checkout was not cloned (%q, %q), got:\n%s", want, failure.errno.Error(), logs)
+					line := logLine(logs, "— checkout plain: ")
+					if want := "— checkout plain: " + failure.reason; !strings.Contains(line, want) || !strings.Contains(line, "could not be cloned from "+realPath(repo)) || !strings.HasSuffix(line, "; git writes it instead") {
+						t.Errorf("the log should say why the checkout was not cloned (%q), got:\n%s", want, logs)
+					}
+					if failure.cloned > 0 && !strings.Contains(line, fmt.Sprintf(" after %d files;", failure.cloned)) {
+						t.Errorf("the log should say how many files were cloned before the failure, got %q", line)
 					}
 					requireLikeAPlainCheckout(t, repo, got.path)
 					if sparse {
@@ -717,8 +722,8 @@ func TestACheckoutIsPlainWhereTheFilesystemCannotClone(t *testing.T) {
 		t.Fatalf("the checkout should be plain and nothing cloned, was made %q with %d clones", got.creation, clones.cloned())
 	}
 	for _, want := range []string{
-		"checkouts: the filesystem of " + root + " cannot clone files (operation not supported), so git writes out every session checkout",
-		"session s-plain — plain checkout: the filesystem of " + root + " cannot clone files (operation not supported)",
+		"checkouts: plain: probe failed (EOPNOTSUPP): the filesystem of " + root + " cannot clone files, so git writes out every session checkout",
+		"session s-plain — checkout plain: probe failed (EOPNOTSUPP): the filesystem of " + root + " cannot clone files",
 	} {
 		if !strings.Contains(logs, want) {
 			t.Errorf("the log should say %q, got:\n%s", want, logs)
@@ -730,6 +735,46 @@ func TestACheckoutIsPlainWhereTheFilesystemCannotClone(t *testing.T) {
 	second := &ClaimedSession{SessionID: "s-plain-2", Branch: "orbit/s-plain-2"}
 	if setupWorktree(second, repo); second.CheckoutCreation != checkoutPlain || clones.probes != 1 {
 		t.Errorf("a second checkout should be plain without a second probe: made %q, %d probes", second.CheckoutCreation, clones.probes)
+	}
+}
+
+// logLine is the first line of logs that holds marker, without its line break, or "".
+func logLine(logs, marker string) string {
+	for _, line := range strings.Split(logs, "\n") {
+		if strings.Contains(line, marker) {
+			return line
+		}
+	}
+	return ""
+}
+
+// The log names a failure by its errno's own name, which is what an operator searches for, wrapped or not. Linux has
+// one number for ENOTSUP and EOPNOTSUPP; macOS has two, and clonefile answers ENOTSUP.
+func TestCloneFailuresAreLoggedByTheirErrnosName(t *testing.T) {
+	for _, c := range []struct {
+		err  error
+		want string
+	}{
+		{syscall.EOPNOTSUPP, "EOPNOTSUPP"},
+		{syscall.EXDEV, "EXDEV"},
+		{&os.PathError{Op: "open", Path: "/x", Err: syscall.EACCES}, "EACCES"},
+		{&fileCloneError{path: "a", after: 2, err: syscall.EIO}, "EIO"},
+		{fmt.Errorf("probing: %w", syscall.ENOSPC), "ENOSPC"},
+		{errors.ErrUnsupported, "unsupported operation"},
+	} {
+		if got := errnoName(c.err); got != c.want {
+			t.Errorf("errnoName(%v) = %q, want %q", c.err, got, c.want)
+		}
+	}
+	want := "ENOTSUP"
+	if syscall.ENOTSUP == syscall.EOPNOTSUPP {
+		want = "EOPNOTSUPP"
+	}
+	if got := errnoName(syscall.ENOTSUP); got != want {
+		t.Errorf("errnoName(ENOTSUP) = %q, want %q", got, want)
+	}
+	if got := whyCloneFailed("/w", errors.New("exit status 128: fatal: bad index")); got != "clone failed (git): exit status 128: fatal: bad index" {
+		t.Errorf("a git step's failure should read as one, got %q", got)
 	}
 }
 
@@ -797,7 +842,7 @@ func TestAWorkspaceOnAnotherFilesystemIsNotClonedFrom(t *testing.T) {
 	if got.creation != checkoutPlain || clones.cloned() != 0 {
 		t.Fatalf("the checkout should be plain and nothing cloned, was made %q with %d clones", got.creation, clones.cloned())
 	}
-	if want := "session s-elsewhere — plain checkout: the workspace's checkout " + realPath(repo) + " is on another filesystem than " + worktreesDir(); !strings.Contains(logs, want) {
+	if want := "session s-elsewhere — checkout plain: another filesystem (EXDEV): the workspace's checkout " + realPath(repo) + " is not on the filesystem of " + worktreesDir(); !strings.Contains(logs, want) {
 		t.Errorf("the log should say %q, got:\n%s", want, logs)
 	}
 	requireLikeAPlainCheckout(t, repo, got.path)
@@ -812,7 +857,7 @@ func TestARealCloneOfASessionCheckout(t *testing.T) {
 			forgetCloneProbes()
 			t.Cleanup(forgetCloneProbes)
 			if err := probeCloning(worktreesDir()); err != nil {
-				t.Skipf("the filesystem of %s cannot clone files (%s); with TMPDIR on one that can, this runs there", worktreesDir(), cloneFailure(err))
+				t.Skipf("the filesystem of %s cannot clone files (%s); with TMPDIR on one that can, this runs there", worktreesDir(), errnoName(err))
 			}
 			clones := recordClones(t, platformCloneFile)
 			repo, base := cloneFixture(t, sparse)

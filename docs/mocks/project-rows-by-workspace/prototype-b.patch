@@ -1,0 +1,75 @@
+diff --git a/src/web/src/components/WorkspaceView.tsx b/src/web/src/components/WorkspaceView.tsx
+index 74d5eb4..088bccb 100644
+--- a/src/web/src/components/WorkspaceView.tsx
++++ b/src/web/src/components/WorkspaceView.tsx
+@@ -3046,6 +3046,7 @@ export function WorkspaceView({
+       byTag: listByTag,
+       folderId: openFolder?.id,
+       coordinators: projectData.coordinators,
++      workspaceId: resolvedWorkspaceId,
+       contentSessions: projectData.contentSessions,
+       runnerOffline: runner.online === false,
+       needsYou: sessionNeedsYou,
+@@ -3053,7 +3054,7 @@ export function WorkspaceView({
+       line: (s) => sessionLine(selectedSession?.id === s.id ? selectedSession : s,
+         effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled, machineName(runner)),
+     }),
+-    [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
++    [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions, resolvedWorkspaceId,
+       effectiveView, listByTag, runner.online, runner.name, runner.displayName, watchingBySession, selectedSession, recapsEnabled],
+   );
+   // A project's entry stands for its coordinator only in the workspace the coordinator runs in.
+diff --git a/src/web/src/lib/sessionProjects.ts b/src/web/src/lib/sessionProjects.ts
+index 9608364..cf3adb5 100644
+--- a/src/web/src/lib/sessionProjects.ts
++++ b/src/web/src/lib/sessionProjects.ts
+@@ -25,6 +25,7 @@ export interface SessionProjectSession extends GroupableSession {
+   folderId?: string | null;
+   projectMembership?: SessionProjectMembership | null;
+   ownerItems?: readonly { since: string }[];
++  workspace?: { id?: string | null; name?: string | null } | null;
+ }
+ 
+ export interface SessionProjectLine {
+@@ -69,6 +70,8 @@ export const listShowsProjects = (view: SessionListView, byTag: boolean, searchi
+ export const SESSION_PROJECT_COPY = {
+   progress: (done: number, total: number) => `${done}/${total}`,
+   progressHint: (sessions: number, running: number) => `${sessions} sessions · ${running} running`,
++  /** Option B: a project's row in a workspace its coordinator does not run in. */
++  here: (n: number, workspace: string) => `${n} ${n === 1 ? 'session' : 'sessions'} in ${workspace}`,
+   waitingSession: (text: string, title: string) => `${text} · ${title}`,
+   noCoordinator: 'No coordinator',
+   openSession: 'Open Session',
+@@ -583,6 +586,9 @@ export function sessionProjectListing<T extends SessionProjectSession>(
+     runnerOffline?: boolean;
+     now?: number;
+     coordinators?: readonly T[];
++    /** The workspace this list is: elsewhere than its coordinator's, a project's row speaks for this
++     *  workspace's members only (option B). */
++    workspaceId?: string | null;
+     /** Same-view sessions across workspaces, used for the waiting line and tooltip count. */
+     contentSessions?: readonly T[];
+     line: (session: T) => SessionProjectLine;
+@@ -651,7 +657,21 @@ export function sessionProjectListing<T extends SessionProjectSession>(
+       summary?.integration, opts.now ?? Date.now(), mainBranchName(summary?.mainBranch));
+     let line: SessionProjectLine;
+     let target: SessionProjectRow<T>['target'];
+-    if (coordinatorLine?.tone === 'approval') {
++    const home = coordinator?.workspace?.id;
++    const away = !!opts.workspaceId && !!home && home !== opts.workspaceId;
++    const localWaiting = waiting.filter((session) => members.includes(session));
++    if (away) {
++      // Option B: in a workspace its coordinator does not run in, the row is a folder of this
++      // workspace's members and says so, rather than the coordinator's words from elsewhere.
++      if (localWaiting.length) {
++        const lead = localWaiting[0];
++        line = { text: SESSION_PROJECT_COPY.waitingSession(lines.get(lead.id)!.text, lead.title ?? ''), tone: 'approval' };
++        target = { kind: 'session', id: lead.id };
++      } else {
++        line = { text: SESSION_PROJECT_COPY.here(members.length, members[0].workspace?.name ?? ''), tone: 'preview' };
++        target = { kind: 'project', id: projectId };
++      }
++    } else if (coordinatorLine?.tone === 'approval') {
+       line = coordinatorLine;
+       target = { kind: 'session', id: coordinator!.id };
+     } else if (waiting.length) {

@@ -129,11 +129,15 @@ describe('Antigravity Google login across client surfaces', () => {
   it('keeps the env-key explanation and never treats unknown as signed in', () => {
     expect(row('env-key').textContent).toContain('env key · runs on your Gemini key');
     const unknown = row('unknown');
-    expect(unknown.textContent).toContain('Unknown');
-    expect(unknown.querySelector('[aria-label="More actions"]')).toBeNull();
+    expect(unknown.textContent).toContain('Couldn’t check');
+    // No sign-in on the row: the check got no answer, so nothing says the account is out. The action
+    // stays in More for the case the login really is gone.
+    expect([...unknown.querySelectorAll('button')].map((b) => b.textContent?.trim()))
+      .not.toContain('Sign in with Google');
+    expect(unknown.querySelector('[aria-label="More actions"]')).not.toBeNull();
     expect(unknown.textContent).not.toContain('remaining');
     const machine = machineRow(fixtures.unknown);
-    expect(machine.textContent).toContain('Unknown');
+    expect(machine.textContent).toContain('Couldn’t check');
     expect(machine.textContent).not.toContain('Google account');
     expect(machine.textContent).not.toContain('Signed in');
     expect(probeReportsSignedIn([fixtures['env-key']], fixtures.google.id, 'antigravity')).toBe(false);

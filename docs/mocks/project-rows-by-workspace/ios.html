@@ -1,0 +1,71 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>iPhone：orbit-prod 的会话列表，今天 / A / B</title>
+<!-- Drawn with the session-recap-display kit (iPhone Pro Max 440 pt, dark, rows as rowD — the owner's
+     10-22 one-line row). Rendered to shots/ios-1.png, which board.html shows as part ⑥. -->
+<link rel="stylesheet" href="../session-recap-display/kit.css">
+<script src="../session-recap-display/kit.js"></script>
+<style>
+  body { padding: 18px 22px 22px; background: #e9e9ee; }
+  #phones { display: grid; grid-template-columns: repeat(3, 440px); gap: 0 44px; align-items: start; padding: 10px; width: max-content; }
+  #phones .cap { max-width: 440px; }
+</style>
+<body>
+<div id="phones">
+  <div class="col"><span class="tag now">今天</span><div id="today"></div>
+    <div class="cap"><span class="n">1</span>项目行在 orbit-prod，第 2 行是 orbit-develop 里 coordinator 的话；点它进项目会话页，长按菜单作用在 coordinator 上。</div></div>
+  <div class="col"><span class="tag rec">A · 推荐</span><div id="A"></div>
+    <div class="cap"><span class="n">2</span>两条成员会话各占一行，带进度小标签；点开就是那条会话。长按菜单多一项 <b>Sessions</b> 进项目会话页：小标签在手机上太小，不单独点。</div></div>
+  <div class="col"><span class="tag alt">B</span><div id="B"></div>
+    <div class="cap"><span class="n">3</span>项目行留着，第 2 行只说这里：<i>2 sessions in orbit-prod</i>。</div></div>
+</div>
+<script>
+// The list as it reads when scrolled into Today: the kit's sticky header, with this board's section and workspace.
+const listHeadOf = (title, section) => `${statusBar('10:20', 80)}
+<div class="nav"><div class="gc l">${ic('ham', 23, 'var(--l1)', 2)}</div><div class="navtitle">${title}</div>
+<div class="gc" style="right:21px;width:105px;justify-content:flex-start"><span style="position:absolute;left:12px;top:10px">${ic('filter', 24, 'var(--l1)', 2)}</span><span style="position:absolute;right:10px;top:10px">${ic('pen', 24, 'var(--l1)', 2)}</span></div></div>
+<div class="lhead"><div class="inset"></div><div class="sec">${section}</div><div class="hl"></div></div>`;
+// A member row in A: the session's own row, the project's progress chip leading its second line.
+const rowMember = (mode, r) => `${t1(r)}<div class="t2"><span class="chips">${pchip(...r.mark)}</span><span class="pv"><span class="rt">${r.recap}</span></span></div>`;
+const rowsAt = (mode, rows, y0 = 156) => rows.map((r, i) => {
+  const at = y0 + i * 75.333;
+  return `<div class="lr" data-key="${r.key || ''}" style="top:${at + 17.6}px">${r.mark ? rowMember(mode, r) : rowD(mode, r)}</div>`
+    + `<div class="sep" style="top:${at + 75.333 - 0.5}px"></div>`;
+}).join('');
+
+const head = [
+  { title: '排查服务响应缓慢', rel: 'just now', spin: true, now: 'Running Bash…', tone: 'run' },
+  { title: '检查备份磁盘余量', rel: '6m ago', recap: '根盘剩 31 GB；今晚的全量备份要 14 GB，够用。' },
+  { title: '证书轮换脚本', rel: '15m ago', recap: '脚本已改完，dry-run 通过；等你确认后在生产执行。' },
+];
+const tail = [{ title: '清理旧的预览环境', rel: '3h ago', recap: '已删 7 个，剩 2 个还有人在用。' }];
+const project = (line) => ({ kind: 'proj', key: 'proj', title: '搜索服务迁移到新索引', rel: '22m ago', meter: [10, 12], line });
+const LISTS = {
+  today: [...head, project('You: Replay closed at 412/430, evidence submitted (revision 1); the replay report is section 5.'), ...tail],
+  A: [...head,
+    { key: 'm1', title: '生产只读核查：新索引', rel: '22m ago', mark: [10, 12], recap: '核查完成：新索引的读流量 100%，错误率 0；等协调者验收。' },
+    { key: 'm2', title: '生产部署：新索引上线', rel: '41m ago', mark: [10, 12], recap: '已部署到生产，等协调者验收。' },
+    ...tail],
+  B: [...head, project('2 sessions in orbit-prod'), ...tail],
+};
+for (const [id, rows] of Object.entries(LISTS)) {
+  document.getElementById(id).innerHTML = phone('dark', `${listHeadOf('orbit-prod', 'Today')}${rowsAt('dark', rows)}`, { h: 650 });
+}
+
+// Marks, measured after layout and drawn inside the phone.
+const phoneOf = (id) => document.querySelector(`#${id} .ph`);
+const rectOf = (id, els) => {
+  const p = phoneOf(id).getBoundingClientRect();
+  const rs = els.map((el) => el.getBoundingClientRect());
+  const x = Math.min(...rs.map((r) => r.left)), y = Math.min(...rs.map((r) => r.top));
+  return { x: x - p.left, y: y - p.top, w: Math.max(...rs.map((r) => r.right)) - x, h: Math.max(...rs.map((r) => r.bottom)) - y };
+};
+const ring = (id, r, n, pad = 4) => phoneOf(id).firstElementChild.insertAdjacentHTML('beforeend',
+  mk(r.x - pad, r.y - pad, r.w + 2 * pad, r.h + 2 * pad) + num(n, r.x - pad - 6, r.y - pad - 13));
+const keyRow = (id, key) => phoneOf(id).querySelector(`.lr[data-key="${key}"]`);
+document.fonts.ready.then(() => {
+  ring('today', rectOf('today', [keyRow('today', 'proj')]), 1);
+  ring('A', rectOf('A', [keyRow('A', 'm1'), keyRow('A', 'm2')]), 2);
+  ring('B', rectOf('B', [keyRow('B', 'proj')]), 3);
+});
+</script>
+</body></html>

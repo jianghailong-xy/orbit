@@ -18,6 +18,24 @@ import (
 // as it always has. Files are never hardlinked between checkouts: a file rewritten in place (shell `>`, Node's
 // writeFile) would change in every checkout at once, and each session's commit would carry the change into its branch.
 
+// The log says how each session checkout was made, in one line that keeps its form, so that operators, and the docs
+// that point them at it, can search for it:
+//
+//	session <id> — checkout cloned: <n> files from <the workspace's checkout>
+//	session <id> — checkout plain: <reason>: <detail>
+//
+// The reason is one of these, where <ERRNO> is the errno's own name (errnoName), EOPNOTSUPP or EXDEV, say:
+//
+//	probe failed (<ERRNO>)          the worktrees root's filesystem cannot clone files (ext4: EOPNOTSUPP)
+//	another filesystem (EXDEV)      the workspace's checkout is not on the worktrees root's filesystem
+//	unreadable workspace (<ERRNO>)  the workspace's checkout could not be looked at
+//	clone failed (<ERRNO>)          the first file could not be cloned
+//	clone failed midway (<ERRNO>)   a file could not be cloned after others were
+//	clone failed (git)              a git step of the cloned checkout failed
+//
+// The worktrees root itself gets a line when it is probed, at start and on a filesystem not probed before:
+// `checkouts: cloned: ...` or `checkouts: plain: probe failed (<ERRNO>): ...`.
+
 // How the runner made a session's checkout (ClaimedSession.CheckoutCreation).
 const (
 	checkoutCloned = "cloned"
@@ -60,9 +78,9 @@ func clonableFilesystem(root string) (uint64, error) {
 	answer := probeCloning(root)
 	cloneProbes.byDevice[dev] = answer
 	if answer == nil {
-		logln("checkouts: the filesystem of", root, "can clone files, so session checkouts are cloned from their workspace's checkout")
+		logln("checkouts: cloned: the filesystem of", root, "can clone files, so session checkouts are cloned from their workspace's checkout")
 	} else {
-		logln("checkouts: the filesystem of", root, "cannot clone files ("+cloneFailure(answer)+"), so git writes out every session checkout")
+		logln("checkouts: plain: probe failed ("+errnoName(answer)+"): the filesystem of", root, "cannot clone files, so git writes out every session checkout")
 	}
 	return dev, answer
 }
@@ -100,33 +118,90 @@ func fileDevice(path string) (uint64, error) {
 	return uint64(st.Dev), nil
 }
 
-// cloneFailure is what err says about why a clone failed, in the system's own words where there are some, so that
-// EOPNOTSUPP and EXDEV read as what they are.
-func cloneFailure(err error) string {
-	var errno syscall.Errno
-	if errors.As(err, &errno) {
-		return errno.Error()
-	}
-	return err.Error()
+// errnoNames are the names the log gives the errnos that cloning and the probe fail with. Linux has one number for
+// EOPNOTSUPP and ENOTSUP, named EOPNOTSUPP; macOS has two, and clonefile answers ENOTSUP.
+var errnoNames = []struct {
+	errno syscall.Errno
+	name  string
+}{
+	{syscall.EOPNOTSUPP, "EOPNOTSUPP"},
+	{syscall.ENOTSUP, "ENOTSUP"},
+	{syscall.EXDEV, "EXDEV"},
+	{syscall.EINVAL, "EINVAL"},
+	{syscall.EIO, "EIO"},
+	{syscall.ENOSPC, "ENOSPC"},
+	{syscall.EDQUOT, "EDQUOT"},
+	{syscall.EACCES, "EACCES"},
+	{syscall.EPERM, "EPERM"},
+	{syscall.EROFS, "EROFS"},
+	{syscall.EEXIST, "EEXIST"},
+	{syscall.ENOENT, "ENOENT"},
+	{syscall.ENOTDIR, "ENOTDIR"},
+	{syscall.EISDIR, "EISDIR"},
+	{syscall.ETXTBSY, "ETXTBSY"},
+	{syscall.EBADF, "EBADF"},
+	{syscall.EAGAIN, "EAGAIN"},
+	{syscall.ENOTTY, "ENOTTY"},
+	{syscall.ENAMETOOLONG, "ENAMETOOLONG"},
 }
 
-// whyNotCloned is why a session checkout cannot be cloned from template, the workspace's own checkout, or "" when it
-// can: the worktrees root's filesystem cannot clone files, or the template is on another filesystem, where every
-// clone would fail with EXDEV.
+// errnoName is the name of the errno that err comes down to, EOPNOTSUPP or EXDEV, say; for an err that names none, it
+// is what err says.
+func errnoName(err error) string {
+	var errno syscall.Errno
+	if !errors.As(err, &errno) {
+		return err.Error()
+	}
+	for _, known := range errnoNames {
+		if known.errno == errno {
+			return known.name
+		}
+	}
+	return fmt.Sprintf("errno %d, %s", int(errno), errno.Error())
+}
+
+// whyNotCloned is why a session checkout cannot be cloned from template, the workspace's own checkout, as the log's
+// reason says it (see above), or "" when it can: the worktrees root's filesystem cannot clone files, or the template
+// is on another filesystem, where every clone would fail with EXDEV.
 func whyNotCloned(template string) string {
 	root := worktreesDir()
 	dev, err := clonableFilesystem(root)
 	if err != nil {
-		return fmt.Sprintf("the filesystem of %s cannot clone files (%s)", root, cloneFailure(err))
+		return fmt.Sprintf("probe failed (%s): the filesystem of %s cannot clone files", errnoName(err), root)
 	}
 	templateDev, err := fileDevice(template)
 	if err != nil {
-		return fmt.Sprintf("the workspace's checkout cannot be read: %v", err)
+		return fmt.Sprintf("unreadable workspace (%s): %v", errnoName(err), err)
 	}
 	if templateDev != dev {
-		return fmt.Sprintf("the workspace's checkout %s is on another filesystem than %s", template, root)
+		return fmt.Sprintf("another filesystem (EXDEV): the workspace's checkout %s is not on the filesystem of %s", template, root)
 	}
 	return ""
+}
+
+// fileCloneError is a file that could not be cloned into a checkout: which one, how many were cloned before it, and
+// why.
+type fileCloneError struct {
+	path  string
+	after int
+	err   error
+}
+
+func (e *fileCloneError) Error() string { return fmt.Sprintf("cloning %s: %v", e.path, e.err) }
+
+func (e *fileCloneError) Unwrap() error { return e.err }
+
+// whyCloneFailed is the reason the log gives a plain checkout made after cloning one from template failed with err.
+func whyCloneFailed(template string, err error) string {
+	var failed *fileCloneError
+	switch {
+	case errors.As(err, &failed) && failed.after == 0:
+		return fmt.Sprintf("clone failed (%s): the first file, %s, could not be cloned from %s", errnoName(failed.err), failed.path, template)
+	case errors.As(err, &failed):
+		return fmt.Sprintf("clone failed midway (%s): %s could not be cloned from %s after %d files", errnoName(failed.err), failed.path, template, failed.after)
+	default:
+		return fmt.Sprintf("clone failed (git): %v", err)
+	}
 }
 
 // populateByCloning fills the checkout at wtPath, which `git worktree add --no-checkout` made and sparse rules may
@@ -183,7 +258,7 @@ func populateByCloning(template, wtPath string) (int, error) {
 		// The template's mode comes along; where its executable bit is not the commit's, the reset below writes the
 		// file again.
 		if err := cloneFile(src, dst, info.Mode().Perm()); err != nil {
-			return cloned, fmt.Errorf("cloning %s: %w", path, err)
+			return cloned, &fileCloneError{path: path, after: cloned, err: err}
 		}
 		cloned++
 	}
