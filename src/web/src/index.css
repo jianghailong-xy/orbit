@@ -27074,3 +27074,10 @@ button.agent-progress-agent:hover {
   gap: 8px;
   flex-shrink: 0;
 }
+
+.feishu-members {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px 16px;
+  margin-top: 4px;
+}

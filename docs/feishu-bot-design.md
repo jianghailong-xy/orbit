@@ -379,6 +379,8 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
    ticket，所以 ticket 只能用一次，且发 connect 的人必须仍是主人。ticket 由 appId 与 event_id 派生，同一事件处理两次得到同一 ticket、
    同一张卡（飞书 uuid 去重），已用过的 ticket 不会被重放的事件重新打开。未确认或已停用的群里 @机器人 只回一句英文说明，不开会话。
    connect 只受理主人，且群不能是外部群（`GET /open-apis/im/v1/chats/:chat_id` 的 `external`）。
+   确认页的「指定的人」按名字勾选：服务端用 ticket 对应的群读 `GET /open-apis/im/v1/chats/:chat_id/members`（open_id，逐页），
+   列出主人以外的成员；读不到时只能选「群里所有人」。存的仍是 open_id。
 
 ### 8.2 一条群消息的路径（决定 4：每单一个话题）
 

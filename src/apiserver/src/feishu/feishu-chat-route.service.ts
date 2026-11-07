@@ -201,9 +201,19 @@ export class FeishuChatRouteService {
     if (ticket) {
       const row = await this.prisma.feishuChatRoute.findFirst({
         where: { ownerId, ticketHash: hashChatTicket(ticket), ticketExpiresAt: { gt: new Date() } },
+        include: { app: { select: { platform: true, appId: true, appSecretEnc: true, ownerOpenId: true } } },
       });
       if (row?.ticketExpiresAt) {
-        pending = { chatId: row.chatId, chatName: row.chatName, expiresAt: row.ticketExpiresAt.toISOString(), connected: row.confirmedAt !== null };
+        // Who is in the group, read from Feishu now, for the allowed-senders picker; the owner is always allowed.
+        const credentials = credentialsOf(row.app);
+        const members = credentials ? await this.outbound.chatMembers(credentials, row.chatId) : null;
+        pending = {
+          chatId: row.chatId,
+          chatName: row.chatName,
+          expiresAt: row.ticketExpiresAt.toISOString(),
+          connected: row.confirmedAt !== null,
+          members: members?.filter((m) => m.openId !== row.app.ownerOpenId) ?? null,
+        };
       }
     }
     return { routes: rows.map(present), pending };

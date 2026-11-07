@@ -16,7 +16,8 @@
  *       and the bot answers with the `Connect this group to Orbit` card whose button carries that ticket; the same event
  *       processed again issues the same ticket and card (same Feishu uuid) and writes nothing;
  *   (5) until it is confirmed, a mention in the group still starts no session and gets the sentence;
- *   (6) the confirm page reads the ticket's group with a login, and a token is refused that read (ACCOUNT);
+ *   (6) the confirm page reads the ticket's group with a login — its members by name, from Feishu, every page, the owner
+ *       left out since they are always allowed — and a token is refused that read (ACCOUNT);
  *   (7) a personal access token is refused the confirm 403 OWNER_INTERACTIVE_CREDENTIAL_REQUIRED and writes nothing;
  *   (8) a login confirms: feishu_chat_route holds exactly what was submitted, switched on, and the ticket is gone; the
  *       ticket does not work a second time, and the connect event processed again does not bring it back;
@@ -99,7 +100,11 @@ test('Feishu: a group is connected only by the owner\'s connect and the confirm 
   });
   await verifyCoordinatorPgIdentity(sql);
   fake.addApp(X);
-  fake.chats.set(TEAM, { name: 'Release team', external: false });
+  fake.chats.set(TEAM, {
+    name: 'Release team',
+    external: false,
+    members: [{ openId: ALICE, name: 'Alice' }, { openId: 'ou_bob', name: 'Bob' }, { openId: 'ou_carol', name: 'Carol' }, { openId: MALLORY, name: 'Mallory' }],
+  });
   fake.chats.set(OTHER, { name: 'Other team', external: false });
   fake.chats.set(EXTERNAL, { name: 'With a vendor', external: true });
   const fakeUrl = await fake.start();
@@ -281,7 +286,14 @@ test('Feishu: a group is connected only by the owner\'s connect and the confirm 
     const read = await api('GET', `/integrations/feishu/chats?ticket=${encodeURIComponent(ticket)}`, login);
     assert.equal(read.status, 200, read.text);
     assert.deepEqual(read.json.routes, []);
-    assert.deepEqual(without(read.json.pending, 'expiresAt'), { chatId: TEAM, chatName: 'Release team', connected: false });
+    assert.deepEqual(without(read.json.pending, 'expiresAt'), {
+      chatId: TEAM,
+      chatName: 'Release team',
+      connected: false,
+      // Read from Feishu page by page, by name, for the picker; the owner is always allowed, so is not offered.
+      members: [{ openId: 'ou_bob', name: 'Bob' }, { openId: 'ou_carol', name: 'Carol' }, { openId: MALLORY, name: 'Mallory' }],
+    });
+    assert.ok(fake.requests.filter((r) => r.path === `/open-apis/im/v1/chats/${TEAM}/members`).length >= 2, 'every page was read');
     const byToken = await api('GET', `/integrations/feishu/chats?ticket=${encodeURIComponent(ticket)}`, token);
     assert.equal(byToken.status, 403);
     assert.equal(byToken.json.code, 'PAT_FORBIDDEN');

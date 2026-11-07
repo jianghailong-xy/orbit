@@ -1,5 +1,5 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useId, useMemo, useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   FEISHU_CHAT_DEFAULT_MAX_CONCURRENT,
@@ -14,11 +14,11 @@ import {
 import { api } from '../api';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
+import { Checkbox } from '../components/ui/Checkbox';
 import { NumberInput } from '../components/ui/NumberInput';
 import { Radio, RadioGroup } from '../components/ui/Radio';
 import { Select } from '../components/ui/Select';
 import { Spinner } from '../components/ui/Spinner';
-import { Textarea } from '../components/ui/Textarea';
 import '../components/ui/Card.css';
 import { workspacesQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
@@ -45,10 +45,6 @@ export const modeLabel = (mode: string) => FEISHU_GROUP_MODES.find((m) => m.valu
 /** §8.1: what connecting the group lets people do, in the words the design asks for. */
 export const groupConsequence = (runner: string, mode: string) =>
   `People in this group can make agents act on ${runner} in ${modeLabel(mode)} mode.`;
-
-/** The open_ids typed into the allowed-senders box: one per line, or separated by commas or spaces. */
-export const parseOpenIds = (text: string) => [...new Set(text.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean))];
-const OPEN_ID = /^ou_[A-Za-z0-9_-]{1,128}$/;
 
 interface WorkspaceRow {
   id: string;
@@ -106,14 +102,22 @@ function ConnectForm({
   const [workspaceId, setWorkspaceId] = useState<string | null>(workspaces.length === 1 ? workspaces[0].id : null);
   const [mode, setMode] = useState<PermissionMode>(PermissionMode.DEFAULT);
   const [who, setWho] = useState<'everyone' | 'listed'>('everyone');
-  const [listed, setListed] = useState('');
+  const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
   const [maxConcurrent, setMaxConcurrent] = useState<number | null>(FEISHU_CHAT_DEFAULT_MAX_CONCURRENT);
   const [perDay, setPerDay] = useState<number | null>(FEISHU_CHAT_DEFAULT_SESSIONS_PER_DAY);
-  const ids = { workspace: useId(), mode: useId(), who: useId(), listed: useId(), concurrent: useId(), perDay: useId() };
+  const ids = { workspace: useId(), mode: useId(), who: useId(), concurrent: useId(), perDay: useId() };
+  const members = pending.members;
+  const choose = (openId: string, on: boolean) =>
+    setChosen((was) => {
+      const next = new Set(was);
+      if (on) next.add(openId);
+      else next.delete(openId);
+      return next;
+    });
 
   const workspace = workspaces.find((w) => w.id === workspaceId);
-  const openIds = useMemo(() => parseOpenIds(listed), [listed]);
-  const badIds = openIds.filter((id) => !OPEN_ID.test(id));
+  // In the group's order, and only people still offered.
+  const openIds = (members ?? []).map((m) => m.openId).filter((id) => chosen.has(id));
   const confirm = useMutation({
     mutationFn: (body: FeishuChatConfirm) => api<FeishuChatRoute>('/integrations/feishu/chats/confirm', { method: 'POST', body }),
     onSuccess: () => {
@@ -123,7 +127,7 @@ function ConnectForm({
     },
   });
   const ready = workspaceId !== null && maxConcurrent !== null && perDay !== null
-    && (who === 'everyone' || (openIds.length > 0 && badIds.length === 0));
+    && (who === 'everyone' || openIds.length > 0);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!ready || confirm.isPending) return;
@@ -191,27 +195,29 @@ function ConnectForm({
               <Radio value="everyone">
                 <span className="admin-signin-choice">Everyone in the group</span>
               </Radio>
-              <Radio value="listed">
+              <Radio value="listed" disabled={members === null}>
                 <span className="admin-signin-choice">Only these people</span>
               </Radio>
             </RadioGroup>
-            {who === 'listed' && (
-              <>
-                <Textarea
-                  id={ids.listed}
-                  aria-label="Allowed senders"
-                  value={listed}
-                  placeholder={'ou_1a2b3c…\nou_4d5e6f…'}
-                  rows={3}
-                  spellCheck={false}
-                  onChange={(e) => setListed(e.target.value)}
-                />
-                <div className="admin-signin-hint">
-                  Their Feishu open_ids, one per line. You can always start sessions yourself.
-                </div>
-                {badIds.length > 0 && <div className="admin-signin-warning" role="alert">Not an open_id: {badIds.join(', ')}</div>}
-              </>
+            {who === 'listed' && members && members.length > 0 && (
+              <div className="feishu-members" role="group" aria-label="Allowed senders">
+                {members.map((m) => (
+                  <Checkbox key={m.openId} checked={chosen.has(m.openId)} onCheckedChange={(on) => choose(m.openId, on)}>
+                    {m.name ?? 'A member whose name Feishu did not give'}
+                  </Checkbox>
+                ))}
+              </div>
             )}
+            {who === 'listed' && members && members.length === 0 && (
+              <div className="admin-signin-hint">Nobody else is in this group yet.</div>
+            )}
+            {members === null && (
+              <div className="admin-signin-warning" role="alert">
+                Orbit couldn&apos;t read who is in this group from Feishu, so you can only allow everyone in it for now. Check
+                that the app has the im:chat:readonly permission and is still in the group, then open the link again.
+              </div>
+            )}
+            <div className="admin-signin-hint">You can always start sessions yourself.</div>
           </div>
 
           <div className="feishu-limits">

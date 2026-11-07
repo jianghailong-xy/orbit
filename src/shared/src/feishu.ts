@@ -213,6 +213,18 @@ export interface FeishuChatPending {
   expiresAt: string;
   /** The group is already connected: confirming replaces its settings. */
   connected: boolean;
+  /**
+   * The people in the group other than the owner, by name, to choose the allowed senders from (§8.1); null when Feishu
+   * would not say who is in it. The owner may always start sessions.
+   */
+  members: FeishuChatMember[] | null;
+}
+
+/** One person in a group, as the confirm page offers them. */
+export interface FeishuChatMember {
+  openId: string;
+  /** Null when Feishu gave no name. */
+  name: string | null;
 }
 
 /** `GET /api/integrations/feishu/chats[?ticket=…]`: the confirmed groups, and the ticket's group when one was given and is live. */

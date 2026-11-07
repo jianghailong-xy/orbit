@@ -10,7 +10,8 @@ import { ApiError } from '../api';
 /**
  * Orbit's confirm page for connecting a Feishu group (docs/feishu-bot-design.md §8.1), opened from the bot's card with
  * its one-time ticket: it names the group the ticket would connect, asks for the workspace, the permission mode — saying
- * what that lets the group do on which runner — who may start sessions and the two limits, and confirms with one POST.
+ * what that lets the group do on which runner — who may start sessions, ticked by name from the group's members, and the
+ * two limits — and confirms with one POST.
  * A ticket that no longer works is said to, with nothing to submit. Over a stand-in for the server.
  */
 
@@ -22,7 +23,7 @@ const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(
 vi.mock('../lib/toast', () => ({ useToast: () => toast }));
 
 import { api } from '../api';
-import { FeishuConnectGroupPage, groupConsequence, parseOpenIds } from './FeishuConnectGroupPage';
+import { FeishuConnectGroupPage, groupConsequence } from './FeishuConnectGroupPage';
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
@@ -31,7 +32,10 @@ let posted: unknown[];
 let refuse: Error | null;
 
 beforeEach(() => {
-  pending = { chatId: 'oc_team', chatName: 'Release team', expiresAt: '2099-01-01T00:00:00.000Z', connected: false };
+  pending = {
+    chatId: 'oc_team', chatName: 'Release team', expiresAt: '2099-01-01T00:00:00.000Z', connected: false,
+    members: [{ openId: 'ou_bob', name: 'Bob' }, { openId: 'ou_carol', name: 'Carol' }, { openId: 'ou_dan', name: null }],
+  };
   posted = [];
   refuse = null;
   vi.mocked(api).mockReset();
@@ -84,6 +88,9 @@ async function click(element: Element | null | undefined, what: string) {
   await settle();
 }
 const button = (label: string) => [...container!.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === label);
+const member = (name: string) =>
+  [...container!.querySelectorAll<HTMLElement>('[aria-label="Allowed senders"] label.orbit-choice')]
+    .find((l) => l.textContent === name)?.querySelector<HTMLElement>('[role="checkbox"]');
 const radio = (label: string) =>
   [...container!.querySelectorAll<HTMLElement>('label.orbit-choice')].find((l) => l.textContent?.startsWith(label))?.querySelector<HTMLElement>('[role="radio"]');
 
@@ -95,12 +102,12 @@ describe('the confirm page', () => {
     await click(radio('Accept Edits'), 'Accept Edits');
     expect(container!.textContent).toContain('People in this group can make agents act on Build box in Accept Edits mode.');
     await click(radio('Only these people'), 'Only these people');
-    const box = container!.querySelector<HTMLTextAreaElement>('textarea[aria-label="Allowed senders"]');
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(box, 'ou_bob\nou_carol, ou_bob');
-      box!.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await settle();
+    // The group's members by name; nobody is ticked yet, so there is nothing to submit.
+    expect([...container!.querySelectorAll('[aria-label="Allowed senders"] label.orbit-choice')].map((l) => l.textContent))
+      .toEqual(['Bob', 'Carol', 'A member whose name Feishu did not give']);
+    expect(button('Connect group')?.disabled).toBe(true);
+    await click(member('Carol'), 'Carol');
+    await click(member('Bob'), 'Bob');
     await click(button('Connect group'), 'Connect group');
     expect(posted).toEqual([{
       ticket: 't-123', workspaceId: 'ws-1', permissionMode: 'acceptEdits', allowedOpenIds: ['ou_bob', 'ou_carol'],
@@ -110,18 +117,24 @@ describe('the confirm page', () => {
     expect(toast.success).toHaveBeenCalledWith('Group connected', 'Release team can now start sessions in groups workspace.');
   });
 
-  it('sends an empty list for everyone in the group, and holds back what is not an open_id', async () => {
+  it('sends an empty list for everyone in the group, and drops what was ticked once everyone is chosen', async () => {
     await open();
     await click(radio('Only these people'), 'Only these people');
-    const box = container!.querySelector<HTMLTextAreaElement>('textarea[aria-label="Allowed senders"]');
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(box, 'bob@example.com');
-      box!.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await settle();
-    expect(container!.textContent).toContain('Not an open_id: bob@example.com');
-    expect(button('Connect group')?.disabled).toBe(true);
+    await click(member('Bob'), 'Bob');
+    await click(member('Bob'), 'Bob again');
+    expect(button('Connect group')?.disabled, 'unticked again, nobody is chosen').toBe(true);
+    await click(member('Bob'), 'Bob');
     await click(radio('Everyone in the group'), 'Everyone in the group');
+    await click(button('Connect group'), 'Connect group');
+    expect((posted[0] as { allowedOpenIds: string[] }).allowedOpenIds).toEqual([]);
+  });
+
+  it('offers only everyone when Feishu would not say who is in the group', async () => {
+    pending = { ...pending!, members: null };
+    await open();
+    expect(container!.textContent).toContain("Orbit couldn't read who is in this group from Feishu");
+    const only = radio('Only these people');
+    expect(only?.hasAttribute('data-disabled') || only?.getAttribute('aria-disabled') === 'true').toBe(true);
     await click(button('Connect group'), 'Connect group');
     expect((posted[0] as { allowedOpenIds: string[] }).allowedOpenIds).toEqual([]);
   });
@@ -145,8 +158,7 @@ describe('the confirm page', () => {
 });
 
 describe('the words', () => {
-  it('state the consequence as the design asks, and read open_ids one per line or comma separated', () => {
+  it('state the consequence as the design asks', () => {
     expect(groupConsequence('build-box', 'bypassPermissions')).toBe('People in this group can make agents act on build-box in Bypass mode.');
-    expect(parseOpenIds(' ou_a,ou_b\n\nou_a ')).toEqual(['ou_a', 'ou_b']);
   });
 });
