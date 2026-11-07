@@ -28,6 +28,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { decryptSecret, encryptSecret } from '../providers/provider-crypto';
 import { conflictingUniqueKey } from '../tasks/task-supersession';
 import { checkCredentials, type CredentialCheck } from './feishu-open-platform';
+import { feishuTiming } from './feishu-timing';
 
 /** pg_advisory_xact_lock namespace for the per-account save serializer (`save`): 4,000,000 plus the migration's number. */
 const SAVE_LOCK_NAMESPACE = 4000489;
@@ -50,7 +51,7 @@ function secretIsUnreadable(stored: string): boolean {
 }
 
 /** The app as every route answers it: never the secret, in either form. */
-function settingsOf(row: FeishuApp): FeishuAppSettings {
+function settingsOf(row: FeishuApp, connectedReplicas: number): FeishuAppSettings {
   return {
     platform: row.platform as FeishuPlatform,
     appId: row.appId,
@@ -66,6 +67,7 @@ function settingsOf(row: FeishuApp): FeishuAppSettings {
     lastConnectedAt: row.lastConnectedAt?.toISOString() ?? null,
     lastEventAt: row.lastEventAt?.toISOString() ?? null,
     lastError: row.lastError,
+    connectedReplicas,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -114,7 +116,17 @@ export class FeishuAppService {
   /** `GET /integrations/feishu`: the switch, and the account's app, null while it has none. */
   async integration(ownerId: string): Promise<FeishuIntegration> {
     const [allowed, app] = await Promise.all([this.allowed(), this.prisma.feishuApp.findUnique({ where: { ownerId } })]);
-    return { allowed, app: app ? settingsOf(app) : null };
+    return { allowed, app: app ? settingsOf(app, await this.connectedReplicas(app.appId)) : null };
+  }
+
+  /**
+   * How many apiserver replicas hold a live long connection of the app now (§4.1, §4.4): their CONNECTED feishu_link rows
+   * whose heartbeat is fresh (feishu/feishu-link.service.ts).
+   */
+  async connectedReplicas(appId: string): Promise<number> {
+    return this.prisma.feishuLink.count({
+      where: { appId, state: 'CONNECTED', heartbeatAt: { gt: new Date(Date.now() - feishuTiming().staleMs) } },
+    });
   }
 
   /**

@@ -77,6 +77,13 @@ function CopyName({ name, onCopy }: { name: string; onCopy: (name: string) => vo
   );
 }
 
+/** How many Orbit servers hold the app's long connection now (§4.4): each server connects every app on its own. */
+export function connectionText(app: FeishuAppSettings): string {
+  if (!app.enabled) return 'Off';
+  if (app.connectedReplicas === 0) return 'Not connected';
+  return app.connectedReplicas === 1 ? 'Connected on 1 Orbit server' : `Connected on ${app.connectedReplicas} Orbit servers`;
+}
+
 /** The app as it stands: its platform and App ID, whether its secret is saved, its switch, and its removal. */
 function AppSummary({
   app, allowed, onReplace,
@@ -127,6 +134,16 @@ function AppSummary({
           <dd className="feishu-hint">
             {app.secretUnreadable ? 'Saved, but no longer readable' : 'Saved. It is never shown again.'}
           </dd>
+          <dt>Connection</dt>
+          <dd>{connectionText(app)}</dd>
+          {app.botName && (
+            <>
+              <dt>Bot</dt>
+              <dd>{app.botName}</dd>
+            </>
+          )}
+          <dt>Last event</dt>
+          <dd className="feishu-hint">{app.lastEventAt ? new Date(app.lastEventAt).toLocaleString() : 'None received yet'}</dd>
         </dl>
         <div className="admin-signin-row">
           <div>

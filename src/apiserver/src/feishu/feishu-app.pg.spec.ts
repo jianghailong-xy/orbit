@@ -76,7 +76,7 @@ const SECRETS = [APP_X.appSecret, X_ROTATED, APP_Y.appSecret, APP_L.appSecret, W
 
 /** What every answer's app is made of, the id twin the response pipeline adds (common/public-id-body.ts) included. */
 const APP_KEYS = [
-  'appId', 'approvalsInFeishu', 'botName', 'createdAt', 'defaultWorkspaceId', 'defaultWorkspacePublicId', 'enabled',
+  'appId', 'approvalsInFeishu', 'botName', 'connectedReplicas', 'createdAt', 'defaultWorkspaceId', 'defaultWorkspacePublicId', 'enabled',
   'hasSecret', 'lastConnectedAt', 'lastError', 'lastEventAt', 'messageDetail', 'ownerName', 'ownerOpenId', 'platform',
   'secretUnreadable', 'updatedAt',
 ];

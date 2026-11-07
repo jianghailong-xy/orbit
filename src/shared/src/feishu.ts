@@ -48,6 +48,8 @@ export interface FeishuAppSettings {
   lastEventAt: string | null;
   /** The last failure as Feishu worded it, with its code; never a credential. */
   lastError: string | null;
+  /** How many apiserver replicas hold a live long connection of this app now (§4.4): one per replica when all is well. */
+  connectedReplicas: number;
   createdAt: string;
   updatedAt: string;
 }
