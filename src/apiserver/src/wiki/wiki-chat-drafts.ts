@@ -876,7 +876,8 @@ export class WikiChatDrafts {
   async retry(ownerId: string, userId: string, draftId: string, actingSessionId: string | null): Promise<WikiChatPressAnswer> {
     refuseActingSession(actingSessionId, 'retrying a wiki chat\'s rewrite');
     void userId;
-    const card = await this.prisma.wikiChatDraft.findFirst({ where: { id: draftId, ownerId }, select: DRAFT_SELECT });
+    // A card of a wiki in Trash is read as none (contract `space.trash`): the lock below answers it the plain 404.
+    const card = await this.prisma.wikiChatDraft.findFirst({ where: { id: draftId, ownerId, space: { deletedAt: null } }, select: DRAFT_SELECT });
     if (card?.kind === 'plan') return this.retryPlanCard(ownerId, card);
     const retried = await withTransactionRetry(
       this.prisma,
@@ -925,14 +926,17 @@ export class WikiChatDrafts {
   /**
    * The build a plan card's press or Try again asked for, named on the card (`change.build`, contract
    * `chat.drafts.results.plan`): its rewrite is that build's, whatever later builds of the version do. Try again's makes
-   * the result unseen again.
+   * the result unseen again. A wiki moved to Trash since the build was asked for has dropped it, and its card is not
+   * written (contract `space.trash`).
    */
   private async recordCardBuild(ownerId: string, draftId: string, build: string, unseen: boolean): Promise<void> {
     await this.prisma.$executeRaw(Prisma.sql`
-      UPDATE "wiki_chat_draft"
-         SET "change" = jsonb_set("change", '{build}', to_jsonb(${build}::text)),
-             "seen_at" = CASE WHEN ${unseen}::boolean THEN NULL ELSE "seen_at" END
-       WHERE "id" = ${draftId}::uuid AND "owner_id" = ${ownerId}::uuid AND "kind" = 'plan' AND "change" IS NOT NULL`);
+      UPDATE "wiki_chat_draft" d
+         SET "change" = jsonb_set(d."change", '{build}', to_jsonb(${build}::text)),
+             "seen_at" = CASE WHEN ${unseen}::boolean THEN NULL ELSE d."seen_at" END
+        FROM "wiki_space" s
+       WHERE d."id" = ${draftId}::uuid AND d."owner_id" = ${ownerId}::uuid AND d."kind" = 'plan' AND d."change" IS NOT NULL
+         AND s."id" = d."space_id" AND s."deleted_at" IS NULL`);
   }
 
   /**

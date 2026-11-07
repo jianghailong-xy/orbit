@@ -22,7 +22,13 @@
  *   4. Undo puts the plan back as a new confirmed version with version 1's content, and the sections the rebuild wrote
  *      or dropped back as they were — sentences and fingerprints — with no model asked and restore versions kept; the
  *      build that follows leaves every one of them as it is;
- *   5. once the plan moved on from a card's version, its Undo is refused and writes nothing.
+ *   5. once the plan moved on from a card's version, its Undo is refused and writes nothing;
+ *   6. a wiki in Trash (contract `space.trash`): its plan cards' press, Undo and Try again are answered as for a card that
+ *      does not exist, and write nothing; restored, the cards are as they were;
+ *   7. the wiki moved to Trash — by its own writer, held open — between a press's hold on its card and its write of the
+ *      plan: the press, and then the Undo, wait on the space row, end with the 404 and write nothing; restored, each goes
+ *      through;
+ *   8. a chat of a wiki in Trash drafts no card, of one document or of several.
  *
  * Not destructive: every row belongs to the account this run creates.
  */
@@ -52,6 +58,7 @@ import { WikiRepoOps } from '../wiki-worker/wiki-repo-ops';
 import { readWikiSystemModel } from '../wiki-worker/wiki-system-model';
 import { appendWikiChatNotes } from './wiki-chat-notes';
 import { WikiDocs } from './wiki-docs';
+import { moveWikiSpaceToTrash } from './wiki-trash';
 import { WikiService } from './wiki.service';
 import '../test-support/daemon-routes-over-http';
 
@@ -592,5 +599,146 @@ test('a plan card of two documents: a split gated as one edit, one press, its re
     assert.match(refused.json.message, /the plan moved on since this card's press made version 4: it stands at version 5 \(draft\) now, so nothing was undone/u);
     assert.deepEqual(await planWrites(), writes, 'nothing written');
     assert.equal((await draftRow(cardC)).undone_at, null, 'and the card is still applied');
+  });
+  // ── 6 ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+  /** Every row a plan card's press or Undo writes, by row version: a write of the same values shows as well. */
+  const rowVersions = async () => {
+    const of = async (table: string, join = '', where = 't."space_id" = $1::uuid') => (await sql.query(
+      `SELECT t."id"::text AS "id", t.ctid::text AS "ctid", t.xmin::text AS "xmin" FROM "${table}" t ${join} WHERE ${where} ORDER BY t."id"`,
+      [spaceId])).rows.map((row) => `${row.id} ${row.ctid} ${row.xmin}`);
+    return {
+      plans: await of('wiki_plan'),
+      planDocs: await of('wiki_plan_doc', 'JOIN "wiki_plan" p ON p."id" = t."plan_id"', 'p."space_id" = $1::uuid'),
+      planSections: await of('wiki_plan_section', 'JOIN "wiki_plan_doc" d ON d."id" = t."doc_id" JOIN "wiki_plan" p ON p."id" = d."plan_id"', 'p."space_id" = $1::uuid'),
+      cards: await of('wiki_chat_draft'),
+      docs: await of('wiki_doc'),
+      sections: await of('wiki_doc_section', 'JOIN "wiki_doc" d ON d."id" = t."doc_id"', 'd."space_id" = $1::uuid'),
+      sentences: await of('wiki_doc_sentence', 'JOIN "wiki_doc_section" s ON s."id" = t."section_id" JOIN "wiki_doc" d ON d."id" = s."doc_id"', 'd."space_id" = $1::uuid'),
+      versions: await of('wiki_doc_section_version'),
+    };
+  };
+  /** The space's plan jobs by id: a move to Trash drops the unfinished ones, and a press asks for one only once it commits. */
+  const planJobIds = async () => (await sql.query(
+    `SELECT "id"::text AS "id" FROM "wiki_plan_job" WHERE "space_id" = $1::uuid ORDER BY "id"`, [spaceId])).rows.map((row) => row.id as string);
+  /** 1.1 as the version in force has it, as a change sends it, with one section's covers changed. */
+  const inForce = async (key: string, covers: string) => {
+    const plan = await api('GET', `/api/wiki/spaces/${pub(spaceId)}/plan`, ownerToken);
+    const doc = plan.json.confirmed.docs.find((one: { slug: string }) => one.slug === SLUG);
+    return {
+      category: 'runtime', slug: SLUG, title: doc.title, question: doc.question, audience: doc.audience, scopeIn: doc.scopeIn, scopeOut: [], length: doc.length,
+      sections: doc.sections.map((s: Record<string, any>) => ({
+        key: s.key, title: s.title, kind: s.kind, covers: s.key === key ? covers : s.covers, length: s.length,
+        sources: { docs: s.sources.docs, code: s.sources.code, contracts: s.sources.contracts },
+      })),
+    };
+  };
+  const toTrash = async () => {
+    const moved = await api('DELETE', `/api/wiki/spaces/${pub(spaceId)}`, ownerToken);
+    assert.equal(moved.status, 200, moved.text);
+  };
+  const restore = async () => {
+    const restored = await api('POST', `/api/wiki/spaces/${pub(spaceId)}/restore`, ownerToken);
+    assert.ok(restored.status < 300, restored.text);
+  };
+  let cardD = '';
+  let cardE = '';
+  await t.test('6. a wiki in Trash: its plan cards\' press, Undo and Try again are answered as for no card and write nothing; restored, the cards are as they were', async () => {
+    // The owner confirms the edit that waits (5), so the plan stands where the next press leaves it.
+    const confirmedEdit = await api('POST', `/api/wiki/spaces/${pub(spaceId)}/plan/versions/5/confirm`, ownerToken);
+    assert.equal(confirmedEdit.status, 200, confirmedEdit.text);
+    // Card D, pressed: applied, and undoable while the plan stands where it left it. Card E, drafted on that: open.
+    const d = await draft({ kind: 'plan', reason: 'Say what survives a respawn first.', idempotencyKey: `d-${RUN}`,
+      change: { docs: [await inForce('recovery', 'What survives a respawn, said first.')] } });
+    assert.equal(d.status, 200, d.text);
+    cardD = toUuid(d.json.draftId);
+    const pressedD = await press(cardD, 'apply');
+    assert.deepEqual([pressedD.status, pressedD.json.draft?.change.version, pressedD.json.draft?.undoable], [200, 6, true], pressedD.text);
+    const e = await draft({ kind: 'plan', reason: 'Say what the contract promises, for an operator.', idempotencyKey: `e-${RUN}`,
+      change: { docs: [await inForce('contract', 'What the contract promises, for an operator.')] } });
+    assert.equal(e.status, 200, e.text);
+    cardE = toUuid(e.json.draftId);
+    assert.equal((await card(cardE)).json.state, 'draft');
+
+    await toTrash();
+    const rows = await rowVersions();
+    const jobs = await planJobIds();
+    const none = randomUUID();
+    for (const [id, what] of [[cardE, 'apply'], [cardE, 'discard'], [cardD, 'undo'], [cardD, 'retry'], [cardD, 'seen']] as const) {
+      const reply = await press(id, what);
+      const nobody = await press(none, what);
+      assert.deepEqual([reply.status, reply.text], [nobody.status, nobody.text], `${what}: answered as for a card that does not exist`);
+    }
+    for (const id of [cardD, cardE]) {
+      const read = await card(id);
+      const nobody = await card(none);
+      assert.deepEqual([read.status, read.text], [nobody.status, nobody.text], 'and read as one');
+    }
+    assert.deepEqual(await rowVersions(), rows, 'nothing of the plan, the cards or the documents written');
+    assert.deepEqual(await planJobIds(), jobs, 'and no build asked for');
+
+    await restore();
+    const readD = await card(cardD);
+    assert.deepEqual([readD.status, readD.json.state, readD.json.undoable], [200, 'applied', true], 'restored, D is applied and undoable as it was');
+    assert.deepEqual([(await card(cardE)).json.state], ['draft'], 'and E is open');
+  });
+
+  // ── 7 ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+  /** Backends waiting on the space row's lock, as `lockSpaceInUse` takes it. */
+  const waitingOnSpace = async () => Number((await sql.query(
+    `SELECT count(*)::int AS n FROM pg_stat_activity
+      WHERE "wait_event_type" = 'Lock' AND "query" LIKE '%FROM "wiki_space"%' AND "query" LIKE '%"deleted_at" IS NULL%' AND "query" LIKE '%FOR NO KEY UPDATE%'`)).rows[0].n);
+  /**
+   * The wiki moved to Trash by its own writer (`moveWikiSpaceToTrash`), whose transaction is held open until the press has
+   * its card and waits on the space's row — then committed.
+   */
+  const trashedMeanwhile = async (pressing: () => Promise<Reply>): Promise<Reply> => {
+    let reply: Promise<Reply> | undefined;
+    let answered = false;
+    await prisma.$transaction(async (tx) => {
+      await moveWikiSpaceToTrash(tx, ownerId, spaceId);
+      reply = pressing();
+      reply.then(() => { answered = true; }, () => { answered = true; });
+      for (const deadline = Date.now() + 30_000; (await waitingOnSpace()) === 0;) {
+        assert.equal(answered, false, 'the press answered without waiting on the space row');
+        assert.ok(Date.now() < deadline, 'the press waits on the space row within 30s');
+        await delay(20);
+      }
+      await delay(300);
+      assert.equal(answered, false, 'and still waits while the move is open');
+    }, { timeout: 60_000, maxWait: 10_000 });
+    return reply!;
+  };
+  await t.test('7. the wiki moved to Trash between a press\'s hold on its card and its write of the plan: neither the press nor the Undo writes anything', async () => {
+    let rows = await rowVersions();
+    let jobs = await planJobIds();
+    const refused = await trashedMeanwhile(() => press(cardE, 'apply'));
+    assert.deepEqual([refused.status, refused.json.message], [404, 'no such wiki space'], refused.text);
+    assert.deepEqual(await rowVersions(), rows, 'the press wrote nothing: no version, no confirmation, no press');
+    assert.deepEqual((await planJobIds()).filter((id) => !jobs.includes(id)), [], 'and asked for no build');
+    assert.equal((await draftRow(cardE)).decision, null);
+    // Restored, the same press goes through: what refused it was the Trash.
+    await restore();
+    const pressed = await press(cardE, 'apply');
+    assert.deepEqual([pressed.status, pressed.json.draft?.change.version, pressed.json.draft?.undoable], [200, 7, true], pressed.text);
+
+    rows = await rowVersions();
+    jobs = await planJobIds();
+    const undoRefused = await trashedMeanwhile(() => press(cardE, 'undo'));
+    assert.deepEqual([undoRefused.status, undoRefused.json.message], [404, 'no such wiki space'], undoRefused.text);
+    assert.deepEqual(await rowVersions(), rows, 'the Undo wrote nothing: no version, no restore, no card');
+    assert.deepEqual((await planJobIds()).filter((id) => !jobs.includes(id)), [], 'and asked for no build');
+    assert.equal((await draftRow(cardE)).undone_at, null);
+    await restore();
+    const undone = await press(cardE, 'undo');
+    assert.deepEqual([undone.status, undone.json.draft?.state, undone.json.planVersion], [200, 'undone', 8], undone.text);
+  });
+
+  // ── 8 ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('8. a chat of a wiki in Trash drafts no card, of one document or of several', async () => {
+    await toTrash();
+    const cards = await count(`SELECT count(*)::int AS n FROM "wiki_chat_draft" WHERE "session_id" = $1::uuid`, [chat]);
+    const refused = await draft({ kind: 'plan', reason, change: split, idempotencyKey: `trashed-${RUN}` });
+    assert.equal(refused.json.code, 'WIKI_SPACE_UNBOUND', refused.text);
+    assert.equal(await count(`SELECT count(*)::int AS n FROM "wiki_chat_draft" WHERE "session_id" = $1::uuid`, [chat]), cards, 'no card');
   });
 });

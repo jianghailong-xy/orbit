@@ -1851,7 +1851,8 @@ export class WikiPlans {
 
   /**
    * A plan card's press (contract `chat.presses.apply`), in the press's own transaction once it holds the card: under the
-   * space row's lock the plan must still stand at the version the card was drafted on — another stored since is
+   * space row's lock (`lockSpaceInUse` — a wiki moved to Trash since the card was held is the plain 404, and nothing is
+   * written) the plan must still stand at the version the card was drafted on — another stored since is
    * WIKI_REVISION_CONFLICT; the change is applied to it and gated again, as an accepted proposal is
    * (`plan.proposals.accept`); the result is stored as a new version of origin owner, as the owner's edit is, and
    * confirmed, the version in force superseded. A refusal throws, and the caller's transaction writes nothing. Answers
@@ -1859,8 +1860,7 @@ export class WikiPlans {
    */
   async applyCardChangeIn(tx: Prisma.TransactionClient, card: { ownerId: string; spaceId: string; change: WikiPlanCardChange }): Promise<{ version: number }> {
     const { ownerId, spaceId, change } = card;
-    await tx.$queryRaw(Prisma.sql`
-      SELECT "id" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`);
+    await lockSpaceInUse(tx, ownerId, spaceId);
     const base = await this.latest(tx, ownerId, spaceId);
     if (!base || base.status !== 'confirmed' || base.version !== change.baseVersion) {
       throw new WikiRefusalError({
@@ -1890,8 +1890,9 @@ export class WikiPlans {
 
   /**
    * A plan card's Undo (contract `chat.presses.undo`; C17), in the Undo's own transaction once it holds the card: under the
-   * space row's lock the plan must still stand at the version the card's press made — the newest, and confirmed — or the
-   * Undo is refused WIKI_REVISION_CONFLICT. The version the card was drafted on is stored again word for word — its
+   * space row's lock (`lockSpaceInUse` — a wiki moved to Trash since the card was held is the plain 404, and nothing is
+   * written) the plan must still stand at the version the card's press made — the newest, and confirmed — or the Undo is
+   * refused WIKI_REVISION_CONFLICT. The version the card was drafted on is stored again word for word — its
    * categories, documents, sections and their keys, new fields, target, gate report and repository check: what the owner
    * had before the press, whose written sections the caller restores by their keys — as a new version of origin owner,
    * and confirmed. Nothing is gated again: it is a version this plan held, and the press's gate held the plan only to the
@@ -1899,8 +1900,7 @@ export class WikiPlans {
    */
   async undoCardChangeIn(tx: Prisma.TransactionClient, card: { ownerId: string; spaceId: string; change: WikiPlanCardChange }): Promise<{ version: number }> {
     const { ownerId, spaceId, change } = card;
-    await tx.$queryRaw(Prisma.sql`
-      SELECT "id" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`);
+    await lockSpaceInUse(tx, ownerId, spaceId);
     const latest = await this.latest(tx, ownerId, spaceId);
     if (change.version === null || !latest || latest.status !== 'confirmed' || latest.version !== change.version) {
       throw new WikiRefusalError({
