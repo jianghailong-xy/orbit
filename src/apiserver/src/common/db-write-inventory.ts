@@ -689,6 +689,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary, which fails the inbox attempt; the inbox claims the event again later, finds the session under its derived id, and writes the chain then.',
   },
   {
+    at: 'feishu/feishu-group.service.ts#start',
+    shape: 'TX_RETRIED',
+    locks: "The request's feishu_thread row (the topic): an INSERT … ON CONFLICT (app_id, chat_id, root_message_id) DO UPDATE of last_spoken_at when the row is the same session's, whose foreign keys take FOR KEY SHARE on the `user` and `feishu_app` rows; then, only when that inserted the row, one INSERT into activity, which has no foreign key and no trigger. feishu_thread has no trigger.",
+    identity: "The app, the group and the message the member sent, and the session id derived from the app and that message (feishuDerivedUuid), all fixed before the closure. The session itself was made before it, by SessionsService.create under that id, so the same event handled again finds the session and writes the same topic.",
+    isolation: '',
+    attempts: 4,
+    replay: "A re-run inserts the same topic, or finds it and stamps it; the activity row is written only by the attempt that inserted the topic, so a re-run after a discarded attempt writes it once, and a second handling of the event — which finds the topic — writes none.",
+    effects: "None inside. The receipt (`Started · <title>`) is sent in the topic after the commit, with a Feishu uuid derived from the message, so the group gets one.",
+    answer: 'Typed 503 from the global boundary, which fails the inbox attempt; the inbox claims the event again later, finds the session under its derived id, and writes the topic then.',
+  },
+  {
     at: 'feishu/feishu-owner.service.ts#createCode',
     shape: 'TX_RETRIED',
     locks: "feishu_connect_code rows of the account, and any expired ones, by a DELETE; then the INSERT of the new code, whose foreign key takes FOR KEY SHARE on the `user` row. The table has no trigger, and nothing else is written.",
@@ -2326,6 +2337,8 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // through its onTurnWritten hook, which a replay of the turn's clientTurnId never reaches.
   { at: 'feishu/feishu-direct.service.ts#registerChain', under: 'feishu/feishu-direct.service.ts#start, and sessions/sessions.service.ts#createTurn (onTurnWritten)' },
   { at: 'feishu/feishu-direct.service.ts#recordActivity', under: 'feishu/feishu-direct.service.ts#start, and sessions/sessions.service.ts#createTurn (onTurnWritten)' },
+  { at: 'feishu/feishu-group.service.ts#registerTopic', under: 'feishu/feishu-group.service.ts#start, and sessions/sessions.service.ts#createTurn (onTurnWritten)' },
+  { at: 'feishu/feishu-group.service.ts#recordActivity', under: 'feishu/feishu-group.service.ts#start, and sessions/sessions.service.ts#createTurn (onTurnWritten)' },
   { at: 'common/lock-order.ts#lockOwnerTaskGraph', under: 'every rank-10 caller (I1)' },
   // The repository operations' three participants (migration 0402, and 0406 for the files a read answers):
   // a snapshot's payload becoming the space's cache, the files a read answered becoming the read cache, and the
