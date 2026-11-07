@@ -640,7 +640,7 @@ final class CursorRuntimeTests: XCTestCase {
 
     func testTheUsageWordsAreTheWebsOwn() throws {
         let planUsage = try source("src/web/src/lib/planUsage.ts")
-        XCTAssertTrue(planUsage.contains("label: included.period === 'weekly' ? 'Weekly limit' : 'Monthly limit',"))
+        XCTAssertTrue(planUsage.contains("const label = included.period === 'weekly' ? 'Weekly limit' : 'Monthly limit';"))
         let engines = try source("src/web/src/components/RunnerEngines.tsx")
         XCTAssertTrue(engines.contains("label: spent.resetsAt ? `Spent · resets ${formatResetTime(spent.resetsAt, now)}` : 'Spent' }"))
         XCTAssertTrue(engines.contains("Usage unavailable"))
