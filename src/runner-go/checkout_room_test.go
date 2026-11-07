@@ -490,7 +490,7 @@ func TestUnderAStorageBudgetsFloorACheckoutWhoseWorkIsOnlyOnItsBranchGoesAndCome
 	}
 }
 
-// Within the hour after a look at resting checkouts that found nothing, the schedule's sweeps do not look again, but a
+// Within the wait after a look at resting checkouts that found nothing, the schedule's sweeps do not look again, but a
 // checkout that would take the budget under its floor still makes room from them: it is the change that wait assumes
 // has not happened.
 func TestUnderAStorageBudgetACheckoutMakesRoomFromRestingCheckoutsDuringTheWait(t *testing.T) {
@@ -510,7 +510,7 @@ func TestUnderAStorageBudgetACheckoutMakesRoomFromRestingCheckoutsDuringTheWait(
 	// Its turn is over, and it rests again.
 	s.set(func() { s.answers["sess-resting"] = "resumable" })
 	if _, looked := s.sweepAfter(worktreeGCInterval, measureWorktreePressure(0, storage)); looked {
-		t.Fatal("five minutes into the hour, the schedule's sweep must not look")
+		t.Fatal("five minutes into the wait, with no newer measurement, the schedule's sweep must not look")
 	}
 	requireCheckoutOnDisk(t, resting, "nothing looked")
 
