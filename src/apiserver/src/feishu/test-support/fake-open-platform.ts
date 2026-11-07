@@ -288,12 +288,15 @@ export class FakeOpenPlatform {
       return;
     }
     const route = this.match(request.method, request.path);
+    const routed = platform === null ? null : { ...request, platform };
     const answer: FakeAnswer =
-      platform === null
+      routed === null
         ? { status: 404, body: { code: 404, msg: `no platform at /${prefix}` } }
         : route
-          ? await route({ ...request, platform })
+          ? await route(routed)
           : { status: 404, body: { code: 404, msg: `no route for ${request.method} ${request.path}` } };
+    // What the route answered a send or reply with, on the request `requests` holds too.
+    if (routed?.answeredWith) request.answeredWith = routed.answeredWith;
     res.writeHead(answer.status, { ...answer.headers, 'content-type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify(answer.body));
   }
