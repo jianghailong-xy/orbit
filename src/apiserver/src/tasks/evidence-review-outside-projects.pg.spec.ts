@@ -466,6 +466,39 @@ suite('outside a project the dispatching session settles the evidence, and the o
       assert.equal((await deliveredTo(reviewer)).length, 2, 'read evidence never receives a fresh window');
     });
 
+    await t.test('repeated global recovery skips non-independent and ended reviewers before createTurn', async () => {
+      const nonIndependent = await conversation('reviewer also ran its task', { status: RunStatus.FAILED });
+      const ownWork = await dispatched('cannot judge its own work', nonIndependent);
+      await db.session.update({ where: { id: nonIndependent }, data: { taskId: ownWork.taskId } });
+      await submit(ownWork, 'ready for an independent reviewer');
+      assert.equal(await reviews.deliver(ownerId, ownWork.taskId, (await latestEvidence(ownWork.taskId)).id),
+        'REVIEWER_NOT_INDEPENDENT', 'the fixture is refused for independence');
+      // Release the run's execution claim before making the other session live on the same task.
+      await db.session.update({ where: { id: ownWork.run }, data: { status: RunStatus.FAILED } });
+      await db.session.update({ where: { id: nonIndependent }, data: { status: RunStatus.AWAITING_INPUT } });
+
+      const ended = await conversation('interrupted with a recorded end', { status: RunStatus.FAILED });
+      const endedWork = await dispatched('cannot deliver after end', ended);
+      await submit(endedWork, 'ready before the reviewer ended');
+      await db.session.update({ where: { id: ended }, data: {
+        status: RunStatus.INTERRUPTED, completedAt: new Date(),
+      } });
+      assert.equal(await reviews.deliver(ownerId, endedWork.taskId, (await latestEvidence(endedWork.taskId)).id),
+        'REVIEWER_ENDED', 'the interrupted fixture has an actual end');
+
+      const before = await db.conversationTurn.count();
+      let sends = 0;
+      const recovering = new EvidenceReviewService(prisma, {
+        createTurn: async () => { sends++; throw new Error('no revision in this sweep is owed a delivery'); },
+      } as unknown as SessionsService);
+      await recovering.deliverOwedTo();
+      await recovering.deliverOwedTo();
+      assert.equal(sends, 0, 'permanent refusals do not reach the write transaction');
+      assert.equal(await db.conversationTurn.count(), before, 'neither sweep writes any turn');
+      assert.equal((await deliveredTo(nonIndependent)).length, 0);
+      assert.equal((await deliveredTo(ended)).length, 0);
+    });
+
     // (6) -------------------------------------------------------------------------------------------
     await t.test('(6) a dispatching session that has ended holds nothing, and one already ended is not handed it',
       async () => {

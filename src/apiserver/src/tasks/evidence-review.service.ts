@@ -7,8 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { SESSION_ENDING_SELECT, sessionHasEnded, conversationIsOver } from '../projects/project-open-item';
-import { COORDINATOR_PAUSE_SELECT, conversationIsPaused } from '../projects/coordinator-evidence-queue';
+import { SESSION_ENDING_SELECT, sessionHasEnded } from '../projects/project-open-item';
 import { readBlockSender } from '../sessions/session-message';
 import { SessionsService } from '../sessions/sessions.service';
 import {
@@ -50,15 +49,17 @@ export class EvidenceReviewService {
     if (!task || task.projectId !== null || !task.creatorSessionId
       || task.completionCriterion !== 'EVIDENCE_JUDGMENT') return null;
     const reviewerSessionId = task.creatorSessionId;
-    // Read before the turn, because `createTurn` refuses an ended conversation by itself and before
-    // the hook below runs, which would read as SESSION_UNAVAILABLE where the reason is that it ended.
-    // The hook asks again under the lock.
-    const reviewer = await this.prisma.session.findFirst({
-      where: { id: reviewerSessionId, ownerId },
-      select: COORDINATOR_PAUSE_SELECT,
-    });
-    if (!reviewer || conversationIsOver(reviewer)) return this.refused(taskId, 'REVIEWER_ENDED');
-    if (conversationIsPaused(reviewer)) return 'WAITING';
+    // Refused revisions are not owed a turn. This write-free preflight keeps the periodic sweep
+    // from opening send transactions or logging the same permanent refusal on every tick.
+    // The send hook checks again under the session lock to cover changes after these reads.
+    try {
+      await bindEvidenceReviewDelivery(this.prisma, { id: evidenceId, taskId, ownerId }, reviewerSessionId);
+    } catch (error) {
+      if (error instanceof EvidenceReviewDeliveryRefused) {
+        return error.refusalCode === 'SESSION_UNAVAILABLE' ? 'WAITING' : error.refusalCode;
+      }
+      throw error;
+    }
     const previous = await this.prisma.conversationTurn.findFirst({
       where: { sessionId: reviewerSessionId, clientTurnId: { startsWith: evidenceReviewTurnId(evidenceId) } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
