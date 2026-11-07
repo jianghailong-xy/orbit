@@ -21,6 +21,8 @@ import { claudeRegionPushBody, regionMachineName } from '../runners/runner-regio
 const APNS_HOST_PROD = 'api.push.apple.com';
 const APNS_HOST_SANDBOX = 'api.sandbox.push.apple.com';
 const SYNC_DEBOUNCE_MS = 300; // coalesce a burst of resolutions into one silent badge sync
+/** How soon a reconcile looks again at a Feishu card another call was drawing (FeishuTransport.closeSettled). */
+const FEISHU_BUSY_RETRY_MS = 5_000;
 /**
  * Shortest gap between two agent-sent notifications about the same session. Every other push here
  * is edge-triggered by something that happens at most a few times per run; this one fires whenever
@@ -1076,8 +1078,8 @@ export class PushService {
    *  resolved, a session left RUNNING, a session ended — possibly on another device). Coalesce a
    *  burst into one silent sync. Called from RealtimeService.publish() on the event's origin replica. */
   scheduleBadgeSync(ownerId: string): void {
-    // The badge is a device's: a Feishu card is not counted, so with no device transport there is nothing to sync.
-    if (!this.apnsEnabled && !this.fcm.enabled) return;
+    // The same reconcile closes the owner's Feishu cards that no longer hold (§6.2), so it runs with Feishu alone too.
+    if (!this.enabled) return;
     clearTimeout(this.syncTimers.get(ownerId));
     this.syncTimers.set(
       ownerId,
@@ -1089,16 +1091,28 @@ export class PushService {
   }
 
   /** Recompute the owner's badge; if it moved or a session dropped out of "needs you", push a
-   *  silent badge update to their devices and name the sessions whose banners should be cleared. */
+   *  silent badge update to their devices and name the sessions whose banners should be cleared.
+   *  Then, from the same "needs you", close the owner's Feishu cards whose matter was settled
+   *  elsewhere (docs/feishu-bot-design.md §6.2) — whether or not the badge moved: an approval
+   *  answered beside another still pending leaves the count where it was. */
   private async reconcileBadge(ownerId: string): Promise<void> {
     try {
       const delta = badgeDiff(this.badgeState.get(ownerId), await this.needsYouSessions(ownerId));
       if (delta.badge === 0) this.badgeState.delete(ownerId);
       else this.badgeState.set(ownerId, { badge: delta.badge, sessions: delta.sessions });
+      if (this.feishu) this.background(this.closeFeishuCards(ownerId, delta.sessions));
       if (delta.changed) await this.syncBadge(ownerId, delta.badge, delta.clearSessions);
     } catch (err) {
       this.log.warn(`badge sync failed: ${(err as Error).message}`);
     }
+  }
+
+  /** The Feishu half of the reconcile. A card another call held is looked at again once that call can have let go. */
+  private async closeFeishuCards(ownerId: string, needsYou: ReadonlySet<string>): Promise<void> {
+    const target = this.feishu ? await this.feishu.target(ownerId) : null;
+    if (!target || !this.feishu) return;
+    const { busy } = await this.feishu.closeSettled(target, needsYou);
+    if (busy) setTimeout(() => this.scheduleBadgeSync(ownerId), FEISHU_BUSY_RETRY_MS).unref?.();
   }
 
   /** Silent (content-available) push: updates the icon badge with no banner/sound, and carries

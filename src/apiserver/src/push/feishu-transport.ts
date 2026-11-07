@@ -2,7 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { Injectable, Logger } from '@nestjs/common';
 import { uuidToBase62, type FeishuMessageDetail, type FeishuPlatform } from '@orbit/shared';
-import { renderFeishuCard, type FeishuAlert, type FeishuApprovalItem } from '../feishu/cards/feishu-cards';
+import {
+  approvalClass,
+  renderFeishuCard,
+  renderFeishuTerminalCard,
+  type FeishuAlert,
+  type FeishuApprovalItem,
+} from '../feishu/cards/feishu-cards';
 import { FeishuAppService } from '../feishu/feishu-app.service';
 import type { FeishuAppCredentials } from '../feishu/feishu-open-platform';
 import { FeishuOutbound, feishuDedupeUuid, type FeishuSendResult } from '../feishu/feishu-outbound';
@@ -41,6 +47,42 @@ export interface FeishuCardSpec {
 export const FEISHU_ALERT_ATTEMPTS = 3;
 /** Rounds one caller sends or updates a card in, picking up what other callers announced meanwhile. */
 const MAX_ROUNDS = 5;
+/** Feishu updates a message only this long after it was sent (§6.2): an older card is left as it is. */
+export const FEISHU_CARD_UPDATE_DAYS = 14;
+
+/** `10:32 UTC`: when a card's matter was settled. Orbit does not know the owner's time zone, so it says which it uses. */
+function clock(at: Date): string {
+  return `${String(at.getUTCHours()).padStart(2, '0')}:${String(at.getUTCMinutes()).padStart(2, '0')} UTC`;
+}
+
+/**
+ * What an approval card says once nothing on it waits any more (§6.2): every approval it lists answered the same way,
+ * answered some of each, or no longer waited on (the turn that asked ended, the session stopped).
+ */
+export function approvalOutcome(listed: { toolName: string; status: string | null; decidedAt: Date | null }[], now: Date): string {
+  const decided = listed.filter((a) => a.status === 'ALLOWED' || a.status === 'DENIED');
+  const at = decided.reduce<Date | null>((latest, a) => (a.decidedAt && (!latest || a.decidedAt > latest) ? a.decidedAt : latest), null) ?? now;
+  if (listed.length === 0 || decided.length < listed.length) return `No longer waiting in Orbit · ${clock(now)}`;
+  const questions = listed.some((a) => approvalClass(a.toolName) !== 'tool');
+  if (!questions && decided.every((a) => a.status === 'ALLOWED')) return `Allowed in Orbit · ${clock(at)}`;
+  if (decided.every((a) => a.status === 'DENIED')) return `Denied in Orbit · ${clock(at)}`;
+  return `Answered in Orbit · ${clock(at)}`;
+}
+
+/** What an owner item's card says once the item is no longer open. */
+export function ownerItemOutcome(item: { resolution: string | null; resolvedAt: Date | null } | null, now: Date): string {
+  if (!item) return `No longer waiting in Orbit · ${clock(now)}`;
+  return `${item.resolution === 'ANSWERED' ? 'Answered' : 'Resolved'} in Orbit · ${clock(item.resolvedAt ?? now)}`;
+}
+
+interface OpenCard {
+  id: string;
+  kind: string;
+  session_id: string | null;
+  approval_id: string | null;
+  open_item_id: string | null;
+  alert: FeishuAlert | null;
+}
 
 /** The deployment's own address, as the other links it hands out are built (sign-in-providers.service.ts). */
 function publicOrigin(): string {
@@ -202,6 +244,123 @@ export class FeishuTransport {
   }
 
   /**
+   * The step the badge reconcile adds (§6.2): the account's cards whose matter was settled elsewhere — an approval
+   * answered in the web app or on a phone, a session that no longer waits on its owner, an owner item resolved — drawn
+   * once more in place as their outcome (`Allowed in Orbit · 10:32 UTC`) with no buttons, and marked CLOSED.
+   *
+   * Only cards Feishu has (SENT, with a message_id) sent within FEISHU_CARD_UPDATE_DAYS: Feishu refuses to update an
+   * older message, so those are left as they are. `needsYou` is the reconcile's own set (PushService.needsYouSessions):
+   * an approval card holds while its session is in it and an approval it lists is still pending. One that holds with
+   * fewer pending than it lists is drawn again (the same pump as an announcement), so an answered approval loses its
+   * buttons while the rest keep theirs.
+   *
+   * A card is closed under its lease, and only when every announcement was drawn (`rendered_revision = revision`): an
+   * approval that joined the stretch is the pump's to draw first. Answers `busy` when a card that may need closing was
+   * held by another call, so the caller looks again once that lets go. Never throws.
+   */
+  async closeSettled(target: FeishuTarget, needsYou: ReadonlySet<string>): Promise<{ closed: number; busy: boolean }> {
+    let closed = 0;
+    let busy = false;
+    try {
+      const cards = await this.prisma.$queryRaw<OpenCard[]>`
+        SELECT "id", "kind", "session_id", "approval_id", "open_item_id", "alert"
+          FROM "feishu_message"
+         WHERE "app_id" = ${target.appId} AND "owner_id" = ${target.ownerId}::uuid
+           AND "status" = 'SENT' AND "message_id" IS NOT NULL AND "kind" IN ('approval', 'owner-item')
+           AND "sent_at" > now() - make_interval(days => ${FEISHU_CARD_UPDATE_DAYS}::int)`;
+      if (cards.length === 0) return { closed, busy };
+      const listed = (card: OpenCard): FeishuApprovalItem[] => (card.alert?.kind === 'approval' ? card.alert.approvals : []);
+      const approvalIds = cards.flatMap((card) => listed(card).map((a) => a.id));
+      const itemIds = cards.flatMap((card) => (card.kind === 'owner-item' && card.open_item_id ? [card.open_item_id] : []));
+      const [approvals, items] = await Promise.all([
+        approvalIds.length === 0 ? [] : this.prisma.approval.findMany({
+          where: { id: { in: approvalIds }, session: { ownerId: target.ownerId } },
+          select: { id: true, status: true, decidedAt: true },
+        }),
+        itemIds.length === 0 ? [] : this.prisma.projectOpenItem.findMany({
+          where: { id: { in: itemIds }, ownerId: target.ownerId },
+          select: { id: true, state: true, resolution: true, resolvedAt: true, projectId: true },
+        }),
+      ]);
+      const approvalById = new Map(approvals.map((a) => [a.id, a]));
+      const itemById = new Map(items.map((i) => [i.id, i]));
+      const now = new Date();
+
+      for (const card of cards) {
+        let outcome: string;
+        let openUrl = orbitUrl({ sessionId: card.session_id });
+        if (card.kind === 'approval') {
+          const rows = listed(card).map((a) => ({
+            toolName: a.toolName,
+            status: approvalById.get(a.id)?.status ?? null,
+            decidedAt: approvalById.get(a.id)?.decidedAt ?? null,
+          }));
+          const pending = rows.filter((a) => a.status === 'PENDING').length;
+          if (card.session_id && needsYou.has(card.session_id) && pending > 0) {
+            if (pending < rows.length) await this.redraw(card, target);
+            continue;
+          }
+          outcome = approvalOutcome(rows, now);
+        } else {
+          const item = card.open_item_id ? itemById.get(card.open_item_id) ?? null : null;
+          if (item?.state === 'OPEN') continue;
+          outcome = ownerItemOutcome(item, now);
+          openUrl = orbitUrl({ sessionId: card.session_id, projectId: item?.projectId });
+        }
+        const result = await this.close(card.id, target, outcome, openUrl);
+        if (result === 'closed') closed++;
+        if (result === 'busy') busy = true;
+      }
+    } catch (err) {
+      this.log.warn(`feishu cards could not be closed: ${(err as Error).message}`);
+    }
+    return { closed, busy };
+  }
+
+  /** An approval card that still holds, drawn again with what is pending now. */
+  private async redraw(card: OpenCard, target: FeishuTarget): Promise<void> {
+    await this.prisma.$executeRaw`
+      UPDATE "feishu_message" SET "revision" = "revision" + 1, "updated_at" = now()
+       WHERE "id" = ${card.id}::uuid AND "status" = 'SENT'`;
+    await this.pump(card.id, target, this.approvalCard(target, card.session_id!, card.approval_id));
+  }
+
+  /**
+   * One card to its outcome, under its lease: drawn from the alert it last showed, with the outcome on top and no
+   * buttons, then CLOSED. Feishu not reached, or failing on its side, after FEISHU_ALERT_ATTEMPTS leaves it SENT for
+   * the next reconcile; a refusal closes it all the same, with Feishu's reason, since asking again would be refused too.
+   */
+  private async close(id: string, target: FeishuTarget, outcome: string, openUrl: string): Promise<'closed' | 'busy' | 'skipped'> {
+    const token = randomUUID();
+    const leaseUntil = new Date(Date.now() + this.timing.alertLeaseMs);
+    const [held] = await this.prisma.$queryRaw<{ message_id: string; alert: FeishuAlert | null; kind: string; session_id: string | null }[]>`
+      UPDATE "feishu_message" SET "lease_token" = ${token}::uuid, "lease_until" = ${leaseUntil}::timestamptz
+       WHERE "id" = ${id}::uuid AND "status" = 'SENT' AND "message_id" IS NOT NULL AND "rendered_revision" = "revision"
+         AND ("lease_until" IS NULL OR "lease_until" < now())
+      RETURNING "message_id", "alert", "kind", "session_id"`;
+    if (!held) {
+      const row = await this.prisma.feishuMessage.findUnique({ where: { id }, select: { status: true, leaseUntil: true } });
+      return row?.status === 'SENT' && row.leaseUntil && row.leaseUntil > new Date() ? 'busy' : 'skipped';
+    }
+    // A SENT card always has the alert it was drawn from; without one there is nothing to draw it as, and nothing to do.
+    let result: FeishuSendResult = { ok: true, messageId: held.message_id };
+    let attempts = 0;
+    if (held.alert) {
+      const card = renderFeishuTerminalCard(held.alert, { detail: target.detail, approvalsInFeishu: target.approvalsInFeishu, openUrl }, outcome);
+      ({ result, attempts } = await this.attempt(() => this.outbound.updateCard(target.credentials, held.message_id, card)));
+    }
+    const lastError = result.ok ? null : failure(result);
+    const status = result.ok || !retryable(result) ? 'CLOSED' : 'SENT';
+    await this.prisma.$executeRaw`
+      UPDATE "feishu_message"
+         SET "status" = ${status}, "lease_token" = NULL, "lease_until" = NULL,
+             "attempts" = "attempts" + ${attempts}, "last_error" = ${lastError}, "updated_at" = now()
+       WHERE "id" = ${id}::uuid AND "lease_token" = ${token}::uuid`;
+    if (!result.ok) this.log.warn(`feishu app ${target.appId}: a ${held.kind} card could not be closed (${lastError})`);
+    return status === 'CLOSED' && result.ok ? 'closed' : 'skipped';
+  }
+
+  /**
    * Take the row's lease while it has a revision nobody drew, draw it, send or update, record it, let go; again, until
    * nothing is left to draw or another holder has it.
    */
@@ -212,7 +371,7 @@ export class FeishuTransport {
       const leaseUntil = new Date(Date.now() + this.timing.alertLeaseMs);
       const [held] = await this.prisma.$queryRaw<{ revision: number; message_id: string | null }[]>`
         UPDATE "feishu_message" SET "lease_token" = ${token}::uuid, "lease_until" = ${leaseUntil}::timestamptz
-         WHERE "id" = ${id}::uuid AND "rendered_revision" <> "revision"
+         WHERE "id" = ${id}::uuid AND "rendered_revision" <> "revision" AND "status" <> 'CLOSED'
            AND ("lease_until" IS NULL OR "lease_until" < now())
         RETURNING "revision", "message_id"`;
       if (!held) {

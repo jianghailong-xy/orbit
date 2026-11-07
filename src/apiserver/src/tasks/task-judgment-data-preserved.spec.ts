@@ -2806,7 +2806,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function, trigger
       // or type is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
       // DELETE: the table starts empty.
-      '0496_feishu_chat_route'],
+      '0496_feishu_chat_route',
+      // 0498 replaces one CHECK of `feishu_message` (docs/feishu-bot-design.md §6.2, task F1-5): status gains CLOSED. It
+      // is not a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six
+      // preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it is
+      // not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '0498_feishu_message_closed'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

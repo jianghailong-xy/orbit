@@ -8800,7 +8800,8 @@ model FeishuMessage {
   /// An approval card's: the first approval of the stretch it lists.
   approvalId       String?   @map("approval_id") @db.Uuid
   openItemId       String?   @map("open_item_id") @db.Uuid
-  /// `PENDING` (not sent yet) | `SENT` | `FAILED` (given up before Feishu accepted it).
+  /// `PENDING` (not sent yet) | `SENT` | `FAILED` (given up before Feishu accepted it) | `CLOSED` (drawn as its outcome once
+  /// its matter was settled elsewhere, F1-5).
   status           String    @default("PENDING")
   /// The alert the card was last drawn from (feishu/cards/feishu-cards.ts `FeishuAlert`).
   alert            Json?     @db.JsonB
