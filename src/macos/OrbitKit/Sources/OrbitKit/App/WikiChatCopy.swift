@@ -193,9 +193,6 @@ public enum WikiChatCopy {
     public static let noHistory = "No chats in this space yet"
     public static let openSession = "Open as a full session"
     public static let close = "Hide chat"
-    /// The native sheet's own composer's buttons (C11); the web panel draws the session page's composer (board 43).
-    public static let send = "Send"
-    public static let stop = "Stop"
     public static let resize = "Resize chat"
     public static let workspace = "Workspace"
     public static let sendFailed = "The message couldn’t be sent. Check the connection, then try again."

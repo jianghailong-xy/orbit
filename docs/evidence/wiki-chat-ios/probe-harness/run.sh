@@ -33,8 +33,11 @@ run_pass() {  # $1 label, $2 scheme, $3 destination, $4 shots dir, $5 simulator 
   echo "==> $1"
   local try
   for try in 1 2; do
+    # ONLY_TESTING="WikiChatShotTests/testC19NewChatComposer …": these cases alone, in the scheme's UI test target.
+    local only=()
+    for t in ${ONLY_TESTING:-}; do only+=("-only-testing:$2UITests/$t"); done
     if SHOTS_DIR="$4" TEST_RUNNER_SHOTS_DIR="$4" xcodebuild test -project C11Probe.xcodeproj -scheme "$2" \
-      -destination "$3" -derivedDataPath ".dd-$2" -resultBundlePath "results/$1.xcresult" \
+      -destination "$3" -derivedDataPath ".dd-$2" -resultBundlePath "results/$1.xcresult" ${only[@]+"${only[@]}"} \
       CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- > "build-$1.log" 2>&1; then
       break
     fi
@@ -55,9 +58,9 @@ run_pass() {  # $1 label, $2 scheme, $3 destination, $4 shots dir, $5 simulator 
   grep -E "Test Case|Executed|error:|\*\* TEST" "build-$1.log" | tail -80 || true
   cp "build-$1.log" "$4/xcodebuild-$1.log"
   # The files this task added or changed, as this build compiled them into the probe app, and what the compiler said.
-  grep -E "SwiftCompile .*(WikiChat[A-Za-z]*|WikiDocView|WikiDocScreens|WikiActivityView|ToolCards|ConsoleModel)\.swift" "build-$1.log" \
+  grep -E "SwiftCompile .*(WikiChat[A-Za-z]*|WikiDocView|WikiDocScreens|WikiActivityView|ToolCards|ConsoleModel|ComposerView)\.swift" "build-$1.log" \
     | sed -E 's#/Users/runner/work/[^ ]*/src/#src/#g' | sort -u > "$4/compiled-$1.txt" || true
-  grep -E "(WikiChat[A-Za-z]*|WikiDocView|WikiDocScreens|WikiActivityView)\.swift:[0-9]+:[0-9]+: (warning|error)" "build-$1.log" \
+  grep -E "(WikiChat[A-Za-z]*|WikiDocView|WikiDocScreens|WikiActivityView|ConsoleModel|ComposerView)\.swift:[0-9]+:[0-9]+: (warning|error)" "build-$1.log" \
     | sort -u > "$4/diagnostics-$1.txt" || true
   echo "$(wc -l < "$4/diagnostics-$1.txt") diagnostics on the wiki chat's files" >> "$4/diagnostics-$1.txt"
   # A runner whose test process could not write the pictures still keeps them as attachments.

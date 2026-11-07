@@ -381,6 +381,59 @@ final class WikiChatLogicTests: XCTestCase {
         XCTAssertNil(WikiChatLogic.parseNoteTag("<orbit_wiki_context entries=\"3\">\nx\n</orbit_wiki_context>"))
     }
 
+    // MARK: a new chat's first message (board 43)
+
+    /// The composer's first message makes the create the web's `WikiChatNew` makes: the words trimmed, the page and the
+    /// selection, the files the attachment row staged, and what the toolbar shows — speed only when on; with no words
+    /// nothing goes, files or not. Every key it sends is one of the contract's `chat.create.body`.
+    func testTheFirstMessageMakesTheCreate() throws {
+        let context = WikiChatContext(page: .doc(docSlug: "session-runtime", sectionKey: "s3"))
+        let first = WikiChatLogic.FirstMessage(words: "  这句少了原因 \n", attachmentIds: ["A1", "A2"], model: "claude-opus-5-5",
+                                               permissionMode: "auto", effort: "", fastMode: false)
+        let request = try XCTUnwrap(WikiChatLogic.createRequest(first, workspaceId: "W1", context: context, clientTurnId: "u-1"))
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
+        XCTAssertEqual(Set(body.keys), ["workspaceId", "content", "clientTurnId", "wikiContext", "attachmentIds", "model",
+                                        "permissionMode", "effort"])
+        XCTAssertEqual(body["content"] as? String, "这句少了原因")
+        XCTAssertEqual(body["attachmentIds"] as? [String], ["A1", "A2"])
+        XCTAssertEqual(body["model"] as? String, "claude-opus-5-5")
+        XCTAssertEqual(body["permissionMode"] as? String, "auto")
+        XCTAssertEqual(body["effort"] as? String, "", "an explicit Default sticks, as a new session's does")
+        XCTAssertEqual((body["wikiContext"] as? [String: Any])?.keys.sorted(), ["page"])
+
+        var fast = first
+        fast.fastMode = true
+        fast.attachmentIds = []
+        fast.model = nil
+        let fastBody = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(
+            XCTUnwrap(WikiChatLogic.createRequest(fast, workspaceId: "W1", context: nil, clientTurnId: "u-2")))) as? [String: Any])
+        XCTAssertEqual(fastBody["fastMode"] as? Bool, true)
+        XCTAssertNil(fastBody["attachmentIds"], "no files, no list")
+        XCTAssertNil(fastBody["model"], "a model not resolved yet is the workspace's to pick")
+        XCTAssertNil(fastBody["wikiContext"])
+
+        var bare = first
+        bare.words = " \n "
+        XCTAssertNil(WikiChatLogic.createRequest(bare, workspaceId: "W1", context: context, clientTurnId: "u-3"),
+                     "a chat opens with the owner's words: files never go alone")
+
+        // Held to the contract's body.
+        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        var contractURL: URL?
+        for _ in 0..<12 {
+            let candidate = dir.appendingPathComponent("contracts/wiki.contract.json")
+            if FileManager.default.fileExists(atPath: candidate.path) { contractURL = candidate; break }
+            dir = dir.deletingLastPathComponent()
+        }
+        let contract = try JSONDecoder().decode(JSONValue.self, from: Data(contentsOf: XCTUnwrap(contractURL, "contracts/wiki.contract.json")))
+        let said = try XCTUnwrap(contract["chat"]?["create"]?["body"]?.stringValue)
+        let keys = Set(said.trimmingCharacters(in: CharacterSet(charactersIn: "{} ")).split(separator: ",").map {
+            $0.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "?"))
+        })
+        XCTAssertTrue(keys.isSuperset(of: Set(body.keys).union(fastBody.keys)),
+                      "the create sends \(Set(body.keys).union(fastBody.keys).subtracting(keys)), which chat.create.body does not name")
+    }
+
     // MARK: the routes
 
     func testEveryCallHitsTheChatsRoute() async throws {

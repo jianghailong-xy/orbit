@@ -488,6 +488,44 @@ public enum WikiChatLogic {
         return parts.joined(separator: " · ")
     }
 
+    // MARK: a new chat's first message (board 43: the session page's composer, in the panel)
+
+    /// What the composer holds as a new chat's first message goes: its words as typed, the files its attachment row
+    /// staged (uploaded to no session yet), and what its toolbar shows.
+    public struct FirstMessage: Equatable, Sendable {
+        public var words: String
+        public var attachmentIds: [String]
+        public var model: String?
+        public var permissionMode: String?
+        public var effort: String?
+        public var fastMode: Bool
+
+        public init(words: String, attachmentIds: [String] = [], model: String? = nil, permissionMode: String? = nil,
+                    effort: String? = nil, fastMode: Bool = false) {
+            self.words = words
+            self.attachmentIds = attachmentIds
+            self.model = model
+            self.permissionMode = permissionMode
+            self.effort = effort
+            self.fastMode = fastMode
+        }
+    }
+
+    /// The create the first message makes (contract `chat.create.body`, the web's `WikiChatNew` send): the words
+    /// trimmed, the page and the selection as `wikiContext`, the files as `attachmentIds`, and the toolbar's model,
+    /// mode, effort and speed (speed only when it is on). Nil with no words: a chat opens with the owner's words, and
+    /// files ride with them, never alone.
+    public static func createRequest(_ first: FirstMessage, workspaceId: String, context: WikiChatContext?,
+                                     clientTurnId: String) -> WikiChatCreateRequest? {
+        let words = first.words.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !words.isEmpty else { return nil }
+        return WikiChatCreateRequest(
+            workspaceId: workspaceId, content: words, clientTurnId: clientTurnId, wikiContext: context,
+            attachmentIds: first.attachmentIds.isEmpty ? nil : first.attachmentIds,
+            model: first.model, permissionMode: first.permissionMode, effort: first.effort,
+            fastMode: first.fastMode ? true : nil)
+    }
+
     // MARK: the composer's attachments (design §4.2)
 
     /// The page the reader is on, as the composer's page chip names it.
