@@ -257,7 +257,7 @@ final class WikiChatShotTests: ProbeCase {
         guard askOnParagraph(app, tag) else { return }
         let runsIn = exactly(app, "Runs in")
         let workspace = app.buttons["Workspace"].firstMatch
-        let page = app.buttons["Remove 3.1 §3"].firstMatch
+        let page = pageCross(app).firstMatch
         let quote = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Remove Runner")).firstMatch
         let mode = toolbarButton(app, "Auto")
         let model = toolbarButton(app, "Opus 5.5")
@@ -309,7 +309,7 @@ final class WikiChatShotTests: ProbeCase {
         let fab = fabButton(app)
         XCTAssertTrue(waitForLabel(fab, "Working…", timeout: 20), "\(tag): the button never said Working…: \(describe(fab))")
         press(fab)
-        let page = app.buttons["Remove 3.1 §3"].firstMatch
+        let page = pageCross(app).firstMatch
         guard page.waitForExistence(timeout: 40) else {
             shot("\(tag)-no-composer")
             tree(app, "\(tag)-no-composer")
@@ -348,9 +348,11 @@ final class WikiChatShotTests: ProbeCase {
         let placeholder = "Reply, or say what to change in the draft"
         let input = app.textViews.firstMatch
         note("\(tag): the composer's field: \(describe(input)) placeholder=\(input.exists ? (input.placeholderValue ?? "nil") : "-")")
-        XCTAssertTrue(appears(app, placeholder, timeout: 10) || (input.exists && (input.placeholderValue ?? "").contains(placeholder)),
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(appears(app, placeholder, timeout: 10) || (input.exists && (input.placeholderValue ?? "").contains(placeholder))
+                      || (field.exists && (field.placeholderValue ?? "").contains(placeholder)),
                       "\(tag): the composer does not ask what to change in the draft")
-        XCTAssertTrue(app.buttons["Remove 3.1 §3"].exists, "\(tag): the page chip is not in the composer's row")
+        XCTAssertTrue(pageCross(app).exists, "\(tag): the page chip is not in the composer's row")
         XCTAssertFalse(exactly(app, "Runs in").exists, "\(tag): a chat that runs shows Runs in")
         shot("\(platform)-c19-3a-card-open")
     }
@@ -388,6 +390,11 @@ final class WikiChatShotTests: ProbeCase {
         press(app.buttons["wiki-chat-ask-done"])
         settle(2)
         return true
+    }
+
+    /// The page chip's cross, whichever section of 3.1 the page shows (a Mac's page may not reach §3).
+    private func pageCross(_ app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Remove 3.1 §")).firstMatch
     }
 
     /// A control of the composer's toolbar by its words: a menu's button, or its text.
