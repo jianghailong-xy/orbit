@@ -1,0 +1,97 @@
+import { Injectable, Logger } from '@nestjs/common';
+import type { AuthCredential } from '../common/current-user.decorator';
+import { PrismaService } from '../prisma/prisma.service';
+
+/** Who a Feishu event acts as (docs/feishu-bot-design.md §7.2): always the account its app belongs to. */
+export interface FeishuActor {
+  userId: string;
+  credential: Extract<AuthCredential, { kind: 'FEISHU' }>;
+}
+
+/** The branches an event is routed to. */
+export type FeishuRoute =
+  /** A message in a direct chat with the bot (§7.3). */
+  | 'DIRECT_MESSAGE'
+  /** A message in a group that @-mentions the bot: the only group messages the app's permissions deliver (§4.2, §8.2). */
+  | 'GROUP_MENTION'
+  /** A click on a card the bot sent (§7.4). */
+  | 'CARD_ACTION'
+  /** The bot was removed from a group (§8.1). */
+  | 'BOT_REMOVED_FROM_CHAT'
+  /** Anything else the app is subscribed to: acknowledged and recorded, never acted on. */
+  | 'IGNORED';
+
+/** An inbox row as the router reads it. */
+export interface InboundEvent {
+  appId: string;
+  eventId: string;
+  eventType: string;
+  payload: unknown;
+}
+
+/** What routing one event decided: the branch, and who it acts as; null when its app is gone. */
+export interface RouteDecision {
+  route: FeishuRoute;
+  actor: FeishuActor;
+  /** The synchronous answer to a card callback (a toast or a card), returned within Feishu's 3 seconds. */
+  answer?: unknown;
+}
+
+type Json = Record<string, unknown>;
+const obj = (v: unknown): Json => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Json) : {});
+const str = (v: unknown): string | undefined => (typeof v === 'string' && v !== '' ? v : undefined);
+
+/** The branch, the actor's open_id and the message an event names, from Feishu's envelope. Pure; exported for its spec. */
+export function classify(eventType: string, payload: unknown): { route: FeishuRoute; openId: string; messageId?: string } {
+  const event = obj(obj(payload).event);
+  switch (eventType) {
+    case 'im.message.receive_v1': {
+      const message = obj(event.message);
+      const openId = str(obj(obj(event.sender).sender_id).open_id) ?? '';
+      const messageId = str(message.message_id);
+      const chatType = str(message.chat_type);
+      if (chatType === 'p2p') return { route: 'DIRECT_MESSAGE', openId, messageId };
+      if (chatType === 'group') return { route: 'GROUP_MENTION', openId, messageId };
+      return { route: 'IGNORED', openId, messageId };
+    }
+    case 'card.action.trigger':
+      return {
+        route: 'CARD_ACTION',
+        openId: str(obj(event.operator).open_id) ?? '',
+        messageId: str(obj(event.context).open_message_id),
+      };
+    case 'im.chat.member.bot.deleted_v1':
+      return { route: 'BOT_REMOVED_FROM_CHAT', openId: str(obj(event.operator_id).open_id) ?? '' };
+    default:
+      return { route: 'IGNORED', openId: '' };
+  }
+}
+
+/**
+ * FeishuRouter (docs/feishu-bot-design.md §3, §7): sends each inbound event to its branch, acting as the account the app
+ * belongs to — read from feishu_app as the event is routed, so an event of an app that is gone acts nowhere. Every branch
+ * records the event and does nothing more yet (task F0-2); later tasks fill them in, each calling only service methods on
+ * the §7.2 allowlist (feishu/feishu-actions.ts). What is logged names the event, the app, the branch and the account,
+ * never the message's text.
+ */
+@Injectable()
+export class FeishuRouter {
+  private readonly logger = new Logger(FeishuRouter.name);
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  async route(event: InboundEvent): Promise<RouteDecision | null> {
+    const app = await this.prisma.feishuApp.findUnique({ where: { appId: event.appId }, select: { ownerId: true } });
+    if (!app) {
+      this.logger.log(`feishu event ${event.eventId} of app ${event.appId} dropped: the app is no longer connected`);
+      return null;
+    }
+    const { route, openId, messageId } = classify(event.eventType, event.payload);
+    const actor: FeishuActor = {
+      userId: app.ownerId,
+      credential: { kind: 'FEISHU', appId: event.appId, openId, ...(messageId ? { messageId } : {}) },
+    };
+    this.logger.log(`feishu event ${event.eventId} of app ${event.appId} routed as ${route} for account ${app.ownerId}`);
+    return { route, actor };
+  }
+}

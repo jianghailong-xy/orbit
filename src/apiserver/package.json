@@ -21,6 +21,7 @@
     "schema": "prisma/schema.prisma"
   },
   "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.76.0",
     "@nats-io/transport-node": "3.4.0",
     "@nestjs/common": "^12.1.0",
     "@nestjs/config": "^12.0.1",
