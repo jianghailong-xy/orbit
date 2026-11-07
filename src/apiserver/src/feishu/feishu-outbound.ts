@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { Injectable, Logger } from '@nestjs/common';
 import { feishuClient, type FeishuAppCredentials } from './feishu-open-platform';
@@ -12,6 +13,15 @@ export type FeishuSendResult =
 export interface FeishuMessageBody {
   msgType: string;
   content: unknown;
+}
+
+/**
+ * Feishu's de-duplication key for one outbound message, derived from why it is sent (the message it answers and what for,
+ * an alert's claim key, an outbox row's id): the same reason twice gives the same key, so Feishu delivers it once however
+ * often it is sent. Feishu takes at most 50 characters; this is 32 hex.
+ */
+export function feishuUuid(why: string): string {
+  return createHash('sha256').update(why).digest('hex').slice(0, 32);
 }
 
 /** Retries of one request after a 429: Feishu's suggested wait each time, then the 429 is the answer. */
@@ -51,23 +61,59 @@ export class FeishuOutbound {
   timing: FeishuTiming = feishuTiming();
   wait: (ms: number) => Promise<unknown> = sleep;
 
-  /** `POST /open-apis/im/v1/messages`: to a user (`open_id`) or a chat (`chat_id`). */
-  send(app: FeishuAppCredentials, to: { receiveIdType: 'open_id' | 'chat_id'; receiveId: string }, body: FeishuMessageBody): Promise<FeishuSendResult> {
+  /**
+   * `POST /open-apis/im/v1/messages`: to a user (`open_id`) or a chat (`chat_id`). `uuid` is Feishu's own de-duplication
+   * key (one message per uuid within an hour): pass `feishuUuid(why)` so the same send made twice delivers once.
+   */
+  send(
+    app: FeishuAppCredentials,
+    to: { receiveIdType: 'open_id' | 'chat_id'; receiveId: string },
+    body: FeishuMessageBody,
+    { uuid }: { uuid?: string } = {},
+  ): Promise<FeishuSendResult> {
     return this.call(app, {
       method: 'POST',
       url: 'open-apis/im/v1/messages',
       params: { receive_id_type: to.receiveIdType },
-      data: { receive_id: to.receiveId, msg_type: body.msgType, content: JSON.stringify(body.content) },
+      data: { receive_id: to.receiveId, msg_type: body.msgType, content: JSON.stringify(body.content), ...(uuid ? { uuid } : {}) },
     });
   }
 
-  /** `POST /open-apis/im/v1/messages/:message_id/reply`; `replyInThread` answers in the message's thread (§8.2). */
-  reply(app: FeishuAppCredentials, messageId: string, body: FeishuMessageBody, { replyInThread = false } = {}): Promise<FeishuSendResult> {
+  /**
+   * `POST /open-apis/im/v1/messages/:message_id/reply`; `replyInThread` answers in the message's thread (§8.2), and
+   * `uuid` is Feishu's de-duplication key, as on `send`.
+   */
+  reply(
+    app: FeishuAppCredentials,
+    messageId: string,
+    body: FeishuMessageBody,
+    { replyInThread = false, uuid }: { replyInThread?: boolean; uuid?: string } = {},
+  ): Promise<FeishuSendResult> {
     return this.call(app, {
       method: 'POST',
       url: `open-apis/im/v1/messages/${encodeURIComponent(messageId)}/reply`,
-      data: { msg_type: body.msgType, content: JSON.stringify(body.content), reply_in_thread: replyInThread },
+      data: { msg_type: body.msgType, content: JSON.stringify(body.content), reply_in_thread: replyInThread, ...(uuid ? { uuid } : {}) },
     });
+  }
+
+  /**
+   * `GET /open-apis/im/v1/chats/:chat_id`: a group's name, and whether it is external (has people from another
+   * organization, §8.1). Null when Feishu does not say — the permission not granted, the bot not in the group, Feishu
+   * unreachable.
+   */
+  async chatInfo(app: FeishuAppCredentials, chatId: string): Promise<{ name: string | null; external: boolean } | null> {
+    try {
+      const answer = (await feishuClient(app).request({
+        method: 'GET',
+        url: `open-apis/im/v1/chats/${encodeURIComponent(chatId)}`,
+      })) as { code?: unknown; data?: { name?: unknown; external?: unknown } } | null;
+      if (answer?.code !== 0 || !answer.data) return null;
+      const name = typeof answer.data.name === 'string' && answer.data.name.trim() !== '' ? answer.data.name.trim().slice(0, 200) : null;
+      return { name, external: answer.data.external === true };
+    } catch {
+      this.logger.log(`feishu app ${app.appId}: a group's information could not be read`);
+      return null;
+    }
   }
 
   /** `PATCH /open-apis/im/v1/messages/:message_id`: replace a card the bot sent (§6.2). */

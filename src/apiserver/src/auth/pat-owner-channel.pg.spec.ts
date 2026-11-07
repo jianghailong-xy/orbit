@@ -41,6 +41,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { hashChatTicket } from '../feishu/feishu-chat-route.service';
 import { OWNER_INTERACTIVE_ROUTES } from './pat-owner-channel-routes';
 import { PAT_FORBIDDEN_REASONS, type PatForbiddenReason } from './pat-scope.decorator';
 import { PAT_SCOPES, PatService } from './pat.service';
@@ -149,6 +150,26 @@ test('the owner channel refuses a personal access token door by door and field b
   const sessionId = toUuid(
     ok(await api('POST', '/sessions', login, { prompt: 'knocked on', workspaceId }), 'creating a session').json.id,
   );
+
+  // A Feishu app of the account's (switched off, so nothing connects it) with a group waiting on a live ticket, and two
+  // groups connected: the three group doors (docs/feishu-bot-design.md §8.1) stood up for real.
+  const feishuAppId = `cli_owner_channel_${RUN}`;
+  await db.feishuApp.create({
+    data: { ownerId: userId, platform: 'FEISHU', appId: feishuAppId, appSecretEnc: 'owner:channel:not-a-secret', enabled: false, ownerOpenId: 'ou_owner' },
+  });
+  const chatTicket = `owner-channel-ticket-${RUN}`;
+  const pendingChat = await db.feishuChatRoute.create({
+    data: {
+      ownerId: userId, appId: feishuAppId, chatId: `oc_pending_${RUN}`,
+      ticketHash: hashChatTicket(chatTicket), ticketOpenId: 'ou_owner', ticketEventId: `ev-${RUN}`, ticketExpiresAt: new Date(Date.now() + 30 * 60_000),
+    },
+  });
+  const connectedChat = async (chat: string) => (await db.feishuChatRoute.create({
+    data: { ownerId: userId, appId: feishuAppId, chatId: `oc_${chat}_${RUN}`, workspaceId, permissionMode: 'default', enabled: true, confirmedAt: new Date() },
+  })).id;
+  const chatToChange = await connectedChat('to-change');
+  const chatToRemove = await connectedChat('to-remove');
+  const chatRow = (id: string) => db.feishuChatRoute.findUnique({ where: { id } });
 
   // ── (1) the owner channel, door by door ────────────────────────────────────────────────────
 
@@ -337,6 +358,27 @@ test('the owner channel refuses a personal access token door by door and field b
     { route: 'POST /wiki/chat-drafts/:id/undo', path: `/wiki/chat-drafts/${nobody()}/undo`, login: 404 },
     { route: 'POST /wiki/chat-drafts/:id/retry', path: `/wiki/chat-drafts/${nobody()}/retry`, login: 404 },
     { route: 'POST /wiki/chat-drafts/:id/seen', path: `/wiki/chat-drafts/${nobody()}/seen`, login: 404 },
+    // Connecting a Feishu group with a live ticket, changing a connected one, removing one.
+    {
+      route: 'POST /integrations/feishu/chats/confirm',
+      path: '/integrations/feishu/chats/confirm',
+      body: { ticket: chatTicket, workspaceId, permissionMode: 'acceptEdits', allowedOpenIds: ['ou_member'], maxConcurrentSessions: 3, sessionsPerDay: 7 },
+      login: 201,
+      observe: async () => (await chatRow(pendingChat.id))?.confirmedAt ?? null,
+    },
+    {
+      route: 'PATCH /integrations/feishu/chats/:id',
+      path: `/integrations/feishu/chats/${chatToChange}`,
+      body: { maxConcurrentSessions: 5 },
+      login: 200,
+      observe: async () => (await chatRow(chatToChange))?.maxConcurrentSessions,
+    },
+    {
+      route: 'DELETE /integrations/feishu/chats/:id',
+      path: `/integrations/feishu/chats/${chatToRemove}`,
+      login: 200,
+      observe: async () => (await chatRow(chatToRemove)) !== null,
+    },
   ];
 
   await t.test('every door in OWNER_INTERACTIVE_ROUTES has a case below, on a path that door answers, and nothing else has one', () => {

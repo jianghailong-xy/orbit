@@ -9,6 +9,8 @@ import {
   type FeishuAppChange,
   type FeishuAppConnect,
   type FeishuAppSettings,
+  type FeishuChatChange,
+  type FeishuChatRoute,
   type FeishuConnectCode,
   type FeishuIntegration,
   type FeishuPlatform,
@@ -26,6 +28,8 @@ import { Switch } from '../components/ui/Switch';
 import '../components/ui/Card.css';
 import { copyText } from '../lib/clipboard';
 import { useToast } from '../lib/toast';
+import { workspacesQuery } from '../lib/queries';
+import { feishuChatsQuery, modeLabel } from './FeishuConnectGroupPage';
 
 /** `GET /integrations/feishu` (docs/feishu-bot-design.md §4.1, §10): never the App Secret, only whether one is saved and readable. */
 export const feishuIntegrationQuery = () =>
@@ -311,6 +315,105 @@ function OwnerSection({ app }: { app: FeishuAppSettings }) {
   );
 }
 
+/** Why a connected group is off, in a sentence. */
+const OFF_REASON: Readonly<Record<string, string>> = {
+  BOT_REMOVED: 'The bot was removed from the group. Add it back and send "@bot connect" there to connect it again.',
+  OWNER: 'Switched off: mentions in the group start nothing.',
+};
+
+/** One connected group: where its sessions open and how, with its switch and its removal. */
+function GroupRow({ route, workspaceName }: { route: FeishuChatRoute; workspaceName: string }) {
+  const qc = useQueryClient();
+  const message = useToast();
+  const switchId = useId();
+  const refresh = () => qc.invalidateQueries({ queryKey: ['integrations', 'feishu', 'chats'] });
+  const change = useMutation({
+    mutationFn: (body: FeishuChatChange) => api<FeishuChatRoute>(`/integrations/feishu/chats/${route.id}`, { method: 'PATCH', body }),
+    onSuccess: () => void refresh(),
+    onError: (e: Error) => message.error("Couldn't change the group", e.message),
+  });
+  const remove = useMutation({
+    mutationFn: () => api<{ removed: true }>(`/integrations/feishu/chats/${route.id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void refresh();
+      message.success('Group removed');
+    },
+    onError: (e: Error) => message.error("Couldn't remove the group", e.message),
+  });
+  const name = route.chatName ?? 'Unnamed group';
+  const who = route.allowedOpenIds.length === 0
+    ? 'Everyone in the group'
+    : `${route.allowedOpenIds.length} ${route.allowedOpenIds.length === 1 ? 'person' : 'people'} and you`;
+  return (
+    <li className="feishu-group" aria-label={name}>
+      <div className="admin-signin-row">
+        <div>
+          <div className="admin-signin-label" id={switchId}>
+            {name}
+          </div>
+          <div className="admin-signin-hint">
+            {workspaceName} · {modeLabel(route.permissionMode)} mode · {who} · up to {route.maxConcurrentSessions} at a time,{' '}
+            {route.sessionsPerDay} a day
+          </div>
+          {!route.enabled && route.disabledReason && <div className="admin-signin-hint">{OFF_REASON[route.disabledReason]}</div>}
+        </div>
+        <div className="feishu-group-actions">
+          <Switch
+            aria-labelledby={switchId}
+            checked={route.enabled}
+            disabled={!route.enabled && route.disabledReason === 'BOT_REMOVED'}
+            loading={change.isPending}
+            onCheckedChange={(enabled) => change.mutate({ enabled })}
+          />
+          <Popconfirm
+            title={`Remove ${name} from Orbit?`}
+            description="Mentions in the group start nothing until it is connected again. Sessions it already started stay."
+            confirmText="Remove group"
+            danger
+            onConfirm={() => remove.mutateAsync()}
+            trigger={
+              <Button size="small" danger loading={remove.isPending}>
+                Remove
+              </Button>
+            }
+          />
+        </div>
+      </div>
+    </li>
+  );
+}
+
+/** §8.1: the groups connected to Orbit. A group is connected from Feishu — the owner sends `@bot connect` in it. */
+function GroupsSection() {
+  const chats = useQuery(feishuChatsQuery());
+  const workspaces = useQuery(workspacesQuery());
+  const nameOf = (id: string) => ((workspaces.data ?? []) as Array<{ id: string; name: string }>).find((w) => w.id === id)?.name ?? 'A workspace';
+  return (
+    <section className="orbit-card feishu-card" aria-label="Groups">
+      <div className="orbit-card-head">
+        <h2 className="orbit-card-title">Groups</h2>
+      </div>
+      <div className="orbit-card-body feishu-fields">
+        <p className="feishu-hint">
+          To connect a group, add the bot to it and send &quot;@bot connect&quot; there. The bot answers with a link to
+          choose the workspace, the permission mode and who can start sessions. Only groups inside your organization can be
+          connected.
+        </p>
+        {chats.isPending && <Spinner />}
+        {chats.isError && <Alert type="error" title="Couldn't load the groups" description={chats.error.message} />}
+        {chats.isSuccess && chats.data.routes.length === 0 && <p className="feishu-hint">No groups are connected.</p>}
+        {chats.isSuccess && chats.data.routes.length > 0 && (
+          <ul className="feishu-groups">
+            {chats.data.routes.map((route) => (
+              <GroupRow key={route.id} route={route} workspaceName={nameOf(route.workspaceId)} />
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
 /** The App ID and App Secret form: a new app, or new credentials for the one connected. Feishu checks them before anything is saved. */
 function CredentialsForm({
   app, allowed, onDone,
@@ -555,6 +658,7 @@ export function FeishuIntegrationPage() {
       )}
       {app && <AppSummary app={app} allowed={allowed} onReplace={() => setReplacing(true)} />}
       {app && allowed && <OwnerSection app={app} />}
+      {app && allowed && <GroupsSection />}
       {(!app || replacing) && (
         <CredentialsForm key={app ? `${app.platform}:${app.appId}` : 'new'} app={app} allowed={allowed} onDone={app ? () => setReplacing(false) : undefined} />
       )}

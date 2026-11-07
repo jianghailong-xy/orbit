@@ -366,6 +366,11 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
    - 上限：同时进行的会话数、每天新开的会话数（同项目的 `sessionBudgetPerDay`）。
 4. 确认是**所有者通道**动作（加进 `pat-owner-channel-routes.ts`，PAT 403），因为它让别人能在你的机器上启动 agent。
 5. 机器人被移出群（`im.chat.member.bot.deleted_v1`）时路由停用。
+6. 实现细节（F3-1）：`feishu_chat_route` 以 `(app_id, chat_id)` 唯一（同一个群可以分别接入不同账号的应用）。主人发 connect 时就建好这一行，
+   只存 ticket 的 SHA-256、发 connect 的 open_id 与过期时间（30 分钟），`confirmed_at` 为空；确认用一条带条件的 UPDATE 写入选择并清掉
+   ticket，所以 ticket 只能用一次，且发 connect 的人必须仍是主人。ticket 由 appId 与 event_id 派生，同一事件处理两次得到同一 ticket、
+   同一张卡（飞书 uuid 去重），已用过的 ticket 不会被重放的事件重新打开。未确认或已停用的群里 @机器人 只回一句英文说明，不开会话。
+   connect 只受理主人，且群不能是外部群（`GET /open-apis/im/v1/chats/:chat_id` 的 `external`）。
 
 ### 8.2 一条群消息的路径（决定 4：每单一个话题）
 
