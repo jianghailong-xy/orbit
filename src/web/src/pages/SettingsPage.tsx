@@ -18,6 +18,7 @@ import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { useToast } from '../lib/toast';
 import { DEFAULT_PERMISSION_MODE, MODE_OPTIONS } from '../lib/workspaceDefaults';
 import { formatFileSize } from '../lib/worktreeFile';
+import { FEISHU_PLATFORM_NAMES, feishuIntegrationQuery } from './FeishuIntegrationPage';
 
 // One labelled row: title + hint on the left, the control on the right.
 function Field({ label, hint, children }: { label: string; hint: ReactNode; children: ReactNode }) {
@@ -184,6 +185,46 @@ function StorageCard() {
   );
 }
 
+/**
+ * The way into the account's own Feishu or Lark app (docs/feishu-bot-design.md §4.1), laid out as Sharing and
+ * Access tokens are, with what the page holds under its line: the app's platform and App ID, or that there is none.
+ */
+function IntegrationsCard() {
+  const navigate = useNavigate();
+  const { data } = useQuery(feishuIntegrationQuery());
+  const value = !data
+    ? null
+    : !data.allowed
+      ? { text: 'Turned off by an administrator', warn: true }
+      : !data.app
+        ? { text: 'Not connected', warn: false }
+        : data.app.secretUnreadable
+          ? { text: `${data.app.appId} needs its App Secret again`, warn: true }
+          : { text: `${FEISHU_PLATFORM_NAMES[data.app.platform]} · ${data.app.appId}${data.app.enabled ? '' : ' · Off'}`, warn: false };
+  return (
+    <Card title="Integrations" style={{ marginTop: 16 }}>
+      <Field
+        label="Feishu"
+        hint={
+          <>
+            A Feishu or Lark app of your own, connected to Orbit as its bot.
+            {value && (
+              <div
+                className="settings-feishu-value"
+                style={{ marginTop: 4, fontSize: 13, color: value.warn ? 'var(--warning)' : 'var(--text-2)' }}
+              >
+                {value.text}
+              </div>
+            )}
+          </>
+        }
+      >
+        <Button onClick={() => navigate('/settings/integrations/feishu')}>Manage</Button>
+      </Field>
+    </Card>
+  );
+}
+
 // Personal preferences. Appearance is account-synced via the theme context; the permission
 // default is what a new session starts in when the composer names no mode (it used to live per
 // workspace — see common/permission-mode.ts for why the posture belongs to the run).
@@ -344,6 +385,8 @@ export function SettingsPage() {
           <Button onClick={() => navigate('/settings/access-tokens')}>Manage</Button>
         </Field>
       </Card>
+
+      <IntegrationsCard />
 
     </div>
   );
