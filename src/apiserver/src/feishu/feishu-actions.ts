@@ -74,3 +74,77 @@ export const FEISHU_INFRASTRUCTURE = [
   'FeishuTransport',
   'ControlPlaneLeader',
 ] as const;
+
+/**
+ * Every action a Feishu event can take (docs/feishu-bot-design.md §1.3 2, §7.2; task F3-6): what it is, the branch the
+ * router sends it down, the handler that takes it, the allowlisted service methods it calls (none: it writes only the
+ * app's own Feishu rows, or nothing), and how what it names is held to the app's account. A reply alone (help, a
+ * non-text message, a refusal) is not an action: it acts on nothing.
+ *
+ * feishu-actions.spec.ts pins it both ways: against the code — each handler exists and is reached from the router,
+ * and the allowlisted calls a source makes are exactly those its actions list — and against feishu-isolation.pg.spec.ts,
+ * which has a cross-account case `[isolation:<key>]` for every action, and no case for an action not listed here.
+ */
+export interface FeishuInboundAction {
+  key: string;
+  route: 'DIRECT_MESSAGE' | 'GROUP_MENTION' | 'CARD_ACTION' | 'BOT_REMOVED_FROM_CHAT' | 'SETTINGS';
+  /** `<source file>#<method>`; the SETTINGS rows are the Orbit pages a Feishu action leads to, not events. */
+  handler: string;
+  /** `Service.method` of FEISHU_ALLOWED_ACTIONS. */
+  calls: readonly string[];
+  /** What the event names, and the account filter that reads it. */
+  scope: string;
+}
+
+export const FEISHU_ACTIONS: readonly FeishuInboundAction[] = [
+  {
+    key: 'owner-code', route: 'DIRECT_MESSAGE', handler: 'feishu-owner.service.ts#handleMessage', calls: [],
+    scope: 'An owner code (also dropped when seen in a group): looked up by its hash and the app’s ownerId; another account’s code is no code.',
+  },
+  {
+    key: 'direct-reply', route: 'DIRECT_MESSAGE', handler: 'feishu-direct.service.ts#handleMessage', calls: ['SessionsService.createTurn'],
+    scope: 'root_id / parent_id: a feishu_thread or feishu_message row of this appId and ownerId; the turn is created as the app’s account.',
+  },
+  {
+    key: 'direct-start', route: 'DIRECT_MESSAGE', handler: 'feishu-direct.service.ts#handleMessage', calls: ['SessionsService.create'],
+    scope: 'The app’s defaultWorkspaceId, read only as a workspace of the app’s ownerId (not deleted); otherwise no default.',
+  },
+  {
+    key: 'direct-status', route: 'DIRECT_MESSAGE', handler: 'feishu-direct.service.ts#handleMessage', calls: ['PushService.needsYouSessions'],
+    scope: 'Names nothing: the sessions waiting on the app’s ownerId.',
+  },
+  {
+    key: 'direct-workspace-pick', route: 'CARD_ACTION', handler: 'feishu-direct.service.ts#handleCardAction', calls: [],
+    scope: 'The button’s workspaceId: a workspace of the app’s ownerId, or answered as one that is gone.',
+  },
+  {
+    key: 'card-approval', route: 'CARD_ACTION', handler: 'feishu-card-actions.ts#answer',
+    calls: ['SessionsService.listApprovals', 'SessionsService.decideApproval'],
+    scope: 'The button’s approvalId: an approval whose session is the app’s ownerId’s; the card redrawn only from this appId’s own feishu_message.',
+  },
+  {
+    key: 'card-question', route: 'CARD_ACTION', handler: 'feishu-card-actions.ts#answer',
+    calls: ['SessionsService.listApprovals', 'SessionsService.decideApproval'],
+    scope: 'As card-approval, for the AskUserQuestion approval the form names.',
+  },
+  {
+    key: 'group-connect', route: 'GROUP_MENTION', handler: 'feishu-chat-route.service.ts#handleGroupMessage', calls: [],
+    scope: 'The chat: the route row keyed (appId, chatId), the app’s own; its ticket is confirmed only by the app’s ownerId.',
+  },
+  {
+    key: 'group-start', route: 'GROUP_MENTION', handler: 'feishu-group.service.ts#handleMention', calls: ['SessionsService.create'],
+    scope: 'The chat: a confirmed route of this appId; the session opens as the route’s ownerId, in its workspace.',
+  },
+  {
+    key: 'group-turn', route: 'GROUP_MENTION', handler: 'feishu-group.service.ts#handleMention', calls: ['SessionsService.createTurn'],
+    scope: 'The topic’s root_id: a feishu_thread row of this appId, the route’s ownerId and this chat.',
+  },
+  {
+    key: 'bot-removed', route: 'BOT_REMOVED_FROM_CHAT', handler: 'feishu-chat-route.service.ts#botRemoved', calls: [],
+    scope: 'The chat: only the route rows of this appId.',
+  },
+  {
+    key: 'settings-default-workspace', route: 'SETTINGS', handler: 'feishu-app.service.ts#change', calls: [],
+    scope: 'Where the default workspace of direct-start is set: a workspace of the signed-in account, else 404.',
+  },
+];

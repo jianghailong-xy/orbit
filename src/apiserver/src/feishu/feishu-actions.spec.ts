@@ -4,7 +4,8 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { PushService } from '../push/push.service';
 import { SessionsService } from '../sessions/sessions.service';
-import { FEISHU_ALLOWED_ACTIONS, FEISHU_INFRASTRUCTURE } from './feishu-actions';
+import { FEISHU_ACTIONS, FEISHU_ALLOWED_ACTIONS, FEISHU_INFRASTRUCTURE } from './feishu-actions';
+import { classify } from './feishu-router';
 
 // The census of what a Feishu event may call (docs/feishu-bot-design.md §7.2, decision 1), pinned both ways, as
 // pat-route-coverage.spec.ts pins the token routes:
@@ -12,7 +13,12 @@ import { FEISHU_ALLOWED_ACTIONS, FEISHU_INFRASTRUCTURE } from './feishu-actions'
 //   (1) every allowlist entry names a method that exists on its service, once;
 //   (2) every call the feishu module's sources make on an injected service — `this.<field>.<method>(` where the
 //       constructor injects `<field>: <Class>` — is either on the module's own infrastructure or on the allowlist;
-//   (3) the writes on it are exactly the ones §7.2 allows so far, each added by its task with §7.2's condition for it.
+//   (3) the writes on it are exactly the ones §7.2 allows, each added by its task with §7.2's condition for it;
+//   (4) FEISHU_ACTIONS, every action a Feishu event can take (F3-6), against the allowlist, the code and the router:
+//       each action's calls are allowlisted and each allowlisted method is some action's; each handler exists and the
+//       router reaches it; a source's allowlisted calls are exactly those of the actions it handles; every branch the
+//       router classifies an event into has an action;
+//   (5) FEISHU_ACTIONS against feishu-isolation.pg.spec.ts: a cross-account case for every action, none for another.
 
 const FEISHU_DIR = path.resolve(__dirname, '../../src/feishu');
 
@@ -91,7 +97,7 @@ test('(2) the census reads a call it should refuse', () => {
   assert.deepEqual(serviceCalls(sample), ['SessionsService.createTurn', 'PrismaService.$queryRaw']);
 });
 
-test('(3) the writes on the allowlist are the ones §7.2 allows so far', () => {
+test('(3) the writes on the allowlist are the ones §7.2 allows', () => {
   assert.deepEqual(
     FEISHU_ALLOWED_ACTIONS.filter((a) => a.access !== 'READ').map((a) => `${a.service}.${a.method}`).sort(),
     // F2-3: reply to a session, open a session from the owner's direct messages. F2-1: answer a tool approval on its card.
@@ -102,4 +108,57 @@ test('(3) the writes on the allowlist are the ones §7.2 allows so far', () => {
 test('(3) decideApproval is called, and only from the card actions', () => {
   const callers = sources().filter(({ text }) => serviceCalls(text).includes('SessionsService.decideApproval')).map(({ file }) => file);
   assert.deepEqual(callers, ['feishu-card-actions.ts']);
+});
+
+test('(4) every action calls only allowlisted methods, and every allowlisted method is some action\'s', () => {
+  const allowed = new Set(FEISHU_ALLOWED_ACTIONS.map((a) => `${a.service}.${a.method}`));
+  const keys = new Set<string>();
+  for (const action of FEISHU_ACTIONS) {
+    assert.ok(!keys.has(action.key), `${action.key} is listed twice`);
+    keys.add(action.key);
+    assert.ok(action.scope.trim() !== '', `${action.key} says how it is held to the app's account`);
+    for (const call of action.calls) assert.ok(allowed.has(call), `${action.key} calls ${call}, which is not allowlisted`);
+  }
+  const used = new Set(FEISHU_ACTIONS.flatMap((a) => a.calls));
+  assert.deepEqual([...allowed].filter((c) => !used.has(c)), [], 'an allowlisted method no action calls');
+});
+
+test('(4) every handler exists, and the router reaches every event handler', () => {
+  const byFile = new Map(sources().map(({ file, text }) => [file, text]));
+  const router = byFile.get('feishu-router.ts')!;
+  for (const action of FEISHU_ACTIONS) {
+    const [file, method] = action.handler.split('#');
+    const text = byFile.get(file!);
+    assert.ok(text, `${action.key}: ${file} is not a source of the feishu module`);
+    assert.match(text, new RegExp(`\\basync ${method}\\(`), `${action.key}: ${action.handler} does not exist`);
+    if (action.route !== 'SETTINGS') assert.ok(router.includes(`.${method}(`), `${action.key}: the router never calls ${method}`);
+  }
+});
+
+test('(4) the allowlisted calls each source makes are exactly those of the actions it handles', () => {
+  const allowed = new Set(FEISHU_ALLOWED_ACTIONS.map((a) => `${a.service}.${a.method}`));
+  for (const { file, text } of sources()) {
+    const made = [...new Set(serviceCalls(text).filter((c) => allowed.has(c)))].sort();
+    const listed = [...new Set(FEISHU_ACTIONS.filter((a) => a.handler.startsWith(`${file}#`)).flatMap((a) => a.calls))].sort();
+    assert.deepEqual(made, listed, `${file}: the allowlisted calls it makes, against the actions FEISHU_ACTIONS gives it`);
+  }
+});
+
+test('(4) every branch the router sends an event down has an action', () => {
+  const samples: Array<[string, unknown]> = [
+    ['im.message.receive_v1', { event: { message: { chat_type: 'p2p' } } }],
+    ['im.message.receive_v1', { event: { message: { chat_type: 'group' } } }],
+    ['card.action.trigger', { event: {} }],
+    ['im.chat.member.bot.deleted_v1', { event: {} }],
+  ];
+  const routes = new Set(samples.map(([type, payload]) => classify(type, payload).route));
+  const covered = new Set<string>(FEISHU_ACTIONS.map((a) => a.route));
+  for (const route of routes) assert.ok(covered.has(route), `no action for ${route}`);
+  assert.equal(classify('anything.else', {}).route, 'IGNORED', 'any other event is recorded and never acted on');
+});
+
+test('(5) feishu-isolation.pg.spec.ts holds every action, and only those, to the app\'s own account', () => {
+  const spec = readFileSync(path.join(FEISHU_DIR, 'feishu-isolation.pg.spec.ts'), 'utf8');
+  const cases = new Set([...spec.matchAll(/\[isolation:([a-z-]+)\]/g)].map((m) => m[1]!));
+  assert.deepEqual([...cases].sort(), FEISHU_ACTIONS.map((a) => a.key).sort());
 });
