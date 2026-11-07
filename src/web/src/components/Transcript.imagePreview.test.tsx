@@ -215,11 +215,11 @@ describe('the viewer', () => {
     await click(pictures[1]);
     expect(shown()).toBe('blob:proposed');
     expect(position()).toBe('2 / 3');
-    expect(viewer()!.querySelector<HTMLButtonElement>('[aria-label="Previous image"]')!.disabled).toBe(false);
+    expect(viewer()!.querySelector<HTMLButtonElement>('[aria-label="Previous image"]')!.getAttribute('aria-disabled')).toBeNull();
     await click(viewer()!.querySelector('[aria-label="Next image"]')!);
     expect(shown()).toBe('blob:docs/mocks/board.png');
     expect(position()).toBe('3 / 3');
-    expect(viewer()!.querySelector<HTMLButtonElement>('[aria-label="Next image"]')!.disabled).toBe(true);
+    expect(viewer()!.querySelector<HTMLButtonElement>('[aria-label="Next image"]')!.getAttribute('aria-disabled')).toBe('true');
     await key('ArrowLeft');
     await key('ArrowLeft');
     expect(shown()).toBe('blob:today');
