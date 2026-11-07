@@ -42,6 +42,9 @@ data class DirectorySession(
     val pendingApprovals: Int = 0, val runningBgJobCount: Int = 0,
     val confirmationUnderReview: JsonObject? = null,
     val lastAssistantText: String? = null, val lastUserText: String? = null,
+    /** Who sent [lastUserText], when another Orbit session did: the row names that session instead of saying "You"
+     *  ([SessionLine.sender]). Null for the owner's own words, and from an older server, which does not send it. */
+    val lastUserFrom: SessionMessageFrom? = null,
     /** The rolling recap the server wrote about this session and when it wrote it (0418), clipped like the previews beside it; the
      *  line the list prefers to [lastAssistantText]. Both null on a session no pass has recapped yet, and from a server that writes
      *  no recaps (`ORBIT_RECAP_ENABLED=0`) — exactly what the row falls back from. The account's Session recaps switch can also hold
@@ -65,6 +68,11 @@ data class DirectorySession(
     val workspace get() = workspaceId ?: agentId ?: agent?.id
     val name get() = title?.takeIf(String::isNotBlank) ?: "Untitled session"
 }
+/** Who sent the message a session row previews, when another Orbit session did (`@orbit/shared` and OrbitKit `SessionMessageFrom`,
+ * design §3.5): the sending session and its title as they stood when the message was written. Both slots optional, so a value read
+ * only in part still says that someone other than the owner sent it. */
+@Serializable
+data class SessionMessageFrom(val sessionId: String? = null, val title: String? = null)
 /** What a LANDING session row says about its subject (`SessionLandingSummary`, contract §2.9 LS6): the subject it represents and where
  * it stands, so the project's Landings window can put a landing still in hand under `Now` and a settled one in the day it settled, and
  * the page's Landings row can count them. Every slot optional, so a server that sends less still decodes. */
