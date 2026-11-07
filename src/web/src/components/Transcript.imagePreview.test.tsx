@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AttachmentResolverContext, ExportCtx, QueuedUserTurn, type RunEvent, Transcript } from './Transcript';
+import { ArtifactResolverContext, AttachmentResolverContext, ExportCtx, QueuedUserTurn, type RunEvent, Transcript } from './Transcript';
 
 /**
  * The transcript's pictures and the viewer they open.
@@ -14,10 +14,10 @@ import { AttachmentResolverContext, ExportCtx, QueuedUserTurn, type RunEvent, Tr
  * when the fetch fails. The object URL belongs to the picture: it is revoked when the picture goes, and at once when
  * it lands after the picture has gone.
  *
- * Every thumbnail the conversation draws — a turn's attachments, a tool's screenshot — joins one viewer that pages
- * through them in the order of the conversation, whatever order their bytes arrived in; a picture that has not
- * arrived is not a page. A reply's Markdown picture, and a queued turn's, open on their own. The saved HTML file
- * draws plain pictures and no viewer.
+ * Every thumbnail the conversation draws — a turn's attachments, a reply's own Markdown pictures, a tool's screenshot —
+ * joins one viewer that pages through them in the order the conversation draws them, whatever order their bytes
+ * arrived in; a picture that has not arrived is not a page. A queued turn's picture opens on its own. The saved HTML
+ * file draws plain pictures and no viewer.
  */
 
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
@@ -36,6 +36,8 @@ let root: Root;
 let pending: Map<string, { resolve: (url: string) => void; reject: (error: Error) => void }>;
 let revoked: string[];
 const resolver = vi.fn((id: string) => new Promise<string>((resolve, reject) => pending.set(id, { resolve, reject })));
+// A picture a reply names by its path in the checkout comes through the artifact route, keyed here by that path.
+const artifacts = vi.fn((path: string) => new Promise<string>((resolve, reject) => pending.set(path, { resolve, reject })));
 
 async function settle(): Promise<void> {
   for (let tick = 0; tick < 4; tick += 1) {
@@ -48,7 +50,9 @@ async function draw(events: RunEvent[] = EVENTS): Promise<void> {
     root.render(
       <MemoryRouter>
         <AttachmentResolverContext.Provider value={resolver}>
-          <Transcript events={events} />
+          <ArtifactResolverContext.Provider value={artifacts}>
+            <Transcript events={events} />
+          </ArtifactResolverContext.Provider>
         </AttachmentResolverContext.Provider>
       </MemoryRouter>,
     );
@@ -93,6 +97,7 @@ beforeEach(() => {
   pending = new Map();
   revoked = [];
   resolver.mockClear();
+  artifacts.mockClear();
   Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: (url: string) => revoked.push(url) });
   container = document.createElement('div');
   document.body.append(container);
@@ -167,15 +172,58 @@ describe('the viewer', () => {
     expect(revoked).toEqual([]);
   });
 
-  it('opens a reply’s Markdown picture on its own', async () => {
+  it('pages a reply’s Markdown picture with the rest, where the reply draws it', async () => {
     await draw();
+    await land('wide');
+    await land('tall');
     await land('diagram');
-    const picture = container.querySelector<HTMLElement>('.md [role="button"][aria-label="Layout diagram"]')!;
-    expect(picture.querySelector('img')!.className).toBe('orbit-image-img md-image');
+    await land('later');
+    await fail('missing');
+
+    const picture = thumbnails(container.querySelector('.chat-assistant .md')!)[0];
+    expect(picture.querySelector('img')!.className).toBe('md-image');
+    expect(picture.querySelector('img')!.getAttribute('alt')).toBe('Layout diagram');
     await click(picture);
     expect(shown()).toBe('blob:diagram');
-    expect(position()).toBeNull();
-    expect(viewer()!.querySelector('[aria-label="Next image"]')).toBeNull();
+    expect(viewer()!.getAttribute('aria-label')).toBe('Layout diagram');
+    expect(position()).toBe('3 / 5');
+    await key('ArrowLeft');
+    expect(shown()).toBe('blob:tall');
+    await key('ArrowRight');
+    await key('ArrowRight');
+    expect(shown()).toBe(`data:image/png;base64,${PNG}`);
+    expect(position()).toBe('4 / 5');
+  });
+
+  it('pages one reply’s pictures in the order it draws them, whatever order their bytes arrived in', async () => {
+    await draw([
+      {
+        seq: 1,
+        type: 'assistant',
+        turnId: 't1',
+        ts: at,
+        payload: { text: 'Today:\n\n![Today](orbit-attachment:today)\n\nProposed:\n\n![Proposed](orbit-attachment:proposed)\n\nThe board:\n\n![Board](docs/mocks/board.png)' },
+      },
+    ]);
+    expect(artifacts.mock.calls.map(([path]) => path)).toEqual(['docs/mocks/board.png']);
+    await land('docs/mocks/board.png');
+    await land('proposed');
+    await land('today');
+
+    const pictures = thumbnails(container.querySelector('.chat-assistant .md')!);
+    expect(pictures.map((button) => button.querySelector('img')!.getAttribute('alt'))).toEqual(['Today', 'Proposed', 'Board']);
+    await click(pictures[1]);
+    expect(shown()).toBe('blob:proposed');
+    expect(position()).toBe('2 / 3');
+    expect(viewer()!.querySelector<HTMLButtonElement>('[aria-label="Previous image"]')!.getAttribute('aria-disabled')).toBeNull();
+    await click(viewer()!.querySelector('[aria-label="Next image"]')!);
+    expect(shown()).toBe('blob:docs/mocks/board.png');
+    expect(position()).toBe('3 / 3');
+    expect(viewer()!.querySelector<HTMLButtonElement>('[aria-label="Next image"]')!.getAttribute('aria-disabled')).toBe('true');
+    await key('ArrowLeft');
+    await key('ArrowLeft');
+    expect(shown()).toBe('blob:today');
+    expect(position()).toBe('1 / 3');
   });
 
   it('opens a queued turn’s picture on its own, since a queued turn is drawn outside the conversation', async () => {

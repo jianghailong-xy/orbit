@@ -231,9 +231,8 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
     };
   });
 
-  // ←/→ page a group wherever focus is — on the window, as the replaced preview listened, so a key still pages when
-  // the button that had focus was disabled at an end and focus fell back to the page. Ahead of the popup, which keeps
-  // arrow keys from bubbling out of it.
+  // ←/→ page a group wherever focus is in the viewer — on the window, as the replaced preview listened, and ahead of
+  // the popup, which keeps arrow keys from bubbling out of it.
   useEffect(() => {
     if (!open || !switches) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -373,13 +372,16 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
           <button ref={closeButton} type="button" className="orbit-image-preview-close" aria-label="Close" onClick={onClose}>
             <CloseOutlined aria-hidden />
           </button>
+          {/* A button that can't act is greyed with aria-disabled, never disabled: a disabled button drops the focus it
+              holds onto the page behind the viewer, whose keys then act under it (↑/↓ switched the session). This one
+              keeps focus, so keys and Tab stay in the viewer and Esc hands focus back; a press on it does nothing. */}
           {switches && (
             <>
               <button
                 type="button"
                 className="orbit-image-preview-switch orbit-image-preview-switch-prev"
                 aria-label="Previous image"
-                disabled={current === 0}
+                aria-disabled={current === 0 || undefined}
                 onClick={() => go(-1)}
               >
                 <LeftOutlined aria-hidden />
@@ -388,7 +390,7 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
                 type="button"
                 className="orbit-image-preview-switch orbit-image-preview-switch-next"
                 aria-label="Next image"
-                disabled={current === count - 1}
+                aria-disabled={current === count - 1 || undefined}
                 onClick={() => go(1)}
               >
                 <RightOutlined aria-hidden />
@@ -409,8 +411,8 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
                   type="button"
                   className="orbit-image-preview-action"
                   aria-label={action.label}
-                  disabled={action.disabled}
-                  onClick={action.onClick}
+                  aria-disabled={action.disabled || undefined}
+                  onClick={action.disabled ? undefined : action.onClick}
                 >
                   {action.icon}
                 </button>

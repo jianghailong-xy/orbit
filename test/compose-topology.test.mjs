@@ -155,9 +155,12 @@ const SURVIVING_CONFIGURATION_SHA = 'a68a3fe8774e4f181b9584443bfaeb1dca39547e';
 // 2026-10-09. docs/postgres-runtime-settings.md §9 records the account owner's approval. a2adab1d then
 // adds `-c jit=off` and the one comment line that explains it: production already ran jit = off for its
 // role and database, and the bundled Postgres JIT-compiled the dispatch sweep's scan.
-// docs/postgres-runtime-settings.md §10 records that approval (2026-11-01). Postgres alone is compared
+// docs/postgres-runtime-settings.md §10 records that approval (2026-11-01). 4695c8db then adds
+// `-c shared_buffers=4GB` and `-c effective_cache_size=12GB` and the three comment lines that explain them:
+// production had run both since 2026-11-06, set with ALTER SYSTEM, and the account owner asked that day for
+// them to be committed; docs/postgres-runtime-settings.md §11 records it. Postgres alone is compared
 // with this pin; every other service keeps the pin it had. New settings still require an explicit review.
-const POSTGRES_CONFIGURATION_SHA = 'a2adab1d49ab991d4fcebe2b305ddc12d7c98f8e';
+const POSTGRES_CONFIGURATION_SHA = '4695c8db4f43f242270b40f727e8f1eab70c3933';
 
 const EXPECTED_SERVICES = ['postgres', 'pgbackup', 'apiserver', 'web', 'gateway'];
 // Added by the account owner on 2026-10-07 (see the top of this file), after every pinned commit above.
@@ -422,6 +425,19 @@ const APPROVED_APISERVER_BLOCKS = [
 const APPROVED_APISERVER_ADDITIONS = APPROVED_APISERVER_BLOCKS.flat();
 // Orbit Files' off-host copy (2026-11-02, the top of this file): the sidecar reads the files directory and cannot write it.
 const PGBACKUP_FILES_MOUNT = '      - ./data/files:/var/lib/orbit/files:ro';
+// The approved additions to postgres's command that (k) sets aside, which (i) pins byte for byte with the rest of the
+// service. Each is found by its LAST line: `      - -c` opens every setting, so a block's first line would find the
+// command's first setting instead. Only its lines and the comment directly above them go, up to the directive before
+// that comment, so the work_mem and JIT comments above jit=off still count.
+const APPROVED_POSTGRES_BLOCKS = [
+  // shared_buffers and effective_cache_size (2026-11-06, POSTGRES_CONFIGURATION_SHA above), right after jit=off.
+  [
+    '      - -c',
+    '      - shared_buffers=4GB',
+    '      - -c',
+    '      - effective_cache_size=12GB',
+  ],
+];
 test('nothing beyond the approved configuration was added to pgbackup, apiserver or web', () => {
   const approved = { pgbackup: [PGBACKUP_FILES_MOUNT], apiserver: APPROVED_APISERVER_ADDITIONS, web: [] };
   for (const [name, additions] of Object.entries(approved)) {
@@ -466,13 +482,22 @@ function withoutApprovedAdditions(source) {
     while (from > 0 && /^\s*#/.test(lines[from - 1])) from -= 1;
     lines = [...lines.slice(0, from), ...lines.slice(last + 1)];
   }
+  for (const block of APPROVED_POSTGRES_BLOCKS) {
+    const last = lines.indexOf(block[block.length - 1]);
+    assert.ok(last > 0, `docker-compose.yml no longer has the approved postgres ${block[block.length - 1].trim()}`);
+    const first = last - (block.length - 1);
+    assert.deepEqual(lines.slice(first, last + 1), block);
+    let from = first;
+    while (from > 0 && /^\s*#/.test(lines[from - 1])) from -= 1;
+    lines = [...lines.slice(0, from), ...lines.slice(last + 1)];
+  }
   return lines.join('\n');
 }
 
 // The sidecar removal stays subtraction. The wiki worker the owner added on 2026-10-07 and the Docker
 // channel of 2026-10-17 are services of their own, whose every line (l) and (m) pin, and the apiserver's
-// approved blocks are pinned beside them; all are set aside here, so that a line added anywhere else still
-// turns this red exactly as it did before those decisions.
+// approved blocks are pinned beside them, as postgres's are by (i); all are set aside here, so that a line added
+// anywhere else still turns this red exactly as it did before those decisions.
 test('(k) removing the sidecars is subtraction: setting the approved wiki worker aside, Compose lost more lines than it gained', () => {
   const rest = withoutApprovedAdditions(withoutService(withoutService(
     withoutService(withoutService(withoutService(current, WIKI_WORKER), DOCKER_CHANNEL), MANAGED_RUNNER_FIREWALL),
@@ -492,8 +517,8 @@ test('(k) removing the sidecars is subtraction: setting the approved wiki worker
   }
   assert.ok(rest.split('\n').length < baseline.split('\n').length);
   // And only the two approved services and the approved additions were set aside: every other service —
-  // the apiserver's own added lines and pgbackup's are what the test above pins, line by line — reads exactly as
-  // it does in the file, so this test cannot pass by quietly rewriting something else.
+  // the apiserver's own added lines and pgbackup's are what the test above pins, line by line, and postgres's what (i)
+  // pins — reads exactly as it does in the file, so this test cannot pass by quietly rewriting something else.
   assert.deepEqual(
     new Map([...services(rest)].filter(([name]) => name !== 'apiserver')),
     new Map([...services(withoutApprovedAdditions(current))].filter(([name]) => !['apiserver', ...APPROVED_ADDITIONS].includes(name))));
