@@ -26,7 +26,7 @@ export const FEISHU_REQUEST_TIMEOUT_MS = 10_000;
  * The SDK logs a failed request together with the body it sent, which for the token request is the App
  * Secret. Nothing this server builds logs through it: the caller is answered what went wrong instead.
  */
-const SILENT: lark.Logger = {
+export const SILENT: lark.Logger = {
   error: () => undefined,
   warn: () => undefined,
   info: () => undefined,

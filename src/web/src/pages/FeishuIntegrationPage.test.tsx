@@ -41,6 +41,8 @@ const SECRET = 'feishu-secret-never-shown-again';
 let stored: { platform: FeishuPlatform; appId: string; secret: string; enabled: boolean } | null;
 let allowed: boolean;
 let secretUnreadable: boolean;
+/** How many replicas the stand-in server says hold the app's long connection. */
+let connectedReplicas: number;
 /** What the stand-in's Feishu answers the next save with, when not a token. */
 let refuse: ApiError | null;
 let requests: Array<{ method: string; body?: unknown }>;
@@ -63,6 +65,7 @@ const app = (): FeishuAppSettings | null =>
     lastConnectedAt: null,
     lastEventAt: null,
     lastError: null,
+    connectedReplicas,
     createdAt: '2026-11-07T08:00:00.000Z',
     updatedAt: '2026-11-07T08:00:00.000Z',
   };
@@ -138,6 +141,7 @@ beforeEach(() => {
   stored = null;
   allowed = true;
   secretUnreadable = false;
+  connectedReplicas = 0;
   refuse = null;
   requests = [];
   vi.mocked(api).mockReset();
@@ -291,6 +295,18 @@ describe('the app connected', () => {
     expect(card('Connect your app')).toBeTruthy();
   });
 
+  it('shows how many Orbit servers hold the long connection', async () => {
+    const fact = () => {
+      const terms = [...card('Your app')!.querySelectorAll('dt')];
+      return terms.find((t) => t.textContent === 'Connection')?.nextElementSibling?.textContent;
+    };
+    await open();
+    expect(fact()).toBe('Not connected');
+    connectedReplicas = 2;
+    await click(card('Your app')!.querySelector<HTMLElement>('[role="switch"]'), 'Use this app');
+    expect(fact()).toBe('Off');
+  });
+
   it('asks for the App Secret again when the key in force can no longer decrypt it', async () => {
     secretUnreadable = true;
     await open();
@@ -320,5 +336,16 @@ describe('the steps in the developer console', () => {
       'https://open.feishu.cn/app',
       'https://open.larksuite.com/app',
     ]);
+  });
+});
+
+describe('connectionText', () => {
+  it('says whether, and on how many Orbit servers, the app is connected', async () => {
+    const { connectionText } = await import('./FeishuIntegrationPage');
+    const of = (enabled: boolean, connectedReplicas: number) => connectionText({ enabled, connectedReplicas } as FeishuAppSettings);
+    expect(of(true, 0)).toBe('Not connected');
+    expect(of(true, 1)).toBe('Connected on 1 Orbit server');
+    expect(of(true, 3)).toBe('Connected on 3 Orbit servers');
+    expect(of(false, 2)).toBe('Off');
   });
 });

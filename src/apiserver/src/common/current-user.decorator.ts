@@ -5,11 +5,17 @@ import { createParamDecorator, ExecutionContext } from '@nestjs/common';
  * JWT the Web and App sign in for — one of the user's personal access tokens, or an administrator
  * viewing Orbit as the user, read-only (auth/impersonation.ts). A login names its login session
  * (docs/push-login-session-design.md) unless its JWT was signed before sessions.
+ *
+ * FEISHU is not a request at all: an action a Feishu event asks for (docs/feishu-bot-design.md §7.2), which
+ * feishu/feishu-router.ts hands straight to a service on the §7.2 allowlist (feishu/feishu-actions.ts), never
+ * through JwtAuthGuard. Its user is always the account the app belongs to; `openId` is who acted in Feishu, and
+ * `messageId` the message or card they acted on, when the event names one.
  */
 export type AuthCredential =
   | { kind: 'LOGIN'; loginSessionId?: string }
   | { kind: 'PAT'; tokenId: string; scopes: string[]; workspaceIds: string[] }
-  | { kind: 'IMPERSONATION'; administratorId: string; expiresAt: number };
+  | { kind: 'IMPERSONATION'; administratorId: string; expiresAt: number }
+  | { kind: 'FEISHU'; appId: string; openId: string; messageId?: string };
 
 export interface AuthUser {
   userId: string;
