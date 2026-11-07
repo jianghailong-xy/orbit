@@ -10,6 +10,8 @@
 > **用词**：本文的 **Agent** 指线上叫 Agent 的 `workspace` 行（契约 §2 Legacy agent alias），不是契约 §3.1 的 `agent` 表。
 > 这个功能在界面上叫 **Smart model selection**，在代码和契约里叫 **Model Routing（路由）**；**档位**指 S / M / L / XL。
 
+> **Phase 2 design amendment (2026-11-08, pending owner confirmation):** §3.5 and §10.3 define auto-hint and Optimize For for project `34tXXUHZEcGeWeB0hp5YU`. They supersede the phase-1 missing-hint rules in §0, §1 and §3.2 only when the new policy is enabled. Other sections describe the phase-1 baseline. This amendment changes documentation only.
+
 ## 0. 一页结论
 
 - 派发任务时，为每一次**新建运行**选 model 和 effort。只管任务运行，不管人自己开的会话。
@@ -137,14 +139,66 @@
 | run 4 | run 3 被 owner 退回 | XL ↑ | Opus 5.5 · max |
 | run 5 | run 4 失败 | XL（已是最高档，不再标 ↑） | Opus 5.5 · max |
 
-### 3.5 以后接在哪里：规则引擎与 LLM 分类器
+### 3.5 Phase 2: auto-hint and Optimize For
 
-- **位置**：§3.2 第 4 条（`modelHint`）之后、第 5 条（不路由）之前，作为**没有建议时的补充来源**。coordinator 或人给的建议
-  永远优先；补充来源也给不出时才不路由。失败升档（第 3 条）照旧作用在它们给出的档位上。
-- **规则引擎**（按任务结构 / 关键词）是纯函数，直接放进路由器；输入就是决策里已经在攒的 `features`（§7.3）。
-- **LLM 分类器**不能在派发时调用（路由器不发网络请求）：要在任务创建 / 修改时异步算好、存下结果，路由器只读存下来的值。
-- 每接一个来源，`policyVersion` + 1，`reasons` 写明档位来自哪里（例如 `Tier M: inferred from the task's shape`），先在影子
-  模式里跑一轮，按 §10 与建议档位的效果比较，再决定是否生效。两个补充来源同时存在时谁优先，用各自的影子数据决定。
+**Scope and invariants.** This is the design for project `34tXXUHZEcGeWeB0hp5YU`, subject to owner review. Routing stays a pure, synchronous function of supplied snapshots. No network router, LLM request, database access, or background job is invoked by the router. The dispatch adapter reads persisted inputs before calling it, as in §8.1–§8.2; dispatch never waits for classification. Results never write back to `task.model`, `task.provider`, or `task.modelHint`. Human model pins win. Existing catalog, permission, quota and engine constraints (§4–§6) still apply, including Agent authorization for cross-engine selection and provider/engine pins. RESUME, ADOPT, same-session retries and human-created sessions remain outside routing; frozen targets are replayed without recomputation.
+
+#### 3.5.1 Hook and precedence
+
+Keep §3.2 rows 1–2 unchanged. Resolve a starting candidate from an explicit `modelHint` first; only when absent, insert auto-hint **after row 4 and before row 5**. This project uses rule inference followed by the missing-hint mode floor/default (§3.5.3). If neither produces a tier, keep row 5's not-routed baseline. A classifier is not an active source in this project (§3.5.4).
+
+Row 3 retains precedence for a qualifying failure with a known previous tier: `finalLevel = min(XL, max(previousLevel + 1, startingCandidate))`, ignoring a null candidate. Thus a missing-hint inference cannot lower a failure escalation; an explicit hint is never replaced by inference or a mode floor. If the previous tier is unknown, use the starting candidate alone. Failure eligibility, skipped usage-limit/capacity failures and tier recovery follow the existing implementation of §3.3. All modes retain this same one-tier escalation and XL cap. A model pin exits before any of these calculations.
+
+#### 3.5.2 Rule-engine input and output
+
+The adapter supplies the same immutable task/history snapshot used to record §7.3 `features`; it must not use a previous decision's feature snapshot as current task data. Already recorded inputs are `completionCriterion`, `hasAcceptanceCommand`, `verifiesTask`, `isForeman`, `dependents`, `promptChars`, `priorRuns`, `priorFailures`, `lastRun`, and skipped quota/capacity counts. `modelHint` gates inference. Runner quotas, catalogs and engine states constrain model selection afterwards, not task difficulty. History drives escalation separately; do not count the same failure twice in inference.
+
+Initial structural rules, evaluated in order (first match wins):
+
+| Condition | Raw tier | English reason body |
+|---|---|---|
+| `isForeman` or `verifiesTask`, or criterion is `OWNER_CONFIRMED` / `VERIFICATION` | L | `Tier L: review or coordination requires a conservative starting tier` |
+| `dependents >= 3` or `promptChars >= 8000` | L | `Tier L: broad dependency impact or a large prompt` |
+| Criterion is `EXECUTABLE`, acceptance command exists, no dependents, and `0 < promptChars <= 2000` | S | `Tier S: bounded executable work with immediate acceptance feedback` |
+| Criterion is `EXECUTABLE` and acceptance command exists | M | `Tier M: executable work with acceptance feedback` |
+| Otherwise, including incomplete structural inputs | null | `No structural rule matched` |
+
+Required structural values must be present and valid for their rule to match; absence is not zero. These thresholds are initial hypotheses to validate in shadow, not evidence that prompt length measures complexity. Existing `features` contain prompt length, **not keyword signals or raw text**: this project does not add keyword inference or retain prompts in decision records. New keyword features would require a separately reviewed policy revision.
+
+Rule output is `{ level: S | M | L | XL | null, source: 'rule', reasons: string[] }`; the initial rules do not emit XL, but escalation can. Every reason is English. Persist additive, id-free fields in decision `features`: `tierSource` (`coordinator`, `rule`, `default`, `escalate`, `not-routed`; future `classifier`), `startingTierSource`, `ruleLevel`, `startingLevel`, and resolved `optimizeFor`. `ruleLevel` is null when not evaluated or abstaining. Preserve existing historical fields and do not rewrite old decisions.
+
+Keep `reasons` a string array for existing clients. Prefix source reasons with stable English tags: `[coordinator] Tier M: suggested by the coordinator`, `[rule] Tier S: bounded executable work with immediate acceptance feedback`, `[default] Tier M: Balance minimum for a task without a suggestion`, `[escalate] Tier L: one above run 1 (M) after acceptance failure`, `[not-routed] Model pinned on the task`. When a mode raises or supplies the candidate, `startingTierSource = default`; otherwise use the hint/rule source. For escalation, `tierSource = escalate` and retain the starting source and its reason; mode adjustments get their own `[default]` reason. If model resolution ultimately cannot route, record `tierSource = not-routed`, keep the intended starting tier/source for audit, and explain the constraint. Engine and constraint reasons follow as before. UI labels derive from tags; reports must not depend on parsing prose.
+
+#### 3.5.3 Optimize For: Cost / Balance / Intelligence
+
+Use an owner-editable Agent setting `modelRoutingOptimizeFor` with values `cost`, `balance`, `intelligence`; absent means `cost`. Agent scope is sufficient for this project; no account inheritance is introduced. Settings copy is **Optimize For**, **Cost**, **Balance**, **Intelligence**. Only subsequent CREATE plans read a changed setting; the resolved value is frozen in decision features and the run target. This preference neither enables Smart model selection nor authorizes extra engines.
+
+| Mode | Missing-hint candidate | Failure escalation |
+|---|---|---|
+| Cost (default) | Raw rule tier; if rules abstain, null (phase-1 not-routed baseline) | Existing one-tier escalation |
+| Balance | `max(M, raw rule tier)`; abstention defaults to M | Same |
+| Intelligence | `max(L, raw rule tier)`; abstention defaults to L | Same |
+
+A mode floor applies **only without `modelHint`**. Explicit hints and model pins behave identically across modes. Cost preserves phase-1 escalation and tier mappings; automatic rule inference on missing hints is the intentional phase-2 addition, enabled only after shadow review. Cost is not a price guarantee: failed work still escalates and constraints may change model family without changing tier.
+
+Examples with the same eligible, unpinned input and no qualifying previous failure: a short executable task with no dependents gives S / M / L in Cost / Balance / Intelligence; an unclassified task gives not-routed / M / L. Explicit `modelHint = S` gives S in every mode. A known previous M failure gives at least L in every mode. `task.model` set always uses the pinned baseline with no routed tier.
+
+#### 3.5.4 Classifier decision: deferred beyond this project
+
+**Defer implementation**, rather than schedule it later within this project. No classifier worker, network call, storage migration or active classifier read is included. Rule inference supplies an auditable baseline first; classifier cost, accuracy and precedence require shadow evidence. Project criterion 5 requires owner acceptance of this explicit gap (the separate classifier-deferral task records that decision); this document does not claim that acceptance has occurred.
+
+Future store/read contract, requiring a separate approved implementation:
+
+1. After task create/update commits, asynchronously enqueue classification from a versioned snapshot of routing-relevant task fields. It must never block dispatch. Do not enqueue from the router.
+2. Store a separate task-associated inference record, not a pin or coordinator hint: `{ inputRevision, classifierVersion, level, reasons, computedAt }`. The task relation identifies the task; decision features remain id-free. `level` validates S/M/L/XL and reasons are English. Compare-and-set against the current input revision prevents a late result overwriting a newer one.
+3. The dispatch adapter may read the persisted result alongside existing inputs. Pass it to the pure router only when its revision matches current relevant task content and its classifier version is approved. Missing, stale, invalid or failed inference is ignored without waiting, retrying or issuing network calls; rules/defaults continue immediately.
+4. Initially evaluate classifier and rule candidates in shadow only. Explicit hints always win. Do not activate a combined-source precedence until matched shadow cohorts establish which source should win and a new design/policy version freezes that order. This project's active order remains hint → rule → mode default → not-routed, with failure escalation as above.
+
+#### 3.5.5 Policy versions
+
+The current implementation is policy v1; this docs-only task does not change the runtime constant. Introducing rule inference uses the next version (v2 if v1 is still current). Introducing optimize-mode semantics uses another version (v3 if sequential); ship each policy's shadow and applied records under the same version. Every added source, rule/threshold change, source precedence change, mode floor or escalation change, tier mapping or selection-constraint change requires a monotonic bump. Assign concrete versions against the implementation at landing time; never reuse a number for different semantics.
+
+Changing an owner's mode selection or enabled flag selects existing policy behavior and does not bump policyVersion; snapshot the resolved settings for audit. Pure wording or layout edits do not require a bump unless the source-tag contract changes. Never relabel historical rows. Classifier activation, if later approved, gets a fresh version even if storage was introduced earlier.
 
 ## 4. 档位表
 
@@ -483,6 +537,14 @@ model 一律取**实际运行**的（会话上首次 claim 之后的值）：生
    通过率比影子期低不超过 5 个百分点；每完成一个任务的 token 明显下降 —— 不降，开启就没有意义。
 4. **调整**：哪一档不达标，先改档位表（`policyVersion` + 1），不要逐个改任务的建议；新版本照样先影子、再对比。
 5. **扩大与回退**：达标后再开其他 Agent。回退就是关开关：只影响之后的新建运行，在跑的运行不受影响。
+
+### 10.3 Phase-2 shadow-first rollout
+
+New sources and mode semantics start shadow-only **even on Agents already enabled for phase 1**. Keep the currently approved policy's dispatch fields until owner approval; `modelRouting = true` alone does not activate an unapproved policy. The implementation must provide a separate policy rollout gate, defaulting to shadow. The candidate decision records the new policy version and resolved mode with `applied = false`; its baseline is the actual approved dispatch selection. Do not overwrite the existing phase-1 decision for the same `(task_id, request_token)`: use a separate versioned shadow evaluation record for parallel comparison, preserving the existing receipt and decision uniqueness contract. Promotion then uses the usual authoritative decision row. This storage/gate work belongs to subsequent implementation tasks, not this documentation change.
+
+Use §10.1's report grouping `policyVersion × level × provider × model`, keeping shadow and applied cohorts separate. Retain source/mode snapshots for audit and matched cohort analysis; the existing report API remains compatible. The report reader must include the versioned shadow evaluations with the same eligibility and metric definitions, deduplicating by task/request/policy; never count both records twice within a policy. This is required rollout plumbing, not a new report grouping dimension. Do not pool Cost, Balance and Intelligence into a mode-effect claim: filter retained snapshots or use separate mode rollout cohorts. Compare missing-hint candidates with phase-1 hinted tasks matched on structural features and completion criterion; report coverage, rule abstentions and tier disagreement separately. Shadow outcomes are outcomes of the actual baseline model, not proof that a candidate model would have passed or saved tokens.
+
+Collect at least two weeks of shadow data and at least 20 samples per compared cohort (§10.2). Insufficient samples mean keep collecting, not enable traffic. Owner reviews the source-tagged reasons and comparisons before a limited EXECUTABLE-first applied cohort. Compare actual first-pass rate (no more than five percentage points lower), failures, tokens per completed task and duration with the matched baseline; expand only after the owner accepts the tradeoff. Revisions restart shadow evaluation under a new policy version. Rollback disables phase-2 application for new plans and retains the last approved policy; disabling Smart model selection restores the original baseline. Existing frozen runs never change.
 
 ## 11. 分期（P0–P5）
 
