@@ -211,6 +211,17 @@ final class ConsoleRegistry {
         for model in models.values { model.reconnectNow() }
     }
 
+    /// A project's pending criteria decisions changed (`project.criteria_decisions.changed`): the
+    /// cached consoles of that project read their decision cards again — every project's when the
+    /// event names none. The read is the console's own door for those cards (`refreshRulerQuestions`).
+    func criteriaDecisionsChanged(projectID: String?) {
+        let key = projectID.map(PublicID.storageKey)
+        for model in models.values {
+            guard let own = model.projectID, key == nil || PublicID.storageKey(own) == key else { continue }
+            Task { await model.refreshRulerQuestions(force: true) }
+        }
+    }
+
     /// Drop all in-memory consoles after persisting them (sign-out). Disk snapshots remain for the
     /// next sign-in.
     func reset() {
@@ -269,7 +280,9 @@ final class ConsoleRegistry {
     /// nothing is left to follow.
     private func pollOperations() async {
         while !Task.isCancelled, !pendingOperations.isEmpty {
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            // In flight and visible only: no event reports an operation settling, and while the app
+            // cannot be seen nobody is watching for it — shown again, it reads at once.
+            await VisibilityGate.app.pause(3)
             for operation in pendingOperations.operations where !Task.isCancelled {
                 do {
                     let detail = try await api.sessionDetail(operation.sessionID)

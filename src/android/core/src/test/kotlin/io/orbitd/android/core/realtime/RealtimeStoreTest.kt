@@ -9,6 +9,9 @@ import kotlinx.coroutines.test.*
 import org.junit.Assert.*
 import org.junit.Test
 
+/** How long the store gathers a burst of account events before it reads what they moved (RealtimeStore.EVENT_WINDOW_MS, R1). */
+private const val WINDOW_MS = 500L
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class RealtimeStoreTest {
     /** [readsBefore] is how many REST reads had been made when this stream connected. */
@@ -59,6 +62,16 @@ class RealtimeStoreTest {
             reads.subList(from, until).map { it.api.query.toMap() }.filter { "after" in it }
         /** The query the store sends for the page past [after]. */
         fun page(after: Long) = mapOf("maxPayload" to "2048", "after" to "$after", "limit" to "200")
+        /** The directory's list reads in `reads[from until]`, in order: `sessions?view=open`, `workspaces`, `session-folders`,
+         * `session-tags`, `runners`. A session's own reads (`sessions/s1/…`) are not lists. */
+        fun lists(from: Int) = reads.subList(from, reads.size).map { it.api }.filter { it.path.size == 1 && it.path[0] in directoryPaths }
+            .map { api -> api.path[0] + api.query.joinToString("&", prefix = if (api.query.isEmpty()) "" else "?") { (k, v) -> "$k=$v" } }
+        private val directoryPaths = setOf("sessions", "workspaces", "session-folders", "session-tags", "runners")
+        /** One account event of [type] on the account stream, and the store's turn to take it. */
+        suspend fun event(type: String, sessionId: String = "s2") {
+            streams.control().emit("""{"type":"$type","sessionId":"$sessionId","data":{}}""")
+            scope.runCurrent()
+        }
         fun client(dispatcher: CoroutineDispatcher = StandardTestDispatcher(scope.testScheduler)) = AuthSession(HttpTransport { request ->
             reads += request
             val path = request.api.path
@@ -623,14 +636,113 @@ class RealtimeStoreTest {
         assertEquals("pings are not account events", mapOf("wiki.changed" to 2L, "session.updated" to 1L), store.state.value.accountEvents)
     }
 
+    /** docs/list-freshness-design.md §4 R1 and R5: a session's event is read once its window closes, half a second after it, and what
+     * is read is the Open list alone — never the workspaces, folders, tags or runners, which no session event moves. */
+    @Test fun aSessionEventReadsTheOpenListOnceItsWindowClosesAndNoOtherList() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        val start = rig.reads.size
+        val revision = store.state.value.invalidationRevision
+        rig.event("session.updated")
+        advanceTimeBy(WINDOW_MS - 1); runCurrent()
+        assertEquals("nothing is read inside the window", emptyList<String>(), rig.lists(start))
+        assertEquals(revision, store.state.value.invalidationRevision)
+        advanceTimeBy(1); runCurrent()
+        assertEquals(listOf("sessions?view=open"), rig.lists(start))
+        assertEquals("the pages are asked once", revision + 1, store.state.value.invalidationRevision)
+        advanceTimeBy(60_000); runCurrent()
+        assertEquals("and nothing more", listOf("sessions?view=open"), rig.lists(start))
+    }
+
+    /** A burst is one read: ten session events within 400 ms close one window and read the Open list once. */
+    @Test fun tenEventsWithin400MsAreOneRead() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        val start = rig.reads.size
+        val revision = store.state.value.invalidationRevision
+        repeat(10) { index ->
+            rig.event(if (index % 2 == 0) "session.updated" else "approval.requested", "s$index")
+            if (index < 9) advanceTimeBy(40)
+        }
+        advanceTimeBy(WINDOW_MS); runCurrent()
+        advanceTimeBy(10_000); runCurrent()
+        assertEquals(listOf("sessions?view=open"), rig.lists(start))
+        assertEquals(revision + 1, store.state.value.invalidationRevision)
+        assertEquals(5L, store.state.value.accountEvents["session.updated"])
+    }
+
+    /** Each library event reads its own list and nothing else; a workspace's is `agent.changed`. */
+    @Test fun aLibraryEventReadsItsOwnListAndNothingElse() = runTest {
+        for ((type, list) in listOf("tag.changed" to "session-tags", "folder.changed" to "session-folders", "agent.changed" to "workspaces")) {
+            val rig = Rig(this)
+            val (_, store) = rig.start()
+            val start = rig.reads.size
+            rig.event(type, "")
+            advanceTimeBy(WINDOW_MS); runCurrent()
+            assertEquals(type, listOf(list), rig.lists(start))
+            store.close(); runCurrent()
+        }
+    }
+
+    /** An event that moves none of the store's lists reads none of them: a task's or a project's asks the pages (the invalidation), the
+     * wiki's only the wiki, and a type this build does not know asks for nothing at all. */
+    @Test fun anEventThatMovesNoListOfTheStoresReadsNone() = runTest {
+        for ((type, invalidates) in listOf("task.changed" to true, "project.changed" to true, "watch.changed" to true,
+            "wiki.changed" to false, "sessions.list_changed" to false, "made.up" to false)) {
+            val rig = Rig(this)
+            val (_, store) = rig.start()
+            val start = rig.reads.size
+            val revision = store.state.value.invalidationRevision
+            rig.event(type, "")
+            advanceTimeBy(WINDOW_MS); runCurrent()
+            assertEquals(type, emptyList<String>(), rig.lists(start))
+            assertEquals(type, if (invalidates) revision + 1 else revision, store.state.value.invalidationRevision)
+            assertEquals(type, 1L, store.state.value.accountEvents[type])
+            store.close(); runCurrent()
+        }
+    }
+
+    /** A list is read once at a time: windows that close while its read is on the wire leave one more read behind it, not one each. */
+    @Test fun aListIsOnTheWireOnceAtATime() = runTest {
+        val rig = Rig(this)
+        rig.start()
+        val start = rig.reads.size
+        val held = CompletableDeferred<Unit>()
+        rig.heldDirectory = held
+        repeat(3) {
+            rig.event("session.updated")
+            advanceTimeBy(WINDOW_MS); runCurrent()
+        }
+        assertEquals(listOf("sessions?view=open"), rig.lists(start))
+        rig.heldDirectory = null
+        held.complete(Unit); runCurrent()
+        assertEquals(listOf("sessions?view=open", "sessions?view=open"), rig.lists(start))
+    }
+
+    /** A connect replays nothing, so it still reads every list at once, without waiting out a window. */
+    @Test fun aConnectReadsEveryListAtOnce() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        val start = rig.reads.size
+        rig.streams.control().frames.close()
+        runCurrent(); advanceTimeBy(301); runCurrent()
+        assertEquals(2L, store.state.value.controlConnects)
+        assertEquals(setOf("workspaces", "session-folders", "session-tags", "runners", "sessions?view=open"), rig.lists(start).toSet())
+        assertEquals(5, rig.lists(start).size)
+    }
+
     @Test fun emptySessionIdNudgesRefetchAndDirectoryErrorRetainsRows() = runTest {
         val rig = Rig(this)
         val (_, store) = rig.start()
         val revision = store.state.value.invalidationRevision
-        rig.directoryError = 403
+        val start = rig.reads.size
         rig.streams.control().emit("""{"type":"folder.changed","sessionId":"","data":{"id":"f1"}}""")
-        runCurrent()
+        runCurrent(); advanceTimeBy(WINDOW_MS); runCurrent()
         assertTrue(store.state.value.invalidationRevision > revision)
+        assertEquals(listOf("session-folders"), rig.lists(start))
+        rig.directoryError = 403
+        rig.event("session.updated")
+        advanceTimeBy(WINDOW_MS); runCurrent()
         assertFalse(store.state.value.directoryFresh)
         assertEquals(403, store.state.value.directoryError!!.httpStatus)
         assertEquals(ConnectionState.CONNECTED, store.state.value.controlConnection)
@@ -672,8 +784,8 @@ class RealtimeStoreTest {
         val (_, store) = rig.start()
         assertNull(store.state.value.directory)
         repeat(4) { round ->
-            rig.streams.control().emit("""{"type":"session.updated","sessionId":"s2","data":{}}""")
-            runCurrent()
+            rig.event("session.updated")
+            advanceTimeBy(WINDOW_MS); runCurrent()
             rig.title = "read $round"
             val next = CompletableDeferred<Unit>()
             rig.heldDirectory = next
@@ -691,7 +803,8 @@ class RealtimeStoreTest {
         val earlier = CompletableDeferred<Unit>()
         rig.title = "before the write"; rig.heldDirectory = earlier
         store.refreshDirectory(); runCurrent()
-        rig.streams.control().emit("""{"type":"session.updated","sessionId":"s2","data":{}}""")
+        rig.event("session.updated")
+        advanceTimeBy(WINDOW_MS); runCurrent()
         val behind = CompletableDeferred<Unit>()
         rig.title = "after the write"; rig.heldDirectory = behind
         val reread = async { store.rereadDirectory() }
@@ -711,8 +824,8 @@ class RealtimeStoreTest {
         val (_, store) = rig.start()
         val read = CompletableDeferred<Unit>()
         rig.title = "moved"; rig.heldDirectory = read
-        rig.streams.control().emit("""{"type":"session.updated","sessionId":"s2","data":{}}""")
-        runCurrent()
+        rig.event("session.updated")
+        advanceTimeBy(WINDOW_MS); runCurrent()
         assertTrue(store.state.value.directoryFresh)
         assertFalse(store.state.value.directoryRefreshing)
         read.complete(Unit); runCurrent()
@@ -748,8 +861,8 @@ class RealtimeStoreTest {
         val (_, store) = rig.start()
         val quiet = CompletableDeferred<Unit>()
         rig.heldDirectory = quiet
-        rig.streams.control().emit("""{"type":"session.updated","sessionId":"s2","data":{}}""")
-        runCurrent()
+        rig.event("session.updated")
+        advanceTimeBy(WINDOW_MS); runCurrent()
         rig.streams.control().frames.close(); runCurrent()
         assertEquals(ConnectionState.BACKOFF, store.state.value.controlConnection)
         quiet.complete(Unit); runCurrent()

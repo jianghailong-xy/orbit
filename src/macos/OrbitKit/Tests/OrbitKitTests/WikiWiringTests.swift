@@ -383,7 +383,7 @@ final class WikiWiringTests: XCTestCase {
         assertOrder(screen, ["TimelineView(.periodic(from: .now, by: wiki.jobsUnderWay ? 5 : 60)) { context in",
                              "seen: seen, jobs: wiki.currentJobs, now: context.date, actions: actions(wiki))",
                              "await wiki.loadOtherPlans()", "await wiki.loadJobs()",
-                             "while !Task.isCancelled, wiki.jobsUnderWay {", "try? await Task.sleep(for: .seconds(5))",
+                             "while !Task.isCancelled, wiki.jobsUnderWay {", "await VisibilityGate.app.pause(5)",
                              ".refreshable {"], "Activity's runs, read and read again")
         XCTAssertTrue(view.contains("openJob: { id in model.push(.wikiJob(jobID: id)) }"), "a run's row opens its page")
         let header = try slice(page, from: "private var runsHeader: some View {", to: "private var newRows: Int")
@@ -662,14 +662,15 @@ final class WikiWiringTests: XCTestCase {
     func testWikiChangedReReadsTheWikiNotTheSessions() throws {
         let app = code(try source("AppModel.swift"))
         let apply = try slice(app, from: "private func apply(_ ev: ControlEvent) {", to: "private func mergeSessionSummary")
-        let arm = try slice(apply, from: "case .wikiChanged:", to: "case .providerChanged:")
+        let arm = try slice(apply, from: "case .wiki:\n", to: "case .folders:")
         XCTAssertTrue(arm.contains("wiki?.nudge()"))
         XCTAssertFalse(arm.contains("scheduleControlRefresh"), "a wiki event is not a session event")
-        let wikiArm = try XCTUnwrap(apply.range(of: "case .wikiChanged:"))
-        let defaultArm = try XCTUnwrap(apply.range(of: "default:\n            scheduleControlRefresh()"))
-        XCTAssertLessThan(wikiArm.lowerBound, defaultArm.lowerBound)
-        let connected = try slice(app, from: "case .connected:", to: "case .event(let ev):")
-        XCTAssertTrue(connected.contains("if let wiki { Task { await wiki.reloadLoaded() } }"))
+        XCTAssertTrue(apply.contains("switch ControlEventRoute.of(ev) {"), "its own route, never the Open list's")
+        let connected = try slice(app, from: "private func reconcileOnConnect() async {", to: "\n    }\n")
+        XCTAssertTrue(connected.contains("if selectedSection == .wiki {\n            if let wiki { Task { await wiki.reloadLoaded() } }"),
+                      "a reconnect re-reads the Wiki while it is on screen")
+        XCTAssertTrue(connected.contains("} else if let wiki, wiki.spacesState.hasLoaded {\n            Task { await wiki.loadSpaces() }"),
+                      "and otherwise its spaces: the drawer's number is on screen beside every section")
         XCTAssertTrue(app.contains("wiki = WikiModel(baseURL: url, tokenStore: tokenStore)"))
     }
 

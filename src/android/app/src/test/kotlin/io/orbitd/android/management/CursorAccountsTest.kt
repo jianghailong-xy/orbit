@@ -74,6 +74,11 @@ class CursorAccountsTest {
         val week = json("""{"provider":"cursor","includedUsage":{"period":"weekly","percentUsed":0.5}}""")
         assertEquals("Weekly limit", usageRows(week).single().label)
         assertEquals(emptyList<UsageRow>(), usageRows(json("""{"provider":"cursor","includedUsage":{"period":"weekly","percentUsed":0}}""")))
+        // Dollar remaining/limit from the dashboard: "$X left", including a true $0 left.
+        val dollars = usageRows(json("""{"provider":"cursor","includedUsage":{"period":"monthly","remainingCents":16778,"limitCents":40000,"resetsAt":"2026-10-19T00:00:00Z"}}""")).single()
+        assertEquals("Monthly limit" to "$167.78 left", dollars.label to dollars.headline)
+        assertEquals(42, dollars.percent)
+        assertEquals("$0 left", usageRows(json("""{"provider":"cursor","includedUsage":{"remainingCents":0,"limitCents":40000}}""")).single().headline)
         // A flat snapshot names itself; another engine's is never read as Cursor CLI's.
         assertEquals("cursor", planUsageSnapshot(json("""{"provider":"cursor","planName":"Pro"}"""), "cursor")?.str("provider"))
         assertNull(planUsageSnapshot(json("""{"provider":"codex"}"""), "cursor"))

@@ -97,6 +97,12 @@ type PlanUsageIncludedUsage struct {
 	ResetsAt string `json:"resetsAt,omitempty"` // when the included usage resets
 	// PercentUsed is Cursor's share used, above 0 only: a 0 is no reading (contract §11), and omitted.
 	PercentUsed float64 `json:"percentUsed,omitempty"`
+	// RemainingCents is planUsage.remaining when Cursor sent dollar fields (cents left of the
+	// included allowance). A pointer so 0 (exhausted) is distinct from "Cursor sent no remaining".
+	RemainingCents *float64 `json:"remainingCents,omitempty"`
+	// LimitCents is planUsage.limit (or planInfo.includedAmountCents) in cents: the included
+	// allowance this period. Absent when Cursor named none.
+	LimitCents *float64 `json:"limitCents,omitempty"`
 	// LimitReachedAt is when a turn on the account last met Cursor's usage limit within this period.
 	LimitReachedAt string `json:"limitReachedAt,omitempty"`
 }

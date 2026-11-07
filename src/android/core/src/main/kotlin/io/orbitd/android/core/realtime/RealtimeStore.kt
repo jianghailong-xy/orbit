@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
@@ -60,9 +61,6 @@ class RealtimeStore(
     /** Moved by every [refreshDirectory] and [rereadDirectory]: someone changed something. What a list the store does not read
      * (Completed, Trash) reads itself again behind. */
     val directoryAsks: StateFlow<Long> = directoryRevision.asStateFlow()
-    /** Moved by every account event and connect. Nobody waits on the read behind one, so unlike [directoryRevision] it costs a
-     * read on the wire nothing: see [control]. */
-    private val directoryChanges = MutableStateFlow(0L)
     /** The revision the last directory read that landed left at: what [rereadDirectory] waits on. */
     private val directoryLanded = MutableStateFlow(0L)
     private val sessionRevision = MutableStateFlow(0L)
@@ -208,22 +206,43 @@ class RealtimeStore(
 
     private suspend fun control(handle: SessionHandle, path: Network) = coroutineScope {
         val refresh = Channel<Unit>(Channel.CONFLATED)
+        // The lists the next read brings besides an ask's: every one for a connect, which replays nothing, and for an account event
+        // only those it moved (R5). The loop below is the only reader, so no list is read twice at once.
+        val wanted = MutableStateFlow<Set<DirectoryList>>(emptySet())
+        fun want(lists: Set<DirectoryList>) { if (lists.isNotEmpty()) { wanted.update { it + lists }; refresh.trySend(Unit) } }
+        // The account events of the window open now, by type: a burst is one read of what it moved, [EVENT_WINDOW_MS] after its first
+        // event (R1), and one invalidation of what the pages read.
+        val held = MutableStateFlow<Set<String>>(emptySet())
+        val window = Channel<Unit>(Channel.CONFLATED)
+        launch {
+            for (ignored in window) {
+                delay(EVENT_WINDOW_MS)
+                window.tryReceive() // The burst's later events are this window's.
+                val types = held.getAndUpdate { emptySet() }
+                if (types.isEmpty()) continue
+                want(types.flatMapTo(mutableSetOf(), ::directoryListsMovedBy))
+                if (types.any { it in INVALIDATING_EVENTS }) invalidate(handle)
+            }
+        }
         launch { directoryRevision.collect { refresh.trySend(Unit) } }
-        launch { directoryChanges.collect { refresh.trySend(Unit) } }
         launch {
             val retry = ReconnectPolicy()
             var asked: Long? = null
             for (ignored in refresh) {
                 val revision = directoryRevision.value
                 val connects = state.value.controlConnects
+                // An ask — Retry, or a write's re-read — reads every list; so does the first read of a connection.
+                val lists = wanted.getAndUpdate { emptySet() } + if (revision != asked) DirectoryList.ALL else emptySet()
+                if (lists.isEmpty()) continue
                 // An account with work running is never quiet for as long as its lists take to read, so an event costs neither
                 // the read on the wire nor the rows on screen: the read lands and this loop reads again behind it. Only an ask
                 // outranks a read, which may have left before the write the ask follows.
                 if (revision != asked || !state.value.directoryFresh) publish(handle) { it.copy(directoryRefreshing = true, directoryFresh = false) }
                 asked = revision
                 try {
-                    // Rows the published directory already holds are kept, not read into a second tree beside it.
-                    val snapshot = rest.directory(handle, state.value.directory)
+                    // Rows the published directory already holds are kept, not read into a second tree beside it; a list this read
+                    // does not bring is the published one.
+                    val snapshot = rest.directory(handle, state.value.directory, lists)
                     currentCoroutineContext().ensureActive()
                     if (!active(handle, path)) return@launch
                     if (directoryRevision.value != revision) { refresh.trySend(Unit); continue }
@@ -238,6 +257,7 @@ class RealtimeStore(
                     retry.healthy()
                 } catch (cancelled: CancellationException) { throw cancelled }
                 catch (error: Exception) {
+                    wanted.update { it + lists }
                     publish(handle) { it.copy(directoryRefreshing = false, directoryFresh = false,
                         directoryError = RealtimeError.from(error)) }
                     // Someone asking (a press of Retry, a write) is read for now, not after the backoff.
@@ -254,6 +274,9 @@ class RealtimeStore(
                 auth.stream(handle, ApiRequest(listOf("events")), onOpen = {
                     if (!active(handle, path)) throw CancellationException()
                     publish(handle) { it.copy(controlConnects = it.controlConnects + 1, directoryFresh = false) }
+                    // Nothing is replayed: every list is read now, which also answers whatever the open window held.
+                    held.value = emptySet()
+                    want(DirectoryList.ALL)
                     invalidate(handle)
                     publish(handle) { it.copy(controlConnection = ConnectionState.CONNECTED, controlError = null) }
                 }, onFrame = { frame ->
@@ -263,7 +286,8 @@ class RealtimeStore(
                     if (event.type != "ping") {
                         publish(handle) { it.copy(accountEvents = it.accountEvents + (event.type to (it.accountEvents[event.type] ?: 0L) + 1)) }
                         if (witness?.enabled == true) witness.account(event.type, event.sessionId)
-                        invalidate(handle)
+                        held.update { it + event.type }
+                        window.trySend(Unit)
                     }
                 })
             } catch (cancelled: CancellationException) { throw cancelled }
@@ -276,9 +300,9 @@ class RealtimeStore(
         }
     }
 
+    /** The pages and the open conversation's cards read again: after a connect, and once for a window of account events. */
     private fun invalidate(handle: SessionHandle) {
         publish(handle) { it.copy(invalidationRevision = it.invalidationRevision + 1, session = it.session?.copy(fresh = false)) }
-        directoryChanges.update { it + 1 }
         refreshSession()
     }
 
@@ -439,6 +463,9 @@ class RealtimeStore(
     private fun Transcript.holds(seq: Long) = events.binarySearchBy(seq) { it.seq } >= 0
 
     companion object {
+        /** How long a burst of account events is gathered for, from its first event, before the lists it moved are read once
+         * (docs/list-freshness-design.md §4 R1). */
+        const val EVENT_WINDOW_MS = 500L
         /** Five 200-event pages: the server's SSE_GAP_CAP, past which it answers a cursor with resync. */
         private const val CATCH_UP_PAGES = 5
         private val SNAPSHOT_EVENTS = setOf("approval_request", "approval_resolved", "queued_turns_changed",

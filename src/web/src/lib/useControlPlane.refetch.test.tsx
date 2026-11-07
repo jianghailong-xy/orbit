@@ -83,11 +83,24 @@ function onScreen(client: QueryClient, key: QueryKey, { cached = true } = {}): L
   return list;
 }
 
-const reconnect = (): Promise<void> => act(async () => FakeEventSource.open[0].onopen?.());
+const latest = (): FakeEventSource => FakeEventSource.open[FakeEventSource.open.length - 1];
+
+/** The stream drops and opens again: a page's first stream reads nothing again (what the page has
+ *  just read is what it follows), a stream after a gap reconciles what is on screen. */
+async function reconnect(): Promise<void> {
+  await act(async () => latest().onerror?.());
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1_500);
+  });
+  await act(async () => latest().onopen?.());
+}
+
+/** The page's first stream opening. */
+const open = (): Promise<void> => act(async () => latest().onopen?.());
 
 async function publish(type: string, data: Record<string, unknown> = {}): Promise<void> {
   await act(async () => {
-    FakeEventSource.open[0].onmessage?.({ data: JSON.stringify({ type, sessionId: 'S1', data }) });
+    latest().onmessage?.({ data: JSON.stringify({ type, sessionId: 'S1', data }) });
   });
 }
 
@@ -157,9 +170,10 @@ describe('the stream reaches the server a few reads at a time', () => {
 
     await reconnect();
     expect(workspace.asked).toBe(1);
+    // Each event's window (a second) closes while the read is still out.
     for (let i = 0; i < 3; i += 1) {
       await publish('session.updated', { id: 'S1' });
-      await advance(600);
+      await advance(1_100);
     }
     expect(workspace.asked, 'an event asked for the list again while its read was out').toBe(1);
 
@@ -175,7 +189,7 @@ describe('the stream reaches the server a few reads at a time', () => {
     const projects = Array.from({ length: 6 }, (_, i) => onScreen(client, ['project-sessions', `P${i}`, 'open', false], { cached: false }));
     expect(projects.map((list) => list.asked)).toEqual([1, 1, 1, 1, 1, 1]);
 
-    await reconnect();
+    await open();
     for (const list of projects) await answer(list);
     expect(projects.map((list) => list.asked), 'the stream opening read the page a second time').toEqual([1, 1, 1, 1, 1, 1]);
   });

@@ -47,6 +47,7 @@ import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import { latestAcceptedCheckpoint } from '../projects/task-checkpoint.service';
 import { ControlPlaneLeader } from './control-plane-leader';
 import { RUNNER_WAKE_CHANNEL } from './runner-wake';
+import { OpenListHints } from './open-list-hints';
 import { RunnerHints, type LinkLiveEvent, type LinkTurnPrefix } from './runner-hints';
 import {
   ownerItemsForRow,
@@ -101,6 +102,9 @@ interface ReadBack {
 
 /** The seqs `from` to `to`, as the log names a read-back of them. */
 const seqRange = (from: number, to: number): string => (from === to ? `seq ${from}` : `seq ${from}-${to}`);
+
+/** One event on the hub. A fresh object per `hub.next`, which every subscriber receives as is. */
+type HubMessage = { runId: string; event: NormalizedRunEvent };
 
 /** A run_event row as the hub carries it. */
 function storedEvent(row: { seq: number; type: string; payload: unknown; turnId: string | null; createdAt: Date }): NormalizedRunEvent {
@@ -311,7 +315,11 @@ export function approvalRequestEvent(
 export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger('Realtime');
   private readonly instanceId = randomUUID();
-  private readonly hub = new Subject<{ runId: string; event: NormalizedRunEvent }>();
+  private readonly hub = new Subject<HubMessage>();
+  /** Per hub message, what its control event says, read once for every stream (eventData). */
+  private readonly eventDataReads = new WeakMap<HubMessage, Promise<Record<string, unknown> | null>>();
+  /** `sessions.list_changed` for the streams that declared it (open-list-hints.ts). */
+  private readonly listHints: OpenListHints;
   /** This replica's own publications, never one the NOTIFY bridge carried in (see localPublications). */
   private readonly published = new Subject<{ runId: string; event: NormalizedRunEvent }>();
   private readonly waiters = new EventEmitter(); // event name = the key waitForNotice waits on
@@ -362,6 +370,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     @Optional() private readonly leader?: ControlPlaneLeader,
   ) {
     this.waiters.setMaxListeners(0);
+    this.listHints = new OpenListHints(prisma);
   }
 
   async onModuleInit(): Promise<void> {
@@ -370,6 +379,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   onModuleDestroy(): void {
     this.stopped = true;
+    this.listHints.stop();
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.listener?.removeAllListeners('error');
     this.listener?.end().catch(() => undefined);
@@ -1225,21 +1235,21 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   // never enter (the sync controlTypeFor() filter drops them before owner resolution).
   // See docs/realtime-control-plane-stream.md.
 
-  streamForUser(userId: string): Observable<ControlEvent> {
-    return this.hub.asObservable().pipe(
+  streamForUser(userId: string, options: { listChanged?: boolean } = {}): Observable<ControlEvent> {
+    const events$ = this.hub.asObservable().pipe(
       filter((m) => controlTypeFor(m.event.type) !== null),
-      mergeMap((m) => this.toControlEvent(userId, m.runId, m.event)),
+      mergeMap((m) => this.toControlEvent(userId, m)),
       filter((e): e is ControlEvent => e !== null),
     );
+    // `sessions.list_changed` only for a stream that declared it (`?hints=list_changed`): a shipped
+    // client re-reads everything on an event type it does not know (open-list-hints.ts).
+    return options.listChanged ? merge(events$, this.listHints.watch(userId)) : events$;
   }
 
   /** Map a hub run event to a control event for `userId`, or null if it isn't this user's
    *  session or carries nothing the control plane forwards. */
-  private async toControlEvent(
-    userId: string,
-    sessionId: string,
-    ev: NormalizedRunEvent,
-  ): Promise<ControlEvent | null> {
+  private async toControlEvent(userId: string, message: HubMessage): Promise<ControlEvent | null> {
+    const { runId: sessionId, event: ev } = message;
     const type = controlTypeFor(ev.type);
     if (!type) return null;
     // User-scoped library events (publishForUser) are keyed `user:<ownerId>`, not by a session:
@@ -1285,14 +1295,48 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     const meta = await this.resolveOwner(sessionId);
     if (!meta || meta.ownerId !== userId) return null;
 
-    let data: Record<string, unknown>;
+    // What the event says is the same for every stream of the account, so it is read once per event
+    // — the summary alone is a dozen queries — and shared between them (see eventData).
+    const shared = await this.eventData(message, type, meta.ownerId);
+    if (!shared) return null;
+    // Each stream gets its own copy: the response interceptors rewrite ids in place, per request.
+    const data = structuredClone(shared);
+    return { type, sessionId, agentId: meta.workspaceId, ts: ev.ts ?? new Date().toISOString(), data };
+  }
+
+  /**
+   * What `toControlEvent` sends for a session's event, read once per hub message however many
+   * streams of the account are open on this process: each stream's `toControlEvent` passes the same
+   * message object, so the first one starts the read and the rest await it. Nothing in it depends on
+   * the stream — ownership is checked before it is asked for — so every stream is sent exactly what
+   * it was sent when each read its own. Keyed weakly by the message, so it lives as long as the
+   * message does and no longer.
+   */
+  private eventData(
+    message: HubMessage,
+    type: ControlEventType,
+    ownerId: string,
+  ): Promise<Record<string, unknown> | null> {
+    let read = this.eventDataReads.get(message);
+    if (!read) {
+      read = this.readEventData(message.runId, type, message.event, ownerId);
+      this.eventDataReads.set(message, read);
+    }
+    return read;
+  }
+
+  private async readEventData(
+    sessionId: string,
+    type: ControlEventType,
+    ev: NormalizedRunEvent,
+    ownerId: string,
+  ): Promise<Record<string, unknown> | null> {
     switch (type) {
       case ControlEventType.SESSION_CREATED:
       case ControlEventType.SESSION_UPDATED: {
         const summary = await this.buildSessionSummary(sessionId);
-        if (!summary) return null; // session vanished mid-flight
-        data = summary as unknown as Record<string, unknown>;
-        break;
+        // Null when the session vanished mid-flight.
+        return summary as unknown as Record<string, unknown> | null;
       }
       case ControlEventType.SESSION_ENDED:
         // Decision Q4: the session left Open — no more events will follow, so drop
@@ -1322,7 +1366,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             derived.lifecycleState;
           const filingState =
             (ev.payload.filingState as SessionFilingState | undefined) ?? derived.filingState;
-          data = {
+          return {
             status: runStatus,
             runStatus,
             sessionState,
@@ -1332,28 +1376,23 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             endReason,
           };
         }
-        break;
       case ControlEventType.SESSION_ERROR:
-        data = errorPayloadOf(ev.payload) as unknown as Record<string, unknown>;
-        break;
+        return errorPayloadOf(ev.payload) as unknown as Record<string, unknown>;
       case ControlEventType.BACKGROUND_TASK:
-        data = backgroundPayloadOf(ev.payload) as unknown as Record<string, unknown>;
-        break;
+        return backgroundPayloadOf(ev.payload) as unknown as Record<string, unknown>;
       case ControlEventType.TASK_CHANGED:
         // No DB augmentation: bounded writers already name every changed row, while ambiguous
         // writers set `resync`. The normalizer also keeps old `{taskId}` events compatible.
-        data = taskChangedData(ev.payload);
-        break;
+        return taskChangedData(ev.payload);
       case ControlEventType.AGENT_CHANGED:
         // Same: a nudge to refetch the owner's workspace list. The id here is the CHANGED workspace —
         // the envelope's `agentId` stays the calling session's workspace.
-        data = {
+        return {
           agentId: String(ev.payload.workspaceId ?? ''),
           ...(typeof ev.payload.affectsTaskRows === 'boolean'
             ? { affectsTaskRows: ev.payload.affectsTaskRows }
             : {}),
         };
-        break;
       case ControlEventType.APPROVAL_REQUESTED:
       case ControlEventType.APPROVAL_RESOLVED: {
         // The same count the summary and the list compute, which is not "every pending row": a card
@@ -1364,8 +1403,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
           select: { id: true, status: true, engineTurnActive: true, runningBgShells: true },
         });
         const approvals = reader ? await countLiveApprovals(this.prisma, reader) : 0;
-        const decisions = await this.ownerDecisionsOn(sessionId, meta.ownerId);
-        data = {
+        const decisions = await this.ownerDecisionsOn(sessionId, ownerId);
+        return {
           approvalId: approvalIdOf(ev.payload),
           // The clients OVERWRITE the row's count with this number, so it has to be the same total
           // the list computes — an approval being answered must not take an unanswered owner
@@ -1373,12 +1412,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
           pendingApprovals: approvals + (decisions?.count ?? 0),
           waitingKind: sessionWaitingKind(approvals, decisions),
         };
-        break;
       }
       default:
         return null;
     }
-    return { type, sessionId, agentId: meta.workspaceId, ts: ev.ts ?? new Date().toISOString(), data };
   }
 
   /** Resolve (and cache) a session's owner + workspace. Bounded LRU; a miss is one indexed lookup. */

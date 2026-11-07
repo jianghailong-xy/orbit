@@ -46,6 +46,8 @@ import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.navigation.*
 import io.orbitd.android.cards.CardFocus
 import io.orbitd.android.reader.landingEntry
+import io.orbitd.android.realtime.PagePoll
+import io.orbitd.android.realtime.PagePolls
 import io.orbitd.android.taskprojects.*
 import io.orbitd.android.tasks.OfflineNote
 import io.orbitd.android.text.*
@@ -60,13 +62,16 @@ import kotlinx.serialization.json.*
 import java.time.Instant
 import java.util.UUID
 
-/** Projects keep the host's object stack, the A03 handle and A04's invalidation stream. */
+/** How often a project's page is read while its line has a job in flight, which no event announces. */
+private const val DETAIL_IN_FLIGHT_MS = 15_000L
+
+/** Projects keep the host's object stack, the A03 handle and A04's account stream. */
 @Composable
-fun ProjectsScreen(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit = {}) {
+fun ProjectsScreen(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, open: (OrbitRoute) -> Unit, back: () -> Unit = {}) {
     val resources = LocalReaderResources.current ?: remember(handle) { ReaderResources(app.session, handle) }
     CompositionLocalProvider(LocalReaderResources provides resources) {
         val id = route.id
-        if (id == null) ProjectIndex(app, handle, revision, open) else ProjectDetail(app, handle, id, revision, open, back)
+        if (id == null) ProjectIndex(app, handle, open) else ProjectDetail(app, handle, id, open, back)
     }
 }
 
@@ -123,7 +128,7 @@ internal fun SectionHead(title: String, detail: String? = null, modifier: Modifi
 // MARK: the index
 
 @Composable
-private fun ProjectIndex(app: OrbitApplication, handle: SessionHandle, revision: Long, open: (OrbitRoute) -> Unit) {
+private fun ProjectIndex(app: OrbitApplication, handle: SessionHandle, open: (OrbitRoute) -> Unit) {
     val api = remember(handle) { ProjectApi(app.session, handle) }
     var projects by remember(handle) { mutableStateOf<List<JsonObject>?>(null) }
     var failed by remember(handle) { mutableStateOf(false) }
@@ -139,12 +144,10 @@ private fun ProjectIndex(app: OrbitApplication, handle: SessionHandle, revision:
         catch (_: Exception) { failed = true }
         finally { loading = false }
     }
-    LaunchedEffect(handle) { load() }
-    // Live events are coalesced as iOS `ProjectsModel.nudge` does — one read two seconds after the first of a burst, never
-    // cancelled by the next — and the index is read again every 15 s while it is shown (`refreshIfDue`).
-    val nudge = remember(handle) { RefreshNudge(scope) { if (projects != null) load() } }
-    LaunchedEffect(handle, revision) { if (revision > 0) nudge.nudge() }
-    LaunchedEffect(handle) { while (true) { delay(15_000); if (projects != null && !loading) load() } }
+    // The index follows the account stream (docs/list-freshness-design.md R6): read as it opens, on a project's or its tasks' events —
+    // one read two seconds after the first of a burst, as iOS `ProjectsModel.nudge` — and on each connect, once a minute without one, on
+    // a backoff while the stream is down, and not at all while the Activity is stopped.
+    PagePoll(app, handle, PagePolls.PROJECT_EVENTS) { if (!loading) load() }
     LaunchedEffect(Unit) { while (true) { delay(60_000); now = Instant.now() } }
     val matching = projects.orEmpty().filter { ProjectAttention.matches(it, query) }
     Column(Modifier.fillMaxSize()) {
@@ -266,7 +269,7 @@ private sealed interface ProjectDialog {
 }
 
 @Composable
-private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: String, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit) {
+private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: String, open: (OrbitRoute) -> Unit, back: () -> Unit) {
     val api = remember(handle) { ProjectApi(app.session, handle) { app.canWrite(handle) } }
     val state = remember(handle, id) { ProjectPageState() }
     DisposableEffect(state) { state.attached = true; onDispose { state.attached = false } }
@@ -328,12 +331,12 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             }
         } finally { state.refreshing = false }
     }
-    LaunchedEffect(handle, id) { load() }
-    // Live events are coalesced: one read two seconds after the first of a burst, never cancelled by the next.
-    val nudge = remember(handle, id) { RefreshNudge(scope) { if (state.document != null) load() } }
-    LaunchedEffect(handle, id, revision) { if (revision > 0) nudge.nudge() }
-    // The visible page follows the work it shows, as the iOS page does, without its graph.
-    LaunchedEffect(handle, id) { while (true) { delay(15_000); if (state.document != null) load(refreshGraph = false) } }
+    // The page follows the account stream as the index does (R6). The landing it draws publishes no event (§2.9 LS6): while the line has
+    // a job in flight the page is read every 15 s as before, without its graph, and an event's read takes the graph again.
+    PagePoll(app, handle, PagePolls.PROJECT_EVENTS, id,
+        inFlightMs = { if (ProjectPage.landingInFlight(state.integration)) DETAIL_IN_FLIGHT_MS else null }) {
+        load(refreshGraph = state.graph == null || !ProjectPage.landingInFlight(state.integration))
+    }
     LaunchedEffect(Unit) { while (true) { delay(1_000); now = Instant.now() } }
     LaunchedEffect(state.copied) { if (state.copied != null) { delay(2500); state.copied = null } }
 

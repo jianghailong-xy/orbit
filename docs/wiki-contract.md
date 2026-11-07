@@ -514,7 +514,9 @@ Confirm 时，模式对它生效过、还没人答的 op 变 `accepted`（§7.5�
   frontmatter 里用 `originSessionId` 指向本 owner 用过它们的会话。这个值是引擎自己的会话 id，按 `session.runtime_session_id` 查；
   没写或查不到的 note 不算污染。会话用 `wiki_note` 记的 note 带 `session_id`（§11），直接按这个会话判定。
   被污染的 op 按第三行处理，Review 卡上有 Web-derived 警示。
-- challenge 从任何来源都立即生效：它只打一个标，作用是让条目立刻退出推送，等 owner 在 Review 里 Re-confirm、Amend 或 Retire。
+- challenge 从任何来源都立即生效：它只打一个标，作用是让条目立刻退出推送，等一个答案：owner 在 Review 里 Re-confirm、Amend 或
+  Retire，或一次**显式回答它**的 amend（`answersChallenge` 指向同一 entry 上待决的 challenge，`reviewModes.challenge`）在生效时把它
+  记 `edited`。没点名 challenge 的 amend 不关任何 challenge。
 - `wiki.ts` 的 `WIKI_EFFECT_POLICY` 是这张表的数据形态，`wikiOpEffect()` 给出单个 op 的结论。
 - **决定**：`POST /api/wiki/changesets/:id/decide`，逐个 op 给 `accept` / `edit` / `reject`；只在 owner 通道（§11）。
 
@@ -732,6 +734,10 @@ Review 只列还有 op 等 owner 的变更集，时间线列的是 op、不说�
 | `supersede` | `entryId`，`baseRevision`，`entry`，`sources` | 新谱系取代旧的；生效时旧条目变 `superseded` | 必带 |
 | `retire` | `entryId`，`baseRevision`，`reason` | 条目从 active 变 retired | 必带 |
 | `challenge` | `entryId`，`reason` | 打 challenged，条目立刻退出推送 | 不带 |
+
+- `amend` 可带可选的 `answersChallenge`：同一 entry 上一条 `pending` challenge 的 id（`reviewModes.challenge`）。它只在这个 amend
+  **生效**时关闭 challenge（记 `edited`，`answered_by` 记 `agent` 或 `owner`），不改变 amend 自己按模式生效/待审的规则；跨条目、已决、
+  不存在或形状不对回 `WIKI_SCHEMA`，这个 op 什么都不写。不带它的 amend 不关任何 challenge。
 
 - **CAS 不可省**：amend / supersede / retire 带上写它时依据的版本号，只有它仍是当前版时才生效，否则
   `WIKI_REVISION_CONFLICT`，并返回当前版和 diff。故意不提供「当前是什么就按什么」的写法。库里的 CHECK 保证
@@ -1257,6 +1263,13 @@ JSON 里是 `anchorRules.verify`；实现在 `src/apiserver/src/wiki/wiki-anchor
   - `retire`：owner 自己的 retire（当前修订为 baseRevision），经唯一写入口记录，reason 取 owner 的附言，没有就取 challenge 的 reason；
     challenge 随条目离开 active 被 withdrawn。
   - challenge 指向的条目已不 active 时记 conflict、什么都不做。`accept` / `edit` / `reject` 对 challenge 保持原意。
+- **amend 也能回答 challenge**（`reviewModes.challenge`，迁移 `0488_wiki_op_answers_challenge`）：amend op 可带可选的
+  `answersChallenge`，只能指同一 entry 上 `pending` 的 challenge op；跨条目、已决、不存在或形状不对回 `WIKI_SCHEMA`，该 op 什么都不写。
+  amend 照常按模式生效——Tiered 直接生效、Automatic 等核实结论、Manual 与各条底线待审——**生效那一刻**才把指名的 challenge 记
+  `edited`、`answered_by` 记 `owner`（owner 自己的 amend）或 `agent`，再由 `recomputeFlags` 清 `challenged`，条目按 §12 的推送规则回推送。
+  challenge 已决或条目已不 active 时不动、也不报错：amend 照常成立。没点名 challenge 的 amend 不关任何 challenge，所以一次无关的错字修正
+  不会把一条内容质疑悄悄关掉。答案来源记在 `wiki_changeset_op.answered_by`（`owner` | `agent` | `research`；0488 之前的行与 Review 里的回答
+  都是 NULL，读作 owner；`research` 是 P2 调研作业的来源）。
 - **Tiered 读得到复验结果**：Tiered 的 pitfall 条件读 `anchor_state`；检查让一条 Tiered 以 unreviewed 生效的 pitfall（active、未污染、当前修订就是那次
   tiered op 写的）变成 verified，且 space 仍是 Tiered、那次 op 自己的出处跨 2 个以上独立会话时，同一事务里升为 auto 并开始推送。
 

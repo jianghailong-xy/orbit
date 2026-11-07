@@ -8,11 +8,16 @@ import androidx.test.core.app.ApplicationProvider
 import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.core.realtime.ConnectionState
+import io.orbitd.android.core.realtime.EventTransport
 import io.orbitd.android.core.realtime.RealtimeStore
+import io.orbitd.android.core.realtime.SseFrame
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.*
 import org.junit.After
 import org.junit.Assert.*
@@ -114,6 +119,30 @@ class PushControllerTest {
         assertNull(sounding.notification.group)
     }
 
+    /** D2 (docs/list-freshness-design.md §2.3): with a notification showing, an account event is checked against the notification's own
+     * record, and the Open list is read once for it — the store's read — not a second time for the notification. */
+    @Test fun anEventWhileANotificationShowsReadsTheOpenListOnlyForTheStore() = runBlocking {
+        // As the application does: what follows the account's events and reconciles is started with the controller.
+        fixture.push.start()
+        fixture.push.onActivityStarted(Activity())
+        fixture.signIn()
+        delay(1_000); fixture.push.reconcile()
+        assertTrue(fixture.push.receive(fixture.data()))
+        assertEquals(1, fixture.active().size)
+        fixture.realtime.setNetwork(true, "wifi"); fixture.realtime.setForeground(true)
+        withTimeout(30_000) { fixture.realtime.state.first { it.directoryFresh && it.controlConnection == ConnectionState.CONNECTED } }
+        withTimeout(30_000) { fixture.realtime.rereadDirectory() }
+        fixture.quiet()
+        val before = fixture.requests.size
+        fixture.pending = false
+        fixture.emit("""{"type":"approval.resolved","sessionId":"$sid","data":{"pendingApprovals":0}}""")
+        withTimeout(30_000) { while (fixture.active().isNotEmpty()) delay(20) }
+        fixture.quiet()
+        val after = fixture.requests.drop(before).map { it.path.joinToString("/") + it.query.joinToString("&", "?") { (k, v) -> "$k=$v" } }
+        assertEquals("the store's read, and no other: $after", 1, after.count { it == "sessions?view=open" })
+        assertTrue("the notification was checked against its own record: $after", "sessions/$sid/approvals?status=PENDING" in after)
+    }
+
     @Test fun permissionAnswerIsRecordedInTheBackgroundAndAnUnwritableStoreDoesNotThrow() = runBlocking {
         val directory = File(app.noBackupFilesDir, "push")
         fixture.close()
@@ -191,6 +220,21 @@ class PushControllerTest {
             override suspend fun clear() { value = null }
         }
         val requests = CopyOnWriteArrayList<ApiRequest>()
+        /** The account stream: it opens and carries what [emit] sends. */
+        private val frames = Channel<String>(Channel.UNLIMITED)
+        private val events = object : EventTransport {
+            override suspend fun stream(request: HttpRequest, onOpen: suspend () -> Unit, onFrame: suspend (SseFrame) -> Unit) {
+                onOpen()
+                if (request.api.path == listOf("events")) for (frame in frames) onFrame(SseFrame(frame, null, null))
+                awaitCancellation()
+            }
+        }
+        fun emit(json: String) { frames.trySend(json) }
+        /** Until no request has been made for a second and a half: what was asked has been answered. */
+        suspend fun quiet() = withTimeout(30_000) {
+            var seen = -1
+            while (seen != requests.size) { seen = requests.size; delay(1_500) }
+        }
         var pending = true
         var unavailable = false
         var denied = false
@@ -245,7 +289,7 @@ class PushControllerTest {
             override suspend fun read(account: AccountKey, kind: DataKind, key: String): ByteArray? = null
             override suspend fun write(account: AccountKey, kind: DataKind, key: String, bytes: ByteArray) = Unit
             override suspend fun clearAll() = Unit
-        }, "test")
+        }, "test", eventTransport = events)
     }
     companion object {
         private const val sid = "019a0000-0000-7000-8000-000000000002"

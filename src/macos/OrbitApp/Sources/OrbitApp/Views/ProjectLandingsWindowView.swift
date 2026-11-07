@@ -48,9 +48,12 @@ final class ProjectLandingsModel {
         return SessionProjectLandings.window(listed, merges: merges)
     }
 
-    /// §2.7a's cadence while a card is in hand: four seconds while one runs, fifteen otherwise.
-    var interval: TimeInterval {
-        window.now.contains { details[$0.sessionId]?.currentAttempt?.state == "RUNNING" } ? 4 : 15
+    /// Whether a card in hand runs. No event reports a landing as it moves (contract §2.7a), so while
+    /// one runs the window reads every 4 s — only while it can be seen; otherwise it follows the control
+    /// stream like any page (`ViewPoll`, docs/list-freshness-design.md §4 R6): the project's hints and
+    /// a minute's safety read while the stream is live, every 15 s while it is down.
+    var cardRunning: Bool {
+        window.now.contains { details[$0.sessionId]?.currentAttempt?.state == "RUNNING" }
     }
 
     /// One read of the window: its two lists, its merges, the coordinator and — while a landing is
@@ -769,9 +772,9 @@ struct ProjectLandingsWindowView: View {
         guard let projectID, !projectID.isEmpty else { return }
         let model = self.model?.projectID == projectID ? self.model! : ProjectLandingsModel(projectID: projectID, api: api)
         self.model = model
-        while !Task.isCancelled {
+        await model.refresh(app: app, focusID: focusID)
+        await ViewPoll.run(app, every: 15, hints: { app.projectHints }, inFlight: { model.cardRunning ? 4 : nil }) {
             await model.refresh(app: app, focusID: focusID)
-            do { try await Task.sleep(nanoseconds: UInt64(model.interval * 1_000_000_000)) } catch { return }
         }
     }
 }

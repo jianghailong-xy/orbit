@@ -61,6 +61,8 @@ class PushController(
     }
     private val work = Mutex()
     private val refresh = Channel<Unit>(Channel.CONFLATED)
+    /** Whether a reconcile asked for since the last one began reads the Open list ([requestReconcile]). */
+    private val openWanted = AtomicBoolean()
     @Volatile private var foreground = false
     private var started = 0
     private val tokenRevision = AtomicLong()
@@ -82,11 +84,13 @@ class PushController(
                 if (mutableNotice.value?.payload?.sessionId?.let { id -> ObjectId.same(id, it.third) } == true) dismissNotice()
                 if (foreground) {
                     safely { if (configured) registration.ensureRegistered() }
-                    requestReconcile()
+                    // An account event: each notification is checked against its own record, never against a second read of the
+                    // Open list, which the store reads for the same event (docs/list-freshness-design.md D2).
+                    refresh.trySend(Unit)
                 }
             }
         }
-        scope.launch(Dispatchers.IO) { for (ignored in refresh) safely { reconcile() } }
+        scope.launch(Dispatchers.IO) { for (ignored in refresh) safely { reconcile(openWanted.getAndSet(false)) } }
     }
 
     private fun fetchToken() {
@@ -169,16 +173,18 @@ class PushController(
         if (session.state.value is AuthState.SignedIn && registration.activeBinding() == null) return false
         return reconcile()
     }
-    fun requestReconcile() { refresh.trySend(Unit) }
-    suspend fun reconcile() = work.withLock { reconcileLocked() }
+    /** A reconcile that reads the Open list for its reminders. One an account event asks for checks each notification by itself. */
+    fun requestReconcile() { openWanted.set(true); refresh.trySend(Unit) }
+    suspend fun reconcile(readOpen: Boolean = true) = work.withLock { reconcileLocked(readOpen) }
 
-    private suspend fun reconcileLocked(): Boolean {
+    /** Without [readOpen], no reminder is let go for the Open list's say: each is read on its own, as every other notification is. */
+    private suspend fun reconcileLocked(readOpen: Boolean = true): Boolean {
         val handle = (session.state.value as? AuthState.SignedIn)?.handle ?: return true
         val binding = registration.activeBinding() ?: return true
         val active = (notifications.active() + listOfNotNull(mutableNotice.value)).distinctBy { it.notificationKey }
         if (active.isEmpty()) return true
         val authority = PushAuthority(session, handle)
-        val needsYou = try { authority.needsYou() } catch (cancel: CancellationException) { throw cancel }
+        val needsYou = if (!readOpen) null else try { authority.needsYou() } catch (cancel: CancellationException) { throw cancel }
             catch (_: Exception) { null }
         var complete = true
         for (message in active) {

@@ -136,14 +136,13 @@ struct RunnersListView: View {
             .navigationTitle(AppSection.runners.title)
             // Each list is its own read, so they are asked for side by side. A machine checks in every
             // 30s: the machines are read again while the page is up, so where each one stands — its row,
-            // and what needs you — moves with it, as a machine's own page does.
+            // and what needs you — moves with it, as a machine's own page does. No event reports a
+            // machine checking in, so this keeps its cadence whatever the control stream does — but
+            // only while the app can be seen, backing off while reads fail (`ViewPoll`), and the app's
+            // own runner snapshot takes each read instead of making its own (`RunnersModel.onRead`).
             .task {
                 await runners.load()
-                while !Task.isCancelled {
-                    try? await Task.sleep(for: .seconds(15))
-                    guard !Task.isCancelled else { return }
-                    await runners.load()
-                }
+                await ViewPoll.run(model, every: 15, inFlight: { 15 }) { await runners.load() }
             }
             .task { await self.model.agents?.reloadPools() }
             .task { await self.model.agents?.loadOwnKeys() }
@@ -541,11 +540,10 @@ struct RunnerDetailContent: View {
             await runners.loadReleaseVersion()
             await runners.loadSessionCounts()
         }
-        // A machine checks in every 30s: read it again while its page is up, so the page moves with it.
+        // A machine checks in every 30s: read it again while its page is up, so the page moves with it
+        // — while the app can be seen (`ViewPoll`).
         .task(id: runner.id) {
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(15))
-                guard !Task.isCancelled else { return }
+            await ViewPoll.run(model, every: 15, inFlight: { 15 }) {
                 await runners.load()
                 await runners.loadSessionCounts()
             }

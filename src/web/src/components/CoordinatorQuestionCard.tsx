@@ -27,6 +27,7 @@ import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { markdownToPlainText } from '../lib/markdownText';
 import { projectOpenItemsQuery } from '../lib/queries';
 import { ago } from '../lib/watches';
+import { streamPoll } from '../lib/listBudget';
 
 /**
  * The question a project's coordinator put to the account owner, as a card (mock 5,
@@ -311,7 +312,7 @@ export function CoordinatorQuestions({
   const items = useQuery({
     ...projectOpenItemsQuery(projectId ?? ''),
     enabled: Boolean(projectId),
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
   const questions = coordinatorQuestions(items.data);
   if (!projectId || questions.length === 0) return null;

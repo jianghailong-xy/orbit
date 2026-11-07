@@ -1,9 +1,10 @@
-import { Controller, MessageEvent, Sse, UseGuards } from '@nestjs/common';
+import { Controller, MessageEvent, Query, Sse, UseGuards } from '@nestjs/common';
 import { interval, map, merge, Observable } from 'rxjs';
 import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
+import { declaresListChanged } from '../realtime/open-list-hints';
 import { RealtimeService } from '../realtime/realtime.service';
 
 /** ~20s keepalive (decision Q5): its job is to let the CLIENT's byte watchdog detect a half-dead
@@ -28,9 +29,16 @@ export class EventsController {
   @AllowQueryToken() // browser EventSource can't set headers; native clients use Authorization
   @PatScope('events:read', { workspaceConfinable: false })
   @Sse('events')
-  events(@CurrentUser() user: AuthUser): Observable<MessageEvent> {
+  events(
+    @CurrentUser() user: AuthUser,
+    // The hints this client understands, comma-separated (docs/realtime-control-plane-stream.md
+    // §4.8). Only `list_changed` exists; a stream that does not name it never receives
+    // `sessions.list_changed`, because every shipped client re-reads everything on a type it does
+    // not know.
+    @Query('hints') hints?: string | string[],
+  ): Observable<MessageEvent> {
     return merge(
-      this.realtime.streamForUser(user.userId).pipe(map((e) => ({ data: e }) as MessageEvent)),
+      this.realtime.streamForUser(user.userId, { listChanged: declaresListChanged(hints) }).pipe(map((e) => ({ data: e }) as MessageEvent)),
       interval(KEEPALIVE_MS).pipe(map(() => ({ data: { type: 'ping' } }) as MessageEvent)),
     );
   }

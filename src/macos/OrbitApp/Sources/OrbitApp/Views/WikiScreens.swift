@@ -76,7 +76,7 @@ struct WikiHomeView: View {
             // The setup card says where the plan's job stands, and no event says when one starts.
             .task(id: WikiPlanLogic.jobUnderWay(wiki.plan)) {
                 while !Task.isCancelled, WikiPlanLogic.jobUnderWay(wiki.plan) {
-                    try? await Task.sleep(for: .seconds(30))
+                    await VisibilityGate.app.pause(30)   // a job under way, and the app seen
                     await wiki.loadPlan()
                 }
             }

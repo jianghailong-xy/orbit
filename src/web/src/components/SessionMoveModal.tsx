@@ -38,6 +38,7 @@ import {
 import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
 import { isSessionTerminal } from '../lib/sessionState';
 import { useToast } from '../lib/toast';
+import { useRefreshSessionLists } from '../lib/useControlPlane';
 import { ProviderTile } from './ProviderGallery';
 import { useConfirm } from './ui/ConfirmDialog';
 import { Dialog } from './ui/Dialog';
@@ -85,6 +86,7 @@ export function SessionMoveModal({
   const [confirm, confirmation] = useConfirm();
   const message = useToast();
   const qc = useQueryClient();
+  const refreshSessionLists = useRefreshSessionLists();
   // The workspace step on screen; null for the first one.
   const [step, setStep] = useState<SessionMoveTarget | null>(null);
   // Folders made from a workspace step, until the server's answer lists them.
@@ -121,7 +123,7 @@ export function SessionMoveModal({
   const counts = new Map((answer?.folders ?? []).map((f) => [f.id, f.sessionCount] as const));
 
   const refreshAfterMove = (): void => {
-    void qc.invalidateQueries({ queryKey: ['sessions'] });
+    refreshSessionLists();
     if (session.projectId) void qc.invalidateQueries({ queryKey: ['project-sessions', session.projectId] });
     void qc.invalidateQueries({ queryKey: ['session-counts'] });
     void qc.invalidateQueries({ queryKey: ['session', session.id], exact: true });
