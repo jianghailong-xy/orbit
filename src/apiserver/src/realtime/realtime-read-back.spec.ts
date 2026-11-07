@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { RunEventType, type NormalizedRunEvent } from '@orbit/shared';
 import type { Subject } from 'rxjs';
 
+import { addTwins } from '../common/public-id-body';
 import { approvalRequestEvent, RealtimeService } from './realtime.service';
 
 /**
@@ -217,7 +218,8 @@ test('with one replica nothing is read back and nothing waits', async () => {
 
 test('an approval card too big for its notification is built again from its row, and what arrived behind it follows', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
-  // The replica the runner asked: what it announces of the card is what this one hears.
+  // The replica the runner asked, with a stream of the session open: what it announces of the card is what this one
+  // hears. The stream's public-id pass rewrites the ids of what it sends in place, as the SSE response's does.
   const announced: string[] = [];
   const asker = new RealtimeService({
     $executeRawUnsafe: async (_sql: string, _channel: string, payload: string) => {
@@ -225,12 +227,14 @@ test('an approval card too big for its notification is built again from its row,
       return 0;
     },
   } as never, {} as never);
-  const card = approvalRequestEvent(BIG_CARD_ROW, '2026-10-28T10:00:01.000Z');
-  asker.publish(SESSION, card);
+  asker.streamForRun(SESSION).subscribe((event) => addTwins({ data: event }, true));
+  const ts = '2026-10-28T10:00:01.000Z';
+  asker.publish(SESSION, approvalRequestEvent(BIG_CARD_ROW, ts));
   assert.equal(announced.length, 1);
   assert.ok(Buffer.byteLength(announced[0], 'utf8') < 200, 'the notification carries none of the input');
   const { i, ...notice } = JSON.parse(announced[0]) as Record<string, unknown>;
-  assert.deepEqual(notice, { r: SESSION, a: APPROVAL, ts: card.ts });
+  assert.deepEqual(notice, { r: SESSION, a: APPROVAL, ts }, 'the approval named by the id its row is stored under');
+  const card = approvalRequestEvent(BIG_CARD_ROW, ts);
 
   // This replica: the approval row's first read fails, as a dropped connection does.
   const reads: unknown[] = [];

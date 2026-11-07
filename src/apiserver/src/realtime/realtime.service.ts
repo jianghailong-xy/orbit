@@ -762,16 +762,19 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    *   - a settlement's STATUS: a status, `final`, a retry time and, from the reaper, its reason, a short fixed phrase.
    */
   publish(runId: string, event: NormalizedRunEvent): void {
+    // Read before this replica's streams are handed the card: a stream's public-id pass (addTwins) rewrites the ids of
+    // what it sends in place, and the other replicas look the approval row up by the id it is stored under.
+    const approvalId = event.type === RunEventType.APPROVAL_REQUEST ? approvalIdOf(event.payload) : null;
     this.publishHere(runId, event);
     const payload = JSON.stringify({ i: this.instanceId, r: runId, e: event });
     // NOTE: NOTIFY's limit is 8000 BYTES — measure UTF-8 bytes, not string length
     // (a multibyte CJK/emoji event can be < 7000 chars but > 8000 bytes).
     if (Buffer.byteLength(payload, 'utf8') <= MAX_NOTIFY_BYTES) {
       this.notifyRaw(EVENT_CHANNEL, payload);
-    } else if (event.type === RunEventType.APPROVAL_REQUEST) {
+    } else if (approvalId !== null) {
       // A card is never stored: the other replicas build it again from its approval row (approvalRequestEvent), at
       // the `ts` it was published at here.
-      this.notifyRaw(EVENT_CHANNEL, JSON.stringify({ i: this.instanceId, r: runId, a: approvalIdOf(event.payload), ts: event.ts }));
+      this.notifyRaw(EVENT_CHANNEL, JSON.stringify({ i: this.instanceId, r: runId, a: approvalId, ts: event.ts }));
     } else {
       // Too big for a NOTIFY payload — signal by seq; other replicas fetch the
       // (already-persisted) RunEvent row.

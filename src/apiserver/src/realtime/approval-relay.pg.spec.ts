@@ -15,6 +15,8 @@
  *   2. A card with about 20 KB of tool input reaches the holder too: the session's stream receives it with its input
  *      whole, the same event the asker's own stream received, and the control stream an approval.requested naming it.
  *      The notification carried no input, and what the session sent next reached the holder's stream after the card.
+ *      The asker has a stream of the session open, as it would in production, whose public-id pass rewrites the card's
+ *      ids in place: the notification still names the approval by the id its row is stored under.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/realtime/approval-relay.pg.spec.ts
  *
@@ -237,7 +239,11 @@ test('an approval card too big for its notification reaches the streams on the o
     const own = await until(() => cardOn(askerStream, approvalId), 20_000);
     assert.ok(own, 'the asker\'s own stream receives the card, as with one apiserver');
     const card = await until(() => cardOn(holderStream, approvalId), 20_000);
-    st.diagnostic(`the holder's stream: ${JSON.stringify(holderStream.frames.map((f) => `${f.seq}:${f.type}`))}`);
+    const told = notices.slice(heardBefore).filter((n) => n.includes(sessionId));
+    st.diagnostic(`the holder's stream: ${JSON.stringify(holderStream.frames.map((f) => `${f.seq}:${f.type}`))}\n`
+      + `what the apiservers announced of the session meanwhile: ${JSON.stringify(told)}\n`
+      + `the holder's read-backs of it: ${JSON.stringify(holder.output().split('\n')
+        .filter((line) => line.includes('[Realtime]') && line.includes(sessionId)))}`);
     assert.ok(card, 'the holder\'s stream receives the card');
     assert.equal(card.payload.input.command, BIG_COMMAND, 'with its input whole');
     assert.deepEqual(card, own, 'the same event the asker\'s stream received');
@@ -251,9 +257,7 @@ test('an approval card too big for its notification reaches the streams on the o
     const at = (f: Record<string, unknown>) => holderStream.frames.indexOf(f);
     assert.ok(at(card) < at(holderStream.frames.find((f) => f.seq === 2)!), 'after the card');
 
-    const told = notices.slice(heardBefore).filter((n) => n.includes(sessionId));
-    st.diagnostic(`what the apiservers announced of the session meanwhile: ${JSON.stringify(told)}`);
-    for (const notice of told) {
+    for (const notice of notices.slice(heardBefore).filter((n) => n.includes(sessionId))) {
       assert.ok(Buffer.byteLength(notice, 'utf8') < NOTIFY_LIMIT_BYTES, 'every notification fits');
       assert.equal(notice.includes(`order-${RUN}`), false, 'and none carried the input');
     }
