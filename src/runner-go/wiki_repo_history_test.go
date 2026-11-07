@@ -298,14 +298,14 @@ func TestWikiRepoOpHistoryDetailIsWhatTheModelReads(t *testing.T) {
 		byID[entry.ID] = entry
 	}
 
-	// Commits: the three that changed how often the term occurs are the oldest of 23, and are kept; the newest
-	// seventeen of the rest fill the twenty; all in git log's order, newest first.
+	// Commits: the three that changed how often the term occurs are the oldest of 23, and are kept; the oldest
+	// seventeen of the rest — the nearest the base — fill the twenty; all in git log's order, newest first.
 	log := byID["log"]
 	if log.CommitsTotal == nil || *log.CommitsTotal != 23 {
 		t.Fatalf("commitsTotal = %v, want 23", log.CommitsTotal)
 	}
 	var want []string
-	for i := 22; i >= 6; i-- {
+	for i := 19; i >= 3; i-- {
 		want = append(want, h.log[i])
 	}
 	want = append(want, h.log[2], h.log[1], h.log[0])
@@ -319,8 +319,8 @@ func TestWikiRepoOpHistoryDetailIsWhatTheModelReads(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("the commits kept are %v, want %v", got, want)
 	}
-	if first := log.Commits[0]; first.Subject != "log 23" || first.Date != "2026-10-05T22:00:00Z" {
-		t.Fatalf("the newest commit reads %+v", first)
+	if first := log.Commits[0]; first.Subject != "log 20" || first.Date != "2026-10-05T19:00:00Z" {
+		t.Fatalf("the newest commit kept reads %+v", first)
 	}
 	// The file itself was added since the base, so it is moved; its three lines that hold the term now.
 	if !reflect.DeepEqual(log.Moved, []string{"src/session/log.ts"}) || log.LinesTotal == nil || *log.LinesTotal != 3 || len(log.Lines) != 3 {
@@ -603,7 +603,7 @@ func TestWikiRepoOpHistoryReadsPatternsAndTheChangesThatMovedATerm(t *testing.T)
 	for i := 1; i <= 10; i++ {
 		historyAt(t, fmt.Sprintf("2026-10-%02dT10:00:00Z", 3+i))
 		message := fmt.Sprintf("probe %d", i)
-		if i == 10 {
+		if i == 1 {
 			message += "\n\n" + strings.Repeat("x", 700)
 		}
 		probes = append(probes, f.push(t, message, func() { f.write(t, "src/queue/run.ts", historyQueueFile(true, i%2 == 1)) }))
@@ -649,9 +649,9 @@ func TestWikiRepoOpHistoryReadsPatternsAndTheChangesThatMovedATerm(t *testing.T)
 	if entry.CommitsTotal == nil || *entry.CommitsTotal != 12 || entry.ChangesTotal == nil || *entry.ChangesTotal != 12 {
 		t.Fatalf("commitsTotal %v, changesTotal %v; want 12 and 12", entry.CommitsTotal, entry.ChangesTotal)
 	}
-	// The fix and the note changed terms whose count moved from the base to the head: both are taken, though ten
-	// probes are newer; the six newest probes fill the eight. In git log's order, newest first.
-	want := []string{probes[9], probes[8], probes[7], probes[6], probes[5], probes[4], notes, fix}
+	// The fix and the note changed terms whose count moved from the base to the head: both are taken first; the six
+	// oldest probes — the nearest the base — fill the eight. In git log's order, newest first.
+	want := []string{probes[5], probes[4], probes[3], probes[2], probes[1], probes[0], notes, fix}
 	var got []string
 	for _, change := range entry.Changes {
 		got = append(got, change.Sha)
@@ -689,10 +689,13 @@ func TestWikiRepoOpHistoryReadsPatternsAndTheChangesThatMovedATerm(t *testing.T)
 		t.Fatalf("the note's patch is %d bytes (truncated %v):\n%s", len(note.Diff), note.DiffTruncated, note.Diff)
 	}
 	// A probe: the one term it changed; a body past its limit is cut.
-	last := byChange[probes[9]]
-	if !reflect.DeepEqual(last.Terms, []string{"probe_term"}) || last.Body != strings.Repeat("x", wikiRepoOpHistoryBodyRunes) ||
-		!strings.Contains(last.Diff, "-probe_term(run);\n") {
-		t.Fatalf("the last probe reads %+v", last)
+	first := byChange[probes[0]]
+	if !reflect.DeepEqual(first.Terms, []string{"probe_term"}) || first.Body != strings.Repeat("x", wikiRepoOpHistoryBodyRunes) ||
+		!strings.Contains(first.Diff, "+probe_term(run);\n") {
+		t.Fatalf("the first probe reads %+v", first)
+	}
+	if second := byChange[probes[1]]; second.Body != "" || !strings.Contains(second.Diff, "-probe_term(run);\n") {
+		t.Fatalf("the second probe, which takes the probe out, reads %+v", second)
 	}
 	if fifth := byChange[probes[4]]; fifth.Body != "" || !strings.Contains(fifth.Diff, "+probe_term(run);\n") {
 		t.Fatalf("the fifth probe, which puts the probe in, reads %+v", fifth)

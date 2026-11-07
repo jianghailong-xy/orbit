@@ -117,12 +117,14 @@ when the checkout has the commits:
 Asked entries (`detail`) also get:
 
 - `commits`: `git log <base>..<to> -- <paths>`, newest first, at most 20 (sha, date, subject), each marked when it
-  changed how many times a term occurs (`git log -S`, a fixed string);
+  changed how many times a term occurs (`git log -S`, a fixed string); every marked one is kept, then the oldest of the
+  rest (round 3: the commits nearest the base, where a fix tends to follow the trouble an entry records);
 - `lines`: the lines of the paths at the head that hold a term (`git grep -n -F`), at most 40;
 - `diff`: `git diff <base> <to> -- <paths>`, the hunks with a term first, at most 6,000 characters;
 - `changes` (round 3, §7): the marked commits read whole, because the commit list and a cut range diff often did not
   show the one that mattered (a fix among 29, 437 or 608 commits). Those of a term whose count differs between the base
-  and the head come first, then the others, newest first within each; at most 8, each with the terms it changed, its
+  and the head come first, then the others, oldest first within each (nearest the base: on round 1's entries the
+  newest of 56 marked commits left out the fix, the oldest did not); at most 8, each with the terms it changed, its
   message's body (600 characters) and its own patch of the paths against its first parent with 8 lines of context, the
   hunks with a term first, at most 2,500 bytes each and 12,000 in all.
 
@@ -158,8 +160,9 @@ do; and nothing in the material that changes what the entry describes means hold
 
 With the changes (round 3), the prompt has a CHANGES section after the diff, split at the recording the same way, and
 the vanished-term rule reads the change that removed the term: fixed or obsolete when it removed the code the entry
-describes, holds when it only renamed, moved or deleted a test, a file or a name while the behaviour the entry
-describes is still in the lines or the diff (round 2's one false `obsolete` was a deleted test file). Fixed or
+describes, holds when it only renamed, moved or deleted a test, a file or a name the entry gives as an example while
+what it warns about still holds: the behaviour is still in the lines or the diff, or it is how a tool such as git, go,
+npm or a database behaves (round 2's one false `obsolete` was a deleted test named in a `go test -run` example). Fixed or
 obsolete is answered only from a change the material shows. A runner without the changes gets the question as it was.
 
 The answer is one JSON object: `{"verdict": …, "commit": "<12-character sha from the list, or null>", "reason": "<one

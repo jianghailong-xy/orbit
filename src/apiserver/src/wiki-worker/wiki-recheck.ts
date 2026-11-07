@@ -269,7 +269,7 @@ export function wikiRecheckPrompt(entry: WikiRecheckEntry, material: WikiRecheck
   out.push('How to read the material:');
   if (answer.changes !== undefined) {
     out.push('- Answer fixed or obsolete only from a change the material shows, and name it: a commit of COMMITS or CHANGES.');
-    out.push('- If a term the entry names as present or broken occurs in none of its files now (see the counts), read the change in CHANGES that removed it. If it removed the code the entry describes, answer fixed or obsolete, even when the entry itself records that change. If it only renamed, moved or deleted a test, a file or a name while the behaviour the entry describes is still in the LINES or the DIFF, the entry holds.');
+    out.push('- If a term the entry names as present or broken occurs in none of its files now (see the counts), read the change in CHANGES that removed it. If it removed the code the entry describes, answer fixed or obsolete, even when the entry itself records that change. If it only renamed, moved or deleted a test, a file or a name the entry gives as an example, while what the entry warns about still holds (the behaviour is still in the LINES or the DIFF, or it is how a tool such as git, go, npm or a database behaves, which no commit here changes), the entry holds.');
   } else {
     out.push('- If a term the entry names as present or broken occurs in none of its files now (see the counts), the entry describes code that is gone: answer fixed or obsolete, even when the entry itself records that change.');
   }

@@ -1212,17 +1212,21 @@ func wikiRepoOpHistoryLog(root, base, to string, matched map[string][]string, pa
 }
 
 // wikiRepoOpHistoryCommits is the commits of the log the model reads, and how many there are. At most
-// wikiRepoOpHistoryMaxCommits are kept: every matched one first, newest first, then the newest of the rest — in
-// git log's order still.
+// wikiRepoOpHistoryMaxCommits are kept: every matched one first, newest first, then the oldest of the rest — the
+// commits nearest the base, where a fix of the trouble an entry records tends to be — in git log's order still.
 func wikiRepoOpHistoryCommits(all []wikiRepoOpHistoryCommit) ([]wikiRepoOpHistoryCommit, int) {
 	keep := make([]bool, len(all))
 	kept := 0
-	for _, wanted := range []bool{true, false} {
-		for i := range all {
-			if all[i].Matched == wanted && kept < wikiRepoOpHistoryMaxCommits {
-				keep[i] = true
-				kept++
-			}
+	for i := range all {
+		if all[i].Matched && kept < wikiRepoOpHistoryMaxCommits {
+			keep[i] = true
+			kept++
+		}
+	}
+	for i := len(all) - 1; i >= 0; i-- {
+		if !all[i].Matched && kept < wikiRepoOpHistoryMaxCommits {
+			keep[i] = true
+			kept++
 		}
 	}
 	commits := []wikiRepoOpHistoryCommit{}
@@ -1236,10 +1240,11 @@ func wikiRepoOpHistoryCommits(all []wikiRepoOpHistoryCommit) ([]wikiRepoOpHistor
 
 // wikiRepoOpHistoryChanges is the matched commits of the log the model reads in full (docs/wiki-claim-recheck-
 // design.md §3.1), and how many matched commits there are. The ones that changed a term whose count differs
-// between the base and `to` — what moved the screen — are taken first, newest first, then the other matched ones,
-// newest first: at most wikiRepoOpHistoryMaxChanges, while at least wikiRepoOpHistoryChangeMinBytes of the
-// patches' wikiRepoOpHistoryChangesBytes are left, each patch cut to the smaller of wikiRepoOpHistoryChangeBytes
-// and what is left. Those taken are answered in git log's order.
+// between the base and `to` — what moved the screen — are taken first, then the other matched ones, each group
+// oldest first: the changes nearest the base, where a fix of the trouble an entry records tends to be, rather than
+// the latest edits of a busy file. At most wikiRepoOpHistoryMaxChanges are taken, while at least
+// wikiRepoOpHistoryChangeMinBytes of the patches' wikiRepoOpHistoryChangesBytes are left, each patch cut to the
+// smaller of wikiRepoOpHistoryChangeBytes and what is left. Those taken are answered in git log's order.
 func wikiRepoOpHistoryChanges(root string, all []wikiRepoOpHistoryCommit, matched map[string][]string,
 	census []wikiRepoOpHistoryCensus, terms, paths []string) ([]wikiRepoOpHistoryChange, int, error) {
 	moved := map[string]bool{}
@@ -1265,7 +1270,8 @@ func wikiRepoOpHistoryChanges(root string, all []wikiRepoOpHistoryCommit, matche
 	taken := map[int]wikiRepoOpHistoryChange{}
 	used := 0
 	for _, wanted := range []bool{true, false} {
-		for i, commit := range all {
+		for i := len(all) - 1; i >= 0; i-- {
+			commit := all[i]
 			if !commit.Matched || first(commit.Sha) != wanted {
 				continue
 			}

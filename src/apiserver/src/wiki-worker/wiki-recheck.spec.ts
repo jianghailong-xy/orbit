@@ -205,7 +205,7 @@ test('with the changes, the question shows each one whole and reads a vanished t
   assert.match(prompt, /THE DIFF OF THESE FILES FROM THE BASE TO NOW \(hunks that mention a term first\)\n\(no difference\)/u);
   assert.match(prompt, /Answer fixed or obsolete only from a change the material shows, and name it: a commit of COMMITS or CHANGES\./u);
   assert.match(prompt, /read the change in CHANGES that removed it\. If it removed the code the entry describes, answer fixed or obsolete/u);
-  assert.match(prompt, /If it only renamed, moved or deleted a test, a file or a name while the behaviour the entry describes is still in the LINES or the DIFF, the entry holds\./u);
+  assert.match(prompt, /If it only renamed, moved or deleted a test, a file or a name the entry gives as an example, while what the entry warns about still holds \(the behaviour is still in the LINES or the DIFF, or it is how a tool such as git, go, npm or a database behaves, which no commit here changes\), the entry holds\./u);
   assert.doesNotMatch(prompt, /the entry describes code that is gone: answer fixed or obsolete/u);
   // No change, said so; a change without a parent shows no patch.
   const none = wikiRecheckPrompt(entry, {
