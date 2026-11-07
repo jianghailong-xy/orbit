@@ -8085,6 +8085,9 @@ export function WorkspaceView({
     const route = detailForSelected?.route;
     return selected?.taskId && route?.applied && route.level && route.model === shownModel ? route : null;
   })();
+  // The menu's title: the engine this session runs on — its own, recorded when it started and never
+  // changed, so no pick below can move it (board 5 ③); a draft's is the one the hero picked.
+  const engineTitle = useMemo(() => engineTitleFor(shownEngine), [shownEngine]);
   // What the Provider row says it is on: an engine's own sign-in by the account in use — Automatic
   // while Orbit picks it — OpenCode's own configuration by that, anything else by its own name.
   const shownProviderRow = providerSwitchChoices.find((choice) => choice.slug === shownProvider);
@@ -8268,6 +8271,7 @@ export function WorkspaceView({
   ];
   const modelMenuItems = composerModelMenuItems({
     shownEngine,
+    engineTitle,
     smartRoute,
     providerSwitchable: providerSwitchChoices.length > 1 || accountsOffered,
     providerMenuOpen,
@@ -11381,6 +11385,7 @@ export function composerSlashItems(
  */
 export function composerModelMenuItems({
   shownEngine,
+  engineTitle,
   smartRoute,
   providerSwitchable,
   providerMenuOpen,
@@ -11405,6 +11410,8 @@ export function composerModelMenuItems({
   openTask,
 }: {
   shownEngine: AgentProvider;
+  /** The menu's title: the engine the session runs on (`engineTitleFor`). */
+  engineTitle: ReturnType<typeof engineTitleFor>;
   smartRoute: Pick<TaskRunRoute, 'level' | 'reasons'> | null;
   /** Another credential the session's engine runs, or another of the runner's accounts, to switch to. */
   providerSwitchable: boolean;
@@ -11429,9 +11436,6 @@ export function composerModelMenuItems({
   pickFastMode: (fast: boolean) => void;
   openTask: () => void;
 }): MenuItem[] {
-  // The menu's title: the engine this session runs on — its own, recorded when it started and never
-  // changed, so no pick below can move it (board 5 ③); a draft's is the one the hero picked.
-  const engineTitle = engineTitleFor(shownEngine);
   const engineTitleGlyph = engineTitle.glyphKey ? PROVIDER_GLYPHS[engineTitle.glyphKey] : undefined;
   const modelMenuItems: MenuItem[] = [
     // The menu's own title, and not a control: the one fact none of the rows below states is which

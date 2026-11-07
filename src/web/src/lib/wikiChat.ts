@@ -33,6 +33,8 @@ import {
   type WikiChatFabState,
   type WikiChatPress,
   type WikiDocSectionVersionView,
+  type SessionTurnIntent,
+  type SessionTurnPlacement,
 } from '@orbit/shared';
 import { api, ApiError } from '../api';
 import { routeId } from './idCodec';
@@ -77,12 +79,8 @@ export const WIKI_CHAT_HISTORY = 'Chats in this space';
 export const WIKI_CHAT_NO_HISTORY = 'No chats in this space yet';
 export const WIKI_CHAT_OPEN_SESSION = 'Open as a full session';
 export const WIKI_CHAT_CLOSE = 'Hide chat';
-export const WIKI_CHAT_SEND = 'Send';
-export const WIKI_CHAT_STOP = 'Stop';
 export const WIKI_CHAT_RESIZE = 'Resize chat';
 export const WIKI_CHAT_WORKSPACE = 'Workspace';
-export const WIKI_CHAT_MODEL = 'Model';
-export const WIKI_CHAT_MODE = 'Mode';
 export const WIKI_CHAT_SEND_FAILED = 'The message couldn’t be sent. Check the connection, then try again.';
 /** The phone's Ask sheet (docs/wiki-comment-to-session-design.md §5): over the paragraph's sentences, each picked by a tap. */
 export const WIKI_CHAT_PICK_SENTENCES = 'Tap the sentences you mean';
@@ -497,13 +495,20 @@ export function wikiChatContext(state: WikiChatAttachments): WikiChatContext | u
 
 // ── Sending ─────────────────────────────────────────────────────────────────────────────────────
 
-/** What a new chat is made with (contract `chat.create`): the owner's first words, word for word. */
+/**
+ * What a new chat is made with (contract `chat.create`): the owner's first words, word for word, and what the
+ * composer's attachment row and toolbar hold (board 43) — the files staged for it, and the model, mode, effort and
+ * speed the owner picked (left out, the chat starts as a session of its workspace does).
+ */
 export interface WikiChatCreate {
   workspaceId?: string;
   content: string;
   wikiContext?: WikiChatContext;
+  attachmentIds?: string[];
   model?: string;
   permissionMode?: string;
+  effort?: string;
+  fastMode?: boolean;
 }
 
 /** `POST /api/wiki/spaces/:id/chats`: the chat's session and its row, the first turn filed under a UUID of ours. */
@@ -515,19 +520,29 @@ export const createWikiChat = (spaceId: string, body: WikiChatCreate, clientTurn
 
 /**
  * The chat's next message, through the session's own message door with an explicit routing intent (contract
- * `chat.turns`): its content is the owner's words alone, the attachments ride beside it as `wikiContext`.
+ * `chat.turns`): its content is the owner's words alone, the page and the selection ride beside it as `wikiContext`,
+ * and the composer's files as `attachmentIds`. While a turn runs the composer sends it into that turn
+ * (`CURRENT_WORK`) or for the next one, as the session page does; a card's own sentence waits for the next turn.
  */
 export const sendWikiChatTurn = (
   sessionId: string,
   content: string,
   wikiContext: WikiChatContext | undefined,
+  options: { intent?: SessionTurnIntent; attachmentIds?: string[]; kind?: 'message' | 'shell' } = {},
   clientTurnId: string = compatibleUuid(),
 ) =>
-  api<{ turnId: string; seq: number; kind: string; placement: string }>(
+  api<{ turnId: string; seq: number; kind: string; placement: SessionTurnPlacement; targetTurnId?: string }>(
     `/sessions/${encodeURIComponent(sessionId)}/turns/current-work-routing`,
     {
       method: 'POST',
-      body: { clientTurnId, content, intent: 'NEXT_TURN', ...(wikiContext ? { wikiContext } : {}) },
+      body: {
+        clientTurnId,
+        content,
+        intent: options.intent ?? 'NEXT_TURN',
+        ...(options.attachmentIds?.length ? { attachmentIds: options.attachmentIds } : {}),
+        ...(options.kind === 'shell' ? { kind: 'shell' } : {}),
+        ...(wikiContext ? { wikiContext } : {}),
+      },
     },
   );
 

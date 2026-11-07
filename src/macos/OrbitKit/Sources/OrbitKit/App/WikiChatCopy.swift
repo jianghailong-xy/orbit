@@ -193,12 +193,11 @@ public enum WikiChatCopy {
     public static let noHistory = "No chats in this space yet"
     public static let openSession = "Open as a full session"
     public static let close = "Hide chat"
+    /// The native sheet's own composer's buttons (C11); the web panel draws the session page's composer (board 43).
     public static let send = "Send"
     public static let stop = "Stop"
     public static let resize = "Resize chat"
     public static let workspace = "Workspace"
-    public static let model = "Model"
-    public static let mode = "Mode"
     public static let sendFailed = "The message couldn’t be sent. Check the connection, then try again."
     /// The phone's Ask sheet, over the paragraph's sentences (docs/wiki-comment-to-session-design.md §5).
     public static let pickSentences = "Tap the sentences you mean"
@@ -323,12 +322,8 @@ public enum WikiChatCopy {
         "WIKI_CHAT_NO_HISTORY": noHistory,
         "WIKI_CHAT_OPEN_SESSION": openSession,
         "WIKI_CHAT_CLOSE": close,
-        "WIKI_CHAT_SEND": send,
-        "WIKI_CHAT_STOP": stop,
         "WIKI_CHAT_RESIZE": resize,
         "WIKI_CHAT_WORKSPACE": workspace,
-        "WIKI_CHAT_MODEL": model,
-        "WIKI_CHAT_MODE": mode,
         "WIKI_CHAT_SEND_FAILED": sendFailed,
         "WIKI_CHAT_PICK_SENTENCES": pickSentences,
         "WIKI_CHAT_ENDED": ended,

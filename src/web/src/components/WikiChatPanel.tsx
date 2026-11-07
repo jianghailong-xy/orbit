@@ -1,26 +1,66 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowRightOutlined,
-  ArrowUpOutlined,
-  BorderOutlined,
-  CaretDownOutlined,
-  CloseOutlined,
-  DownOutlined,
-  PlusOutlined,
-  ReadOutlined,
-} from '@ant-design/icons';
-import { decideApproval, interruptSession, listApprovals, type PermissionRule } from '../api';
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type Dispatch,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowRightOutlined, CaretDownOutlined, CloseOutlined, DownOutlined, PlusOutlined, ReadOutlined } from '@ant-design/icons';
+import {
+  AgentProvider,
+  derivePermissionSemantics,
+  encodeCursorModel,
+  ENGINE_CLI_NAMES,
+  fastModeAvailable,
+  runtimeTakesMidTurnSteer,
+  wikiChatCardNeedsYou,
+  type SessionTurnIntent,
+} from '@orbit/shared';
+import { api, decideApproval, interruptSession, listApprovals, updateSessionConfig, type PermissionRule } from '../api';
 import { ApprovalPanel } from './ApprovalPanel';
+import { PendingTray } from './PendingTray';
 import { SessionConversation } from './SessionConversation';
-import { orbitLinkStateWord } from './WorkspaceView';
+import type { TurnImage } from './Transcript';
+import {
+  composerModelMenuItems,
+  composerSlashItems,
+  isGenerating,
+  lastContextReading,
+  orbitLinkStateWord,
+  pushHistory,
+  SessionComposer,
+  SessionStatusCard,
+  statusLabel,
+  useComposerImages,
+  usePendingTray,
+  type ComposerImage,
+  type LocalStatusCard,
+  type SessionComposerProps,
+} from './WorkspaceView';
 import { wikiChatReviewPath, type WikiDraftCardHost } from './WikiDraftCard';
 import { approvalRememberOffered } from '../lib/dshRuntime';
+import { composerDraftAfterSend, isCurrentWorkUnavailable } from '../lib/composerSendState';
+import { materializeReferences, type ReferenceMap } from '../lib/composerRefs';
+import { CURSOR_QUEUE_NOTE, cursorModelPick, cursorSettingRows } from '../lib/cursorRuntime';
 import { encodeId, routeId } from '../lib/idCodec';
 import { machineName } from '../lib/machineSetup';
-import { meQuery, providersQuery, runnersQuery, sessionQuery, wikiChatsQuery, workspacesQuery } from '../lib/queries';
-import { isSessionLive, isSessionTerminal, sessionRetryPending, sessionRunStatusOf } from '../lib/sessionState';
+import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
+import { poolsAsProviders, providerPoolsQuery } from '../lib/providerPools';
+import { meQuery, providersQuery, runnersQuery, sessionQuery, wikiChatsQuery, workspacesQuery, type Me } from '../lib/queries';
+import { returnsToComposer } from '../lib/queuedTurnRestore';
+import { engineTitleFor } from '../lib/sessionProviderChoices';
+import { outlivingSessionWork } from '../lib/sessionActivity';
+import { isSessionLive, isSessionTerminal, sessionRetryPending, sessionRunStateOf, sessionRunStatusOf } from '../lib/sessionState';
+import { defaultSessionTurnIntent } from '../lib/sessionTurnIntent';
+import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
+import { isLocalSlashCommand, localStatusRows, slashCommandName, supportsRunnerSlashAssets } from '../lib/slashCommands';
+import { useToast } from '../lib/toast';
+import { turnPlacementOf } from '../lib/turnPlacement';
 import { useSessionStream } from '../lib/useSessionStream';
 import {
   WIKI_CHAT_CHOOSE_WORKSPACE,
@@ -30,8 +70,6 @@ import {
   WIKI_CHAT_EMPTY_HINT,
   WIKI_CHAT_EMPTY_NOTE,
   WIKI_CHAT_HISTORY,
-  WIKI_CHAT_MODE,
-  WIKI_CHAT_MODEL,
   WIKI_CHAT_NEW,
   WIKI_CHAT_NEW_PARAM,
   WIKI_CHAT_NO_HISTORY,
@@ -41,8 +79,6 @@ import {
   WIKI_CHAT_PLACEHOLDER_DRAFT,
   WIKI_CHAT_RESIZE,
   WIKI_CHAT_RUNS_IN,
-  WIKI_CHAT_SEND,
-  WIKI_CHAT_STOP,
   WIKI_CHAT_TRASHED,
   WIKI_CHAT_WORKSPACE,
   WIKI_CHAT_WIDTH,
@@ -54,30 +90,34 @@ import {
   wikiChatOffline,
   wikiChatQuoteCounts,
   wikiChatRemove,
-  wikiChatRunLine,
   wikiChatRunsIn,
   wikiChatSendError,
   wikiChatShown,
   wikiChatWorkspaceName,
   type WikiChatAttachAction,
   type WikiChatAttachments,
+  type WikiChatContext,
   type WikiChatDraftView,
   type WikiChatLayout,
   type WikiChatList,
   type WikiChatWorkspace,
 } from '../lib/wikiChat';
 import {
-  DEFAULT_PERMISSION_MODE,
-  MODE_OPTIONS,
   clampPermissionModeForModel,
+  DEFAULT_PERMISSION_MODE,
   defaultModelFor,
+  defaultModelKey,
+  effectiveSessionModel,
+  effortOptionsFor,
+  isLoginProvider,
+  MODE_OPTIONS,
   modelOptionsFor,
-  permissionModeSupported,
+  normalizeEffortFor,
+  providerIdentityResolved,
   sessionEngineOf,
   supportsAuto,
   type ConfiguredProvider,
 } from '../lib/workspaceDefaults';
-import { wikiChatCardNeedsYou } from '@orbit/shared';
 import { wikiEntryPath, type WikiSpaceRow } from '../lib/wiki';
 import { wikiDocSectionPath } from '../lib/wikiDocs';
 import { wikiPlanDocPath, wikiPlanPath } from '../lib/wikiPlan';
@@ -86,10 +126,13 @@ import { wikiSettingsPath } from '../lib/wikiReviewMode';
 /**
  * The panel the round button opens (design §4.1, board 42 ①): docked on the right of the page, or over it, or a
  * sheet, by the window's width (`wikiChatLayout`). Its head is the chat's title — pressed, the space's chats —
- * then `+` a new chat, `↗` the full session page, `✕` hide it (the chat goes on). Under the head, one line says
- * where it runs; before the first message that line is the choice of it (Runs in). The conversation is the
- * session page's own (`SessionConversation`, with the approval cards answerable here); the composer is a short
- * one: words, the attachments, Send and Stop. Everything else is on the full session page.
+ * then `+` a new chat, `↗` the full session page, `✕` hide it (the chat goes on). A new chat's one line under the
+ * head is Runs in, the workspace alone (board 43 ②); once the chat runs no workspace is shown, as on the session page.
+ * The conversation is the session page's own (`SessionConversation`, with the approval cards answerable here), and
+ * so is the composer (`SessionComposer`, board 43 ② ④ ⑤): the page and the selection are the first chips of its
+ * attachment row, and everything else in it — pictures and files, the slash menu, the mode, the model with its effort
+ * and speed, the gauges, Send and Stop, a message sent into a running turn or queued for the next — is the session
+ * page's.
  */
 export function WikiChatPanel({
   space,
@@ -134,8 +177,8 @@ export function WikiChatPanel({
   const title = (fresh ? null : (session.data?.title || row?.title)) || WIKI_CHAT_NEW;
   const [history, setHistory] = useState(false);
   const [sheetFull, setSheetFull] = useState(false);
-  // A chat's first words, kept from the create until its own conversation draws them.
-  const [opening, setOpening] = useState<{ sessionId: string; text: string } | null>(null);
+  // A chat's first message, kept from the create until its own conversation draws it.
+  const [opening, setOpening] = useState<{ sessionId: string; message: ChatOpening } | null>(null);
 
   const style: CSSProperties = layout === 'sheet' ? {} : { top, width: width ?? undefined };
   return (
@@ -195,8 +238,8 @@ export function WikiChatPanel({
           list={list}
           attachments={attachments}
           dispatch={dispatch}
-          onCreated={(created, text) => {
-            setOpening({ sessionId: routeId(created) ?? created, text });
+          onCreated={(created, message) => {
+            setOpening({ sessionId: routeId(created) ?? created, message });
             onChat(created);
           }}
         />
@@ -211,7 +254,7 @@ export function WikiChatPanel({
           focus={focus}
           attachments={attachments}
           dispatch={dispatch}
-          opening={opening?.sessionId === sessionId ? opening.text : null}
+          opening={opening?.sessionId === sessionId ? opening.message : null}
           onNewChat={() => onChat(WIKI_CHAT_NEW_PARAM)}
         />
       )}
@@ -272,43 +315,310 @@ function WikiChatHistory({ list, current, onPick }: { list: WikiChatList | null 
   );
 }
 
-// ── A chat not started yet: where it will run, and its first message ───────────────────────────────
+// ── The composer: the session page's own (board 43) ───────────────────────────────────────────
 
-/**
- * The model and mode a chat on `workspace` starts with unless the owner picks others, read as a new session of
- * that workspace reads them: the workspace's provider and model, the runner's catalogue, the account's mode.
- */
-function useChatDefaults(workspaceId: string | null) {
-  const workspaces = useQuery(workspacesQuery());
+/** What a chat's first message showed when it went, painted at once as the session page paints a new session's. */
+interface ChatOpening {
+  text: string;
+  attachments: Array<{ id: string; mime: string; name?: string }>;
+}
+
+/** A chat's session config as the composer's toolbar shows it, in the session's own values. */
+interface ChatConfig {
+  model: string;
+  permissionMode: string;
+  effort: string;
+  fastMode: boolean;
+}
+
+type ChatConfigChange = Partial<ChatConfig>;
+
+/** The runner a chat runs on, and the providers its models are read from — the account's keys and pools, as the
+ *  session page reads them. */
+function useChatMachine(runnerId: string | null | undefined) {
   const runners = useQuery(runnersQuery());
   const providers = useQuery(providersQuery());
-  const me = useQuery(meQuery());
-  return useMemo(() => {
-    const workspace = (workspaces.data ?? []).find((row) => row.id === workspaceId) as
-      | { provider?: string | null; model?: string | null; runnerId?: string | null }
-      | undefined;
-    const configured = (providers.data ?? []) as ConfiguredProvider[];
-    const runner = (runners.data ?? []).find((row) => row.id === workspace?.runnerId) as { modelCatalog?: never } | undefined;
-    const catalog = runner?.modelCatalog ?? null;
-    const engine = sessionEngineOf(undefined, workspace?.provider, configured);
-    const provider = workspace?.provider ?? engine;
-    const models = modelOptionsFor(engine, provider, catalog, configured);
-    const model = workspace?.model && models.some((o) => o.value === workspace.model) ? workspace.model : defaultModelFor(engine, provider, catalog, configured);
-    const modeFor = (picked: string) =>
-      MODE_OPTIONS.filter(
-        (o) => permissionModeSupported(o.value, engine) && (o.value !== 'auto' || supportsAuto(picked, engine, provider, configured, catalog)),
-      );
-    const mode = clampPermissionModeForModel(
-      me.data?.preferences?.defaultPermissionMode ?? DEFAULT_PERMISSION_MODE,
-      model,
-      engine,
-      provider,
-      configured,
-      catalog,
-    );
-    return { models, model, mode, modeFor };
-  }, [workspaces.data, runners.data, providers.data, me.data, workspaceId]);
+  const pools = useQuery(providerPoolsQuery());
+  const sharedPools = useQuery(sharedPoolsQuery());
+  const configured = useMemo(
+    () => [
+      ...(providers.data ?? []),
+      ...poolsAsProviders([...(sharedPools.data ?? []).map(sharedPoolAsProviderPool), ...(pools.data ?? [])]),
+    ],
+    [providers.data, pools.data, sharedPools.data],
+  );
+  const loaded = providers.data !== undefined && !pools.isPending && !sharedPools.isPending;
+  const runner = ((runners.data ?? []).find((row) => row.id === runnerId) ?? null) as ChatRunner | null;
+  return { runner, configured: configured as ConfiguredProvider[], loaded };
 }
+
+/** The runner fields the composer reads. */
+type ChatRunner = Parameters<typeof SessionComposer>[0]['runner'] & {
+  id: string;
+  name: string;
+  displayName?: string | null;
+  commands?: Parameters<typeof composerSlashItems>[0];
+  skills?: Parameters<typeof composerSlashItems>[1];
+  runtimeDefaultModels?: Parameters<typeof effectiveSessionModel>[6];
+  activeSessions?: number;
+  maxConcurrent?: number;
+};
+
+const modeValue = (label: string): string => MODE_OPTIONS.find((option) => option.label === label)?.value ?? 'default';
+const modeLabel = (value: string): string => MODE_OPTIONS.find((option) => option.value === value)?.label ?? 'Default';
+
+/**
+ * The composer toolbar's facts and picks for a chat, by the session page's own rules: the models of the engine and
+ * provider the chat runs on, the mode and the effort as that model takes them, a fast lane where there is one, and a
+ * Cursor model's own settings. A pick says what it changes and `change` applies it — a new chat keeps it for its
+ * create, a chat that runs writes its session's config — and, as on the session page, a model or an effort picked is
+ * remembered as the account's next.
+ */
+function useChatToolbar({
+  engine,
+  provider,
+  runner,
+  configured,
+  resolved,
+  current,
+  change,
+}: {
+  engine: AgentProvider;
+  provider: string;
+  runner: ChatRunner | null;
+  configured: ConfiguredProvider[];
+  resolved: boolean;
+  current: ChatConfig;
+  change: (next: ChatConfigChange) => void;
+}) {
+  const qc = useQueryClient();
+  const modelPreference = useMutation({
+    // In the order they were made, beside the session page's own picks.
+    scope: { id: 'model-preferences' },
+    mutationFn: (model: string) =>
+      api('/users/me/preferences', { method: 'PATCH', body: { defaultModels: { [defaultModelKey(engine, provider)]: model } } }),
+  });
+  const catalog = runner?.modelCatalog ?? null;
+  const shownModel = current.model;
+  const shownCursorPick = engine === AgentProvider.CURSOR ? cursorModelPick(shownModel, catalog) : null;
+  const shownModelName = shownCursorPick?.model ?? shownModel;
+  const catalogModelOptions = resolved ? modelOptionsFor(engine, provider, catalog, configured) : [];
+  const shownModelOptions = catalogModelOptions.some((option) => option.value === shownModelName)
+    ? catalogModelOptions
+    : [{ value: shownModelName, label: shownModelName }, ...catalogModelOptions];
+  const shownModelLabel = shownModelOptions.find((option) => option.value === shownModelName)?.label ?? shownModelName;
+  const shownMode = modeLabel(current.permissionMode);
+  const shownEffort = normalizeEffortFor(engine, provider, current.effort, shownModel, catalog, configured);
+  const shownEffortOptions = effortOptionsFor(engine, provider, shownModel, catalog, configured);
+  const shownEffortLabel = shownEffortOptions.find((option) => option.value === shownEffort)?.label ?? shownEffort;
+  const fastModeUsable = resolved && fastModeAvailable(engine, shownModel, catalog);
+  const cursorAuto = engine === AgentProvider.CURSOR && (!shownModelName || shownModelName === 'default');
+  const cursorSettings = cursorAuto ? [] : cursorSettingRows(shownCursorPick);
+  const onOwnModels = engine === AgentProvider.CLAUDE && !isLoginProvider(provider) && configured.some((p) => p.slug === provider);
+  const permissionSemanticsFor = (label: string) =>
+    derivePermissionSemantics(engine, modeValue(label), onOwnModels ? undefined : shownModel, runner?.runsAsRoot, catalog);
+
+  const remember = (patch: { defaultModels?: Record<string, string>; defaultEffort?: string }) =>
+    qc.setQueryData<Me>(meQuery().queryKey, (prev) =>
+      prev
+        ? {
+            ...prev,
+            preferences: {
+              ...prev.preferences,
+              ...(patch.defaultModels ? { defaultModels: { ...prev.preferences?.defaultModels, ...patch.defaultModels } } : {}),
+              ...(patch.defaultEffort !== undefined ? { defaultEffort: patch.defaultEffort } : {}),
+            },
+          }
+        : prev,
+    );
+  const pickModel = (model: string): void => {
+    // A re-selection is still a preference, as on the session page.
+    remember({ defaultModels: { [defaultModelKey(engine, provider)]: model } });
+    modelPreference.mutate(model);
+    if (model === shownModelName) return;
+    // A model that cannot run Auto drops it to Default, and an effort the model does not take goes too.
+    const drop = shownMode === 'Auto' && !supportsAuto(model, engine, provider, configured, catalog);
+    const effort = normalizeEffortFor(engine, provider, current.effort, model, catalog, configured);
+    change({ model, ...(drop ? { permissionMode: 'default' } : {}), ...(effort !== current.effort ? { effort } : {}) });
+  };
+  const pickEffort = (effort: string): void => {
+    if (effort === shownEffort) return;
+    const normalized = normalizeEffortFor(engine, provider, effort, shownModel, catalog, configured);
+    remember({ defaultEffort: normalized });
+    void api('/users/me/preferences', { method: 'PATCH', body: { defaultEffort: normalized } }).catch(() => undefined);
+    change({ effort: normalized });
+  };
+  const pickFastMode = (fastMode: boolean): void => {
+    if (fastMode !== current.fastMode) change({ fastMode });
+  };
+  const pickCursorSetting = (id: string, value: string): void => {
+    if (!shownCursorPick || cursorSettings.find((row) => row.id === id)?.value === value) return;
+    change({ model: encodeCursorModel(shownCursorPick.model, { ...shownCursorPick.parameters, [id]: value }, shownCursorPick.row) });
+  };
+  const modelMenuItems = composerModelMenuItems({
+    shownEngine: engine,
+    engineTitle: engineTitleFor(engine),
+    smartRoute: null,
+    // Another provider or account is the full session page's (design §4.1).
+    providerSwitchable: false,
+    shownKeyGone: null,
+    shownProviderValue: provider,
+    providerMenuGroups: [],
+    shownModelOptions,
+    shownProviderCapabilitiesResolved: resolved,
+    shownModelName,
+    pickModel,
+    cursorAuto,
+    shownEffortLabel,
+    shownEffortOptions,
+    shownEffort,
+    pickEffort,
+    cursorSettings,
+    pickCursorSetting,
+    fastModeUsable,
+    shownFastMode: current.fastMode,
+    pickFastMode,
+    openTask: () => undefined,
+  });
+  return {
+    shownModel,
+    shownMode,
+    shownEffort,
+    shownModelLabel,
+    shownEffortLabel,
+    cursorAuto,
+    cursorSettings,
+    fastModeUsable,
+    shownFastMode: current.fastMode,
+    permissionSemanticsFor,
+    modelMenuItems,
+    onMode: (label: string) => change({ permissionMode: modeValue(label) }),
+  };
+}
+
+/** The draft a chat's composer holds: its words, their references, the history cursor and the staged files. */
+function useChatDraft(sessionId: string | null, canAttach: boolean) {
+  const [text, setText] = useState('');
+  const [composerRefs, setComposerRefs] = useState<ReferenceMap>({});
+  const [histIdx, setHistIdx] = useState(-1);
+  const [histDraft, setHistDraft] = useState('');
+  const [images, setImages] = useState<ComposerImage[]>([]);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const { addImage, stageRestored, removeImage } = useComposerImages(canAttach, sessionId ?? undefined, setImages);
+  // Staged files belong to this chat (they cannot go with another): their previews go with it, as the session page's do.
+  const staged = useRef(images);
+  staged.current = images;
+  useEffect(() => () => staged.current.forEach((image) => image.previewUrl && URL.revokeObjectURL(image.previewUrl)), []);
+  const clear = () => {
+    setText((draft) => composerDraftAfterSend(draft, true));
+    setComposerRefs({});
+    setImages([]);
+  };
+  return {
+    text,
+    setText,
+    composerRefs,
+    setComposerRefs,
+    histIdx,
+    setHistIdx,
+    histDraft,
+    setHistDraft,
+    images,
+    readyImages: images.filter((image) => image.status === 'done' && image.id),
+    uploading: images.some((image) => image.status === 'uploading'),
+    taRef,
+    addImage,
+    removeImage,
+    stageRestored,
+    clear,
+  };
+}
+
+/** The page and the selection: the first chips of the composer's attachment row (board 43 ④), each with its cross. */
+function wikiChatChips(attachments: WikiChatAttachments, dispatch: Dispatch<WikiChatAttachAction>): ReactNode {
+  const { page, quote } = wikiChatShown(attachments);
+  if (!page && !quote) return null;
+  return (
+    <>
+      {page && (
+        <span className="composer-pill composer-file wk-chat-chip" data-kind="page">
+          <ReadOutlined className="composer-file-icon ic" />
+          <span className="composer-file-name l">{page.label}</span>
+          <button type="button" className="composer-file-remove x" aria-label={wikiChatRemove(page.label)} onClick={() => dispatch({ type: 'crossPage' })}>
+            <CloseOutlined />
+          </button>
+        </span>
+      )}
+      {quote && (
+        <span
+          className="composer-pill composer-file wk-chat-chip q"
+          data-kind="quote"
+          title={quote.selected > quote.sentenceIds.length ? wikiChatCapped(quote.selected) : undefined}
+        >
+          <span className="composer-file-name q1">{quote.first}</span>
+          <span className="composer-file-size sub">{wikiChatQuoteCounts(quote.sentenceIds.length, quote.sources)}</span>
+          <button type="button" className="composer-file-remove x" aria-label={wikiChatRemove(quote.first)} onClick={() => dispatch({ type: 'crossQuote' })}>
+            <CloseOutlined />
+          </button>
+        </span>
+      )}
+    </>
+  );
+}
+
+/** What both of the panel's composers hand the session page's alike: the draft, the toolbar's facts and picks, and none of
+ *  what only the session page has (an armed reply, a draft's workspace picker, a pool's account, a plan's quota). */
+function sharedComposerProps(
+  draft: ReturnType<typeof useChatDraft>,
+  toolbar: ReturnType<typeof useChatToolbar>,
+  modelMenu: ReturnType<typeof useModelMenuState>,
+) {
+  return {
+    text: draft.text,
+    setText: draft.setText,
+    composerRefs: draft.composerRefs,
+    setComposerRefs: draft.setComposerRefs,
+    histIdx: draft.histIdx,
+    setHistIdx: draft.setHistIdx,
+    histDraft: draft.histDraft,
+    setHistDraft: draft.setHistDraft,
+    images: draft.images,
+    readyImages: draft.readyImages,
+    addImage: draft.addImage,
+    removeImage: draft.removeImage,
+    taRef: draft.taRef,
+    composerDisabled: false,
+    replyTo: null,
+    workspaceReadOnly: true,
+    setWorkspaceId: () => undefined,
+    managedDraftBlocked: false,
+    ...modelMenu,
+    shownMode: toolbar.shownMode,
+    onDraftMode: toolbar.onMode,
+    permissionSemanticsFor: toolbar.permissionSemanticsFor,
+    modelMenuItems: toolbar.modelMenuItems,
+    smartRoute: null,
+    shownModelLabel: toolbar.shownModelLabel,
+    shownEffortLabel: toolbar.shownEffortLabel,
+    cursorAuto: toolbar.cursorAuto,
+    fastModeUsable: toolbar.fastModeUsable,
+    shownFastMode: toolbar.shownFastMode,
+    cursorSettings: toolbar.cursorSettings,
+    shownPool: null,
+    shownPoolAccount: null,
+    shownPlanUsage: null,
+    shownModel: toolbar.shownModel,
+    planUsageAccount: undefined,
+    planUsageReset: undefined,
+  } satisfies Partial<SessionComposerProps>;
+}
+
+/** `/status`, which the session page answers itself: what this chat runs on, as a card under the conversation. */
+function statusCard(rows: Parameters<typeof localStatusRows>[0]): LocalStatusCard {
+  return { id: `status-${Date.now()}-${Math.random().toString(36).slice(2)}`, rows: localStatusRows(rows) };
+}
+
+// ── A chat not started yet: where it will run, and its first message ───────────────────────────────
 
 function WikiChatNew({
   space,
@@ -321,30 +631,134 @@ function WikiChatNew({
   list: WikiChatList | null | undefined;
   attachments: WikiChatAttachments;
   dispatch: Dispatch<WikiChatAttachAction>;
-  onCreated: (sessionId: string, text: string) => void;
+  onCreated: (sessionId: string, message: ChatOpening) => void;
 }) {
   const qc = useQueryClient();
+  const message = useToast();
   const [picked, setPicked] = useState<string | null>(null);
   const runsIn = list ? wikiChatRunsIn(list, picked) : null;
   const workspace = runsIn?.kind === 'chosen' ? runsIn.workspace : null;
-  const defaults = useChatDefaults(workspace?.id ?? null);
-  const [model, setModel] = useState<string | null>(null);
-  const [mode, setMode] = useState<string | null>(null);
-  const shownModel = model ?? defaults.model;
-  const shownMode = mode ?? defaults.mode;
+  // The model, mode, effort and speed a chat on `workspace` starts with unless the owner picks others, read as a new
+  // session of that workspace reads them: the workspace's provider and model, the runner's catalogue, the account's
+  // mode and effort.
+  const workspaces = useQuery(workspacesQuery());
+  const me = useQuery(meQuery());
+  const row = (workspaces.data ?? []).find((w) => w.id === workspace?.id) as
+    | { provider?: string | null; model?: string | null; effort?: string | null; runnerId?: string | null }
+    | undefined;
+  const machine = useChatMachine(row?.runnerId);
+  const catalog = machine.runner?.modelCatalog ?? null;
+  const engine = sessionEngineOf(undefined, row?.provider, machine.configured);
+  const provider = row?.provider ?? engine;
+  const resolved = providerIdentityResolved(provider, machine.loaded);
+  // The owner's picks, which alone go with the create: what is not picked starts as the workspace's sessions do.
+  const [picks, setPicks] = useState<ChatConfigChange>({});
+  const models = modelOptionsFor(engine, provider, catalog, machine.configured);
+  const model =
+    picks.model ??
+    (row?.model && models.some((option) => option.value === row.model)
+      ? row.model
+      : defaultModelFor(engine, provider, catalog, machine.configured, machine.runner?.runtimeDefaultModels));
+  const current: ChatConfig = {
+    model,
+    permissionMode:
+      picks.permissionMode ??
+      clampPermissionModeForModel(
+        me.data?.preferences?.defaultPermissionMode ?? DEFAULT_PERMISSION_MODE,
+        model,
+        engine,
+        provider,
+        machine.configured,
+        catalog,
+      ),
+    effort: picks.effort ?? row?.effort ?? me.data?.preferences?.defaultEffort ?? '',
+    fastMode: picks.fastMode ?? false,
+  };
+  const toolbar = useChatToolbar({
+    engine,
+    provider,
+    runner: machine.runner,
+    configured: machine.configured,
+    resolved,
+    current,
+    change: (next) => setPicks((previous) => ({ ...previous, ...next })),
+  });
+  const online = machine.runner?.online ?? workspace?.online ?? false;
+  const draft = useChatDraft(null, !!workspace && online);
+  // Why the first message did not go, in the server's words or as a lost connection (wikiChatSendError).
+  const [failed, setFailed] = useState<string | null>(null);
+  const [statusCards, setStatusCards] = useState<LocalStatusCard[]>([]);
+  const modelMenu = useModelMenuState();
+  const slashItems = useMemo(
+    () => composerSlashItems(machine.runner?.commands, machine.runner?.skills, !supportsRunnerSlashAssets(engine), engine, workspace?.id),
+    [machine.runner?.commands, machine.runner?.skills, engine, workspace?.id],
+  );
 
-  const send = async (text: string) => {
-    const created = await createWikiChat(space.id, {
-      workspaceId: workspace!.id,
-      content: text,
-      wikiContext: wikiChatContext(attachments),
-      // Named only when the owner picked them; otherwise the chat starts as a session of its workspace does.
-      ...(model !== null ? { model } : {}),
-      ...(mode !== null ? { permissionMode: mode } : {}),
-    });
-    dispatch({ type: 'sent' });
-    void qc.invalidateQueries({ queryKey: wikiChatsQuery(space.id).queryKey });
-    onCreated(created.sessionId, text);
+  const create = useMutation({
+    mutationFn: (vars: { content: string; images: ComposerImage[]; context: WikiChatContext | undefined }) =>
+      createWikiChat(space.id, {
+        workspaceId: workspace!.id,
+        content: vars.content,
+        wikiContext: vars.context,
+        ...(vars.images.length > 0 ? { attachmentIds: vars.images.map((image) => image.id!) } : {}),
+        // Named only when the owner picked them; otherwise the chat starts as a session of its workspace does.
+        ...(picks.model !== undefined ? { model: picks.model } : {}),
+        ...(picks.permissionMode !== undefined ? { permissionMode: picks.permissionMode } : {}),
+        ...(picks.effort !== undefined ? { effort: toolbar.shownEffort } : {}),
+        ...(picks.fastMode !== undefined ? { fastMode: picks.fastMode } : {}),
+      }),
+    onSuccess: (created, vars) => {
+      pushHistory(routeId(created.sessionId) ?? created.sessionId, vars.content);
+      dispatch({ type: 'sent' });
+      void qc.invalidateQueries({ queryKey: wikiChatsQuery(space.id).queryKey });
+      // The create has no turn of this tab's to keep previews under: the transcript draws the files from the server.
+      vars.images.forEach((image) => image.previewUrl && URL.revokeObjectURL(image.previewUrl));
+      draft.clear();
+      onCreated(created.sessionId, {
+        text: vars.content,
+        attachments: vars.images.flatMap((image) => (image.id ? [{ id: image.id, mime: image.mime || 'application/octet-stream', name: image.name }] : [])),
+      });
+    },
+    onError: (error) => setFailed(wikiChatSendError(error)),
+  });
+
+  const onSend = (): void => {
+    const words = draft.text.trim();
+    if (create.isPending || !workspace) return;
+    const command = slashCommandName(words);
+    if (command !== null && isLocalSlashCommand(command)) {
+      setStatusCards((previous) => [
+        ...previous.slice(-4),
+        statusCard({
+          surface: 'Web',
+          runnerName: workspace.runner ?? undefined,
+          runnerOnline: online,
+          sessionTitle: null,
+          sessionStatus: null,
+          workspaceName: workspace.name,
+          engine: ENGINE_CLI_NAMES[engine],
+          provider,
+          model: toolbar.shownModel,
+          permissionMode: toolbar.shownMode,
+          effort: toolbar.shownEffort,
+          fastMode: toolbar.fastModeUsable && toolbar.shownFastMode,
+          contextTokens: 0,
+        }),
+      ]);
+      draft.setText('');
+      draft.setHistIdx(-1);
+      return;
+    }
+    // As on the session page: a bare `/` names nothing to run.
+    if (command === '' && supportsRunnerSlashAssets(engine)) {
+      message.error('Pick a slash command before sending');
+      return;
+    }
+    // A chat opens with the owner's words (contract `chat.create`): files ride with them, never alone.
+    if (!words || draft.uploading) return;
+    draft.setHistIdx(-1);
+    setFailed(null);
+    create.mutate({ content: materializeReferences(words, draft.composerRefs), images: draft.readyImages, context: wikiChatContext(attachments) });
   };
 
   return (
@@ -359,25 +773,8 @@ function WikiChatNew({
             options={runsIn.choices.map((choice) => ({ value: choice.id, label: wikiChatWorkspaceName(choice) }))}
             onChange={(id) => {
               setPicked(id);
-              setModel(null);
-              setMode(null);
+              setPicks({});
             }}
-          />
-          {defaults.models.length > 0 && (
-            <WikiChatPick
-              label={WIKI_CHAT_MODEL}
-              value={shownModel}
-              shown={defaults.models.find((o) => o.value === shownModel)?.label ?? shownModel}
-              options={defaults.models}
-              onChange={setModel}
-            />
-          )}
-          <WikiChatPick
-            label={WIKI_CHAT_MODE}
-            value={shownMode}
-            shown={MODE_OPTIONS.find((o) => o.value === shownMode)?.label ?? shownMode}
-            options={defaults.modeFor(shownModel)}
-            onChange={setMode}
           />
         </div>
       )}
@@ -395,12 +792,56 @@ function WikiChatNew({
             {WIKI_CHAT_EMPTY_NOTE}
           </div>
         )}
+        {statusCards.map((card) => (
+          <SessionStatusCard card={card} key={card.id} />
+        ))}
       </div>
       {runsIn && runsIn.kind !== 'none' && (
-        <WikiChatComposer attachments={attachments} dispatch={dispatch} ready={runsIn.kind === 'chosen'} busy={false} onSend={send} />
+        <div className="wk-chat-composer">
+          {failed && (
+            <div className="wk-chat-failed" role="alert">
+              {failed}
+            </div>
+          )}
+          <SessionComposer
+            {...sharedComposerProps(draft, toolbar, modelMenu)}
+            selectedId={null}
+            canAttach={!!workspace && online}
+            attachmentsBefore={wikiChatChips(attachments, dispatch)}
+            composerPlaceholder={WIKI_CHAT_PLACEHOLDER}
+            offeredSuggestion={null}
+            acceptSuggestion={() => undefined}
+            slashItems={slashItems}
+            runner={machine.runner ?? { online }}
+            workspacesForRunner={(workspaces.data ?? []).filter((w) => w.runnerId === row?.runnerId)}
+            shellOffered={false}
+            shellUnavailable
+            live={false}
+            configMut={{ mutate: () => undefined }}
+            shownEngine={engine}
+            configEditable
+            contextTokens={0}
+            shownProvider={provider}
+            configuredProviders={machine.configured}
+            showStop={false}
+            onStop={() => undefined}
+            canSend={runsIn.kind === 'chosen' && !create.isPending && !draft.uploading && !!draft.text.trim()}
+            sending={create.isPending}
+            onSend={onSend}
+            queueOffered={false}
+            defaultSendIntent="NEXT_TURN"
+          />
+        </div>
       )}
     </>
   );
+}
+
+/** The model chip's menu, open or not (the session page keeps it so another card can open it; nothing here does). */
+function useModelMenuState() {
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [, setProviderMenuOpen] = useState(false);
+  return { modelMenuOpen, setModelMenuOpen, setProviderMenuOpen };
 }
 
 /** The space's first chat, or one whose remembered workspace no longer qualifies: choose where it runs (§5.1). */
@@ -418,7 +859,7 @@ function WikiChatChoose({ choices, onPick }: { choices: readonly WikiChatWorkspa
   );
 }
 
-/** One of Runs in's pickers, the native select under the words it shows (as the Wiki head's space picker). */
+/** Runs in's picker, the native select under the words it shows (as the Wiki head's space picker). */
 function WikiChatPick({
   label,
   value,
@@ -447,9 +888,9 @@ function WikiChatPick({
   );
 }
 
-// ── A chat that runs: where, its conversation, its next message ───────────────────────────────────
+// ── A chat that runs: its conversation, what is waiting to be read, its next message ───────────────
 
-/** The fields of a session's detail its run line reads. */
+/** The fields of a session's detail the panel reads. */
 interface ChatSession {
   title?: string;
   workspace?: { id: string; name?: string } | null;
@@ -458,7 +899,25 @@ interface ChatSession {
   provider?: string | null;
   model?: string | null;
   permissionMode?: string | null;
+  effort?: string | null;
+  fastMode?: boolean | null;
+  numTurns?: number;
+  pendingApprovals?: number;
+  waitingKind?: string | null;
   deletedAt?: string | null;
+  /** The work a parked turn left running, which keeps Stop on as the session page keeps it (`outlivingSessionWork`). */
+  runningSubagentCount?: number | null;
+  runningBgCount?: number | null;
+  runningBgJobCount?: number | null;
+}
+
+/** One message of the owner's into a running chat, as the composer sends it. */
+interface ChatSendVars {
+  content: string;
+  images: ComposerImage[];
+  intent: SessionTurnIntent;
+  shell?: boolean;
+  context?: WikiChatContext;
 }
 
 function WikiChatSession({
@@ -481,15 +940,16 @@ function WikiChatSession({
   focus: string | null;
   attachments: WikiChatAttachments;
   dispatch: Dispatch<WikiChatAttachAction>;
-  opening: string | null;
+  opening: ChatOpening | null;
   onNewChat: () => void;
 }) {
   const navigate = useNavigate();
-  const runners = useQuery(runnersQuery());
-  const providers = useQuery(providersQuery());
-  const runner = (runners.data ?? []).find((row) => row.id === session?.assignedRunnerId) as
-    | { name: string; displayName?: string | null; online?: boolean; modelCatalog?: never }
-    | undefined;
+  const qc = useQueryClient();
+  const message = useToast();
+  const workspaces = useQuery(workspacesQuery());
+  const machine = useChatMachine(session?.assignedRunnerId);
+  const runner = machine.runner;
+  const catalog = runner?.modelCatalog ?? null;
   const live = !!session && !session.deletedAt && isSessionLive(session);
   const stream = useSessionStream({
     sessionId,
@@ -497,59 +957,306 @@ function WikiChatSession({
     runStatus: session ? sessionRunStatusOf(session) : undefined,
     runTerminal: !!session && isSessionTerminal(session),
   });
-  const { setAcceptedUserTurns, setIdle, setApprovals, approvals, idle } = stream;
+  const { setAcceptedUserTurns, setIdle, setApprovals, approvals, idle, queued, setQueued, visibleQueuedTurns, transcriptEvents } = stream;
+  // Pictures this tab sent, by the turn they went with: drawn in the bubble and the tray until the server's copy is.
+  const [turnImages, setTurnImages] = useState<Record<string, TurnImage[]>>({});
 
-  // The first words of a chat just made paint at once, as the session page paints a new session's.
+  // The first words of a chat just made paint at once, with their files, as the session page paints a new session's.
   useEffect(() => {
     if (!opening) return;
     setAcceptedUserTurns((current) => [
       ...current.filter((turn) => turn.key !== `initial:${sessionId}`),
-      { key: `initial:${sessionId}`, sessionId, source: 'local', text: opening, acceptedAt: new Date().toISOString(), attachments: [] },
+      { key: `initial:${sessionId}`, sessionId, source: 'local', text: opening.text, acceptedAt: new Date().toISOString(), attachments: opening.attachments },
     ]);
   }, [opening, sessionId, setAcceptedUserTurns]);
 
-  const machine = runner ? machineName(runner) : list?.workspace && list.workspace.id === session?.workspace?.id ? list.workspace.runner : null;
-  const engine = session ? sessionEngineOf(session.engine, session.provider, (providers.data ?? []) as ConfiguredProvider[]) : null;
-  const models = engine ? modelOptionsFor(engine, session?.provider, runner?.modelCatalog ?? null, (providers.data ?? []) as ConfiguredProvider[]) : [];
-  const line = wikiChatRunLine([
-    session?.workspace?.name,
-    machine,
-    session?.model ? (models.find((o) => o.value === session.model)?.label ?? session.model) : null,
-    session?.permissionMode ? (MODE_OPTIONS.find((o) => o.value === session.permissionMode)?.label ?? session.permissionMode) : null,
-  ]);
+  // ── What the toolbar shows and changes: the session's own config, changed as the session page changes it ──
+  const engine = session ? sessionEngineOf(session.engine, session.provider, machine.configured) : AgentProvider.CLAUDE;
+  const provider = session?.provider ?? engine;
+  const resolved = providerIdentityResolved(provider, machine.loaded);
+  const workspaceRow = (workspaces.data ?? []).find((w) => w.id === session?.workspace?.id) as
+    | { model?: string | null; effort?: string | null; runnerId?: string | null }
+    | undefined;
+  const model = effectiveSessionModel(engine, provider, session?.model, workspaceRow?.model, catalog, machine.configured, runner?.runtimeDefaultModels);
+  const permissionMode = session?.permissionMode ?? 'default';
+  const current: ChatConfig = {
+    model,
+    permissionMode: resolved ? clampPermissionModeForModel(permissionMode, model, engine, provider, machine.configured, catalog) : permissionMode,
+    effort: session?.effort ?? workspaceRow?.effort ?? '',
+    fastMode: session?.fastMode === true,
+  };
+  const configMut = useMutation({
+    mutationFn: (config: ChatConfigChange) => updateSessionConfig(sessionId, config),
+    onMutate: async (config) => {
+      const key = sessionQuery(sessionId).queryKey;
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData(key);
+      qc.setQueryData(key, (old: unknown) => (old ? { ...(old as object), ...config } : old) as never);
+      return { previous };
+    },
+    onError: (error: Error, config, context) => {
+      if (context?.previous !== undefined) qc.setQueryData(sessionQuery(sessionId).queryKey, context.previous as never);
+      // Named by what was picked, as the session page names it: a model switch carries the mode and effort that follow it.
+      message.error(
+        config.model !== undefined
+          ? "Couldn't change the model"
+          : config.permissionMode !== undefined
+            ? "Couldn't change the mode"
+            : config.effort !== undefined
+              ? "Couldn't change the effort"
+              : "Couldn't change the speed",
+        error.message,
+      );
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['session', sessionId] });
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
+    },
+  });
+  const toolbar = useChatToolbar({
+    engine,
+    provider,
+    runner,
+    configured: machine.configured,
+    resolved,
+    current,
+    change: (config) => configMut.mutate(config),
+  });
+  const online = runner?.online ?? false;
+  const draft = useChatDraft(sessionId, live && online);
+  const [failed, setFailed] = useState<string | null>(null);
+  const [statusCards, setStatusCards] = useState<LocalStatusCard[]>([]);
+  const modelMenu = useModelMenuState();
+  const codexComposer = !supportsRunnerSlashAssets(engine);
+  const slashItems = useMemo(
+    () => composerSlashItems(runner?.commands, runner?.skills, codexComposer, engine, session?.workspace?.id),
+    [runner?.commands, runner?.skills, codexComposer, engine, session?.workspace?.id],
+  );
+
+  // ── What waits to be read: the tray over the composer, and the transcript's steers, as on the session page ──
+  // A message handed back — withdrawn, or put back undelivered — joins the draft above whatever is being typed.
+  const restoreUndelivered = useMemo(
+    () =>
+      session?.deletedAt
+        ? null
+        : (text: string, files?: readonly { id: string; mime?: string; mimeType?: string; name?: string }[]) => {
+            const body = text.trim();
+            if (!body) return;
+            draft.setText((typed) => (typed.trim() ? `${typed}\n\n${body}` : body));
+            draft.stageRestored(files);
+            setTimeout(() => draft.taRef.current?.focus(), 0);
+          },
+    // The draft's setters keep their identity for the chat's life.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [session?.deletedAt],
+  );
+  const runStatus = session ? sessionRunStatusOf(session) : null;
+  const steerOffered = live && runStatus === 'RUNNING' && runtimeTakesMidTurnSteer(engine);
+  const { steerWithdrawal, pendingTrayRows } = usePendingTray({
+    selectedId: sessionId,
+    selectedTrashed: !!session?.deletedAt,
+    selectedMissing: false,
+    queued,
+    setQueued,
+    visibleQueuedTurns,
+    transcriptEvents,
+    turnImages,
+    restoreUndelivered,
+    shownEngine: engine,
+    steerOffered,
+  });
+
+  // ── Sending, by the session page's rules: into the running turn unless held or ⌥Enter, Stop with nothing typed ──
+  const defaultSendIntent = defaultSessionTurnIntent({ live, status: runStatus, numTurns: Number(session?.numTurns ?? 0) });
+  const generating = !!session && (isGenerating(session, sessionRunStateOf(session)) || outlivingSessionWork(session) !== null);
+  const showStop = generating && !draft.text.trim() && draft.readyImages.length === 0;
+  const queueOffered = defaultSendIntent === 'CURRENT_WORK' && !showStop && runtimeTakesMidTurnSteer(engine);
+
+  /** Where a message landed: the next turn now (a bubble), or the tray — waiting for the next turn, or into this one. */
+  const placed = (res: Awaited<ReturnType<typeof sendWikiChatTurn>>, vars: Pick<ChatSendVars, 'content' | 'images' | 'shell'>) => {
+    const placement = turnPlacementOf(res);
+    if (placement === 'accepted') {
+      setIdle(false);
+      if (!vars.shell) {
+        setAcceptedUserTurns((current) =>
+          [
+            ...current.filter((turn) => turn.key !== res.turnId),
+            {
+              key: res.turnId,
+              sessionId,
+              source: 'local' as const,
+              turnId: res.turnId,
+              text: vars.content,
+              acceptedAt: new Date().toISOString(),
+              attachments: vars.images.flatMap((image) =>
+                image.id ? [{ id: image.id, mime: image.mime || 'application/octet-stream', name: image.name }] : [],
+              ),
+            },
+          ].slice(-32),
+        );
+      }
+      return;
+    }
+    const files = vars.images.flatMap((image) => (image.id ? [{ id: image.id, mimeType: image.mime }] : []));
+    const item = {
+      turnId: res.turnId,
+      content: vars.content,
+      shell: vars.shell,
+      placement,
+      ...(res.targetTurnId ? { targetTurnId: res.targetTurnId } : {}),
+      ...(files.length ? { attachments: files } : {}),
+    };
+    setQueued((current) =>
+      current.some((turn) => turn.turnId === item.turnId)
+        ? current.map((turn) => (turn.turnId === item.turnId ? { ...turn, ...item } : turn))
+        : [...current, item],
+    );
+  };
+
+  const send = useMutation({
+    mutationFn: (vars: ChatSendVars) =>
+      sendWikiChatTurn(sessionId, vars.content, vars.shell ? undefined : vars.context, {
+        intent: vars.intent,
+        attachmentIds: vars.images.flatMap((image) => (image.id ? [image.id] : [])),
+        kind: vars.shell ? 'shell' : undefined,
+      }),
+    onSuccess: (res, vars) => {
+      pushHistory(sessionId, vars.shell ? `!${vars.content}` : vars.content);
+      // A shell command carries no page and no selection: what the composer shows stays for the next message.
+      if (!vars.shell) dispatch({ type: 'sent' });
+      const previews = vars.images.filter((image) => image.previewUrl);
+      if (previews.length) {
+        setTurnImages((current) => ({ ...current, [res.turnId]: previews.map((image) => ({ url: image.previewUrl as string, mime: image.mime })) }));
+      }
+      draft.clear();
+      placed(res, vars);
+      void qc.invalidateQueries({ queryKey: ['session', sessionId] });
+    },
+    onError: (error, vars) => {
+      // No turn left to join: the message goes as the next turn it would have been a moment later (session page).
+      if (isCurrentWorkUnavailable(error) && vars.intent === 'CURRENT_WORK') {
+        send.mutate({ ...vars, intent: 'NEXT_TURN' });
+        return;
+      }
+      setFailed(wikiChatSendError(error));
+    },
+  });
+
+  const stop = useMutation({
+    // The session page's Stop: the turn, and the background work it left running.
+    mutationFn: () => interruptSession(sessionId, undefined, { stopBackgroundWork: true }),
+    onSuccess: () => {
+      // A stop drops what was queued behind it; what the owner typed comes back into the (empty) composer, files and all.
+      const theirs = visibleQueuedTurns.filter(returnsToComposer);
+      const restored = theirs
+        .map((turn) => {
+          const body = turn.content.trim();
+          return body && turn.shell ? `!${body}` : body;
+        })
+        .filter(Boolean)
+        .join('\n\n');
+      if (restored) draft.setText(restored);
+      draft.stageRestored(theirs.flatMap((turn) => turn.attachments ?? []));
+      setQueued([]);
+      void qc.invalidateQueries({ queryKey: ['session', sessionId] });
+    },
+    onError: (error: Error) => message.error("Couldn't stop the session", error.message),
+  });
+
+  const onSend = (intentOverride?: SessionTurnIntent): void => {
+    const intent = intentOverride ?? defaultSendIntent;
+    const words = draft.text.trim();
+    if (send.isPending) return;
+    const command = slashCommandName(words);
+    if (command !== null) {
+      if (isLocalSlashCommand(command)) {
+        const { tokens, window } = lastContextReading(stream.events);
+        setStatusCards((previous) => [
+          ...previous.slice(-4),
+          statusCard({
+            surface: 'Web',
+            runnerName: runner ? machineName(runner) : undefined,
+            runnerOnline: runner?.online,
+            activeSessions: runner?.activeSessions,
+            maxConcurrent: runner?.maxConcurrent,
+            sessionTitle: session?.title ?? null,
+            sessionStatus: session ? statusLabel(session, null, runner ? machineName(runner) : null) : null,
+            workspaceName: session?.workspace?.name,
+            engine: ENGINE_CLI_NAMES[engine],
+            provider,
+            model: toolbar.shownModel,
+            permissionMode: toolbar.shownMode,
+            effort: toolbar.shownEffort,
+            fastMode: toolbar.fastModeUsable && toolbar.shownFastMode,
+            contextTokens: tokens,
+            contextWindow: window,
+          }),
+        ]);
+        draft.setText('');
+        draft.setHistIdx(-1);
+        return;
+      }
+      // As on the session page: a bare `/` names nothing to run.
+      if (!codexComposer && !command) {
+        message.error('Pick a slash command before sending');
+        return;
+      }
+    }
+    if (draft.uploading || (!words && draft.readyImages.length === 0)) return;
+    draft.setHistIdx(-1);
+    setFailed(null);
+    if (words.startsWith('!')) {
+      // DeepSeek Harness has no shell bridge: the command stays in the composer rather than going out to fail.
+      if (engine === AgentProvider.DSH) {
+        message.warning('DeepSeek Harness sessions don’t run ! shell commands', 'Ask the agent to run it instead.');
+        return;
+      }
+      const command = words.slice(1).trim();
+      if (command) send.mutate({ content: command, images: [], shell: true, intent: 'NEXT_TURN' });
+      else draft.setText('');
+      return;
+    }
+    send.mutate({ content: materializeReferences(words, draft.composerRefs), images: draft.readyImages, intent, context: wikiChatContext(attachments) });
+  };
+
+  // The engine's guess at the next message, offered in an idle, empty composer as on the session page.
+  const offeredSuggestion = offeredPromptSuggestion(stream.eventsSessionId === sessionId ? currentPromptSuggestion(stream.events) : null, {
+    idle,
+    draftEmpty: draft.text === '' && draft.images.length === 0,
+    replying: false,
+    pendingApprovals: approvals.length + (session?.pendingApprovals ?? 0),
+    waitingKind: session?.waitingKind,
+    sendable: live && online,
+    failed: !!session && sessionRunStatusOf(session) === 'FAILED',
+  });
+  const acceptSuggestion = (): void => {
+    if (!offeredSuggestion) return;
+    draft.setText(offeredSuggestion);
+    if (draft.histIdx !== -1) draft.setHistIdx(-1);
+    setTimeout(() => {
+      const box = draft.taRef.current;
+      if (!box) return;
+      box.focus();
+      box.selectionStart = box.selectionEnd = box.value.length;
+    }, 0);
+  };
 
   const decide = async (
     approvalId: string,
     behavior: 'allow' | 'deny',
     answers?: Record<string, string[]>,
-    message?: string,
+    note?: string,
     rememberRules?: PermissionRule[],
     startAfterCreate?: boolean,
   ): Promise<void> => {
     setApprovals((previous) => previous.filter((approval) => approval.id !== approvalId));
     try {
-      await decideApproval(sessionId, approvalId, behavior, message, answers, rememberRules, startAfterCreate);
+      await decideApproval(sessionId, approvalId, behavior, note, answers, rememberRules, startAfterCreate);
     } catch {
       listApprovals(sessionId)
         .then(setApprovals)
         .catch(() => undefined);
     }
-  };
-
-  /** One message of the owner's: what the composer sends with its attachments, and Redo's sentence with none. */
-  const post = async (text: string, context: ReturnType<typeof wikiChatContext>) => {
-    const sent = await sendWikiChatTurn(sessionId, text, context);
-    if (sent.placement !== 'queued') {
-      setIdle(false);
-      setAcceptedUserTurns((current) => [
-        ...current.filter((turn) => turn.key !== sent.turnId),
-        { key: sent.turnId, sessionId, source: 'local', turnId: sent.turnId, text, acceptedAt: new Date().toISOString(), attachments: [] },
-      ]);
-    }
-  };
-  const send = async (text: string) => {
-    await post(text, wikiChatContext(attachments));
-    dispatch({ type: 'sent' });
   };
 
   // The card the chat was opened at: one named, or the first that needs the owner (design §3).
@@ -558,7 +1265,8 @@ function WikiChatSession({
     return (cards ?? []).find((card) => wikiChatCardNeedsYou(wikiChatCardOf(card)))?.id ?? null;
   }, [focus, cards]);
 
-  // What the chat's cards open, they open beside it: a section on its document, an entry in its drawer, Review.
+  // What the chat's cards open, they open beside it: a section on its document, an entry in its drawer, Review. A
+  // card's own sentence (Redo) waits for the next turn, whatever the composer would do with one typed now.
   const wikiCards = useMemo<WikiDraftCardHost>(
     () => ({
       spaceId: space.id,
@@ -567,10 +1275,10 @@ function WikiChatSession({
       openReview: (changesetId, seq) => navigate(wikiChatReviewPath(space.slug, changesetId, seq)),
       openSettings: () => navigate(wikiSettingsPath(space.slug)),
       openPlan: (docSlug) => navigate(docSlug ? wikiPlanDocPath(space.slug, docSlug) : wikiPlanPath(space.slug)),
-      send: (text) => post(text, undefined),
+      send: async (text) => placed(await sendWikiChatTurn(sessionId, text, undefined), { content: text, images: [] }),
       focus: focusCard,
     }),
-    // `post` reads this chat's stream setters, which keep their identity for the chat's life.
+    // `placed` reads this chat's stream setters, which keep their identity for the chat's life.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [navigate, space.id, space.slug, focusCard, sessionId],
   );
@@ -592,27 +1300,26 @@ function WikiChatSession({
       return;
     }
     body.scrollTop = body.scrollHeight;
-  }, [shown, approvals.length, focusCard]);
+  }, [shown, approvals.length, focusCard, statusCards.length]);
 
-  const busy = live && !idle;
   // A chat that takes no more messages says so, and offers a new one (C8 review); one the server retries by itself does not.
   const ended = !!session && (!!session.deletedAt || (!live && !sessionRetryPending(session)));
   const draftOpen = (cards ?? []).some((card) => card.state === 'draft' || card.state === 'changed');
+  const { tokens: contextTokens, window: reportedContextWindow } = lastContextReading(stream.events);
   return (
     <>
-      <div className="wk-chat-run line">{line}</div>
       {runner && runner.online === false && <div className="wk-chat-note">{wikiChatOffline(machineName(runner))}</div>}
       <div className="wk-chat-body" ref={bodyRef}>
         <SessionConversation
           sessionId={sessionId}
           stream={stream}
           live={live}
-          turnImages={NO_IMAGES}
+          turnImages={turnImages}
           inserts={NO_INSERTS}
           authErrorHelp={null}
           autoRetryHelp={null}
-          restoreUndelivered={null}
-          steerWithdrawal={null}
+          restoreUndelivered={restoreUndelivered}
+          steerWithdrawal={steerWithdrawal}
           linkStateWord={orbitLinkStateWord}
           linkRefreshKey={0}
           answeredQuestions={null}
@@ -627,6 +1334,9 @@ function WikiChatSession({
               rememberable={approvalRememberOffered(engine ?? '')}
             />
           ))}
+        {statusCards.map((card) => (
+          <SessionStatusCard card={card} key={card.id} />
+        ))}
       </div>
       {ended ? (
         <div className="wk-chat-ended" role="status">
@@ -637,130 +1347,45 @@ function WikiChatSession({
           </button>
         </div>
       ) : (
-        <WikiChatComposer
-          attachments={attachments}
-          dispatch={dispatch}
-          ready={live || !session}
-          busy={busy}
-          placeholder={draftOpen ? WIKI_CHAT_PLACEHOLDER_DRAFT : WIKI_CHAT_PLACEHOLDER}
-          onSend={send}
-          onStop={() => void interruptSession(sessionId).catch(() => undefined)}
-        />
+        <div className="wk-chat-composer">
+          <PendingTray rows={pendingTrayRows} note={engine === AgentProvider.CURSOR ? CURSOR_QUEUE_NOTE : null} />
+          {failed && (
+            <div className="wk-chat-failed" role="alert">
+              {failed}
+            </div>
+          )}
+          <SessionComposer
+            {...sharedComposerProps(draft, toolbar, modelMenu)}
+            selectedId={sessionId}
+            canAttach={live && online}
+            attachmentsBefore={wikiChatChips(attachments, dispatch)}
+            composerPlaceholder={draftOpen ? WIKI_CHAT_PLACEHOLDER_DRAFT : WIKI_CHAT_PLACEHOLDER}
+            offeredSuggestion={offeredSuggestion}
+            acceptSuggestion={acceptSuggestion}
+            slashItems={slashItems}
+            runner={runner ?? { online: false }}
+            workspacesForRunner={(workspaces.data ?? []).filter((w) => w.runnerId === session?.assignedRunnerId)}
+            shellUnavailable={!live}
+            live={live}
+            configMut={configMut}
+            shownEngine={engine}
+            configEditable={live && online}
+            contextTokens={contextTokens}
+            reportedContextWindow={reportedContextWindow}
+            shownProvider={provider}
+            configuredProviders={machine.configured}
+            showStop={showStop}
+            onStop={() => stop.mutate()}
+            canSend={(!!draft.text.trim() || draft.readyImages.length > 0) && !send.isPending && !draft.uploading && live}
+            sending={send.isPending}
+            onSend={onSend}
+            queueOffered={queueOffered}
+            defaultSendIntent={defaultSendIntent}
+          />
+        </div>
       )}
     </>
   );
 }
 
-const NO_IMAGES = {};
 const NO_INSERTS: never[] = [];
-
-// ── The composer ──────────────────────────────────────────────────────────────────────────────────
-
-/**
- * The short composer (design §4.1, board 42 ①): the attachments as chips — the page, then the quote — each with
- * its cross; the words; Send; and Stop while a turn runs. What the chips show is what the message sends, and it is
- * frozen when the message goes (`wikiChatContext`). Enter sends, Shift+Enter breaks the line.
- */
-function WikiChatComposer({
-  attachments,
-  dispatch,
-  ready,
-  busy,
-  placeholder = WIKI_CHAT_PLACEHOLDER,
-  onSend,
-  onStop,
-}: {
-  attachments: WikiChatAttachments;
-  dispatch: Dispatch<WikiChatAttachAction>;
-  /** Whether a message can go now: a workspace is chosen, the session takes turns. */
-  ready: boolean;
-  busy: boolean;
-  /** `Reply, or say what to change in the draft` while a card of the chat is open (board 42 ②). */
-  placeholder?: string;
-  onSend: (text: string) => Promise<void>;
-  onStop?: () => void;
-}) {
-  const [text, setText] = useState('');
-  const [sending, setSending] = useState(false);
-  // Why the last message did not go, in the server's words or as a lost connection (wikiChatSendError).
-  const [failed, setFailed] = useState<string | null>(null);
-  const { page, quote } = wikiChatShown(attachments);
-  const canSend = ready && !sending && text.trim().length > 0;
-
-  const submit = async (event?: FormEvent) => {
-    event?.preventDefault();
-    if (!canSend) return;
-    setSending(true);
-    setFailed(null);
-    try {
-      // The owner's words go as they were typed: they are the message, and a source (contract `chat.create`).
-      await onSend(text);
-      setText('');
-    } catch (error) {
-      setFailed(wikiChatSendError(error));
-    } finally {
-      setSending(false);
-    }
-  };
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-      event.preventDefault();
-      void submit();
-    }
-  };
-
-  return (
-    <form className="wk-chat-compose" onSubmit={(event) => void submit(event)}>
-      {(page || quote) && (
-        <div className="wk-chat-chips">
-          {page && (
-            <span className="wk-chat-chip" data-kind="page">
-              <ReadOutlined className="ic" />
-              <span className="l">{page.label}</span>
-              <button type="button" className="x" aria-label={wikiChatRemove(page.label)} onClick={() => dispatch({ type: 'crossPage' })}>
-                <CloseOutlined />
-              </button>
-            </span>
-          )}
-          {quote && (
-            <span
-              className="wk-chat-chip q"
-              data-kind="quote"
-              title={quote.selected > quote.sentenceIds.length ? wikiChatCapped(quote.selected) : undefined}
-            >
-              <span className="q1">{quote.first}</span>
-              <span className="sub">{wikiChatQuoteCounts(quote.sentenceIds.length, quote.sources)}</span>
-              <button type="button" className="x" aria-label={wikiChatRemove(quote.first)} onClick={() => dispatch({ type: 'crossQuote' })}>
-                <CloseOutlined />
-              </button>
-            </span>
-          )}
-        </div>
-      )}
-      <textarea
-        className="wk-chat-input"
-        value={text}
-        rows={2}
-        placeholder={placeholder}
-        aria-label={placeholder}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={onKeyDown}
-      />
-      {failed && (
-        <div className="wk-chat-failed" role="alert">
-          {failed}
-        </div>
-      )}
-      <div className="wk-chat-cfoot">
-        {busy && onStop && (
-          <button type="button" className="wk-chat-stop" aria-label={WIKI_CHAT_STOP} title={WIKI_CHAT_STOP} onClick={onStop}>
-            <BorderOutlined />
-          </button>
-        )}
-        <button type="submit" className="wk-chat-send" aria-label={WIKI_CHAT_SEND} title={WIKI_CHAT_SEND} disabled={!canSend}>
-          <ArrowUpOutlined />
-        </button>
-      </div>
-    </form>
-  );
-}

@@ -15,10 +15,12 @@ vi.mock('mermaid', () => ({ default: mermaid }));
 
 // The conversation is the session page's own (SessionConversation over useSessionStream), whose tests own it; its
 // live stream needs an EventSource and a runner. Here a stand-in stream holds what a case sets: the approvals
-// waiting and whether a turn is running.
-const stream = vi.hoisted(() => ({ approvals: [] as unknown[], idle: true, accepted: [] as unknown[] }));
+// waiting, whether a turn is running, and the messages queued or sent into the turn (the tray's).
+const stream = vi.hoisted(() => ({ approvals: [] as unknown[], idle: true, accepted: [] as unknown[], queued: [] as unknown[] }));
 vi.mock('../lib/useSessionStream', () => ({
   useSessionStream: () => ({
+    events: [],
+    eventsSessionId: null,
     transcriptEvents: [],
     approvals: stream.approvals,
     setApprovals: (next: unknown) => {
@@ -30,6 +32,11 @@ vi.mock('../lib/useSessionStream', () => ({
     },
     setAcceptedUserTurns: (next: unknown) => {
       stream.accepted = typeof next === 'function' ? (next as (v: unknown[]) => unknown[])(stream.accepted) : (next as unknown[]);
+    },
+    queued: stream.queued,
+    visibleQueuedTurns: stream.queued,
+    setQueued: (next: unknown) => {
+      stream.queued = typeof next === 'function' ? (next as (v: unknown[]) => unknown[])(stream.queued) : (next as unknown[]);
     },
   }),
 }));
@@ -114,6 +121,8 @@ const NO_COUNTS = { needsYou: 0, working: false, updated: 0 };
 let chats: WikiChatList;
 /** What the fake API was asked to write, in order. */
 let writes: Array<{ method: string; path: string; body: Record<string, unknown> }>;
+/** The files uploaded, in order: what they were scoped to (`sessionId=…`, or nothing for a new chat's). */
+let uploads: Array<{ scope: string; name: string; type: string; id: string }>;
 /** The chat session's detail. */
 let session: Record<string, unknown>;
 
@@ -124,6 +133,13 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
   const path = url.split('?')[0]!;
   const method = (init?.method ?? 'GET').toUpperCase();
   const space = `/api/wiki/spaces/${SPACE_ID}`;
+  if (method === 'POST' && path === '/api/attachments') {
+    // An upload is multipart: what it was scoped to, and the file, are what a case reads.
+    const file = (init?.body as FormData).get('file') as File;
+    const id = `ATT${uploads.length + 1}`;
+    uploads.push({ scope: url.split('?')[1] ?? '', name: file.name, type: file.type, id });
+    return reply(201, { id });
+  }
   if (method !== 'GET') {
     const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
     writes.push({ method, path, body });
@@ -131,7 +147,12 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
       chats = { ...chats, workspace: { ...(chats.choices.find((c) => c.id === body.workspaceId) ?? DEVELOP), eligible: true } };
       return reply(201, { sessionId: 'S1chat', chat: { sessionId: 'S1chat', title: '', status: 'QUEUED', open: true } });
     }
-    if (path.endsWith('/turns/current-work-routing')) return reply(201, { turnId: 'T2', seq: 2, kind: 'message', placement: 'accepted' });
+    if (path.endsWith('/turns/current-work-routing')) {
+      const turnId = `T${writes.length + 1}`;
+      // While a turn runs, the server writes a message sent into it as a steer, and queues one for the next turn.
+      const placement = session.runState === 'RUNNING' ? (body.intent === 'CURRENT_WORK' ? 'steer' : 'queued') : 'accepted';
+      return reply(201, { turnId, seq: writes.length + 1, kind: placement === 'steer' ? 'steer' : 'message', placement, ...(placement === 'steer' ? { targetTurnId: 'T1' } : {}) });
+    }
     return reply(200, { ok: true });
   }
   if (path === '/api/wiki/spaces') return reply(200, [SPACE]);
@@ -147,7 +168,10 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
   if (path === '/api/workspaces') return reply(200, [{ id: 'w1', name: 'orbit-develop', runnerId: 'r1', provider: null, model: null }]);
   if (path === '/api/runners') {
     return reply(200, [
-      { id: 'r1', name: 'hpc-01', displayName: 'HPC', online: true, modelCatalog: { claude: [{ value: 'claude-opus-5-5', label: 'Claude Opus 5.5' }] } },
+      {
+        id: 'r1', name: 'hpc-01', displayName: 'HPC', online: true,
+        modelCatalog: { claude: [{ value: 'claude-opus-5-5', label: 'Claude Opus 5.5' }, { value: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' }] },
+      },
     ]);
   }
   if (path === '/api/providers') return reply(200, []);
@@ -173,6 +197,7 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   chats = { spaceId: SPACE_ID, workspace: { ...DEVELOP, eligible: true }, choices: [DEVELOP, MAC], fab: NO_COUNTS, chats: [] };
   writes = [];
+  uploads = [];
   session = {
     id: 'S1chat', title: 'Runner offline: why three heartbeats', runState: 'AWAITING_INPUT', status: 'AWAITING_INPUT',
     workspace: { id: 'w1', name: 'orbit-develop' }, assignedRunnerId: 'r1', engine: 'claude', provider: 'claude',
@@ -181,6 +206,7 @@ beforeEach(() => {
   stream.approvals = [];
   stream.idle = true;
   stream.accepted = [];
+  stream.queued = [];
   storage = { local: new Map(), session: new Map() };
   windowWidth(1500);
   vi.stubGlobal('ResizeObserver', class { observe(): void {} unobserve(): void {} disconnect(): void {} });
@@ -262,8 +288,12 @@ const press = async (node: Element | null | undefined): Promise<void> => {
 };
 const byLabel = (label: string): HTMLElement | null => document.querySelector<HTMLElement>(`[aria-label="${label}"]`);
 
+/** The panel's composer: the session page's own (board 43). */
+const composer = (): HTMLElement | null => document.querySelector<HTMLElement>('.wk-chat-composer .composer-box');
+const field = (): HTMLTextAreaElement => composer()!.querySelector<HTMLTextAreaElement>('.composer-field textarea')!;
+
 async function type(value: string): Promise<void> {
-  const area = document.querySelector<HTMLTextAreaElement>('textarea.wk-chat-input')!;
+  const area = field();
   const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
   await act(async () => {
     setValue.call(area, value);
@@ -489,9 +519,11 @@ describe('where a chat runs (design §5.1)', () => {
 
     await press(document.querySelectorAll('.wk-chat-choice')[0]);
     expect(document.querySelector('.wk-chat-choose')).toBeNull();
+    // Runs in holds the workspace alone (board 43 ②): the model and the mode are the composer's toolbar's.
     expect([...document.querySelectorAll('.wk-chat-run .k, .wk-chat-run .v')].map((node) => node.textContent)).toEqual([
-      'Runs in', 'orbit-develop · HPC', 'Claude Opus 5.5', 'Default',
+      'Runs in', 'orbit-develop · HPC',
     ]);
+    expect(composer()!.querySelector('.composer-model-name')?.textContent).toBe('Claude Opus 5.5');
     await press(byLabel('Send'));
     const created = writes.find((write) => write.path === `/api/wiki/spaces/${SPACE_ID}/chats`)!;
     expect(created.body).toEqual({
@@ -518,7 +550,7 @@ describe('where a chat runs (design §5.1)', () => {
     chats = { ...chats, workspace: null, choices: [] };
     await open('/wiki/orbit?chat=new');
     expect(panel()!.querySelector('.wk-chat-empty')?.textContent).toBe('Turn on worktrees for a workspace in this repository to chat here');
-    expect(document.querySelector('textarea.wk-chat-input')).toBeNull();
+    expect(composer()).toBeNull();
     // The button stays, as ever.
     await press(byLabel('Hide chat'));
     expect(fab()).toBeTruthy();
@@ -676,9 +708,10 @@ describe('the attachments (design §4.2, board 42 ①)', () => {
 });
 
 describe('a chat that runs', () => {
-  it('says on one line where it runs: workspace · machine · engine · mode', async () => {
+  it('shows no workspace once it runs: its model and mode are the composer\'s, as on the session page (board 43 ④)', async () => {
     await open('/wiki/orbit?chat=S1chat');
-    expect(document.querySelector('.wk-chat-run.line')?.textContent).toBe('orbit-develop · HPC · Claude Opus 5.5 · Default');
+    expect(document.querySelector('.wk-chat-run')).toBeNull();
+    expect(composer()!.querySelector('.composer-model-name')?.textContent).toBe('Claude Opus 5.5');
     expect(document.querySelector('.conversation')?.getAttribute('data-session')).toBe('S1chat');
     await press(byLabel('Open as a full session'));
     expect(where()).toBe('/sessions/S1chat');
@@ -694,7 +727,169 @@ describe('a chat that runs', () => {
     const approve = [...document.querySelectorAll<HTMLButtonElement>('.wk-chat-body button')].find((button) => /^Approve/.test(button.textContent ?? ''));
     await press(approve);
     expect(writes.find((write) => write.path === '/api/sessions/S1chat/approvals/AP1/decision')?.body).toMatchObject({ behavior: 'allow' });
+    // Stop, as the session page's: the turn, and the background work it left running.
     await press(byLabel('Stop'));
-    expect(writes.some((write) => write.path === '/api/sessions/S1chat/interrupt')).toBe(true);
+    expect(writes.find((write) => write.path === '/api/sessions/S1chat/interrupt')?.body).toEqual({ stopBackgroundWork: true });
+  });
+});
+
+describe('the composer: the session page’s own (board 43, plan A)', () => {
+  /** The writes of the session's own message door, in order. */
+  const turns = () => writes.filter((write) => write.path === '/api/sessions/S1chat/turns/current-work-routing');
+  /** Stage a file through the composer's `+`: its File picker, or its Image one. */
+  async function attach(name: string, type: string, picker: 'File' | 'Image' = 'File'): Promise<void> {
+    const input = composer()!.querySelector<HTMLInputElement>(picker === 'Image' ? 'input[type="file"][accept]' : 'input[type="file"]:not([accept])')!;
+    Object.defineProperty(input, 'files', { configurable: true, value: [new File(['a line of the log'], name, { type })] });
+    await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+    await settle();
+  }
+  /** A press as a pointer makes it, for the house Select and Menu (base-ui reads the pointer, not just the click). */
+  async function point(node: Element | null | undefined): Promise<void> {
+    expect(node).toBeTruthy();
+    await act(async () => {
+      const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+      node!.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse', isPrimary: true }));
+      node!.dispatchEvent(new MouseEvent('mousedown', init));
+      node!.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse', isPrimary: true }));
+      node!.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+      node!.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
+    });
+    await settle();
+  }
+  /** Open the toolbar's mode picker, as the session page's tests open a house Select, and wait for its options. */
+  async function openMode(): Promise<void> {
+    const trigger = composer()!.querySelector('.composer-toolbar .orbit-select [role="combobox"]');
+    expect(trigger).toBeTruthy();
+    await act(async () => {
+      const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+      trigger!.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse' }));
+      trigger!.dispatchEvent(new MouseEvent('mousedown', init));
+      trigger!.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse' }));
+      trigger!.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+      trigger!.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
+    });
+    // It opens a few frames later (base-ui's floating layer), each of which React has to be let through.
+    for (let frame = 0; frame < 100; frame += 1) {
+      if (document.querySelectorAll('[role="listbox"] [role="option"]').length > 0) return;
+      await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
+    }
+    throw new Error('the mode picker did not open');
+  }
+  const menuRow = (label: string) =>
+    [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')].find((row) => row.textContent?.trim() === label);
+  const option = (label: string) =>
+    [...document.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')].find((row) => row.textContent?.startsWith(label));
+
+  it('is the session page’s SessionComposer, with the page and the selection first in its attachment row, each with its cross (④)', async () => {
+    await open('/wiki/orbit/d/session-runtime?chat=S1chat');
+    await select('s1-0-0', 0, 's1-0-1', 2);
+    await press(document.querySelector('.wk-chat-ask'));
+    await attach('runner.log', 'text/plain');
+    const box = composer()!;
+    // The attachment row: the page, the selection, then the file staged beside them — each a chip with its cross.
+    const row = [...box.querySelector('.composer-attachments')!.children];
+    expect(row.map((chip) => chip.getAttribute('data-kind') ?? chip.className)).toEqual(['page', 'quote', 'composer-pill composer-file']);
+    expect(row.map((chip) => chip.querySelector('button')?.getAttribute('aria-label'))).toEqual([
+      'Remove 3.1 §1', `Remove ${DOC.sections[0]!.blocks[0]!.sentences[0]!.text}`, 'Remove file',
+    ]);
+    // The rest is the session page's: its field, and its toolbar of +, mode, model and effort, the context gauge and Send.
+    expect(field().getAttribute('placeholder')).toBe('Ask about this page, or say what should change');
+    const toolbar = box.querySelector('.composer-toolbar')!;
+    expect(toolbar.querySelector('[aria-label="Add attachment"]')).toBeTruthy();
+    expect(toolbar.querySelectorAll('.orbit-select')).toHaveLength(1);
+    expect(toolbar.querySelector('.composer-model-chip')?.getAttribute('aria-label')).toBe('Model Claude Opus 5.5, effort Default');
+    expect(toolbar.querySelector('.composer-usage')).toBeTruthy();
+    expect(toolbar.querySelector('[aria-label="Send"]')).toBeTruthy();
+    // The very component the session page renders, not one drawn to look like it.
+    const source = (file: string) => readFileSync(resolve(__dirname, file), 'utf8');
+    expect(source('WikiChatPanel.tsx')).toMatch(/import \{[^}]*\bSessionComposer,[^}]*\} from '\.\/WorkspaceView';/su);
+    expect(source('WikiChatPanel.tsx').match(/<SessionComposer\n/gu)).toHaveLength(2);
+    expect(source('WorkspaceView.tsx').match(/<SessionComposer\n/gu)).toHaveLength(1);
+    expect(source('WikiChatPanel.tsx')).not.toMatch(/<textarea|function WikiChatComposer/u);
+  });
+
+  it('a new chat’s Runs in holds only the workspace; the model and the mode picked in the toolbar go with its create (②)', async () => {
+    await open('/wiki/orbit/d/session-runtime?chat=new');
+    expect([...document.querySelectorAll('.wk-chat-run select')].map((picker) => picker.getAttribute('aria-label'))).toEqual(['Workspace']);
+    // The mode from its picker, the model from the chip's menu: where the session page has them.
+    await openMode();
+    await point(option('Plan'));
+    await act(async () => composer()!.querySelector('.composer-model-chip')!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await settle();
+    await act(async () => menuRow('Claude Sonnet 5.5')!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await settle();
+    expect(composer()!.querySelector('.composer-model-name')?.textContent).toBe('Claude Sonnet 5.5');
+    await type('Split 3.1 in two: what a turn is, and how it is delivered.');
+    await press(byLabel('Send'));
+    const created = writes.find((write) => write.path === `/api/wiki/spaces/${SPACE_ID}/chats`)!;
+    expect(created.body).toEqual({
+      workspaceId: 'w1',
+      content: 'Split 3.1 in two: what a turn is, and how it is delivered.',
+      clientTurnId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      wikiContext: { page: { kind: 'doc', docSlug: 'session-runtime', sectionKey: 's1' } },
+      model: 'claude-sonnet-5-5',
+      permissionMode: 'plan',
+    });
+    // Once the chat runs, Runs in is gone.
+    expect(where()).toBe('/wiki/orbit/d/session-runtime?chat=S1chat');
+    expect(document.querySelector('.wk-chat-run')).toBeNull();
+  });
+
+  it('a chat that runs changes its session’s config as the session page does', async () => {
+    await open('/wiki/orbit?chat=S1chat');
+    await openMode();
+    await point(option('Accept Edits'));
+    expect(writes.find((write) => write.path === '/api/sessions/S1chat/config')?.body).toEqual({ permissionMode: 'acceptEdits' });
+  });
+
+  it('while a turn runs: Stop with nothing typed; a message goes into the turn, or waits for the next held or with ⌥Enter, in the tray (⑤)', async () => {
+    session = { ...session, runState: 'RUNNING', status: 'RUNNING' };
+    stream.idle = false;
+    await open('/wiki/orbit?chat=S1chat');
+    expect(byLabel('Stop')).toBeTruthy();
+    expect(byLabel('Send')).toBeNull();
+    // Typed while it runs, Send says where it goes: into the running turn, the way the session page sends it.
+    await type('Read the lease from the config, not the constant.');
+    const into = byLabel('Add to current work')!;
+    expect(into.getAttribute('title')).toMatch(/^Send into the current turn · .*Enter, or hold, to queue it for the next turn$/u);
+    await press(into);
+    expect(turns()[0]!.body).toMatchObject({ content: 'Read the lease from the config, not the constant.', intent: 'CURRENT_WORK' });
+    // ⌥Enter queues it for the next turn instead.
+    await type('Then run the spec again.');
+    await act(async () => field().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', altKey: true, bubbles: true, cancelable: true })));
+    await settle();
+    expect(turns()[1]!.body).toMatchObject({ content: 'Then run the spec again.', intent: 'NEXT_TURN' });
+    // Both wait over the composer, as on the session page: the one sent into the turn, and the one queued behind it.
+    const rows = [...document.querySelectorAll('.wk-chat-composer .pending-tray-row')];
+    expect(rows.map((row) => [row.querySelector('.pending-tray-text')?.textContent, row.querySelector('.pending-tray-state')?.textContent])).toEqual([
+      ['Read the lease from the config, not the constant.', 'Sending…'],
+      ['Then run the spec again.', 'Queued for next turn'],
+    ]);
+    expect(byLabel('Stop')).toBeTruthy();
+  });
+
+  it('sends pictures and files with a new chat’s first message, and with a later one through the session’s own door', async () => {
+    await open('/wiki/orbit/d/session-runtime?chat=new');
+    await attach('runner.log', 'text/plain');
+    expect(composer()!.querySelector('.composer-attachments .composer-file:not(.wk-chat-chip) .composer-file-name')?.textContent).toBe('runner.log');
+    await type('The runner log from the night it went offline.');
+    await press(byLabel('Send'));
+    // Uploaded before any session exists, and named in the create, which links it to the chat's first turn.
+    expect(uploads).toEqual([{ scope: '', name: 'runner.log', type: 'text/plain', id: 'ATT1' }]);
+    expect(writes.find((write) => write.path === `/api/wiki/spaces/${SPACE_ID}/chats`)!.body).toMatchObject({
+      content: 'The runner log from the night it went offline.',
+      attachmentIds: ['ATT1'],
+    });
+    expect(stream.accepted).toEqual([
+      expect.objectContaining({ key: 'initial:S1chat', attachments: [{ id: 'ATT1', mime: 'text/plain', name: 'runner.log' }] }),
+    ]);
+    // The chat runs now: a later file is the session's own upload, and goes with the message through its door.
+    expect(composer()!.querySelector('.composer-attachments .composer-file:not(.wk-chat-chip)')).toBeNull();
+    await attach('heartbeats.csv', 'text/csv');
+    await type('And the heartbeats.');
+    await press(byLabel('Send'));
+    expect(uploads[1]).toEqual({ scope: 'sessionId=S1chat', name: 'heartbeats.csv', type: 'text/csv', id: 'ATT2' });
+    expect(turns().at(-1)!.body).toMatchObject({ content: 'And the heartbeats.', intent: 'NEXT_TURN', attachmentIds: ['ATT2'] });
+    expect(composer()!.querySelector('.composer-file:not(.wk-chat-chip)')).toBeNull();
   });
 });
