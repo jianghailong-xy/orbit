@@ -40,7 +40,7 @@ import { hashPassword } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { encryptSecret } from '../providers/provider-crypto';
-import { feishuDerivedUuid } from './feishu-direct.service';
+import { feishuDerivedUuid, feishuTurnKey } from './feishu-direct.service';
 import { FEISHU_TEST_OPEN_PLATFORM_ENV } from './feishu-open-platform';
 import { FakeOpenPlatform, type FakeConnection, type FakeRequest } from './test-support/fake-open-platform';
 
@@ -250,10 +250,16 @@ test('Feishu: the owner replies to a session and starts one from their direct me
     const receiptId = repliesTo(started!.messageId)[0]!.answeredWith!;
     const m = await dm({ text: 'Also update the changelog' }, { root: started!.messageId, parent: receiptId }, { answered: false });
     const turn = await until('the turn', () => db.conversationTurn.findFirst({
-      where: { sessionId: started!.sessionId, clientTurnId: feishuDerivedUuid('feishu-turn', X.appId, m.eventId) },
+      where: { sessionId: started!.sessionId, clientTurnId: feishuTurnKey(X.appId, m.eventId) },
     }));
     assert.equal(turn.content, 'Also update the changelog');
     assert.equal(turn.kind, 'message');
+    // The owner's own words: the row previews them as the owner's — no outside sender, and not Orbit's (0491).
+    const row = await db.session.findUniqueOrThrow({
+      where: { id: started!.sessionId },
+      select: { lastUserText: true, lastUserFromOrbit: true, lastUserFromExternalSource: true },
+    });
+    assert.deepEqual(row, { lastUserText: 'Also update the changelog', lastUserFromOrbit: null, lastUserFromExternalSource: null });
     assert.deepEqual(textsTo(m.messageId), [], 'a turn sent is not answered: the session answers');
   });
 
@@ -262,7 +268,7 @@ test('Feishu: the owner replies to a session and starts one from their direct me
     const alert = await card(waiting.id, 'finished');
     const before = (await feishuActivity()).length;
     const m = await dm({ text: 'Now ship it' }, { root: alert }, { answered: false });
-    const turnKey = feishuDerivedUuid('feishu-turn', X.appId, m.eventId);
+    const turnKey = feishuTurnKey(X.appId, m.eventId);
     const turn = await until('the turn', () => db.conversationTurn.findFirst({ where: { sessionId: waiting.id, clientTurnId: turnKey } }));
     assert.equal(turn.content, 'Now ship it');
     const chain = await db.feishuThread.findUnique({ where: { appId_chatId_rootMessageId: { appId: X.appId, chatId: CHAT, rootMessageId: alert } } });

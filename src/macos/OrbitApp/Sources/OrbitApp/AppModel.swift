@@ -2536,6 +2536,28 @@ final class AppModel {
         }
     }
 
+    /// Complete on a finished project's row (design §4.3, §3.6): the server moves its coordinator and
+    /// every member still in Open, in any workspace, to Completed in one call.
+    func completeProjectSessions(_ row: SessionProjectRow) {
+        guard let api else { return }
+        let members = row.members.map(\.id)
+        filedSessions.formUnion(members)
+        Task { @MainActor in
+            defer { filedSessions.subtract(members) }
+            do { _ = try await api.completeProjectSessions(row.projectId) }
+            catch {
+                showToast("Couldn't complete the project's sessions", subtitle: row.title,
+                          detail: Self.toastDetail(error), tone: .error)
+                return
+            }
+            for id in members {
+                sessionDetails.remove(id)
+                dropIfOpen(id)
+            }
+            await reloadSessionLists()
+        }
+    }
+
     /// Move a completed/trashed session back to Open (also the Undo target).
     func moveSessionToOpen(_ id: String) {
         guard let api else { return }

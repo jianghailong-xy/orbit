@@ -1876,6 +1876,14 @@ model Session {
   // ConversationTurn.senderSessionId is not one.
   lastUserFromSessionId String?  @map("last_user_from_session_id") @db.Uuid
   lastUserFromTitle     String?  @map("last_user_from_title")
+  // That lastUserText is Orbit's own message (a turn the control plane wrote itself: a fact told to a
+  // coordinator, a watch's wake, the owner's answer handed on…): `{ coordinatorDelivery: <card> | null }`,
+  // the card being the one the conversation draws a coordinator's notification as. Null for any other
+  // sender. Written and cleared in the same statements as lastUserText (0491).
+  lastUserFromOrbit     Json?    @map("last_user_from_orbit")
+  // The platform wrote this session's opening prompt (0493): a coordinator's, a judgment's, a dispatch
+  // console's or an @-mention reply's. Its `initial-<id>` turn is then Orbit's on the row and the queue.
+  promptByOrbit         Boolean  @default(false) @map("prompt_by_orbit")
   // Who sent lastUserText, when somebody outside Orbit did: 'FEISHU' and the sender's name, as the turn's
   // externalSender* columns record them (docs/feishu-bot-design.md §8.2). Both null for anybody else.
   // Written and cleared in the same statements as lastUserText (0502).

@@ -520,6 +520,12 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// server writes and clears it with `lastUserText`, and an event folds neither into a row
     /// (`SessionUpsert`), so a row always holds the pair one read gave it.
     public let lastUserFrom: SessionMessageFrom?
+    /// That `lastUserText` is Orbit's own message (a coordinator's notification, a watch's wake, the
+    /// owner's answer handed on…), with the notification card its line is written from: the row says
+    /// `Orbit: …` (`SessionLine.orbitLine`). Nil for anybody else's words, and from an older control
+    /// plane, which does not send it. Written and cleared with `lastUserText`, and kept beside it as
+    /// `lastUserFrom` is (`SessionUpsert`).
+    public let lastUserFromOrbit: OrbitMessageFrom?
     /// Who sent `lastUserText` when somebody outside Orbit did — a connected Feishu group's member
     /// (docs/feishu-bot-design.md §8.2): the row says `From Feishu · <name>` instead of "You"
     /// (`SessionLine.sender`). Nil for anybody else, and from an older control plane. Written and
@@ -711,6 +717,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         // A sender this build cannot read is none: the row says "You", as it always did, rather than
         // the whole list failing to decode.
         lastUserFrom = try? values.decodeIfPresent(SessionMessageFrom.self, forKey: .lastUserFrom)
+        // The same for Orbit's mark: a value this build cannot read is none, and the row says "You".
+        lastUserFromOrbit = try? values.decodeIfPresent(OrbitMessageFrom.self, forKey: .lastUserFromOrbit)
         // The same for somebody outside Orbit: a source this build does not know is no sender.
         lastUserFromExternal = try? values.decodeIfPresent(ExternalMessageFrom.self, forKey: .lastUserFromExternal)
         recapText = try values.decodeIfPresent(String.self, forKey: .recapText)
@@ -751,6 +759,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 lastAssistantText: String? = nil,
                 lastToolUse: String? = nil, lastUserText: String? = nil,
                 lastUserFrom: SessionMessageFrom? = nil,
+                lastUserFromOrbit: OrbitMessageFrom? = nil,
                 lastUserFromExternal: ExternalMessageFrom? = nil,
                 recapText: String? = nil, recapAt: String? = nil,
                 runningBgCount: Int? = nil,
@@ -828,6 +837,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.lastToolUse = lastToolUse
         self.lastUserText = lastUserText
         self.lastUserFrom = lastUserFrom
+        self.lastUserFromOrbit = lastUserFromOrbit
         self.lastUserFromExternal = lastUserFromExternal
         self.recapText = recapText
         self.recapAt = recapAt

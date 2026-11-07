@@ -72,6 +72,46 @@ final class ExternalSenderTests: XCTestCase {
         XCTAssertEqual(again.lastUserFromExternal, named.lastUserFromExternal)
     }
 
+    /// The four senders a row names, each as the server's `pendingMessageColumns` gives it (at most one):
+    /// Orbit, a Feishu group member, another Orbit session, and the owner.
+    func testTheRowNamesEachOfTheFourSenders() throws {
+        func line(_ extra: String) throws -> String {
+            SessionLine.make(for: try row(extra), live: true).text
+        }
+        XCTAssertEqual(try line(#","lastUserFromOrbit":{"coordinatorDelivery":null}"#), "Orbit: Fix the build")
+        XCTAssertEqual(try line(#","lastUserFromExternal":{"source":"FEISHU","name":"Li Lei"}"#),
+                       "From Feishu · Li Lei: Fix the build")
+        XCTAssertEqual(try line(#","lastUserFrom":{"sessionId":"s2","title":"Build the package"}"#),
+                       "Build the package: Fix the build")
+        XCTAssertEqual(try line(""), "You: Fix the build")
+        // Should two ever arrive together, the row asks in the web's order (`orbitLine(s) ?? sentLine(…, sentBy(s))`,
+        // and `sentBy` asks the outsider before the session).
+        XCTAssertEqual(try line(#","lastUserFromOrbit":{"coordinatorDelivery":null},"lastUserFromExternal":{"source":"FEISHU","name":"Li Lei"}"#),
+                       "Orbit: Fix the build")
+        XCTAssertEqual(try line(#","lastUserFromExternal":{"source":"FEISHU","name":"Li Lei"},"lastUserFrom":{"sessionId":"s2","title":"Build"}"#),
+                       "From Feishu · Li Lei: Fix the build")
+    }
+
+    /// Both marks ride beside the message through every fold of a row, and a re-read without them clears both.
+    func testBothMarksAreKeptAndClearedWithTheMessage() throws {
+        let both = try row(#","lastUserFromOrbit":{"coordinatorDelivery":null},"lastUserFromExternal":{"source":"FEISHU","name":"Li Lei"}"#)
+        for folded in [both.settingTitle("Renamed"), both.settingPendingApprovals(2),
+                       try JSONDecoder().decode(Session.self, from: try JSONEncoder().encode(both))] {
+            XCTAssertEqual(folded.lastUserFromOrbit, OrbitMessageFrom())
+            XCTAssertEqual(folded.lastUserFromExternal, ExternalMessageFrom(name: "Li Lei"))
+        }
+        let cleared = try JSONDecoder().decode(Session.self, from: Data(
+            #"{"id":"s1","status":"RUNNING","lastUserText":null,"lastUserFromOrbit":null,"lastUserFromExternal":null}"#.utf8))
+        XCTAssertNil(cleared.lastUserFromOrbit)
+        XCTAssertNil(cleared.lastUserFromExternal)
+    }
+
+    func testTheWebAsksOrbitBeforeTheOtherSenders() throws {
+        let row = try source(Self.webRow)
+        XCTAssertEqual(row.components(separatedBy: "return orbitLine(s) ?? sentLine(s.lastUserText, sentBy(s));").count - 1, 2,
+                       "the web's two pending-message lines no longer ask Orbit first, then sentBy")
+    }
+
     // MARK: - The conversation
 
     private func echo(_ sender: String?) throws -> RunEvent {
