@@ -375,8 +375,9 @@ internal object WikiLogic {
     }
     fun oldestProposal(cards: List<ReviewCard>): String? = cards.mapNotNull { card ->
         card.changeset.createdAt?.let { at -> RelativeTime.parse(at)?.let { at to it } } }.minByOrNull { it.second }?.first
+    /** A challenge's Keep (`reconfirm`) says the button's word, so a press meant as Retire reads as what it did. */
     fun decidedToast(op: String?, action: String): String = when (action) {
-        "edit" -> WikiCopy.decidedEdited; "reconfirm" -> WikiCopy.decidedReconfirmed; "amend" -> WikiCopy.decidedAmended
+        "edit" -> WikiCopy.decidedEdited; "reconfirm" -> WikiCopy.decidedKept; "amend" -> WikiCopy.decidedAmended
         "retire" -> WikiCopy.retired
         "reject" -> if (op == "retire") WikiCopy.decidedKept else WikiCopy.rejected
         else -> if (op == "retire") WikiCopy.retired else WikiCopy.decidedAccepted
@@ -417,6 +418,9 @@ internal object WikiLogic {
     fun anchorInput(anchor: JsonElement): JsonElement =
         if (anchor is JsonObject) JsonObject(anchor.filterKeys { it in anchorInputKeys }) else anchor
     fun cardKind(card: ReviewCard, entry: WikiEntry?): String? = card.op.payload["entry"]["kind"].text() ?: entry?.kind
+    /** Whether a challenge's entry takes an Amend: a decision is superseded, never rewritten (contract
+     * `kinds.decision.amendable`), and the server refuses its amend WIKI_SCHEMA. */
+    fun amendable(card: ReviewCard, entry: WikiEntry?): Boolean = cardKind(card, entry) != "decision"
     fun cardChip(op: String?): String = if (op == "supersede") WikiCopy.opLabel("amend") else WikiCopy.opLabel(op)
     fun proposedBy(changeset: WikiChangeset): String {
         if (changeset.sessionId != null) {
@@ -477,7 +481,7 @@ internal data class WikiHomeContent(val space: WikiSpace, val spaces: List<WikiS
 
 internal object WikiModeLogic {
     /** The settings page's sections, top to bottom — the web's order (`WIKI_SETTINGS_SECTIONS`). */
-    enum class SettingsSection(val title: String) { REVIEW_MODE(WikiModeCopy.reviewMode), WORKSPACES(WikiModeCopy.workspaces), MAINTENANCE(WikiModeCopy.maintenance), DELETE(WikiModeCopy.deleteTitle) }
+    enum class SettingsSection(val title: String) { REVIEW_MODE(WikiModeCopy.reviewMode), WORKSPACES(WikiModeCopy.workspaces), MAINTENANCE(WikiModeCopy.maintenance), TRASH(WikiModeCopy.trashTitle) }
     val modes = listOf("manual", "tiered", "automatic")
     const val defaultMode = "tiered"
     fun mode(settings: WikiSpaceSettings?): String = settings?.reviewMode?.takeIf { it in modes } ?: "manual"
@@ -497,6 +501,11 @@ internal object WikiModeLogic {
     fun monthDay(iso: String, zone: ZoneId = ZoneId.systemDefault()): String? {
         val at = RelativeTime.parse(iso)?.atZone(zone) ?: return null
         return "${months[at.monthValue - 1]} ${at.dayOfMonth}"
+    }
+    /** A day with its year, as Trash dates its rows: `Nov 7, 2026`. */
+    fun monthDayYear(iso: String, zone: ZoneId = ZoneId.systemDefault()): String? {
+        val at = RelativeTime.parse(iso)?.atZone(zone) ?: return null
+        return "${months[at.monthValue - 1]} ${at.dayOfMonth}, ${at.year}"
     }
     fun runWhen(iso: String, zone: ZoneId = ZoneId.systemDefault()): String {
         val at = RelativeTime.parse(iso)?.atZone(zone) ?: return ""

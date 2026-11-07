@@ -183,6 +183,35 @@ describe('a Cursor CLI account’s quota', () => {
     expect(planUsageSnapshotForProvider({ claude: { fiveHour: { utilization: 5 } } }, CURSOR)).toBeNull();
   });
 
+  it('prefers Cursor’s remaining/limit cents as "$X left" when the dashboard sent them', () => {
+    const dollars = {
+      provider: CURSOR,
+      planName: 'Ultra',
+      includedUsage: {
+        period: 'monthly' as const,
+        resetsAt: '2026-10-19T00:00:00Z',
+        percentUsed: 15.48,
+        remainingCents: 16778,
+        limitCents: 40000,
+      },
+    };
+    const [row] = currentPlanUsageRows(dollars, now);
+    expect(row).toMatchObject({
+      label: 'Monthly limit',
+      headline: '$167.78 left',
+      remaining: true,
+      percent: 42,
+      nearLimit: false,
+      window: { utilization: expect.closeTo(58.055, 2), resetsAt: '2026-10-19T00:00:00Z' },
+    });
+    expect(
+      currentPlanUsageRows(
+        { provider: CURSOR, includedUsage: { remainingCents: 0, limitCents: 40000, resetsAt: '2026-10-19T00:00:00Z' } },
+        now,
+      )[0],
+    ).toMatchObject({ headline: '$0 left', percent: 0, nearLimit: true, window: { utilization: 100 } });
+  });
+
   it('is spent from a turn that met the limit until its usage comes back, and not before or after', () => {
     const spent = { provider: CURSOR, includedUsage: { startsAt: '2026-10-03T00:00:00Z', resetsAt: '2026-11-03T00:00:00Z', limitReachedAt: '2026-10-16T09:00:00Z' } };
     expect(cursorUsageLimit(spent, now)).toEqual({ resetsAt: '2026-11-03T00:00:00Z' });

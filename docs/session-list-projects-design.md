@@ -1,6 +1,6 @@
 # 会话列表里的项目条目：一个项目合成一个条目
 
-状态：已定稿（2026-10-04），按项目「会话列表：一个项目合成一个条目」分任务落地。修订：10-05 点条目改为进项目会话页；10-17 条目在别的 Workspace 里，方向键跨过、默认打开不挑它（§4.3、§4.4）；10-27 项目会话页的落地合成一行 Landings 与这个项目的 Landings 窗口，合入行也挪进窗口（集成线契约修订 28；§2、§3.2、§3.4、§5）。效果图在 `docs/mocks/session-list-projects/`：`01-web` 是真实 Web 控制台截图，新加的部分用控制台自己的样式画进页面；`02-ios` 是 iPhone 版式，照 `AgentSessionRow.compactRow` 画。
+状态：已定稿（2026-10-04），按项目「会话列表：一个项目合成一个条目」分任务落地。修订：10-05 点条目改为进项目会话页；10-17 条目在别的 Workspace 里，方向键跨过、默认打开不挑它（§4.3、§4.4）；10-27 项目会话页的落地合成一行 Landings 与这个项目的 Landings 窗口，合入行也挪进窗口（集成线契约修订 28；§2、§3.2、§3.4、§5）；11-07 项目条目只放在 coordinator 所在的 Workspace，别处的成员会话照普通会话显示、带进度小标签（取代 10-04 的跨 Workspace 条目和 10-17 的跨过规则），做完的项目条目可以 Complete，会话行的 “You:” 只指你自己（§3.5、§3.6、§4.2、§4.3、§4.4、§6、§9，效果图 `docs/mocks/project-rows-by-workspace/`）。效果图在 `docs/mocks/session-list-projects/`：`01-web` 是真实 Web 控制台截图，新加的部分用控制台自己的样式画进页面；`02-ios` 是 iPhone 版式，照 `AgentSessionRow.compactRow` 画。
 本文是执行会话的契约：写代码前读它；实现与本文冲突时，先说清楚再改，别悄悄偏离。
 
 ## 1. 为什么
@@ -67,6 +67,21 @@
 - 进度数字（`taskCounts`、`buckets.running`）和 coordinator 处理中的例外来自 `/projects/sidebar`：照旧 15 秒轮询，另外收到成员会话的 `session.updated` 时去抖（约 2 秒）顺手刷新一次。
 - 把两端都没处理的 `project.changed` 接上：Web 的 `groupsFor` 现在只刷会话，Swift 的 `ControlEventType` 把它解成 `.unknown`；收到时刷新项目摘要。
 
+### 3.5 `lastUserFrom`（owner 11-07）
+
+`lastUserText` 是「发进会话、还没回的那条消息」，不分是谁发的：owner 自己发的，和别的会话用 `session_send` / `project_send` 发来的，都记在这里。coordinator 收到的多是执行会话的汇报，于是项目条目第 2 行（§4.2 第 6 种）常写着 owner 没说过的 `You: …`。
+
+- 会话列表行（`GET /sessions` 各口子）、详情（`GET /sessions/:id`）和 `session.updated` 推送的摘要（`buildSessionSummary`）都加 `lastUserFrom: { sessionId, title } | null`：`lastUserText` 来自别的会话时，记下发送会话的 id 和那一刻的标题；owner 发的为 `null`。和 `lastUserText` 在同一处写、同一处清。
+- 写 `lastUserText` 的几处（`sessions.service.ts` 里带 `senderSessionId` 的那几处）同时写它；发送方的记法与对话里「From <会话名>」卡片（`sessionMessage`）同源，不从正文猜。
+- 客户端：有 `lastUserFrom` 时，行上写 `<title>: <消息>`；没有时照旧 `You: <消息>`（§6）。老服务器不给这个字段，照旧。发送会话的标题为空或全是空白时写 `Untitled session: <消息>`，和对话里 From 卡片对没有标题的会话的叫法同一句（web `SESSION_MESSAGE_UNTITLED`、OrbitKit `SessionMessageCard.untitled`、Android `TaskDetailCopy.untitledSession`；coordinator 11-07）：`You:` 只在 `lastUserFrom` 为 null 时用。
+
+### 3.6 做完的项目一起完成（owner 11-07）
+
+项目 DONE 或 CANCELLED 后，项目条目菜单的 `Complete`（§4.3）把 coordinator 和这个项目还在 Open 的成员会话（含别的 Workspace 的）一起移进 Completed。
+
+- 服务端一个口子做这件事（名字由实现定，例如 `POST /projects/:id/sessions/complete`）：只对 DONE / CANCELLED 的项目开放，OPEN 的拒绝；一次事务里逐条走现有的会话 Complete（还在跑的照 Complete 的规则结束运行），返回移动了几条；别人的项目 404。
+- 不自动移走：项目做完后还在干活的 coordinator（比如还在看着某件事）由 owner 决定什么时候收。
+
 ## 4. 列表里的项目条目
 
 ### 4.1 版式
@@ -89,7 +104,7 @@
 3. **coordinator 在处理例外**（`/projects/sidebar` 的 `attention.coordinatorItems`）：项目页那个蓝标签的话去掉 `Coordinator ·` 前缀、首字母大写，如 `Resolving a merge conflict · 18m`，蓝字。
 4. **coordinator 正在跑一轮**（转圈，runner 在线）：coordinator 会话行的原话（`Running …` 蓝字）。
 5. **平台有在途的落地**（19555f614，本条此前漏写）：项目列表 / 侧栏的 `integration.inFlight` 描述的那个作业，选法同项目页的 landing 行（运行中优先，再按最早领取或入队）：`Merge to main · queued · 13m`、`Landing · checking · 4m · <task>`（几条同时在途时种类后写 `<n> jobs`，不带任务名）。运行中且心跳不超过 10 分钟用 `running` 语气（同 `Running …`），排队或心跳更旧用 `queued` 语气。旧服务端只给 `activeJobCount` 时写 `Landing · <n> job(s)`。web `sessionProjectLandingLine`，OrbitKit 同一文案。
-6. **其余**：coordinator 会话行的其他原话（`You: …`、最后一条回复预览）。
+6. **其余**：coordinator 会话行的其他原话（`You: …` 或 `<会话标题>: …`、最后一条回复预览）。`You:` 只给你自己发的消息；别的会话发来的写那个会话的标题（§3.5，owner 11-07）。
 7. **没有 coordinator**（从没开过、在回收站或已清除）：`No coordinator`，灰字。
 
 ### 4.3 点击
@@ -97,9 +112,10 @@
 - **点条目**：进项目会话页（§5），会话栏留在本 Workspace（10-05 起；之前是进第 2 行所说的那个会话）。
 - **进度小标签**：不再是单独的点击区，点它就是点条目；Web 悬停时提示 `<n> sessions · <m> running`（n 含 coordinator）。
 - **Web 悬停 ⋯ / 右键 / iOS 长按**：`Open Session`、`Sessions`、`Open Project`，分隔线，`Pin` / `Unpin`、`Move…`（owner 10-04 的决定）。`Open Session` 打开第 2 行所说的那个会话：第 1、3、4、6 种是 coordinator；第 2 种是那个等你的执行会话；第 5 种有 coordinator 时进 coordinator（集成线契约修订 12 对实现的要求：`inFlight` 带 `landingSessionId` 时进那个落地会话）；第 2 行说的不是一个会话时（第 5 种没有 coordinator、第 7 种）置灰。后两项作用在 coordinator 上，条目跟着走。
-  - **不放** `Complete`、`Share`、`Delete`：完成 coordinator 会影响整个项目，要在对话里做。
+  - 项目 OPEN 时**不放** `Complete`、`Share`、`Delete`：完成 coordinator 会影响整个项目，要在对话里做。
+  - 项目 DONE 或 CANCELLED 后，菜单第一项是 `Complete`，下面一条分隔线：把 coordinator 和这个项目还在 Open 的会话一起移进 Completed（§3.6）。iOS、Android 长按同样。不自动移走（owner 11-07）。
   - **不放任何回答按钮**：回答只在对话里的卡片上（`OwnerConfirmationCard.test` 钉着“会话列表上不能有回答入口”）。
-- **方向键与默认打开**（Web，owner 10-17 的决定，效果图 `docs/mocks/project-row-other-workspace/`）：↑ / ↓ 逐行切换打开的会话；从侧栏进 Workspace 时，默认打开列表里的一条。在 coordinator 所在的 Workspace 里，条目算作 coordinator 那一行，↑ / ↓ 走到它就打开 coordinator。在别的 Workspace 里，条目只收本 Workspace 的成员会话，和文件夹行一样：↑ / ↓ 跨过它，默认打开也不挑它，免得打开 coordinator 把会话栏换成它的 Workspace。没有 coordinator 的条目同样跨过。
+- **方向键与默认打开**（Web，owner 11-07 的决定，取代 10-17 的跨过规则；效果图 `docs/mocks/project-rows-by-workspace/`）：↑ / ↓ 逐行切换打开的会话；从侧栏进 Workspace 时，默认打开列表里的一条。项目条目只出现在 coordinator 所在的 Workspace（§4.4），在那里它算作 coordinator 那一行，↑ / ↓ 走到它就打开 coordinator。别的 Workspace 里没有项目条目，项目的成员会话是普通行，方向键和默认打开照普通会话。没有 coordinator 的项目照 §4.4 的例外：条目像文件夹行，↑ / ↓ 跨过它，默认打开不挑它。
 - **滑动**（iOS、Web 手机）：右滑 `Pin` / `Unpin`，左滑 `Move`。
 - **选中态**（Web）：打开的会话是这个项目的成员时，条目高亮。
 
@@ -108,8 +124,8 @@
 - **位置**：占 coordinator 的位置。coordinator 置顶就在 Pinned；否则按组里最新的活动时间进时间分组。成员会话自己的置顶不影响条目。
 - **Open / Completed**：视图里有这个项目的任何一个会话就显示条目，状态点、时间只算这个视图里的会话（同文件夹）。执行会话在任务 DONE 后会自动进 Completed（`docs/session-lifecycle-design.md` §3），所以 Completed 里的条目收着已完成的执行会话。
 - **Trash、Filter by Tag、Group by Tag、搜索**：平铺，不合并，免得两套分组叠在一起（同文件夹）。
-- **文件夹**：coordinator 在哪个文件夹，条目就在哪个文件夹（文件夹行的数字和标记把条目里的会话算进去）。成员会话一律收在条目后面，忽略它们自己的 `folderId`；非 coordinator 成员的 `Move…` 隐藏。
-- **跨 Workspace**：每个有成员会话的 Workspace 列表里都出现这个条目，内容是整个项目的，状态点只算本 Workspace 的会话。点了进项目会话页，会话栏留在本 Workspace。在 coordinator 所在的 Workspace 之外，条目只代表本 Workspace 的成员会话，像文件夹行：方向键跨过它，默认打开不挑它（§4.3，owner 10-17）。从项目会话页或菜单的 `Open Session` 打开别的 Workspace 的会话时，会话栏跟着换到那个 Workspace（Web 本来就这样）。
+- **文件夹**：coordinator 在哪个文件夹，条目就在哪个文件夹（文件夹行的数字和标记把条目里的会话算进去）。成员会话一律收在条目后面，忽略它们自己的 `folderId`；非 coordinator 成员的 `Move…` 隐藏。这只在 coordinator 所在的 Workspace：别处的成员是普通行，按自己的 `folderId`，`Move…` 照常（11-07）。
+- **跨 Workspace**（owner 11-07，方案 A；取代 10-04 的「每个有成员会话的 Workspace 列表里都出现这个条目」和 10-17 的跨过规则）：项目条目只出现在 coordinator 所在的 Workspace。别的 Workspace 里没有项目条目：项目在那里的成员会话照普通会话显示——自己的时间分组、状态点、置顶、文件夹、`Move…`、`Complete`、方向键——第 2 行开头带项目的进度小标签（`<done>/<total>`，项目不在 `/projects/sidebar` 里时写它的状态），悬停写 `Part of <项目名> · open its sessions`。Web 点小标签进项目会话页（会话栏留在本 Workspace）；iOS、Android 的小标签不单独点，长按菜单加 `Sessions` 进项目会话页。Open 和 Completed 都按这条规则。规则只看 coordinator 在哪：coordinator 就在这个 Workspace 的项目照旧是一个条目。没有 coordinator 的项目（从没开过、在回收站或已清除）照旧：每个有成员会话的 Workspace 都出现条目，像文件夹行（§4.3）。从项目会话页或菜单的 `Open Session` 打开别的 Workspace 的会话时，会话栏跟着换到那个 Workspace（Web 本来就这样）。
 - **老服务器**：没有 `projectMembership` 时平铺，和现在一样。项目不在 `/projects/sidebar` 里（比如已 DONE）时，进度小标签只显示 `projectStatus`，不画进度条。
 - **Needs-you 提示条、推送**：不变，照旧直接跳到等你的那个会话。
 
@@ -134,6 +150,10 @@
 | 执行会话等你 | `<等待原话> · <会话名>` |
 | coordinator 处理例外 | `Resolving a merge conflict · <age>`、`Checks failed · <age>`、`Handling an integration error · <age>`、`Handling a failed task · <age>`、`Reviewing a delivery · <age>` |
 | 没有 coordinator | `No coordinator` |
+| 别处成员行的进度小标签悬停（Web，11-07） | `Part of <项目名> · open its sessions` |
+| 别处成员行的长按菜单（iOS、Android，11-07） | `Sessions`（进项目会话页） |
+| 做完的项目条目菜单（11-07） | `Complete` |
+| 会话行里别的会话发来、还没回的消息（三端，11-07） | `<会话标题>: <消息>`，发送会话没有标题时 `Untitled session: <消息>`；你自己发的仍是 `You: <消息>` |
 | 条目菜单（owner 10-04 的决定） | `Open Session`、`Sessions`、`Open Project`、`Pin`、`Unpin`、`Move…` |
 | 项目会话页页头按钮（iOS，owner 10-06 的决定） | `Open Project` |
 | 项目会话页 | `Project · <n> sessions`、`Coordinator`（节名）、`<done>/<total> done · <m> running` |
@@ -166,3 +186,15 @@
 6. OrbitKit：`SessionProjectGrouping`、`projectMembership` 解码和文案对照测试，依赖 4。
 7. iOS：列表里的项目条目、项目会话页、长按和滑动，依赖 2、3、6。
 8. Owner 在部署后的 Web 控制台和 TestFlight 构建上对照效果图确认，依赖 5、7。
+
+### 11-07 修订的分任务
+
+0. 设计稿与效果图进仓库（本文这一版、`docs/mocks/project-rows-by-workspace/`）。
+1. Web：§4.3、§4.4 的方案 A（`sessionProjects.ts`、`WorkspaceView.tsx`，原型见效果图旁的 `prototype-a.patch`），10-17 的跨过规则与它的测试改成新规则。
+2. OrbitKit + iOS：同一条规则（`SessionProjectGrouping`），成员行的进度小标签，长按 `Sessions`。
+3. Android：同一条规则（`SessionProjects.kt`），成员行的进度小标签，长按 `Sessions`。
+4. 服务端：§3.5 的 `lastUserFrom`。
+5. 三端：§3.5 的行上写法，依赖 4。
+6. 服务端：§3.6 的一起完成。
+7. 三端：§4.3 做完的项目条目的 `Complete`，依赖 6。
+8. Owner 在部署后的 Web、TestFlight 和 Android 构建上对照效果图确认，依赖以上全部。

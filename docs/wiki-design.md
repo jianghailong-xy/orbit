@@ -304,7 +304,10 @@ POST   /wiki/spaces  |  PATCH /wiki/spaces/:id       设置：push / autoAccept 
 GET    /wiki/spaces/:id/workspaces                   列出 workspace 和可加入的 workspace
 POST   /wiki/spaces/:id/workspaces                   加入 workspace，或把留在外面的打开
 DELETE /wiki/spaces/:id/workspaces/:workspaceId      把 workspace 留在外面
-DELETE /wiki/spaces/:id                               永久删除这个 wiki（`docs/mocks/wiki-delete`）
+DELETE /wiki/spaces/:id                               移进回收站，保留 365 天（`docs/mocks/wiki-trash`）
+POST   /wiki/spaces/:id/restore                       从回收站恢复
+DELETE /wiki/spaces/:id/purge                         永久删除回收站里的这个 wiki，后台分批删
+GET    /wiki/trash                                    回收站
 GET    /wiki/spaces/:id                              首页数据：principles、topics、recent decisions、health、usage
 GET    /wiki/spaces/:id/entries?kind&topic&status&q&cursor
 GET    /wiki/entries/:id?include=sources,history,exposure
@@ -666,6 +669,7 @@ EXECUTABLE 判据）——随维护会话在 P11（2026-10-19）删除：维护�
   - 不推送给 agent。
 - **条目详情**：字段、Detector 读数、Sources（OrbitLinkCard）、Anchors、Where it's used、History；操作为 Edit / Supersede / Retire / Pin。
 - **Review**：逐 op 卡片，含 diff、污染警示、`similar[]`；按钮 Accept / Edit / Reject▾。
+  - 质疑卡（11-07 owner 定，效果图 `docs/mocks/wiki-challenge-answers`，三端相同）：回答写成结果，依次是 `Keep` · `Amend…` · `Retire…`，没有实心主按钮（Review 里实心按钮的意思是「照这张卡的提议做」，质疑卡上没有这样的回答）。`Retire…` 红色排最后，按下先打开条目页已有的 Retire… 对话框，理由框预填质疑的理由，说明末尾是 “This cannot be undone.”。按钮上方 `After` 一行写清每个回答之后 agent 会怎样、Retire 不能撤回。toast 用按钮上的词（Kept）。手机上答完一张，下一张从它的顶上开始。decision 类条目不显示 `Amend…`（契约里 decision 不能改写）。起因：11-06 所有者四次想按 Retire，按成了实心的 Re-confirm。
 - **会话接触点**
   - 任务启动卡沿用「⊕ Orbit attached: Wiki context · N entries」折叠条（05a）；
   - `describeNote` 加 `wiki context` 种类；
@@ -926,7 +930,8 @@ H4 精度 <50%、出现任何一次泄漏，或 H5 显示检索不比编译差�
 | `33-desktop` | web 桌面（1920×1080、1440×900）：首页主区是内容；Activity 页沿用图 29 的卡片排法 |
 | `38-workspaces` | Wiki 设置的 Workspaces 卡（web、iOS）：谁在这个 wiki 里、开关、`Add workspace…`、没有仓库的 wiki，以及开和关的规则（owner 2026-11-02 定） |
 | `41-home-setup` | 还没有内容的 Wiki：今天和提议对比、设置卡的四个样子（web 桌面、web 手机、iOS）、没有 wiki 时的 `Create wiki` 表单，以及每种状态说什么、按钮去哪里的规则表 |
-| `../wiki-delete/01-delete-wiki` | 删除 Wiki（web、iOS、Android）：侧栏 ⋯ 菜单、设置页底部、确认框、删除之后 |
+| `../wiki-delete/01-delete-wiki` | 删除 Wiki（web、iOS、Android）：侧栏 ⋯ 菜单、设置页底部、确认框、删除之后；已由回收站取代 |
+| `../wiki-trash/01-wiki-trash` | Wiki 回收站（web、iOS、Android）：Move to Trash、三处入口、回收站弹窗、恢复被拒、永久删除，以及规则（owner 2026-11-07 定） |
 
 ## 附 B：Wikova 借鉴对照
 

@@ -734,6 +734,11 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         folderId: idOf(await as('POST', '/session-folders', { workspaceId, name: `${name} spare folder` }), 'a spare folder'),
         sessionId: await session(ownerId, workspaceId, runnerId, `${name} spare session`),
         purgedSessionId,
+        trashedWikiSpaceId: await (async () => {
+          const id = idOf(await as('POST', '/wiki/spaces', { title: `${name} spare wiki` }), 'a spare wiki');
+          ok(await as('DELETE', `/wiki/spaces/${id}`), 'moving the spare wiki to Trash');
+          return id;
+        })(),
         tagId: idOf(await as('POST', '/session-tags', { name: `${name} spare tag`, color: '#663399' }), 'a spare tag'),
         shareLinkId,
         listId: idOf(await as('POST', '/task-lists', { title: `${name} spare list` }), 'a spare list'),

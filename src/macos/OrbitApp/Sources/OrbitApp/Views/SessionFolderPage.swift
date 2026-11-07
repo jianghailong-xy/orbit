@@ -163,6 +163,7 @@ struct SessionFolderPage: View {
                                       folders: inputs.workspaceFolders,
                                       projects: inputs.projects, view: inputs.view,
                                       byTag: false, searching: inputs.searching, folderID: inputs.folderID,
+                                      workspaceID: inputs.workspaceID,
                                       runnerOffline: inputs.runnerOffline,
                                       coordinators: coordinators,
                                       contentSessions: inputs.view == .open ? inputs.accountSessions : inputs.allSessions,
@@ -255,6 +256,7 @@ struct SessionFolderPage: View {
         let sessions = grouping.folderListing.sessions
         let timeSections = grouping.timeSections
         let projectRows = grouping.projectRows
+        let projectMarks = grouping.projectListing.marks
         return List(selection: rowNavigation == .selection ? $app.selectedAgentSessionID : nil) {
             if isSearching {
                 searchResults
@@ -265,22 +267,23 @@ struct SessionFolderPage: View {
                         // (the first row drops its top separator with the title).
                         ForEach(section.sessions) { session in
                             if session.id == section.sessions.first?.id {
-                                listRow(session, projects: projectRows).listRowSeparator(.hidden, edges: .top)
+                                listRow(session, projects: projectRows, marks: projectMarks)
+                                    .listRowSeparator(.hidden, edges: .top)
                             } else {
-                                listRow(session, projects: projectRows)
+                                listRow(session, projects: projectRows, marks: projectMarks)
                             }
                         }
                     } else if section.title == "Pinned" {
                         Section {
                             if !pinnedCollapsed {
-                                ForEach(section.sessions) { listRow($0, projects: projectRows) }
+                                ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
                             }
                         } header: {
                             pinnedSectionHeader(section.title)
                         }
                     } else {
                         Section {
-                            ForEach(section.sessions) { listRow($0, projects: projectRows) }
+                            ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
                         } header: {
                             Text(section.title).textCase(nil)
                         }
@@ -347,27 +350,36 @@ struct SessionFolderPage: View {
 
     /// One row, wrapped for the container it is in — the workspace list's own arrangement, repeated
     /// here so a folder's page and the list outside behave identically (see `AgentPanes.sessionRow`).
-    @ViewBuilder private func listRow(_ s: Session, projects: [String: SessionProjectRow]) -> some View {
+    @ViewBuilder private func listRow(_ s: Session, projects: [String: SessionProjectRow],
+                                      marks: [String: SessionProjectMark]) -> some View {
         if let project = projects[s.id] {
             projectRow(project)
         } else {
-            sessionRow(s)
+            sessionRow(s, mark: marks[s.id])
         }
     }
 
-    @ViewBuilder private func sessionRow(_ s: Session) -> some View {
-        let row = AgentSessionRow(session: s, deleted: address.view == .trash, showsPin: address.view == .open)
+    /// `mark`: as on the workspace list's rows (`AgentPanes.sessionRow`).
+    @ViewBuilder private func sessionRow(_ s: Session, mark: SessionProjectMark?) -> some View {
+        let row = AgentSessionRow(session: s, deleted: address.view == .trash, showsPin: address.view == .open,
+                                  projectMark: mark)
+        let onSessions: (() -> Void)? = mark.map { mark in
+            { app.openProjectSessions(SessionProjectAddress(projectID: mark.projectId, agentID: address.agentID,
+                                                            view: address.view)) }
+        }
         switch rowNavigation {
         case .selection:
             row.sessionRowActions(s, scope: address.view, onTag: { taggingSession = s },
-                                  onShare: { sharingSession = s }, onMove: { movingSession = s })
+                                  onShare: { sharingSession = s }, onMove: { movingSession = s },
+                                  onSessions: onSessions)
                 .tag(s.id)
         case .push:
             Button { app.openSessionRow(s) } label: {
                 row.foregroundStyle(.primary)
             }
             .sessionRowActions(s, scope: address.view, onTag: { taggingSession = s },
-                               onShare: { sharingSession = s }, onMove: { movingSession = s })
+                               onShare: { sharingSession = s }, onMove: { movingSession = s },
+                               onSessions: onSessions)
         }
     }
 

@@ -57,30 +57,64 @@ export const WIKI_WORKSPACES_EMPTY = 'No workspace is in this wiki yet.';
 export const WIKI_ADD_WORKSPACE = 'Add workspace…';
 export const WIKI_ADD_WORKSPACE_GROUP = 'Workspaces with no repository';
 
-/** Delete wiki (docs/mocks/wiki-delete, contract `space.delete`): the foot of the page, and the question it asks. */
-export const WIKI_DELETE_TITLE = 'Delete this wiki';
-export const WIKI_DELETE_NOTE = 'Its entries, documents and history are permanently deleted.';
-export const WIKI_DELETE_OPEN = 'Delete wiki…';
-export const WIKI_DELETE_CONFIRM = 'Delete wiki';
-export const WIKI_DELETE_KEPT = 'Workspaces and sessions are kept.';
-export const wikiDeleteQuestion = (name: string): string => `Delete wiki “${name}”?`;
-export const wikiDeleted = (name: string): string => `Deleted wiki “${name}”`;
-/** What a wiki with a repository does after it: `bindOnFirstUse` makes it again. */
-export const wikiDeleteComesBack = (repository: string): string =>
-  `The next session on ${repository} to use the wiki starts a new, empty one.`;
+/**
+ * The wiki's Trash (docs/mocks/wiki-trash, contract `space.trash`): the foot of Wiki settings, the question Move to Trash
+ * asks, the ways to Trash, and Trash itself. Every client says these words; `wiki-review-mode.fixture.json` holds them.
+ */
+export const WIKI_TRASH_TITLE = 'Move to Trash';
+export const WIKI_TRASH_OPEN = 'Move to Trash…';
+export const WIKI_TRASH_CONFIRM = 'Move to Trash';
+export const WIKI_TRASH_NOTE = 'It stays in Trash for 365 days and can be restored until then.';
+export const WIKI_TRASH_LEAVES = 'It leaves your wikis now, and sessions stop reading it.';
+export const WIKI_TRASH_KEPT = 'Workspaces and sessions are kept.';
+export const wikiTrashQuestion = (name: string): string => `Move wiki “${name}” to Trash?`;
+export const wikiMovedToTrash = (name: string): string => `Moved wiki “${name}” to Trash`;
+/** What a wiki with a repository does while it is in Trash: `bindOnFirstUse` makes a new one. */
+export const wikiTrashComesBack = (repository: string): string =>
+  `Until you restore it, the next session on ${repository} to use the wiki starts a new, empty one.`;
+
+const counted = (count: number, one: string, many: string): string => `${count.toLocaleString('en-US')} ${count === 1 ? one : many}`;
 
 /**
- * What the question says it takes. `entries` is null until the health read answers, or when it fails: the sentence
- * still says what goes, with no number in it.
+ * What the question says Trash keeps. `entries` is null until the health read answers, or when it fails: the sentence
+ * still says what stays, with no number in it.
  */
-export function wikiDeleteBody(entries: number | null, documents: number): string {
-  const counted = (count: number, one: string, many: string): string => `${count.toLocaleString('en-US')} ${count === 1 ? one : many}`;
+export function wikiTrashBody(entries: number | null, documents: number): string {
   const things = [
     ...(entries === null ? ['entries'] : entries > 0 ? [counted(entries, 'entry', 'entries')] : []),
     ...(documents > 0 ? [counted(documents, 'document', 'documents')] : []),
   ];
-  const whose = entries === 1 && documents === 0 ? 'its' : 'their';
-  const subject = things.length === 0 ? 'Its history' : `Its ${things.join(', ')} and ${whose} history`;
+  const one = things.length === 1 && ((entries === 1 && documents === 0) || (entries === 0 && documents === 1));
+  const subject = things.length === 0 ? 'It stays' : `Its ${things.join(' and ')} ${one ? 'stays' : 'stay'}`;
+  return `${subject} in Trash for 365 days: restore it any time until then. After that it is deleted for good.`;
+}
+
+/** The ways to Trash: the line under Wiki settings' card, and the one on the first-wiki card when no wiki is left. */
+export const WIKI_TRASH_OPEN_TRASH = 'Open Trash';
+export const wikiTrashHolds = (wikis: number): string => `Trash holds ${counted(wikis, 'wiki', 'wikis')}.`;
+export const wikiTrashHoldsWhenEmpty = (wikis: number): string =>
+  `${counted(wikis, 'wiki', 'wikis')} ${wikis === 1 ? 'is' : 'are'} in Trash.`;
+/** The native clients' row for it, beside the word Trash. */
+export const wikiTrashRowCount = (wikis: number): string => counted(wikis, 'wiki', 'wikis');
+
+/** Trash itself. */
+export const WIKI_TRASH_PAGE_TITLE = 'Trash';
+export const WIKI_TRASH_PAGE_LEAD = 'A wiki stays here for 365 days after it was moved, then it is deleted for good.';
+export const WIKI_TRASH_PAGE_EMPTY = 'Trash is empty.';
+export const WIKI_TRASH_RESTORE = 'Restore';
+export const WIKI_TRASH_DELETE_PERMANENTLY = 'Delete permanently…';
+export const WIKI_TRASH_CLOSE = 'Close';
+export const wikiRestored = (name: string): string => `Restored wiki “${name}”`;
+const trashDate = (iso: string): string =>
+  new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+/** One wiki's line in Trash: when it was moved, what it holds, and when it goes. */
+export const wikiTrashRowLine = (row: { deletedAt: string; purgeAt: string; entries: number }): string =>
+  `Moved to Trash ${trashDate(row.deletedAt)} · ${counted(row.entries, 'entry', 'entries')} · deleted for good ${trashDate(row.purgeAt)}`;
+export const WIKI_TRASH_PURGE_QUESTION = 'Delete permanently?';
+export const WIKI_TRASH_PURGE_CONFIRM = 'Delete permanently';
+/** What Delete permanently says it takes, as the session Trash's own question does. */
+export function wikiTrashPurgeBody(entries: number): string {
+  const subject = entries === 0 ? 'Its history' : `Its ${counted(entries, 'entry', 'entries')} and ${entries === 1 ? 'its' : 'their'} history`;
   return `${subject} will be permanently deleted. This cannot be undone.`;
 }
 export const WIKI_MODE_DEFAULT = 'default';
@@ -205,7 +239,7 @@ export function wikiWorkspaceLabel(workspace: { name?: string | null; runner?: {
  * The sections of the settings page, top to bottom — the order both clients draw them in, which
  * `WikiReviewModeCopyParityTests` reads out of the page and holds `WikiLogic.SettingsSection` to.
  */
-export const WIKI_SETTINGS_SECTIONS = [WIKI_REVIEW_MODE, WIKI_WORKSPACES, WIKI_MAINTENANCE, WIKI_DELETE_TITLE] as const;
+export const WIKI_SETTINGS_SECTIONS = [WIKI_REVIEW_MODE, WIKI_WORKSPACES, WIKI_MAINTENANCE, WIKI_TRASH_TITLE] as const;
 
 // ── The marks an entry wears, and the owner's two answers (mocks 17–18) ─────────────────────────
 
@@ -491,9 +525,20 @@ export function wikiRecentRows<T extends WikiRecentItem>(items: readonly T[]): A
 
 // ── A challenge's answers (contract `anchorRules.verify.answers`) ──────────────────────────────
 
-export const WIKI_RECONFIRM = 'Re-confirm';
+// The answers say what becomes of the entry (owner, 2026-11-07, docs/mocks/wiki-challenge-answers): Keep is
+// `reconfirm` — the word Review's Retire card already uses for "the entry stays" — and the two that ask first end
+// in an ellipsis. None of them is the card's filled answer: Review's filled button means "do what this card
+// proposes", and a challenge has no such answer. WIKI_AMEND and WIKI_RETIRE stay the words of the form and the
+// dialog the two open.
+export const WIKI_RECONFIRM = 'Keep';
 export const WIKI_AMEND = 'Amend';
+export const WIKI_AMEND_ANSWER = 'Amend…';
 export const WIKI_RETIRE = 'Retire';
+export const WIKI_RETIRE_ANSWER = 'Retire…';
+/** The After row above the answers: what each one does to the entry, and that Retire cannot be undone. */
+export const WIKI_CHALLENGE_AFTER_KEEP = 'Agents get this entry again. You can still retire it later.';
+export const WIKI_CHALLENGE_AFTER_AMEND = 'Agents get your version, and its anchors are checked again.';
+export const WIKI_CHALLENGE_AFTER_RETIRE = 'Agents stop getting it. This cannot be undone.';
 export const WIKI_CHALLENGE_WAITS = 'Agents stop getting this entry until you answer.';
 export const WIKI_CHALLENGED = 'Challenged';
 export const WIKI_AMEND_NOTE = 'Your version replaces the entry, and its anchors are checked again.';

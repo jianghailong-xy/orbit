@@ -2732,7 +2732,43 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // DO block. It is not a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of
       // the six preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so
       // it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: the table starts empty.
-      '0483_wiki_chat_draft'],
+      '0483_wiki_chat_draft',
+      // 0484 makes the Open list's data version cheap: a new `open_list_epoch` table, four
+      // statement-level bump functions (`open_list_bump_owner`, `open_list_bump_via_project`,
+      // `open_list_bump_via_session`, `open_list_bump_session`), their triggers on 29 tables
+      // (including `task`, `session` and `conversation_turn`), three indexes on `session`, and a
+      // nullable `task_completion_evidence.review_turn_at`, backfilled once from the matching
+      // review turn and thereafter stamped by a trigger on `conversation_turn` inserts. The bump
+      // triggers write `open_list_epoch`, never the table they are on, and the one UPDATE writes
+      // `review_turn_at` alone: no preserved row or column is touched, none of the six preserved
+      // triggers/functions is named or replaced, and no preserved object is dropped, so it is not
+      // another writer of the DONE fence.
+      '0484_open_list_epoch',
+      // 0485 adds two nullable columns to `session` (`last_user_from_session_id`, `last_user_from_title`: who sent the
+      // message the row previews) in one DO statement that takes the table's lock in short tries, and nothing else.
+      // `session` is not a preserved relation, no column any preserved trigger reads is touched, and no function,
+      // trigger, type or constraint is created, replaced or dropped, so it is not another writer of the DONE fence. No
+      // INSERT, UPDATE or DELETE: every stored session reads NULL in both.
+      '0485_session_last_user_from',
+      // 0486 (the wiki's Trash) adds five columns, a CHECK and a partial index to `wiki_space` alone, in one DO block that
+      // asks for the table's lock 2 s at a time. It is not a preserved relation, no `task`, `session`, `project` or
+      // `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function, trigger or
+      // type is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '0486_wiki_space_trash',
+      // 0487 spreads 0484's Open-list counters over several `open_list_epoch` rows so that writers never queue on one: a
+      // new sequence `open_list_epoch_shard_seq`, a new function `open_list_bump`, and CREATE OR REPLACE of 0484's four
+      // bump functions to call it. No table, column, constraint or trigger is created, altered or dropped; the functions
+      // write `open_list_epoch` alone, no preserved row or column is touched, and none of the six preserved
+      // triggers/functions is named or replaced, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE runs at apply time.
+      '0487_open_list_epoch_shards',
+      // 0488 (an amend answering a challenge) adds two nullable columns to `wiki_changeset_op`
+      // (`answers_challenge`, a history reference with no foreign key, and `answered_by`) and three CHECKs, and
+      // nothing else. It is not a preserved relation, no `task`, `session`, `project` or `project_acceptance_*`
+      // object nor any of the six preserved triggers/functions is named, and no function, trigger or type is
+      // created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE: every stored op reads NULL in both columns and satisfies the CHECKs as it stands.
+      '0488_wiki_op_answers_challenge'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

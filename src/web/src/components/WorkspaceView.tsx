@@ -496,6 +496,7 @@ import { deliveryFailureExplanation, offersSteerWithdraw, steerDeliveryState } f
 import { backgroundWorkIsActive, isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
 import type { OutlivingWork } from '../lib/sessionActivity';
 import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
+import { SESSION_MESSAGE_UNTITLED } from '../lib/sessionMessage';
 import { trashNoteWhen } from '../lib/trashNote';
 import { transcriptPlaceholder } from '../lib/transcriptPaint';
 import { useDelayedFlag } from '../lib/useDelayedFlag';
@@ -1044,14 +1045,27 @@ type SessionLine = {
   text: string;
   tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review';
 };
-// The line for a message of YOURS the workspace hasn't answered yet. Prefixed, because the preview
-// line is otherwise the workspace's voice: unmarked, a message you sent and a reply to it read
-// exactly alike, and "has it answered me yet?" is the one question the list has to answer while a
-// turn is running. Same flattening as a reply preview — it may be markdown too.
-const sentLine = (text: string): SessionLine => ({
-  text: `You: ${plainPreview(text)}`,
+// The line for a message the workspace hasn't answered yet, marked with who sent it (`sentBy`).
+// Prefixed, because the preview line is otherwise the workspace's voice: unmarked, a message and a
+// reply to it read exactly alike, and "has it answered me yet?" is the one question the list has to
+// answer while a turn is running. Same flattening as a reply preview — it may be markdown too.
+const sentLine = (text: string, sender: string): SessionLine => ({
+  text: `${sender}: ${plainPreview(text)}`,
   tone: 'preview',
 });
+// Keep this literal declaration: native parity tests read the web source directly.
+export const SENT_BY_YOU = 'You';
+// Who sent the message a row previews (`lastUserText`). "You" only for the owner's own words — and
+// for every message from an older server, which names no sender. A message another Orbit session sent
+// (`session_send`, `project_send`) names that session (`lastUserFrom`) as the conversation's card
+// names it: its title, or what an untitled one is called (docs/session-list-projects-design.md §3.5,
+// owner 2026-11-07). A coordinator's unanswered message is usually a task's report, which "You:" put
+// in the owner's mouth.
+const sentBy = (s: any): string => {
+  const from = s.lastUserFrom;
+  if (!from || typeof from !== 'object') return SENT_BY_YOU;
+  return (typeof from.title === 'string' ? from.title.trim() : '') || SESSION_MESSAGE_UNTITLED;
+};
 
 // The five owner items, one word each: no project and no count, because a row is one line and the
 // project it is about is the conversation the row already names (contract §7.6 V13). The native
@@ -1163,11 +1177,11 @@ export const sessionLine = (
     // through to the muted last-reply preview, which reads as idle.
     if ((s.runningSubagentCount ?? 0) > 0)
       return { text: `${subagentRunningLabel(s.runningSubagentCount)}…`, tone: 'running' };
-    // The workspace hasn't answered yet: show the message you sent (the server keeps lastUserText
+    // The workspace hasn't answered yet: show the message it was sent (the server keeps lastUserText
     // from the moment it is enqueued until a reply lands) instead of the previous turn's reply,
     // which would read as if this one had already been answered. It's content, not status — the
     // spinner already carries "working" — so it takes the muted preview tone, not blue.
-    if (s.lastUserText) return sentLine(s.lastUserText);
+    if (s.lastUserText) return sentLine(s.lastUserText, sentBy(s));
     if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
     return { text: 'Running…', tone: 'running' };
   }
@@ -1186,7 +1200,7 @@ export const sessionLine = (
   // A message that never got an answer — the turn was interrupted, or failed, before any reply
   // landed — outranks the previous turn's reply: it's the newer of the two, and it's what the
   // session is left waiting on. The server only keeps lastUserText while it stands unanswered.
-  if (s.lastUserText) return sentLine(s.lastUserText);
+  if (s.lastUserText) return sentLine(s.lastUserText, sentBy(s));
   // The rolling recap (0418) takes the place of the reply preview it used to show: the sentence
   // the server wrote about the session, not the raw last reply flattened down to one line. Only
   // here — below every live line above — so a working session still says what it is doing. Off
@@ -2325,7 +2339,9 @@ export function WorkspaceView({
   const rowView = projectView ?? view;
   const sessionRowView = useCallback((session: SessionListItem): SessionView => openProjectId
     ? sessionLifecycleStateOf(session).toLowerCase() as SessionView : rowView, [openProjectId, rowView]);
-  const onRowTouchStart = (e: ReactTouchEvent, session: any, canFullSwipe: boolean, projectId?: string): void => {
+  const onRowTouchStart = (
+    e: ReactTouchEvent, session: any, canFullSwipe: boolean, projectId?: string, movable = sessionMovable(session),
+  ): void => {
     if (!isMobile) return;
     const t = e.touches[0];
     // Clear any guard left set by a prior swipe that fired no trailing click, so the next
@@ -2336,7 +2352,7 @@ export function WorkspaceView({
     const rect = e.currentTarget.getBoundingClientRect();
     const geometry = projectId
       ? { leadingWidth: SWIPE_ACTION_WIDTH, trailingWidth: SWIPE_ACTION_WIDTH, fullSwipeAt: null, maxOffset: SWIPE_ACTION_WIDTH + 20 }
-      : swipeGeometry(sessionRowView(session), rect.width, canFullSwipe, sessionMovable(session));
+      : swipeGeometry(sessionRowView(session), rect.width, canFullSwipe, movable);
     swipeRef.current = {
       session,
       id,
@@ -2916,20 +2932,22 @@ export function WorkspaceView({
     return list;
   }, [sessions, resolvedWorkspaceId, tagFilter]);
   // Other workspaces may contain only workers. Read the project's words across workspaces,
-  // keeping this view's activity and folder count scoped to its own members.
+  // keeping this view's activity and folder count scoped to its own members. From the list's first
+  // frame, not a render later when `projectsShown` catches up: the landing waits on these reads.
   const projectData = useSessionProjectData({
-    sessions: visibleSessions, view: effectiveView, enabled: projectsShown && !openProjectId,
+    sessions: visibleSessions, view: effectiveView, enabled: listShowsProjects(effectiveView, listByTag) && !openProjectId,
     controlLive, needsYou: (s) => sessionLine(s, true, sessionWatching(watchingBySession, s.id)).tone === 'approval',
   });
   // `includeLanding`: the page's Landings group lists the project's LANDING sessions, and no other
-  // read ever sees one (§2.9 LS6).
+  // read ever sees one (§2.9 LS6). `priority`: the page is waiting on these two, so they do not
+  // queue behind the workspace list's background project reads (queries.ts projectRead).
   const projectSessionsQ = useQuery({
-    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'open', includeLanding: !!openProjectId }),
+    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'open', includeLanding: !!openProjectId, priority: true }),
     enabled: !!openProjectId,
     refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
   });
   const completedProjectSessionsQ = useQuery({
-    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'completed', includeLanding: !!openProjectId }),
+    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'completed', includeLanding: !!openProjectId, priority: true }),
     enabled: !!openProjectId,
     refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
   });
@@ -3046,6 +3064,7 @@ export function WorkspaceView({
       byTag: listByTag,
       folderId: openFolder?.id,
       coordinators: projectData.coordinators,
+      workspaceId: resolvedWorkspaceId,
       contentSessions: projectData.contentSessions,
       runnerOffline: runner.online === false,
       needsYou: sessionNeedsYou,
@@ -3054,23 +3073,15 @@ export function WorkspaceView({
         effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled, machineName(runner)),
     }),
     [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
-      effectiveView, listByTag, runner.online, runner.name, runner.displayName, watchingBySession, selectedSession, recapsEnabled],
+      effectiveView, listByTag, runner.online, runner.name, runner.displayName, watchingBySession, selectedSession, recapsEnabled,
+      resolvedWorkspaceId],
   );
-  // A project's entry stands for its coordinator only in the workspace the coordinator runs in.
-  // Elsewhere it holds that workspace's own members, as a folder row holds its sessions: the arrow keys
-  // pass over it and a landing never picks it, because opening the coordinator would swap this list for
-  // the coordinator's workspace. A click still opens the project's sessions page (owner 10-17,
-  // docs/mocks/project-row-other-workspace).
-  const entrySession = useCallback(
-    (entry: { coordinator: SessionListItem | null }): SessionListItem[] =>
-      entry.coordinator && (!resolvedWorkspaceId || entry.coordinator.workspace?.id === resolvedWorkspaceId)
-        ? [entry.coordinator] : [],
-    [resolvedWorkspaceId],
-  );
+  // A project's entry is in the list only where its coordinator runs (owner 2026-11-07), so it stands
+  // for the coordinator; one with no coordinator is passed over, as a folder row is.
   const listedSessions = useMemo(
     () => openProjectId ? projectMembers : folderListing.entries.flatMap((entry) => entry.kind === 'project'
-      ? entrySession(entry) : [entry]),
-    [folderListing, openProjectId, projectMembers, entrySession],
+      ? entry.coordinator ? [entry.coordinator] : [] : [entry]),
+    [folderListing, openProjectId, projectMembers],
   );
   // Where a session opened from this list lives. On a folder's page the page goes along, so the
   // list stays on it while the conversations it lists are opened one after another.
@@ -3176,8 +3187,8 @@ export function WorkspaceView({
   // and tag grouping regroups outright — so anything that moves the cursor by a row (Up/Down,
   // "open the next one after completing") has to walk this, not the pre-section list.
   const orderedSessions = useMemo(() => sections.flatMap((s) => s.sessions.flatMap((entry) =>
-    entry.kind === 'project' ? entrySession(entry) : [entry],
-  )), [sections, entrySession]);
+    entry.kind === 'project' ? entry.coordinator ? [entry.coordinator] : [] : [entry],
+  )), [sections]);
 
   // Right-pane mode. A real session (/sessions/<id>) shows its conversation; with
   // none selected we're composing a new session — explicitly (/workspaces/<id>/new),
@@ -3223,6 +3234,9 @@ export function WorkspaceView({
     // session filed in a folder could be picked from under it. A server without folders answers
     // with an error, which is known too.
     if (foldersQ.isPending) return;
+    // Nor before each project's coordinator is found: where it runs decides whether the project's members
+    // here are rows of their own or held in its row (owner 2026-11-07).
+    if (projectData.placing) return;
     const remembered = scopeWorkspaceId ? lastSessionByWorkspace.get(scopeWorkspaceId) : undefined;
     const target = listedSessions.find((s) => s.id === remembered) ?? listedSessions[0];
     if (target) navigate(sessionItemPath(target), { replace: true });
@@ -3235,6 +3249,7 @@ export function WorkspaceView({
     view,
     sessionsQ.isSuccess,
     foldersQ.isPending,
+    projectData.placing,
     listedSessions,
     scopeWorkspaceId,
     navigate,
@@ -9487,7 +9502,10 @@ export function WorkspaceView({
                 }
                 const actionSession = selectedSession?.id === s.id ? selectedSession : s;
                 const memberView = sessionRowView(actionSession);
-                const movable = sessionMovable(s);
+                // A member whose project has no row here is a row of its own, filed by its own folder
+                // (owner 2026-11-07).
+                const mark = s.projectMark;
+                const movable = sessionMovable(s) || !!mark;
                 const swipeActions = sessionSwipeActions(memberView, movable);
                 const swipeSizes = swipeWidths(memberView, movable);
                 const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);
@@ -9587,7 +9605,7 @@ export function WorkspaceView({
                           navigate(sessionItemPath(actionSession), { state: stampFromList() }),
                         );
                     }}
-                    onTouchStart={(e) => { if (!renaming) onRowTouchStart(e, actionSession, canFullSwipe); }}
+                    onTouchStart={(e) => { if (!renaming) onRowTouchStart(e, actionSession, canFullSwipe, undefined, movable); }}
                     onTouchMove={onRowTouchMove}
                     onTouchEnd={onRowTouchEnd}
                     onTouchCancel={onRowTouchCancel}
@@ -9656,6 +9674,34 @@ export function WorkspaceView({
                                 or waiting on, else its recap (sessionLine). Tags are filed and
                                 filtered by, not drawn on the row (the owner, 2026-10-22). */}
                             <div className="session-sub">
+                              {/* A member whose project has no row in this workspace: the project's
+                                  progress, which opens its sessions page (owner 2026-11-07). */}
+                              {mark && (
+                                <button
+                                  type="button"
+                                  className={`session-project-progress${mark.status === 'DONE' ? ' done' : ''}`}
+                                  title={SESSION_PROJECT_COPY.markHint(mark.title)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (swipeClickGuard.current) {
+                                      swipeClickGuard.current = false;
+                                      return;
+                                    }
+                                    if (swipeOpen) {
+                                      setSwipeOpen(null);
+                                      return;
+                                    }
+                                    enterProjectSessions(mark.projectId);
+                                  }}
+                                >
+                                  {mark.taskCounts ? (
+                                    <>
+                                      <SessionProjectProgressBar counts={mark.taskCounts} runningCount={mark.runningCount} />
+                                      {SESSION_PROJECT_COPY.progress(mark.taskCounts.done, mark.taskCounts.total)}
+                                    </>
+                                  ) : mark.status}
+                                </button>
+                              )}
                               <div
                                 className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
                               >

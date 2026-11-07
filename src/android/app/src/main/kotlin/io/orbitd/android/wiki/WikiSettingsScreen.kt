@@ -31,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
 import io.orbitd.android.directory.DirectoryData
 import io.orbitd.android.directory.LoadingMessage
+import io.orbitd.android.directory.StatusMessage
+import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.OrbitRoute
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.toast.OrbitToasts
@@ -40,8 +42,8 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 
 // Wiki settings (iOS `WikiSettingsView.swift`; criterion 8, mock 20): which review mode the space runs in, whether
-// Automatic sends spot checks, the space's Wiki maintenance run, and deleting the wiki (docs/mocks/wiki-delete) — pushed
-// from the Wiki home's gear. The app's own
+// Automatic sends spot checks, the space's Wiki maintenance run, and moving the wiki to Trash (docs/mocks/wiki-trash) —
+// pushed from the Wiki home's gear. The app's own
 // settings form: inset-grouped sections, a header and a footer each. The sections are `WikiModeLogic.SettingsSection`
 // in its order, which is the web page's; the modes are `WikiModeLogic.modes`; every word is `WikiModeCopy`'s.
 
@@ -54,8 +56,10 @@ internal class WikiSettingsActions(
     /** Set up… when maintenance is off, Edit… when it is on: the same sheet. */
     val setUp: () -> Unit = {},
     val turnOff: () -> Unit = {},
-    /** Delete wiki…, which asks first. */
-    val delete: () -> Unit = {},
+    /** Move to Trash…, which asks first. */
+    val moveToTrash: () -> Unit = {},
+    /** The Trash row: Trash's own page. */
+    val openTrash: () -> Unit = {},
 )
 
 /** The settings page, drawn from the space as the server kept it: the workspace is where the repository is read from,
@@ -63,12 +67,13 @@ internal class WikiSettingsActions(
  * workspace. [server]: the deployment's System model while the server executes the account's wiki (mock 35 ①②, P9),
  * drawn read-only with its state, and one sentence says where the wiki's material goes; null while the read does not
  * say so (still loading, or a control plane from before it), which draws neither.
- * [workspaces]: who is in the wiki and who can be added (mock 38); null until it has been read.
+ * [workspaces]: who is in the wiki and who can be added (mock 38); null until it has been read. [trashed]: how many wikis
+ * Trash holds — its row, under Move to Trash…, is drawn while it holds one.
  * Every control is off while a write is in flight ([busy]). */
 @Composable
 internal fun WikiSettingsPage(route: OrbitRoute, space: WikiSpace, workspaceLabel: (String) -> String? = { null },
     server: WikiSystemModelStatus? = null, busy: Boolean = false, actions: WikiSettingsActions = WikiSettingsActions(),
-    workspaces: WikiSpaceWorkspaces? = null) {
+    workspaces: WikiSpaceWorkspaces? = null, trashed: Int = 0) {
     val mode = WikiModeLogic.mode(space.settings)
     val maintenance = space.settings?.maintenance ?: WikiMaintenanceSettings.default
     PageBar.Bind(route, WikiModeCopy.settingsTitle)
@@ -173,14 +178,27 @@ internal fun WikiSettingsPage(route: OrbitRoute, space: WikiSpace, workspaceLabe
                         }
                     }
                 }
-                WikiModeLogic.SettingsSection.DELETE -> {
-                    item(key = "delete-header") { WikiPlanSectionHead(section.title) }
-                    item(key = "delete") {
-                        WikiCard(Modifier.testTag("wiki-settings-delete")) {
-                            SettingsButtonRow(WikiModeCopy.deleteOpen, "wiki-settings-delete-open", busy, destructive = true, onClick = actions.delete)
+                WikiModeLogic.SettingsSection.TRASH -> {
+                    item(key = "trash-header") { WikiPlanSectionHead(section.title) }
+                    item(key = "trash") {
+                        WikiCard(Modifier.testTag("wiki-settings-move-to-trash")) {
+                            SettingsButtonRow(WikiModeCopy.trashOpen, "wiki-settings-move-to-trash-open", busy, destructive = true, onClick = actions.moveToTrash)
                         }
                     }
-                    item(key = "delete-footer") { WikiPlanFootnote(WikiModeCopy.deleteNote) }
+                    item(key = "trash-footer") { WikiPlanFootnote(WikiModeCopy.trashNote) }
+                    // The way to Trash while it holds a wiki: a card of its own under the note, as Edit… and Turn off stand
+                    // under Maintenance's, with no heading of its own, so the page's sections stay the web's.
+                    if (trashed > 0) item(key = "trash-row") {
+                        WikiCard {
+                            WikiRowButton("wiki-settings-trash", onClick = actions.openTrash) {
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text(WikiModeCopy.trash, Modifier.weight(1f), style = WikiType.prose)
+                                    Text(WikiModeCopy.trashRowCount(trashed), style = WikiType.prose, color = WikiPalette.secondary)
+                                    Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(14.dp), tint = WikiPalette.secondary)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -533,15 +551,16 @@ internal fun WikiSettingsScreen(store: WikiStore, route: OrbitRoute, data: Direc
     var settingUp by rememberSaveable { mutableStateOf(false) }
     var notice by rememberSaveable { mutableStateOf<String?>(null) }
     var members by remember { mutableStateOf<WikiSpaceWorkspaces?>(null) }
-    var confirmingDelete by rememberSaveable { mutableStateOf(false) }
-    var deleteRefusal by rememberSaveable { mutableStateOf<String?>(null) }
-    /** What the delete's question counts, read with the page; null until then, or when the read fails. */
-    var deleteEntries by remember { mutableStateOf<Int?>(null) }
+    var confirmingTrash by rememberSaveable { mutableStateOf(false) }
+    var trashRefusal by rememberSaveable { mutableStateOf<String?>(null) }
+    /** What Move to Trash's question counts, read with the page; null until then, or when the read fails. */
+    var trashEntries by remember { mutableStateOf<Int?>(null) }
     suspend fun readMembers(id: String) { optional { store.client.spaceWorkspaces(id) }?.let { members = it } }
     LaunchedEffect(store, state.currentSpace?.id) { state.currentSpace?.let { readMembers(it.id) } }
-    LaunchedEffect(store, state.currentSpace?.id) { deleteEntries = state.currentSpace?.let { optional { store.client.health(it.id).entries } } }
+    LaunchedEffect(store, state.currentSpace?.id) { trashEntries = state.currentSpace?.let { optional { store.client.health(it.id).entries } } }
     LaunchedEffect(store) { store.loadSpaces() }
     LaunchedEffect(store) { store.loadSystemModel() }
+    LaunchedEffect(store) { store.loadTrash() }
     val choices = rememberWikiWorkspaceChoices(store, data).choices
     val space = state.currentSpace
     if (space == null) {
@@ -562,30 +581,106 @@ internal fun WikiSettingsScreen(store: WikiStore, route: OrbitRoute, data: Direc
             } },
             setUp = { settingUp = true },
             turnOff = { scope.launch { finish(store.updateSpace(space, wikiMaintenanceOff())) } },
-            delete = { confirmingDelete = true }),
-        workspaces = members)
+            moveToTrash = { confirmingTrash = true },
+            openTrash = { nav.open(OrbitRoute(Destination.WIKI_TRASH)) }),
+        workspaces = members, trashed = state.trash.size)
     if (settingUp) WikiSetUpSheet(store, space, data, close = { settingUp = false })
     WikiRefusalAlert(WikiCopy.settingsSaveFailed, notice) { notice = null }
-    if (confirmingDelete) {
+    if (confirmingTrash) {
         val name = WikiSpaceLogic.names(state.spaces)[space.id] ?: space.title ?: space.slug
-        AlertDialog(onDismissRequest = { confirmingDelete = false }, modifier = Modifier.testTag("wiki-delete-dialog"),
-            title = { Text(WikiModeCopy.deleteQuestion(name)) },
-            text = { Text(WikiModeCopy.deleteMessage(deleteEntries, space.docs?.written ?: 0, space.repoUrlNorm)) },
+        AlertDialog(onDismissRequest = { confirmingTrash = false }, modifier = Modifier.testTag("wiki-move-to-trash-dialog"),
+            title = { Text(WikiModeCopy.trashQuestion(name)) },
+            text = { Text(WikiModeCopy.trashMessage(trashEntries, space.docs?.written ?: 0, space.repoUrlNorm)) },
             confirmButton = {
                 TextButton(onClick = {
-                    confirmingDelete = false
+                    confirmingTrash = false
                     scope.launch {
                         // The page goes as soon as the wiki does, back to the one the Wiki opens now, or to its empty state.
-                        deleteRefusal = store.deleteSpace(space) {
+                        trashRefusal = store.moveToTrash(space) {
                             nav.back()
-                            OrbitToasts.show(WikiModeCopy.deleted(name))
+                            OrbitToasts.show(WikiModeCopy.movedToTrash(name))
                         }
                     }
-                }, modifier = Modifier.testTag("wiki-delete-confirm")) { Text(WikiModeCopy.deleteConfirm, color = MaterialTheme.colorScheme.error) }
+                }, modifier = Modifier.testTag("wiki-move-to-trash-confirm")) { Text(WikiModeCopy.trashConfirm, color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmingDelete = false }, modifier = Modifier.testTag("wiki-delete-cancel")) { Text(WikiModeCopy.cancel) }
+                TextButton(onClick = { confirmingTrash = false }, modifier = Modifier.testTag("wiki-move-to-trash-cancel")) { Text(WikiModeCopy.cancel) }
             })
     }
-    WikiRefusalAlert(WikiModeCopy.deleteFailed, deleteRefusal) { deleteRefusal = null }
+    WikiRefusalAlert(WikiModeCopy.trashFailed, trashRefusal) { trashRefusal = null }
+}
+
+// MARK: - Trash
+
+/** Trash (docs/mocks/wiki-trash ②, the web's Trash dialog), pushed from Wiki settings' Trash row, the space picker and the
+ * first-wiki card: how long Trash keeps a wiki, then each wiki in it, the newest move first, with Restore and Delete
+ * permanently… under it. Delete permanently asks first, as the sessions' Trash does; a write the server refuses says why in
+ * an alert, in the server's own words — a restore while a newer wiki holds the repository among them. */
+@Composable
+internal fun WikiTrashScreen(store: WikiStore, route: OrbitRoute) {
+    val state by store.state.collectAsState()
+    val scope = rememberCoroutineScope()
+    /** The wiki Delete permanently is asking about, by id. */
+    var purging by rememberSaveable { mutableStateOf<String?>(null) }
+    var restoreRefusal by rememberSaveable { mutableStateOf<String?>(null) }
+    var purgeRefusal by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(store) { store.loadTrash() }
+    PageBar.Bind(route, WikiModeCopy.trash)
+    LazyColumn(Modifier.fillMaxSize().testTag("wiki-trash-page"), contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)) {
+        item(key = "lead") { WikiPlanFootnoteText(WikiModeCopy.trashLead, "wiki-trash-lead") }
+        item(key = "rows") {
+            when (presentation(state.trashState, state.trash.isEmpty())) {
+                LoadPresentation.LOADING -> LoadingMessage("Loading…")
+                LoadPresentation.FAILED -> StatusMessage("Trash couldn't be loaded", "Check the connection, then try again.") { scope.launch { store.loadTrash() } }
+                LoadPresentation.EMPTY -> WikiCard(Modifier.testTag("wiki-trash-empty")) {
+                    Text(WikiModeCopy.trashEmpty, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), style = WikiType.prose,
+                        color = WikiPalette.secondary)
+                }
+                LoadPresentation.CONTENT, LoadPresentation.CONTENT_WITH_ERROR -> WikiCard(Modifier.testTag("wiki-trash-rows")) {
+                    state.trash.forEachIndexed { index, row ->
+                        if (index > 0) HorizontalDivider(Modifier.padding(start = 16.dp))
+                        TrashRow(row, state.busy, restore = {
+                            scope.launch {
+                                val refusal = store.restore(row)
+                                if (refusal != null) restoreRefusal = refusal else OrbitToasts.show(WikiModeCopy.restored(row.name))
+                            }
+                        }, purge = { purging = row.id })
+                    }
+                }
+            }
+        }
+    }
+    state.trash.firstOrNull { it.id == purging }?.let { row ->
+        AlertDialog(onDismissRequest = { purging = null }, modifier = Modifier.testTag("wiki-trash-purge-dialog"),
+            title = { Text(WikiModeCopy.purgeQuestion) },
+            text = { Text(WikiModeCopy.purgeBody(row.entries)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    purging = null
+                    scope.launch { purgeRefusal = store.purge(row) }
+                }, modifier = Modifier.testTag("wiki-trash-purge-confirm")) { Text(WikiModeCopy.purgeConfirm, color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { purging = null }, modifier = Modifier.testTag("wiki-trash-purge-cancel")) { Text(WikiModeCopy.cancel) }
+            })
+    }
+    WikiRefusalAlert(WikiModeCopy.restoreFailed, restoreRefusal) { restoreRefusal = null }
+    WikiRefusalAlert(WikiModeCopy.purgeFailed, purgeRefusal) { purgeRefusal = null }
+}
+
+/** One wiki in Trash: its name over when it was moved, what it holds and when it is deleted for good — one stop to
+ * TalkBack — then Restore and Delete permanently…, each a stop of its own. */
+@Composable
+private fun TrashRow(row: WikiTrashRow, busy: Boolean, restore: () -> Unit, purge: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp).semantics(mergeDescendants = true) {}
+        .testTag("wiki-trash-row:${row.id}"), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(row.name, style = WikiType.prose)
+        Text(WikiModeCopy.trashRowLine(row.deletedAt, row.purgeAt, row.entries), style = WikiType.subtext, color = WikiPalette.secondary)
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = restore, enabled = !busy, modifier = Modifier.testTag("wiki-trash-restore:${row.id}")) { Text(WikiModeCopy.restore) }
+            TextButton(onClick = purge, enabled = !busy, modifier = Modifier.testTag("wiki-trash-delete:${row.id}")) {
+                Text(WikiModeCopy.deletePermanently, color = MaterialTheme.colorScheme.error.copy(alpha = if (busy) 0.38f else 1f))
+            }
+        }
+    }
 }

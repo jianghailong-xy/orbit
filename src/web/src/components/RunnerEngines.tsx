@@ -86,7 +86,16 @@ import {
   claudeRegionMachineNote,
 } from '../lib/claudeRegionCopy';
 import { listAttentionLine, type AttentionItem } from '../lib/runnerAttention';
-import { RUNNER_ENGINE_NO_QUOTA_LIMIT, RUNNER_ENGINE_RENEW, runnerEngineNext } from '../lib/runnerCopy';
+import {
+  RUNNER_ENGINE_COULDNT_CHECK,
+  RUNNER_ENGINE_NO_QUOTA_LIMIT,
+  RUNNER_ENGINE_NO_READING,
+  RUNNER_ENGINE_RENEW,
+  runnerEngineAccountsUnchecked,
+  runnerEngineCouldntCheckAccounts,
+  runnerEngineCouldntCheckNote,
+  runnerEngineNext,
+} from '../lib/runnerCopy';
 import {
   RUNNER_DEFAULT_USE_AGAIN,
   runnerAccountRemoveDetailAutomatic,
@@ -249,7 +258,7 @@ function versionOf(engine: RowEngine, health?: RunnerEngineHealth): string {
 }
 
 /** The sub-line under an engine's name: what is on this machine, or what would be. */
-function metaFor(kind: RowKind, engine: RowEngine, health?: RunnerEngineHealth): string {
+function metaFor(kind: RowKind, engine: RowEngine, health?: RunnerEngineHealth, signIn = true): string {
   if (kind === 'installing') return health?.installed ? 'Reinstalling' : 'Not installed yet';
   if (kind === 'installed') return 'Waiting for this runner to check in';
   if (!health?.installed) {
@@ -257,7 +266,11 @@ function metaFor(kind: RowKind, engine: RowEngine, health?: RunnerEngineHealth):
     // went), so this just states the fact.
     return kind === 'missing' ? 'Not installed — Orbit can install it here' : 'Not installed';
   }
-  if (kind === 'unknown') return `${versionOf(engine, health)} · the CLI wouldn't say`;
+  // With a sign-in, the badge says the check failed and the line keeps the version alone rather
+  // than saying it twice. Without one (OpenCode), the CLI's own answer is the whole story.
+  if (kind === 'unknown') {
+    return signIn ? versionOf(engine, health) : `${versionOf(engine, health)} · the CLI wouldn't say`;
+  }
   // Which of Kimi's two sites the login is on: the same CLI signs in to either, and a session spends
   // that site's subscription.
   if (engine === 'kimi' && health.kimiRegion) return `${versionOf(engine, health)} · ${KIMI_SITE[health.kimiRegion].domain}`;
@@ -393,13 +406,18 @@ function quotaOf(kind: RowKind, snapshot: PlanUsageSnapshot | null, online: bool
 
 /** What a row's tag says: whether that login can run a session now — and if its quota is spent, when
  *  it can — in the words the account pools use for theirs. */
-function statusOf(kind: RowKind, quota: Quota, now: number): { color: string; label: string } {
+function statusOf(kind: RowKind, quota: Quota, now: number, signIn = true): { color: string; label: string } {
   // A Cursor CLI account is spent when a turn on it met Cursor's limit, which no reading says.
   const spent = kind === 'in' ? quota.cursor?.spent : null;
   if (spent) return { color: 'orange', label: spent.resetsAt ? `Spent · resets ${formatResetTime(spent.resetsAt, now)}` : 'Spent' };
   const binding = bindingPlanUsageRow(quota.windows);
-  // Signed in with nothing read: the sign-in is all there is to say.
-  if (kind !== 'in' || !binding) return STATUS_TAG[kind];
+  // Signed in with nothing read: the sign-in is all there is to say. An engine Orbit signs no one
+  // in (OpenCode) has no sign-in check to have failed, so its unknown keeps the neutral word.
+  if (kind !== 'in' || !binding) {
+    return kind === 'unknown' && signIn
+      ? { color: 'default', label: RUNNER_ENGINE_COULDNT_CHECK }
+      : STATUS_TAG[kind];
+  }
   if (binding.window.utilization < 100) return { color: 'green', label: 'Available' };
   const resetsAt = binding.window.resetsAt;
   return { color: 'orange', label: resetsAt ? `Spent · resets ${formatResetTime(resetsAt, now)}` : 'Spent' };
@@ -412,7 +430,7 @@ function available(kind: RowKind, quota: Quota): boolean {
 
 /** The quota column: each window with how much of it is used and when it resets, or why there is
  *  nothing to show — under the name of the account it is, when the row speaks for several (`next`). */
-function QuotaCell({ kind, quota, next }: { kind: RowKind; quota: Quota; next?: string }) {
+function QuotaCell({ kind, quota, next, signIn = true }: { kind: RowKind; quota: Quota; next?: string; signIn?: boolean }) {
   return (
     <div className="re-quota">
       {next && <div className="re-quota-head re-quota-next">{runnerEngineNext(next)}</div>}
@@ -423,7 +441,7 @@ function QuotaCell({ kind, quota, next }: { kind: RowKind; quota: Quota; next?: 
               {row.groupLabel && <div className="re-quota-head">{row.groupLabel}</div>}
               <div className="re-quota-head">
                 <b>{row.label}</b>
-                <span>{row.percent}%{row.remaining ? ' remaining' : ''}</span>
+                <span>{row.headline ?? `${row.percent}%${row.remaining ? ' remaining' : ''}`}</span>
               </div>
               <div className={`runner-util ${planUsageRowSpent(row) ? 'spent' : row.nearLimit ? 'full' : ''}`}>
                 <span className="runner-util-fill" style={{ width: `${planUsageRowSpent(row) ? 100 : row.percent}%` }} />
@@ -454,14 +472,19 @@ function QuotaCell({ kind, quota, next }: { kind: RowKind; quota: Quota; next?: 
           </span>
         </>
       ) : (
-        <span className="re-quota-none">
+        <span
+          className="re-quota-none"
+          title={kind === 'unknown' && signIn ? 'No quota reading — the sign-in check didn’t answer.' : undefined}
+        >
           {kind === 'in'
             ? quota.noLimit
               ? RUNNER_ENGINE_NO_QUOTA_LIMIT
               : 'No quota reported'
             : kind === 'out'
               ? 'Sign in to see quota'
-              : '—'}
+              : kind === 'unknown' && signIn
+                ? RUNNER_ENGINE_NO_READING
+                : '—'}
         </span>
       )}
     </div>
@@ -470,9 +493,12 @@ function QuotaCell({ kind, quota, next }: { kind: RowKind; quota: Quota; next?: 
 
 /** Routine account maintenance stays in one menu. The pause dialog lives outside the dropdown
  *  so closing the menu does not unmount the operation it just opened. `moreRef` is its button. */
-function RunnerAccountMenu({ onRename, onSignIn, onRemove, offline, removing, removesInOrbit, pause, moreRef }: {
+function RunnerAccountMenu({ onRename, onSignIn, signInLabel, onRemove, offline, removing, removesInOrbit, pause, moreRef }: {
   onRename?: () => void;
   onSignIn?: () => void;
+  /** What that item is called: "Re-sign in" for a login that is in, "Sign in" for one the check
+   *  couldn't answer. */
+  signInLabel?: string;
   onRemove?: () => void;
   offline: boolean;
   removing?: boolean;
@@ -494,7 +520,7 @@ function RunnerAccountMenu({ onRename, onSignIn, onRemove, offline, removing, re
   const menu = (controls?: AccountPauseControls) => {
     const items: MenuItem[] = [
       ...(onRename ? [{ key: 'rename', icon: <EditOutlined aria-hidden />, label: 'Rename', onSelect: rename }] : []),
-      ...(onSignIn ? [{ key: 'login', icon: <LoginOutlined aria-hidden />, label: 'Re-sign in', disabled: offline, onSelect: onSignIn }] : []),
+      ...(onSignIn ? [{ key: 'login', icon: <LoginOutlined aria-hidden />, label: signInLabel ?? 'Re-sign in', disabled: offline, onSelect: onSignIn }] : []),
       ...(controls ? controls.paused ? [
         { key: 'resume', icon: <PlayCircleOutlined aria-hidden />, label: 'Resume now', disabled: controls.pending, onSelect: controls.resume },
         { key: 'duration', icon: <PauseOutlined aria-hidden />, label: 'Change pause duration…', disabled: controls.pending, onSelect: controls.choose },
@@ -549,6 +575,9 @@ function FoldedAccounts({
   now: number;
 }) {
   const signedOut = accounts.filter((account) => accountKindOf(account) === 'out' && !runsOnEnvKey(health, account)).length;
+  // A fold must not hide a check that got no answer either: it is the one state a folded head could
+  // otherwise call nothing at all.
+  const unchecked = accounts.filter((account) => accountKindOf(account) === 'unknown' && !runsOnEnvKey(health, account)).length;
   const account = accounts.find((entry) => entry.id === next);
   const kind: RowKind = account ? (runsOnEnvKey(health, account) ? 'in' : accountKindOf(account)) : 'out';
   const quota: Quota = account
@@ -560,6 +589,10 @@ function FoldedAccounts({
       {signedOut > 0 ? (
         <div className="re-status">
           <Badge tone="orange">{signedOut} signed out</Badge>
+        </div>
+      ) : unchecked > 0 ? (
+        <div className="re-status">
+          <Badge>{runnerEngineAccountsUnchecked(unchecked)}</Badge>
         </div>
       ) : account ? (
         <AccountPauseStatus until={account.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={statusOf(kind, quota, now)} />
@@ -689,6 +722,12 @@ function EngineRow({
     const accountQuota = loginEngine === null ? null : accountPlanUsage(usage, loginEngine, account.id);
     return !accountIsPaused(account.pausedUntil, now) && available(own, quotaOf(own, accountQuota, !!runner.online, now, engine));
   }).length;
+  // The accounts whose sign-in check got no answer. The head counts them out of "available" and
+  // names them after it, because "0 of N accounts available" reads as "nothing is logged in" — a
+  // claim the runner never made.
+  const unchecked = kept.filter(
+    (account) => !runsOnEnvKey(health, account) && accountKindOf(account) === 'unknown',
+  ).length;
   // "Add account" is how a machine gets from one account to two, so it is not the group's to hold:
   // the Codex row offers it whenever the probe speaks for the engine, whether it heads a group yet
   // or not. An Antigravity account is a Google sign-in, which only some runners can add, and a Kimi
@@ -724,13 +763,15 @@ function EngineRow({
     if (cursorBlocked) return null;
     if (engine === 'antigravity' && kind !== 'missing' && kind !== 'installing' && kind !== 'install-failed') {
       if (googleLogin !== 'available') return null;
-      if (kind === 'in' && !envKey) return null;
+      // Signed in (on the key or on Google), or a check that got no answer: nothing to sign in to
+      // on the row. An unanswered check keeps its action in More, like every engine's.
+      if ((kind === 'in' && !envKey) || kind === 'unknown') return null;
       return <Button size="small" variant="primary" className="re-action" disabled={offline} onClick={() => onSignIn(signIn === engine ? null : engine)}>Sign in with Google</Button>;
     }
     if (offline) {
       // Nothing on an offline machine can be pressed. An engine with a sign-in still shows where
-      // the button would be; OpenCode has none to show.
-      return loginEngine === null || kind === 'in' ? null : <Button size="small" className="re-action" disabled>Sign in</Button>;
+      // the button would be; OpenCode has none to show, and an unanswered check is no sign-out.
+      return loginEngine === null || kind === 'in' || kind === 'unknown' ? null : <Button size="small" className="re-action" disabled>Sign in</Button>;
     }
     switch (kind) {
       case 'missing':
@@ -753,7 +794,11 @@ function EngineRow({
         );
       case 'in':
         return null;
-      // Signed out, wouldn't say, or just installed. An install the probe hasn't caught up with yet
+      // The check got no answer: nothing says the account is out, so the row offers no sign-in.
+      // The action stays in More for the case the login really is gone.
+      case 'unknown':
+        return null;
+      // Signed out, or just installed. An install the probe hasn't caught up with yet
       // gets Sign in too: a CLI that was just installed has no sign-in, so that is what comes next,
       // and the runner only reports an install done once the binary is on its PATH — waiting for the
       // check-in first left the row with nothing to press for up to a heartbeat.
@@ -782,12 +827,15 @@ function EngineRow({
         <>
           {versionOf(engine, health)} ·{' '}
           <b>
-            {ready} of {kept.length} accounts available
+            {kept.length > 0 && unchecked === kept.length
+              ? runnerEngineCouldntCheckAccounts(kept.length)
+              : `${ready} of ${kept.length} accounts available`}
           </b>
+          {unchecked > 0 && unchecked < kept.length && <> · {runnerEngineAccountsUnchecked(unchecked)}</>}
         </>
       ) : (
         // A build Orbit doesn't run says which it is; nothing it would answer about a sign-in matters.
-        <>{cursorBlocked ? versionOf(engine, health) : metaFor(kind, engine, health)}</>
+        <>{cursorBlocked ? versionOf(engine, health) : metaFor(kind, engine, health, loginEngine !== null)}</>
       )}
       {/* Whether this CLI is being kept current, next to what it currently is — the two
           halves of the same question, and useless apart. */}
@@ -812,7 +860,7 @@ function EngineRow({
       data-engine={engine}
       // The head's line folds its group from anywhere on it, as a card's head does — not a panel or
       // note opened under the line, which are the row's and not its head's.
-      onClick={grouped ? foldFromAnywhere(() => onFold(!open), 'button, a, input, .re-panel, .re-login-note') : undefined}
+      onClick={grouped ? foldFromAnywhere(() => onFold(!open), 'button, a, input, .re-panel, .re-login-note, .re-dup') : undefined}
     >
       {grouped ? (
         // A group folds under its head. The toggle is the identity alone, as a runner card's is, so
@@ -873,8 +921,8 @@ function EngineRow({
       )}
       {!grouped && !cursorBlocked && !regionBlocked && (
         <>
-          <AccountPauseStatus until={single?.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={antigravity?.supported === false ? { color: 'orange', label: 'Update runner' } : statusOf(kind, quota, now)} />
-          {envKey ? <div className="re-quota re-meta">env key · runs on your Gemini key</div> : <QuotaCell kind={kind} quota={quota} />}
+          <AccountPauseStatus until={single?.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={antigravity?.supported === false ? { color: 'orange', label: 'Update runner' } : statusOf(kind, quota, now, loginEngine !== null)} />
+          {envKey ? <div className="re-quota re-meta">env key · runs on your Gemini key</div> : <QuotaCell kind={kind} quota={quota} signIn={loginEngine !== null} />}
         </>
       )}
       {folded && !regionBlocked && loginEngine !== null && (
@@ -913,9 +961,10 @@ function EngineRow({
         {!grouped && (
           <RunnerAccountMenu
             offline={offline}
-            onSignIn={!regionBlocked && loginEngine !== null && kind === 'in' && (loginEngine !== 'antigravity' || (googleLogin === 'available' && !envKey))
+            onSignIn={!regionBlocked && loginEngine !== null && (kind === 'in' || kind === 'unknown') && (loginEngine !== 'antigravity' || (googleLogin === 'available' && !envKey))
               ? () => onSignIn(signIn === engine ? null : engine)
               : undefined}
+            signInLabel={kind === 'unknown' ? 'Sign in' : undefined}
             // A Gemini key is not an account of the machine's to pause: Default on it is no Google
             // sign-in at all.
             pause={single && ((kind === 'in' && !envKey) || accountIsPaused(single.pausedUntil, now)) ? {
@@ -925,6 +974,14 @@ function EngineRow({
           />
         )}
       </div>
+
+      {/* The check got no answer: said once under the head, with what it does and does not mean.
+          The rows above keep their own badges; signing in is not the fix for a timeout. */}
+      {grouped && !folded && unchecked > 0 && !regionBlocked && (
+        <div className="re-dup">
+          <span>{runnerEngineCouldntCheckNote()}</span>
+        </div>
+      )}
 
       {/* The engine's one account says what an account row says: a login about to lapse, and what
           being signed out costs — here, the engine on this machine. */}
@@ -939,6 +996,13 @@ function EngineRow({
       {!grouped && kind === 'out' && !loginHint && !cursorBlocked && !regionBlocked && (
         <div className="re-dup">
           <span>{signedOutNote(engineNameOf(engine), true)}</span>
+        </div>
+      )}
+      {/* Only an engine Orbit signs in has a sign-in check to explain: OpenCode's unknown is its own
+          provider's, said under the row by openCodeHint. */}
+      {!grouped && kind === 'unknown' && loginEngine !== null && !loginHint && !cursorBlocked && !regionBlocked && !envKey && (
+        <div className="re-dup">
+          <span>{runnerEngineCouldntCheckNote()}</span>
         </div>
       )}
       {/* Why, and what still runs here; then when it was checked and where Claude's connection came out. */}
@@ -1266,7 +1330,8 @@ function AccountRow({
       removesInOrbit={isDefault}
       moreRef={more}
       onRename={() => setEditing(true)}
-      onSignIn={kind === 'in' && !envKey && !regionBlocked ? toggle : undefined}
+      onSignIn={(kind === 'in' || kind === 'unknown') && !envKey && !regionBlocked ? toggle : undefined}
+      signInLabel={kind === 'unknown' ? 'Sign in' : undefined}
       onRemove={removable ? () => setConfirmingRemove(true) : undefined}
       pause={(kind === 'in' && !envKey) || accountIsPaused(account.pausedUntil, now) ? {
         name: accountNameOf(account), until: account.pausedUntil,
@@ -1313,7 +1378,9 @@ function AccountRow({
         <QuotaCell kind={kind} quota={quota} />
       )}
       <div className="re-act">
-        {kind !== 'in' && !regionBlocked && (
+        {/* An unanswered check is not a sign-out: no button on the row. Sign in stays in More for
+            the case the login really is gone. */}
+        {kind === 'out' && !regionBlocked && (
           <Button size="small" className="re-action" variant={runner.online ? 'primary' : 'default'} disabled={!runner.online || removing} onClick={toggle}>
             Sign in
           </Button>

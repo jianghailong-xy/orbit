@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { sessionLine, statusLabel } from './WorkspaceView';
+import { SESSION_MESSAGE_UNTITLED } from '../lib/sessionMessage';
+import { SENT_BY_YOU, sessionLine, statusLabel } from './WorkspaceView';
 
 /**
  * The session row's second line. Kept in step with the native port
@@ -272,6 +273,60 @@ describe('sessionLine', () => {
       text: 'Ended',
       tone: 'preview',
     });
+  });
+});
+
+/**
+ * Whose message the line previews (docs/session-list-projects-design.md §3.5, owner 2026-11-07). The
+ * server keeps one unanswered message per session whoever sent it, so a coordinator's row read "You:"
+ * over a task's report. Another Orbit session's message (`lastUserFrom`) is named for that session,
+ * as the conversation's card names it; "You" is only ever the owner's own words. Kept in step with
+ * OrbitKit's `SessionLineSenderTests` and Android's `SessionLineTest`.
+ */
+describe('sessionLine names who sent the message it previews', () => {
+  const report = 'Done: **the package builds**';
+  const from = { sessionId: 'session-1', title: 'Build the package' };
+
+  it('names another session by its title, while the turn runs and after it stopped', () => {
+    expect(sessionLine({ status: 'RUNNING', lastAssistantText: 'previous reply', lastUserText: report, lastUserFrom: from }, true))
+      .toEqual({ text: 'Build the package: Done: the package builds', tone: 'preview' });
+    expect(sessionLine({ status: 'INTERRUPTED', lastAssistantText: 'previous reply', lastUserText: report, lastUserFrom: from }, true))
+      .toEqual({ text: 'Build the package: Done: the package builds', tone: 'preview' });
+    // Trash says it the same way.
+    expect(sessionLine({ status: 'FAILED', lastUserText: report, lastUserFrom: from }, false))
+      .toEqual({ text: 'Build the package: Done: the package builds', tone: 'preview' });
+  });
+
+  it('says You for the owner’s own message, and for an older server that names no sender', () => {
+    expect(SENT_BY_YOU).toBe('You');
+    expect(sessionLine({ status: 'RUNNING', lastUserText: 'ship it', lastUserFrom: null }, true))
+      .toEqual({ text: 'You: ship it', tone: 'preview' });
+    expect(sessionLine({ status: 'INTERRUPTED', lastUserText: 'ship it', lastUserFrom: null }, true))
+      .toEqual({ text: 'You: ship it', tone: 'preview' });
+    expect(sessionLine({ status: 'RUNNING', lastUserText: 'ship it' }, true))
+      .toEqual({ text: 'You: ship it', tone: 'preview' });
+    expect(sessionLine({ status: 'INTERRUPTED', lastUserText: 'ship it' }, true))
+      .toEqual({ text: 'You: ship it', tone: 'preview' });
+  });
+
+  it('calls a sender with no title what the conversation’s card calls it, never You', () => {
+    expect(SESSION_MESSAGE_UNTITLED).toBe('Untitled session');
+    for (const title of ['', '   ', '\n\t ']) {
+      expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: 'ship it', lastUserFrom: { sessionId: 'session-1', title } }, true))
+        .toEqual({ text: 'Untitled session: ship it', tone: 'preview' });
+    }
+    // A title is named as written, without the spaces around it.
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: 'ship it', lastUserFrom: { sessionId: 'session-1', title: '  Build the package ' } }, true).text)
+      .toBe('Build the package: ship it');
+  });
+
+  it('changes nothing above the message, and a sender with no message makes no line', () => {
+    expect(sessionLine({ status: 'RUNNING', lastToolUse: 'Bash', lastUserText: report, lastUserFrom: from }, true))
+      .toEqual({ text: 'Running Bash…', tone: 'running' });
+    expect(sessionLine({ status: 'AWAITING_INPUT', pendingApprovals: 1, lastUserText: report, lastUserFrom: from }, true))
+      .toEqual({ text: 'Waiting for approval', tone: 'approval' });
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastAssistantText: 'On it.', lastUserFrom: from }, true))
+      .toEqual({ text: 'On it.', tone: 'preview' });
   });
 });
 

@@ -40,6 +40,7 @@ struct WikiHomeView: View {
                                      start: startCard(wiki, space: space, now: context.date), busy: wiki.busy,
                                      seen: seen, failed: loading && wiki.homeState.lastLoadFailed, waiting: wiki.waiting,
                                      shareLive: shareRead?.link.map { $0.state != .ended } ?? false,
+                                     trashed: wiki.trash.count,
                                      besideContents: rowNavigation == .selection, actions: actions(wiki))
                     }
                 } else {
@@ -158,6 +159,7 @@ struct WikiHomeView: View {
             pickSpace: { slug in wiki.selectedSlug = slug },
             search: { query in await wiki.search(query) },
             openSettings: { open(.wikiSettings) },
+            openTrash: { open(.wikiTrash) },
             openContents: { contentsShown = true },
             openActivity: { open(.wikiActivity) },
             openShare: { sharing = true },
@@ -208,7 +210,8 @@ struct WikiHomePlaceholder: View {
 
 /// The Wiki of an account with no wiki (mock 41 ⑧): the same card, whose first step makes one. A wiki describes a
 /// repository, so with no workspace on one there is nothing to offer yet and the step says so — once the workspaces are
-/// read, so a first look does not say it of an account that has them.
+/// read, so a first look does not say it of an account that has them. While Trash holds a wiki, the page says so and
+/// opens it (docs/mocks/wiki-trash): with no wiki left, that is the one way back to it.
 struct WikiFirstStartScreen: View {
     @Environment(AppModel.self) private var model
     let wiki: WikiModel
@@ -217,7 +220,8 @@ struct WikiFirstStartScreen: View {
 
     var body: some View {
         let workspaces = model.wikiWorkspacesLoading || model.wikiWorkspaceChoices.contains { $0.repository != nil }
-        WikiFirstStartPage(card: WikiStartLogic.firstCard(workspaces: workspaces)) { _ in creating = true }
+        WikiFirstStartPage(card: WikiStartLogic.firstCard(workspaces: workspaces), trashed: wiki.trash.count,
+                           openTrash: { model.push(.wikiTrash) }) { _ in creating = true }
             .sheet(isPresented: $creating) { WikiCreateSheet(wiki: wiki) }
     }
 }
@@ -236,6 +240,8 @@ struct WikiDetailPane: View {
             WikiActivityView()
         } else if model.nav.wikiSettingsOnTop {
             WikiSettingsView()
+        } else if model.nav.wikiTrashOnTop {
+            WikiTrashView()
         } else if let run = model.nav.selectedWikiRunID {
             WikiRunView(changesetID: run).id(run)
         } else if let job = model.nav.selectedWikiJobID {
@@ -725,6 +731,10 @@ struct WikiReviewView: View {
     @State private var editing: WikiLogic.ReviewCard?
     /// A challenge whose Amend form is open.
     @State private var amending: WikiLogic.ReviewCard?
+    /// A challenge whose Retire… dialog is open, and the reason the dialog holds: the challenge's own until the
+    /// owner changes it.
+    @State private var retiring: WikiLogic.ReviewCard?
+    @State private var retireReason = ""
     @State private var notice: String?
 
     var body: some View {
@@ -767,6 +777,28 @@ struct WikiReviewView: View {
                     }
                 }
             }
+            // A challenge's Retire…: the entry page's own dialog, with what retiring does and that it cannot be undone,
+            // and the reason filled in from the challenge. Cancel goes first. The reason goes with the decide as its
+            // note, which the server records as the retirement's reason.
+            .alert(WikiCopy.retire, isPresented: Binding(get: { retiring != nil },
+                                                         set: { if !$0 { retiring = nil } }),
+                   presenting: retiring) { card in
+                TextField(WikiCopy.reasonPlaceholder, text: $retireReason)
+                Button("Cancel", role: .cancel) { retireReason = "" }
+                Button(WikiCopy.retireConfirm, role: .destructive) {
+                    let why = retireReason.trimmingCharacters(in: .whitespacesAndNewlines)
+                    retireReason = ""
+                    guard !why.isEmpty else { return }
+                    Task {
+                        let answer = await wiki.decide(card, .retire, note: why)
+                        finish(answer, card: card, action: .retire)
+                    }
+                }
+                // A retirement says why, as the entry page's does: no reason, no Retire.
+                .disabled(retireReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            } message: { _ in
+                Text(WikiCopy.retireNote)
+            }
             .alert(WikiCopy.decideFailed, isPresented: Binding(get: { notice != nil },
                                                           set: { if !$0 { notice = nil } })) {
                 Button("OK", role: .cancel) { notice = nil }
@@ -788,7 +820,11 @@ struct WikiReviewView: View {
             },
             edit: { card in editing = card },
             openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) },
-            amend: { card in amending = card })
+            amend: { card in amending = card },
+            retire: { card in
+                retireReason = card.op.payload?["reason"]?.stringValue ?? ""
+                retiring = card
+            })
     }
 
     /// A refusal opens the alert with the server's reason; an answer that landed is floated.
@@ -813,7 +849,7 @@ struct WikiReviewView: View {
 /// A challenge's Amend: the owner's version of the entry it names — its title and one line — written
 /// as the owner's revision; the anchors are checked again (contract `anchorRules.verify.answers.amend`).
 /// Only what changed is sent, and with nothing changed the answer waits: an Amend that changes nothing
-/// is a Re-confirm.
+/// is a Keep.
 private struct WikiChallengeAmendForm: View {
     let entry: WikiEntry
     /// The answer: nil once it landed and the form can close, else the refusal, which stays here.

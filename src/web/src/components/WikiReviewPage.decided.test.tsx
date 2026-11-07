@@ -262,23 +262,23 @@ describe('a decide the server recorded without applying it', () => {
     await expectRefused(CONFLICT, 'Accepted');
   });
 
-  it('a challenge of an entry no longer active: Re-confirm says the entry is no longer active', async () => {
+  it('a challenge of an entry no longer active: Keep says the entry is no longer active', async () => {
     recorded = 'conflict';
     const challenge = CHALLENGE();
     const card = await mount([changeset([challenge])], ENTRY.title);
 
-    await press('Re-confirm', card);
+    await press('Keep', card);
 
     expect(decides).toEqual([[{ opId: challenge.id, action: 'reconfirm' }]]);
-    await expectRefused(INACTIVE, 'Re-confirmed');
+    await expectRefused(INACTIVE, 'Kept');
   });
 
   it("a challenge of an entry no longer active: its Amend form says so too, and not 'Amended'", async () => {
     recorded = 'conflict';
     const challenge = CHALLENGE();
     const card = await mount([changeset([challenge])], ENTRY.title);
-    await vi.waitFor(() => expect(button('Amend', card).disabled).toBe(false), { timeout: 10_000 });
-    await press('Amend', card);
+    await vi.waitFor(() => expect(button('Amend…', card).disabled).toBe(false), { timeout: 10_000 });
+    await press('Amend…', card);
     await vi.waitFor(() => expect(form()).not.toBeNull(), { timeout: 10_000 });
 
     await retitle('Upgrade recreates what changed');
@@ -324,9 +324,13 @@ describe('a decide the server recorded as asked', () => {
     const challenge = CHALLENGE();
     const card = await mount([changeset([challenge])], ENTRY.title);
 
-    await press('Retire', card);
+    // Retire… asks first; the dialog's Retire sends the challenge's reason as the record's.
+    await press('Retire…', card);
+    expect(decides).toEqual([]);
+    await vi.waitFor(() => expect(form()).not.toBeNull(), { timeout: 10_000 });
+    await press('Retire', form()!);
 
-    expect(decides).toEqual([[{ opId: challenge.id, action: 'retire' }]]);
+    expect(decides).toEqual([[{ opId: challenge.id, action: 'retire', note: 'docs/upgrade.md no longer says this' }]]);
     await vi.waitFor(() => expect(toasts()).toContain('Retired'), { timeout: 10_000 });
     expect(toasts()).not.toContain('Nothing was applied');
     expect(toasts()).not.toContain(FAILED);

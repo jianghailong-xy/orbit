@@ -516,6 +516,13 @@ export interface PlanUsageIncludedUsage {
    *  never says the account is spent, at 100% neither: past its included usage a paid plan can go on,
    *  on demand. */
   percentUsed?: number;
+  /** Cents left of the included allowance (`GetCurrentPeriodUsage` `planUsage.remaining`). Present
+   *  when Cursor sent dollar fields — including 0 when the allowance is exhausted (proto3 omits a
+   *  zero remaining beside a present `limit`). Absent when Cursor named no remaining, never invented. */
+  remainingCents?: number;
+  /** Cents of included allowance this period (`planUsage.limit`, or `planInfo.includedAmountCents`
+   *  when period usage named remaining but not limit). Absent when Cursor named none. */
+  limitCents?: number;
   /** ISO-8601: when a turn on this account last met Cursor's usage limit ("Upgrade your plan to
    *  continue", contract §12) within this period. The account is spent from then until `resetsAt`; a
    *  later turn on it that ends well takes it back, and so does the next period. */

@@ -141,7 +141,7 @@ export interface SpaceScope {
  */
 export async function spaceScope(prisma: PrismaService, ownerId: string, spaceId: string): Promise<SpaceScope> {
   const space = await prisma.wikiSpace.findFirst({
-    where: { id: spaceId, ownerId },
+    where: { id: spaceId, ownerId, deletedAt: null },
     select: { id: true, repoUrlNorm: true, settings: true },
   });
   if (!space) throw new NotFoundException('no such wiki space');

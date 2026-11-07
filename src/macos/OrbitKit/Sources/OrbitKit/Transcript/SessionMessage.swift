@@ -73,6 +73,31 @@ public struct SessionMessage: Sendable, Equatable, Codable {
     }
 }
 
+/// Who sent the message a session row previews (`Session.lastUserText`), when another Orbit session
+/// did — `session_send`, `project_send` or `session_interrupt` (docs/session-list-projects-design.md
+/// §3.5). Mirrors `@orbit/shared`'s `SessionMessageFrom`: the same two facts the card names its sender
+/// by, as they stood when the message was written. The rows carry it as `lastUserFrom`, nil when the
+/// account owner wrote the message. Both fields default, as the card's do, so a value this build reads
+/// only in part still says that someone other than the owner sent it.
+public struct SessionMessageFrom: Sendable, Equatable, Codable {
+    /// The sending session, in the uuid spelling every other read of one uses.
+    public let sessionId: String
+    public let title: String
+
+    public init(sessionId: String, title: String = "") {
+        self.sessionId = sessionId
+        self.title = title
+    }
+
+    private enum CodingKeys: String, CodingKey { case sessionId, title }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        sessionId = (try? values.decodeIfPresent(String.self, forKey: .sessionId)) ?? ""
+        title = (try? values.decodeIfPresent(String.self, forKey: .title)) ?? ""
+    }
+}
+
 /// What the card says, in the web's own words: `lib/sessionMessage.ts`, which
 /// `SessionMessageCopyParityTests` holds this end to.
 public enum SessionMessageCard {

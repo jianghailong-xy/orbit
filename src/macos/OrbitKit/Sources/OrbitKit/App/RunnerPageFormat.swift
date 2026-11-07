@@ -272,12 +272,14 @@ public enum RunnerPageFormat {
         }
     }
 
-    /// One login's answer: only the CLI's own yes is signed in, and a CLI that wouldn't say is not
-    /// shown as either.
+    /// One login's answer: only the CLI's own yes is signed in; a CLI that wouldn't say is a failed
+    /// check, said as such and never as signed in (nor as signed out). Nil only where the account has
+    /// no answer of its own to give — Antigravity's Default on the machine's Gemini key.
     public static func authStatus(_ auth: String?) -> Status? {
         switch auth {
         case "yes": return Status(text: RunnerPageCopy.RUNNER_ENGINE_SIGNED_IN, tone: .ok)
         case "no": return Status(text: RunnerPageCopy.RUNNER_ENGINE_SIGNED_OUT, tone: .warn)
+        case "unknown": return Status(text: RunnerPageCopy.RUNNER_ENGINE_COULDNT_CHECK, tone: .muted)
         default: return nil
         }
     }
@@ -329,7 +331,16 @@ public enum RunnerPageFormat {
         if auths.allSatisfy({ $0 == "yes" }) {
             return Status(text: RunnerPageCopy.runnerEngineAccountsSignedIn(count: accounts.count), tone: .ok)
         }
-        return auths.contains("no") ? authStatus("no") : nil
+        if auths.contains("no") { return authStatus("no") }
+        // None out, and not all in: the check answered for some or none of them. Say so rather than
+        // leaving the row with no status at all (web's "N couldn’t be checked" / "couldn’t check N
+        // accounts" on the group's head).
+        let unchecked = auths.filter { $0 != "yes" }.count
+        return Status(
+            text: unchecked == accounts.count
+                ? RunnerPageCopy.runnerEngineCouldntCheckAccounts(count: unchecked)
+                : RunnerPageCopy.runnerEngineAccountsUnchecked(count: unchecked),
+            tone: .muted)
     }
 
     /// Which of Kimi's two sites its login is on, said after the version on its Engines row (web's
@@ -627,6 +638,18 @@ public enum RunnerPageFormat {
         guard line.auth == "no" else { return nil }
         return alone ? RunnerPageCopy.runnerEngineSignedOutAlone(engine: engineName(engine))
                      : RunnerPageCopy.RUNNER_ENGINE_ACCOUNT_SIGNED_OUT_NOTE
+    }
+
+    /// What a row says under it when its sign-in check got no answer: a failed check, not a
+    /// sign-out. Nil for an engine Orbit signs no one in to — OpenCode's unknown is its provider's —
+    /// and when every account answered.
+    public static func couldntCheckNote(_ health: RunnerEngineHealth, engine: String) -> String? {
+        guard health.installed == true, loginEngine(engine) != nil else { return nil }
+        let accounts = health.accounts ?? []
+        let unchecked = accounts.isEmpty
+            ? health.auth == "unknown"
+            : accounts.contains { $0.auth == "unknown" && !runsOnEnvKey(health, account: $0.id, auth: $0.auth) }
+        return unchecked ? RunnerPageCopy.runnerEngineCouldntCheckNote() : nil
     }
 
     /// What Add Account calls a new account until the user names it: its number on the machine,

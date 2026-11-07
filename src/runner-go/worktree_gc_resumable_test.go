@@ -3116,7 +3116,9 @@ func TestTheRunLoopCallsEverySideOfTheResumableSweep(t *testing.T) {
 	} else {
 		end := door + strings.Index(body[door:], "\n}\n")
 		rest := strings.Replace(body[:door]+body[end:], "\tresumableWaitUntil time.Time\n", "", 1)
-		if strings.Contains(strings.Replace(rest, "while resumableWaitUntil is ahead", "", 1), "resumableWaitUntil") {
+		rest = strings.Replace(rest, "\tresumableWaitMeasured time.Time\n", "", 1)
+		if strings.Contains(strings.Replace(rest, "while resumableWaitUntil is ahead", "", 1), "resumableWaitUntil") ||
+			strings.Contains(rest, "resumableWaitMeasured") {
 			t.Error("nothing but sweepResumable may read or write the wait")
 		}
 	}

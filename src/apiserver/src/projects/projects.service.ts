@@ -3947,6 +3947,29 @@ export class ProjectsService {
     return this.afterPause(ownerId, id, 'RESUME', written);
   }
 
+  /**
+   * `POST /projects/:id/sessions/complete` — Complete on a finished project's row
+   * (docs/session-list-projects-design.md §3.6): its coordinator and its members still in Open, in
+   * every workspace, moved to Completed together (`SessionsService.completeProjectSessions`), which
+   * answers how many moved. Nothing moves them by itself: a coordinator still watching something
+   * after its project is done is the owner's to put away when they choose.
+   *
+   * The owner's press: a request carrying an acting session is refused 403 before anything is read.
+   */
+  async completeSessions(ownerId: string, id: string, actingSessionId?: string): Promise<{ completed: number }> {
+    const session = actingSessionId?.trim();
+    if (session) {
+      throw new ForbiddenException({
+        code: 'PROJECT_SESSIONS_COMPLETE_OWNER_ONLY',
+        message:
+          `this request carries the session header of ${session}, so an agent session is making it; `
+          + "moving a finished project's sessions to Completed is the account owner's press, from the "
+          + 'Orbit app with their own sign-in.',
+      });
+    }
+    return this.sessions.completeProjectSessions(ownerId, id);
+  }
+
   /** Refused whole before anything is read: a request from a session does not pause or resume. */
   private static refusePauseFromSession(actingSessionId: string | undefined): void {
     const refusal = projectPauseSessionRefusal(actingSessionId);

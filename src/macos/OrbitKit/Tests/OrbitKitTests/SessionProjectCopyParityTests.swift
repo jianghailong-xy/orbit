@@ -69,6 +69,10 @@ final class SessionProjectCopyParityTests: XCTestCase {
              SessionProjectCopy.progressHint(sessions: 23, running: 47)
                 .replacingOccurrences(of: "23", with: "${sessions}")
                 .replacingOccurrences(of: "47", with: "${running}")),
+            // The mark on a member's own row (owner 2026-11-07): the web's hover, iOS's accessibility label.
+            ("markHint: (title: string)",
+             SessionProjectCopy.markHint(title: "PROJECT_TITLE")
+                .replacingOccurrences(of: "PROJECT_TITLE", with: "${title}")),
             ("waitingSession: (text: string, title: string)",
              SessionProjectCopy.waitingSession("WAIT_TEXT", title: "SESSION_TITLE")
                 .replacingOccurrences(of: "WAIT_TEXT", with: "${text}")
@@ -87,6 +91,36 @@ final class SessionProjectCopyParityTests: XCTestCase {
         for (signature, copy) in templates {
             XCTAssertTrue(web.contains("\(signature) => `\(copy)`,"),
                           "\(signature): the web's template drifted from \(copy.debugDescription)")
+        }
+    }
+
+    /// The words the tests in this file hold to the web's.
+    private static let held: Set<String> = [
+        "noCoordinator", "openSession", "openCoordinator", "sessions", "openProject", "pin", "unpin", "move",
+        "coordinatorSection", "pageSubtitleLoading", "startReview", "startNotAsked", "startHint",
+        "progress", "progressHint", "markHint", "waitingSession", "pageSubtitle", "pageProgress", "startAsked",
+        "pageNotStarted", "startSuggestion",
+    ]
+    /// The web's words OrbitKit's table does not carry: the project page's status line before any count,
+    /// and its empty and failed states.
+    private static let notInThisTable: Set<String> = ["pageStatus", "pageEmpty", "pageUnread", "retry"]
+
+    /// Every word of the web's `SESSION_PROJECT_COPY` is held here or named above as not in this table:
+    /// a sentence the web adds that OrbitKit does not carry fails.
+    func testEveryWebWordIsHeldHereOrNamed() throws {
+        let web = try web()
+        let open = try XCTUnwrap(web.range(of: "export const SESSION_PROJECT_COPY = {"), "no SESSION_PROJECT_COPY")
+        let close = try XCTUnwrap(web.range(of: "\n} as const;", range: open.upperBound..<web.endIndex))
+        let table = String(web[open.upperBound..<close.lowerBound])
+        let keys = try NSRegularExpression(pattern: "^  (\\w+):", options: [.anchorsMatchLines])
+            .matches(in: table, range: NSRange(table.startIndex..., in: table))
+            .compactMap { Range($0.range(at: 1), in: table).map { String(table[$0]) } }
+        XCTAssertFalse(keys.isEmpty, "no words read from SESSION_PROJECT_COPY")
+        for key in keys where !Self.held.contains(key) && !Self.notInThisTable.contains(key) {
+            XCTFail("SESSION_PROJECT_COPY says \(key), which SessionProjectCopy neither holds nor names")
+        }
+        for key in Self.held.union(Self.notInThisTable).subtracting(keys).sorted() {
+            XCTFail("SESSION_PROJECT_COPY no longer says \(key)")
         }
     }
 

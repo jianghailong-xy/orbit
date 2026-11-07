@@ -13,6 +13,7 @@ import type {
   SessionCapabilities,
   SessionLandingView,
   SessionMessageCard,
+  SessionMessageFrom,
   SessionReplyCard,
   SessionMoveTargets,
   SessionRequestView,
@@ -1028,6 +1029,12 @@ export const completeSession = async (sessionId: string) => {
   }
 };
 
+/** Complete on a DONE or CANCELLED project's row (docs/session-list-projects-design.md §3.6): its
+ *  coordinator and its members still in Open, in every workspace, move to Completed together.
+ *  Answers how many moved; an OPEN project is refused 409 PROJECT_STILL_OPEN. */
+export const completeProjectSessions = (projectId: string) =>
+  api<{ completed: number }>(`/projects/${encodeURIComponent(projectId)}/sessions/complete`, { method: 'POST' });
+
 export const deleteSession = (sessionId: string) =>
   api(`/sessions/${sessionId}`, { method: 'DELETE' });
 
@@ -1747,6 +1754,11 @@ export type SessionListItem = Record<string, any> & {
    *  session no pass has recapped yet. */
   recapText?: string | null;
   recapAt?: string | null;
+  /** Who sent the unanswered message the row previews (`lastUserText`), when another Orbit session
+   *  did: the row names that session instead of saying "You" (docs/session-list-projects-design.md
+   *  §3.5). Null for the owner's own words; absent from an older server, where every message reads as
+   *  the owner's, as it always did. */
+  lastUserFrom?: SessionMessageFrom | null;
 };
 
 /** The repair conversation attached to a merge recovery on its parent session. */
@@ -1836,6 +1848,8 @@ export interface SessionDetail {
    *  Null on a session no pass has recapped yet. */
   recapText?: string | null;
   recapAt?: string | null;
+  /** Who sent the unanswered message, as the list row carries it (`SessionListItem.lastUserFrom`). */
+  lastUserFrom?: SessionMessageFrom | null;
   startedAt?: string | null;
   finishedAt?: string | null;
   error?: string | null;

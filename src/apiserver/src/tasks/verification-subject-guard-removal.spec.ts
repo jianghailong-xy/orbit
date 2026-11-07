@@ -271,7 +271,14 @@ test('(c) negative control: the scan would still report a forged call site, and 
 const CENSUS_TABLES = ['conversation_turn', 'run_event', 'session', 'task'];
 
 const CORE_TRIGGERS_AFTER: Readonly<Record<string, readonly string[]>> = {
-  conversation_turn: [],
+  conversation_turn: [
+    // 0484's: the Open list's version counter, and the delivery moment its evidence-review
+    // deadline is stamped from. SIBLING changes, like the rest of this list.
+    'conversation_turn_evidence_review_deadline',
+    'conversation_turn_open_list_epoch_delete',
+    'conversation_turn_open_list_epoch_insert',
+    'conversation_turn_open_list_epoch_update',
+  ],
   run_event: ['run_event_ingestion_provenance_guard'],
   session: [
     // 0414's: a session's recorded engine is claimed and leased only by a transaction that declares it
@@ -296,6 +303,10 @@ const CORE_TRIGGERS_AFTER: Readonly<Record<string, readonly string[]>> = {
     'session_engine_from_task_pin',
     'session_engine_immutable',
     'session_merge_projection_checkpoint_authority_trg',
+    // 0484's: the Open list's version counter, bumped by the session row itself. A SIBLING change.
+    'session_open_list_epoch_delete',
+    'session_open_list_epoch_insert',
+    'session_open_list_epoch_update',
     'session_opencode_runner_claim_guard',
     'session_project_capacity_serialize_insert_delete',
     'session_project_capacity_serialize_update',
@@ -331,7 +342,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
   // `task` carries 24; naming all of them here would restate the inventory rather than check it.
   // What matters for it is the same two properties, stated directly.
   const core = TRIGGER_WRITE_SOURCES.filter((entry) => CENSUS_TABLES.includes(entry.table));
-  assert.equal(core.length, 54,
+  assert.equal(core.length, 64,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -355,7 +366,9 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '`project_rollup_candidate_task_insert` and `project_rollup_candidate_task_update` to `task`, '
     + 'appending the tasks GET /projects has to classify itself, and 54 once 0476 added '
     + '`session_wiki_chat_space_guard` to `session`, which refuses a write that would change the '
-    + 'wiki space a session is a chat of');
+    + 'wiki space a session is a chat of, and 64 once 0484 made the Open list\'s data version '
+    + 'cheap: three `open_list_epoch_*` triggers on `task`, three on `session`, and three plus '
+    + '`conversation_turn_evidence_review_deadline` on `conversation_turn`');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
   // Every one of them installed BEFORE 0207 is still here. Derived from the inventory's own
@@ -367,7 +380,11 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + 'and 34 until 0329 removed 0122\'s `task_dispatch_authority_derive` with the column it stamped');
   assert.deepEqual(
     core.filter((entry) => Number(entry.since.slice(0, 4)) >= 207).map((entry) => entry.trigger).sort(),
-    ['project_rollup_candidate_task_insert', 'project_rollup_candidate_task_update',
+    ['conversation_turn_evidence_review_deadline',
+      'conversation_turn_open_list_epoch_delete',
+      'conversation_turn_open_list_epoch_insert',
+      'conversation_turn_open_list_epoch_update',
+      'project_rollup_candidate_task_insert', 'project_rollup_candidate_task_update',
       'project_task_status_count_delete', 'project_task_status_count_insert',
       'project_task_status_count_move', 'run_event_ingestion_provenance_guard',
       'session_acquisition_engine_guard',
@@ -375,9 +392,11 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
       'session_cursor_runner_acquisition_guard',
       'session_dsh_runner_acquisition_guard',
       'session_engine_from_task_pin', 'session_engine_immutable',
+      'session_open_list_epoch_delete', 'session_open_list_epoch_insert', 'session_open_list_epoch_update',
       'session_request_asker_stopped', 'session_request_recipient_ended', 'session_source_freeze_guard',
       'session_wiki_chat_space_guard',
       'task_list_task_count_delete', 'task_list_task_count_insert', 'task_list_task_count_relist',
+      'task_open_list_epoch_delete', 'task_open_list_epoch_insert', 'task_open_list_epoch_update',
       'task_owner_confirmation_review_reviewer_ended', 'task_progress_epoch_advance'],
     'the only triggers here newer than 0207 are the ones a later migration installed and kept — '
     + '0220\'s `run_event_ingestion_provenance_guard`, 0231\'s `session_source_freeze_guard`, '
@@ -389,6 +408,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '`session_engine_from_task_pin` and `session_engine_immutable` and 0426\'s '
     + '`session_cursor_runner_acquisition_guard` and 0441\'s two `project_rollup_candidate_task_*` '
     + 'and 0476\'s `session_wiki_chat_space_guard`. '
+    + '0484\'s nine `open_list_epoch_*` triggers and `conversation_turn_evidence_review_deadline`. '
     + '0212\'s `failure_successor_task_binding_immutable` was another, and 0226 removed it',
   );
   assert.ok(

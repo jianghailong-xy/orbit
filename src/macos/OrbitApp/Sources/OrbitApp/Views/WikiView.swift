@@ -25,6 +25,8 @@ struct WikiHomeActions {
     var search: (String) async -> [WikiSearchHit] = { _ in [] }
     /// The space's Wiki settings: the gear in the bar (mock 12 ①) and Manage spaces.
     var openSettings: () -> Void = {}
+    /// Trash, from the space menu under Manage spaces (docs/mocks/wiki-trash).
+    var openTrash: () -> Void = {}
     /// The Contents sheet — the directory — from the list button in the bar (mock 30 ③).
     var openContents: () -> Void = {}
     /// Activity, from the bar's history mark (design §12.3.2).
@@ -78,6 +80,8 @@ struct WikiHomePage: View {
     var waiting = 0
     /// The space has a public link open: the bar's globe is green.
     var shareLive = false
+    /// How many wikis are in Trash: the space menu offers it while any is.
+    var trashed = 0
     /// Drawn beside the directory column: no head, no Contents in the bar, no foot.
     var besideContents = false
     var actions = WikiHomeActions()
@@ -179,7 +183,8 @@ struct WikiHomePage: View {
                 .font(.largeTitle.bold())
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
-            WikiSpacePicker(space: space, spaces: spaces, pick: actions.pickSpace, manage: actions.openSettings)
+            WikiSpacePicker(space: space, spaces: spaces, pick: actions.pickSpace, manage: actions.openSettings,
+                            trashed: trashed, openTrash: actions.openTrash)
         }
         .padding(.top, 4)
     }
@@ -565,9 +570,12 @@ private struct WikiStartMark: View {
     }
 }
 
-/// The Wiki of an account with no wiki (mock 41 ⑧): the title, then the setup card, whose first step makes one.
+/// The Wiki of an account with no wiki (mock 41 ⑧): the title, then the setup card, whose first step makes one — and,
+/// while Trash holds a wiki, how many it holds and Open Trash under the card (docs/mocks/wiki-trash).
 struct WikiFirstStartPage: View {
     let card: WikiStartLogic.Card
+    var trashed = 0
+    var openTrash: () -> Void = {}
     var act: (WikiStartLogic.ActionTo) -> Void = { _ in }
 
     var body: some View {
@@ -580,6 +588,14 @@ struct WikiFirstStartPage: View {
                     .wikiHomeOnBackground()
             }
             WikiStartSection(card: card, act: act)
+            if trashed > 0 {
+                Section {
+                    Button(WikiModeCopy.trashOpenTrash, action: openTrash)
+                } header: {
+                    Text(WikiModeCopy.trashHoldsWhenEmpty(trashed))
+                        .textCase(nil)
+                }
+            }
         }
         .wikiHomeListStyle()
         .environment(\.defaultMinListRowHeight, 0)
@@ -594,12 +610,16 @@ struct WikiFirstStartPage: View {
 /// on a phone, the directory column's beside it. With one space it is a grey label and no control: no chevron,
 /// no menu. With several, a menu of every space, the current one ticked — a toggle per space, whose tick a menu
 /// draws in its own column, its name the title and the repository and documents the line under it — what waits
-/// in each in the row's icon cell, and Manage spaces at the foot, into Wiki settings.
+/// in each in the row's icon cell, and Manage spaces at the foot, into Wiki settings, with Trash under it while Trash
+/// holds a wiki (docs/mocks/wiki-trash).
 struct WikiSpacePicker: View {
     let space: WikiSpace
     let spaces: [WikiSpace]
     var pick: (String) -> Void = { _ in }
     var manage: () -> Void = {}
+    /// How many wikis are in Trash.
+    var trashed = 0
+    var openTrash: () -> Void = {}
 
     var body: some View {
         let names = WikiSpaceLogic.names(spaces)
@@ -632,6 +652,11 @@ struct WikiSpacePicker: View {
                 Divider()
                 Button(action: manage) {
                     Label(WikiCopy.manageSpaces, systemImage: "gearshape")
+                }
+                if trashed > 0 {
+                    Button(action: openTrash) {
+                        Label(WikiModeCopy.trashPickerItem, systemImage: "trash")
+                    }
                 }
             } label: {
                 HStack(spacing: 4) {
@@ -1301,6 +1326,9 @@ struct WikiReviewActions {
     var openSession: (String) -> Void = { _ in }
     /// A challenge's Amend: the owner's version of the entry it names.
     var amend: (WikiLogic.ReviewCard) -> Void = { _ in }
+    /// A challenge's Retire…: the entry page's own Retire… dialog, the challenge's reason filled in. The card never
+    /// retires the entry straight from the press.
+    var retire: (WikiLogic.ReviewCard) -> Void = { _ in }
 }
 
 /// Review: the proposals waiting for the owner, one card at a time with its position ("1 of 3"),
@@ -1322,33 +1350,50 @@ struct WikiReviewPage: View {
 
     private var shown: [WikiLogic.ReviewCard] { WikiLogic.cards(cards, in: tab) }
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Picker(WikiCopy.reviewTitle, selection: $tab) {
-                    ForEach(WikiLogic.ReviewTab.allCases, id: \.self) { tab in
-                        Text(WikiLogic.tabLabel(tab, cards: cards)).tag(tab)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+    /// The page's content, which a card that takes another's place is shown from the top of.
+    private static let top = "wiki-review-top"
 
-                let visible = shown
-                if let at = WikiLogic.clampedIndex(index, count: visible.count) {
-                    if visible.count > 1 { pager(at: at, count: visible.count) }
-                    WikiReviewCard(card: visible[at], entry: namedEntry(visible[at]), now: now,
-                                   busy: busy, actions: actions)
-                        .id(visible[at].id)
-                } else {
-                    Text(WikiCopy.noReview)
-                        .font(.orbitSubtext)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.vertical, 28)
+    /// The card on show, by id.
+    private var shownCardID: String? {
+        let visible = shown
+        return WikiLogic.clampedIndex(index, count: visible.count).map { visible[$0].id }
+    }
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Picker(WikiCopy.reviewTitle, selection: $tab) {
+                        ForEach(WikiLogic.ReviewTab.allCases, id: \.self) { tab in
+                            Text(WikiLogic.tabLabel(tab, cards: cards)).tag(tab)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+
+                    let visible = shown
+                    if let at = WikiLogic.clampedIndex(index, count: visible.count) {
+                        if visible.count > 1 { pager(at: at, count: visible.count) }
+                        WikiReviewCard(card: visible[at], entry: namedEntry(visible[at]), now: now,
+                                       busy: busy, actions: actions)
+                            .id(visible[at].id)
+                    } else {
+                        Text(WikiCopy.noReview)
+                            .font(.orbitSubtext)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, 28)
+                    }
+                    autoAccept
                 }
-                autoAccept
+                .padding(16)
+                .id(Self.top)
             }
-            .padding(16)
+            // When the card on show changes (an answer took it away, or Previous, Next or a tab moved on), the next
+            // one shows from its head and its reason, not at the scroll the last one was answered at. Its answers are
+            // then a scroll away, never under the finger that just pressed (owner, 2026-11-07,
+            // docs/mocks/wiki-challenge-answers D4).
+            .onChange(of: shownCardID) { _, _ in proxy.scrollTo(Self.top, anchor: .top) }
         }
         .navigationTitle(WikiCopy.reviewTitle)
         #if os(iOS)
@@ -1447,7 +1492,7 @@ struct WikiReviewCard: View {
 
     private var op: WikiChangesetOp { card.op }
     private var isRetire: Bool { op.op == .retire }
-    /// A challenge is answered about the entry it names: Re-confirm, Amend or Retire.
+    /// A challenge is answered about the entry it names: Keep, Amend… or Retire….
     private var isChallenge: Bool { op.op == .challenge }
     private var tainted: Bool { op.tainted == true }
 
@@ -1461,6 +1506,10 @@ struct WikiReviewCard: View {
                 .font(.title3.bold())
                 .fixedSize(horizontal: false, vertical: true)
             if isRetire { retireFields } else { content }
+            if isChallenge {
+                labelled(WikiCopy.afterLabel,
+                         texts: WikiModeLogic.challengeAfter(kind: WikiLogic.cardKind(card, entry: entry)).map(afterText))
+            }
             ApprovalActions {
                 if isRetire {
                     Button { actions.decide(card, .accept, nil) } label: {
@@ -1472,17 +1521,27 @@ struct WikiReviewCard: View {
                     }
                     .buttonStyle(.bordered)
                 } else if isChallenge {
+                    // Each answer says what becomes of the entry, and none is filled: a challenge proposes no answer
+                    // to accept (owner, 2026-11-07, docs/mocks/wiki-challenge-answers D1, D2). Amend… only for a kind
+                    // that can be amended (D5); Retire… asks first, in the entry page's own dialog (D3).
                     Button { actions.decide(card, .reconfirm, nil) } label: {
                         Text(WikiModeCopy.reconfirm).approvalActionLabel()
                     }
-                    .buttonStyle(.borderedProminent)
-                    Button { actions.amend(card) } label: {
-                        Text(WikiModeCopy.amend).approvalActionLabel()
-                    }
                     .buttonStyle(.bordered)
-                    .disabled(entry == nil)
-                    Button { actions.decide(card, .retire, nil) } label: {
-                        Text(WikiModeCopy.retire).approvalActionLabel()
+                    if WikiModeLogic.amendable(WikiLogic.cardKind(card, entry: entry)) {
+                        Button { actions.amend(card) } label: {
+                            Text(WikiModeCopy.amendAnswer).approvalActionLabel()
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(entry == nil)
+                    }
+                    Button(role: .destructive) { actions.retire(card) } label: {
+                        Text(WikiModeCopy.retireAnswer).approvalActionLabel()
+                            #if os(macOS)
+                            // macOS draws a bordered button's destructive role in the plain label colour; the
+                            // answer that cannot be undone is red on every client (owner, 2026-11-07).
+                            .foregroundStyle(.red)
+                            #endif
                     }
                     .buttonStyle(.bordered)
                 } else {
@@ -1680,6 +1739,23 @@ struct WikiReviewCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    /// A row whose lines carry their own emphasis: a challenge's After row.
+    private func labelled(_ label: String, texts: [Text]) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label).font(.orbitLabel).foregroundStyle(.secondary)
+            ForEach(Array(texts.enumerated()), id: \.offset) { _, text in
+                text
+                    .font(.orbitProse)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// `Keep · Agents get this entry again…`: the answer's word in bold, Retire's in red, then what it does.
+    private func afterText(_ line: WikiModeLogic.AfterLine) -> Text {
+        Text(line.answer).bold().foregroundColor(line.destructive ? Color.red : nil) + Text(" · " + line.effect)
     }
 
     /// One field's red and green lines.

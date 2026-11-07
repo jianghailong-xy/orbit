@@ -221,12 +221,16 @@ pg spec 用执行计划钉住了这一点。它声明为 IMMUTABLE（里面的 `
   - 这两个写入都只属于 owner：带会话头回 `WIKI_OWNER_CHANNEL_ONLY`，个人访问令牌回 `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，因为谁在 space 里就是谁能读它的条目。两者都不动游标：加入的 workspace 从 space 当前的水位往后读。
   - 会话所在 workspace 不在任何 space 时返回 `WIKI_SPACE_UNBOUND`，并用一句话说明怎么绑；被留在外面的 workspace 返回同一个码，并说明这一点。项目通过其 codebase 的仓库地址找到 space，没有单独的表。
   - Wiki 设置的 Workspaces 卡（web、macOS/iOS、Android，在 Review mode 和 Maintenance 之间，效果图 38）读 `GET /api/wiki/spaces/:id/workspaces`：`{ workspaces, addable }`，每行 `{ id, name, runner, inWiki }`。`workspaces` 是这个仓库上、或这个 space 的行点名的活 workspace，按名字排（不分大小写），切开关时行不跳，被留在外面的留在列表里，`inWiki` 为 false。`addable` 是 `Add workspace…` 能加的：没有仓库、也不在任何 wiki 里（被别的 space 留在外面的算不在）。
-- **删除**（`space.delete`）：`DELETE /api/wiki/spaces/:id` 永久删除一个 wiki，回 `{ spaceId }`；别人的或已经没有的回普通 404。
-  - 只属于 owner：带会话头回 `WIKI_OWNER_CHANNEL_ONLY`，个人访问令牌回 `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，没有 agent 工具和 CLI 命令。
-  - 一个事务里按外键删掉 space 下的全部内容，包括公开链接；不能撤销，失败时什么都不少。Workspace、会话、任务和项目不动；文字里的 `orbit-wiki:` 链接从此指向不存在的内容。
-  - 不等、也不拒绝在跑的作业：作业行随 space 一起没了，它按租约写的都匹配不到行，下一次需要 space 的写入失败，这次尝试就结束，也没有行可以重排。仓库操作的结果回 404，runner 当作操作已不存在。
-  - 有仓库的 wiki 会被这个仓库下一个调 wiki 工具的会话重新建出来，是空的，和任何新 space 一样请求 plan 的初稿；它的 workspace 行随旧 space 没了，留在外面的标记也一样。没有仓库的不会回来，绑在它上面的会话回 `WIKI_SPACE_UNBOUND`。
-  - 入口：web 在侧栏的 wiki 行和 Wiki 设置页底部，macOS/iOS 和 Android 在 Wiki 设置页底部；都先确认，写明 wiki 的名字和要删的条目数、文档数（效果图 `docs/mocks/wiki-delete`）。
+- **回收站**（`space.trash`，迁移 0486，效果图 `docs/mocks/wiki-trash`，owner 2026-11-07 定）：删除 wiki 改为移进回收站，保留 365 天，期间可以恢复；到期或 owner 永久删除后，在后台分批删掉。
+  - `DELETE /api/wiki/spaces/:id` 移进回收站，回 `{ spaceId, deletedAt, purgeAt }`；别人的、已在回收站的或已经没有的回普通 404。四个回收站路由都只属于 owner：带会话头回 `WIKI_OWNER_CHANNEL_ONLY`，个人访问令牌回 `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，没有 agent 工具和 CLI 命令。
+  - 移进去是一个很短的事务：锁住这一行，写 `deleted_at` 和 `purge_at`（365 天后），原 slug 和仓库存进 `trashed_slug`、`trashed_repo_url_norm`，slug 换成按 id 生成的占位、仓库置空，维护关掉，未结束的 `wiki_job` 和 `wiki_plan_job` 删掉。其余行一行不动。
+  - 回收站里的 wiki 在任何入口都当作不存在：列表、各页面、按它或它里面东西的 id 读、跨 wiki 搜索、Review 队列、链接卡片、会话的 wiki 工具、各个调度。公开链接暂停（`PAUSED` / `IN_TRASH`，访客 404），恢复后自动重新打开。
+  - 会话：指向回收站里 wiki 的 `wiki_space_workspace` 行在它在回收站期间不起作用。有仓库的 workspace，会话用这个仓库当前在用的 wiki，没有就按 `binding.automatic` 建一个空的，workspace 的行随之指向新 wiki；没有仓库的 workspace 回 `WIKI_SPACE_UNBOUND`，说明 wiki 在回收站里。
+  - `POST /api/wiki/spaces/:id/restore` 恢复，回这个 wiki（同 `GET /api/wiki/spaces/:id`）：slug 回原样，被在用的 wiki 占了就加 `-2`、`-3`…；仓库回原样，被在用的 wiki 占着就回 409，原话是 “A newer wiki for <repo> is in your wikis now. Move it to Trash first, then restore this one.”；设置回原样但维护保持关闭；内容、公开链接都回来，期间没进别的 wiki 的 workspace 也回来。在用的 wiki 原样回答；已到期或已经没有的回 404。
+  - `DELETE /api/wiki/spaces/:id/purge` 永久删除，回 `{ spaceId }`：`purge_at` 改成现在，马上离开回收站；不在回收站的回 404。真正的删除由 `WikiTrashPurge` 在跑单例清扫的进程上每分钟做一次：租约拿下一个到期的 wiki，每条语句删一批（条目连同它们的 supersede 链，然后按目录里指向 `wiki_space` 的外键逐表删，最后删 wiki 本身），一次最多 30 秒，中断后下一次接着删。
+  - `GET /api/wiki/trash` 列出回收站：`{ spaces: [{ id, slug, title, repoUrlNorm, deletedAt, purgeAt, entries }] }`，最近移进的在前，slug 和仓库是原来的，`entries` 是在用条目数。
+  - Workspace、会话、任务和项目全程不动。文字里的 `orbit-wiki:` 链接在永久删除之后指向不存在的内容。
+  - 入口：web 在侧栏 wiki 行的 ⋯ 和 Wiki 设置页底部（Move to Trash…）；侧栏 Wiki 组最后一行、设置页最后一张卡片和首个 wiki 的引导卡片通向回收站弹窗。macOS/iOS 和 Android 在 Wiki 设置页底部，加上 wiki 选择器里 Manage spaces 下面一项和引导卡片里一句。都先确认，写明 wiki 的名字和回收站保留什么。
 - **设置**（`settings` jsonb，缺省的键按默认值读）：
   - `push`，默认开（owner 2026-09-25 拍板：推送默认开，每个 space 可以关）；
   - `autoAcceptReinforce`，默认开：非 owner 的 reinforce 立即生效；关掉后进 Review；
@@ -510,7 +514,9 @@ Confirm 时，模式对它生效过、还没人答的 op 变 `accepted`（§7.5�
   frontmatter 里用 `originSessionId` 指向本 owner 用过它们的会话。这个值是引擎自己的会话 id，按 `session.runtime_session_id` 查；
   没写或查不到的 note 不算污染。会话用 `wiki_note` 记的 note 带 `session_id`（§11），直接按这个会话判定。
   被污染的 op 按第三行处理，Review 卡上有 Web-derived 警示。
-- challenge 从任何来源都立即生效：它只打一个标，作用是让条目立刻退出推送，等 owner 在 Review 里 Re-confirm、Amend 或 Retire。
+- challenge 从任何来源都立即生效：它只打一个标，作用是让条目立刻退出推送，等一个答案：owner 在 Review 里 Re-confirm、Amend 或
+  Retire，或一次**显式回答它**的 amend（`answersChallenge` 指向同一 entry 上待决的 challenge，`reviewModes.challenge`）在生效时把它
+  记 `edited`。没点名 challenge 的 amend 不关任何 challenge。
 - `wiki.ts` 的 `WIKI_EFFECT_POLICY` 是这张表的数据形态，`wikiOpEffect()` 给出单个 op 的结论。
 - **决定**：`POST /api/wiki/changesets/:id/decide`，逐个 op 给 `accept` / `edit` / `reject`；只在 owner 通道（§11）。
 
@@ -728,6 +734,10 @@ Review 只列还有 op 等 owner 的变更集，时间线列的是 op、不说�
 | `supersede` | `entryId`，`baseRevision`，`entry`，`sources` | 新谱系取代旧的；生效时旧条目变 `superseded` | 必带 |
 | `retire` | `entryId`，`baseRevision`，`reason` | 条目从 active 变 retired | 必带 |
 | `challenge` | `entryId`，`reason` | 打 challenged，条目立刻退出推送 | 不带 |
+
+- `amend` 可带可选的 `answersChallenge`：同一 entry 上一条 `pending` challenge 的 id（`reviewModes.challenge`）。它只在这个 amend
+  **生效**时关闭 challenge（记 `edited`，`answered_by` 记 `agent` 或 `owner`），不改变 amend 自己按模式生效/待审的规则；跨条目、已决、
+  不存在或形状不对回 `WIKI_SCHEMA`，这个 op 什么都不写。不带它的 amend 不关任何 challenge。
 
 - **CAS 不可省**：amend / supersede / retire 带上写它时依据的版本号，只有它仍是当前版时才生效，否则
   `WIKI_REVISION_CONFLICT`，并返回当前版和 diff。故意不提供「当前是什么就按什么」的写法。库里的 CHECK 保证
@@ -1253,6 +1263,13 @@ JSON 里是 `anchorRules.verify`；实现在 `src/apiserver/src/wiki/wiki-anchor
   - `retire`：owner 自己的 retire（当前修订为 baseRevision），经唯一写入口记录，reason 取 owner 的附言，没有就取 challenge 的 reason；
     challenge 随条目离开 active 被 withdrawn。
   - challenge 指向的条目已不 active 时记 conflict、什么都不做。`accept` / `edit` / `reject` 对 challenge 保持原意。
+- **amend 也能回答 challenge**（`reviewModes.challenge`，迁移 `0488_wiki_op_answers_challenge`）：amend op 可带可选的
+  `answersChallenge`，只能指同一 entry 上 `pending` 的 challenge op；跨条目、已决、不存在或形状不对回 `WIKI_SCHEMA`，该 op 什么都不写。
+  amend 照常按模式生效——Tiered 直接生效、Automatic 等核实结论、Manual 与各条底线待审——**生效那一刻**才把指名的 challenge 记
+  `edited`、`answered_by` 记 `owner`（owner 自己的 amend）或 `agent`，再由 `recomputeFlags` 清 `challenged`，条目按 §12 的推送规则回推送。
+  challenge 已决或条目已不 active 时不动、也不报错：amend 照常成立。没点名 challenge 的 amend 不关任何 challenge，所以一次无关的错字修正
+  不会把一条内容质疑悄悄关掉。答案来源记在 `wiki_changeset_op.answered_by`（`owner` | `agent` | `research`；0488 之前的行与 Review 里的回答
+  都是 NULL，读作 owner；`research` 是 P2 调研作业的来源）。
 - **Tiered 读得到复验结果**：Tiered 的 pitfall 条件读 `anchor_state`；检查让一条 Tiered 以 unreviewed 生效的 pitfall（active、未污染、当前修订就是那次
   tiered op 写的）变成 verified，且 space 仍是 Tiered、那次 op 自己的出处跨 2 个以上独立会话时，同一事务里升为 auto 并开始推送。
 
@@ -3165,7 +3182,7 @@ C6（草稿与按压）、C8 与 C9（web）、C11（iOS）、C12（plan 卡）�
 
 | 状态 | 显示 | 条件 | 动作 |
 | --- | --- | --- | --- |
-| `applied` | `Applied · Confirmed by you`；卡里有 challenge、它在按压所记变更集里的决定还是 pending 时写 `Applied · In Review` · `Re-confirm, amend or retire the entry in Review.`，链到那条条目的 Review（`wikiChatAppliedInReview`：按下立起的标记要你在 Review 里答，没有确认任何东西） | 按过 Apply 或 Edit | Undo（可撤时）· Open entry（entry 卡）；重写的动作见 28.8 |
+| `applied` | `Applied · Confirmed by you`；卡里有 challenge、它在按压所记变更集里的决定还是 pending 时写 `Applied · In Review` · `Keep, amend or retire the entry in Review.`，链到那条条目的 Review（`wikiChatAppliedInReview`：按下立起的标记要你在 Review 里答，没有确认任何东西） | 按过 Apply 或 Edit | Undo（可撤时）· Open entry（entry 卡）；重写的动作见 28.8 |
 | `undone` | `Undone` | 按过 Apply，又按了 Undo | — |
 | `discarded` | `Discarded` | 按过 Discard | — |
 | `replaced` | `Replaced` · `A newer draft took over.` | 这场聊天里有新卡替换了它 | — |
