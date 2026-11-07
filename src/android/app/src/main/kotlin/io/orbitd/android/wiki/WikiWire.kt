@@ -81,6 +81,19 @@ data class WikiSpaceWorkspaceRow(val id: String, val name: String, val runner: S
 @Serializable
 data class WikiSpaceWorkspaces(val workspaces: List<WikiSpaceWorkspaceRow> = emptyList(), val addable: List<WikiSpaceWorkspaceRow> = emptyList())
 
+/** One wiki in Trash (contract `space.trash.list`): the name and repository it had, which a restore gives back, when it
+ * was moved and when it is deleted for good, and its active entries. */
+@Serializable
+data class WikiTrashRow(val id: String, val slug: String = "", val title: String? = null, val repoUrlNorm: String? = null,
+    val deletedAt: String? = null, val purgeAt: String? = null, val entries: Int = 0) {
+    /** What its row calls it, and so does what a restore says. */
+    val name: String get() = title?.takeIf { it.isNotBlank() } ?: slug
+}
+
+/** `GET /wiki/trash`: the owner's wikis in Trash, the newest move first. */
+@Serializable
+data class WikiTrash(val spaces: List<WikiTrashRow> = emptyList())
+
 @Serializable
 data class WikiSpace(
     val id: String, val slug: String, val title: String? = null, val repoUrlNorm: String? = null, val rootCommitSha: String? = null,

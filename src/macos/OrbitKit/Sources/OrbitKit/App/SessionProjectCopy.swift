@@ -7,6 +7,9 @@ public enum SessionProjectCopy {
     public static func progressHint(sessions: Int, running: Int) -> String {
         "\(sessions) sessions · \(running) running"
     }
+    /// The progress mark on a member's own row, where its project has no row (owner 2026-11-07): the
+    /// web's hover, and here the mark's accessibility label. The way in is the long press's Sessions.
+    public static func markHint(title: String) -> String { "Part of \(title) · open its sessions" }
     public static func waitingSession(_ text: String, title: String) -> String {
         "\(text) · \(title)"
     }

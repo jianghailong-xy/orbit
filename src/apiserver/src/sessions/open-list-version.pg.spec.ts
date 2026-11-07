@@ -396,6 +396,95 @@ test("another account's writes leave this account's version alone", { skip }, as
   assert.equal(await readOpenListVersion(mine.db as never, mine.ownerId), before);
 });
 
+/** A connection of its own, for a transaction held open beside the writes under test. */
+async function connection(t: { after: (fn: () => Promise<void>) => void }): Promise<Client> {
+  const client = new Client({ connectionString: URL, connectionTimeoutMillis: 2_000 });
+  await client.connect();
+  t.after(() => client.end());
+  return client;
+}
+
+/** How many rows the account's `session` counter is spread over (0487). */
+async function sessionCounterRows(f: Fixture): Promise<number> {
+  const [row] = await f.db.$queryRaw<Array<{ n: number }>>`
+    SELECT count(*)::int AS n FROM open_list_epoch
+     WHERE owner_id = ${f.ownerId}::uuid AND split_part(source, '#', 1) = 'session'`;
+  return row.n;
+}
+
+/**
+ * 0484 bumped one row per (owner, source) inside the writing transaction, so that row stayed
+ * locked until the writer committed, and every other write of the account to the same table
+ * queued behind it, rows the two never shared included: the runner link's ingest held its
+ * account's session counter through its whole run_event insert. A bump now takes a counter row no
+ * other transaction holds, and adds one only when it finds them all held. `lock_timeout` turns a
+ * wait into an error (55P03), so a writer that queues fails here instead of only being slow.
+ */
+test("a write never waits for another open transaction's counter, and still moves the version", { skip }, async (t) => {
+  const f = await fixture(t);
+  for (const title of ['one', 'two', 'three']) {
+    await f.db.session.update({ where: { id: f.sessionId }, data: { title } });
+  }
+  assert.equal(await sessionCounterRows(f), 1, 'writes one after another took more than one counter row');
+
+  const holder = await connection(t);
+  const writer = await connection(t);
+  await holder.query('BEGIN');
+  await holder.query(`UPDATE session SET title = 'held' WHERE id = $1`, [f.sessionId]);
+  const held = await readOpenListVersion(f.db as never, f.ownerId);
+
+  // Another session row of the same account: it shares nothing with the holder but the counter.
+  await writer.query(`SET lock_timeout = '500ms'`);
+  await writer.query(`UPDATE session SET title = 'beside' WHERE id = $1`, [f.otherId]);
+  assert.equal(await sessionCounterRows(f), 2, 'the write beside an open one did not take a row of its own');
+  const beside = await readOpenListVersion(f.db as never, f.ownerId);
+  assert.notEqual(beside, held, 'a write committed beside an open one did not move the version');
+
+  await holder.query('COMMIT');
+  assert.notEqual(await readOpenListVersion(f.db as never, f.ownerId), beside, "the held write's commit did not move the version");
+
+  for (const title of ['four', 'five']) {
+    await f.db.session.update({ where: { id: f.otherId }, data: { title } });
+  }
+  assert.equal(await sessionCounterRows(f), 2, 'a counter grew a row with no writer open beside it');
+});
+
+/**
+ * 0484's counters were taken in the order a transaction WROTE its tables, which no lock-order rank
+ * governs, so two writers taking `session` and `task` in opposite orders deadlocked on them
+ * (40P01) though they shared no row. A bump waits for nobody now, so both commit.
+ */
+test('two writers taking two counters in opposite orders both commit', { skip }, async (t) => {
+  const f = await fixture(t);
+  const [first, second] = await Promise.all(['a', 'b'].map((name) => f.db.task.create({
+    data: {
+      ownerId: f.ownerId, title: `olv ${name}`, creatorType: 'USER', creatorId: f.ownerId,
+      completionCriterion: 'OWNER_CONFIRMED',
+    },
+  })));
+  const a = await connection(t);
+  const b = await connection(t);
+  for (const client of [a, b]) {
+    await client.query('BEGIN');
+    // Longer than deadlock_timeout, so that on 0484 the deadlock detector is what ends the wait.
+    await client.query(`SET LOCAL lock_timeout = '5s'`);
+  }
+  await a.query(`UPDATE session SET title = 'a' WHERE id = $1`, [f.sessionId]);
+  await b.query(`UPDATE task SET title = 'b' WHERE id = $1`, [second.id]);
+  const crossed = await Promise.allSettled([
+    a.query(`UPDATE task SET title = 'a' WHERE id = $1`, [first.id]),
+    b.query(`UPDATE session SET title = 'b' WHERE id = $1`, [f.otherId]),
+  ]);
+  assert.deepEqual(
+    crossed.map((outcome) => outcome.status === 'fulfilled' ? 'committed' : (outcome.reason as { code?: string }).code),
+    ['committed', 'committed'],
+  );
+  const before = await readOpenListVersion(f.db as never, f.ownerId);
+  await a.query('COMMIT');
+  await b.query('COMMIT');
+  assert.notEqual(await readOpenListVersion(f.db as never, f.ownerId), before);
+});
+
 /**
  * A LANDING row is in no flat list (contract §2.9 LS6), so only the project grouping's
  * `includeLanding=1` read can show it. That read is built every time — its rows are a few — and

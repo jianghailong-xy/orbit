@@ -44,6 +44,7 @@ import {
 import { WikiDocs } from './wiki-docs';
 import { followWikiDocsPress, wikiDocsFollowFactsOf } from './wiki-docs-follow';
 import { wikiPlanCardBase, wikiPlanCardChangeOf, WikiPlans } from './wiki-plan';
+import { assertWikiSpaceInUse } from './wiki-trash';
 import { WikiRefusalError, WikiService, type CheckedChatOps, type WikiPrincipal, type WikiProposeInput } from './wiki.service';
 
 /**
@@ -469,8 +470,12 @@ export class WikiChatDrafts {
 
   /** A card's row, held FOR UPDATE: the first lock every press takes. Another owner's card is the plain 404. */
   private async lockCard(tx: Prisma.TransactionClient, ownerId: string, draftId: string): Promise<DraftRow> {
+    // A card of a wiki in Trash is the plain 404, as its wiki is (contract `space.trash`).
     const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-      SELECT "id"::text AS "id" FROM "wiki_chat_draft" WHERE "id" = ${draftId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`);
+      SELECT d."id"::text AS "id" FROM "wiki_chat_draft" d
+        JOIN "wiki_space" s ON s."id" = d."space_id" AND s."deleted_at" IS NULL
+       WHERE d."id" = ${draftId}::uuid AND d."owner_id" = ${ownerId}::uuid
+       FOR UPDATE OF d`);
     if (locked.length === 0) throw new NotFoundException('no such card');
     return tx.wikiChatDraft.findFirstOrThrow({ where: { id: draftId, ownerId }, select: DRAFT_SELECT });
   }
@@ -488,6 +493,7 @@ export class WikiChatDrafts {
     refuseActingSession(actingSessionId, 'reading a wiki chat\'s cards');
     const chat = await this.prisma.session.findFirst({ where: { id: chatId, ownerId }, select: { id: true, wikiChatSpaceId: true } });
     if (!chat?.wikiChatSpaceId) throw new NotFoundException('no such wiki chat');
+    await assertWikiSpaceInUse(this.prisma, ownerId, chat.wikiChatSpaceId, 'no such wiki chat');
     const rows = await this.prisma.wikiChatDraft.findMany({
       where: { ownerId, sessionId: chat.id },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -497,7 +503,7 @@ export class WikiChatDrafts {
   }
 
   private async view(ownerId: string, draftId: string): Promise<WikiChatDraftView> {
-    const row = await this.prisma.wikiChatDraft.findFirst({ where: { id: draftId, ownerId }, select: DRAFT_SELECT });
+    const row = await this.prisma.wikiChatDraft.findFirst({ where: { id: draftId, ownerId, space: { deletedAt: null } }, select: DRAFT_SELECT });
     if (!row) throw new NotFoundException('no such card');
     const [view] = await draftViews(this.prisma, ownerId, [row]);
     return view!;
@@ -699,7 +705,7 @@ export class WikiChatDrafts {
    * when no card's Apply recorded it — an ordinary changeset, reverted as ever.
    */
   async undoForChangeset(ownerId: string, userId: string, changesetId: string, actingSessionId: string | null): Promise<WikiChatPressAnswer | null> {
-    const card = await this.prisma.wikiChatDraft.findFirst({ where: { ownerId, changesetId }, select: { id: true } });
+    const card = await this.prisma.wikiChatDraft.findFirst({ where: { ownerId, changesetId, space: { deletedAt: null } }, select: { id: true } });
     if (!card) return null;
     return this.undo(ownerId, userId, card.id, actingSessionId);
   }
@@ -858,7 +864,7 @@ export class WikiChatDrafts {
   async seen(ownerId: string, userId: string, draftId: string, actingSessionId: string | null): Promise<WikiChatPressAnswer> {
     refuseActingSession(actingSessionId, 'marking a wiki chat\'s rewrite seen');
     void userId;
-    const row = await this.prisma.wikiChatDraft.findFirst({ where: { id: draftId, ownerId }, select: DRAFT_SELECT });
+    const row = await this.prisma.wikiChatDraft.findFirst({ where: { id: draftId, ownerId, space: { deletedAt: null } }, select: DRAFT_SELECT });
     if (!row) throw new NotFoundException('no such card');
     const rewrite = (await draftRewrites(this.prisma, ownerId, [row])).get(row.id);
     let wrote = false;

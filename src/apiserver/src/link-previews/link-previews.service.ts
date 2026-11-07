@@ -350,7 +350,8 @@ export class LinkPreviewsService {
     // wiki would answer it: every entry card is `unavailable`, and nothing is read.
     if (ids.length === 0 || !wikiOnFor(currentWikiRollout(), ownerId)) return new Map();
     const rows = await this.prisma.wikiEntry.findMany({
-      where: { id: { in: ids }, ownerId },
+      // An entry of a wiki in Trash is a card naming nothing, as one deleted is (contract `space.trash`).
+      where: { id: { in: ids }, ownerId, space: { deletedAt: null } },
       select: {
         id: true,
         kind: true,

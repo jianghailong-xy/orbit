@@ -200,6 +200,8 @@ orbit_pat_<43 字符 base64url>        # randomBytes(32)，256 bit
 
 2026-11-06 又追加 1 条：`DELETE /wiki/spaces/:id`。永久删除一个 wiki，同样只属于 owner，对 agent 会话同样拒 `WIKI_OWNER_CHANNEL_ONLY`。
 
+2026-11-07 又追加 3 条：`POST /wiki/spaces/:id/restore`、`DELETE /wiki/spaces/:id/purge` 和 `GET /wiki/trash`。`DELETE /wiki/spaces/:id` 改为移进回收站；回收站的四个路由都只属于 owner，对 agent 会话的三个写同样拒 `WIKI_OWNER_CHANNEL_ONLY`。
+
 ※ 2026-10-07 起这条与 `PATCH /projects/:id` 不再逐字段对应：后者对 agent 会话只拒集成对象里的
 **线**字段（`line` / `projectBranchName` / `upstreamRef`，拒 403 `INTEGRATION_SETTINGS_OWNER_ONLY`），
 而 `mergeCheckCommand` / `mergeCheckTimeoutSeconds` 在本会话对本项目的 ALLOWED 确认卡覆盖这次改动时可以写入

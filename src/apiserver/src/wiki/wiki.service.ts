@@ -54,6 +54,7 @@ import {
   type WikiSourceKind,
   type WikiSpaceSettings,
   type WikiTieredBasis,
+  type WikiTrash,
   type WikiTrust,
   type WikiVerdictInput,
   type WikiVerificationEvidence,
@@ -114,6 +115,7 @@ import {
 } from './wiki-verify-evidence';
 import { enqueueWikiVerifyJob, wikiVerifyJobNeeded } from './wiki-verify-jobs';
 import { entryAppliedBy } from './wiki-run-reads';
+import { listWikiTrash, moveWikiSpaceToTrash, requestWikiSpacePurge, restoreWikiSpace } from './wiki-trash';
 import { wikiChatChoices, wikiSpaceWorkspaces, wikiWorkspacesOfSpaces } from './wiki-workspaces';
 
 /** `Prisma.TransactionClient`, named once: every write below takes one, never the unmanaged client. */
@@ -266,6 +268,15 @@ function refuseWorkspaceChange(): never {
     'WIKI_OWNER_CHANNEL_ONLY',
     'which workspaces are in a wiki is the account owner\'s to say, through an owner channel with no acting session: '
       + 'report what should change, and let a person change it.',
+  );
+}
+
+/** Moving a wiki to Trash, restoring it and deleting it for good are the owner's, as deleting it was. */
+function refuseTrashChange(): never {
+  return refuse(
+    'WIKI_OWNER_CHANNEL_ONLY',
+    'moving a wiki to Trash, restoring it and deleting it for good are the account owner\'s to do, through an owner '
+      + 'channel with no acting session: report what should change, and let a person change it.',
   );
 }
 
@@ -938,12 +949,15 @@ export class WikiService {
       });
       if (!session) throw new NotFoundException('no such session');
       if (session.workspaceId) {
+        // A row naming a wiki in Trash reads as no row (contract `space.trash.sessions`): a workspace on a repository
+        // goes on to the wiki in use for it, made empty if there is none, and one with no repository is told why.
         const bound = await this.prisma.wikiSpaceWorkspace.findFirst({
           where: { workspaceId: session.workspaceId, ownerId },
-          select: { spaceId: true, leftOutAt: true },
+          select: { spaceId: true, leftOutAt: true, space: { select: { deletedAt: true } } },
         });
-        if (bound?.leftOutAt) return refuse('WIKI_SPACE_UNBOUND', 'The owner left this workspace out of its wiki.');
-        if (bound) return bound.spaceId;
+        const inUse = bound && bound.space.deletedAt === null ? bound : null;
+        if (inUse?.leftOutAt) return refuse('WIKI_SPACE_UNBOUND', 'The owner left this workspace out of its wiki.');
+        if (inUse) return inUse.spaceId;
         const workspace = await this.prisma.workspace.findFirst({
           where: { id: session.workspaceId, ownerId },
           select: { id: true, name: true, repoUrl: true },
@@ -951,11 +965,18 @@ export class WikiService {
         if (workspace?.repoUrl) {
           return this.bindOnFirstUse(ownerId, workspace.id, workspace.repoUrl, workspace.name);
         }
+        if (bound && !namedSpaceId) {
+          return refuse(
+            'WIKI_SPACE_UNBOUND',
+            'The wiki this workspace is in was moved to Trash: the owner restores it from Trash, or binds the workspace '
+              + 'to another wiki in Wiki settings.',
+          );
+        }
       }
     }
     if (namedSpaceId) {
       const space = await this.prisma.wikiSpace.findFirst({
-        where: { id: namedSpaceId, ownerId },
+        where: { id: namedSpaceId, ownerId, deletedAt: null },
         select: { id: true },
       });
       if (!space) throw new NotFoundException('no such wiki space');
@@ -998,6 +1019,12 @@ export class WikiService {
           create: { spaceId, ownerId, workspaceId },
           update: {},
           select: { id: true },
+        });
+        // A row naming a wiki in Trash moves to this one, and the workspace with it: it joined another wiki meanwhile,
+        // so a restore of that one leaves it here (contract `space.trash.restore`).
+        await tx.wikiSpaceWorkspace.updateMany({
+          where: { workspaceId, ownerId, space: { deletedAt: { not: null } } },
+          data: { spaceId, leftOutAt: null },
         });
         return { spaceId, created: !existing };
       },
@@ -1074,7 +1101,7 @@ export class WikiService {
    */
   async listSpaces(ownerId: string): Promise<Array<Record<string, unknown>>> {
     const spaces = await this.prisma.wikiSpace.findMany({
-      where: { ownerId },
+      where: { ownerId, deletedAt: null },
       orderBy: { slug: 'asc' },
       select: {
         id: true,
@@ -1161,10 +1188,10 @@ export class WikiService {
     return this.requireSpace(ownerId, spaceId);
   }
 
-  /** One of the owner's spaces, or a plain 404 (§10.1: another owner's is a 404 as well). */
+  /** One of the owner's spaces in use, or a plain 404 (§10.1: another owner's is a 404 as well, and one in Trash). */
   async requireSpace(ownerId: string, spaceId: string) {
     const space = await this.prisma.wikiSpace.findFirst({
-      where: { id: spaceId, ownerId },
+      where: { id: spaceId, ownerId, deletedAt: null },
       select: {
         id: true,
         slug: true,
@@ -1347,35 +1374,53 @@ export class WikiService {
   }
 
   /**
-   * Delete a space and all it holds, for good (contract `space.delete`). Nothing outside the wiki depends on it, so the
-   * foreign keys take everything with the one row, its public link included; workspaces and sessions stay. A job
-   * running in it loses its row, and its next write ends it. A space with a repository is made again, empty, by the
-   * next session on that repository to use the wiki (`bindOnFirstUse`): the owner is told so before they press.
+   * Move a space to Trash (contract `space.trash`): one short write under its row lock, which hides it from every door,
+   * frees its name and repository for a new wiki, turns its maintenance off and drops the work queued or running for it.
+   * What it holds stays for WIKI_TRASH_RETENTION_DAYS, and a restore brings it back. The owner's alone, as who is in a
+   * space is: a session header is refused here and a personal access token at the guard.
    */
-  async deleteSpace(ownerId: string, spaceId: string, actingSessionId: string | null = null) {
-    if (actingSessionId) {
-      return refuse(
-        'WIKI_OWNER_CHANNEL_ONLY',
-        'deleting a wiki is the account owner\'s to do, through an owner channel with no acting session: '
-          + 'report what should change, and let a person change it.',
-      );
-    }
-    await withTransactionRetry(
+  async moveSpaceToTrash(ownerId: string, spaceId: string, actingSessionId: string | null = null) {
+    if (actingSessionId) return refuseTrashChange();
+    const moved = await withTransactionRetry(
       this.prisma,
-      async (tx) => {
-        const locked = await tx.$queryRaw<Array<{ id: string }>>`
-          SELECT "id" FROM "wiki_space"
-          WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid
-          FOR UPDATE`;
-        if (locked.length === 0) throw new NotFoundException('no such wiki space');
-        await tx.wikiSpace.delete({ where: { id: spaceId }, select: { id: true } });
-      },
-      // The size of a wiki's cascade, not of its one row: the default deadline would fail the wikis it matters most for.
-      // A deadlock victim loses at the statement that lost, so one more attempt absorbs a writer that arrived at the same rows.
-      loggedRetry(this.logger, 'wiki.deleteSpace', { transaction: { timeout: 60_000, maxWait: 10_000 }, maxAttempts: 2 }),
+      (tx) => moveWikiSpaceToTrash(tx, ownerId, spaceId),
+      loggedRetry(this.logger, 'wiki.moveSpaceToTrash'),
     );
     this.realtime?.publishWikiChanged(ownerId, spaceId);
+    return { spaceId, deletedAt: moved.deletedAt.toISOString(), purgeAt: moved.purgeAt.toISOString() };
+  }
+
+  /**
+   * Bring a space back from Trash (contract `space.trash.restore`): its name, or the next free one; its repository,
+   * unless a wiki in use holds it now, which is refused with what to do; its settings with maintenance still off; and
+   * what it holds, its public link and the workspaces that did not join another wiki meanwhile. Answers the space; one
+   * in use is answered as it is, so a second press changes nothing.
+   */
+  async restoreSpace(ownerId: string, spaceId: string, actingSessionId: string | null = null) {
+    if (actingSessionId) return refuseTrashChange();
+    const { restored } = await withTransactionRetry(
+      this.prisma,
+      (tx) => restoreWikiSpace(tx, ownerId, spaceId),
+      loggedRetry(this.logger, 'wiki.restoreSpace'),
+    );
+    if (restored) this.realtime?.publishWikiChanged(ownerId, spaceId);
+    return this.requireSpace(ownerId, spaceId);
+  }
+
+  /**
+   * Delete a space in Trash for good (contract `space.trash.purge`): it leaves Trash at once, and the purge takes what it
+   * holds in the background, a batch at a time (`WikiTrashPurge`). One not in Trash is the plain 404.
+   */
+  async purgeSpace(ownerId: string, spaceId: string, actingSessionId: string | null = null) {
+    if (actingSessionId) return refuseTrashChange();
+    if (!(await requestWikiSpacePurge(this.prisma, ownerId, spaceId))) throw new NotFoundException('no such wiki in Trash');
+    this.realtime?.publishWikiChanged(ownerId, spaceId);
     return { spaceId };
+  }
+
+  /** The owner's wikis in Trash, the newest move first (contract `space.trash.list`). */
+  async listTrash(ownerId: string): Promise<WikiTrash> {
+    return { spaces: await listWikiTrash(this.prisma, ownerId) };
   }
 
   // ── The single write entry point (§4.1) ───────────────────────────────────────────────────────
@@ -2248,7 +2293,7 @@ export class WikiService {
       this.prisma,
       async (tx) => {
         const changeset = await tx.wikiChangeset.findFirst({
-          where: { id: changesetId, ownerId },
+          where: { id: changesetId, ownerId, space: { deletedAt: null } },
           select: CHANGESET_SELECT,
         });
         if (!changeset) throw new NotFoundException('no such changeset');
@@ -2308,7 +2353,7 @@ export class WikiService {
     const answer = await withTransactionRetry(
       this.prisma,
       async (tx) => {
-        const changeset = await tx.wikiChangeset.findFirst({ where: { id: changesetId, ownerId }, select: CHANGESET_SELECT });
+        const changeset = await tx.wikiChangeset.findFirst({ where: { id: changesetId, ownerId, space: { deletedAt: null } }, select: CHANGESET_SELECT });
         if (!changeset) throw new NotFoundException('no such changeset');
         return this.revertIn(tx, ownerId, userId, changeset, literals, null);
       },
@@ -5316,7 +5361,7 @@ export class WikiService {
   }
 
   private async ownEntryById(tx: Tx, ownerId: string, entryId: string): Promise<EntryRow | null> {
-    return tx.wikiEntry.findFirst({ where: { id: entryId, ownerId }, select: ENTRY_SELECT });
+    return tx.wikiEntry.findFirst({ where: { id: entryId, ownerId, space: { deletedAt: null } }, select: ENTRY_SELECT });
   }
 
   // ── Reads the two doors serve ─────────────────────────────────────────────────────────────────
@@ -5340,6 +5385,8 @@ export class WikiService {
       where: {
         id: entryId,
         ownerId,
+        // An entry of a wiki in Trash is the plain 404, as its wiki is (contract `space.trash`).
+        space: { deletedAt: null },
         ...(spaceId
           ? { spaceId, OR: [{ tainted: false }, { trust: { in: [...WIKI_VOUCHED_TRUST] } }, { status: { not: 'active' } }] }
           : {}),
@@ -5444,7 +5491,14 @@ export class WikiService {
    */
   async listReview(ownerId: string, spaceId?: string): Promise<Array<Record<string, unknown>>> {
     const rows = await this.prisma.wikiChangeset.findMany({
-      where: { ownerId, status: 'pending', ops: { some: { decision: 'pending' } }, ...(spaceId ? { spaceId } : {}) },
+      where: {
+        ownerId,
+        status: 'pending',
+        ops: { some: { decision: 'pending' } },
+        // A wiki in Trash waits for nobody (contract `space.trash`): named or not, its changesets are not listed.
+        space: { deletedAt: null },
+        ...(spaceId ? { spaceId } : {}),
+      },
       orderBy: { createdAt: 'desc' },
       take: 100,
       select: CHANGESET_SELECT,

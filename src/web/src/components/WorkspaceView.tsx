@@ -500,6 +500,7 @@ import { deliveryFailureExplanation, offersSteerWithdraw, steerDeliveryState } f
 import { backgroundWorkIsActive, isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
 import type { OutlivingWork } from '../lib/sessionActivity';
 import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
+import { SESSION_MESSAGE_UNTITLED } from '../lib/sessionMessage';
 import { trashNoteWhen } from '../lib/trashNote';
 import { transcriptPlaceholder } from '../lib/transcriptPaint';
 import { useDelayedFlag } from '../lib/useDelayedFlag';
@@ -1048,14 +1049,27 @@ type SessionLine = {
   text: string;
   tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review';
 };
-// The line for a message of YOURS the workspace hasn't answered yet. Prefixed, because the preview
-// line is otherwise the workspace's voice: unmarked, a message you sent and a reply to it read
-// exactly alike, and "has it answered me yet?" is the one question the list has to answer while a
-// turn is running. Same flattening as a reply preview — it may be markdown too.
-const sentLine = (text: string): SessionLine => ({
-  text: `You: ${plainPreview(text)}`,
+// The line for a message the workspace hasn't answered yet, marked with who sent it (`sentBy`).
+// Prefixed, because the preview line is otherwise the workspace's voice: unmarked, a message and a
+// reply to it read exactly alike, and "has it answered me yet?" is the one question the list has to
+// answer while a turn is running. Same flattening as a reply preview — it may be markdown too.
+const sentLine = (text: string, sender: string): SessionLine => ({
+  text: `${sender}: ${plainPreview(text)}`,
   tone: 'preview',
 });
+// Keep this literal declaration: native parity tests read the web source directly.
+export const SENT_BY_YOU = 'You';
+// Who sent the message a row previews (`lastUserText`). "You" only for the owner's own words — and
+// for every message from an older server, which names no sender. A message another Orbit session sent
+// (`session_send`, `project_send`) names that session (`lastUserFrom`) as the conversation's card
+// names it: its title, or what an untitled one is called (docs/session-list-projects-design.md §3.5,
+// owner 2026-11-07). A coordinator's unanswered message is usually a task's report, which "You:" put
+// in the owner's mouth.
+const sentBy = (s: any): string => {
+  const from = s.lastUserFrom;
+  if (!from || typeof from !== 'object') return SENT_BY_YOU;
+  return (typeof from.title === 'string' ? from.title.trim() : '') || SESSION_MESSAGE_UNTITLED;
+};
 
 // The five owner items, one word each: no project and no count, because a row is one line and the
 // project it is about is the conversation the row already names (contract §7.6 V13). The native
@@ -1167,11 +1181,11 @@ export const sessionLine = (
     // through to the muted last-reply preview, which reads as idle.
     if ((s.runningSubagentCount ?? 0) > 0)
       return { text: `${subagentRunningLabel(s.runningSubagentCount)}…`, tone: 'running' };
-    // The workspace hasn't answered yet: show the message you sent (the server keeps lastUserText
+    // The workspace hasn't answered yet: show the message it was sent (the server keeps lastUserText
     // from the moment it is enqueued until a reply lands) instead of the previous turn's reply,
     // which would read as if this one had already been answered. It's content, not status — the
     // spinner already carries "working" — so it takes the muted preview tone, not blue.
-    if (s.lastUserText) return sentLine(s.lastUserText);
+    if (s.lastUserText) return sentLine(s.lastUserText, sentBy(s));
     if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
     return { text: 'Running…', tone: 'running' };
   }
@@ -1190,7 +1204,7 @@ export const sessionLine = (
   // A message that never got an answer — the turn was interrupted, or failed, before any reply
   // landed — outranks the previous turn's reply: it's the newer of the two, and it's what the
   // session is left waiting on. The server only keeps lastUserText while it stands unanswered.
-  if (s.lastUserText) return sentLine(s.lastUserText);
+  if (s.lastUserText) return sentLine(s.lastUserText, sentBy(s));
   // The rolling recap (0418) takes the place of the reply preview it used to show: the sentence
   // the server wrote about the session, not the raw last reply flattened down to one line. Only
   // here — below every live line above — so a working session still says what it is doing. Off

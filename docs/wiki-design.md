@@ -304,7 +304,10 @@ POST   /wiki/spaces  |  PATCH /wiki/spaces/:id       设置：push / autoAccept 
 GET    /wiki/spaces/:id/workspaces                   列出 workspace 和可加入的 workspace
 POST   /wiki/spaces/:id/workspaces                   加入 workspace，或把留在外面的打开
 DELETE /wiki/spaces/:id/workspaces/:workspaceId      把 workspace 留在外面
-DELETE /wiki/spaces/:id                               永久删除这个 wiki（`docs/mocks/wiki-delete`）
+DELETE /wiki/spaces/:id                               移进回收站，保留 365 天（`docs/mocks/wiki-trash`）
+POST   /wiki/spaces/:id/restore                       从回收站恢复
+DELETE /wiki/spaces/:id/purge                         永久删除回收站里的这个 wiki，后台分批删
+GET    /wiki/trash                                    回收站
 GET    /wiki/spaces/:id                              首页数据：principles、topics、recent decisions、health、usage
 GET    /wiki/spaces/:id/entries?kind&topic&status&q&cursor
 GET    /wiki/entries/:id?include=sources,history,exposure
@@ -926,7 +929,8 @@ H4 精度 <50%、出现任何一次泄漏，或 H5 显示检索不比编译差�
 | `33-desktop` | web 桌面（1920×1080、1440×900）：首页主区是内容；Activity 页沿用图 29 的卡片排法 |
 | `38-workspaces` | Wiki 设置的 Workspaces 卡（web、iOS）：谁在这个 wiki 里、开关、`Add workspace…`、没有仓库的 wiki，以及开和关的规则（owner 2026-11-02 定） |
 | `41-home-setup` | 还没有内容的 Wiki：今天和提议对比、设置卡的四个样子（web 桌面、web 手机、iOS）、没有 wiki 时的 `Create wiki` 表单，以及每种状态说什么、按钮去哪里的规则表 |
-| `../wiki-delete/01-delete-wiki` | 删除 Wiki（web、iOS、Android）：侧栏 ⋯ 菜单、设置页底部、确认框、删除之后 |
+| `../wiki-delete/01-delete-wiki` | 删除 Wiki（web、iOS、Android）：侧栏 ⋯ 菜单、设置页底部、确认框、删除之后；已由回收站取代 |
+| `../wiki-trash/01-wiki-trash` | Wiki 回收站（web、iOS、Android）：Move to Trash、三处入口、回收站弹窗、恢复被拒、永久删除，以及规则（owner 2026-11-07 定） |
 
 ## 附 B：Wikova 借鉴对照
 

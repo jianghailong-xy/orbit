@@ -65,11 +65,11 @@ public struct SessionLine: Equatable, Sendable {
             if let n = s.runningSubagentCount, n > 0 {
                 return SessionLine(text: "\(subagentRunningLabel(n))…", tone: .running)
             }
-            // The agent hasn't answered yet: show the message you sent (server-kept from the moment
+            // The agent hasn't answered yet: show the message it was sent (server-kept from the moment
             // it is enqueued until a reply lands) rather than the previous turn's reply, which
             // would read as if this one had already been answered. Content, not status — the
             // spinner already conveys "working" — so it takes the muted preview tone.
-            if let u = s.lastUserText, !u.isEmpty { return sentLine(u) }
+            if let u = s.lastUserText, !u.isEmpty { return sentLine(u, from: s.lastUserFrom) }
             if let a = s.lastAssistantText, !a.isEmpty { return SessionLine(text: plainPreview(a), tone: .preview) }
             return SessionLine(text: "Running…", tone: .running)
         }
@@ -97,7 +97,7 @@ public struct SessionLine: Equatable, Sendable {
         // reply landed — outranks the previous turn's reply: it's the newer of the two, and it's
         // what the session is left waiting on. The server only keeps it while it stands
         // unanswered, so a non-empty value here always means exactly that.
-        if let u = s.lastUserText, !u.isEmpty { return sentLine(u) }
+        if let u = s.lastUserText, !u.isEmpty { return sentLine(u, from: s.lastUserFrom) }
         // The rolling recap (0418) takes the place of the reply preview it used to show: the sentence
         // the server wrote about the session, not the raw last reply flattened down to one line. Only
         // here — below every live line above — so a working session still says what it is doing (web
@@ -116,12 +116,28 @@ public struct SessionLine: Equatable, Sendable {
         return SessionLine(text: SessionHeader.statusWord(for: s), tone: .preview)
     }
 
-    /// The line for a message of YOURS the agent hasn't answered yet. Prefixed, because the preview
-    /// line is otherwise the agent's voice: unmarked, a message you sent and a reply to it read
-    /// exactly alike, and "has it answered me yet?" is the one question the list has to answer
-    /// while a turn is running. Same flattening as a reply — a sent message may be markdown too.
-    static func sentLine(_ text: String) -> SessionLine {
-        SessionLine(text: "You: \(plainPreview(text))", tone: .preview)
+    /// The line for a message the agent hasn't answered yet, marked with who sent it (`sender`).
+    /// Prefixed, because the preview line is otherwise the agent's voice: unmarked, a message and a
+    /// reply to it read exactly alike, and "has it answered me yet?" is the one question the list has
+    /// to answer while a turn is running. Same flattening as a reply — a sent message may be markdown
+    /// too. Web parity: `sentLine` in WorkspaceView.tsx.
+    static func sentLine(_ text: String, from: SessionMessageFrom?) -> SessionLine {
+        SessionLine(text: "\(sender(from)): \(plainPreview(text))", tone: .preview)
+    }
+
+    /// The owner, as the sender of their own message (web `SENT_BY_YOU`).
+    static let you = "You"
+
+    /// Who sent the message a row previews. "You" only for the owner's own words — and for every
+    /// message from an older control plane, which names no sender. A message another Orbit session
+    /// sent names that session (`lastUserFrom`) as the conversation's card names it: its title, or
+    /// what an untitled one is called (`SessionMessageCard.untitled`; docs/session-list-projects-design.md
+    /// §3.5, owner 2026-11-07). A coordinator's unanswered message is usually a task's report, which
+    /// "You:" put in the owner's mouth. Web parity: `sentBy`.
+    static func sender(_ from: SessionMessageFrom?) -> String {
+        guard let from else { return you }
+        let title = from.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? SessionMessageCard.untitled : title
     }
 
     /// Flatten an assistant reply into a single prose line: drop code blocks and the markdown
