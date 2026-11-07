@@ -55,4 +55,25 @@ describe('project reads', () => {
     h.out.shift()!.answer();
     await expect(read).resolves.toEqual([]);
   });
+
+  it('a project page does not wait for the workspace list to drain first', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const background = Array.from({ length: 12 }, (_, i) =>
+      client.fetchQuery(projectSessionsQuery({ projectId: `B${i}`, view: 'open' })));
+    await settle();
+    expect(h.out, 'the background reads are not at their cap').toHaveLength(4);
+
+    const page = client.fetchQuery(
+      projectSessionsQuery({ projectId: 'P1', view: 'open', includeLanding: true, priority: true }));
+    await settle();
+    expect(h.out.map((r) => r.path), 'the page waited behind the workspace list')
+      .toContain('/sessions?projectId=P1&view=open&includeLanding=1');
+    expect(h.out, 'the page read was held back by the cap').toHaveLength(5);
+
+    while (h.out.length > 0) {
+      h.out.shift()!.answer();
+      await settle();
+    }
+    await Promise.all([...background, page]);
+  });
 });
