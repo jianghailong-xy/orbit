@@ -427,6 +427,17 @@ describe('sessionLine says Orbit for the message Orbit wrote', () => {
     expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: 'ship it', lastUserFromOrbit: 'Orbit' }, true).text).toBe('You: ship it');
   });
 
+  // The four senders one row can name, each as the server writes it (at most one of the three marks set):
+  // another session, Orbit, a Feishu group member (docs/feishu-bot-design.md §8.2), and the owner.
+  it('names each of the four senders, as the server marks them', () => {
+    const row = (marks: Record<string, unknown>) =>
+      sessionLine({ status: 'AWAITING_INPUT', lastUserText: 'ship it', lastUserFrom: null, lastUserFromOrbit: null, lastUserFromExternal: null, ...marks }, true).text;
+    expect(row({ lastUserFrom: { sessionId: 'session-1', title: 'Build the package' } })).toBe('Build the package: ship it');
+    expect(row({ lastUserFromOrbit: { coordinatorDelivery: null } })).toBe('Orbit: ship it');
+    expect(row({ lastUserFromExternal: { source: 'FEISHU', name: 'Lin Mei' } })).toBe('From Feishu · Lin Mei: ship it');
+    expect(row({})).toBe('You: ship it');
+  });
+
   it('changes nothing above the message, and a mark with no message makes no line', () => {
     const told = { lastUserText: notification, lastUserFromOrbit: { coordinatorDelivery: evidence } };
     expect(sessionLine({ status: 'RUNNING', lastToolUse: 'Bash', ...told }, true)).toEqual({ text: 'Running Bash…', tone: 'running' });
