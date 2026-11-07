@@ -5,6 +5,7 @@ import { BACKGROUND_WAKE_TURN_PREFIX } from '../runner-api/background-job-wake';
 import { TASK_ACCEPTANCE_CLIENT_TURN_PREFIX } from '../tasks/executable-acceptance-round';
 import { TASK_RUN_TURN_PREFIX } from '../tasks/task-run-identity';
 import {
+  AUTO_RETRY_ORBIT_TURN_KEY_PREFIX,
   CONFIRMATION_RETURN_TURN_KEY_PREFIX,
   EVIDENCE_REVIEW_TURN_KEY_PREFIX,
   EVIDENCE_SEND_BACK_TURN_KEY_PREFIX,
@@ -23,7 +24,8 @@ import {
  * session's request handed back to it, a confirmation request's review on its three turns — to
  * its reviewer, a reviewer's return to the run, the owner's answers to the reviewer — an evidence
  * revision handed to the session that dispatched its task, and a send-back's note handed to the
- * run that submitted the revision. A coordinator's
+ * run that submitted the revision, and the re-send of any of those after a failed turn
+ * (`auto-retry:orbit:`; a re-send of somebody's own words keeps the bare `auto-retry:` key). A coordinator's
  * wake delivery and a criteria decision's reply are keyed by `derivedUuid`, which no client mints.
  * Any other key is one the sender chose — the account owner's client, or an agent.
  *
@@ -49,6 +51,30 @@ export function isOrbitAuthoredTurn(clientTurnId: string | null | undefined): bo
     OWNER_CONFIRMATION_ANSWERS_TURN_KEY_PREFIX,
     EVIDENCE_REVIEW_TURN_KEY_PREFIX,
     EVIDENCE_SEND_BACK_TURN_KEY_PREFIX,
+    AUTO_RETRY_ORBIT_TURN_KEY_PREFIX,
   ];
   return prefixes.some((prefix) => clientTurnId.startsWith(prefix)) || isDerivedUuid(clientTurnId);
+}
+
+/**
+ * The key a session's opening prompt is filed under as its first turn (`SessionsService.initialTurnClientId`,
+ * which answers this). Spelled here so the rule below needs no import of the sessions service.
+ */
+export function openingTurnKey(sessionId: string): string {
+  return `initial-${sessionId}`;
+}
+
+/**
+ * `isOrbitAuthoredTurn` for a turn of a known session: also the opening of a session the platform
+ * opened with a prompt of its own (`session.prompt_by_orbit`, migration 0493) — a project's
+ * coordinator, a judgment, a task list's dispatch console, the reply to an @-mention. Their opening
+ * shares the `initial-<id>` key with a person's own, so the key alone cannot say whose it is; the
+ * column written when the session was made does (docs/session-list-projects-design.md §3.5).
+ */
+export function isOrbitAuthoredTurnOf(
+  session: { id: string; promptByOrbit: boolean },
+  clientTurnId: string | null | undefined,
+): boolean {
+  return isOrbitAuthoredTurn(clientTurnId)
+    || (session.promptByOrbit && clientTurnId === openingTurnKey(session.id));
 }

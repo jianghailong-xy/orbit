@@ -42,6 +42,8 @@
  *  (11) The call's statements do not grow with its batches: twelve batches take as many as three.
  *  (12) Another session's message: merged and alone, the echo writes its sender beside the text (`lastUserFrom`, the
  *       uuid column among the call's columns) and the reply clears both.
+ *  (13) Orbit's own message: merged and alone, the echo writes Orbit's mark beside the text (`lastUserFromOrbit`, a
+ *       nullable jsonb column, cleared as SQL NULL) and the reply clears both.
  *
  * Every state is read on a second connection, never through the answer that wrote it.
  *
@@ -99,6 +101,7 @@ import { RunnerLinkEventsController, RunnerLinkGatewayCallGuard } from './runner
 import { readRunnerLink, RUNNER_LINK, runnerLinkCredential, signRunnerLinkToken, type RunnerLinkState } from './runner-link-token';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import { resetRunEventSeqConflictMetrics, runEventSeqConflictsSnapshot } from './run-event-seq-conflicts';
+import { WATCH_TURN_KEY_PREFIX } from '../sessions/watch-turn-key';
 import '../test-support/daemon-routes-over-http';
 
 declare global {
@@ -423,7 +426,8 @@ test('the link gateway\'s merged event call: many sessions in one transaction, e
   async function derivedState(sessionId: string) {
     const { rows } = await sql.query(
       `SELECT status::text AS status, last_assistant_text, last_tool_use, last_user_text,
-              last_user_from_session_id::text AS last_user_from_session_id, last_user_from_title, engine_turn_active,
+              last_user_from_session_id::text AS last_user_from_session_id, last_user_from_title, last_user_from_orbit,
+              engine_turn_active,
               engine_phase, context_tokens, context_window, running_bg_shells, running_bg_jobs, running_subagents,
               (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(running_bg_job_activity) AS k) AS bg_job_activity_ids,
               runtime_session_id, coordinator_context_epoch, coordinator_context_ack_key, retry_at, retry_attempts,
@@ -1077,6 +1081,50 @@ test('the link gateway\'s merged event call: many sessions in one transaction, e
         const { last_user_text, last_user_from_session_id, last_user_from_title } = mergedState;
         assert.deepEqual({ last_user_text, last_user_from_session_id, last_user_from_title }, expected[round],
           `round ${round}, pair ${i}: the message and its sender`);
+      }
+    }
+  });
+
+  await t.test('(13) Orbit\'s own message: merged and alone, the echo writes Orbit\'s mark beside the text and a reply clears both', async () => {
+    const words = 'Orbit Watch w-13 matched at generation 1: the build finished';
+    const pairs: Array<{ alone: { sessionId: string; turnId: string }; merged: { sessionId: string; turnId: string } }> = [];
+    for (const i of [0, 1]) {
+      const pair = {
+        alone: await liveSession(a, `woken, alone ${i}`, { words }),
+        merged: await liveSession(a, `woken, merged ${i}`, { words }),
+      };
+      // The turn is a watch's wake, under the key the watch delivery writes it with.
+      for (const { turnId } of [pair.alone, pair.merged]) {
+        await prisma.conversationTurn.update({
+          where: { id: turnId }, data: { clientTurnId: `${WATCH_TURN_KEY_PREFIX}${randomUUID()}:1` },
+        });
+      }
+      pairs.push(pair);
+    }
+    const rounds = (turnId: string): unknown[][] => [
+      [ev(1, RunEventType.USER, { text: words }, turnId)],
+      [ev(2, RunEventType.ASSISTANT, { text: 'the build is green' }, turnId)],
+    ];
+    const expected = [
+      { last_user_text: words, last_user_from_session_id: null, last_user_from_orbit: { coordinatorDelivery: null } },
+      { last_user_text: null, last_user_from_session_id: null, last_user_from_orbit: null },
+    ];
+    for (const round of [0, 1]) {
+      for (const pair of pairs) {
+        const answer = await alone(door.linkPort, a, pair.alone.sessionId, rounds(pair.alone.turnId)[round]);
+        assert.equal(answer.status, 202, JSON.stringify(answer.body));
+      }
+      const answer = await merged(door.linkPort, pairs.map((pair) => ({
+        of: a, sessionId: pair.merged.sessionId, events: rounds(pair.merged.turnId)[round],
+      })));
+      assert.deepEqual(answersOf(answer), pairs.map(() => ({ ok: true, durableSeq: round + 1, rejected: [] })));
+      for (const [i, pair] of pairs.entries()) {
+        const { retry_at: _mergedRetry, ...mergedState } = await derivedState(pair.merged.sessionId);
+        const { retry_at: _aloneRetry, ...aloneState } = await derivedState(pair.alone.sessionId);
+        assert.deepEqual(mergedState, aloneState, `round ${round}, pair ${i}: the same derived state`);
+        const { last_user_text, last_user_from_session_id, last_user_from_orbit } = mergedState;
+        assert.deepEqual({ last_user_text, last_user_from_session_id, last_user_from_orbit }, expected[round],
+          `round ${round}, pair ${i}: the message and Orbit's mark`);
       }
     }
   });

@@ -12,11 +12,12 @@ import { watchQuery, watchesQuery } from './queries';
  * Two kinds of event reach it. A `watch.changed` NAMES a watch and arrives after the server already
  * moved it (docs/watch-contract.md §8.1): a delivery, a deadline, a dead letter, an agent making or
  * releasing one — none of which writes a task or a session row, so before this event the list found
- * them only on its 60s poll. A session's, an approval's or a task's event names no watch, and
- * arrives BEFORE the evaluator reads the row it hints at (§8), so those invalidate the read at once
- * and again a few seconds later. The library events that can move no watch leave it alone. Mounted
- * over a fake EventSource, read off the cache's own `isInvalidated` flag with keys from the factory
- * the pages use.
+ * them only on its 60s poll. A session's, an approval's or a task's event names no watch: it moves a
+ * watch card only when it is about one of the watch's targets, whose standing the card draws from
+ * the same read (`targetStatus`, `targetTask`), so only those re-read it, once. A watch the evaluator
+ * moves after such an event arrives as its own `watch.changed`. The library events that can move no
+ * watch leave it alone. Mounted over a fake EventSource, read off the cache's own `isInvalidated`
+ * flag with keys from the factory the pages use.
  */
 
 vi.mock('../api', () => ({ getToken: () => 'token' }));
@@ -41,6 +42,16 @@ const TAGS: QueryKey = ['session-tags'];
 const TASKS: QueryKey = ['tasks'];
 const SESSIONS: QueryKey = ['sessions'];
 
+/** A watch on hand that follows session S1, and session S2 whose run is task T2, and task T1. */
+const FOLLOWING = [{
+  id: 'W1',
+  targets: [
+    { targetKind: 'SESSION', targetResourceId: 'S1' },
+    { targetKind: 'SESSION', targetResourceId: 'S2', targetTask: { id: 'T2' } },
+    { targetKind: 'TASK', targetResourceId: 'T1' },
+  ],
+}];
+
 const frame = (type: string, data: Record<string, unknown>, sessionId = '') => ({
   type,
   sessionId,
@@ -56,7 +67,7 @@ async function mount(keys: QueryKey[]): Promise<QueryClient> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   // Seeded rather than fetched: a read with no observer is only marked by an invalidation, never
   // refetched, so the flag is the provider's doing and nothing else's.
-  for (const key of keys) client.setQueryData(key, []);
+  for (const key of keys) client.setQueryData(key, key === WATCHES ? FOLLOWING : []);
   container = document.createElement('div');
   document.body.appendChild(container);
   const next = createRoot(container);
@@ -119,27 +130,48 @@ afterEach(async () => {
 });
 
 describe('the watches read rides the control-plane stream', () => {
-  it('session.updated invalidates the watches, and again once the evaluation it set off can have landed', async () => {
-    const client = await mount([WATCHES]);
+  it('a session.updated about a followed session invalidates the watches, and only once', async () => {
+    const client = await mount([WATCHES, SESSIONS]);
 
     await publish(frame('session.updated', { id: 'S1', status: 'AWAITING_INPUT' }, 'S1'));
     await untilInvalidated(client, WATCHES);
 
-    // Read again, as an observer would, and the second look still comes.
-    client.setQueryData(WATCHES, []);
+    // Read again, as an observer would: no second look comes for the same event.
+    client.setQueryData(WATCHES, FOLLOWING);
+    await new Promise((resolve) => setTimeout(resolve, 4_000));
+    expect(invalidated(client, WATCHES), 'the watches were read a second time for one event').toBe(false);
+  }, 10_000);
+
+  it('a session.updated about a session no watch follows leaves the watches alone', async () => {
+    const client = await mount([WATCHES, SESSIONS]);
+
+    await publish(frame('session.updated', { id: 'S9', status: 'AWAITING_INPUT' }, 'S9'));
+    // The positive this negative is paired with: the flush ran and reached the sessions.
+    await untilInvalidated(client, SESSIONS);
     expect(invalidated(client, WATCHES)).toBe(false);
-    await untilInvalidated(client, WATCHES, 8_000);
   });
 
-  it('an approval and a task change invalidate the watches too', async () => {
-    const client = await mount([WATCHES]);
+  it('an approval and a task change about what a watch follows invalidate the watches too', async () => {
+    const client = await mount([WATCHES, TASKS]);
 
     await publish(frame('approval.requested', { id: 'A1' }, 'S1'));
     await untilInvalidated(client, WATCHES);
 
-    client.setQueryData(WATCHES, []);
+    client.setQueryData(WATCHES, FOLLOWING);
     await publish(frame('task.changed', { taskId: 'T1', taskIds: ['T1'], resync: false }));
     await untilInvalidated(client, WATCHES);
+
+    // A followed session's own task, as the watch names it.
+    client.setQueryData(WATCHES, FOLLOWING);
+    await publish(frame('task.changed', { taskIds: ['T2'], resync: false }));
+    await untilInvalidated(client, WATCHES);
+
+    // A task no watch follows reaches the task lists and not the watches.
+    client.setQueryData(WATCHES, FOLLOWING);
+    client.setQueryData(TASKS, []);
+    await publish(frame('task.changed', { taskId: 'T9', taskIds: ['T9'], resync: false }));
+    await untilInvalidated(client, TASKS);
+    expect(invalidated(client, WATCHES)).toBe(false);
   });
 
   it('a watch.changed re-reads the watches at once, without the 60s poll', async () => {

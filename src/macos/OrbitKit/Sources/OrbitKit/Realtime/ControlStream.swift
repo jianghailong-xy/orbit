@@ -10,6 +10,17 @@ public enum ControlStreamEvent: Sendable, Equatable {
     /// The stream is live (HTTP 200). Local marker, not a wire event.
     case connected
     case event(ControlEvent)
+    /// A frame that is not a control event arrived — the server's `{type:"ping"}`, every ~20s. It
+    /// carries nothing to apply, but it is a message: the server, not just a proxy in front of it,
+    /// is talking on this connection, which is what lets the reconnect ramp reset
+    /// (`ReconnectPolicy.noteHealthy`) on an account with no events for a while.
+    case keepalive
+
+    /// What one SSE frame of the stream is: a control event, or — the server's `{type:"ping"}`, or
+    /// any other frame that is not one — a keepalive.
+    public static func frame(_ sse: SSEEvent) -> ControlStreamEvent {
+        SSEDecoding.controlEvent(from: sse).map(ControlStreamEvent.event) ?? .keepalive
+    }
 }
 
 /// Source of the user-scoped control-plane stream (`GET /api/events`). Abstracted so the
@@ -55,6 +66,18 @@ public enum ControlStreamError: Error, Equatable {
     case watchdogTimeout
 }
 
+/// Where the control-plane stream connects.
+public enum ControlStreamURL {
+    /// `GET /api/events`, declaring the hints this client follows: `list_changed`, without which the
+    /// server never sends `sessions.list_changed` (docs/realtime-control-plane-stream.md §4.8).
+    public static func events(_ baseURL: URL) -> URL {
+        let events = baseURL.appendingPathComponent("api/events")
+        guard var parts = URLComponents(url: events, resolvingAgainstBaseURL: false) else { return events }
+        parts.queryItems = (parts.queryItems ?? []) + [URLQueryItem(name: "hints", value: "list_changed")]
+        return parts.url ?? events
+    }
+}
+
 #if os(macOS) || os(iOS)
 /// Live SSE transport for `GET /api/events` over `URLSession.bytes`, with the `Authorization`
 /// header (native clients never put the token in the URL) and a byte watchdog: the server
@@ -79,7 +102,7 @@ public struct URLSessionControlStream: ControlPlaneStreaming {
             let clock = ByteClock()
             let reader = Task {
                 do {
-                    var req = URLRequest(url: baseURL.appendingPathComponent("api/events"))
+                    var req = URLRequest(url: ControlStreamURL.events(baseURL))
                     req.timeoutInterval = 3600
                     req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
                     if let t = token() { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
@@ -96,9 +119,7 @@ public struct URLSessionControlStream: ControlPlaneStreaming {
                     // delimiter. Every byte — keepalive comments included — feeds the clock.
                     for try await byte in bytes {
                         clock.pulse()
-                        if let sse = parser.consume(byte: byte), let ev = SSEDecoding.controlEvent(from: sse) {
-                            continuation.yield(.event(ev))
-                        }
+                        if let sse = parser.consume(byte: byte) { continuation.yield(.frame(sse)) }
                     }
                     continuation.finish()
                 } catch {

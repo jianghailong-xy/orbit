@@ -102,6 +102,16 @@ public final class APIClient: @unchecked Sendable {
         }
     }
 
+    /// Trade the stored refresh token for a fresh access token, through the same single-flight refresh
+    /// a REST call's 401 takes. For the control-plane stream, which is not a REST call: its 401 asks
+    /// for this and connects again. False when there is no fresh token now — the refresh token is
+    /// gone or refused, or the server could not be reached.
+    public func refreshSession() async -> Bool {
+        let refresher = await SessionRefresherRegistry.shared.refresher(
+            baseURL: baseURL, tokenStore: tokenStore, session: session)
+        return await refresher.refresh()
+    }
+
     /// Revoke a refresh token server-side on sign-out. Best-effort (`try?`); takes the token
     /// explicitly so the caller can clear local storage immediately without racing this call.
     public func revokeRefreshToken(_ refreshToken: String) async {
@@ -377,6 +387,14 @@ public final class APIClient: @unchecked Sendable {
         } catch APIError.http(let status, _) where status == 404 || status == 405 {
             _ = try await postRaw("sessions/\(id)/archive", body: Optional<Empty>.none)
         }
+    }
+    /// Complete on a DONE or CANCELLED project's row (docs/session-list-projects-design.md §3.6): its
+    /// coordinator and its members still in Open, in every workspace, move to Completed together.
+    /// Answers how many moved; an OPEN project is refused 409 PROJECT_STILL_OPEN.
+    public func completeProjectSessions(_ projectID: String) async throws -> Int {
+        struct Completed: Decodable { let completed: Int }
+        let data = try await postRaw("projects/\(projectID)/sessions/complete", body: Optional<Empty>.none)
+        return try decoder.decode(Completed.self, from: data).completed
     }
     public func restoreSession(_ id: String) async throws { _ = try await postRaw("sessions/\(id)/restore", body: Optional<Empty>.none) }
     public func deleteSession(_ id: String) async throws { try await deleteRaw("sessions/\(id)") }

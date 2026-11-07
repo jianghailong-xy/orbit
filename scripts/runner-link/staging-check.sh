@@ -3,16 +3,16 @@
 # <state>/client/check/ (README.md beside this file):
 #
 #   1. Refusals before the upgrade, and the TLS certificate the link presents.
-#   2. A test runner connects, heartbeats over the link and over HTTPS, and mirrors for 50 s: Welcome, heartbeat
-#      answers, ping round trips, and every mirror compared equal.
+#   2. A test runner connects and heartbeats for 50 s: Welcome says MODE_LINK, every beat is forwarded to the heartbeat
+#      route and answered MODE_LINK, and pings make their round trips.
 #   3. A gateway release (the container recreated, as an upgrade does): the runner is sent Drain and connects to the new
 #      gateway.
 #   4. A certificate rotation under a live connection, which stays up.
 #   5. A revocation: the probe runner's token is rotated, the gateway closes its live connection and refuses its old
 #      link token, and the runner works again with its new token.
 #   6. Hints over NATS: the gateway subscribes to the hint subject of the runner it holds a connection of and no other;
-#      a wake for another runner is published on that runner's subject and never reaches the gateway, and a wake for
-#      the probe runner is relayed (counted, not sent: the connection is in MODE_HTTP).
+#      a wake for another runner, connected a moment before and gone since, is published on that runner's subject and
+#      never reaches the gateway, and a wake for the probe runner is relayed to its connection.
 #
 # It assumes no other runner is connected to the stack, and exits non-zero at the first step that does not hold.
 set -euo pipefail
@@ -21,8 +21,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/staging-lib.sh"
 
 [ -f "$env_file" ] || die "no staging stack in $state: run staging-up.sh first"
 [ "$(setting STAGING_TLS files)" = files ] || die "the check runs in the files TLS mode"
-[ "$(setting STAGING_MODE http)" = http ] ||
-  die "this is the shadow period's check: run it with the stack in MODE_HTTP (ORBIT_LINK_STAGING_MODE=http staging-up.sh --no-build); staging-check-link.sh checks MODE_LINK"
 out="$state/client/check"
 rm -rf "$out"
 mkdir -p "$out"
@@ -92,14 +90,13 @@ grep -q 'Verify return code: 0 (ok)' "$out/1-tls.txt" || fail "the link's certif
 openssl x509 -noout -subject -issuer -serial -enddate -ext subjectAltName < "$out/1-tls.txt" > "$out/1-certificate.txt"
 cat "$out/1-certificate.txt" >&2
 
-step "2. a runner connects, heartbeats and mirrors for 50s"
+step "2. a runner connects and heartbeats for 50s"
 curl -fsS "$metrics" > "$out/2-metrics-before.txt"
 client -duration 50s -summary "$out/2-client.json" -capture "$out/2-client.capture" > "$out/2-client.log" 2>&1 ||
   fail "the test runner failed"
 curl -fsS "$metrics" > "$out/2-metrics-after.txt"
 check_json "$out/2-client.json" 's.connects === 1 && s.lostConnections === 0 && s.heartbeatAcks >= 20 &&
-  s.httpHeartbeats.ok >= 20 && s.mirrorsSent.heartbeat === s.httpHeartbeats.ok && s.mirrorsSent.events === s.mirrorsSent.heartbeat &&
-  s.rpcResults.LINK_MODE_HTTP >= 2 * s.mirrorsSent.heartbeat - 2 && s.modes.MODE_HTTP === s.heartbeatAcks'
+  s.heartbeatAcks >= s.heartbeatsSent - 1 && s.modes.MODE_LINK === s.heartbeatAcks'
 node - "$out/2-metrics-before.txt" "$out/2-metrics-after.txt" "$out/2-client.json" <<'EOF' || fail "the gateway's counts for step 2"
 const fs = require('fs');
 const read = (f) => Object.fromEntries(fs.readFileSync(f, 'utf8').split('\n').filter((l) => l && !l.startsWith('#'))
@@ -111,11 +108,9 @@ const checks = {
   'handshakes ok': [delta('link_handshakes_total{result="ok"}'), (d) => d === 1],
   'handshake durations': [delta('link_handshake_duration_seconds_count'), (d) => d === 1],
   heartbeats: [delta('link_heartbeats_total'), (d) => d === client.heartbeatsSent],
+  // Each beat forwarded to the heartbeat route and answered: the last one may still be on its way as the runner stops.
+  'heartbeats forwarded': [delta('link_heartbeat_forwards_total{result="forwarded"}'), (d) => d >= client.heartbeatAcks && d <= client.heartbeatsSent],
   'ping round trips': [delta('link_rtt_seconds_count'), (d) => d >= 2],
-  'heartbeat mirrors equal': [delta('link_shadow_pairs_total{kind="heartbeat",result="match"}'), (d) => d === client.mirrorsSent.heartbeat],
-  'event mirrors equal': [delta('link_shadow_pairs_total{kind="events",result="match"}'), (d) => d === client.mirrorsSent.events],
-  'mirrors different': [delta('link_shadow_pairs_total{kind="heartbeat",result="mismatch"}') + delta('link_shadow_pairs_total{kind="events",result="mismatch"}'), (d) => d === 0],
-  'mirror halves unpaired': [Object.keys(after).filter((k) => k.startsWith('link_shadow_unpaired_total')).reduce((n, k) => n + delta(k), 0), (d) => d === 0],
   'closed by the runner': [delta('link_disconnects_total{reason="client_closed"}'), (d) => d === 1],
 };
 let ok = true;
@@ -127,7 +122,7 @@ process.exit(ok ? 0 : 1);
 EOF
 docker run --rm -v "$out:$out" "$image" dump "$out/2-client.capture" > "$out/2-client.dump.txt" ||
   fail "link-gateway dump could not decode the capture"
-for body in hello welcome heartbeat heartbeat_ack event_batch rpc rpc_result; do
+for body in hello welcome heartbeat heartbeat_ack; do
   grep -q " $body " "$out/2-client.dump.txt" || fail "the capture has no $body frame"
 done
 
@@ -200,8 +195,8 @@ nats_msgs() { curl -fsS "$nats_monitor/varz" | node -pe "JSON.parse(require('fs'
 hints_relayed() { curl -fsS "$metrics" | awk '$1 ~ /^link_hints_total\{/ { n += $2 } END { print n + 0 }'; }
 json_field() { node -pe "JSON.parse(require('fs').readFileSync(0, 'utf8')).$1"; }
 owner_call() { curl -fsS -X "$1" "$origin/api$2" -H "Authorization: Bearer $access" -H 'content-type: application/json' ${3:+-d "$3"}; }
-# A second runner of the account, online over HTTPS and never connected to the link: the runner whose hints this
-# gateway must never see. Registered once and kept, as staging-seed.mjs keeps the probe runner.
+# A second runner of the account, online and not connected to the link: the runner whose hints this gateway must never
+# see. Registered once and kept, as staging-seed.mjs keeps the probe runner.
 peer_token="$(cat "$state/secrets/hint_peer_token" 2>/dev/null || true)"
 peer_id="$(cat "$state/secrets/hint_peer_id" 2>/dev/null || true)"
 peer_mints() {
@@ -219,9 +214,13 @@ if ! peer_mints; then
   (umask 077; printf '%s\n' "$peer_token" > "$state/secrets/hint_peer_token"; printf '%s\n' "$peer_id" > "$state/secrets/hint_peer_id")
   rm -f "$out/6-peer.json"
 fi
-# One heartbeat puts it online, which a sign-in asks for.
-curl -fsS -X POST "$origin/api/runner/heartbeat" -H "Authorization: Bearer $peer_token" -H 'content-type: application/json' \
-  -d "{\"leaseOwner\":\"$(cat /proc/sys/kernel/random/uuid)\",\"status\":\"ONLINE\"}" > /dev/null || fail "the hint peer's heartbeat failed"
+# A heartbeat puts it online, which a sign-in asks for. The server takes it over the link alone: the peer connects for a
+# moment, beats, and leaves, and the gateway lets its subject go with its last connection.
+"$here/staging-client.sh" -runner-token "$peer_token" -duration 6s -summary "$out/6-peer-client.json" > "$out/6-peer-client.log" 2>&1 ||
+  fail "the hint peer did not connect"
+check_json "$out/6-peer-client.json" 's.connects === 1 && s.heartbeatAcks >= 1'
+no_subscription() { [ "$(metric link_hint_subscriptions)" = 0 ]; }
+wait_until 15 "the gateway let the peer's subject go" no_subscription
 
 client -duration 40s -summary "$out/6-client.json" > "$out/6-client.log" 2>&1 &
 runner=$!
@@ -242,19 +241,21 @@ sleep 2
 [ "$(hints_relayed)" = "$relayed_before" ] || fail "the gateway received a hint for a runner it holds no connection of"
 owner_call DELETE "/runners/$peer_id/login" > /dev/null || fail "cancelling the peer's sign-in failed"
 
-# A wake for the probe runner is published on its subject and relayed: counted, not sent, as the connection is MODE_HTTP.
+# A wake for the probe runner is published on its subject, relayed and sent to its connection.
 in_before="$(nats_msgs in)"; out_before="$(nats_msgs out)"
-commands_before="$(metric 'link_hints_total{kind="commands",result="mode_http"}')"
+commands_before="$(metric 'link_hints_total{kind="commands",result="sent"}')"
 owner_call POST "/runners/$runner_id/login" '{}' > "$out/6-probe-login.json" || fail "starting a sign-in on the probe runner failed"
-commands_relayed() { [ "$(metric 'link_hints_total{kind="commands",result="mode_http"}')" -gt "$commands_before" ]; }
-wait_until 10 "the probe runner's hint relayed" commands_relayed
+commands_relayed() { [ "$(metric 'link_hints_total{kind="commands",result="sent"}')" -gt "$commands_before" ]; }
+wait_until 10 "the probe runner's hint sent" commands_relayed
 owner_call DELETE "/runners/$runner_id/login" > /dev/null || fail "cancelling the probe runner's sign-in failed"
 printf 'NATS in %s -> %s, out %s -> %s\n' "$in_before" "$(nats_msgs in)" "$out_before" "$(nats_msgs out)" | tee "$out/6-nats.txt" >&2
 [ "$(nats_msgs out)" -gt "$out_before" ] || fail "NATS handed the probe runner's hint to nobody"
 kill "$runner" 2>/dev/null || true
 wait "$runner" 2>/dev/null || true
-docker logs "$gateway" 2>&1 | grep 'msg=hint ' > "$out/6-gateway-hints.txt" || fail "the gateway logged no hint"
-grep -q "runner=$runner_id kind=commands result=mode_http" "$out/6-gateway-hints.txt" || fail "the gateway's hint log does not name the probe runner"
+# A hint sent is logged as the frame it went in, with its runner; one that is not, as msg=hint.
+docker logs "$gateway" 2>&1 | grep -E 'msg=hint |frame="#[0-9]+ hint ' > "$out/6-gateway-hints.txt" || fail "the gateway logged no hint"
+grep -Eq "runner=$runner_id .*dir=out frame=\"#[0-9]+ hint kind=\*linkpb.Hint_Commands\"" "$out/6-gateway-hints.txt" ||
+  fail "the gateway's log has no commands hint sent to the probe runner"
 grep -q "runner=$peer_id" "$out/6-gateway-hints.txt" && fail "the gateway logged a hint for the peer"
 
 curl -fsS "$metrics" > "$out/metrics-final.txt"

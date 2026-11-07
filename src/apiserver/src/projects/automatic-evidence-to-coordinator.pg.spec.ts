@@ -582,7 +582,7 @@ test('(1) an Automatic project hands the revision to its coordinator to decide, 
     }
   });
 
-test('(2) once exceptionEscalationSeconds have passed since the delivery, the owner is asked',
+test('(2) once exceptionEscalationSeconds have passed since pickup, the owner is asked',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
@@ -591,7 +591,13 @@ test('(2) once exceptionEscalationSeconds have passed since the delivery, the ow
       await submit(stack, w);
       const [row] = await evidenceWakes(stack.db, w.taskId);
       assert.equal(row!.status, 'DELIVERED', `refused with ${row!.refusalCode}`);
-      const deliveredAt = row!.updatedAt.getTime();
+      const takenAt = new Date(row!.updatedAt.getTime() + 3 * ESCALATION_SECONDS * 1_000);
+      assert.deepEqual(await ownerAsked(stack, w, takenAt), [], 'queued evidence started a clock');
+      await stack.db.conversationTurn.updateMany({
+        where: { sessionId: w.coordinatorSessionId!, clientTurnId: coordinatorDeliveryTurnId(row!.idempotencyKey) },
+        data: { status: 'IN_FLIGHT', deliveredAt: takenAt },
+      });
+      const deliveredAt = takenAt.getTime();
 
       // By the read's own clock: held until the second before the escalation, asked from it on.
       const window = ESCALATION_SECONDS * 1_000;
@@ -610,14 +616,15 @@ test('(2) once exceptionEscalationSeconds have passed since the delivery, the ow
       assert.equal(await ownerCount(stack, w, new Date(deliveredAt + 300_000)), 1);
 
       // And through the two production reads, which read at "now": until the delivery is old
-      // enough the owner is not asked, and once it is — the row aged by the same 300 seconds the
+      // enough the owner is not asked, and once it is — the turn aged by the same 300 seconds the
       // clock would take — the card's read lists it and the badge lights.
       assert.deepEqual(await cardNow(stack, w), []);
       assert.equal(await badge(stack, w), badgeBefore);
       await stack.db.$executeRaw`
-        UPDATE "project_coordinator_wake"
-           SET "updated_at" = "updated_at" - make_interval(secs => 301)
-         WHERE "id" = ${row!.id}::uuid`;
+        UPDATE "conversation_turn"
+           SET "delivered_at" = now() - make_interval(secs => 301)
+         WHERE "session_id" = ${w.coordinatorSessionId}::uuid
+           AND "client_turn_id" = ${coordinatorDeliveryTurnId(row!.idempotencyKey)}`;
       assert.deepEqual(await cardNow(stack, w), [w.taskId],
         'the delivery is past its escalation and the owner is still not asked');
       assert.equal(await badge(stack, w), badgeBefore + 1, 'the badge did not light with the card');
@@ -878,7 +885,7 @@ test('(9) the hold ends the moment the coordinator cannot act on it, and not whi
       const paused = await readPendingEvidenceJudgments(stack.prisma, w.ownerId, {
         id: w.coordinatorSessionId!, taskId: null,
       });
-      assert.deepEqual(paused.waitingOnCoordinator.map((r) => r.taskId), [w.taskId]);
+      assert.deepEqual(paused.waitingOnCoordinator, []);
 
       // Parked on a retry is the same pause.
       await stack.db.session.update({
@@ -1061,7 +1068,7 @@ test('(13) a coordinator conversation that is only down is not written to or rev
       const read = await readPendingEvidenceJudgments(stack.prisma, w.ownerId, {
         id: w.coordinatorSessionId!, taskId: null,
       });
-      assert.deepEqual(read.waitingOnCoordinator.map((r) => r.taskId), [w.taskId]);
+      assert.deepEqual(read.waitingOnCoordinator, []);
     } finally {
       await stack.db.$disconnect();
     }

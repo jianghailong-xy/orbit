@@ -96,9 +96,9 @@ final class InfrastructurePageWiringTests: XCTestCase {
         XCTAssertTrue(page.contains(".navigationTitle(AppSection.runners.title)"))
         // The machines are read again while the page is up, so a row's Offline and its "N / M running"
         // never come from two different reads' worth of time.
-        try assertInOrder(page, ["await runners.load()", "while !Task.isCancelled {",
-                                 "try? await Task.sleep(for: .seconds(15))", "await runners.load()"],
-                          "the page's machines, read again while it is up")
+        try assertInOrder(page, ["await runners.load()",
+                                 "await ViewPoll.run(model, every: 15, inFlight: { 15 }) { await runners.load() }"],
+                          "the page's machines, read again while it is up — and the app can be seen")
         for read in [".task { await self.model.agents?.reloadPools() }",
                      ".task { await self.model.agents?.loadOwnKeys() }", ".task { await self.model.sharedPools?.load() }",
                      "await self.model.sharedPools?.loadAccess(id)",

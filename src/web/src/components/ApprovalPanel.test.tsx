@@ -728,9 +728,12 @@ describe('batch create approval', () => {
       // Waited out in act slices, not one act: the picture arrives through a `lazy()` import that
       // resolves on its own schedule, and React queues every render scheduled inside an in-flight
       // act callback until that callback settles. In slices the card can draw inside the wait.
-      for (let attempt = 0; attempt < 20 && !host!.querySelector('[data-testid="project-canvas"]'); attempt += 1) {
+      // A deadline, not a count of slices: under a loaded merge check (`--maxWorkers=2`, load ~30)
+      // the import alone outlasts 200 ms. `vi.waitFor` would be one act around the whole wait.
+      const deadline = Date.now() + 8_000;
+      while (!host!.querySelector('[data-testid="project-canvas"]') && Date.now() < deadline) {
         await act(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 10));
+          await new Promise((resolve) => setTimeout(resolve, 20));
         });
       }
       expect(host!.querySelector('[data-testid="project-canvas"]')).not.toBeNull();

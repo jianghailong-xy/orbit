@@ -285,10 +285,6 @@ public enum AutoRetryLogic {
     /// window tells the user to wait days for a quota that comes back in hours. Codex names no
     /// window at all and is `other`.
     ///
-    /// One judgment for both places that name the window: this card's title, and the pause line of
-    /// an evidence version waiting for its coordinator (`EvidenceDecisions.coordinatorPause`), so the
-    /// line can never name another window than the card above it. Whether a failure is a usage
-    /// limit at all is `EngineErrors.isUsageLimitErrorText`'s answer, not this one's.
     public static func quotaWindowKind(_ message: String) -> QuotaWindow {
         let m = message.lowercased()
         if m.contains("hit your session limit") { return .fiveHour }

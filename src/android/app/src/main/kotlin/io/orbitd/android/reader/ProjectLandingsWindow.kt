@@ -36,6 +36,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.cards.PromotionReceiptSheet
@@ -60,6 +63,8 @@ import io.orbitd.android.navigation.OrbitRoute
 import io.orbitd.android.navigation.Origin
 import io.orbitd.android.projects.ProjectApi
 import io.orbitd.android.projects.failureReason
+import io.orbitd.android.realtime.PagePoll
+import io.orbitd.android.realtime.PagePolls
 import io.orbitd.android.taskprojects.canWrite
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.wiki.PageBar
@@ -84,7 +89,8 @@ import kotlinx.serialization.json.JsonObject
 private const val FOCUS_OUTLINE_MS = 1_500L
 /** The room a settled bubble's column leaves at its end, like an incoming chat message's (board 01 b); `Now`'s cards take it. */
 private val BUBBLE_END_GUTTER = 44.dp
-/** How often the two lists are read again while the window shows (the web's 15 s), and the merges into main (its 60 s). */
+/** How often the two lists are read again while the window shows a landing in hand (the web's 15 s), and the merges into main (its
+ *  60 s); with none in hand, as the account stream says (PagePoll). */
 private const val LISTS_READ_MS = 15_000L
 private const val MERGES_READ_MS = 60_000L
 
@@ -208,16 +214,23 @@ internal fun ProjectLandingsWindow(app: OrbitApplication, handle: SessionHandle,
     }
     /** A card whose read says it settled moves into its day: the lists and the merges are read again at once. */
     fun settled() { scope.launch { coroutineScope { launch { readLists() }; launch { readMerged() } } } }
+    /** Whether a landing is in hand, as the window's state says when a poll asks: a row not settled, or a card whose own read says so
+     * (the landing the window was opened on may be no row yet). */
+    fun inHand() = state.rows.any { row -> row.landing?.let { (it.state ?: if (it.settledAt != null) "SETTLED" else "IN_FLIGHT") != "SETTLED" } == true } ||
+        state.cards.values.any { it.view != null && it.view.settledAt == null }
 
     LaunchedEffect(state) {
         if (focusId != null && state.focus == null) launch {
             val detail = attempt { api.objectRead(listOf("sessions", focusId)) }
             if (detail != null) state.focus = detail else state.focusFailed = true
         }
-        launch { while (true) { readLists(); delay(LISTS_READ_MS) } }
-        launch { while (true) { readMerged(); delay(MERGES_READ_MS) } }
         launch { while (true) { delay(1_000); now = Instant.now() } }
     }
+    // The lists and the merges into main. A landing publishes no event (§2.9 LS6): while one is in hand they keep their cadence, 15 s and
+    // 60 s; with none they follow the account stream as every page does (docs/list-freshness-design.md R6). Neither reads while the
+    // Activity is stopped.
+    PagePoll(app, handle, PagePolls.PROJECT_EVENTS, state, inFlightMs = { if (inHand()) LISTS_READ_MS else null }) { readLists() }
+    PagePoll(app, handle, PagePolls.PROJECT_EVENTS, state, inFlightMs = { if (inHand()) MERGES_READ_MS else null }) { readMerged() }
 
     // The landing the window was opened on, when no list carries it: a landing whose row is not inserted yet (LS1's pre-generated id),
     // its subject read off its own view — or, when this device cannot read that view, the job an integration read last described,
@@ -241,19 +254,23 @@ internal fun ProjectLandingsWindow(app: OrbitApplication, handle: SessionHandle,
     val window = remember(rows, state.merged, minute) { SessionProjectLandings.window(rows, state.merged, now, zone) }
     val entries = windowItems(window, state.listed, state.listFailed)
 
-    // Only cards poll: each one's own view, on the landing page's cadence (RUNNING 4 s, QUEUED 15 s, nothing once settled).
+    // Each card polls its own view on the landing page's cadence (RUNNING 4 s, QUEUED 15 s, nothing once settled), while the Activity is
+    // started: a stopped one reads nothing, and one started again reads each card at once.
     val cardIds = window.now.map { it.sessionId }
-    LaunchedEffect(cardIds) {
-        for (id in cardIds) launch {
-            while (true) {
-                LandingSessionReads.read(api, projects, id, state.cards[id] ?: LandingSessionRead(), app.landingJobs, handle) { read ->
-                    // A read carries the card as it was when it left: one that left before a press, or while one was out, must neither
-                    // let the doors up under it nor hold them down after it.
-                    state.cards[id] = read.copy(acting = state.cards[id]?.acting ?: false)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(cardIds, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            for (id in cardIds) launch {
+                while (true) {
+                    LandingSessionReads.read(api, projects, id, state.cards[id] ?: LandingSessionRead(), app.landingJobs, handle) { read ->
+                        // A read carries the card as it was when it left: one that left before a press, or while one was out, must neither
+                        // let the doors up under it nor hold them down after it.
+                        state.cards[id] = read.copy(acting = state.cards[id]?.acting ?: false)
+                    }
+                    val view = state.cards[id]?.view
+                    if (view?.settledAt != null) { settled(); break }
+                    delay(LandingSessionModel.nextReadMs(view) ?: break)
                 }
-                val view = state.cards[id]?.view
-                if (view?.settledAt != null) { settled(); break }
-                delay(LandingSessionModel.nextReadMs(view) ?: break)
             }
         }
     }

@@ -43,7 +43,7 @@ func (tc *testConn) eventAck(timeout time.Duration) *linkpb.EventAck {
 	return tc.await("event_ack", timeout, nil).GetEventAck()
 }
 
-func TestAnEventBatchIsStoredAsItsMirrorWouldBeAndAcknowledged(t *testing.T) {
+func TestAnEventBatchIsStoredAsTheEventsRouteTakesItAndAcknowledged(t *testing.T) {
 	backend := newFakeBackend(t, stored)
 	h := newLinkHarness(t, []*fakeBackend{backend}, nil)
 	tc, w := h.connectLink(runnerA, processA)
@@ -60,17 +60,16 @@ func TestAnEventBatchIsStoredAsItsMirrorWouldBeAndAcknowledged(t *testing.T) {
 	if len(calls) != 1 {
 		t.Fatalf("%d calls", len(calls))
 	}
-	hello := linkHello(processA).GetHello()
-	req := &linkpb.TunnelRequest{Method: "POST", Path: "/runner/sessions/" + eventSession + "/events", JsonBody: calls[0].Body}
-	if diffs := compareEvents(eb, req, hello); len(diffs) != 0 {
-		t.Fatalf("the forwarded batch differs from the mirror's mapping: %s\nbody %s", fields(diffs), calls[0].Body)
+	// The body the events route takes: the connection's process, and each event with its ts in RFC 3339 to the
+	// millisecond and its payload as the runner sent it.
+	event := func(seq int, ts string) string {
+		return fmt.Sprintf(`{"seq": %d, "type": "assistant", "ts": %q, "turnId": "0190a0b0-0000-7000-8000-0000000000f1",
+			"payload": {"text": "<b>step %d</b> & é 中文", "n": 1.5}}`, seq, ts, seq)
 	}
-	var body struct {
-		LeaseOwner string `json:"leaseOwner"`
-	}
-	_ = json.Unmarshal(calls[0].Body, &body)
-	if body.LeaseOwner != strings.ToLower(processA) {
-		t.Fatalf("leaseOwner %q", body.LeaseOwner)
+	want := fmt.Sprintf(`{"leaseOwner": %q, "events": [%s, %s, %s]}`, strings.ToLower(processA),
+		event(1, "2025-10-25T08:13:20.124Z"), event(2, "2025-10-25T08:13:20.125Z"), event(3, "2025-10-25T08:13:20.126Z"))
+	if !jsonEqual(calls[0].Body, []byte(want)) {
+		t.Fatalf("the forwarded batch is not the events route's body:\n got %s\nwant %s", calls[0].Body, want)
 	}
 	if got := h.g.metrics.eventsStored.get(); got != 3 {
 		t.Fatalf("link_events_stored_total %v", got)

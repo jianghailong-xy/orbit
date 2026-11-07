@@ -40,8 +40,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** What a page's list draws, worked out once per change of what it is worked out from: the body also runs for what moves no row. */
-private class ListContent(val groups: List<SessionGroup>, val projects: Map<String, SessionProjectRow>, val folders: List<Pair<Folder, List<DirectorySession>>>)
+/** What a page's list draws, worked out once per change of what it is worked out from: the body also runs for what moves no row.
+ * [marks]: the project of each member that is a row of its own here, its project's row being where its coordinator runs. */
+private class ListContent(val groups: List<SessionGroup>, val projects: Map<String, SessionProjectRow>, val marks: Map<String, SessionProjectMark>,
+    val folders: List<Pair<Folder, List<DirectorySession>>>)
 
 /** How long a pull's spinner stays for a read that has not answered: a read gets 10 s, and past that the store keeps retrying by itself. */
 private const val PULL_WAIT_MS = 12_000L
@@ -51,13 +53,12 @@ private const val PULL_WAIT_MS = 12_000L
  * else in ≡, and ✎; the list holds the needs-you capsule, rows that a tap opens and a long press offers the menu of, and a search
  * at its foot; a pull refreshes it. Nothing is drawn beside rows while a read is out, and nothing waits on one: a server's refusal
  * says so through the prompts it always has. A folder's page has ⋯ for ≡, and no capsule or search: its scope is its list's.
- * [revision] re-reads the project rows' progress after a control event; [watching] is every session parked on a watch that will
- * resume it, which a row's line says.
+ * [watching] is every session parked on a watch that will resume it, which a row's line says.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: DirectoryApi, handle: SessionHandle,
-    open: (OrbitRoute) -> Unit, refresh: () -> Unit, revision: Long = 0L, watching: Map<String, WatchSessionSummary> = emptyMap(),
+    open: (OrbitRoute) -> Unit, refresh: () -> Unit, watching: Map<String, WatchSessionSummary> = emptyMap(),
     scopeList: SessionScopeList = remember(api) { SessionScopeList(api) }) {
     val app = LocalContext.current.applicationContext as OrbitApplication
     var view by rememberSaveable { mutableStateOf(SessionView.entries.firstOrNull { it.query == route.sessionView } ?: SessionView.OPEN) }
@@ -68,7 +69,7 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
     var projectMenu by remember { mutableStateOf<SessionProjectRow?>(null) }
     var pulling by remember { mutableStateOf(false) }
     var pinnedCollapsed by rememberPinnedCollapsed()
-    val sidebar by rememberProjectSidebar(api, revision)
+    val sidebar by rememberProjectSidebar(app, handle, api)
     val asks by app.realtime.directoryAsks.collectAsState()
     val trashing by app.trashing.ids.collectAsState()
     val recaps = LocalSessionRecaps.current
@@ -93,14 +94,15 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
         // has thousands of rows, mostly in other workspaces.
         val spellings = sessions.mapTo(HashSet()) { it.workspace }.filterTo(HashSet()) { ObjectId.same(it, workspace) }
         val local = sessions.filter { it.workspace in spellings }
-        // A05-6: in Open and Completed, a project's members are one row in its coordinator's place. Its coordinator may be in another
-        // workspace, and so may members whose words the row borrows; what the row counts and shows moving is this workspace's.
+        // A05-6: in Open and Completed, a project's members are one row in its coordinator's place. Members elsewhere may supply the
+        // words the row borrows; what the row counts and shows moving is this workspace's. A project whose coordinator runs in another
+        // workspace has no row here: its members are rows of their own, each marked with it (owner 2026-11-07, option A).
         val listing = if (!SessionProjectGrouping.listShowsProjects(view, byTag = tag != null || grouping == Grouping.TAG)) null else {
             SessionProjectGrouping.listing(local, data.folders.filter { ObjectId.same(it.workspaceId, workspace) },
                 sidebar, view, byTag = false, folderId = folderId, runnerOffline = runnerOffline,
                 coordinators = (sessions + openRows).filter { it.projectMembership?.isCoordinator == true },
                 // The view's own list across every workspace (iOS: the account's Open list, or the scope's `allSessions`).
-                contentSessions = sessions, watching = watching, recaps = recaps)
+                contentSessions = sessions, watching = watching, recaps = recaps, workspaceId = workspace)
         }
         val groups = directoryGroups(listing?.entries?.map { it.groupingSession } ?: visibleSessions(local, data.folders, workspace,
             folderId, view, tag, grouping == Grouping.TAG), view, grouping)
@@ -109,7 +111,7 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
         val folders = if (isFolder || view == SessionView.TRASH || tag != null || grouping == Grouping.TAG) emptyList() else data.folders.filter { f ->
             ObjectId.same(f.workspaceId, workspace) && (view == SessionView.OPEN || counted.any { ObjectId.same(it.folderId, f.id) })
         }.sortedBy { it.name.lowercase() }.map { f -> f to counted.filter { ObjectId.same(it.folderId, f.id) } }
-        ListContent(groups, listing?.projects.orEmpty().associateBy { it.projectId }, folders)
+        ListContent(groups, listing?.projects.orEmpty().associateBy { it.projectId }, listing?.marks.orEmpty(), folders)
     }
     val waiting = if (view == SessionView.OPEN) !data.ready && data.error == null else scopeRows == null && scopeList.error(view) == null
     val failure = if (view == SessionView.OPEN) data.error.takeIf { !data.ready } else scopeList.error(view).takeIf { scopeRows == null }
@@ -173,8 +175,8 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
                                         projectMenu = project
                                     }
                                     else SessionRow(session, machine, { open(OrbitRoute(Destination.SESSION, session.id, workspace, folderId)) },
-                                        deleted = view == SessionView.TRASH, watching = watching[watchKey(session.id)]) {
-                                        action = DirectoryDialog.SessionMenu(session, view)
+                                        deleted = view == SessionView.TRASH, watching = watching[watchKey(session.id)], mark = content.marks[session.id]) {
+                                        action = DirectoryDialog.SessionMenu(session, view, content.marks[session.id])
                                     }
                                     RowDivider()
                                 }
@@ -201,10 +203,13 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
             if (!isFolder) Box(Modifier.align(Alignment.BottomCenter)) { BottomSearch(list, query) { query = it } }
         }
     }
-    // A row's menu does not wait for a read either (iOS): what the server refuses comes back in its own words.
-    action?.let { DirectoryActionDialog(it, api, data.copy(fresh = true), setDialog = { action = it }, onChanged = refresh) }
+    // A row's menu does not wait for a read either (iOS): what the server refuses comes back in its own words. A marked member's
+    // Sessions opens its project's sessions page, as the project's row does where its coordinator runs.
+    action?.let { DirectoryActionDialog(it, api, data.copy(fresh = true), setDialog = { action = it },
+        openSessions = { project -> open(OrbitRoute(Destination.PROJECT_SESSIONS, project, workspace, origin = Origin.LIST)) }, onChanged = refresh) }
     projectMenu?.let { row ->
-        ProjectRowMenu(row, true, close = { projectMenu = null },
+        ProjectRowMenu(row, true, view, close = { projectMenu = null },
+            complete = { SessionActions(api, app) { refresh() }.completeProject(row.projectId, row.title) },
             openSession = { id -> open(OrbitRoute(Destination.SESSION, id, workspace, folderId)) },
             openSessions = { open(OrbitRoute(Destination.PROJECT_SESSIONS, row.projectId, workspace, origin = Origin.LIST)) },
             openProject = { open(OrbitRoute(Destination.PROJECT, row.projectId)) },

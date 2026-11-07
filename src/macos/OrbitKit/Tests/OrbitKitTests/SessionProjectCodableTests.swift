@@ -211,11 +211,13 @@ final class SessionProjectRefreshWiringTests: XCTestCase {
 
     func testProjectChangedRefreshesSummariesWithoutRefetchingSessions() throws {
         let app = try appSource("AppModel.swift")
-        let start = try XCTUnwrap(app.range(of: "case .projectChanged:"))
-        let end = try XCTUnwrap(app.range(of: "case .wikiChanged:", range: start.upperBound..<app.endIndex))
+        let start = try XCTUnwrap(app.range(of: "case .projects:"))
+        let end = try XCTUnwrap(app.range(of: "case .wiki:", range: start.upperBound..<app.endIndex))
         let branch = String(app[start.upperBound..<end.lowerBound])
-        XCTAssertTrue(branch.contains("projects?.nudge()"))
+        XCTAssertTrue(branch.contains("nudgeProjects()"))
         XCTAssertFalse(branch.contains("scheduleControlRefresh()"))
+        let nudge = try XCTUnwrap(app.range(of: "private func nudgeProjects() {"))
+        XCTAssertTrue(app[nudge.upperBound...].prefix(120).contains("projects?.nudge()"))
         let model = try appSource("ProjectsModel.swift")
         XCTAssertTrue(model.contains("async let sidebarRead = api.sidebarProjects()"))
         XCTAssertTrue(model.contains("if let list = try? await sidebarRead, list != sidebarProjects { sidebarProjects = list }"))
@@ -224,13 +226,13 @@ final class SessionProjectRefreshWiringTests: XCTestCase {
 
     func testMemberSummariesRefreshProgressAndPatchEveryLoadedRelation() throws {
         let app = try appSource("AppModel.swift")
-        let start = try XCTUnwrap(app.range(of: "case .sessionCreated, .sessionUpdated:"))
-        let end = try XCTUnwrap(app.range(of: "case .approvalRequested, .approvalResolved:",
+        let start = try XCTUnwrap(app.range(of: "case .sessionRow:"))
+        let end = try XCTUnwrap(app.range(of: "case .approvalRow:",
                                          range: start.upperBound..<app.endIndex))
         let branch = String(app[start.upperBound..<end.lowerBound])
         XCTAssertTrue(branch.contains("summary.projectMembership.flatMap({ $0 }) != nil"))
         XCTAssertTrue(branch.contains("$0.id == summary.id && $0.projectMembership != nil"))
-        XCTAssertTrue(branch.contains("projects?.nudge()"))
+        XCTAssertTrue(branch.contains("nudgeProjects()"))
         XCTAssertTrue(app.contains("summary.projectTitle != nil || summary.projectMembership != nil"))
     }
 }

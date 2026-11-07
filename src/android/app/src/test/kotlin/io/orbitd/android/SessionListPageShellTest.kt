@@ -208,10 +208,10 @@ class SessionListPageShellTest {
     @Test fun aPullReadsTheOpenListAgainAndARowMovesInPlace() {
         signIn()
         await { exists(plain) }
-        val before = NavShell.calls.count { it == "GET sessions?view=open" }
+        val before = NavShell.calls.count { it.substringBefore("&since=") == "GET sessions?view=open" }
         NavShell.extra = mapOf("open" to listOf(NavShell.row("34A05cSessionFresh001", "Fresh row")))
         compose.onNodeWithTag("directory-list").performTouchInput { swipeDown() }
-        await { NavShell.calls.count { it == "GET sessions?view=open" } > before && exists(hasRowMenu("Options for Fresh row")) }
+        await { NavShell.calls.count { it.substringBefore("&since=") == "GET sessions?view=open" } > before && exists(hasRowMenu("Options for Fresh row")) }
     }
 
     /** At the foot, in a thumb's reach; out of the way on the way down, back on the way up. Typing searches the server, and the hits take

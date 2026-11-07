@@ -232,14 +232,13 @@ struct SessionFolderPage: View {
         // Keep the page's rows fresh while it is the page on screen: pushing it cancels the list
         // beneath (`AgentPanes`' own task), and in a wide shell it replaces that list outright.
         // Completed keeps its poll; Open is served by the app's shared snapshot, so one read is
-        // enough there.
+        // enough there. The poll follows the control stream, as the workspace's own Completed list
+        // does (`ViewPoll`, docs/list-freshness-design.md §4 R6).
         .task(id: "\(address.agentID)|\(address.view.rawValue)") {
             await app.agents?.loadSessions(agentID: address.agentID, view: address.view)
             await app.projects?.load()
             guard address.view != .open else { return }
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 4_000_000_000)
-                if Task.isCancelled { break }
+            await ViewPoll.run(app, every: 4, hints: { app.lifecycleHints }) {
                 await app.agents?.loadSessions(agentID: address.agentID, view: address.view)
             }
         }
@@ -395,7 +394,7 @@ struct SessionFolderPage: View {
             }
         }
         return SessionProjectRowView(row: row, onOpen: { app.openProjectSessions(projectAddress) })
-        .sessionProjectRowActions(row, onOpen: onOpen, onSessions: { app.openProjectSessions(projectAddress) }, onProject: {
+        .sessionProjectRowActions(row, view: address.view, onOpen: onOpen, onSessions: { app.openProjectSessions(projectAddress) }, onProject: {
             app.openProject(row.projectId)
         }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })
     }

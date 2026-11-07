@@ -355,7 +355,7 @@ gateway_vars=(
   LINK_LISTEN_ADDR="127.0.0.1:$link_port" LINK_METRICS_ADDR="127.0.0.1:$metrics_port"
   LINK_TLS_MODE=files LINK_TLS_CERT_FILE="$sec/server.pem" LINK_TLS_KEY_FILE="$sec/server.key"
   LINK_PUBLIC_KEYS="$public_keys" LINK_API_URL="http://127.0.0.1:$stub_base" LINK_GATEWAY_TOKEN="$(cat "$sec/gateway-token")"
-  LINK_MODE=link LINK_INTERNAL_API_URLS="$backend_urls"
+  LINK_INTERNAL_API_URLS="$backend_urls"
   LINK_NATS_URL="nats://127.0.0.1:$nats_port" LINK_NATS_SEED="$(cat "$sec/nats_gateway_seed")"
   # As staging's load test sets them (staging.loadgen.compose.yml): Hello, Welcome, Drain and Close logged, not every
   # frame; and every runner admitted from the few addresses the shards dial from, the limit across all clients kept.

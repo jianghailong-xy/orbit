@@ -8,7 +8,7 @@ import {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { escalatesAt } from './open-item-escalation.service';
-import { openItemOwed, ownerItemKind } from './project-open-item';
+import { openItemOwed, openItemVisible, ownerItemKind } from './project-open-item';
 import { DONE_REQUEST_KIND } from './project-done-request';
 import { START_REQUEST_KIND } from './project-start-request';
 
@@ -257,6 +257,7 @@ async function readOpenItems(
      WHERE item.state = 'OPEN' ${narrowed}
        AND (item.kind <> 'START_REQUEST' OR proj.started_at IS NULL)
        AND ${openItemOwed('item')}
+       AND ${openItemVisible('item')}
        AND (item.kind <> 'DONE_REQUEST' OR proj."status" = 'OPEN')
      GROUP BY item.project_id, item.kind, item.assignee, item.assignee_reason`);
 }

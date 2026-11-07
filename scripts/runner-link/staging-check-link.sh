@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Checks the running staging stack's link gateway in MODE_LINK, every path it forwards, one step after another, with the
+# Checks the running staging stack's link gateway, every path it forwards, one step after another, with the
 # test runner (link-gateway client -drill, src/link-gateway/client_link.go) and the stack's own state, and keeps what each
 # step saw in <state>/client/check-link/ (README.md beside this file):
 #
@@ -22,16 +22,15 @@
 #      EVENT_SEQ_GAP, and the database holds every seq once. Then a Welcome naming the session states its last seq, and
 #      the release GET /api/runner/release assigns is the one Welcome and HeartbeatAck name.
 #
-# Run it with the stack in MODE_LINK with two apiservers (ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_BACKENDS=2
-# staging-up.sh), in the files TLS mode, with no other runner connected; it needs Go for step 1. It exits non-zero at
-# the first step that does not hold. staging-check.sh is the shadow period's check, in MODE_HTTP.
+# Run it with the stack over two apiservers (ORBIT_LINK_STAGING_BACKENDS=2 staging-up.sh), in the files TLS mode, with no
+# other runner connected; it needs Go for step 1. It exits non-zero at the first step that does not hold.
+# staging-check.sh checks the gateway's own part: TLS, drains, certificates, revocations and hints.
 set -euo pipefail
 # shellcheck source=staging-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/staging-lib.sh"
 
 [ -f "$env_file" ] || die "no staging stack in $state: run staging-up.sh first"
 [ "$(setting STAGING_TLS files)" = files ] || die "the check runs in the files TLS mode"
-[ "$(setting STAGING_MODE http)" = link ] || die "the stack is not in MODE_LINK: ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_BACKENDS=2 $here/staging-up.sh --no-build"
 [ "$(setting STAGING_BACKENDS 1)" = 2 ] || die "step 4 stops a second apiserver: ORBIT_LINK_STAGING_BACKENDS=2 $here/staging-up.sh --no-build"
 command -v go >/dev/null || die "go is required (step 1 runs the gateway's NATS test)"
 out="$state/client/check-link"
@@ -76,7 +75,7 @@ process.exit(ok ? 0 : 1);
 EOF
 }
 psql_value() { docker exec "$pg" psql -U orbit -d orbit -tAc "$1"; }
-client() { "$here/staging-client.sh" -http=false -events 0 -mirror=false "$@"; }
+client() { "$here/staging-client.sh" "$@"; }
 
 step "1. NATS authenticates: no seed, no connection; each user only what it does"
 for who in apiserver gateway; do

@@ -96,6 +96,7 @@ import {
 } from './project-pause-dispatch';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { CoordinatorEvidenceQueueService } from '../projects/coordinator-evidence-queue.service';
+import { EvidenceReviewService } from './evidence-review.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { FilesService } from '../files/files.service';
@@ -2132,6 +2133,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      * one over THIS prisma and the same environment, so a copy is made exactly as the injected one makes it.
      */
     @Optional() files?: FilesService,
+    @Optional() private readonly evidenceReviews?: EvidenceReviewService,
   ) {
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
     this.files = files ?? new FilesService(prisma);
@@ -2577,6 +2579,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // hands it over too; that is the latency, and this is the guarantee that one which is back and
       // has no turn ending is not left with revisions waiting (coordinator-evidence-queue.service.ts).
       .then(() => this.evidenceQueue?.deliverToIdleCoordinators())
+      .then(() => this.evidenceReviews?.deliverOwedTo())
       .catch((e) =>
         this.logger.error(`waiting evidence sweep failed: ${e instanceof Error ? e.message : e}`),
       );
@@ -14384,6 +14387,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         startsTaskWork: false,
         contextTaskId: delivery.taskId,
         id: sessionId,
+        // The opening is the mention as the platform hands it on, not the owner's words (0493, design §3.5).
+        promptByOrbit: true,
         // A conversation about a task needs no branch and no worktree. Creating one would leave an
         // unmerged branch behind for a reply to a comment, which reads as work nobody finished.
         noWorktree: true,

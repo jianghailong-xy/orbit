@@ -38,6 +38,8 @@ private struct RunnerEngineContent: View {
     let runners: RunnersModel
     let runner: Runner
     let engine: String
+    /// Whether the app can be seen, which the page's poll reads (`ViewPoll`).
+    @Environment(AppModel.self) private var model
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -130,13 +132,10 @@ private struct RunnerEngineContent: View {
             }
         }
         .runnerNotice(notice)
-        // A sign-in lands on the machine's next check-in: read it again while the page is up.
+        // A sign-in lands on the machine's next check-in: read it again while the page is up — and the
+        // app can be seen (`ViewPoll`).
         .task(id: runner.id) {
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(10))
-                guard !Task.isCancelled else { return }
-                await runners.load()
-            }
+            await ViewPoll.run(model, every: 10, inFlight: { 10 }) { await runners.load() }
         }
         .refreshable { await runners.load() }
     }

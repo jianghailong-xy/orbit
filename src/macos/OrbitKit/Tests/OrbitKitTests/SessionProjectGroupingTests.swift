@@ -71,6 +71,22 @@ final class SessionProjectGroupingTests: XCTestCase {
                                        contentSessions: content, watching: watching, line: line)
     }
 
+    /// Design §4.3 (owner 2026-11-07): a DONE or CANCELLED project's row leads its menu with Complete,
+    /// in Open only; an OPEN project's row has no completion.
+    func testOnlyAFinishedProjectInOpenOffersComplete() {
+        for status in ProjectStatus.allCases {
+            let members = [session("coordinator", role: .coordinator, projectStatus: status),
+                           session("worker", projectStatus: status)]
+            for view in [SessionView.open, .completed] {
+                let row = listing(members, view: view, projects: []).projects.first
+                XCTAssertEqual(row?.status, status)
+                XCTAssertEqual(row?.offersComplete(in: view),
+                               view == .open && (status == .done || status == .cancelled),
+                               "\(status) in \(view)")
+            }
+        }
+    }
+
     func testAllMembershipRolesMergeInOpenAndCompleted() {
         let members = [coordinator()] + [SessionProjectMembership.Role.task, .context, .judgment, .child]
             .map { session($0.rawValue, role: $0) }

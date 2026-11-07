@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { renderRawQuery, noSessionRequests } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
 import { ConflictException, ForbiddenException, Logger } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { Prisma, RunStatus } from '@prisma/client';
 import { API_ERROR_RETRY_BACKOFF_MS, MAX_API_ERROR_RETRIES, RunEventType } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
+import { coordinatorDeliveryTurnId } from '../projects/coordinator-delivery.service';
+import { WATCH_TURN_KEY_PREFIX } from '../sessions/watch-turn-key';
 import {
   renderRunEventSeqConflictMetrics,
   resetRunEventSeqConflictMetrics,
@@ -49,6 +51,10 @@ function makeController(
     turnSenders?: Record<string, string>;
     /** The sessions a sender is read from (session-message.ts, owner-scoped): each one's owner and title. */
     senders?: Record<string, { ownerId: string; title: string }>;
+    /** Each turn's key (`conversation_turn.client_turn_id`), by turn id: whose namespace it is in. */
+    turnKeys?: Record<string, string>;
+    /** The DELIVERED coordinator wakes a notification's card is read from (coordinator-delivery-card.ts). */
+    coordinatorWakes?: Array<{ event: string; subjectId: string; detail: unknown; delivery: unknown; updatedAt: Date }>;
     coordinatorContextEpoch?: number;
     retryAttempts?: number;
   } = {},
@@ -124,7 +130,18 @@ function makeController(
       findMany: async (args: { where: { sessionId: string; id: { in: string[] } } }) =>
         Object.entries(stored.turnContents ?? {})
           .filter(([id]) => args.where.sessionId === 'session-1' && args.where.id.in.includes(id))
-          .map(([id, content]) => ({ id, content, senderSessionId: stored.turnSenders?.[id] ?? null })),
+          .map(([id, content]) => ({
+            id,
+            content,
+            senderSessionId: stored.turnSenders?.[id] ?? null,
+            ...(stored.turnKeys?.[id] ? { clientTurnId: stored.turnKeys[id] } : {}),
+          })),
+    },
+    // The coordinator's notifications delivered to this conversation, by the key their turn was written under.
+    projectCoordinatorWake: {
+      findMany: async (args: { where: { sessionId: string; OR: Array<{ delivery: { equals: string } }> } }) =>
+        (stored.coordinatorWakes ?? []).filter((wake) => args.where.sessionId === 'session-1'
+          && args.where.OR.some((key) => (wake.delivery as { clientTurnId?: string }).clientTurnId === key.delivery.equals)),
     },
     session: {
       findUniqueOrThrow: async () => ({
@@ -1061,6 +1078,110 @@ test('a batch that neither asks nor answers leaves the sender alone', async () =
 
   const preview = previewUpdate(calls);
   assert.ok(!('lastUserFromSessionId' in preview) && !('lastUserFromTitle' in preview));
+});
+
+/**
+ * A message Orbit wrote itself says so on the row (`lastUserFromOrbit`, docs/session-list-projects-design.md
+ * §3.5, owner 2026-11-07): read off the turn's own key and the cards stored with this very echo, in the same
+ * write as the text, and with the card of a coordinator's notification, which the row's sentence is written
+ * from — the card the transcript is drawn with, not a second reading of it.
+ */
+test('a watch’s wake is previewed as Orbit’s, with no card', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING, 'runtime-1', {
+    turnContents: { 'turn-1': 'Orbit Watch w-1 matched at generation 2: CI finished\n\nThis turn was queued by the watch.' },
+    turnKeys: { 'turn-1': `${WATCH_TURN_KEY_PREFIX}44444444-4444-4444-8444-444444444444:2` },
+  });
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [{ seq: 1, type: RunEventType.USER, ts: '2026-11-07T07:21:58.000Z', turnId: 'turn-1', payload: { text: 'Orbit Watch w-1 matched' } }],
+  });
+
+  const preview = previewUpdate(calls);
+  assert.match(preview.lastUserText, /^Orbit Watch w-1 matched at generation 2/);
+  assert.deepEqual(preview.lastUserFromOrbit, { coordinatorDelivery: null });
+  assert.equal(preview.lastUserFromSessionId, null, 'a session was named for Orbit’s words');
+});
+
+test('a coordinator’s notification is previewed as Orbit’s, with the card its echo is stored with', async () => {
+  const key = coordinatorDeliveryTurnId('wake-key-1');
+  const { calls, controller } = makeController(RunStatus.RUNNING, 'runtime-1', {
+    turnContents: { 'turn-1': 'From Orbit · project “Rows” has a revision of completion evidence for you to decide' },
+    turnKeys: { 'turn-1': key },
+    coordinatorWakes: [{
+      event: 'COMPLETION_EVIDENCE_REVISED',
+      subjectId: 'task-1',
+      detail: { title: 'Orbit lines', evidenceRevision: 2 },
+      delivery: { clientTurnId: key },
+      updatedAt: new Date('2026-11-07T07:20:00.000Z'),
+    }],
+  });
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [{ seq: 1, type: RunEventType.USER, ts: '2026-11-07T07:21:58.000Z', turnId: 'turn-1', payload: { text: 'From Orbit · project' } }],
+  });
+
+  const preview = previewUpdate(calls);
+  const card = {
+    kind: 'EVIDENCE_SUBMITTED',
+    task: { id: 'task-1', title: 'Orbit lines' },
+    revision: 2,
+    count: null,
+    deliveredAt: '2026-11-07T07:20:00.000Z',
+    toCoordinator: true,
+  };
+  assert.deepEqual(preview.lastUserFromOrbit, { coordinatorDelivery: card });
+  const [echo] = calls.createMany[0].data as Array<{ payload: { coordinatorDelivery?: unknown } }>;
+  assert.deepEqual(echo.payload.coordinatorDelivery, card, 'the row and the transcript read different cards');
+});
+
+test('the owner’s message, and a session’s under a key of Orbit’s namespace, are not Orbit’s', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING, 'runtime-1', {
+    turnContents: { 'turn-1': 'mine', 'turn-2': 'a report' },
+    turnKeys: { 'turn-1': '7a0c3f53-0c5e-4f0e-9d1c-6f3f9f1b2c4d', 'turn-2': `${WATCH_TURN_KEY_PREFIX}chosen-by-an-agent` },
+    turnSenders: { 'turn-2': 'sender-1' },
+    senders: { 'sender-1': { ownerId: 'owner-1', title: 'Worker: criterion 3' } },
+  });
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [{ seq: 1, type: RunEventType.USER, ts: '2026-11-07T07:21:58.000Z', turnId: 'turn-1', payload: { text: 'mine' } }],
+  });
+  assert.equal(previewUpdate(calls).lastUserFromOrbit, Prisma.DbNull, 'the owner’s words read as Orbit’s');
+
+  calls.update.length = 0;
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [{ seq: 2, type: RunEventType.USER, ts: '2026-11-07T07:22:58.000Z', turnId: 'turn-2', payload: { text: 'a report' } }],
+  });
+  const preview = previewUpdate(calls);
+  assert.equal(preview.lastUserFromSessionId, 'sender-1');
+  assert.equal(preview.lastUserFromOrbit, Prisma.DbNull, 'a session’s message read as Orbit’s for the key it chose');
+});
+
+test('a reply clears Orbit’s mark together with the message', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING, 'runtime-1', {
+    turnContents: { 'turn-1': 'Orbit Watch w-1 matched at generation 2: CI finished' },
+    turnKeys: { 'turn-1': `${WATCH_TURN_KEY_PREFIX}44444444-4444-4444-8444-444444444444:2` },
+  });
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 1, type: RunEventType.USER, ts: '2026-11-07T07:21:58.000Z', turnId: 'turn-1', payload: { text: 'Orbit Watch' } },
+      { seq: 2, type: RunEventType.ASSISTANT, ts: '2026-11-07T07:22:20.000Z', turnId: 'turn-1', payload: { text: 'CI is green.' } },
+    ],
+  });
+
+  const preview = previewUpdate(calls);
+  assert.equal(preview.lastUserText, null);
+  assert.equal(preview.lastUserFromOrbit, Prisma.DbNull, 'Orbit’s mark outlived the message it was on');
+});
+
+test('a batch that neither asks nor answers leaves Orbit’s mark alone', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING);
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [{ seq: 9, type: RunEventType.SYSTEM, ts: '2026-11-07T07:23:00.000Z', turnId: 'turn-2', payload: { subtype: 'status' } }],
+  });
+
+  assert.ok(!('lastUserFromOrbit' in previewUpdate(calls)));
 });
 
 test('terminal sessions reject durable events before any write or publish', async () => {

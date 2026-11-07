@@ -10908,106 +10908,6 @@ button.chat-jump-start:hover {
 .evidence-decision-receipt-mark {
   color: var(--success-solid);
 }
-/* A version waiting for its paused coordinator (`QueuedEvidenceCard`): folded, in the neutral
-   frame the exception card wears while the coordinator is handling it, because nobody is being
-   asked anything yet. Two classes, for the reason the receipt's rule gives. */
-.approval-card.evidence-queued {
-  border-color: var(--border);
-  background: var(--bg-raised);
-}
-.evidence-queued .approval-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--bg-subtle);
-  border-bottom-color: var(--border-subtle);
-}
-.evidence-queued-mark {
-  color: var(--text-3);
-}
-.evidence-queued-time {
-  flex: none;
-  margin-left: auto;
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--text-3);
-}
-.evidence-queued-body {
-  padding-top: 8px;
-  padding-bottom: 10px;
-}
-.evidence-queued-title {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-  font-weight: 600;
-  line-height: 1.45;
-}
-/* Why it waits: amber while the coordinator is paused, the note's grey once it is back. The same
-   line heads the card a reader opens from here, in the warning box below. */
-.evidence-queued-pause {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--text-2);
-}
-.evidence-queued-pause.is-paused {
-  color: var(--warning);
-}
-.evidence-queued-pause .anticon {
-  flex: none;
-}
-.evidence-queued-note {
-  margin-top: 2px;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--text-2);
-}
-/* The card's one way in, on a row of its own: text in the brand colour, as the open-item card's
-   own presses are, under a hairline. */
-.evidence-queued-decide {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  margin-top: 10px;
-  padding: 8px 0 0;
-  border: none;
-  border-top: 1px solid var(--border-subtle);
-  background: none;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--brand);
-  text-align: start;
-  cursor: pointer;
-}
-.evidence-queued-decide:hover {
-  text-decoration: underline;
-}
-.evidence-queued-decide:focus-visible {
-  outline: 2px solid var(--orbit-focus-color);
-  outline-offset: 2px;
-}
-.evidence-queued-caret {
-  font-size: 11px;
-}
-/* The card that version opens into says why it waits before anything else. */
-.evidence-queued-notice {
-  margin-top: 10px;
-  padding: 8px 10px;
-  border: 1px solid var(--warning-border);
-  border-radius: 8px;
-  background: var(--warning-bg);
-}
-.evidence-queued-notice .evidence-queued-pause {
-  margin-top: 0;
-}
 /* Handed to the coordinator: the conversation's one-line pill, as a merge's line is drawn. */
 .evidence-sent {
   display: flex;
@@ -21896,6 +21796,96 @@ div.landing-jobs-open {
 }
 .admin-signin-error {
   color: var(--error);
+}
+/* Admin → Integrations: how many Feishu apps accounts have connected. */
+.admin-feishu-count {
+  color: var(--text-2);
+}
+/* Settings → Integrations → Feishu (FeishuIntegrationPage): the account's own app, then the steps in Feishu's
+   console. Its fields reuse the admin Sign-in settings' rows, labels and hints. */
+.feishu-page {
+  max-width: 720px;
+  margin: 0 auto;
+}
+.feishu-intro {
+  margin: 4px 0 20px;
+  color: var(--text-3);
+}
+.feishu-card {
+  margin-bottom: 16px;
+}
+/* Above the app. The Alert's own `margin: 0` (ui/Alert.css, loaded later) is one class deep, so this is two. */
+.feishu-page > .feishu-not-allowed {
+  margin-bottom: 16px;
+}
+.feishu-fields {
+  display: grid;
+  gap: 20px;
+}
+.feishu-hint {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.feishu-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 0;
+}
+.feishu-facts dt {
+  color: var(--text-2);
+}
+.feishu-facts dd {
+  min-width: 0;
+  margin: 0;
+}
+.feishu-facts code,
+.feishu-copy code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--fill-muted);
+  color: var(--text-1);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.feishu-platforms {
+  display: grid;
+  gap: 10px;
+}
+.feishu-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.feishu-steps {
+  display: grid;
+  gap: 16px;
+  margin: 0 0 16px;
+  padding-left: 20px;
+}
+.feishu-steps p {
+  margin: 4px 0 0;
+  color: var(--text-2);
+}
+.feishu-names {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.feishu-names li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+.feishu-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 /* Admin → Users: one row an account — who, how they sign in, whether they can, when they last used
    Orbit, since when — and its actions: the one most often wanted in sight, the rest in its menu

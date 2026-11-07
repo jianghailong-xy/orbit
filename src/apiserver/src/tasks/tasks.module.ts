@@ -60,6 +60,7 @@ import { TaskModelRoutingReportService } from './task-model-routing-report.servi
   // in a second module would construct a second one, and its onModuleInit would start a
   // second auto-run reconcile timer (every sweep, and every dispatch, would run twice).
   exports: [
+    EvidenceReviewService,
     TasksService,
     ReferenceExpansionService,
     TaskCompletionEvidenceService,

@@ -363,7 +363,7 @@ final class WikiStartParityTests: XCTestCase {
         assertSays(try web("src/web/src/lib/queries.ts"), "return state === 'queued' || state === 'running' ? 30_000 : false;", in: "queries.ts")
         let home = try native("Views/WikiScreens.swift")
         assertOrder(home, [".task(id: WikiPlanLogic.jobUnderWay(wiki.plan)) {", "while !Task.isCancelled, WikiPlanLogic.jobUnderWay(wiki.plan) {",
-                           "try? await Task.sleep(for: .seconds(30))", "await wiki.loadPlan()"], "the home while a job is on its way")
+                           "await VisibilityGate.app.pause(30)", "await wiki.loadPlan()"], "the home while a job is on its way")
     }
 
     // MARK: an account with no wiki

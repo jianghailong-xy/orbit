@@ -6,6 +6,7 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.DecodeSequenceMode
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromStream
 import kotlinx.serialization.json.decodeToSequence
 
 object Wire {
@@ -13,6 +14,12 @@ object Wire {
 
     fun <T> decode(bytes: ByteArray, serializer: DeserializationStrategy<T>): T = protocol {
         json.decodeFromString(serializer, bytes.decodeToString())
+    }
+
+    /** [decode], read straight from [bytes] rather than from the body as one string. */
+    @OptIn(ExperimentalSerializationApi::class)
+    fun <T> stream(bytes: ByteArray, serializer: DeserializationStrategy<T>): T = protocol {
+        json.decodeFromStream(serializer, bytes.inputStream())
     }
 
     /** A JSON array of objects, read one object at a time straight from [bytes]: never the body as one string. An object

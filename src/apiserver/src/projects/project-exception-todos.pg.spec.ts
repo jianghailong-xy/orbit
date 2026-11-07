@@ -1,3 +1,4 @@
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -2154,6 +2155,8 @@ test('delivering an item spends nothing of the coordinator\'s fuse budget', { sk
 async function escalate(stack: Stack, w: World, a: Attempt): Promise<ItemRow> {
   const opened = await onlyItemFor(stack.db, w, a.taskId, 'the failure opened one item');
   assert.equal(opened.assignee, 'COORDINATOR');
+  await stack.openItems.deliverForTasks([a.taskId]);
+  await receiveOpenItem(stack.db, opened.id);
   assert.ok(opened.escalateAt, 'a coordinator item is opened with the project\'s window on it');
   await stack.db.$executeRaw(
     Prisma.sql`UPDATE "project_open_item" SET "escalate_at" = now() - interval '1 minute'

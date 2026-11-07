@@ -164,6 +164,7 @@ import {
   CLAUDE_REGION_STOPPED_SUBTYPE,
   type ClaudeRegionCheckRequest,
   type ClaudeRegionCheckResponse,
+  type OrbitMessageFrom,
   type SessionMessageFrom,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
@@ -199,7 +200,7 @@ import {
 import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
 import { QueueService } from '../queue/queue.service';
-import { RealtimeService, runEventBatchNotice } from '../realtime/realtime.service';
+import { approvalRequestEvent, RealtimeService, runEventBatchNotice } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
 import { CreateTaskBatchItemDto } from '../tasks/dto';
 import { TASK_CRITERION_SHAPE_ADVICE_CODE } from '../tasks/task-criterion-shape-advice';
@@ -243,6 +244,7 @@ import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { CoordinatorEvidenceQueueService } from '../projects/coordinator-evidence-queue.service';
+import { EvidenceReviewService } from '../tasks/evidence-review.service';
 import {
   TASK_ACCEPTANCE_CLIENT_TURN_PREFIX,
   executableAcceptanceFailureReason,
@@ -302,6 +304,7 @@ import {
   pendingMessageColumns,
   readBriefSender,
 } from '../sessions/session-message';
+import { orbitMessageOf } from '../sessions/orbit-message';
 import { SessionRequestService } from '../sessions/session-request.service';
 import {
   appendSessionRepliesContext,
@@ -595,6 +598,9 @@ const INGEST_SESSION_SELECT = {
   // this batch is the one that delivers the task's brief (`readTurnCards`).
   taskId: true,
   runSource: true,
+  // That the platform wrote this session's opening prompt (0493): its opening turn's echo is then
+  // Orbit's message on the row (`orbitMessageOf`), not the owner's.
+  promptByOrbit: true,
   // The line an account-pool member switch owes the transcript, taken by the first
   // engine start a batch carries (QueueService.resolvePoolMember writes it).
   poolSwitchNotice: true,
@@ -823,6 +829,7 @@ const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 
   lastUserText: { column: 'last_user_text', type: 'text' },
   lastUserFromSessionId: { column: 'last_user_from_session_id', type: 'uuid' },
   lastUserFromTitle: { column: 'last_user_from_title', type: 'text' },
+  lastUserFromOrbit: { column: 'last_user_from_orbit', type: 'jsonb' },
   retryAt: { column: 'retry_at', type: 'timestamp' },
   retryAttempts: { column: 'retry_attempts', type: 'integer' },
   claudeAccount: { column: 'claude_account', type: 'text' },
@@ -848,6 +855,8 @@ function ingestedSessionValue(type: (typeof INGESTED_SESSION_COLUMNS)[string]['t
     case 'text[]':
       return Array.isArray(value) && value.every((v) => typeof v === 'string') ? JSON.stringify(value) : undefined;
     case 'jsonb':
+      // `Prisma.DbNull` is how a nullable one is cleared (`lastUserFromOrbit`): SQL NULL, not JSON null.
+      if (value === Prisma.DbNull) return null;
       return value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype ? JSON.stringify(value) : undefined;
   }
 }
@@ -1566,6 +1575,7 @@ export class RunnerApiController {
      * injected one does.
      */
     @Optional() files?: FilesService,
+    @Optional() private readonly evidenceReviews?: EvidenceReviewService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -5609,22 +5619,7 @@ export class RunnerApiController {
     // An already-answered approval raises no card and buzzes no phone: not interrupting is the
     // entire point of having granted it.
     if (!existing && !allowedMessage) {
-      this.realtime.publish(sessionId, {
-        seq: 0,
-        type: RunEventType.APPROVAL_REQUEST,
-        payload: {
-          id: approval.id,
-          toolName: approval.toolName,
-          input: approval.input,
-          toolUseId: approval.toolUseId ?? undefined,
-          // The reader that outlives the turn, to a client that has to answer "is this still a
-          // question" itself: a card raised by a runner-hosted job is live while that process is
-          // up, whatever the conversation is doing, and a client that reads only the turn would
-          // take the card down the moment the turn ended (`WorkspaceView`'s local predicate).
-          backgroundJobId: approval.backgroundJobId ?? undefined,
-        },
-        ts: new Date().toISOString(),
-      });
+      this.realtime.publish(sessionId, approvalRequestEvent(approval, new Date().toISOString()));
       // Fire-and-forget: nudge the owner's iOS devices that a reply is needed. Not awaited so a
       // slow APNs round-trip can't delay the runner's approval-create response.
       void this.push.notifyApprovalRequest(sessionId, approval.id, approval.toolName);
@@ -7364,6 +7359,7 @@ export class RunnerApiController {
       // And the evidence revisions that waited for it while it was paused: a coordinator whose turn
       // ended is back, and a paused one is left alone (projects/coordinator-evidence-queue.service.ts).
       await this.evidenceQueue?.deliverOwedTo(sessionId);
+      await this.evidenceReviews?.deliverOwedTo(sessionId);
       // And the confirmation reviews it was to be handed whose delivery a crash cut off between their
       // commit and the hand-off (docs/owner-confirmation-review-contract.md §2 D5).
       await this.confirmationReviews?.deliverPendingFor(sessionId).catch((error) => this.logger.warn(
@@ -7993,6 +7989,7 @@ export class RunnerApiController {
           })
         : [];
       const authoredUserText = new Map(userTurns.map((turn) => [turn.id, turn.content]));
+      const userTurnById = new Map(userTurns.map((turn) => [turn.id, turn]));
       // The cards those turns are drawn as rather than as the owner's own message — an exception
       // item's delivery, the owner's answer handed to the coordinator, a fact the coordinator is told
       // or the answer to a criteria proposal, a task run's brief, a project's start, a confirmation
@@ -8156,6 +8153,11 @@ export class RunnerApiController {
       // name the same session the same way — and null for the owner's words, the platform's, or an
       // echo with no turn to read a sender from. Decided wherever pendingUserText is.
       let pendingUserFrom: SessionMessageFrom | null = null;
+      // Or that Orbit wrote it (`lastUserFromOrbit`): a turn the control plane wrote itself, read off
+      // the turn's key and the cards stored with this very echo (orbit-message.ts), so the row says
+      // "Orbit" for exactly the turns the conversation draws as the platform's — with the card of a
+      // coordinator's notification, which the row's line is written from.
+      let pendingUserOrbit: OrbitMessageFrom | null = null;
       let currentWorkAcknowledged = 0;
       const acknowledgedTurnIds = acknowledgedRuntimeTurnIds(durable);
       if (acknowledgedTurnIds.length > 0) {
@@ -8210,11 +8212,17 @@ export class RunnerApiController {
             ? authoredUserText.get(e.turnId)
             : echoed;
           pendingUserText = text?.trim() || null;
-          const card = e.turnId ? turnCards.get(e.turnId)?.sessionMessage : undefined;
+          const cards = e.turnId ? turnCards.get(e.turnId) : undefined;
+          const card = cards?.sessionMessage;
           pendingUserFrom = card ? { sessionId: card.fromSessionId, title: card.fromTitle } : null;
+          const turn = e.turnId ? userTurnById.get(e.turnId) : undefined;
+          pendingUserOrbit = turn
+            ? orbitMessageOf(turn, cards, { id: sessionId, promptByOrbit: session.promptByOrbit })
+            : null;
         } else if (ANSWERS_USER_TURN.has(e.type)) {
           pendingUserText = null;
           pendingUserFrom = null;
+          pendingUserOrbit = null;
         }
         frontier = { seq: e.seq, tool };
       }
@@ -8284,7 +8292,7 @@ export class RunnerApiController {
         ...(enginePhaseSince !== undefined ? { enginePhaseSince } : {}),
         // undefined = nothing in this batch either asked or answered; keep the stored
         // message rather than writing null over it. Its sender is written with it, every time.
-        ...(pendingUserText !== undefined ? pendingMessageColumns(pendingUserText, pendingUserFrom) : {}),
+        ...(pendingUserText !== undefined ? pendingMessageColumns(pendingUserText, pendingUserFrom, pendingUserOrbit) : {}),
         ...retry,
       });
 

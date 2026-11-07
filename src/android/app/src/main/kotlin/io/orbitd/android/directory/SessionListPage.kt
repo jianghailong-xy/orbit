@@ -94,12 +94,13 @@ internal object SessionListTime {
  * A session's row (iOS `AgentSessionRow.compactRow`): the title with its live mark and time, then one line in the tone of what it
  * says. A tap opens it and a long press is its menu. [machine] is the runner it runs on, by name: a session held for the Claude
  * region says Anthropic is unavailable there, where it is known. [deleted] is Trash, where nothing is live. A screen reader hears
- * the state the mark leaves out as the row's value (`SessionHeader.statusWord`).
+ * the state the mark leaves out as the row's value (`SessionHeader.statusWord`). [mark] is the project of a member whose project
+ * has no row in this list (owner 2026-11-07, option A): its progress leads the second line, as it leads a project row's.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () -> Unit,
-    deleted: Boolean = false, watching: WatchSessionSummary? = null, onOptions: () -> Unit) {
+    deleted: Boolean = false, watching: WatchSessionSummary? = null, mark: SessionProjectMark? = null, onOptions: () -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val recaps = LocalSessionRecaps.current
     val line = remember(session, deleted, watching, recaps, machine) {
@@ -116,6 +117,7 @@ internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () 
             SessionListTime.format(session)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = muted, maxLines = 1, softWrap = false) }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            mark?.let { SessionProjectMarkChip(it) }
             if (session.projectMembership?.isCoordinator == true) Text(SessionListCopy.COORDINATOR,
                 Modifier.background(muted.copy(alpha = 0.14f), CircleShape).padding(horizontal = 6.dp, vertical = 1.dp)
                     .clearAndSetSemantics { contentDescription = SessionListCopy.COORDINATOR_LABEL },

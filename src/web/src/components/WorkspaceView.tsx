@@ -103,7 +103,8 @@ import {
   type SwipeGeometry,
   type SwipeSide,
 } from '../lib/sessionSwipe';
-import { useControlPlaneLive } from '../lib/useControlPlane';
+import { useControlPlaneLive, useRefreshSessionLists } from '../lib/useControlPlane';
+import { listPollMs, pollWhileInFlight, promotionInFlight, streamPoll } from '../lib/listBudget';
 import { useSessionProjectData } from '../lib/useSessionProjectData';
 import {
   workspacesQuery,
@@ -278,6 +279,7 @@ import {
   getSession,
   interruptSession,
   listApprovals,
+  completeProjectSessions,
   mergeSessionToMain,
   type EventPageEvent,
   type PermissionRule,
@@ -376,7 +378,6 @@ import {
   DECISION_SENDING_BACK_PREFIX,
   EvidenceDecisionReceipt,
   SessionEvidenceDecisionCard,
-  coordinatorQueueRows,
   evidenceDecisionCardRows,
   evidenceDecisionRefusal,
   sendEvidenceDecision,
@@ -497,6 +498,7 @@ import { backgroundWorkIsActive, isSessionTurnActive, outlivingSessionWork } fro
 import type { OutlivingWork } from '../lib/sessionActivity';
 import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
 import { SESSION_MESSAGE_UNTITLED } from '../lib/sessionMessage';
+import { coordinatorDeliverySentence, parseCoordinatorDelivery } from '../lib/coordinatorDelivery';
 import { trashNoteWhen } from '../lib/trashNote';
 import { transcriptPlaceholder } from '../lib/transcriptPaint';
 import { useDelayedFlag } from '../lib/useDelayedFlag';
@@ -1066,6 +1068,23 @@ const sentBy = (s: any): string => {
   if (!from || typeof from !== 'object') return SENT_BY_YOU;
   return (typeof from.title === 'string' ? from.title.trim() : '') || SESSION_MESSAGE_UNTITLED;
 };
+// Keep this literal declaration: native parity tests read the web source directly.
+export const SENT_BY_ORBIT = 'Orbit';
+// The line for a message Orbit wrote itself (`lastUserFromOrbit`, docs/session-list-projects-design.md
+// §3.5, owner 2026-11-07), or null for anybody else's: Orbit says it, never "You", which put "You: From
+// Orbit · project …" on a coordinator's row while it read the notification. A notification the
+// conversation draws as a line says that line's own sentence, from the card the server read it with
+// (`coordinatorDeliverySentence`); any other says its first line, flattened like a preview — the rest is
+// written for the agent. An older server sends no mark, and every message reads as before.
+const orbitLine = (s: any): SessionLine | null => {
+  const orbit = s.lastUserFromOrbit;
+  if (!orbit || typeof orbit !== 'object') return null;
+  const card = parseCoordinatorDelivery(orbit);
+  const said = card
+    ? coordinatorDeliverySentence(card)
+    : plainPreview(String(s.lastUserText).split('\n').find((line) => line.trim() !== '') ?? '');
+  return { text: `${SENT_BY_ORBIT}: ${said}`, tone: 'preview' };
+};
 
 // The five owner items, one word each: no project and no count, because a row is one line and the
 // project it is about is the conversation the row already names (contract §7.6 V13). The native
@@ -1181,7 +1200,7 @@ export const sessionLine = (
     // from the moment it is enqueued until a reply lands) instead of the previous turn's reply,
     // which would read as if this one had already been answered. It's content, not status — the
     // spinner already carries "working" — so it takes the muted preview tone, not blue.
-    if (s.lastUserText) return sentLine(s.lastUserText, sentBy(s));
+    if (s.lastUserText) return orbitLine(s) ?? sentLine(s.lastUserText, sentBy(s));
     if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
     return { text: 'Running…', tone: 'running' };
   }
@@ -1200,7 +1219,7 @@ export const sessionLine = (
   // A message that never got an answer — the turn was interrupted, or failed, before any reply
   // landed — outranks the previous turn's reply: it's the newer of the two, and it's what the
   // session is left waiting on. The server only keeps lastUserText while it stands unanswered.
-  if (s.lastUserText) return sentLine(s.lastUserText, sentBy(s));
+  if (s.lastUserText) return orbitLine(s) ?? sentLine(s.lastUserText, sentBy(s));
   // The rolling recap (0418) takes the place of the reply preview it used to show: the sentence
   // the server wrote about the session, not the raw last reply flattened down to one line. Only
   // here — below every live line above — so a working session still says what it is doing. Off
@@ -2487,8 +2506,11 @@ export function WorkspaceView({
   // The workspace whose conversation list this column is. The route names it on /workspaces/<id>;
   // a /sessions/<id> deep link doesn't, so it's latched from the open session once that
   // resolves (see the effect below) — the query itself is scoped by it, so it can't be
-  // derived further down where the list it would depend on is built.
-  const [scopeWorkspaceId, setScopeWorkspaceId] = useState<string | null>(lockedWorkspaceId ?? null);
+  // derived further down where the list it would depend on is built. On a reload of a session's
+  // page the splash has already read that session (BootGate), so the list starts in its workspace:
+  // starting from none, it read the runner's whole Open list first and this workspace's a frame later.
+  const [scopeWorkspaceId, setScopeWorkspaceId] = useState<string | null>(() =>
+    lockedWorkspaceId ?? qc.getQueryData(sessionQuery(selectedId).queryKey)?.workspace?.id ?? null);
   // How much of the list is loaded. One page on open; scrolling toward the end widens the
   // window (see loadMoreSessions), which re-keys the query to the larger page.
   const [sessionLimit, setSessionLimit] = useState(SESSION_PAGE_SIZE);
@@ -2522,13 +2544,17 @@ export function WorkspaceView({
     limit: scopeWorkspaceId && (foldersShown || projectsShown) ? null : sessionLimit,
   });
   const sessionsKey = sessionsOpts.queryKey;
-  // While the control-plane stream is connected it pushes list changes (a coalesced refetch per
-  // event), so stop the 4s poll; on any stream gap `controlLive` flips false and it resumes.
+  // While the control-plane stream is connected it re-reads the list on every event that touches
+  // it, so the poll is only the list budget's safety read; on any stream gap `controlLive` flips
+  // false and the shared outage backoff takes over (lib/listBudget).
   const controlLive = useControlPlaneLive();
+  // What a write made here re-reads the lists with: in the stream's coalescing window, which the
+  // server's own event for the write joins (W5).
+  const refreshSessionLists = useRefreshSessionLists();
   const sessionsQ = useQuery({
     ...sessionsOpts,
     enabled: !openProjectId,
-    refetchInterval: controlLive || openProjectId ? false : 4000,
+    refetchInterval: openProjectId ? false : (query) => listPollMs(controlLive, query),
     // Widening the window re-keys the query, so hold the rows already on screen while the
     // larger page loads instead of blanking the list. Only within one scope (every key part
     // but the page size): another scope's rows must never stand in for this one's, even for
@@ -2618,8 +2644,10 @@ export function WorkspaceView({
       // server runs after it has answered. Then it goes quiet.
       if (detail && mergeRepairLoopLive(detail)) return 3000;
       // A deep-linked/Completed ENDING row may already be absent from the Open list. Keep polling
-      // its own current detail until terminal instead of relying solely on selectedFromList.
-      return shouldPollSessionDetail(selectedId, detail, selectedFromList) ? 5000 : false;
+      // its own current detail until terminal instead of relying solely on selectedFromList. Every
+      // `session.*` event about it re-reads it (useControlPlane), so while the stream is live this
+      // is the list budget's safety read.
+      return shouldPollSessionDetail(selectedId, detail, selectedFromList) ? listPollMs(controlLive, q, 5000) : false;
     },
   });
   const detailForSelected = sessionDetailQ.data?.id === selectedId ? sessionDetailQ.data : null;
@@ -2944,12 +2972,12 @@ export function WorkspaceView({
   const projectSessionsQ = useQuery({
     ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'open', includeLanding: !!openProjectId, priority: true }),
     enabled: !!openProjectId,
-    refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
+    refetchInterval: (query) => listPollMs(controlLive, query),
   });
   const completedProjectSessionsQ = useQuery({
     ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'completed', includeLanding: !!openProjectId, priority: true }),
     enabled: !!openProjectId,
-    refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
+    refetchInterval: (query) => listPollMs(controlLive, query),
   });
   // The merges into main this project has made: they are rows of its Landings window (owner
   // 2026-10-27), and the page's Landings row counts today's.
@@ -3013,7 +3041,7 @@ export function WorkspaceView({
   const pageOpenItemsQ = useQuery({
     ...projectOpenItemsQuery(openProjectId ?? ''),
     enabled: !!openProjectId && pageNotStarted,
-    refetchInterval: controlLive ? 20_000 : 4000,
+    refetchInterval: (query) => listPollMs(controlLive, query),
   });
   const pageStart = pageNotStarted
     ? startPageRow(pageStarted, pageOpenItemsQ.isError ? undefined : pageOpenItemsQ.data)
@@ -4390,28 +4418,30 @@ export function WorkspaceView({
     gcTime: Infinity,
   });
 
-  // The merges this project has already made, for the record each one leaves where it happened
-  // (`ProjectPromotionReceipt` below). NOT the read the strip's card is drawn from: that one is the
-  // candidate on offer, and it moves on to the next one — a receipt drawn from it would describe a
-  // different merge every time the branch was offered again, which is exactly what the card at the
-  // bottom of this pane used to do. Polled with the card, because a conversation that is open is
-  // where somebody watches their own merge land.
-  const mergedPromotions = useQuery({
-    ...projectMergedPromotionsQuery(coordinatedProjectId ?? ''),
-    enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
-    refetchInterval: 20_000,
-  });
-
   // The candidate on offer, read HERE as well as inside the strip's card below, for the one state
   // the strip does not keep: a candidate a check blocked has a moment, and where that moment falls
   // is a fact about this conversation's own events (`transcriptEvents`), which only this view
   // holds. Same query key as the card's own read, so the two share one request. Polled, because a
   // blocked candidate is still moving — somebody is resolving it — and the card drawn from it says
-  // who and for how long.
+  // who and for how long. A merge check ending announces nothing on the stream, so while one runs
+  // the candidate keeps its cadence; otherwise it follows the stream (lib/listBudget).
   const currentPromotion = useQuery({
     ...projectPromotionQuery(coordinatedProjectId ?? ''),
     enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
-    refetchInterval: 20_000,
+    refetchInterval: pollWhileInFlight(20_000, (query) => promotionInFlight(query.state.data)),
+  });
+
+  // The merges this project has already made, for the record each one leaves where it happened
+  // (`ProjectPromotionReceipt` below). NOT the read the strip's card is drawn from: that one is the
+  // candidate on offer, and it moves on to the next one — a receipt drawn from it would describe a
+  // different merge every time the branch was offered again, which is exactly what the card at the
+  // bottom of this pane used to do. Polled with the card while a merge is in flight, because a
+  // conversation that is open is where somebody watches their own merge land.
+  const mergeInFlight = promotionInFlight(currentPromotion.data);
+  const mergedPromotions = useQuery({
+    ...projectMergedPromotionsQuery(coordinatedProjectId ?? ''),
+    enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
+    refetchInterval: pollWhileInFlight(20_000, () => mergeInFlight),
   });
 
   // What this project still owes somebody, for the exceptions drawn into the transcript at the
@@ -4421,7 +4451,7 @@ export function WorkspaceView({
   const openItems = useQuery({
     ...projectOpenItemsQuery(coordinatedProjectId ?? ''),
     enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
 
   // Which of those rows the pinned strip lists: the ones the evidence card below is drawn for, by
@@ -5010,16 +5040,13 @@ export function WorkspaceView({
     // An evidence version: the row leaving the pending read is what says it was answered elsewhere
     // or displaced by a newer revision — the two refusals the door gives. Read off the same queue
     // the card is drawn from, and only once that read has come back, for the reason below. A
-    // version waiting for the coordinator is still the reader's to send back from the card they
-    // opened (`Decide it myself`), so its place in that queue counts as being there.
+    // reply stays armed only while its question remains in the read.
     if (replyTo.target.kind === 'evidenceDecision') {
       const read = pendingDecisions.data;
       if (!read) return;
       const address = decisionRowKey(replyTo.target);
-      const still = [
-        ...evidenceDecisionCardRows(read, selectedSession?.projectId ?? null, selectedId),
-        ...coordinatorQueueRows(read, selectedSession?.projectId ?? null, selectedId),
-      ].some((row) => decisionRowKey(row) === address);
+      const still = evidenceDecisionCardRows(read, selectedSession?.projectId ?? null, selectedId)
+        .some((row) => decisionRowKey(row) === address);
       if (!still) setReplyTo(null);
       return;
     }
@@ -5330,7 +5357,7 @@ export function WorkspaceView({
         setComposerRefs({});
         setImages([]);
         setView('open');
-        qc.invalidateQueries({ queryKey: ['sessions'] });
+        refreshSessionLists();
         navigate(`/sessions/${encodeId(routedToSessionId)}`);
         return;
       }
@@ -5433,7 +5460,7 @@ export function WorkspaceView({
           );
         }
       }
-      qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       // Reviving moves the row from Completed to Open server-side (see SessionsService.resume),
       // so refetch the detail too — otherwise the header ⋮ keeps offering Move to Open for a
       // session that's already back in Open.
@@ -5569,7 +5596,7 @@ export function WorkspaceView({
       if (restored) setText(restored);
       stageRestored(theirs.flatMap((q) => q.attachments ?? []));
       setQueued([]);
-      qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
     },
     onError: (e: Error) => message.error("Couldn't stop the session", e.message),
   });
@@ -5628,7 +5655,7 @@ export function WorkspaceView({
     onSuccess: (_d, session) => {
       setView('open');
       refreshProjectSession(session.id, session.projectId);
-      qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       qc.invalidateQueries({ queryKey: ['session', session.id] });
       if (session.notify) {
         message.sessionNotice({
@@ -5707,7 +5734,7 @@ export function WorkspaceView({
     onSuccess: (_d, session) => {
       leaveIfOpen(session.id);
       dropFromLists(session.id, session.projectId);
-      qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       showUndo(session, 'complete');
     },
     onError: (e: Error, session) =>
@@ -5719,6 +5746,17 @@ export function WorkspaceView({
         detail: e.message,
         tone: 'error',
       }),
+  });
+  // Complete on a finished project's row (design §4.3, §3.6): the server moves its coordinator and
+  // every member still in Open, in any workspace, to Completed in one call.
+  const completeProjectMut = useMutation({
+    mutationFn: ({ projectId }: { projectId: string; memberIds: string[] }) => completeProjectSessions(projectId),
+    onSuccess: (_d, { projectId, memberIds }) => {
+      if (selectedId && memberIds.includes(selectedId)) leaveIfOpen(selectedId);
+      memberIds.forEach((id) => dropFromLists(id, projectId));
+      qc.invalidateQueries({ queryKey: ['sessions'] });
+    },
+    onError: (e: Error) => message.error("Couldn't complete the project's sessions", e.message),
   });
   const requestComplete = useCallback(
     (session: any): void => {
@@ -5785,7 +5823,7 @@ export function WorkspaceView({
     onSuccess: (_d, session) => {
       leaveIfOpen(session.id);
       dropFromLists(session.id, session.projectId);
-      qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       showUndo(session, 'trash');
     },
     onError: (e: Error, session) =>
@@ -5855,7 +5893,7 @@ export function WorkspaceView({
     onSuccess: (_d, session) => {
       leaveIfOpen(session.id);
       dropFromLists(session.id);
-      qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       message.sessionNotice({
         sessionId: session.id,
         sessionTitle: session.title,
@@ -5901,7 +5939,7 @@ export function WorkspaceView({
     },
     onError: (e: Error) => message.error("Couldn't rename the session", e.message),
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       void qc.invalidateQueries({ queryKey: ['project-sessions'] });
     },
   });
@@ -5923,7 +5961,7 @@ export function WorkspaceView({
     onError: (e: Error, { pin }) =>
       message.error(pin ? "Couldn't pin the session" : "Couldn't unpin the session", e.message),
     onSettled: (_data, _error, { projectId }) => {
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       if (projectId) void qc.invalidateQueries({ queryKey: ['project-sessions', projectId] });
     },
   });
@@ -5969,7 +6007,7 @@ export function WorkspaceView({
     },
     onSettled: (_data, _error, { id }) => {
       tagSaveInFlight.current = false;
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       void qc.invalidateQueries({ queryKey: ['session', id], exact: true });
     },
   });
@@ -6094,7 +6132,7 @@ export function WorkspaceView({
         headline: continued ? 'Handed to the existing repair session' : 'Repair session started',
         detail: 'Opening the repair session.', tone: 'info' });
       navigate(`/sessions/${encodeId(session.id)}`);
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
     },
     onError: (e: Error) => message.error("Couldn't start the repair session", e.message),
   });
@@ -6146,7 +6184,7 @@ export function WorkspaceView({
         icon: 'sync',
       });
       void qc.invalidateQueries({ queryKey: ['session', vars.id] });
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
     },
     onError: (e: Error, vars) =>
       message.sessionNotice({
@@ -6184,7 +6222,7 @@ export function WorkspaceView({
         icon: 'sync',
       });
       void qc.invalidateQueries({ queryKey: ['session', vars.id] });
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
     },
     onError: (e: Error, vars) =>
       message.sessionNotice({
@@ -6288,7 +6326,7 @@ export function WorkspaceView({
         e.message,
       );
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
+    onSettled: () => refreshSessionLists(),
   });
   // Move a session to another of its runner's accounts, or back onto Automatic (switchAccount). The
   // gauge, its popover and the menu read the session's detail, so that is re-read with the list.
@@ -6298,7 +6336,7 @@ export function WorkspaceView({
       message.error("Couldn't switch the account", e.message);
     },
     onSettled: (_result, _error, vars) => {
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       void qc.invalidateQueries({ queryKey: ['session', vars.id] });
     },
   });
@@ -7448,7 +7486,7 @@ export function WorkspaceView({
       api(`/tasks/${taskId}/execute`, { method: 'POST', body: { triggerId } }),
     onSuccess: () => {
       message.success('Assignee workspace triggered');
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
       if (selectedId) void qc.invalidateQueries({ queryKey: ['session', selectedId] });
     },
     // The task moved on between the page's read and the press; the refusal names the run that has
@@ -8048,7 +8086,7 @@ export function WorkspaceView({
           Array.isArray(old) ? old.map((s) => (s.folderId === folder.id ? { ...s, folderId: null } : s)) : old,
         );
         void qc.invalidateQueries({ queryKey: ['session-folders'] });
-        void qc.invalidateQueries({ queryKey: ['sessions'] });
+        refreshSessionLists();
         if (openFolder?.id === folder.id) leaveFolder(true);
       },
     });
@@ -9485,6 +9523,16 @@ export function WorkspaceView({
                       } : undefined}
                       // The menu stops its own clicks before they reach the row, which would open it.
                       menu={[
+                        // A finished project's row can leave Open: Complete moves its coordinator and
+                        // the members still open to Completed (§4.3; board 2026-11-07, part ④).
+                        ...(effectiveView === 'open' && (s.status === 'DONE' || s.status === 'CANCELLED') ? [
+                          { key: 'complete', icon: <CheckOutlined />, label: SESSION_PROJECT_COPY.complete,
+                            onSelect: () => {
+                              setMenuOpenId(null);
+                              completeProjectMut.mutate({ projectId: s.projectId, memberIds: s.members.map((m: any) => m.id) });
+                            } },
+                          { key: 'divider-complete', type: 'separator' as const },
+                        ] : []),
                         { key: 'session', label: SESSION_PROJECT_COPY.openSession, disabled: s.target.kind !== 'session',
                           onSelect: () => { setMenuOpenId(null); openTarget(); } },
                         { key: 'sessions', label: SESSION_PROJECT_COPY.sessions,
@@ -10384,7 +10432,6 @@ export function WorkspaceView({
                   key={`evidence:${selectedId}`}
                   sessionId={selectedId}
                   projectId={selectedSession?.projectId ?? null}
-                  coordinator={selectedSession}
                   onSendBack={startEvidenceSendBack}
                 />
               )}

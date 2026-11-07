@@ -16,6 +16,7 @@ import type { EvidenceTestReport } from '../lib/evidenceFiles';
 import { pendingCriteriaDecisionsQuery, pendingDecisionsQuery } from '../lib/queries';
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import './ui/Typography.css';
+import { streamPoll } from '../lib/listBudget';
 
 /**
  * What is TRUE right now about this session's open questions, pinned under the header.
@@ -869,14 +870,14 @@ export function SessionDecisionStrip({
   const pending = useQuery({
     ...pendingDecisionsQuery(sessionId),
     enabled: Boolean(sessionId),
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
   // The same read the card in the transcript uses, through the same factory, so the floor and the
   // card cannot be looking at two different moments.
   const criteria = useQuery({
     ...pendingCriteriaDecisionsQuery(projectId ?? ''),
     enabled: Boolean(projectId),
-    refetchInterval: 20_000,
+    refetchInterval: streamPoll(20_000),
   });
 
   // A read that failed is not "nothing is waiting". Saying so in one muted line is the smallest

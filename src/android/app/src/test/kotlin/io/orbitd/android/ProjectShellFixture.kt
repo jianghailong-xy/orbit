@@ -12,6 +12,7 @@ import java.time.ZoneOffset
 import java.util.TimeZone
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.channels.Channel
 import kotlinx.serialization.json.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
@@ -51,6 +52,8 @@ internal object ProjectShell {
     @Volatile var done = false
     /** Who recorded it: "DERIVED" for Orbit itself, "OWNER" for the owner's own press. */
     @Volatile var doneBy = "DERIVED"
+    /** The Launch members the project's Complete door (`POST projects/:id/sessions/complete`) has moved to Completed. */
+    @Volatile var completedMembers: Set<String> = emptySet()
     /** Whether the DONE document carries the projection's counts; false is a server before the owner's done door, which draws none. */
     @Volatile var doneCounts = true
 
@@ -160,7 +163,7 @@ internal object ProjectShell {
 
     fun reset() {
         calls.clear(); started = true; startRequest = false; quietStatus = 200
-        done = false; doneBy = "DERIVED"; doneCounts = true
+        done = false; doneBy = "DERIVED"; doneCounts = true; completedMembers = emptySet()
         promotion = null; merged = "[]"; mergeCheck = false; mergeJobKind = "CHECK_PROMOTION"; holder = null; criteria = null; pressStatus = 200; mergeWaiting = false; bodies.clear()
         landTasks = null; plan = null; documentStatus = 200; holdDocument = null; landing = null; landingById = emptyMap(); landingTitle = null; inFlightJobs = null
         landings = null; needsYouItems = null; sourceLanding = null
@@ -173,7 +176,16 @@ internal object ProjectShell {
         trashed = emptySet(); holdDelete = null; holdMembers = null; attention = null
         quietAttention = null; coordinatorWorking = false
         configRevision = null; automatic = true; maxConcurrentTasks = 2; crossings = null; tasks = null
+        lineIdle = false
+        while (accountEvents.tryReceive().isSuccess) Unit
     }
+
+    /** Nothing on the project's line: no job running or queued, and no `inFlight` (the landing card and the merge's live line are gone). */
+    @Volatile var lineIdle = false
+    /** Account events the account stream sends ([event]), in order. */
+    private val accountEvents = Channel<String>(Channel.UNLIMITED)
+    /** One account event of [type] on the account stream, as the server sends it. */
+    fun event(type: String, sessionId: String = "") { accountEvents.trySend("""{"type":"$type","sessionId":"$sessionId","data":{}}""") }
 
     private fun ago(minutes: Long) = Instant.now().minusSeconds(minutes * 60).toString()
     private val workspaces = """[
@@ -187,7 +199,9 @@ internal object ProjectShell {
         """{"id":"$id","title":"$title","status":"$run","runState":"$run","lifecycleState":"$lifecycle","agent":{"id":"$workspace","name":"${if (workspace == ALPHA) "Alpha" else "Beta"}"},
             "agentId":"$workspace","createdAt":"${ago(600)}","lastTurnAt":"$lastTurnAt","pendingApprovals":$approvals,"tags":[],
             "capabilities":{"canComplete":${lifecycle == "OPEN"},"canRestore":${lifecycle != "OPEN"}}$extra}"""
-    private fun session(id: String) = when (id) {
+    private fun session(id: String) = if (id in completedMembers) openSession(id).replaceFirst("\"lifecycleState\":\"OPEN\"", "\"lifecycleState\":\"COMPLETED\"")
+        .replace("\"canComplete\":true", "\"canComplete\":false").replace("\"canRestore\":false", "\"canRestore\":true") else openSession(id)
+    private fun openSession(id: String) = when (id) {
         COORD -> row(COORD, "Coordinate launch", ALPHA, "AWAITING_INPUT", ""","lastAssistantText":"Planning the release","projectId":"$LAUNCH",${member("COORDINATOR")}${
             if (mergeWaiting) ""","projectTitle":"Launch","waitingKind":"OWNER_ITEM","ownerItems":[{"itemId":"i-merge","kind":"PROMOTION_APPROVAL",
                 "title":"Merge 4 tasks into main?","since":"${ago(130)}"}]""" else ""}${if (coordinatorWorking) ""","engineTurnActive":true""" else ""}""",
@@ -199,6 +213,9 @@ internal object ProjectShell {
         else -> row(DONE, "Shipped docs", ALPHA, "SUCCEEDED", ""","completedAt":"${ago(2 * 24 * 60)}",${member("TASK")}""", "COMPLETED", ago(2 * 24 * 60))
     }
     private fun list(vararg sessions: String) = sessions.filter { it !in trashed }.joinToString(",", "[", "]") { session(it) }
+    /** A view's rows once the Complete door has moved some of Launch's members out of Open and into Completed. */
+    private fun open(vararg sessions: String) = list(*sessions.filter { it !in completedMembers }.toTypedArray())
+    private fun completed(vararg sessions: String) = list(*(completedMembers.toList() + sessions).toTypedArray())
     /** The same read with the project's LANDING rows beside its conversations (`includeLanding=1`, LS6). */
     private fun landingRows(base: String): String {
         val extra = landings?.removePrefix("[")?.removeSuffix("]") ?: return base
@@ -214,7 +231,8 @@ internal object ProjectShell {
     private val listedJobs get() = inFlightJobs?.let { runCatching { Wire.json.parseToJsonElement(it).jsonArray }.getOrNull() }?.filterIsInstance<JsonObject>()
     private val integrating get() = listedJobs?.count { it.text("state") == "RUNNING" } ?: 1
     private val queued get() = listedJobs?.count { it.text("state") == "QUEUED" } ?: 0
-    private val integration get() = """{"line":"PROJECT_BRANCH","ref":"project/launch","integratingCount":$integrating,"queuedCount":$queued,
+    private val integration get() = if (lineIdle) """{"line":"PROJECT_BRANCH","ref":"project/launch","integratingCount":0,"queuedCount":0,"inFlight":null}"""
+        else """{"line":"PROJECT_BRANCH","ref":"project/launch","integratingCount":$integrating,"queuedCount":$queued,
         "inFlight":${if (mergeCheck) """{"kind":"$mergeJobKind","state":"RUNNING","phase":"CHECK","startedAt":"${ago(7)}","heartbeatAt":"${ago(0)}"}"""
             else """{"kind":"LAND_TASK","state":"RUNNING","phase":"CHECK","taskTitle":"Wire the page","startedAt":"${ago(3)}","heartbeatAt":"${ago(0)}"}"""}${
             landTasks?.let { ""","landTasks":$it""" }.orEmpty()}${inFlightJobs?.let { ""","inFlightJobs":$it""" }.orEmpty()}}"""
@@ -304,11 +322,11 @@ internal object ProjectShell {
             path == "sessions" && scoped == QUIET -> if (quietStatus == 200) ok("[]") else ApiResponse(quietStatus, """{"message":"The project's sessions are unavailable"}""".encodeToByteArray())
             path == "sessions" && scoped == LAUNCH -> {
                 // The page's own widening (§2.9 LS6): its Landings group's rows ride on this read and no other.
-                val answer = ok(landingRows(if (view == "open") list(COORD, WORKER, WAITING) else if (view == "completed") list(DONE) else "[]"))
+                val answer = ok(landingRows(if (view == "open") open(COORD, WORKER, WAITING) else if (view == "completed") completed(DONE) else "[]"))
                 holdMembers?.await()
                 answer
             }
-            path == "sessions" -> ok(when (view) { "open" -> list(COORD, WORKER, WAITING, PLAIN); "completed" -> list(DONE); else -> "[]" })
+            path == "sessions" -> ok(when (view) { "open" -> open(COORD, WORKER, WAITING, PLAIN); "completed" -> completed(DONE); else -> "[]" })
             path == "sessions/$LANDING" && method == "GET" && landingStatus != 200 ->
                 ApiResponse(landingStatus, """{"message":"The server is unavailable"}""".encodeToByteArray())
             // A landing id reached by a link or a row: the detail is a landing's whenever the fixture says this id is one.
@@ -335,6 +353,9 @@ internal object ProjectShell {
                 ok("{}")
             }
             path.startsWith("sessions/") && path.endsWith("/page") -> ok("""{"events":[],"hasMore":false,"lastSeq":0,"latestSeq":0}""")
+            path == "projects/$LAUNCH/sessions/complete" && method == "POST" ->
+                if (!done) ApiResponse(409, """{"code":"PROJECT_STILL_OPEN","message":"The project is still open."}""".encodeToByteArray())
+                else { completedMembers = setOf(COORD, WORKER, WAITING); ok("""{"completed":3}""") }
             path == "projects/sidebar" -> ok(sidebar())
             path == "projects" -> ok("""[$project,{"id":"$QUIET","title":"Quiet","status":"OPEN","createdAt":"2026-10-01T00:00:00Z"${
                 quietAttention?.let { ""","attention":$it""" }.orEmpty()}}]""")
@@ -387,10 +408,12 @@ internal object ProjectShell {
         landings?.let { runCatching { Wire.json.parseToJsonElement(it).jsonArray }.getOrNull() }
             ?.filterIsInstance<JsonObject>()?.mapNotNull { it.text("id") }.orEmpty())
 
-    /** The streams open and stay quiet: the account is connected, so writes are offered. */
+    /** The streams open and stay quiet but for the account events a test sends ([event]): the account is connected, so writes are
+     * offered. */
     private val events = object : EventTransport {
         override suspend fun stream(request: HttpRequest, onOpen: suspend () -> Unit, onFrame: suspend (SseFrame) -> Unit): Unit {
             onOpen()
+            if (request.api.path == listOf("events")) for (frame in accountEvents) onFrame(SseFrame(frame, null, null))
             awaitCancellation()
         }
     }

@@ -193,7 +193,7 @@ struct WikiJobView: View {
             .task(id: jobID) {
                 await wiki.loadJobs()
                 while !Task.isCancelled, wiki.jobsUnderWay {
-                    try? await Task.sleep(for: .seconds(5))
+                    await VisibilityGate.app.pause(5)   // a job under way, and the app seen
                     await wiki.loadJobs()
                 }
             }

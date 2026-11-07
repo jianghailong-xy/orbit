@@ -86,6 +86,7 @@ export const SESSION_PROJECT_COPY = {
   waitingSession: (text: string, title: string) => `${text} · ${title}`,
   noCoordinator: 'No coordinator',
   openSession: 'Open Session',
+  complete: 'Complete',
   openCoordinator: 'Open Coordinator',
   sessions: 'Sessions',
   openProject: 'Open Project',

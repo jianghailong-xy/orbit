@@ -49,6 +49,7 @@ import {
   workspaceSessionCountsQuery,
 } from '../lib/queries';
 import { CLAUDE_SESSION_ID_RE, importClaudeSessionAndWait } from '../lib/sessionImport';
+import { useRefreshSessionLists } from '../lib/useControlPlane';
 import { AbandonedCheckouts } from '../components/AbandonedCheckouts';
 import { ClaudeHistoryOffer, type ImportMode } from '../components/ClaudeHistoryOffer';
 import { AccountSelect, offersAccount } from '../components/AccountSelect';
@@ -250,6 +251,7 @@ export function RunnerDetailPage() {
   const [confirm, confirmation] = useConfirm();
   const message = useToast();
   const qc = useQueryClient();
+  const refreshSessionLists = useRefreshSessionLists();
 
   const runners = useQuery({
     queryKey: ['runners'],
@@ -460,7 +462,7 @@ export function RunnerDetailPage() {
                 ? 'Importing 1 conversation — it appears as it lands.'
                 : `Importing ${res.imported} conversations — they appear as they land.`,
             );
-            void qc.invalidateQueries({ queryKey: ['sessions'] });
+            refreshSessionLists();
           })
           .catch((e: Error) =>
             message.error(
@@ -614,7 +616,7 @@ export function RunnerDetailPage() {
         res.removed === 1 ? '1 imported conversation removed.' : `${res.removed} imported conversations removed.`,
       );
       void qc.invalidateQueries({ queryKey: ['imported-sessions', editing?.id] });
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refreshSessionLists();
     },
     onError: (e: Error) => message.error("Couldn't remove the imported conversations", e.message),
   });

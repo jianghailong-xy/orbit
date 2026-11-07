@@ -137,17 +137,18 @@ internal fun cardSession(): Pair<OrbitApplication, SessionState>? {
 
 /** The cards' own reads and bookkeeping, run by the reader whether or not the rail is on screen: what this conversation created,
  * the merges it recorded, the project's task graph for a start card, the watches it observes; the confirmation re-read when its
- * review is due; the stale copies; and the doors' fences restored. A04 is the only live-state owner; these re-read on its
- * invalidations. */
+ * review is due; the stale copies; and the doors' fences restored. A04 is the only live-state owner; these re-read behind its
+ * snapshot reads. */
 @Composable
 fun SessionCardsReads(cards: SessionCardsModel) {
     val (app, session) = cardSession() ?: return
-    val realtime by app.realtime.state.collectAsState()
     val sessionCards = remember(session.snapshot) { session.snapshot?.let { CardCatalog.session(session.id, it) }.orEmpty() }
     val current = sessionCards + cards.watches
     val project = session.snapshot?.detail?.text("projectId") ?: session.snapshot?.detail?.obj("project")?.text("id")
     val wantsPlan = current.any { it.family == CardFamily.START }
-    LaunchedEffect(session.fresh, cards.handle, session.id, project, realtime.invalidationRevision, wantsPlan) {
+    // Behind each snapshot read the store lands (`snapshotReads`): a connect, an account event about this conversation or its project,
+    // its own stream's, and the minute's safety read. Never on an event about another session (docs/list-freshness-design.md §4 R5).
+    LaunchedEffect(session.fresh, cards.handle, session.id, project, session.snapshotReads, wantsPlan) {
         if (!session.fresh) return@LaunchedEffect
         cards.evidenceFiles.readAgain()
         val api = CardAuthority(app.session, cards.handle)
@@ -219,12 +220,7 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                 val preview = CardPreviews.preview(card)
                 val fresh = cards.fresh(session, card)
                 val result = results[card.key]?.takeIf { it.binding == card.binding } ?: CardActionState()
-                // Decide it myself opens a revision waiting for the coordinator into its evidence card, here in place, and that
-                // card is what is pressed (`CoordinatorQueue`).
-                var decidingMyself by rememberSaveable { mutableStateOf(false) }
-                val drawn = (if (decidingMyself) CoordinatorQueue.decideMyself(card) else null) ?: card
-                val submit = { verb: CardVerb, input: CardInput ->
-                    if (verb == CardVerb.DECIDE_MYSELF) decidingMyself = true else cards.submit(drawn, verb, input) }
+                val submit = { verb: CardVerb, input: CardInput -> cards.submit(card, verb, input) }
                 when {
                     // A08-13: a question that has ended is the record it became, replayed in its review.
                     card.family == CardFamily.QUESTION_RECORD -> QuestionRecordCard(card) { cards.open(card.key) }
@@ -240,7 +236,7 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                     // A08-17: an exception that became the owner's, or a pause, is its own card (iOS `OwnerItemCardView`).
                     card.family == CardFamily.EXCEPTION -> ExceptionCard(card, fresh, result, mergeCard, open, discuss,
                         review = { promotion -> CardFocus.request(session.id, "promotion:$promotion") }, main = coordinatedMain, submit = submit)
-                    else -> CompositionLocalProvider(LocalEvidenceFiles provides cards.evidenceFiles) { BusinessCard(drawn, fresh, result, open, discuss, submit) }
+                    else -> CompositionLocalProvider(LocalEvidenceFiles provides cards.evidenceFiles) { BusinessCard(card, fresh, result, open, discuss, submit) }
                 }
             }
         } }

@@ -218,6 +218,7 @@ func TestTheDrillSettingIsChecked(t *testing.T) {
 	env := map[string]string{
 		"LINK_PUBLIC_KEYS": publicPEM(t, keys.pub), "LINK_GATEWAY_TOKEN": strings.Repeat("g", 32),
 		"LINK_API_URL": "http://apiserver:3000", "LINK_TLS_MODE": "off",
+		"LINK_INTERNAL_API_URLS": "http://apiserver:3001",
 	}
 	if c, err := configFromEnv(func(k string) string { return env[k] }); err != nil || c.DrillLoseAnswers != nil {
 		t.Fatalf("by default: %v, %v", c.DrillLoseAnswers, err)

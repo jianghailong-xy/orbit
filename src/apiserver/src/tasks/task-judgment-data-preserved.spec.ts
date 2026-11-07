@@ -2768,7 +2768,35 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // object nor any of the six preserved triggers/functions is named, and no function, trigger or type is
       // created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
       // DELETE: every stored op reads NULL in both columns and satisfies the CHECKs as it stands.
-      '0488_wiki_op_answers_challenge'],
+      '0488_wiki_op_answers_challenge',
+      // 0489 is two new tables for the Feishu bot integration (docs/feishu-bot-design.md §4.1): `feishu_app`, each account's
+      // own app, with its primary key, two unique indexes (owner_id, app_id), CHECKs and foreign keys to `user` (ON DELETE
+      // CASCADE) and `workspace` (ON DELETE SET NULL), and `feishu_deployment_setting`, the administrators' switch, of at
+      // most one row (`feishu_deployment_setting_one_row_chk`, `id` = 1) with no foreign key. Neither is a preserved
+      // relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved
+      // triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it is not another
+      // writer of the DONE fence. No INSERT, UPDATE or DELETE: both tables start empty.
+      '0489_feishu_app',
+      // 0491 adds one nullable JSONB column to `session` (`last_user_from_orbit`: that Orbit wrote the message the row
+      // previews, with the notification card its line is written from) in one DO statement that takes the table's lock
+      // in short tries, and nothing else. `session` is not a preserved relation, no column any preserved trigger reads
+      // is touched, and no function, trigger, type or constraint is created, replaced or dropped, so it is not another
+      // writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored session reads NULL.
+      '0491_session_last_user_from_orbit',
+      // 0492 is two new tables for the Feishu bot integration (docs/feishu-bot-design.md §4.4, §7.1): `feishu_inbound_event`,
+      // the inbound inbox, unique on (app_id, event_id), and `feishu_link`, each replica's connection of each app, keyed
+      // (app_id, replica_id); both reference `feishu_app` (app_id) ON DELETE CASCADE, with CHECKs and one partial index.
+      // Neither is a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of the
+      // six preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so
+      // it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: both tables start empty.
+      '0492_feishu_inbound_event',
+      // 0493 adds one BOOLEAN NOT NULL DEFAULT false column to `session` (`prompt_by_orbit`: that the platform wrote
+      // the session's opening prompt) in one DO statement that takes the table's lock in short tries, and nothing
+      // else. `session` is not a preserved relation, no column any preserved trigger reads is touched, and no
+      // function, trigger, type or constraint is created, replaced or dropped, so it is not another writer of the
+      // DONE fence. No INSERT, UPDATE or DELETE: a constant default is a catalog change, every stored session reads
+      // false.
+      '0493_session_prompt_by_orbit'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

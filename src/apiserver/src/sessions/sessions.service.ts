@@ -31,7 +31,7 @@ import { freshRunningBgJobs } from './background-job-activity';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
-import { isOrbitAuthoredTurn } from './orbit-authored-turn';
+import { isOrbitAuthoredTurn, isOrbitAuthoredTurnOf, openingTurnKey } from './orbit-authored-turn';
 import { importForkSessionId } from './import-fork';
 import { assertMayMoveRuns, assertSessionMayReach, type SessionAct } from './session-reach';
 import {
@@ -42,7 +42,8 @@ import {
   STEER_WITHDRAW_WAIT_MS,
 } from './steer-withdraw';
 import { readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql } from './session-project-membership';
-import { lastUserFromOf, pendingMessageColumns, readSessionMessageFrom } from './session-message';
+import { lastUserFromOf, lastUserFromOrbitOf, pendingMessageColumns, readSessionMessageFrom } from './session-message';
+import { readOrbitMessageFrom } from './orbit-message';
 import {
   closeRequestsTheRetryWillNotResend,
   isSessionReplyTurn,
@@ -163,7 +164,7 @@ import { chatSourceColumns, decideSessionSource, type SessionSourceTaskRow } fro
 import { readWikiChatContext, sameWikiChatContext, wikiContextOutsideChat } from '../wiki/wiki-chat-context';
 import { branchName } from '../projects/project-criterion-landing';
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
-import { INTEGRATION_ITEM_KINDS, openItemOwed } from '../projects/project-open-item';
+import { INTEGRATION_ITEM_KINDS, openItemOwed, openItemVisible } from '../projects/project-open-item';
 import { readSourceLanding } from '../projects/landing-session';
 import { readLandingIntegrationLog, type IntegrationLogSelectors } from '../projects/project-integration-log';
 import {
@@ -363,6 +364,9 @@ function isPlatformContentTurn(clientTurnId: string | null | undefined): boolean
 // window a provider actually reports — a weekly quota — so a bad clock parks a session for days
 // at worst, never indefinitely.
 const MAX_ARM_AHEAD_MS = 8 * 24 * 60 * 60 * 1000;
+
+/** How long a finished Open-list build answers the reads of its version (`sharedOpenList`). */
+const OPEN_LIST_BUILD_KEEP_MS = 5_000;
 
 // A lease this close to expiry is not a usable CURRENT_WORK target: capability resolution and the
 // insert still have to commit before the runner can poll. The final check uses PostgreSQL's clock.
@@ -824,6 +828,8 @@ export class SessionsService {
   private readonly logger = new Logger(SessionsService.name);
   /** The snapshots `listOpenSince` answers a cursor against — see open-list-delta.ts. */
   private readonly openListDelta = new OpenListDeltaStore();
+  /** Open lists built at a version, shared by the reads that ask for the same one (`sharedOpenList`). */
+  private readonly openListBuilds = new Map<string, { builtAt: number; rows: Promise<unknown> }>();
   /** How long a steer's withdrawal waits for the runner's answer (steer-withdraw.ts). A field so a
    *  spec can wait less for an answer it knows is not coming. */
   protected steerWithdrawWaitMs = STEER_WITHDRAW_WAIT_MS;
@@ -1003,6 +1009,13 @@ export class SessionsService {
        * the canonical project title with this bit; public session creation cannot claim it.
        */
       titleManagedByProject?: boolean;
+      /**
+       * The platform wrote `dto.prompt`, not a person (0493): set by the doors that open a session with
+       * a prompt of their own — a project's coordinator, a judgment, a task list's dispatch console, an
+       * @-mention's reply. Its opening turn is then Orbit's on the row and the queue
+       * (`isOrbitAuthoredTurnOf`). Internal: public session creation cannot claim it.
+       */
+      promptByOrbit?: boolean;
       /**
        * The HTTP create door's credential. A personal access token may not choose `permissionMode`
        * at all, to any value, for the reason `updateConfig` refuses it one (§5.1 of
@@ -1460,6 +1473,7 @@ export class SessionsService {
         title,
         titleManagedByProject: opts?.titleManagedByProject ?? false,
         titleBeforeProjectManagement: null,
+        promptByOrbit: opts?.promptByOrbit ?? false,
         branch,
         prompt: dto.prompt,
         status: RunStatus.PENDING,
@@ -1610,6 +1624,8 @@ export class SessionsService {
     const {
       titleManagedByProject: _titleManagedByProject,
       titleBeforeProjectManagement: _titleBeforeProjectManagement,
+      // Read where the row is (orbit-authored-turn.ts); the row already says it as `lastUserFromOrbit`.
+      promptByOrbit: _promptByOrbit,
       ...publicSession
     } = session;
     return withSessionState(publicSession);
@@ -3476,6 +3492,34 @@ export class SessionsService {
     return readOpenListVersion(this.prisma, ownerId, Date.now());
   }
 
+  /**
+   * `list`'s answer for the flat Open list, built once for every read that asks for it at the same
+   * data version with the same filters: a change hints every device of the account at once
+   * (`sessions.list_changed`), and each of them reads. Reads that arrive while the build is in flight
+   * await it; for OPEN_LIST_BUILD_KEEP_MS after it finished they are answered from it. A version is
+   * read before the list it stands beside is built, so these rows can only be newer than the version
+   * every reader of them read, never older: a reader is never handed a list that lags what it asked
+   * for. A failed build is forgotten at once. Each reader gets its own copy, because the response
+   * interceptors rewrite ids in place, per request.
+   */
+  private async sharedOpenList<T>(key: string, build: () => Promise<T>): Promise<T> {
+    const now = Date.now();
+    for (const [k, entry] of this.openListBuilds) {
+      if (now - entry.builtAt >= OPEN_LIST_BUILD_KEEP_MS) this.openListBuilds.delete(k);
+    }
+    let entry = this.openListBuilds.get(key);
+    if (!entry) {
+      const fresh = { builtAt: Number.POSITIVE_INFINITY, rows: build() };
+      fresh.rows.then(
+        () => { fresh.builtAt = Date.now(); },
+        () => { if (this.openListBuilds.get(key) === fresh) this.openListBuilds.delete(key); },
+      );
+      this.openListBuilds.set(key, fresh);
+      entry = fresh;
+    }
+    return structuredClone((await entry.rows) as T);
+  }
+
   async list(
     ownerId: string,
     filters: {
@@ -3491,6 +3535,9 @@ export class SessionsService {
       view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system';
       limit?: number;
     },
+    /** The Open list's data version the caller read for this list (`openListVersion`). Given, a flat
+     *  Open read is shared with every other read of the same version and filters (`sharedOpenList`). */
+    version?: string,
   ) {
     // Open = neither completed nor deleted; Completed = completed but not deleted;
     // Trash = deleted, regardless of completion state. Legacy view names remain aliases.
@@ -3565,12 +3612,20 @@ export class SessionsService {
       view === 'completed'
         ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) DESC NULLS LAST, s.created_at DESC`
         : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.last_turn_at, s.created_at) DESC, s.created_at DESC`;
-    return this.listRows(ownerId, {
+    const build = () => this.listRows(ownerId, {
       scope: Prisma.sql`${runnerFilter} ${workspaceFilter} ${confinedFilter} ${tagFilter} ${projectFilter}`,
       visibility,
       orderBy,
       pageLimit,
     });
+    if (version === undefined || view !== 'open' || filters.projectId !== undefined) return build();
+    return this.sharedOpenList(JSON.stringify([
+      ownerId, version, filters.runnerId ?? null, filters.workspaceId ?? null, filters.tagId ?? null,
+      filters.confinedTo ?? null,
+      typeof filters.limit === 'number' && Number.isFinite(filters.limit) && filters.limit > 0
+        ? Math.floor(filters.limit)
+        : null,
+    ]), build);
   }
 
   /**
@@ -3606,8 +3661,9 @@ export class SessionsService {
     // it equals the ETag the plain read sends for them. A project read reads no version and is built
     // every time, as its plain read is: its rows are a few, and the LANDING rows of the
     // landing-aware one are not sources of the version.
-    const version = filters.projectId === undefined
-      ? openListEtag(await this.openListVersion(ownerId), {
+    const dataVersion = filters.projectId === undefined ? await this.openListVersion(ownerId) : undefined;
+    const version = dataVersion !== undefined
+      ? openListEtag(dataVersion, {
           runnerId: filters.runnerId,
           workspaceId: filters.workspaceId,
           tagId: filters.tagId,
@@ -3619,7 +3675,7 @@ export class SessionsService {
     if (since && version !== undefined && this.openListDelta.unchanged(ownerId, scope, since, version)) {
       return { full: false as const, upserts: [], removedIds: [], cursor: since };
     }
-    const rows = await this.list(ownerId, { ...filters, view: 'open' });
+    const rows = await this.list(ownerId, { ...filters, view: 'open' }, dataVersion);
     // A runner's heartbeat restamps every row it hosts every 30 seconds; with a few runners that
     // alone would resend most of the list on most polls. The clients that read this delta draw
     // nothing from the raw timestamp — what it decides (the queue gate, capabilities) are fields of
@@ -3707,6 +3763,7 @@ export class SessionsService {
       lastUserText: string | null;
       lastUserFromSessionId: string | null;
       lastUserFromTitle: string | null;
+      lastUserFromOrbit: Prisma.JsonValue | null;
       // The rolling recap and when it was written (0418): the line the list prefers to the raw
       // last reply. Both null on a session no pass has recapped yet.
       recapText: string | null;
@@ -3802,6 +3859,8 @@ export class SessionsService {
         -- Who sent it, when another session did (0485): the row names that session, not "You".
         s.last_user_from_session_id AS "lastUserFromSessionId",
         s.last_user_from_title AS "lastUserFromTitle",
+        -- Or that Orbit wrote it (0491), with the notification card its line is written from.
+        s.last_user_from_orbit AS "lastUserFromOrbit",
         -- The rolling recap (0418), clipped like the previews above. A session with no recap yet
         -- answers nulls, which is what the row falls back from to lastAssistantText.
         left(s.recap_text, ${SessionsService.PREVIEW_LEN}::int) AS "recapText",
@@ -3892,6 +3951,7 @@ export class SessionsService {
                    AND oi.project_id = l.project_id
                    AND oi.kind IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
                    AND ${openItemOwed('oi')}
+                   AND ${openItemVisible('oi')}
                    AND (oi.task_id = l.task_id
                         OR oi.promotion_id = l.promotion_id
                         OR EXISTS (
@@ -4017,6 +4077,8 @@ export class SessionsService {
         lastUserText: r.lastUserText,
         // `{ sessionId, title }` of the session that sent lastUserText, null for the owner's own.
         lastUserFrom: lastUserFromOf(r),
+        // `{ coordinatorDelivery }` when Orbit wrote it, null for anybody else's.
+        lastUserFromOrbit: lastUserFromOrbitOf(r),
         recapText: r.recapText,
         recapAt: r.recapAt,
         mergeStatus: r.mergeStatus,
@@ -4289,6 +4351,8 @@ export class SessionsService {
       sharedAt: _retiredSharedAt,
       titleManagedByProject: _titleManagedByProject,
       titleBeforeProjectManagement: _titleBeforeProjectManagement,
+      // Internal, as in `create`: the row says it as `lastUserFromOrbit`, the queue as `authoredByOrbit`.
+      promptByOrbit: _promptByOrbit,
       // Read, never spread: it is the input to the count below, and a client that wants to know
       // which jobs are moving asks the count, not the per-job instants behind it.
       runningBgJobActivity,
@@ -4298,6 +4362,8 @@ export class SessionsService {
       // Read, never spread: answered as one `lastUserFrom`, the shape the list row and the summary carry.
       lastUserFromSessionId,
       lastUserFromTitle,
+      // Read, never spread, as the list row reads it (`lastUserFromOrbitOf`).
+      lastUserFromOrbit,
       ...rest
     } = projected;
     const tags = tagLinks
@@ -4378,6 +4444,8 @@ export class SessionsService {
       projectMembership: await readSessionProjectMembership(this.prisma, session.id),
       // Who sent lastUserText, when another session did — the list row's and the summary's key.
       lastUserFrom: lastUserFromOf({ lastUserFromSessionId, lastUserFromTitle }),
+      // Or that Orbit wrote it, with the notification card its line is written from.
+      lastUserFromOrbit: lastUserFromOrbitOf({ lastUserFromOrbit }),
       sourceLanding,
       ...(landing ? { landing } : {}),
       shareToken: shareLinks?.[0]?.token ?? null,
@@ -5727,7 +5795,7 @@ export class SessionsService {
    *  / queue.service.buildSession. It's a real PENDING message turn but isn't a withdrawable
    *  queued follow-up, so the queued-turn list/cancel paths exclude it. */
   static initialTurnClientId(sessionId: string): string {
-    return `initial-${sessionId}`;
+    return openingTurnKey(sessionId);
   }
 
   /** Allocate a turn while the caller holds the Session row lock. */
@@ -6428,6 +6496,12 @@ export class SessionsService {
       const sentBy = dto.content && opts?.senderSessionId
         ? await readSessionMessageFrom(tx, ownerId, opts.senderSessionId)
         : null;
+      // Or that Orbit wrote it — a coordinator's notification, a watch's wake, the owner's answer
+      // handed on — with the notification's card, which the hook above has already bound to this turn
+      // (orbit-message.ts). Read only for a key in the platform's own namespace.
+      const sentByOrbit = dto.content
+        ? await readOrbitMessageFrom(tx, id, turn, opts?.senderSessionId ?? null)
+        : null;
       const nextStatus = statusAfterTurnEnqueued(session.status);
       await tx.session.update({
         where: { id },
@@ -6441,8 +6515,8 @@ export class SessionsService {
           // the one thing that reads as "already answered". The runner's own `user` event rewrites
           // the same value; only a reply clears it (ANSWERS_USER_TURN). An attachment-only send
           // carries no text to preview and so leaves the column as it found it. Its sender goes
-          // with it (`lastUserFrom`), null for the owner's own words.
-          ...(dto.content ? pendingMessageColumns(dto.content, sentBy) : {}),
+          // with it (`lastUserFrom`, `lastUserFromOrbit`), both null for the owner's own words.
+          ...(dto.content ? pendingMessageColumns(dto.content, sentBy, sentByOrbit) : {}),
           // A message on this session disarms any auto-retry waiting on it — whether it
           // came from the user (they took over; sending their own message again behind
           // their back would be a second, unasked-for turn) or from the sweeper itself
@@ -6744,6 +6818,9 @@ export class SessionsService {
       const sentBy = content && opts?.senderSessionId
         ? await readSessionMessageFrom(tx, ownerId, opts.senderSessionId)
         : null;
+      const sentByOrbit = content
+        ? await readOrbitMessageFrom(tx, id, turn, opts?.senderSessionId ?? null)
+        : null;
       const nextStatus = statusAfterTurnEnqueued(session.status);
       await tx.session.update({
         where: { id },
@@ -6752,7 +6829,7 @@ export class SessionsService {
           lastTurnAt: new Date(),
           // The redirected message is what the session is waiting on now — previewed from here
           // exactly as in createTurn, with who sent it.
-          ...(content ? pendingMessageColumns(content, sentBy) : {}),
+          ...(content ? pendingMessageColumns(content, sentBy, sentByOrbit) : {}),
           // The person took over: an auto-retry waiting on this session must not fire a
           // second, unasked-for turn behind the one they just redirected to. A claim the sweep had
           // in flight ends for the same reason (migration 0354) — this turn is not its.
@@ -6824,7 +6901,8 @@ export class SessionsService {
       where: { id, ownerId },
       // What the cards are read against (turn-cards.ts): whose rows they may name, and the task a
       // run's brief was built from. And whether it is a wiki chat, whose opening turn is its prompt.
-      select: { id: true, ownerId: true, taskId: true, runSource: true, wikiChatSpaceId: true },
+      // And whether the platform wrote that prompt (0493), which makes the opening Orbit's.
+      select: { id: true, ownerId: true, taskId: true, runSource: true, wikiChatSpaceId: true, promptByOrbit: true },
     });
     if (!session) throw new NotFoundException('session not found');
     const turns = await this.prisma.conversationTurn.findMany({
@@ -6909,7 +6987,7 @@ export class SessionsService {
             mimeType: attachment.mimeType,
           })),
           ...cards.get(turn.id),
-          ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
+          ...(isOrbitAuthoredTurnOf(session, turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
         };
       });
     }
@@ -6978,7 +7056,7 @@ export class SessionsService {
               }
             : {}),
           ...cards.get(turn.id),
-          ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
+          ...(isOrbitAuthoredTurnOf(session, turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
           content,
           createdAt: turn.createdAt.toISOString(),
           attachments: turn.attachments.map((attachment) => ({
@@ -9340,6 +9418,9 @@ export class SessionsService {
       const sentBy = dto.content && opts?.senderSessionId
         ? await readSessionMessageFrom(tx, ownerId, opts.senderSessionId)
         : null;
+      const sentByOrbit = dto.content
+        ? await readOrbitMessageFrom(tx, id, turn, opts?.senderSessionId ?? null)
+        : null;
       await tx.session.update({
         where: { id },
         data: {
@@ -9358,7 +9439,7 @@ export class SessionsService {
           // Previewed from enqueue, as in createTurn: a revive waits for a slot like any other
           // turn, and until the runner reports it the row would show the reply from before. With
           // its sender, as there.
-          ...(dto.content ? pendingMessageColumns(dto.content, sentBy) : {}),
+          ...(dto.content ? pendingMessageColumns(dto.content, sentBy, sentByOrbit) : {}),
           mergeStatus: null,
           mergeOperationId: null,
           mergeOperationOwner: null,

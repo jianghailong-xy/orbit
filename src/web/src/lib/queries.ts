@@ -83,6 +83,8 @@ import {
   type TaskCounts,
 } from './taskPages';
 import { mergeWatches } from './watches';
+import { integrationInFlight, pollWhileInFlight, streamPoll, streamStaleTime } from './listBudget';
+import { readOpenList, type OpenListAnswer } from './openListDelta';
 
 export type { ConfiguredProvider };
 
@@ -288,16 +290,23 @@ async function fetchSessions(
   tagId: string | null,
   limit: number | null,
 ): Promise<SessionListItem[]> {
-  const path = (requestedView: string | null): string => {
+  const path = (requestedView: string | null, since?: string): string => {
     const qs = new URLSearchParams();
     if (runnerId) qs.set('runnerId', runnerId);
     if (workspaceId) qs.set('workspaceId', workspaceId);
     if (requestedView) qs.set('view', requestedView);
     if (tagId) qs.set('tagId', tagId);
     if (limit) qs.set('limit', String(limit));
+    if (since !== undefined) qs.set('since', since);
     const suffix = qs.toString();
     return `/sessions${suffix ? `?${suffix}` : ''}`;
   };
+  // A whole Open list is read as a delta against the copy this scope last read (lib/openListDelta).
+  // A page is not: the delta read answers the whole scope and has no page size.
+  if (view === 'open' && !limit) {
+    return readOpenList(JSON.stringify([runnerId, workspaceId, tagId]), (since) =>
+      api<OpenListAnswer<SessionListItem>>(path(view, since)));
+  }
   const rows = await api<SessionListItem[]>(path(view));
   if (!view || view === 'open') return rows;
   const expected = view === 'completed' ? 'COMPLETED' : 'TRASH';
@@ -327,6 +336,10 @@ export const sessionsQuery = (
   return queryOptions({
     queryKey: ['sessions', runnerId, workspaceId, view, tagId, limit] as const,
     queryFn: () => fetchSessions(runnerId, workspaceId, view, tagId, limit),
+    // The stream marks a list stale the moment an event touches it, so while it is live what was
+    // just read is still good to show: the console mounting on the list the splash read moments ago
+    // (BootGate) reads it once, not twice (docs/list-freshness-design.md W5).
+    staleTime: streamStaleTime,
   });
 };
 
@@ -336,12 +349,11 @@ export const PROJECT_SESSION_REFRESH_MS = 60_000;
 
 /**
  * At most this many project reads are out at once, per tab. A workspace list reads every project it
- * shows (useSessionProjectData), each on an interval of its own, and the intervals all start in the
- * same render, so the reads fall due together: forty-odd at once on a large account, on a page load,
- * every PROJECT_SESSION_REFRESH_MS after it, and every 4 s while the stream is down (which is also
- * what meets a restarting server). Each read is cheap. Forty at once are a queue on the server's
- * connection pool that every other request then waits in: when one tab was reloaded on 2026-10-25 at
- * 01:01Z, 52 of the 59 project reads it made that minute took 0.5 s or more.
+ * shows (useSessionProjectData), and the reads fall due together: forty-odd at once on a large
+ * account, on a page load, when the stream reopens, and on each step of the outage backoff while it
+ * is down (which is also what meets a restarting server). Each read is cheap. Forty at once are a
+ * queue on the server's connection pool that every other request then waits in: when one tab was
+ * reloaded on 2026-10-25 at 01:01Z, 52 of the 59 project reads it made that minute took 0.5 s or more.
  */
 const PROJECT_READS_AT_ONCE = 4;
 let projectReadsOut = 0;
@@ -561,7 +573,8 @@ export const activeTasksQuery = (listId?: string, projectId?: string) =>
   queryOptions({
     queryKey: ['tasks', 'active', listId ?? null, ...(projectId ? [{ projectId }] : [])] as const,
     queryFn: () => api<ActiveTasks>(activeTasksPath(listId, projectId)),
-    refetchInterval: 5_000,
+    // `task.*` events refresh it; this is the safety read (listBudget).
+    refetchInterval: streamPoll(5_000),
   });
 
 /**
@@ -640,14 +653,17 @@ export function projectsQueryKey(filter: ProjectFilter): [string, ProjectFilter]
  * (one `['projects']` invalidation reaches every entry), while the page's own Open entry is no
  * longer dragged onto this cadence — it keeps its `PROJECTS_REFRESH_MS`.
  *
- * Polled as a fallback for missed control events, alongside project changes and the debounced
- * refresh when a member session moves.
+ * Refreshed by project changes and, debounced, when a member session moves; polled only as the
+ * safety read for a missed event (listBudget).
  */
 export const openProjectsQuery = () =>
   queryOptions({
     queryKey: ['projects', 'sidebar'] as const,
     queryFn: () => api<SidebarProject[]>('/projects/sidebar'),
-    refetchInterval: 15_000,
+    refetchInterval: streamPoll(15_000),
+    // The splash reads it to decide the Open list's shape (BootGate); the rail mounting a moment
+    // later shows that read instead of making another.
+    staleTime: streamStaleTime,
   });
 
 /** The project document also supplies title and task counts when a finished project is
@@ -686,7 +702,8 @@ export const projectCoordinatorStatusQuery = (projectId: string) =>
     queryKey: ['project', projectId, 'coordinator', 'status'] as const,
     queryFn: () =>
       api<CoordinatorStatus>(`/projects/${encodeURIComponent(projectId)}/coordinator/status`),
-    refetchInterval: 15_000,
+    // Project and member-session events refresh it (useControlPlane); this is the safety read.
+    refetchInterval: streamPoll(15_000),
   });
 
 /** One entry of the blocking-root leaderboard: an unfinished task and how much unfinished work
@@ -780,9 +797,11 @@ export const projectReadyToRunQuery = (projectId: string, limit = 5) =>
       api<ProjectReadyToRun>(
         `/projects/${encodeURIComponent(projectId)}/panorama/ready?limit=${limit}`,
       ),
+    // Task, project and member-session events refresh it (useControlPlane); this is the safety read,
+    // and the outage backoff while the stream is down, no faster than its old cadence.
     refetchInterval: (query) => {
       const data = query.state.data;
-      return (data?.queuedCount ?? 0) + (data?.runningCount ?? 0) > 0 ? 5_000 : 15_000;
+      return streamPoll((data?.queuedCount ?? 0) + (data?.runningCount ?? 0) > 0 ? 5_000 : 15_000)(query);
     },
   });
 
@@ -803,7 +822,7 @@ export const projectDependencyGraphQuery = (projectId: string) =>
       api<ProjectDependencyGraphResponse>(
         `/projects/${encodeURIComponent(projectId)}/dependency-graph`,
       ),
-    refetchInterval: 30_000,
+    refetchInterval: streamPoll(30_000),
   });
 
 // ── Unit L7: the attribution boundary, and the two writes that cross it ───────────────────────
@@ -1003,7 +1022,9 @@ export const projectIntegrationQuery = (projectId: string) =>
     queryKey: ['project', projectId, 'integration'] as const,
     queryFn: () =>
       api<ProjectIntegrationView>(`/projects/${encodeURIComponent(projectId)}/integration`),
-    refetchInterval: 30_000,
+    // A landing or a merge in flight announces nothing on the stream (LANDING sessions publish no
+    // event), so the line keeps its cadence while one is; otherwise it follows the stream.
+    refetchInterval: pollWhileInFlight(30_000, (query) => integrationInFlight(query.state.data)),
   });
 
 /** The selectors one page of a landing's check output is read by (contract §2.2 J-T4, §2.9 LS2). */

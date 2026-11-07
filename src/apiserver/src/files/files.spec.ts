@@ -463,8 +463,11 @@ for (const [storage, config] of [
 ] as const) {
   test(`a start with ${storage} removes what is stale, without waiting for it, and goes on whatever it finds`, async (t) => {
     const { dir, tempDir } = sweeping(t);
+    const logs: string[] = [];
     const warnings: string[] = [];
-    t.mock.method(Logger.prototype, 'log', () => undefined);
+    t.mock.method(Logger.prototype, 'log', (line: string) => {
+      logs.push(line);
+    });
     t.mock.method(Logger.prototype, 'warn', (line: string) => {
       warnings.push(line);
     });
@@ -474,7 +477,11 @@ for (const [storage, config] of [
     const fresh = writtenHoursAgo(tempDir, 'upload-under-way', 0);
     // Nothing for Nest to wait on: a disk that hangs holds up no start.
     assert.equal(files.onApplicationBootstrap(), undefined);
-    for (let i = 0; i < 500 && existsSync(stale); i += 1) await sleep(10);
+    // Its summary is said only once it has been through every entry, so the directory is locked below
+    // with nothing of this first run still to read in it.
+    for (let i = 0; i < 500 && logs.length === 0; i += 1) await sleep(10);
+    assert.deepEqual(logs, [`temporary files: removed 1 (5 bytes) not written for a day from ${tempDir}`]);
+    assert.deepEqual(warnings, []);
     assert.equal(existsSync(stale), false);
     assert.equal(existsSync(fresh), true);
 

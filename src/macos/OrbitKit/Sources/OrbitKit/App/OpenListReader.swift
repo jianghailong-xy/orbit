@@ -3,6 +3,11 @@ import Foundation
 /// How the app polls the Open list: the delta read where the server has one, otherwise the
 /// conditional full read it used before.
 ///
+/// The full read always asks against the tag of the last list it was given, even once the caller's
+/// list has been written some other way (an event folded in): an unchanged answer then hands back
+/// that tagged list — what a whole read would have returned — rather than the whole list coming over
+/// the wire again (docs/list-freshness-design.md §2.3 A7).
+///
 /// The delta (`APIClient.listOpenSessions(since:)`) is applied to the list exactly as the server
 /// last sent it under the cursor, never to whatever the app has since folded events into, so what
 /// comes out is the list a full read would have returned, in the server's order. When that cannot
@@ -25,8 +30,9 @@ public final class OpenListReader {
     private let now: () -> Date
     private let deltaRetryInterval: TimeInterval
 
-    /// The full read's tag for the list the caller holds.
+    /// The full read's tag, and the list it describes.
     private var etag: String?
+    private var tagged: [Session] = []
     /// The delta read's cursor, and the list as the server sent it under that cursor.
     private var cursor: String?
     private var base: [Session] = []
@@ -74,8 +80,13 @@ public final class OpenListReader {
                 deltaUnavailable()
             }
         }
-        guard let fresh = try await api.listOpenSessions(ifNoneMatch: current ? etag : nil) else {
-            return .unchanged
+        guard let fresh = try await api.listOpenSessions(ifNoneMatch: etag) else {
+            // The server's list is still the tagged one. The caller's may have been written since
+            // (`invalidate`), so it is vouched for only when it is still that list.
+            if current { return .unchanged }
+            let list = tagged
+            remember(list, cursor: nil, etag: etag)
+            return .list(list)
         }
         remember(fresh.sessions, cursor: nil, etag: fresh.etag)
         return .list(fresh.sessions)
@@ -93,6 +104,7 @@ public final class OpenListReader {
         base = next == nil ? [] : list
         replacedRows = nil
         etag = tag
+        tagged = tag == nil ? [] : list
         current = false
     }
 
