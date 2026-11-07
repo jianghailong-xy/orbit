@@ -58,10 +58,17 @@ final class ExternalSenderTests: XCTestCase {
         XCTAssertEqual(SessionLine.make(for: try row(""), live: true).text, "You: Fix the build")
     }
 
-    func testOneMessageHasOneSenderAndTheOutsiderIsAskedFirst() {
-        XCTAssertEqual(SessionLine.sender(SessionMessageFrom(sessionId: "s", title: "Build"),
-                                          external: ExternalMessageFrom(name: "Li Lei")), "From Feishu · Li Lei")
-        XCTAssertEqual(SessionLine.sender(nil, external: nil), SessionLine.you)
+    func testTheOutsidersLineIsTheLabelAndNothingForAnybodyElse() {
+        XCTAssertEqual(SessionLine.externalLine("Fix **it**", ExternalMessageFrom(name: "Li Lei")),
+                       SessionLine(text: "From Feishu · Li Lei: Fix it", tone: .preview))
+        XCTAssertNil(SessionLine.externalLine("Fix it", nil))
+        // Both of the row's pending-message lines ask Orbit, then the outsider, then the sentence that names
+        // another session or "You" — the order the web's `orbitLine(s) ?? sentLine(…, sentBy(s))` asks in.
+        let swift = try? String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../Sources/OrbitKit/App/SessionLine.swift").standardizedFileURL, encoding: .utf8)
+        XCTAssertEqual(swift?.components(separatedBy:
+            "return orbitLine(u, s.lastUserFromOrbit) ?? externalLine(u, s.lastUserFromExternal) ?? sentLine(u, from: s.lastUserFrom) }")
+            .count, 3, "SessionLine.swift no longer asks the outsider between Orbit and the sentence on both lines")
     }
 
     func testAnEventKeepsTheSenderBesideTheMessage() throws {
