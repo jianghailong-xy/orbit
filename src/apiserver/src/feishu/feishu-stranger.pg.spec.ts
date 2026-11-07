@@ -14,7 +14,8 @@
  *   (1) while nobody is the owner, a direct message is answered with how to become it, and writes nothing;
  *   (2) once someone is, a direct message from anyone else — text, `disconnect`, an image — is answered only
  *       `This bot only takes direct messages from its owner.`, and writes nothing; the owner stays who they were;
- *   (3) the same stranger's event processed a second time writes nothing either;
+ *   (3) the same stranger's event processed a second time writes nothing either, and its reply is sent again with the
+ *       same `uuid`, so Feishu delivers one and answers the repeat with the same message_id (project instruction 15);
  *   (4) a click on a card by anyone but the owner (a forwarded card) is answered synchronously with the toast
  *       `Only the owner of this bot can answer this card.`, sends nothing to the open platform, and writes nothing; the
  *       same holds while nobody is the owner, and for a click that names no clicker;
@@ -235,10 +236,18 @@ test('Feishu: only the owner is served — a stranger\'s direct message and a fo
     const before = await mark();
     await until('processed again', async () =>
       (await sql.query(`SELECT 1 FROM feishu_inbound_event WHERE app_id = $1 AND event_id = $2 AND processed_at IS NOT NULL AND attempts = 2`, [X.appId, strangerEvent])).rowCount);
-    await until('the second reply', () => repliesTo(messageId).length === 2);
+    const replyPath = `/open-apis/im/v1/messages/${messageId}/reply`;
+    await until('the second reply', () => fake.requestsTo(replyPath).length === 2);
     await sleep(300);
     assert.deepEqual(await strayWrites(before, strangerEvent, app, links), []);
-    assert.deepEqual(repliesTo(messageId), [STRANGER_DM, STRANGER_DM]);
+    // Answered alike, and delivered once: both replies carry one de-duplication key.
+    assert.deepEqual(repliesTo(messageId), [STRANGER_DM]);
+    const [first, again] = fake.requestsTo(replyPath);
+    const uuidOf = (r: FakeRequest) => (r.body as { uuid?: string }).uuid;
+    assert.ok(uuidOf(first!), 'the reply carries a uuid');
+    assert.equal(uuidOf(again!), uuidOf(first!), 'the repeat carries the same one');
+    assert.ok(first!.answeredWith);
+    assert.equal(again!.answeredWith, first!.answeredWith, 'and is answered with the message already delivered');
   });
 
   await t.test('(4) a click on a forwarded card is refused with the toast, sends nothing, and writes nothing', async () => {

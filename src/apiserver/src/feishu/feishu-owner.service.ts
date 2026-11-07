@@ -19,7 +19,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { decryptSecret } from '../providers/provider-crypto';
 import { FeishuAppService } from './feishu-app.service';
 import type { FeishuAppCredentials } from './feishu-open-platform';
-import { FeishuOutbound, type FeishuSendResult } from './feishu-outbound';
+import { FeishuOutbound, feishuDedupeUuid, type FeishuSendResult } from './feishu-outbound';
 
 /** What the bot answers in Feishu (§5). English, as every word the bot sends (CLAUDE.md §5). */
 export const FEISHU_OWNER_REPLIES = {
@@ -231,7 +231,11 @@ export class FeishuOwnerService {
   async replyTo(app: FeishuOwnerApp, messageId: string, words: string): Promise<FeishuSendResult | null> {
     const credentials = credentialsOf(app);
     if (!credentials) return null;
-    const result = await this.outbound.reply(credentials, messageId, text(words));
+    // Keyed on the app, the message answered and what the answer says: the same event processed again, or a retry whose
+    // request got through, is one reply to Feishu (project instruction 15).
+    const result = await this.outbound.reply(credentials, messageId, text(words), {
+      uuid: feishuDedupeUuid('owner-reply', app.appId, messageId, words),
+    });
     if (!result.ok) this.logger.warn(`feishu app ${app.appId}: a reply was not delivered (code ${result.feishuCode ?? result.status})`);
     return result;
   }

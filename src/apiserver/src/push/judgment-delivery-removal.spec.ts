@@ -34,7 +34,9 @@ test('the delivery worker, its alert and their specs are deleted', () => {
 
 test('the push module keeps only the sender, and gained no resident process', () => {
   const module = read('src/apiserver/src/push/push.module.ts');
-  assert.match(module, /providers: \[PushService\]/u);
+  // The sender and its third transport, the owner's Feishu app (docs/feishu-bot-design.md §6.1): a channel the same
+  // alerts go out on, with no worker, timer or outbox of its own.
+  assert.match(module, /providers: \[PushService, FeishuTransport\]/u);
   assert.match(module, /exports: \[PushService\]/u);
   assert.doesNotMatch(module, /Judgment/u);
   assert.doesNotMatch(module, /setInterval|setTimeout|OnModuleInit|OnApplicationBootstrap/u);
