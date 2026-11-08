@@ -635,6 +635,12 @@ next_step="    Next     Start a session"$'\n'"             $SERVER/runners/$ID_T
 # Independent heartbeats: each runner beats the stub with its own credential (first beat at ~30s).
 wait_until 60 beats_since alice-e2e 0 && wait_until 60 beats_since test-user-e2e 0 ||
   fail 4 "the stub did not see both runners heartbeat" "$UNIT_A" "$UNIT_T"
+# A runner beats only over the runner link: each beat the stub counted came over its link.
+for n in alice-e2e test-user-e2e; do
+  line=$(stub_runners | awk -v n="$n" '$1 == n')
+  awk '$7 > 0 && $7 == $4 { ok = 1 } END { exit !ok }' <<<"$line" ||
+    fail 4 "$n's heartbeats did not all come over the stub's runner link (stub: $line)" "$UNIT_A" "$UNIT_T"
+done
 # docs: "Register each account's runner" — the account's own status and log, without root.
 out=$(as test.user 'systemctl status "orbit-runner@$(systemd-escape "$(id -un)")"' 2>&1)
 rc=$?
@@ -646,7 +652,7 @@ wait_until 15 own_journal_has test.user "runner \"test-user-e2e\" online -> $SER
   fail 4 "test.user's journalctl -u \"orbit-runner@\$(systemd-escape \"\$(id -un)\")\" does not show its runner coming online" "$UNIT_T"
 check_machine_binary 4 "$SHA_V1"
 check_no_sudo "after test.user registered"
-pass 4 "test.user: $OWN_COPY (as test.user) gave it its own copy, then orbit register exit 0 without root; $UNIT_T (named by systemd-escape, which leaves 'test.user' as it is) enabled and active as euid $UID_T from /home/test.user/.orbit/bin/orbit beside $UNIT_A — separate processes ($PID_A, $PID_T) in separate cgroups, separate credentials ($ID_A, $ID_T), each heartbeating the control plane on its own; test.user reads its runner's status (active (running)) and log itself"
+pass 4 "test.user: $OWN_COPY (as test.user) gave it its own copy, then orbit register exit 0 without root; $UNIT_T (named by systemd-escape, which leaves 'test.user' as it is) enabled and active as euid $UID_T from /home/test.user/.orbit/bin/orbit beside $UNIT_A — separate processes ($PID_A, $PID_T) in separate cgroups, separate credentials ($ID_A, $ID_T), each heartbeating the control plane on its own, every beat over the runner link; test.user reads its runner's status (active (running)) and log itself"
 
 # --- 5. kill -9 --------------------------------------------------------------------------------
 
