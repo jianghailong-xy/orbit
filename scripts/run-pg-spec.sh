@@ -41,13 +41,10 @@
 #     the PostgreSQL below it, and because a second copy of it here would drift from that one.
 #   * `rm -rf build` before compiling. `tsc` does not delete outputs whose sources are gone, so a
 #     tree left by an earlier branch runs deleted specs and imports deleted modules.
-#   * PGDATA on tmpfs. A throwaway PostgreSQL's data volume is what fills the root disk; on tmpfs
-#     there is nothing to leak, and the `docker rm -f -v` below takes the rest. `-v` is not
-#     optional. The trap fires on the failure paths too — a script that goes red still cleans up.
-#     The trade is that this cluster does not survive `docker restart`, so
-#     COORDINATOR_PG_RESTART_COMMAND is deliberately NOT supplied: a spec that needs a real server
-#     restart will skip, and a skip here is red, which is the honest answer rather than a restart
-#     that silently returns an empty data directory.
+#   * PGDATA on a disposable Docker volume, so a real container restart preserves the cluster.
+#     `docker rm -f -v` removes the volume too; the trap cleans up on failure paths as well.
+#     The child receives the container and restart command, as in project-pg-matrix.sh, so specs
+#     that exercise a real server restart run rather than skip.
 #   * A template database migrated once, cloned per spec. Specs that own schema would otherwise
 #     hand the next one a database they left rearranged.
 #   * Readiness over TCP, from inside the container. The entrypoint runs an init server that
@@ -142,10 +139,10 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "==> provisioning $CONTAINER ($IMAGE, PGDATA on tmpfs)"
+echo "==> provisioning $CONTAINER ($IMAGE, disposable PGDATA volume)"
 docker run -d --name "$CONTAINER" \
   -e "POSTGRES_USER=$ADMIN" -e "POSTGRES_PASSWORD=$PASSWORD" -e POSTGRES_DB=postgres \
-  -e PGDATA=/pgdata --tmpfs /pgdata:size=2g \
+  -e PGDATA=/pgdata -v /pgdata \
   -p 127.0.0.1::5432 "$IMAGE" >/dev/null || die "docker run failed"
 PORT="$(docker port "$CONTAINER" 5432/tcp | head -1 | sed 's/.*://')"
 [ -n "$PORT" ] || die "docker did not publish a host port"
@@ -188,6 +185,8 @@ for spec in "${SPECS[@]}"; do
          ORBIT_DB_CONFLICT_ORIGIN=fault_injection
          COORDINATOR_PG_EXPECTED_USER="$ADMIN"
          COORDINATOR_PG_EXPECTED_SYSTEM_IDENTIFIER="$SYSTEM_ID"
+         COORDINATOR_PG_CONTAINER="$CONTAINER"
+         COORDINATOR_PG_RESTART_COMMAND="docker restart $CONTAINER"
          NODE_OPTIONS="$(pg_matrix_child_node_options)")
   # One database, under all three names a pg spec in this tree looks for. Of the 113, 111 read
   # COORDINATOR_PG_URL; `runner-api/steer-dequeue.pg.spec` reads ORBIT_TEST_PG_URL and
