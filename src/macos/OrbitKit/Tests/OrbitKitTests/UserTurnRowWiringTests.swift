@@ -129,8 +129,9 @@ final class UserTurnRowWiringTests: XCTestCase {
         let values = handed.matches(in: code, range: NSRange(code.startIndex..., in: code)).compactMap {
             Range($0.range(at: 1), in: code).map { String(code[$0]) }
         }
-        // Each card, and the owner's own bubble last.
-        XCTAssertEqual(values.count, Self.cardViews.count + 1, "a card is drawn with no Cancel while queued")
+        // Each card, then the bubble headed with who outside Orbit sent it (`externalSender`), and the
+        // owner's own bubble last.
+        XCTAssertEqual(values.count, Self.cardViews.count + 2, "a card is drawn with no Cancel while queued")
         XCTAssertEqual(Set(values), ["cancel"], "a card is handed a Cancel that is not the queue's")
     }
 

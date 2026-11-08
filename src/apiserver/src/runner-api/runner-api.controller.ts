@@ -28,6 +28,7 @@ import type { Request, Response } from 'express';
 import { plainToInstance } from 'class-transformer';
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
+import { registerFeishuReply } from '../feishu/feishu-outbox-register';
 import { deriveSessionCapabilities, type SessionCapabilityFields } from '../sessions/session-state';
 import { readWorktreeArtifactRequest, worktreeFileAnswerKey } from '../sessions/worktree-artifact';
 import { importForkSessionId } from '../sessions/import-fork';
@@ -164,6 +165,7 @@ import {
   CLAUDE_REGION_STOPPED_SUBTYPE,
   type ClaudeRegionCheckRequest,
   type ClaudeRegionCheckResponse,
+  type ExternalMessageFrom,
   type OrbitMessageFrom,
   type SessionMessageFrom,
 } from '@orbit/shared';
@@ -301,6 +303,7 @@ import {
 } from '../sessions/engine-session';
 import {
   appendSessionMessageContext,
+  externalSenderOf,
   pendingMessageColumns,
   readBriefSender,
 } from '../sessions/session-message';
@@ -347,6 +350,7 @@ import {
   withOwnerAnswer,
   withProjectStarted,
   withSessionMessage,
+  withExternalSender,
   withSessionReplies,
   withTaskStart,
 } from './control-plane-note';
@@ -830,6 +834,8 @@ const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 
   lastUserFromSessionId: { column: 'last_user_from_session_id', type: 'uuid' },
   lastUserFromTitle: { column: 'last_user_from_title', type: 'text' },
   lastUserFromOrbit: { column: 'last_user_from_orbit', type: 'jsonb' },
+  lastUserFromExternalSource: { column: 'last_user_from_external_source', type: 'text' },
+  lastUserFromExternalName: { column: 'last_user_from_external_name', type: 'text' },
   retryAt: { column: 'retry_at', type: 'timestamp' },
   retryAttempts: { column: 'retry_attempts', type: 'integer' },
   claudeAccount: { column: 'claude_account', type: 'text' },
@@ -920,6 +926,9 @@ interface HandedTurn {
   targetTurnId: string | null;
   coordinatorContextKey: string | null;
   senderSessionId: string | null;
+  /** Who outside Orbit sent it (migration 0502): what the runner's delivery says to the agent. */
+  externalSenderSource: string | null;
+  externalSenderName: string | null;
   /** A wiki chat's page and selection, as ids (migration 0476): what `appendWikiChatNotes` reads. */
   wikiContext: unknown;
 }
@@ -4827,6 +4836,8 @@ export class RunnerApiController {
                    "target_turn_id" AS "targetTurnId",
                    "coordinator_context_key" AS "coordinatorContextKey",
                    "sender_session_id" AS "senderSessionId",
+                   "external_sender_source" AS "externalSenderSource",
+                   "external_sender_name" AS "externalSenderName",
                    "wiki_context" AS "wikiContext"
             FROM "conversation_turn" turn
             WHERE turn.id = ${owned[0].inboxRequestTurnId}::uuid
@@ -5084,11 +5095,16 @@ export class RunnerApiController {
                   "target_turn_id" AS "targetTurnId",
                   "coordinator_context_key" AS "coordinatorContextKey",
                   "sender_session_id" AS "senderSessionId",
+                  "external_sender_source" AS "externalSenderSource",
+                  "external_sender_name" AS "externalSenderName",
                   "wiki_context" AS "wikiContext"
       `;
       if (rows.length === 0) return null;
       const t = rows[0];
       let attachments: TurnAttachment[] | undefined;
+      // Who outside Orbit sent it, on the first delivery of a message only: the runner says so to the agent after the
+      // words (docs/feishu-bot-design.md §8.2). A re-delivery's continuation is the platform's words, as below.
+      let externalSender: ExternalMessageFrom | undefined;
       let content = t.content ?? undefined;
       if (t.kind === 'message' || t.kind === 'steer') {
         // Context derived from the Session is expanded at delivery, never written over the text
@@ -5136,6 +5152,7 @@ export class RunnerApiController {
         if (runtimeStarted) {
           content = buildResumeContinuation(t.content);
         } else {
+          externalSender = externalSenderOf(t) ?? undefined;
           const atts = await tx.attachment.findMany({
             where: { turnId: t.id },
             select: { id: true, mimeType: true, fileName: true },
@@ -5355,6 +5372,7 @@ export class RunnerApiController {
         kind: t.kind as ConversationTurnKind,
         content,
         attachments,
+        ...(externalSender ? { externalSender } : {}),
         env: reload?.env,
         // Said on the delivery itself, because it is only ever true of THIS control plane and
         // is only needed while this one message is being answered for: a steer that provably
@@ -7348,6 +7366,12 @@ export class RunnerApiController {
     // RUNNING. Publish the committed row for every applied non-steer completion; task-bound
     // summaries carry taskId and clear the running overlay without waiting for reconciliation.
     if (finalized.applied && !finalized.steer) {
+      // The turn's reply, registered to go back to the session's Feishu chain (docs/feishu-bot-design.md §7.5): after
+      // the commit, one statement of its own, a failure only logged — the turn never waits on Feishu nor fails for it
+      // (§1.3 item 6). A worker on any replica sends it (feishu/feishu-outbox.ts).
+      if ('taskOwnerId' in finalized && finalized.taskOwnerId) {
+        await registerFeishuReply(this.prisma, this.logger, { sessionId, ownerId: finalized.taskOwnerId, turnId: dto.turnId });
+      }
       // A turn of this conversation has ended, which is where anything a project still owes it is
       // handed over — including what was recorded while it was busy, and what the door that recorded
       // it never got to deliver (contract §4.4 X-D4 3).
@@ -7985,7 +8009,10 @@ export class RunnerApiController {
       const userTurns = userTurnIds.length > 0
         ? await tx.conversationTurn.findMany({
             where: { sessionId, id: { in: userTurnIds } },
-            select: { id: true, content: true, clientTurnId: true, senderSessionId: true },
+            select: {
+              id: true, content: true, clientTurnId: true, senderSessionId: true,
+              externalSenderSource: true, externalSenderName: true,
+            },
           })
         : [];
       const authoredUserText = new Map(userTurns.map((turn) => [turn.id, turn.content]));
@@ -8018,6 +8045,7 @@ export class RunnerApiController {
         e.payload = withConfirmationReturn(e.payload, cards?.confirmationReturn ?? null);
         e.payload = withSessionMessage(e.payload, cards?.sessionMessage ?? null);
         e.payload = withSessionReplies(e.payload, cards?.sessionReplies ?? null);
+        e.payload = withExternalSender(e.payload, cards?.externalSender ?? null);
       }
       // A move between account-pool members is said on the first engine start after it — the first
       // event from a process holding the new member's key. It rides on the runner's own event
@@ -8158,6 +8186,8 @@ export class RunnerApiController {
       // "Orbit" for exactly the turns the conversation draws as the platform's — with the card of a
       // coordinator's notification, which the row's line is written from.
       let pendingUserOrbit: OrbitMessageFrom | null = null;
+      // Or who outside Orbit sent it (a Feishu group's member, 0502), off the same turn's card.
+      let pendingUserExternal: ExternalMessageFrom | null = null;
       let currentWorkAcknowledged = 0;
       const acknowledgedTurnIds = acknowledgedRuntimeTurnIds(durable);
       if (acknowledgedTurnIds.length > 0) {
@@ -8219,10 +8249,12 @@ export class RunnerApiController {
           pendingUserOrbit = turn
             ? orbitMessageOf(turn, cards, { id: sessionId, promptByOrbit: session.promptByOrbit })
             : null;
+          pendingUserExternal = cards?.externalSender ?? null;
         } else if (ANSWERS_USER_TURN.has(e.type)) {
           pendingUserText = null;
           pendingUserFrom = null;
           pendingUserOrbit = null;
+          pendingUserExternal = null;
         }
         frontier = { seq: e.seq, tool };
       }
@@ -8292,7 +8324,9 @@ export class RunnerApiController {
         ...(enginePhaseSince !== undefined ? { enginePhaseSince } : {}),
         // undefined = nothing in this batch either asked or answered; keep the stored
         // message rather than writing null over it. Its sender is written with it, every time.
-        ...(pendingUserText !== undefined ? pendingMessageColumns(pendingUserText, pendingUserFrom, pendingUserOrbit) : {}),
+        ...(pendingUserText !== undefined
+          ? pendingMessageColumns(pendingUserText, pendingUserFrom, pendingUserOrbit, pendingUserExternal)
+          : {}),
         ...retry,
       });
 

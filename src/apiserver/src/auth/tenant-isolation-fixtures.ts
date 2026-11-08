@@ -635,6 +635,18 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     ok(await as('PUT', `/tasks/${shareTaskId}/share`, {}), 'a share link');
     const shareLinkId = (await db.shareLink.findFirstOrThrow({ where: { ownerId, taskId: shareTaskId } })).id;
 
+    // A Feishu app of the account's, switched off so no replica connects it, and two groups connected to it (§8.1).
+    const feishuAppId = `cli_census_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+    await db.feishuApp.create({ data: { ownerId, platform: 'FEISHU', appId: feishuAppId, appSecretEnc: 'census:not:a-secret', enabled: false } });
+    const feishuChatRoute = async (chat: string) => (await db.feishuChatRoute.create({
+      data: {
+        ownerId, appId: feishuAppId, chatId: `oc_${chat}_${randomUUID().slice(0, 8)}`, chatName: `${name} ${chat}`,
+        workspaceId, permissionMode: 'default', enabled: true, confirmedAt: new Date(),
+      },
+    })).id;
+    const feishuChatRouteId = await feishuChatRoute('group');
+    const spareFeishuChatRouteId = await feishuChatRoute('spare-group');
+
     const purgedSessionId = await session(ownerId, workspaceId, runnerId, `${name} trashed session`);
     await db.session.update({ where: { id: purgedSessionId }, data: { deletedAt: new Date() } });
 
@@ -716,6 +728,7 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       wikiChatId,
       wikiChatDraftId,
       wikiTopicSlug: 'census',
+      feishuChatRouteId,
       adminSubjectId: adminSubject.userId,
       adminSubjectTokenId,
       adminProviderId: await adminProvider(`${name}-admin-provider`),
@@ -741,6 +754,7 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         })(),
         tagId: idOf(await as('POST', '/session-tags', { name: `${name} spare tag`, color: '#663399' }), 'a spare tag'),
         shareLinkId,
+        feishuChatRouteId: spareFeishuChatRouteId,
         listId: idOf(await as('POST', '/task-lists', { title: `${name} spare list` }), 'a spare list'),
         taskId: await task(`${name} spare task`),
       },

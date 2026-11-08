@@ -322,6 +322,26 @@ describe('sessionLine names who sent the message it previews', () => {
       .toBe('Build the package: ship it');
   });
 
+  // A Feishu group member's message (`lastUserFromExternal`, docs/feishu-bot-design.md §8.2): named as the
+  // conversation heads their bubble, `From Feishu · <name>`, never You.
+  it('names a Feishu group member as From Feishu · <name>, while the turn runs and after it stopped', () => {
+    const outsider = { source: 'FEISHU', name: 'Lin Mei' };
+    expect(sessionLine({ status: 'RUNNING', lastAssistantText: 'previous reply', lastUserText: 'fix the **flaky** test', lastUserFromExternal: outsider }, true))
+      .toEqual({ text: 'From Feishu · Lin Mei: fix the flaky test', tone: 'preview' });
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: 'fix the flaky test', lastUserFrom: null, lastUserFromExternal: outsider }, true))
+      .toEqual({ text: 'From Feishu · Lin Mei: fix the flaky test', tone: 'preview' });
+    expect(sessionLine({ status: 'FAILED', lastUserText: 'fix the flaky test', lastUserFromExternal: outsider }, false))
+      .toEqual({ text: 'From Feishu · Lin Mei: fix the flaky test', tone: 'preview' });
+    // Feishu would not say the name.
+    expect(sessionLine({ status: 'RUNNING', lastUserText: 'fix it', lastUserFromExternal: { source: 'FEISHU', name: null } }, true))
+      .toEqual({ text: 'From Feishu: fix it', tone: 'preview' });
+    // Cleared with the text (null), or a source this client does not know: the owner's own, as before.
+    expect(sessionLine({ status: 'RUNNING', lastUserText: 'fix it', lastUserFromExternal: null }, true))
+      .toEqual({ text: 'You: fix it', tone: 'preview' });
+    expect(sessionLine({ status: 'RUNNING', lastUserText: 'fix it', lastUserFromExternal: { source: 'SLACK', name: 'Lin Mei' } }, true))
+      .toEqual({ text: 'You: fix it', tone: 'preview' });
+  });
+
   it('changes nothing above the message, and a sender with no message makes no line', () => {
     expect(sessionLine({ status: 'RUNNING', lastToolUse: 'Bash', lastUserText: report, lastUserFrom: from }, true))
       .toEqual({ text: 'Running Bash…', tone: 'running' });
@@ -405,6 +425,17 @@ describe('sessionLine says Orbit for the message Orbit wrote', () => {
       .toBe('Build the package: ship it');
     // A mark that is not an object is none.
     expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: 'ship it', lastUserFromOrbit: 'Orbit' }, true).text).toBe('You: ship it');
+  });
+
+  // The four senders one row can name, each as the server writes it (at most one of the three marks set):
+  // another session, Orbit, a Feishu group member (docs/feishu-bot-design.md §8.2), and the owner.
+  it('names each of the four senders, as the server marks them', () => {
+    const row = (marks: Record<string, unknown>) =>
+      sessionLine({ status: 'AWAITING_INPUT', lastUserText: 'ship it', lastUserFrom: null, lastUserFromOrbit: null, lastUserFromExternal: null, ...marks }, true).text;
+    expect(row({ lastUserFrom: { sessionId: 'session-1', title: 'Build the package' } })).toBe('Build the package: ship it');
+    expect(row({ lastUserFromOrbit: { coordinatorDelivery: null } })).toBe('Orbit: ship it');
+    expect(row({ lastUserFromExternal: { source: 'FEISHU', name: 'Lin Mei' } })).toBe('From Feishu · Lin Mei: ship it');
+    expect(row({})).toBe('You: ship it');
   });
 
   it('changes nothing above the message, and a mark with no message makes no line', () => {

@@ -3,6 +3,7 @@ import type {
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
   CoordinatorDeliveryCard,
+  ExternalMessageFrom,
   OpenItemDeliveryCard,
   OwnerAnswerCard,
   ProjectStartedCard,
@@ -24,7 +25,7 @@ import {
   readConfirmationReviewRequestCard,
 } from '../tasks/owner-confirmation-review-turn';
 import { readTaskStartCard } from '../tasks/task-start-card';
-import { readSessionMessageCard } from './session-message';
+import { externalSenderOf, readSessionMessageCard } from './session-message';
 import { readSessionReplyCards, readTurnRequestIds } from './session-request';
 
 /**
@@ -54,6 +55,8 @@ export interface TurnCards {
   confirmationReturn?: ConfirmationReturnCard;
   sessionMessage?: SessionMessageCard;
   sessionReplies?: SessionReplyCard[];
+  /** Somebody outside Orbit sent the turn (a Feishu group's member, migration 0502): who, never their open_id. */
+  externalSender?: ExternalMessageFrom;
 }
 
 /**
@@ -71,7 +74,14 @@ export interface TurnCards {
 export async function readTurnCards(
   db: Prisma.TransactionClient,
   session: { id: string; ownerId: string; taskId: string | null; runSource: SessionRunSource | null },
-  turns: ReadonlyArray<{ id: string; clientTurnId: string; content: string | null; senderSessionId: string | null }>,
+  turns: ReadonlyArray<{
+    id: string;
+    clientTurnId: string;
+    content: string | null;
+    senderSessionId: string | null;
+    externalSenderSource?: string | null;
+    externalSenderName?: string | null;
+  }>,
 ): Promise<Map<string, TurnCards>> {
   const cards = new Map<string, TurnCards>();
   const add = (turnId: string, card: TurnCards) => cards.set(turnId, { ...cards.get(turnId), ...card });
@@ -135,6 +145,12 @@ export async function readTurnCards(
       db, session.ownerId, turn.senderSessionId!, requestOfTurn.get(turn.id), session.id,
     );
     if (sessionMessage) add(turn.id, { sessionMessage });
+  }
+  // The turns somebody outside Orbit sent — a connected Feishu group's member (docs/feishu-bot-design.md §8.2) — read
+  // off the turn's own columns: no other row is named, so this costs nothing.
+  for (const turn of turns) {
+    const externalSender = externalSenderOf(turn);
+    if (externalSender) add(turn.id, { externalSender });
   }
   // The outcomes of this session's own requests that a turn hands back (contract §4.2), read off the
   // request rows by the key of the turn they ride on. That is not only a reply turn: an outcome held

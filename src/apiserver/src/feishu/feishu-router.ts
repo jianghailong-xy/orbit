@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
+import { FeishuChatRouteService } from './feishu-chat-route.service';
+import { directMessageOf, FeishuDirectService } from './feishu-direct.service';
+import { FeishuGroupService } from './feishu-group.service';
+import { FEISHU_OWNER_REPLIES, FeishuOwnerService, type FeishuTextMessage } from './feishu-owner.service';
 
 /** Who a Feishu event acts as (docs/feishu-bot-design.md §7.2): always the account its app belongs to. */
 export interface FeishuActor {
@@ -20,6 +24,16 @@ export type FeishuRoute =
   | 'BOT_REMOVED_FROM_CHAT'
   /** Anything else the app is subscribed to: acknowledged and recorded, never acted on. */
   | 'IGNORED';
+
+/**
+ * What answers the owner's clicks on cards (feishu/feishu-card-actions.ts). It registers itself when its module starts,
+ * since it lives beside the services it calls rather than in this module (feishu-actions.module.ts says why); while
+ * none is registered, a click that passes the owner check is recorded and answered with nothing.
+ */
+export interface FeishuCardActionHandler {
+  answer(event: InboundEvent, actor: FeishuActor): Promise<unknown>;
+  deliverLate(event: InboundEvent, answer: unknown, clickedAt: number): Promise<void>;
+}
 
 /** An inbox row as the router reads it. */
 export interface InboundEvent {
@@ -67,21 +81,85 @@ export function classify(eventType: string, payload: unknown): { route: FeishuRo
   }
 }
 
+/** The chat a message event was sent in, or the bot was removed from: `event.message.chat_id` or `event.chat_id`. */
+export function chatIdOf(payload: unknown): string | undefined {
+  const event = obj(obj(payload).event);
+  return str(obj(event.message).chat_id) ?? str(event.chat_id);
+}
+
+/**
+ * The text of a message event, with where it was sent and by whom; null for anything that is not a text message. In a
+ * group, the @mention placeholders (`@_user_1`) are dropped. Pure; exported for its spec.
+ */
+export function textMessageOf(payload: unknown): FeishuTextMessage | null {
+  const event = obj(obj(payload).event);
+  const message = obj(event.message);
+  const chatType = str(message.chat_type);
+  const openId = str(obj(obj(event.sender).sender_id).open_id);
+  const messageId = str(message.message_id);
+  if ((chatType !== 'p2p' && chatType !== 'group') || !openId || !messageId || str(message.message_type) !== 'text') return null;
+  let text: unknown;
+  try {
+    text = obj(JSON.parse(str(message.content) ?? '')).text;
+  } catch {
+    return null;
+  }
+  if (typeof text !== 'string') return null;
+  return { chatType, openId, messageId, text: chatType === 'group' ? text.replace(/@_user_\d+/g, ' ').trim() : text.trim() };
+}
+
 /**
  * FeishuRouter (docs/feishu-bot-design.md §3, §7): sends each inbound event to its branch, acting as the account the app
- * belongs to — read from feishu_app as the event is routed, so an event of an app that is gone acts nowhere. Every branch
- * records the event and does nothing more yet (task F0-2); later tasks fill them in, each calling only service methods on
- * the §7.2 allowlist (feishu/feishu-actions.ts). What is logged names the event, the app, the branch and the account,
+ * belongs to — read from feishu_app as the event is routed, so an event of an app that is gone acts nowhere. A text
+ * message that is an owner code, or the owner's `disconnect`, goes to FeishuOwnerService (§5).
+ *
+ * Only the owner is served (§7.3, §7.4). Any other direct message is answered with one English sentence — that the bot
+ * takes direct messages only from its owner, or, while nobody is the owner, how to become it — and writes nothing. A
+ * card click is checked first of all: a clicker whose open_id is not the app's ownerOpenId (a forwarded card) is
+ * answered with a toast and writes nothing. Every later card action goes through that same check. The owner's own
+ * direct messages, and their clicks on its cards, go to FeishuDirectService (§7.3); a click it does not take (anything
+ * but its default-workspace card) goes to the registered FeishuCardActionHandler (feishu-card-actions.ts, task F2-1),
+ * which answers Allow once and Deny on approval cards. Every other branch
+ * records the event and does nothing more yet; later tasks fill them in, each calling only service methods on the §7.2 allowlist
+ * (feishu/feishu-actions.ts). What is logged names the event, the app, the branch and the account,
  * never the message's text.
  */
 @Injectable()
 export class FeishuRouter {
   private readonly logger = new Logger(FeishuRouter.name);
+  private cardActions?: FeishuCardActionHandler;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly owner: FeishuOwnerService,
+    private readonly chats: FeishuChatRouteService,
+    private readonly direct: FeishuDirectService,
+    private readonly group: FeishuGroupService,
+  ) {}
+
+  /** Who answers the owner's card clicks from now on. */
+  useCardActions(handler: FeishuCardActionHandler): void {
+    this.cardActions = handler;
+  }
+
+  /**
+   * A card click's answer that was ready only after the inbox had answered Feishu `Working…` (§7.1): what it carries for
+   * the card goes through the callback's update token. Never throws.
+   */
+  async lateAnswer(event: InboundEvent, answer: unknown, clickedAt: number): Promise<void> {
+    if (!this.cardActions || event.eventType !== 'card.action.trigger') return;
+    try {
+      await this.cardActions.deliverLate(event, answer, clickedAt);
+    } catch (error) {
+      this.logger.warn(`feishu event ${event.eventId} of app ${event.appId}: the late card answer failed: ${(error as Error).message}`);
+    }
+  }
 
   async route(event: InboundEvent): Promise<RouteDecision | null> {
-    const app = await this.prisma.feishuApp.findUnique({ where: { appId: event.appId }, select: { ownerId: true } });
+    const app = await this.prisma.feishuApp.findUnique({
+      where: { appId: event.appId },
+      select: { ownerId: true, appId: true, platform: true, appSecretEnc: true, ownerOpenId: true, botName: true, defaultWorkspaceId: true },
+    });
     if (!app) {
       this.logger.log(`feishu event ${event.eventId} of app ${event.appId} dropped: the app is no longer connected`);
       return null;
@@ -92,6 +170,35 @@ export class FeishuRouter {
       credential: { kind: 'FEISHU', appId: event.appId, openId, ...(messageId ? { messageId } : {}) },
     };
     this.logger.log(`feishu event ${event.eventId} of app ${event.appId} routed as ${route} for account ${app.ownerId}`);
+    if (route === 'CARD_ACTION') {
+      if (!app.ownerOpenId || openId !== app.ownerOpenId) {
+        this.logger.log(`feishu event ${event.eventId} of app ${event.appId}: a card click by someone other than the owner, refused`);
+        return { route, actor, answer: { toast: { type: 'error', content: FEISHU_OWNER_REPLIES.strangerCard } } };
+      }
+      const answer = await this.direct.handleCardAction(app, event.payload);
+      if (answer) return { route, actor, answer };
+      if (this.cardActions) return { route, actor, answer: await this.cardActions.answer(event, actor) };
+      return { route, actor };
+    }
+    if (route === 'DIRECT_MESSAGE' || route === 'GROUP_MENTION') {
+      const message = textMessageOf(event.payload);
+      // An owner code is taken from anyone (§5.1): it is how someone becomes the owner.
+      if (message && (await this.owner.handleMessage(app, message))) return { route, actor };
+      if (route === 'DIRECT_MESSAGE' && messageId && (!app.ownerOpenId || openId !== app.ownerOpenId)) {
+        this.logger.log(`feishu event ${event.eventId} of app ${event.appId}: a direct message from someone other than the owner, refused`);
+        await this.owner.replyTo(app, messageId, app.ownerOpenId ? FEISHU_OWNER_REPLIES.stranger : FEISHU_OWNER_REPLIES.noOwner);
+      } else if (route === 'DIRECT_MESSAGE') {
+        await this.direct.handleMessage(app, actor, event.eventId, event.payload);
+      }
+      // A group: `connect`, or a mention in a group that cannot run it (§8.1); in a connected group, a request (§8.2).
+      const chatId = chatIdOf(event.payload);
+      if (route === 'GROUP_MENTION' && messageId && openId && chatId) {
+        const mention = { eventId: event.eventId, chatId, messageId, openId, text: message?.text ?? '' };
+        const connected = await this.chats.handleGroupMessage(app, mention);
+        if (connected) await this.group.handleMention(app, actor, connected, { ...mention, rootId: directMessageOf(event.payload)?.rootId });
+      }
+    }
+    if (route === 'BOT_REMOVED_FROM_CHAT') await this.chats.botRemoved(event.appId, chatIdOf(event.payload) ?? '');
     return { route, actor };
   }
 }

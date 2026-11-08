@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { Injectable, Logger } from '@nestjs/common';
 import { feishuClient, type FeishuAppCredentials } from './feishu-open-platform';
@@ -12,6 +13,16 @@ export type FeishuSendResult =
 export interface FeishuMessageBody {
   msgType: string;
   content: unknown;
+}
+
+/**
+ * Feishu's own de-duplication key for a send or a reply (`uuid` in the request body, at most 50 characters): Feishu
+ * delivers one message per uuid within an hour. Derived from why the message is sent — never from the attempt — so the
+ * same event processed again, a retry after a timeout whose request got through, and two replicas sending at once all
+ * reach the person once (project instruction 15). A hex SHA-256 of the reasons, cut to 32 characters.
+ */
+export function feishuDedupeUuid(...why: string[]): string {
+  return createHash('sha256').update(JSON.stringify(why)).digest('hex').slice(0, 32);
 }
 
 /** Retries of one request after a 429: Feishu's suggested wait each time, then the 429 is the answer. */
@@ -51,23 +62,59 @@ export class FeishuOutbound {
   timing: FeishuTiming = feishuTiming();
   wait: (ms: number) => Promise<unknown> = sleep;
 
-  /** `POST /open-apis/im/v1/messages`: to a user (`open_id`) or a chat (`chat_id`). */
-  send(app: FeishuAppCredentials, to: { receiveIdType: 'open_id' | 'chat_id'; receiveId: string }, body: FeishuMessageBody): Promise<FeishuSendResult> {
+  /**
+   * `POST /open-apis/im/v1/messages`: to a user (`open_id`) or a chat (`chat_id`). `uuid` (feishuDedupeUuid) makes Feishu
+   * deliver it once however often it is sent within an hour.
+   */
+  send(
+    app: FeishuAppCredentials,
+    to: { receiveIdType: 'open_id' | 'chat_id'; receiveId: string },
+    body: FeishuMessageBody,
+    { uuid }: { uuid?: string } = {},
+  ): Promise<FeishuSendResult> {
     return this.call(app, {
       method: 'POST',
       url: 'open-apis/im/v1/messages',
       params: { receive_id_type: to.receiveIdType },
-      data: { receive_id: to.receiveId, msg_type: body.msgType, content: JSON.stringify(body.content) },
+      data: { receive_id: to.receiveId, msg_type: body.msgType, content: JSON.stringify(body.content), ...(uuid ? { uuid } : {}) },
     });
   }
 
-  /** `POST /open-apis/im/v1/messages/:message_id/reply`; `replyInThread` answers in the message's thread (§8.2). */
-  reply(app: FeishuAppCredentials, messageId: string, body: FeishuMessageBody, { replyInThread = false } = {}): Promise<FeishuSendResult> {
+  /**
+   * `POST /open-apis/im/v1/messages/:message_id/reply`; `replyInThread` answers in the message's thread (§8.2), and `uuid`
+   * is Feishu's de-duplication key, as for `send`.
+   */
+  reply(
+    app: FeishuAppCredentials,
+    messageId: string,
+    body: FeishuMessageBody,
+    { replyInThread = false, uuid }: { replyInThread?: boolean; uuid?: string } = {},
+  ): Promise<FeishuSendResult> {
     return this.call(app, {
       method: 'POST',
       url: `open-apis/im/v1/messages/${encodeURIComponent(messageId)}/reply`,
-      data: { msg_type: body.msgType, content: JSON.stringify(body.content), reply_in_thread: replyInThread },
+      data: { msg_type: body.msgType, content: JSON.stringify(body.content), reply_in_thread: replyInThread, ...(uuid ? { uuid } : {}) },
     });
+  }
+
+  /**
+   * `GET /open-apis/im/v1/chats/:chat_id`: a group's name, and whether it is external (has people from another
+   * organization, §8.1). Null when Feishu does not say — the permission not granted, the bot not in the group, Feishu
+   * unreachable.
+   */
+  async chatInfo(app: FeishuAppCredentials, chatId: string): Promise<{ name: string | null; external: boolean } | null> {
+    try {
+      const answer = (await feishuClient(app).request({
+        method: 'GET',
+        url: `open-apis/im/v1/chats/${encodeURIComponent(chatId)}`,
+      })) as { code?: unknown; data?: { name?: unknown; external?: unknown } } | null;
+      if (answer?.code !== 0 || !answer.data) return null;
+      const name = typeof answer.data.name === 'string' && answer.data.name.trim() !== '' ? answer.data.name.trim().slice(0, 200) : null;
+      return { name, external: answer.data.external === true };
+    } catch {
+      this.logger.log(`feishu app ${app.appId}: a group's information could not be read`);
+      return null;
+    }
   }
 
   /** `PATCH /open-apis/im/v1/messages/:message_id`: replace a card the bot sent (§6.2). */
@@ -77,6 +124,65 @@ export class FeishuOutbound {
       url: `open-apis/im/v1/messages/${encodeURIComponent(messageId)}`,
       data: { content: JSON.stringify(card) },
     });
+  }
+
+  /**
+   * `POST /open-apis/interactive/v1/card/update`: replace the card a callback was clicked on, with the callback's own
+   * update token (§7.1) — the late answer to a click Orbit could not answer within Feishu's 3 seconds. Feishu takes a
+   * token for 30 minutes after the click and at most twice.
+   */
+  delayedUpdateCard(app: FeishuAppCredentials, token: string, card: unknown): Promise<FeishuSendResult> {
+    return this.call(app, { method: 'POST', url: 'open-apis/interactive/v1/card/update', data: { token, card } });
+  }
+
+  /**
+   * `GET /open-apis/contact/v3/users/:user_id` (open_id): a person's name in the app's tenant, for display (§5.1). Null
+   * when Feishu does not say — the permission not granted, the person out of the app's range, Feishu unreachable.
+   */
+  async userName(app: FeishuAppCredentials, openId: string): Promise<string | null> {
+    try {
+      const answer = (await feishuClient(app).request({
+        method: 'GET',
+        url: `open-apis/contact/v3/users/${encodeURIComponent(openId)}`,
+        params: { user_id_type: 'open_id' },
+      })) as { code?: unknown; data?: { user?: { name?: unknown } } } | null;
+      const name = answer?.code === 0 ? answer.data?.user?.name : undefined;
+      return typeof name === 'string' && name.trim() !== '' ? name.trim().slice(0, 200) : null;
+    } catch {
+      this.logger.log(`feishu app ${app.appId}: a user's name could not be read`);
+      return null;
+    }
+  }
+
+  /**
+   * `GET /open-apis/im/v1/chats/:chat_id/members` (open_id): the people in a group, by name, for the confirm page's
+   * allowed-senders picker (§8.1). At most 1000 of them, 100 a page. Null when Feishu does not say
+   * (the permission not granted, the bot not in the group, Feishu unreachable).
+   */
+  async chatMembers(app: FeishuAppCredentials, chatId: string): Promise<Array<{ openId: string; name: string | null }> | null> {
+    const members: Array<{ openId: string; name: string | null }> = [];
+    let pageToken: string | undefined;
+    try {
+      for (let page = 0; page < 10; page++) {
+        const answer = (await feishuClient(app).request({
+          method: 'GET',
+          url: `open-apis/im/v1/chats/${encodeURIComponent(chatId)}/members`,
+          params: { member_id_type: 'open_id', page_size: '100', ...(pageToken ? { page_token: pageToken } : {}) },
+        })) as { code?: unknown; data?: { items?: unknown; has_more?: unknown; page_token?: unknown } } | null;
+        if (answer?.code !== 0 || !answer.data) return null;
+        for (const item of Array.isArray(answer.data.items) ? answer.data.items : []) {
+          const { member_id: openId, name } = (item ?? {}) as { member_id?: unknown; name?: unknown };
+          if (typeof openId !== 'string' || openId === '') continue;
+          members.push({ openId, name: typeof name === 'string' && name.trim() !== '' ? name.trim().slice(0, 200) : null });
+        }
+        pageToken = typeof answer.data.page_token === 'string' && answer.data.page_token !== '' ? answer.data.page_token : undefined;
+        if (answer.data.has_more !== true || !pageToken) break;
+      }
+      return members;
+    } catch {
+      this.logger.log(`feishu app ${app.appId}: a group's members could not be read`);
+      return null;
+    }
   }
 
   private async call(app: FeishuAppCredentials, request: Request): Promise<FeishuSendResult> {

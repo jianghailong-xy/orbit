@@ -69,7 +69,7 @@ public struct SessionLine: Equatable, Sendable {
             // it is enqueued until a reply lands) rather than the previous turn's reply, which
             // would read as if this one had already been answered. Content, not status — the
             // spinner already conveys "working" — so it takes the muted preview tone.
-            if let u = s.lastUserText, !u.isEmpty { return orbitLine(u, s.lastUserFromOrbit) ?? sentLine(u, from: s.lastUserFrom) }
+            if let u = s.lastUserText, !u.isEmpty { return orbitLine(u, s.lastUserFromOrbit) ?? externalLine(u, s.lastUserFromExternal) ?? sentLine(u, from: s.lastUserFrom) }
             if let a = s.lastAssistantText, !a.isEmpty { return SessionLine(text: plainPreview(a), tone: .preview) }
             return SessionLine(text: "Running…", tone: .running)
         }
@@ -97,7 +97,7 @@ public struct SessionLine: Equatable, Sendable {
         // reply landed — outranks the previous turn's reply: it's the newer of the two, and it's
         // what the session is left waiting on. The server only keeps it while it stands
         // unanswered, so a non-empty value here always means exactly that.
-        if let u = s.lastUserText, !u.isEmpty { return orbitLine(u, s.lastUserFromOrbit) ?? sentLine(u, from: s.lastUserFrom) }
+        if let u = s.lastUserText, !u.isEmpty { return orbitLine(u, s.lastUserFromOrbit) ?? externalLine(u, s.lastUserFromExternal) ?? sentLine(u, from: s.lastUserFrom) }
         // The rolling recap (0418) takes the place of the reply preview it used to show: the sentence
         // the server wrote about the session, not the raw last reply flattened down to one line. Only
         // here — below every live line above — so a working session still says what it is doing (web
@@ -123,6 +123,15 @@ public struct SessionLine: Equatable, Sendable {
     /// too. Web parity: `sentLine` in WorkspaceView.tsx.
     static func sentLine(_ text: String, from: SessionMessageFrom?) -> SessionLine {
         SessionLine(text: "\(sender(from)): \(plainPreview(text))", tone: .preview)
+    }
+
+    /// The line for a message somebody outside Orbit sent — a member of a connected Feishu group
+    /// (`lastUserFromExternal`, docs/feishu-bot-design.md §8.2) — or nil for anybody else's: named the way
+    /// the conversation names them over their words, `From Feishu · <name>: …`, never "You". One message
+    /// has one sender; the web asks it inside `sentBy`, before another session's title.
+    static func externalLine(_ text: String, _ from: ExternalMessageFrom?) -> SessionLine? {
+        guard let from else { return nil }
+        return SessionLine(text: "\(ExternalSender.label(from)): \(plainPreview(text))", tone: .preview)
     }
 
     /// The owner, as the sender of their own message (web `SENT_BY_YOU`).

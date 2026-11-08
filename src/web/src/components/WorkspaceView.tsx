@@ -498,6 +498,7 @@ import { backgroundWorkIsActive, isSessionTurnActive, outlivingSessionWork } fro
 import type { OutlivingWork } from '../lib/sessionActivity';
 import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
 import { SESSION_MESSAGE_UNTITLED } from '../lib/sessionMessage';
+import { externalSenderLabel, parseExternalSender } from '../lib/externalSender';
 import { coordinatorDeliverySentence, parseCoordinatorDelivery } from '../lib/coordinatorDelivery';
 import { trashNoteWhen } from '../lib/trashNote';
 import { transcriptPlaceholder } from '../lib/transcriptPaint';
@@ -1063,7 +1064,13 @@ export const SENT_BY_YOU = 'You';
 // names it: its title, or what an untitled one is called (docs/session-list-projects-design.md §3.5,
 // owner 2026-11-07). A coordinator's unanswered message is usually a task's report, which "You:" put
 // in the owner's mouth.
+//
+// Somebody outside Orbit — a member of a connected Feishu group (`lastUserFromExternal`,
+// docs/feishu-bot-design.md §8.2) — is named the way the conversation names them over their words:
+// `From Feishu · <name>`. One message has one sender, so this is asked first.
 const sentBy = (s: any): string => {
+  const outsider = parseExternalSender(s.lastUserFromExternal);
+  if (outsider) return externalSenderLabel(outsider);
   const from = s.lastUserFrom;
   if (!from || typeof from !== 'object') return SENT_BY_YOU;
   return (typeof from.title === 'string' ? from.title.trim() : '') || SESSION_MESSAGE_UNTITLED;

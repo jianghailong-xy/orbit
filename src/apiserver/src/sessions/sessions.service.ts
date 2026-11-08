@@ -42,7 +42,16 @@ import {
   STEER_WITHDRAW_WAIT_MS,
 } from './steer-withdraw';
 import { readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql } from './session-project-membership';
-import { lastUserFromOf, lastUserFromOrbitOf, pendingMessageColumns, readSessionMessageFrom } from './session-message';
+import {
+  externalSenderColumns,
+  externalSenderOf,
+  lastUserFromExternalOf,
+  lastUserFromOf,
+  lastUserFromOrbitOf,
+  pendingMessageColumns,
+  readSessionMessageFrom,
+  type ExternalTurnSender,
+} from './session-message';
 import { readOrbitMessageFrom } from './orbit-message';
 import {
   closeRequestsTheRetryWillNotResend,
@@ -1039,6 +1048,12 @@ export class SessionsService {
         /** The workspace's repository identity, frozen as the selector's (SR54, SR36). */
         repository: { repoUrl: string; rootCommitSha: string | null };
       };
+      /**
+       * Who outside Orbit sent the opening message (docs/feishu-bot-design.md §8.2): a member of a connected Feishu
+       * group whose mention opened this session (feishu-group.service.ts). Internal, like `createTurn`'s. The
+       * opening turn is then laid down now, carrying the sender, rather than by the claim, which knows of none.
+       */
+      externalSender?: ExternalTurnSender;
     },
   ) {
     refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
@@ -1596,6 +1611,8 @@ export class SessionsService {
     // as an imported transcript's and lays no turn down, so without this the files would never
     // reach the engine.
     if (attachmentsAlone && !newWorkspace) await this.seedOpeningTurn(session);
+    // Opened by somebody outside Orbit: the opening turn says who, so it is laid down now with them on it.
+    else if (opts?.externalSender && !newWorkspace && !dto.shell) await this.seedOpeningTurn(session, opts.externalSender);
     this.queue.notifySessionQueued(session.assignedRunnerId);
     // A task run, a delegation or a message opening a session on a sleeping managed runner wakes it.
     await this.wakeManagedRunner(session.assignedRunnerId, 'session');
@@ -3764,6 +3781,8 @@ export class SessionsService {
       lastUserFromSessionId: string | null;
       lastUserFromTitle: string | null;
       lastUserFromOrbit: Prisma.JsonValue | null;
+      lastUserFromExternalSource: string | null;
+      lastUserFromExternalName: string | null;
       // The rolling recap and when it was written (0418): the line the list prefers to the raw
       // last reply. Both null on a session no pass has recapped yet.
       recapText: string | null;
@@ -3861,6 +3880,9 @@ export class SessionsService {
         s.last_user_from_title AS "lastUserFromTitle",
         -- Or that Orbit wrote it (0491), with the notification card its line is written from.
         s.last_user_from_orbit AS "lastUserFromOrbit",
+        -- Or who outside Orbit sent it (0502): a Feishu group's member.
+        s.last_user_from_external_source AS "lastUserFromExternalSource",
+        s.last_user_from_external_name AS "lastUserFromExternalName",
         -- The rolling recap (0418), clipped like the previews above. A session with no recap yet
         -- answers nulls, which is what the row falls back from to lastAssistantText.
         left(s.recap_text, ${SessionsService.PREVIEW_LEN}::int) AS "recapText",
@@ -4079,6 +4101,8 @@ export class SessionsService {
         lastUserFrom: lastUserFromOf(r),
         // `{ coordinatorDelivery }` when Orbit wrote it, null for anybody else's.
         lastUserFromOrbit: lastUserFromOrbitOf(r),
+        // `{ source: 'FEISHU', name }` when somebody outside Orbit sent it (0502), null otherwise.
+        lastUserFromExternal: lastUserFromExternalOf(r),
         recapText: r.recapText,
         recapAt: r.recapAt,
         mergeStatus: r.mergeStatus,
@@ -4364,6 +4388,8 @@ export class SessionsService {
       lastUserFromTitle,
       // Read, never spread, as the list row reads it (`lastUserFromOrbitOf`).
       lastUserFromOrbit,
+      lastUserFromExternalSource,
+      lastUserFromExternalName,
       ...rest
     } = projected;
     const tags = tagLinks
@@ -4446,6 +4472,7 @@ export class SessionsService {
       lastUserFrom: lastUserFromOf({ lastUserFromSessionId, lastUserFromTitle }),
       // Or that Orbit wrote it, with the notification card its line is written from.
       lastUserFromOrbit: lastUserFromOrbitOf({ lastUserFromOrbit }),
+      lastUserFromExternal: lastUserFromExternalOf({ lastUserFromExternalSource, lastUserFromExternalName }),
       sourceLanding,
       ...(landing ? { landing } : {}),
       shareToken: shareLinks?.[0]?.token ?? null,
@@ -5741,6 +5768,7 @@ export class SessionsService {
     tx: Prisma.TransactionClient,
     session: { id: string; prompt: string; importedAt: Date | null; wikiChatSpaceId: string | null },
     excludedAttachmentIds: readonly string[] = [],
+    externalSender?: ExternalTurnSender,
   ) {
     if (session.importedAt || session.wikiChatSpaceId) return;
     const existing = await tx.conversationTurn.findUnique({
@@ -5752,11 +5780,22 @@ export class SessionsService {
       },
       select: { id: true },
     });
-    if (existing) return;
+    if (existing) {
+      // A claim that came between the session's INSERT and this seed laid the opening turn down knowing no sender.
+      // Still undelivered, it is given its sender now; once handed out, the engine has read it as it was.
+      if (externalSender) {
+        await tx.conversationTurn.updateMany({
+          where: { id: existing.id, status: 'PENDING', externalSenderSource: null },
+          data: externalSenderColumns(externalSender),
+        });
+      }
+      return;
+    }
     const turn = await this.insertTurnLocked(tx, session.id, {
       kind: 'message',
       content: session.prompt,
       clientTurnId: SessionsService.initialTurnClientId(session.id),
+      ...externalSenderColumns(externalSender),
     });
     // Link any compose-page uploads (scoped to the session, still turn-less) to the seed
     // turn, exactly as the claim would, so they ride along with the prompt.
@@ -5775,10 +5814,13 @@ export class SessionsService {
    * a session `create` opened with attachments alone. The uploads are linked in the same
    * transaction as the turn, so no runner can take the turn without them.
    */
-  private async seedOpeningTurn(session: { id: string; prompt: string; importedAt: Date | null; wikiChatSpaceId: string | null }) {
+  private async seedOpeningTurn(
+    session: { id: string; prompt: string; importedAt: Date | null; wikiChatSpaceId: string | null },
+    externalSender?: ExternalTurnSender,
+  ) {
     await withTransactionRetry(this.prisma, async (tx) => {
       await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${session.id}::uuid FOR UPDATE`;
-      await this.ensurePromptSeeded(tx, session);
+      await this.ensurePromptSeeded(tx, session, [], externalSender);
     }, loggedRetry(this.logger, 'sessions.seedOpeningTurn'));
   }
 
@@ -5942,6 +5984,10 @@ export class SessionsService {
       sendIntent?: SessionTurnIntent;
       targetTurnId?: string;
       senderSessionId?: string;
+      /** Who outside Orbit sent it (migration 0502), as `externalSenderColumns` writes it. */
+      externalSenderSource?: string;
+      externalSenderId?: string;
+      externalSenderName?: string | null;
       /** A wiki chat's page and selection (migration 0476), which delivery reads. */
       wikiContext?: Prisma.InputJsonValue;
     },
@@ -6164,6 +6210,12 @@ export class SessionsService {
        * sender. Written on a NEW turn only; a replay returns the turn as it was written.
        */
       senderSessionId?: string;
+      /**
+       * Who outside Orbit sent this turn (`conversation_turn.external_sender_*`, migration 0502): a member of a
+       * connected Feishu group, from the event Feishu delivered (feishu-group.service.ts, docs/feishu-bot-design.md
+       * §8.2). Like `senderSessionId`, an option of this call and never a field of `dto`. Written on a NEW turn only.
+       */
+      externalSender?: ExternalTurnSender;
       /** Full logical resume payload hash. Present only when resume delegates to this live path. */
       requestFingerprint?: string;
       /**
@@ -6486,6 +6538,7 @@ export class SessionsService {
         ...(steerTarget ? { sendIntent: 'CURRENT_WORK' } : intent ? { sendIntent: intent } : {}),
         ...(targetTurnId ? { targetTurnId } : {}),
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
+        ...externalSenderColumns(opts?.externalSender),
         ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
@@ -6515,8 +6568,10 @@ export class SessionsService {
           // the one thing that reads as "already answered". The runner's own `user` event rewrites
           // the same value; only a reply clears it (ANSWERS_USER_TURN). An attachment-only send
           // carries no text to preview and so leaves the column as it found it. Its sender goes
-          // with it (`lastUserFrom`, `lastUserFromOrbit`), both null for the owner's own words.
-          ...(dto.content ? pendingMessageColumns(dto.content, sentBy, sentByOrbit) : {}),
+          // with it (`lastUserFrom`, `lastUserFromOrbit`, `lastUserFromExternal`), all null for the owner's own words.
+          ...(dto.content
+            ? pendingMessageColumns(dto.content, sentBy, sentByOrbit, externalSenderOf(externalSenderColumns(opts?.externalSender)))
+            : {}),
           // A message on this session disarms any auto-retry waiting on it — whether it
           // came from the user (they took over; sending their own message again behind
           // their back would be a second, unasked-for turn) or from the sweeper itself
@@ -6933,6 +6988,8 @@ export class SessionsService {
         content: true,
         createdAt: true,
         senderSessionId: true,
+        externalSenderSource: true,
+        externalSenderName: true,
         attachments: { select: { id: true, mimeType: true } },
       },
     });
@@ -8542,13 +8599,25 @@ export class SessionsService {
   }
 
   /** Record a human allow/deny on a pending approval; the runner's next read picks
-   *  it up and returns it to claude's --permission-prompt-tool. */
+   *  it up and returns it to claude's --permission-prompt-tool.
+   *
+   *  `credential` is the door the decider came in by, recorded on the decision that lands
+   *  (`decided_credential_kind`, 0500). A FEISHU one is a click on a Feishu card
+   *  (docs/feishu-bot-design.md §7.2): its clicker's open_id and the card's message_id are recorded
+   *  beside it, and it carries only a plain allow or deny — "always allow" widens a standing grant and
+   *  "Create and start" starts work, both of which stay in the app — so either is refused before anything
+   *  is written. */
   async decideApproval(
     ownerId: string,
     id: string,
     approvalId: string,
     dto: ApprovalDecisionRequest,
+    credential?: AuthCredential,
   ): Promise<ApprovalInfo> {
+    const feishu = credential?.kind === 'FEISHU' ? credential : null;
+    if (feishu && (dto.rememberRules !== undefined || dto.startAfterCreate !== undefined)) {
+      throw new BadRequestException('a decision from a Feishu card is a plain allow or deny: "always allow" and "Create and start" stay in Orbit');
+    }
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       select: { id: true, workspaceId: true, sessionKind: true },
@@ -8598,8 +8667,12 @@ export class SessionsService {
       where: { id: approvalId, sessionId: id },
       select: { toolName: true, input: true },
     });
-    // Only the first decision on a still-PENDING approval applies (idempotent).
-    const res = await this.prisma.approval.updateMany({
+    // Only the first decision on a still-PENDING approval applies (idempotent). A Feishu card's
+    // decision is also an Activity row (docs/feishu-bot-design.md §7.2): written in the same
+    // transaction, and only by the decision that lands, so a replayed event or a stale card's
+    // click records nothing more.
+    const decide = async (db: Prisma.TransactionClient) => {
+      const landed = await db.approval.updateMany({
       where: { id: approvalId, sessionId: id, status: 'PENDING' },
       data: {
         status,
@@ -8617,9 +8690,28 @@ export class SessionsService {
             ? (dto.rememberRules as unknown as Prisma.InputJsonValue)
             : Prisma.DbNull,
         decidedById: ownerId,
+        decidedCredentialKind: credential?.kind ?? null,
+        decidedFeishuOpenId: feishu?.openId ?? null,
+        decidedFeishuMessageId: feishu?.messageId ?? null,
         decidedAt: new Date(),
       },
     });
+      if (feishu && landed.count > 0) {
+        await db.activity.create({
+          data: {
+            actorId: ownerId,
+            type: 'feishu.approval.decided',
+            credentialKind: 'FEISHU',
+            payload: {
+              sessionId: id, approvalId, behavior: dto.behavior,
+              appId: feishu.appId, openId: feishu.openId, messageId: feishu.messageId ?? null,
+            } as Prisma.InputJsonValue,
+          },
+        });
+      }
+      return landed;
+    };
+    const res = await withTransactionRetry(this.prisma, (tx) => decide(tx), loggedRetry(this.logger, 'sessions.decideApproval'));
     const a = await this.prisma.approval.findFirst({ where: { id: approvalId, sessionId: id } });
     if (!a) throw new NotFoundException('approval not found');
     if (res.count > 0) {

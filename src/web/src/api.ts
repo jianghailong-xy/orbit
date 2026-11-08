@@ -14,6 +14,7 @@ import type {
   SessionLandingView,
   SessionMessageCard,
   SessionMessageFrom,
+  ExternalMessageFrom,
   OrbitMessageFrom,
   SessionReplyCard,
   SessionMoveTargets,
@@ -1765,6 +1766,10 @@ export type SessionListItem = Record<string, any> & {
    *  `Orbit: …` (docs/session-list-projects-design.md §3.5). Null for anybody else's words; absent
    *  from an older server. */
   lastUserFromOrbit?: OrbitMessageFrom | null;
+  /** Who sent it when somebody outside Orbit did — a Feishu group's member (docs/feishu-bot-design.md
+   *  §8.2): the row says `From Feishu · <name>` instead of "You". Null for anybody else; absent from an
+   *  older server. */
+  lastUserFromExternal?: ExternalMessageFrom | null;
 };
 
 /** The repair conversation attached to a merge recovery on its parent session. */
@@ -1858,6 +1863,8 @@ export interface SessionDetail {
   lastUserFrom?: SessionMessageFrom | null;
   /** That Orbit wrote it, as the list row carries it (`SessionListItem.lastUserFromOrbit`). */
   lastUserFromOrbit?: OrbitMessageFrom | null;
+  /** And when somebody outside Orbit sent it (`SessionListItem.lastUserFromExternal`). */
+  lastUserFromExternal?: ExternalMessageFrom | null;
   startedAt?: string | null;
   finishedAt?: string | null;
   error?: string | null;

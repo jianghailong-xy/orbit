@@ -69,6 +69,7 @@ const CARD_FIELDS: Record<keyof TurnCards, true> = {
   confirmationReturn: true,
   sessionMessage: true,
   sessionReplies: true,
+  externalSender: true,
 };
 const FIELDS = Object.keys(CARD_FIELDS) as Array<keyof TurnCards>;
 

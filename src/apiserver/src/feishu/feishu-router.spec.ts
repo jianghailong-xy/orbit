@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { eventIdentity } from './feishu-inbox.service';
-import { FeishuRouter, classify } from './feishu-router';
+import { FEISHU_OWNER_REPLIES, codeIn, generateConnectCode, hashConnectCode } from './feishu-owner.service';
+import { FeishuRouter, classify, textMessageOf } from './feishu-router';
 import { backoffMs, feishuTiming } from './feishu-timing';
 import { decodeFrame, encodeFrame } from './test-support/fake-frames';
 
@@ -14,7 +15,7 @@ const message = (chatType: string) => ({
   header: { event_id: 'ev-1', event_type: 'im.message.receive_v1', app_id: 'cli_a' },
   event: {
     sender: { sender_id: { open_id: 'ou_sender' } },
-    message: { message_id: 'om_1', chat_type: chatType, content: '{"text":"secret words"}' },
+    message: { message_id: 'om_1', chat_type: chatType, message_type: 'text', content: '{"text":"secret words"}' },
   },
 });
 
@@ -35,7 +36,13 @@ test('each event type goes to its branch, with who acted and the message it name
 
 test("the router acts as the account the app belongs to, with a FEISHU credential, and logs no message text", async () => {
   const prisma = { feishuApp: { findUnique: async ({ where }: { where: { appId: string } }) => (where.appId === 'cli_a' ? { ownerId: 'user-a' } : null) } };
-  const router = new FeishuRouter(prisma as never);
+  const handed: unknown[] = [];
+  const owner = {
+    handleMessage: async (_app: unknown, m: unknown) => { handed.push(m); return false; },
+    replyTo: async () => null,
+  };
+  const direct = { handleMessage: async () => undefined, handleCardAction: async () => null };
+  const router = new FeishuRouter(prisma as never, owner as never, { handleGroupMessage: async () => undefined, botRemoved: async () => undefined } as never, direct as never, {} as never);
   const logged: string[] = [];
   (router as unknown as { logger: { log: (m: string) => void } }).logger = { log: (m) => logged.push(m) };
   const decision = await router.route({ appId: 'cli_a', eventId: 'ev-1', eventType: 'im.message.receive_v1', payload: message('p2p') });
@@ -44,7 +51,88 @@ test("the router acts as the account the app belongs to, with a FEISHU credentia
     actor: { userId: 'user-a', credential: { kind: 'FEISHU', appId: 'cli_a', openId: 'ou_sender', messageId: 'om_1' } },
   });
   assert.equal(await router.route({ appId: 'cli_gone', eventId: 'ev-2', eventType: 'im.message.receive_v1', payload: message('p2p') }), null);
-  assert.ok(logged.length === 2 && logged.every((line) => !line.includes('secret words')));
+  assert.ok(logged.length === 3 && logged.every((line) => !line.includes('secret words')));
+  assert.deepEqual(handed, [{ chatType: 'p2p', openId: 'ou_sender', messageId: 'om_1', text: 'secret words' }], 'a text message is offered to the owner branch');
+});
+
+test('only the owner is served: a stranger\'s direct message gets one sentence, a stranger\'s card click a toast', async () => {
+  let ownerOpenId: string | null = null;
+  const prisma = { feishuApp: { findUnique: async () => ({ ownerId: 'user-a', appId: 'cli_a', ownerOpenId }) } };
+  const replies: Array<[string, string]> = [];
+  let code = false;
+  const owner = {
+    handleMessage: async () => code,
+    replyTo: async (_app: unknown, messageId: string, words: string) => { replies.push([messageId, words]); return null; },
+  };
+  const directed: string[] = [];
+  const direct = {
+    handleMessage: async (_app: unknown, actor: { credential: { openId: string } }) => { directed.push(actor.credential.openId); },
+    handleCardAction: async () => null,
+  };
+  const router = new FeishuRouter(prisma as never, owner as never, { handleGroupMessage: async () => undefined, botRemoved: async () => undefined } as never, direct as never, {} as never);
+  (router as unknown as { logger: { log: () => void } }).logger = { log: () => undefined };
+  const dm = (payload: unknown = message('p2p')) => router.route({ appId: 'cli_a', eventId: 'ev', eventType: 'im.message.receive_v1', payload });
+  const click = (openId: string) => router.route({
+    appId: 'cli_a', eventId: 'ev', eventType: 'card.action.trigger',
+    payload: { event: { operator: { open_id: openId }, context: { open_message_id: 'om_card' } } },
+  });
+  const toast = { toast: { type: 'error', content: 'Only the owner of this bot can answer this card.' } };
+
+  // Nobody is the owner yet: how to become it; a click by anyone is refused.
+  await dm();
+  assert.deepEqual(replies.splice(0), [['om_1', FEISHU_OWNER_REPLIES.noOwner]]);
+  assert.deepEqual((await click('ou_sender'))?.answer, toast);
+
+  ownerOpenId = 'ou_owner';
+  await dm();
+  const image = message('p2p');
+  image.event.message.message_type = 'image';
+  await dm(image);
+  assert.deepEqual(replies.splice(0), [['om_1', 'This bot only takes direct messages from its owner.'], ['om_1', 'This bot only takes direct messages from its owner.']]);
+  assert.deepEqual((await click('ou_sender'))?.answer, toast);
+  assert.deepEqual((await click(''))?.answer, toast);
+  assert.equal((await click('ou_owner'))?.answer, undefined, "the owner's click passes the check");
+
+  // An owner code is the owner branch's to answer, from anyone; the owner's own message is not refused.
+  code = true;
+  await dm();
+  code = false;
+  const own = message('p2p');
+  own.event.sender.sender_id.open_id = 'ou_owner';
+  await dm(own);
+  assert.deepEqual(replies, []);
+  // Only the owner's own direct message, not an owner code, reaches the direct-message branch (§7.3).
+  assert.deepEqual(directed, ['ou_owner']);
+});
+
+test('an owner code: 8 characters of an alphabet without 0/O/1/I, with a digit; typed loosely, read strictly', () => {
+  for (let i = 0; i < 200; i++) {
+    const code = generateConnectCode();
+    assert.match(code, /^[A-HJ-NP-Z2-9]{8}$/);
+    assert.match(code, /[2-9]/);
+    assert.equal(codeIn(code), code);
+  }
+  assert.equal(codeIn(' abcd-2345 '), 'ABCD2345');
+  assert.equal(codeIn('ABCD 2345'), 'ABCD2345');
+  for (const notACode of ['PASSWORD', 'thankyou', 'ABCD234', 'ABCD23456', 'ABCD0345', 'disconnect', 'hello there', '']) {
+    assert.equal(codeIn(notACode), null, notACode);
+  }
+  assert.match(hashConnectCode('ABCD2345'), /^[0-9a-f]{64}$/);
+  assert.equal(FEISHU_OWNER_REPLIES.connected, "You're connected as the owner of this Orbit bot.");
+});
+
+test("a text message's text: a direct message as sent, a group's without its @mentions; anything else is none", () => {
+  const event = (chatType: string, content: string, messageType = 'text') => ({
+    event: {
+      sender: { sender_id: { open_id: 'ou_s' } },
+      message: { message_id: 'om_x', chat_type: chatType, message_type: messageType, content },
+    },
+  });
+  assert.deepEqual(textMessageOf(event('p2p', '{"text":" ABCD2345 "}')), { chatType: 'p2p', openId: 'ou_s', messageId: 'om_x', text: 'ABCD2345' });
+  assert.deepEqual(textMessageOf(event('group', '{"text":"@_user_1 ABCD2345"}')), { chatType: 'group', openId: 'ou_s', messageId: 'om_x', text: 'ABCD2345' });
+  assert.equal(textMessageOf(event('p2p', '{"image_key":"img"}', 'image')), null);
+  assert.equal(textMessageOf(event('p2p', 'not json')), null);
+  assert.equal(textMessageOf(event('topic', '{"text":"x"}')), null);
 });
 
 test("an envelope's identity: schema 2.0's header, or a v1 event's uuid; none is no identity", () => {
