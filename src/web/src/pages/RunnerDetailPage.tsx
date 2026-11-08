@@ -162,6 +162,7 @@ interface Workspace {
   /** Smart model selection (docs/model-routing-design.md §7.2): on, a fresh task run here is created
    *  on the routed model and effort; off (the default), routing is only recorded in shadow. */
   modelRouting?: boolean;
+  modelRoutingOptimizeFor?: 'cost' | 'balance' | 'intelligence';
   /** The other engines smart selection may move this Agent's task runs to (§6). Empty = none: a run
    *  stays on this Agent's own engine. */
   modelRoutingProviders?: string[];
@@ -402,6 +403,7 @@ export function RunnerDetailPage() {
   const [fRepoUrl, setFRepoUrl] = useState('');
   const [fEnableWorktree, setFEnableWorktree] = useState(false);
   const [fModelRouting, setFModelRouting] = useState(false);
+  const [fOptimizeFor, setFOptimizeFor] = useState<NonNullable<Workspace['modelRoutingOptimizeFor']>>('cost');
   const [fRoutingEngines, setFRoutingEngines] = useState<string[]>([]);
   const [fEnv, setFEnv] = useState<{ key: string; value: string }[]>([]);
   // null = Default, the runner's own Codex account.
@@ -433,6 +435,7 @@ export function RunnerDetailPage() {
         repoUrl: fRepoUrl.trim() || undefined,
         enableWorktree: fEnableWorktree,
         modelRouting: fModelRouting,
+        modelRoutingOptimizeFor: fOptimizeFor,
         modelRoutingProviders: fRoutingEngines,
         env: Object.fromEntries(
           fEnv.map((r) => [r.key.trim(), r.value]).filter(([k]) => k),
@@ -631,6 +634,7 @@ export function RunnerDetailPage() {
     setFRepoUrl(a?.repoUrl ?? '');
     setFEnableWorktree(a?.enableWorktree ?? false);
     setFModelRouting(a?.modelRouting ?? false);
+    setFOptimizeFor(a?.modelRoutingOptimizeFor ?? 'cost');
     setFRoutingEngines(a?.modelRoutingProviders ?? []);
     setFEnv(Object.entries(a?.env ?? {}).map(([key, value]) => ({ key, value })));
     setFCodexAccount(a?.codexAccount ?? null);
@@ -864,6 +868,27 @@ export function RunnerDetailPage() {
             setDirty(true);
           }}
         >
+          <div className="rd-form-field">
+            <div className="rd-form-label">Optimize For</div>
+            <Select
+              aria-label="Optimize For"
+              value={fOptimizeFor}
+              options={[
+                { value: 'cost', label: 'Cost' },
+                { value: 'balance', label: 'Balance' },
+                { value: 'intelligence', label: 'Intelligence' },
+              ]}
+              onValueChange={(value) => {
+                if (value === null) return;
+                setFOptimizeFor(value);
+                setDirty(true);
+              }}
+            />
+            <div className="rd-path-hint">
+              For tasks without a suggested tier: Cost uses the inferred tier, Balance starts at M,
+              and Intelligence starts at L. Applies to future runs; pinned models always win.
+            </div>
+          </div>
           <RoutingEngines
             own={formRun.engine}
             value={fRoutingEngines}

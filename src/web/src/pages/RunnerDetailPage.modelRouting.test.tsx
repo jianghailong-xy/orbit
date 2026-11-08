@@ -107,7 +107,8 @@ function mount(
     const method = options?.method ?? 'GET';
     if (method === 'PATCH' || method === 'POST') {
       writes.push({ method, path, body: options?.body as Record<string, unknown> });
-      return { ...ws, ...(options?.body as object) };
+      ws = { ...ws, ...(options?.body as object) };
+      return ws;
     }
     if (path === '/runners') return [runner];
     if (path === '/workspaces') return [ws];
@@ -156,6 +157,19 @@ const click = async (el: HTMLElement) => {
 };
 const squash = (text: string | null | undefined) => (text ?? '').replace(/\s+/g, ' ').trim();
 
+// Select options need the browser's full pointer sequence to commit a choice.
+const press = async (el: HTMLElement) => {
+  await act(async () => {
+    const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+    el.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse' }));
+    el.dispatchEvent(new MouseEvent('mousedown', init));
+    el.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse' }));
+    el.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+    el.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
+  });
+  await settle();
+};
+
 /** Open the workspace's editor, as a person does: by its name in the list. */
 async function openEditor() {
   await settle();
@@ -181,6 +195,44 @@ const smartSwitch = () => smartRow().querySelector<HTMLElement>('[role="switch"]
 const modelLine = () => squash(form().querySelector('.rd-form-derived')?.textContent);
 
 describe('smart model selection on the Agent', () => {
+  it.each([
+    [undefined, 'Cost'],
+    ['cost', 'Cost'],
+    ['balance', 'Balance'],
+    ['intelligence', 'Intelligence'],
+  ])('reads optimize mode %s as %s', async (mode, label) => {
+    mount(workspace({ modelRoutingOptimizeFor: mode }));
+    await openEditor();
+    expect(smartRow().querySelector('[aria-label="Optimize For"]')?.textContent).toContain(label);
+  });
+
+  it.each(['Cost', 'Balance', 'Intelligence'])('saves %s without enabling routing or extra engines', async (label) => {
+    const { writes } = mount(workspace({ modelRoutingOptimizeFor: label === 'Balance' ? 'cost' : 'balance' }));
+    await openEditor();
+    await click(smartRow().querySelector<HTMLElement>('[aria-label="Optimize For"]')!);
+    expect([...document.querySelectorAll('[role="option"]')].map((el) => el.textContent)).toEqual([
+      'Cost', 'Balance', 'Intelligence',
+    ]);
+    await press(byText('[role="option"]', label));
+    await click(byText('button', 'Save'));
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toMatchObject({
+      path: `/workspaces/${WORKSPACE_ID}`,
+      body: { modelRoutingOptimizeFor: label.toLowerCase(), modelRouting: false, modelRoutingProviders: [] },
+    });
+    await openEditor();
+    expect(smartRow().querySelector('[aria-label="Optimize For"]')?.textContent).toContain(label);
+  });
+
+  it('preserves the saved optimize mode when editing another setting with the account switch off', async () => {
+    const { writes } = mount(workspace({ modelRoutingOptimizeFor: 'intelligence' }), { modelRouting: false });
+    await openEditor();
+    expect(form().querySelector('[aria-label="Optimize For"]')).toBeNull();
+    await click(form().querySelector<HTMLElement>('.rd-set-row [role="switch"]')!);
+    await click(byText('button', 'Save'));
+    expect(writes[0].body.modelRoutingOptimizeFor).toBe('intelligence');
+  });
+
   it('sits under Worktree isolation, off until it is turned on, with the task routing explanation', async () => {
     mount(workspace());
     await openEditor();
