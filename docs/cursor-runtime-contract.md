@@ -574,6 +574,9 @@ sudo, recursive deletes outside temporary directories, secret files, other syste
 (`dshToolGateMatch`), and containers still require a card. Sandboxed Auto scans the
 entire script body for these markers, including quoted command arguments; an
 unterminated heredoc also gets a card. This does not change DSH's classifier.
+Owner decision (2026-11-08): the workspace's standing "Always allow" rule counts
+as owner approval. Such an answer escapes the sandbox through the same one-use,
+exact-command grant as a person's click (§8.5); runner classifier allows stay sandboxed.
 
 | Orbit 模式 | 能否强制 | 依据 |
 | --- | --- | --- |
@@ -849,15 +852,18 @@ unterminated heredoc also gets a card. This does not change DSH's classifier.
 
 本次没有发现从 ACP toolCallId 到某个包装 PID 的可靠关联键；但本方案授权的单位是同一会话、同一 cwd 的
 精确命令，不是指定 PID。08/09 的命令字节、cwd、env 完全相同，哪个实例消费批准不影响这个授权单位。
-安全性质为：对每个 X，`unsandboxed execs(X) ≤ person approvals(X)`；不是“批准的那个 PID 必须逃逸”。
+安全性质为：对每个 X，`unsandboxed execs(X) ≤ owner approvals(X)`；不是“批准的那个 PID 必须逃逸”。
 这些记录证明了可观察输入的相等性，没有实现或压测下面的 grant 协议。
 
-1. **创建 grant**：仅在人对原有 Orbit 卡片回答 `ALLOWED` 时，runner 在回复该 ACP 请求的 `allow-once` **之前**，
+1. **Grant creation (owner decision, 2026-11-08)**: an `ALLOWED` answer from a person
+   or the owner's standing workspace "Always allow" rule creates one grant before
+   the runner replies `allow-once` to the ACP request. The remaining exact-match,
+   count, TTL, and revocation requirements apply equally to both sources.
    原子记录一个 grant。键为 `(conversation id, cwd, exact command bytes)`；命令字节必须与 Cursor 放进 fd 5 的
    NUL 终止载荷严格对应，不 trim、不重排、不重新 quote、不按 shell 语义归一化；拒绝缺失/多余 NUL 或无法识别的编码。
    如索引使用 hash，仍核对完整键，不能仅凭 hash 相等授权。cwd 从该调用的执行上下文取得，不能总是假设为 workspace。
    无法确定 cwd/载荷时不创建 grant。每次批准对应独立的一份计数，重复答复按 permission request 去重，不能重复加数。
-   Auto 允许、规则预批、CLI 未询问、拒绝、取消都不创建 grant；测试中 harness 的卡片 ALLOWED 只模拟这个分支。
+   Runner classifier allows, unasked CLI commands, denials, and cancellations create no grant.
 2. **存储与消费**：grant 放在 runner 管理、sandbox 不可写且在可写 roots 以外的会话私有存储中，带短 TTL 和会话代次。
    `orbit-bash` 识别固定 loader 后读取完整 fd 5 命令，在执行前向 broker 请求原子消费一份精确匹配且未过期的 grant。
    读取不能丢失或改变载荷：必须把同样的字节重新接回 fd 5，使原 loader 仍得到同一命令；不认识布局就不读取/不消费，走 sandbox。
@@ -901,15 +907,20 @@ recorded in runner job `bgj_5bc8ee3a6de0`; it is a Bash replay, not a real CLI e
 
 In Auto with a usable OS sandbox, `orbit-bash` keeps its existing HOME/environment
 restoration, then invokes the runner's shell helper. Unknown invocations, snapshots,
-unasked commands, standing-rule approvals, and Auto approvals all stay sandboxed.
+unasked commands and runner classifier Auto approvals all stay sandboxed.
 The helper recognizes the pinned argv/loader and a single NUL-terminated UTF-8
 fd-5 payload; it replays those exact bytes when no grant is available. Invalid,
 oversized, or ambiguous payloads fail without executing. Failed sandbox commands
 include an English explanation of the writable-root restriction on stderr.
 
-Only a card-path `ALLOWED` response with the server's `decidedById` creates a grant,
-under the bridge's turn lock and before `allow-once` is queued. Older servers
-without that optional field cannot authorize an escape. Grants live in runner
+Owner decision (2026-11-08): a workspace standing "Always allow" answer counts
+as owner approval, exactly like a person's click. A card-path `ALLOWED` response
+with the server's `decidedById` or `standingGrant: true` creates one grant under
+the bridge's turn lock and before `allow-once` is queued. The server sends the
+standing marker only for an allowed row with no decider and the exact stored
+`AUTO_ALLOWED_MESSAGE`; coordinator task-create allows do not qualify. An older
+server without the marker retains today's behavior: an answer with neither
+owner-approval field creates no grant. Grants live in runner
 memory, are deduplicated by the server's approval ID (including a repeated RPC
 for the same answered card), expire after one minute, and are
 cleared at turn cancellation/settlement, policy change, or process exit. Exact

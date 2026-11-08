@@ -2239,6 +2239,8 @@ export interface ApprovalDecisionRequest {
 export interface ApprovalDecisionResponse {
   /** Present only when a person answered; standing grants have no decider. */
   decidedById?: string;
+  /** Present (true) only for an ALLOWED answer from the owner's standing workspace rule. */
+  standingGrant?: boolean;
   id: string;
   status: ApprovalStatus;
   behavior?: 'allow' | 'deny';

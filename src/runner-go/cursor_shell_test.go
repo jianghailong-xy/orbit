@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -73,16 +72,32 @@ func TestCursorGrantsExactCountAndLifecycle(t *testing.T) {
 	}
 }
 
-func TestCursorGrantOnlyPersonBeforeReply(t *testing.T) {
-	for _, person := range []bool{false, true} {
-		t.Run(fmt.Sprint(person), func(t *testing.T) {
+func TestCursorGrantOwnerApprovalBeforeReply(t *testing.T) {
+	for _, tc := range []struct {
+		name                               string
+		person, standing, classifier, want bool
+	}{
+		{name: "unmarked response"},
+		{name: "person", person: true, want: true},
+		{name: "standing rule", standing: true, want: true},
+		{name: "classifier auto allow", classifier: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			rig := newCursorBridgeRig("auto", func(context.Context, string, interface{}, string) (*ApprovalDecisionResponse, error) {
 				decision := &ApprovalDecisionResponse{ID: "one-card", Status: "ALLOWED"}
-				if person {
+				if tc.person {
 					decision.DecidedByID = "owner"
+				}
+				decision.StandingGrant = tc.standing
+				if tc.classifier {
+					t.Error("classifier allow reached the approval card")
 				}
 				return decision, nil
 			})
+			command := "python3 -c 'print(1)'"
+			if tc.classifier {
+				command = "pwd"
+			}
 			if err := rig.mapper.begin("turn"); err != nil {
 				t.Fatal(err)
 			}
@@ -92,15 +107,18 @@ func TestCursorGrantOnlyPersonBeforeReply(t *testing.T) {
 			original := rig.bridge.reply
 			observed := false
 			rig.bridge.reply = func(id interface{}, result map[string]interface{}) {
-				observed = b.consume(cursorGrantKey{"conversation", rig.bridge.workspace, "python3 -c 'print(1)'"})
+				observed = b.consume(cursorGrantKey{"conversation", rig.bridge.workspace, command})
 				original(id, result)
 			}
-			params := cursorPermissionParams(map[string]interface{}{"toolCallId": "shell", "title": "`python3 -c 'print(1)'`", "kind": "execute"})
+			params := cursorPermissionParams(map[string]interface{}{"toolCallId": "shell", "title": "`" + command + "`", "kind": "execute"})
 			params["sessionId"] = "conversation"
 			rig.bridge.permission(1, params)
 			rig.bridge.wait()
-			if observed != person {
-				t.Fatalf("grant before reply = %v; person = %v", observed, person)
+			if observed != tc.want {
+				t.Fatalf("grant before reply = %v; want = %v", observed, tc.want)
+			}
+			if b.consume(cursorGrantKey{"conversation", rig.bridge.workspace, command}) {
+				t.Fatal("one approval created more than one grant")
 			}
 			observed = false
 			rig.bridge.permission(2, params)

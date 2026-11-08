@@ -394,7 +394,7 @@ func (b *cursorPermissionBridge) permission(id interface{}, params map[string]in
 		if policy.Mode == "bypassPermissions" {
 			b.noteBypass(ask.TurnID)
 		}
-		personApproved := false
+		ownerApproved := false
 		approvalID := ""
 		b.later(id, ask.ToolUseID, func(ctx context.Context) map[string]interface{} {
 			decision, err := b.card(ctx, ask.Name, ask.Input, ask.ToolUseID)
@@ -403,7 +403,7 @@ func (b *cursorPermissionBridge) permission(id interface{}, params map[string]in
 			}
 			switch decision.Status {
 			case "ALLOWED":
-				personApproved = decision.DecidedByID != "" && decision.ID != ""
+				ownerApproved = (decision.DecidedByID != "" || decision.StandingGrant) && decision.ID != ""
 				approvalID = decision.ID
 				// Once, even for "always": the standing grant answers the next card of its kind.
 				return cursorSelected(cursorAllowOnce)
@@ -412,7 +412,7 @@ func (b *cursorPermissionBridge) permission(id interface{}, params map[string]in
 			}
 			return nil
 		}, func() {
-			if personApproved && b.grants != nil && b.mode.Mode == "auto" && ask.Name == "Bash" {
+			if ownerApproved && b.grants != nil && b.mode.Mode == "auto" && ask.Name == "Bash" {
 				b.grants.add(approvalID, cursorGrantKey{firstString(params, "sessionId"), b.workspace, firstString(mapValue(ask.Input), "command")})
 			}
 		})
