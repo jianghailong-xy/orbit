@@ -121,6 +121,7 @@ export class WorkspacesService {
         enableWorktree: dto.enableWorktree ?? false,
         defaultMergeTarget: dto.defaultMergeTarget,
         modelRouting: dto.modelRouting ?? false,
+        modelRoutingOptimizeFor: dto.modelRoutingOptimizeFor ?? 'cost',
         modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders) ?? [],
       },
     });
@@ -325,6 +326,7 @@ export class WorkspacesService {
       kimiAccount: dto.kimiAccount,
       cursorAccount: dto.cursorAccount,
       modelRouting: dto.modelRouting,
+      modelRoutingOptimizeFor: dto.modelRoutingOptimizeFor,
       modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders),
     };
     if (dto.disallowedTools) data.disallowedTools = dto.disallowedTools as Prisma.InputJsonValue;

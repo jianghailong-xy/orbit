@@ -1188,6 +1188,7 @@ model Workspace {
   effort              String?   @map("effort")
   // Owner-controlled routing; false records shadow decisions without changing dispatch.
   modelRouting        Boolean   @default(false) @map("model_routing")
+  modelRoutingOptimizeFor String @default("cost") @map("model_routing_optimize_for")
   modelRoutingProviders String[] @default([]) @map("model_routing_providers")
   // routing: bind to a specific runner and/or match runner labels
   targetRunnerId      String?   @map("target_runner_id") @db.Uuid
