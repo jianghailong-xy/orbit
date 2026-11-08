@@ -26819,30 +26819,35 @@ button.agent-progress-agent:hover {
 .wk-chat-choice:hover { border-color: var(--brand); background: var(--brand-tint); }
 .wk-chat-choice .m { font-size: 12px; color: var(--text-3); }
 .wk-chat-body { flex: 1; min-height: 0; overflow-y: auto; overflow-anchor: none; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; }
+/* A person's meta row runs out to the left of the bubble's column on one line (.chat-user-meta), but the panel is 320–560
+   wide and its body is a scroll box, which cuts off whatever runs past its left edge (C15). Here the attachment line
+   takes a line of its own under the bubble and wraps there, whole, as board 42 ① shows it; the copy and the time keep
+   their line under it, where the dot that led into the attachment line has nothing left to lead into. */
+.wk-chat-body .chat-user-meta { flex-wrap: wrap; height: auto; min-height: 18px; }
+.wk-chat-body .chat-user-meta > .chat-injected-head { order: -1; flex: 1 1 100%; white-space: normal; text-align: right; }
+.wk-chat-body .chat-user-meta > .chat-meta-sep:has(+ .chat-injected-head) { display: none; }
 .wk-chat-empty { margin: 34px 16px; text-align: center; font-size: 13.5px; line-height: 1.7; color: var(--text-2); }
-.wk-chat-compose { flex: none; margin: 2px 12px 12px; padding: 8px 9px 8px 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-raised); }
-.wk-chat-compose:focus-within { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(51, 112, 255, .14); }
-.wk-chat-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
-.wk-chat-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; box-sizing: border-box; padding: 1px 3px 1px 7px;
-                border-radius: 6px; background: var(--fill-muted); color: var(--text-1); font-size: 12px; line-height: 1.5; }
-.wk-chat-chip .ic { font-size: 12px; color: var(--text-2); }
-.wk-chat-chip.q { padding-left: 9px; background: #fffaeb; box-shadow: inset 2px 0 0 #f2c14e; }
-.wk-chat-chip .q1 { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.wk-chat-chip .sub { flex: none; white-space: nowrap; color: var(--text-3); }
-.wk-chat-chip .x { flex: none; height: 16px; display: inline-flex; align-items: center; padding: 0 3px; border: 0; background: none;
-                   color: var(--text-3); font-size: 10px; cursor: pointer; }
-.wk-chat-chip .x:hover { color: var(--text-1); }
-.wk-chat-input { display: block; box-sizing: border-box; width: 100%; min-height: 42px; padding: 0; border: 0; outline: none; resize: none;
-                 background: none; font: inherit; font-size: 13.5px; line-height: 1.6; color: var(--text-1); }
-.wk-chat-input::placeholder { color: var(--text-4); }
-.wk-chat-failed { margin-top: 4px; font-size: 12px; color: var(--error); }
-.wk-chat-cfoot { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 4px; }
-.wk-chat-send, .wk-chat-stop { flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; display: inline-flex;
-                               align-items: center; justify-content: center; font-size: 13px; cursor: pointer; }
-.wk-chat-send { background: var(--brand); color: #fff; }
-.wk-chat-send:disabled { background: var(--brand-border); cursor: default; }
-.wk-chat-stop { background: var(--fill-muted); color: var(--text-1); font-size: 11px; }
-.wk-chat-stop:hover { background: var(--bg-hover-strong); }
+/* The panel's composer is the session page's (board 43): its box 12px in from the panel's edges, as the short one it
+   replaced was — 374 wide in the default panel, where its toolbar keeps one line as it is. Dragged narrower (to 320),
+   the toolbar does what the session page's does on a phone (the 600px block of .composer-toolbar): tighter gaps, the
+   gauges as shapes only, and if that is still not enough, the model's name gives way before the mode, the effort, the
+   gauges or Send would shrink — board 43 ⑥ is what squeezing them all looks like. */
+.wk-chat-composer { flex: none; margin: 2px 12px 12px; container: wk-chat-composer / inline-size; }
+.wk-chat-composer .composer-toolbar > .composer-pill,
+.wk-chat-composer .composer-toolbar > .composer-usage,
+.wk-chat-composer .composer-toolbar > .orbit-button { flex: none; }
+.wk-chat-composer .composer-toolbar > .composer-model-pill { min-width: 0; flex-shrink: 1; }
+@container wk-chat-composer (max-width: 359px) {
+  .wk-chat-composer .composer-toolbar { gap: 2px; padding: 4px 11.43px 7px; }
+  .wk-chat-composer .composer-toolbar .composer-pill:not(.composer-model-pill) { padding-left: 3px; }
+  .wk-chat-composer .composer-toolbar .composer-usage-pct { display: none; }
+  .wk-chat-composer .composer-toolbar .composer-usage { padding-right: 3px; }
+}
+/* The page and the selection lead the composer's attachment row, drawn as its file chips are — no wider, the quote's
+   first sentence giving way to its counts (board 43 ④) — and the quote opens with the selection's amber bar. */
+.wk-chat-composer .wk-chat-chip.q::before { content: ""; flex: none; align-self: stretch; width: 3px; margin: 1px 2px 1px 0; border-radius: 2px;
+                                            background: #f2c14e; }
+.wk-chat-failed { margin: 0 6px 6px; font-size: 12px; color: var(--error); }
 
 /* A document's selection, snapped to whole sentences, and the composer's quote (board 42 ①), and the Ask above it. */
 .wk-dc-body .wk-snap { background: #e9f1ff; box-shadow: inset 0 -2px 0 #9dbcff; }
@@ -26898,6 +26903,8 @@ button.agent-progress-agent:hover {
 .wk-draft-diff { margin: 2px 0 6px; }
 .wk-draft-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .wk-draft-failed { margin-top: 6px; font-size: 12px; line-height: 1.5; color: var(--error); }
+/* The errors the plan's gate found in a plan card's change, one a line under the press's reason (C12). */
+.wk-draft-failed-list { margin: 4px 0 0; padding-left: 16px; overflow-wrap: anywhere; }
 .wk-draft-none { font-size: 12.5px; color: var(--text-3); }
 .wk-draft-result { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 0 8px; font-size: 13px; line-height: 1.5; color: var(--text-2); }
 .wk-draft-result > .ic { flex: none; display: inline-flex; }
@@ -26951,7 +26958,6 @@ button.agent-progress-agent:hover {
 .wk-tl-doc.left .wk-tl-t { color: var(--text-3); }
 .wk-banner.wk-chat-banner { display: flex; margin-top: 10px; }
 :root[data-theme='dark'] .wk-dc-body .wk-snap { background: rgba(51, 112, 255, .2); box-shadow: inset 0 -2px 0 rgba(120, 160, 255, .7); }
-:root[data-theme='dark'] .wk-chat-chip.q { background: rgba(242, 193, 78, .14); }
 :root[data-theme='dark'] .wk-chat-host .wk-dc-body ::selection { background: rgba(51, 112, 255, .45); }
 :root[data-theme='dark'] .wk-chat-fab-badge { border-color: var(--bg-raised); }
 @media (max-width: 639px) {

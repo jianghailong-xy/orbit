@@ -6,6 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { WIKI_CHAT_PROMPT } from '@orbit/shared';
 import { ExportCtx, type RunEvent, Transcript } from './Transcript';
 
 /**
@@ -247,6 +248,52 @@ it('is one line after the hidden copy and time, the counts in its name and toolt
   expect(wrap.lastElementChild?.className, 'the rows open under the meta row').toBe('chat-injected-panel');
   expect(line.textContent).toBe(`${OPEN_LABEL} background jobs`);
   expect(bubble().textContent?.trim()).toBe('已经部署，请帮我测试');
+});
+
+describe('a wiki chat’s first message (board 42 ①, C15)', () => {
+  // What delivery appends to it (wiki contract `chat.notes`): the chat's words to its agent, then the page and the
+  // selection the composer showed.
+  const PAGE = [
+    '<orbit_wiki_page of="doc" doc="1.1" slug="runner-presence" section="2" key="s2" repoSha="626a9ec0d1e2">',
+    '§2 Heartbeats',
+    'A runner sends a heartbeat every 30 seconds.',
+    '</orbit_wiki_page>',
+  ].join('\n');
+  const SELECTION = [
+    '<orbit_wiki_selection doc="1.1" slug="runner-presence" section="2" key="s2" sentences="2" sources="1" repoSha="626a9ec0d1e2">',
+    '§2 Heartbeats',
+    'A runner sends a heartbeat every 30 seconds.',
+    '  - src/runner/presence.ts@626a9ec0d1e2#L30-31',
+    '</orbit_wiki_selection>',
+  ].join('\n');
+  const RULES_MARK = 'You are chatting beside a page of this repository';
+
+  it('lists the page and the selection it was sent with, and not the chat’s words to its agent, which the fold still opens to', async () => {
+    const appended = `\n\n${WIKI_CHAT_PROMPT}\n\n${PAGE}\n\n${SELECTION}`;
+    await mount([userEvent(`Record this as a decision.${appended}`, appended)]);
+
+    const toggle = attachedToggle();
+    expect(toggle?.textContent).toBe(`${LABEL} Wiki page · 1.1 §2, Wiki selection · 1.1 §2 · 2 sentences · 1 source`);
+    expect(container.textContent).not.toContain('Wiki chat');
+    expect(bubble().textContent?.trim()).toBe('Record this as a decision.');
+    await click(toggle!);
+    // Opened, it is what the agent read with the message, every block of it.
+    expect(opened()?.textContent).toContain(RULES_MARK);
+    expect(opened()?.textContent).toContain('src/runner/presence.ts@626a9ec0d1e2#L30-31');
+  });
+
+  it('sent with neither page nor selection, draws no line: the chat’s words to its agent are not something the owner attached', async () => {
+    const appended = `\n\n${WIKI_CHAT_PROMPT}`;
+    await mount([userEvent(`Is this still true?${appended}`, appended)]);
+
+    expect(bubble().textContent?.trim()).toBe('Is this still true?');
+    expect(attachedToggle()).toBeNull();
+    expect(container.textContent).not.toContain('Orbit attached');
+    expect(container.textContent).not.toContain(RULES_MARK);
+    // The meta row is the copy and the time alone, as under any message.
+    const row = container.querySelector('.chat-user-wrap > .chat-user-meta')!;
+    expect([...row.children].map((child) => child.className)).toEqual(['chat-copy', 'chat-time']);
+  });
 });
 
 describe('the exported transcript', () => {

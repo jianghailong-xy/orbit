@@ -19,7 +19,7 @@ import { WIKI_DOC_SECTION_EVENT } from './WikiDirectory';
 import { WikiChatFab } from './WikiChatFab';
 import { WikiChatPanel } from './WikiChatPanel';
 import { routeId } from '../lib/idCodec';
-import { wikiChatDraftsQuery, wikiChatsQuery, wikiDocQuery, wikiDocsQuery, wikiEntryQuery } from '../lib/queries';
+import { wikiChatDraftsQuery, wikiChatsQuery, wikiDocQuery, wikiDocsQuery, wikiEntryQuery, wikiPlanQuery } from '../lib/queries';
 import {
   WIKI_CHAT_ASK,
   WIKI_CHAT_FOCUS_NEEDS_YOU,
@@ -35,7 +35,9 @@ import {
   wikiChatFabShown,
   wikiChatFoldsDirectory,
   wikiChatLayout,
+  wikiChatPageSection,
   wikiChatPanelWidth,
+  wikiChatReading,
   wikiChatSearch,
   wikiChatSnap,
   wikiChatToOpen,
@@ -43,11 +45,12 @@ import {
   writeWikiChatWidth,
   type WikiChatPage,
   type WikiChatQuote,
+  type WikiChatReading,
   type WikiChatSentence,
 } from '../lib/wikiChat';
 import { wikiChatWhere } from '@orbit/shared';
 import type { WikiSpaceRow } from '../lib/wiki';
-import type { WikiDocView } from '../lib/wikiDocs';
+import { wikiDocSectionOfAnchor, type WikiDocView } from '../lib/wikiDocs';
 
 /**
  * What a page of the Wiki asks of the chat: to put a selection in the composer, and which sentences the
@@ -258,31 +261,41 @@ function usePanelTop(hostRef: RefObject<HTMLDivElement | null>, open: boolean, p
   return top;
 }
 
+/** No section announced yet, and no anchor. */
+const NO_READING: WikiChatReading = { read: null, anchor: null };
+
 /**
  * The page the composer attaches (design §4.2): a document and the section nearest the top of the reading (the
- * one the directory lights, `WIKI_DOC_SECTION_EVENT`), an entry's drawer its entry, a plan page its document.
+ * one the directory lights, `WIKI_DOC_SECTION_EVENT`) — or the section its address's anchor names, until the reader
+ * scrolls (`wikiChatReading`, C15) —, an entry's drawer its entry, a plan page its document.
  * Other pages attach none: the contract names no other kind (`chat.notes.wikiContext`).
  */
 function useWikiChatPage(space: WikiSpaceRow, route: string): WikiChatPage | null {
   const params = useParams();
+  const { hash } = useLocation();
   const docSlug = route === 'doc' ? (params.doc ?? null) : null;
   const planSlug = route === 'planDoc' || route === 'planSection' ? (params.doc ?? null) : null;
+  // A plan page at one of its document's sections (`…/plan/d/<doc>/<n>`) attaches that section too (C12).
+  const planIndex = route === 'planSection' && /^\d+$/u.test(params.section ?? '') ? Number(params.section) : null;
   const entryId = route === 'entry' ? (routeId(params.entry) ?? params.entry ?? null) : null;
   const doc = useQuery(wikiDocQuery(docSlug ? space.id : null, docSlug));
   const docs = useQuery(wikiDocsQuery(planSlug ? space.id : null));
+  const plan = useQuery({ ...wikiPlanQuery(space.id), enabled: planIndex !== null });
   const entry = useQuery(wikiEntryQuery(entryId));
-  const [section, setSection] = useState<{ slug: string; key: string } | null>(null);
+  const [reading, read] = useReducer(wikiChatReading, NO_READING);
+  // Taken before the page's jump to it can announce where it landed: the layout effect runs ahead of the page's own.
+  const anchored = docSlug ? wikiDocSectionOfAnchor(hash) : null;
+  useLayoutEffect(() => read({ type: 'anchor', slug: docSlug, key: anchored }), [docSlug, anchored]);
   useEffect(() => {
     const onSection = (event: Event) => {
       const detail = (event as CustomEvent<{ slug: string; key: string }>).detail;
-      if (detail?.slug && detail.key) setSection({ slug: detail.slug, key: detail.key });
+      if (detail?.slug && detail.key) read({ type: 'read', slug: detail.slug, key: detail.key });
     };
     window.addEventListener(WIKI_DOC_SECTION_EVENT, onSection);
     return () => window.removeEventListener(WIKI_DOC_SECTION_EVENT, onSection);
   }, []);
 
   const view = doc.data ?? null;
-  const sectionKey = section && section.slug === docSlug ? section.key : null;
   const entryTitle = entry.data?.title ?? null;
   const planNumber = useMemo(() => {
     if (!planSlug) return null;
@@ -292,17 +305,25 @@ function useWikiChatPage(space: WikiSpaceRow, route: string): WikiChatPage | nul
     }
     return null;
   }, [docs.data, planSlug]);
+  // The section by its number in the plan in force: the plan read the note is written from.
+  const planSection = planIndex !== null
+    ? (plan.data?.confirmed?.docs.find((one) => one.slug === planSlug)?.sections[planIndex - 1]?.key ?? null)
+    : null;
 
   return useMemo<WikiChatPage | null>(() => {
     if (docSlug && view) {
-      const current = view.sections.find((s) => s.key === sectionKey) ?? view.sections[0];
+      const key = wikiChatPageSection(reading, docSlug, view.sections.map((s) => s.key));
+      const current = view.sections.find((s) => s.key === key);
       if (!current) return null;
       return { kind: 'doc', docSlug, sectionKey: current.key, label: wikiChatWhere(view.number, current.number) };
     }
     if (entryId && entryTitle) return { kind: 'entry', entryId, label: entryTitle };
+    if (planSlug && planSection && planIndex !== null) {
+      return { kind: 'plan', docSlug: planSlug, sectionKey: planSection, label: wikiChatWhere(planNumber ?? planSlug, planIndex) };
+    }
     if (planSlug) return { kind: 'plan', docSlug: planSlug, label: planNumber ?? planSlug };
     return null;
-  }, [docSlug, view, sectionKey, entryId, entryTitle, planSlug, planNumber]);
+  }, [docSlug, view, reading, entryId, entryTitle, planSlug, planNumber, planSection, planIndex]);
 }
 
 // ── Asking about a selection (design §2 step 2, board 42 ① ②) ─────────────────────────────────────

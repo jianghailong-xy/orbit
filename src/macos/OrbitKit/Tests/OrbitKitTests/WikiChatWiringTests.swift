@@ -147,23 +147,89 @@ final class WikiChatWiringTests: XCTestCase {
         XCTAssertTrue(views.contains(".onChange(of: chat.focusedSessionID) { _, _ in model.syncConsoleFocus() }"))
     }
 
-    /// The composer sends a running chat's message through its console — queued behind a running turn, the page and
-    /// the quote beside the words — and lets the attachments go only once the server took it.
-    func testTheComposerSendsTheAttachmentsBesideTheWords() throws {
+    /// The panel's composer is the session page's own (board 43 ② ④ ⑤): `ComposerView` over the chat's console, the
+    /// page and the selection leading its attachment row. Every send of it carries them beside the words and lets them
+    /// go once the server took the message; a new chat's draft makes the chat through the wiki's own door, with the
+    /// files staged and what the toolbar shows.
+    func testTheComposerIsTheSessionPagesComposer() throws {
         let views = code(try source("Views/WikiChatViews.swift"))
-        let composer = try slice(views, from: "struct WikiChatComposer: View {", to: "private func pageChip(")
-        XCTAssertTrue(composer.contains("await console.send(queueForNextTurn: true, wikiContext: context, accepted: { chat.sent() })"))
-        XCTAssertTrue(composer.contains("if await chat.create(spaceID: space.id, text: words) { focused = false }"))
+        let composer = try slice(views, from: "struct WikiChatComposer: View {", to: "private struct WikiChatNewComposer: View {")
+        assertOrder(composer, ["ComposerBand {", "ComposerView(console: console,",
+                               "emptyPlaceholder: creates == nil ? chat.placeholder : WikiChatCopy.placeholder,",
+                               "? nil : AnyView(WikiChatChips(chat: chat)))",
+                               ".onAppear { console.wikiChat = composing }", ".onDisappear { console.wikiChat = nil }",
+                               "WikiChatComposing(context: { chat.context }, accepted: { chat.sent() })",
+                               "await chat.create(spaceID: creates.spaceID, workspaceID: creates.workspaceID, first)"],
+                    "the panel's composer")
+        for own in ["TextField(", "stop.fill", "wiki-chat-send"] {
+            XCTAssertFalse(composer.contains(own), "the panel draws a short composer of its own again (\(own))")
+        }
+        let new = try slice(views, from: "private struct WikiChatNewComposer: View {", to: "private struct WikiChatChips: View {")
+        assertOrder(new, ["WikiChatComposer(chat: chat, console: draft, creates: (spaceID, workspaceID))",
+                          "let made = registry.draftModel(", "made.composerText = chat.draftText", "draft = made",
+                          "await made.prepareDraft()", "if let text { chat.draftText = text }"], "a new chat's draft console")
+        let chips = try slice(views, from: "private struct WikiChatChips: View {", to: "struct WikiChatAskSheet: View {")
+        assertOrder(chips, ["if let page = shown.page { pageChip(page) }", "if let quote = shown.quote { quoteChip(quote) }",
+                            "chip(remove: WikiChatCopy.remove(page.label), cross: { chat.crossPage() })",
+                            "chip(remove: WikiChatCopy.remove(quote.first), cross: { chat.crossQuote() })",
+                            ".accessibilityLabel(remove)"], "the page and the selection, each with its cross")
+        // The chips lead the composer's own attachment row, above the words and the toolbar.
+        let composerView = code(try source("Views/ComposerView.swift"))
+        assertOrder(composerView, ["ComposerAttachmentsView(console: console, leading: leadingAttachments)", "inputField",
+                                   "toolbar\n"], "the composer card")
+        let row = try slice(composerView, from: "struct ComposerAttachmentsView: View {", to: "private func attachmentChip(")
+        assertOrder(row, ["if !console.pendingAttachments.isEmpty || leading != nil {", "if let leading { leading }",
+                          "ForEach(console.pendingAttachments)"], "the attachment row")
+        XCTAssertTrue(composerView.contains("if console.replyContext == nil, let emptyPlaceholder { return emptyPlaceholder }"))
+        // Every send from the composer — Send, Return, held to queue, Stop and send — carries the page and the selection.
         let console = code(try source("ConsoleModel.swift"))
         let send = try slice(console, from: "func send(authoritative: RunStatus? = nil,", to: "} catch {")
         assertOrder(send, ["wikiContext: WikiChatContext? = nil, accepted onAccepted: (@MainActor () -> Void)? = nil) async {",
+                           "let wikiContext = wikiContext ?? (fromComposer ? wikiChat?.context() : nil)",
+                           "let onAccepted = onAccepted ?? (fromComposer ? wikiChat?.accepted : nil)",
+                           "if isDraft { await createDraftSession(); return }",
                            "queueForNextTurn: queueForNextTurn, wikiContext: wikiContext)",
                            "statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)", "onAccepted?()"],
                     "a chat's send")
+        let create = try slice(console, from: "private func createDraftSession() async {", to: "let (text, shell) = ComposerLogic.parseShell(composerText)")
+        assertOrder(create, ["if let create = wikiChat?.create {",
+                             "guard !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }",
+                             "let made = await create(WikiChatLogic.FirstMessage(",
+                             "words: composerText, attachmentIds: pendingAttachments.compactMap(\\.remoteID),",
+                             "model: providerCapabilitiesResolved ? modelID : nil, permissionMode: permissionMode.rawValue,",
+                             "effort: effort.rawValue, fastMode: fastMode))", "guard made else { return }",
+                             "composerText = \"\"", "pendingAttachments = []"], "a new chat's first message")
+        XCTAssertTrue(console.contains("replyContext == nil && !pendingAttachments.isEmpty && wikiChat?.create == nil"),
+                      "a new chat's files never go without words")
+        let chat = try slice(code(try source("WikiChatModel.swift")),
+                             from: "func create(spaceID: String, workspaceID: String, _ first: WikiChatLogic.FirstMessage) async -> Bool {",
+                             to: "func press(_ card: WikiChatDraftView")
+        assertOrder(chat, ["WikiChatLogic.createRequest(", "first, workspaceId: workspaceID, context: context,",
+                           "try await api.createWikiChat(spaceID: spaceID, request)", "sent()", "chat = made.sessionId"],
+                    "the create")
         let post = try slice(console, from: "private func postTurn(", to: "private func retryingTransientFailures<T>(")
         XCTAssertTrue(post.contains("stopSessionId: confirmedStopSessionID,\n"))
         XCTAssertTrue(post.contains("wikiContext: wikiContext)\n        let turnRequest = ComposerLogic.makeTurn("))
         XCTAssertTrue(post.contains("queueForNextTurn: queueForNextTurn, wikiContext: wikiContext)"))
+    }
+
+    /// Runs in is a new chat's alone and holds the workspace alone — the model and the mode are the composer's
+    /// toolbar's — on a phone too; a chat that runs shows no workspace, as the session page (board 43 ② ④).
+    func testRunsInIsANewChatsAndHoldsTheWorkspaceAlone() throws {
+        let views = code(try source("Views/WikiChatViews.swift"))
+        let new = try slice(views, from: "private struct WikiChatNewBody: View {", to: "private func choose(")
+        assertOrder(new, ["case .chosen(let workspace, _, let choices)?:\n                runsInLine(workspace, choices: choices)",
+                          "WikiChatNewComposer(chat: chat, spaceID: space.id, workspaceID: workspace.id)",
+                          ".id(workspace.id)", "Text(WikiChatCopy.runsIn)", "WikiChatLogic.workspaceName(workspace)"],
+                    "a new chat's Runs in")
+        let line = try slice(new, from: "private func runsInLine(", to: "private func choose(")
+        for other in ["model", "Model", "permission", "Mode"] {
+            XCTAssertFalse(line.contains(other), "Runs in holds the workspace alone, not \(other)")
+        }
+        let running = try slice(views, from: "private struct WikiChatRunningBody: View {", to: "private struct WikiChatEndedLine: View {")
+        for gone in ["runsInLine(", "WikiChatCopy.runsIn", "WikiChatLogic.runLine("] {
+            XCTAssertFalse(running.contains(gone), "a chat that runs shows no workspace (\(gone))")
+        }
     }
 
     // MARK: Ask, the cards, Updated
@@ -210,7 +276,7 @@ final class WikiChatWiringTests: XCTestCase {
         let card = try slice(views, from: "struct WikiDraftCardView: View {", to: "struct WikiDraftEditForm: View {")
         assertOrder(card, ["let look = WikiChatLogic.cardLook(card)", "let face = WikiChatLogic.cardFace(card)",
                            "stateLine(look)", "if let note = look.note {", "if look.inReview {", "Button(note) { open(.review) }",
-                           "if card.tainted {", "if let heading = face.heading {", "if isOpen {", "fields(face)",
+                           "Text(note)", "if card.tainted {", "if let heading = face.heading {", "if isOpen {", "fields(face)",
                            "buttons(look)", "if let failed {", "if let result = WikiChatLogic.resultLook(card) {",
                            "resultLine(result, actions: look.rewriteActions)"], "the card's parts, board 42 ⑤")
         assertOrder(card, ["Text(look.title.uppercased())", "ForEach(Array(face.diff.enumerated()), id: \\.offset)",
@@ -218,7 +284,9 @@ final class WikiChatWiringTests: XCTestCase {
                            "ForEach(Array(face.rows.enumerated()), id: \\.offset)", "label(row.label)",
                            "Text(row.value)\n                            .fixedSize(horizontal: false, vertical: true)\n                            .frame(maxWidth: .infinity, alignment: .leading)",
                            "label(WikiChatCopy.cardSources)",
-                           "label(WikiChatCopy.cardRewrites)", "WikiDraftCardTarget.section(doc: $0.doc, key: $0.key)",
+                           "label(WikiChatCopy.cardRewrites)",
+                           "links(WikiChatLogic.rewriteLinks(kind: card.kind, rewrites: card.rewrites)",
+                           ".map { ($0.label, WikiDraftCardTarget.section(doc: $0.doc, key: $0.key)) })",
                            "label(WikiChatCopy.similar)", "WikiDraftCardTarget.entry($0.id)",
                            "private func label(_ text: String) -> some View {\n        Text(text)\n            .foregroundStyle(.secondary)\n            .fixedSize()",
                            "let primary: WikiChatAction? = card.state == .draft ? look.actions.first : nil",
@@ -237,9 +305,14 @@ final class WikiChatWiringTests: XCTestCase {
         assertOrder(slot, ["case .section(let doc, let key): leave { go(.wikiDoc(slug: doc, section: key)) }",
                            "case .entry(let id):             leave { go(.wikiEntry(entryID: id)) }",
                            "case .review:                    leave { go(.wikiReview) }"], "what a card's links open")
-        // A press that did not go is said in its card, in the web's words.
+        // A press that did not go is said in its card, in the web's words — a plan card's change the plan's gate refused
+        // with every error the gate found under the reason (C12).
         let model = code(try source("WikiChatModel.swift"))
-        XCTAssertTrue(model.contains("if press != .seen { pressFailures[key] = WikiChatLogic.pressError(error) }"))
+        XCTAssertTrue(model.contains("if press != .seen { pressFailures[key] = WikiChatLogic.pressRefusal(error) }"))
+        // A plan card opens its first document on the plan page (C12, C17), as the web's Open in Plan does.
+        assertOrder(slot, ["case .openInPlan:",
+                           "let node: NavNode = card.change?.docs.first.map { .wikiPlanDoc(slug: $0.slug, version: nil) } ?? .wikiPlan(version: nil)",
+                           "leave { go(node) }"], "Open in Plan")
         XCTAssertTrue(model.contains("return WikiChatLogic.pressError(error)"), "Edit's refusal")
         XCTAssertTrue(model.contains("guard WikiChatLogic.needsSeen(card) else { return }"))
         // Edit sends only what changed, under the web's words.
@@ -248,6 +321,18 @@ final class WikiChatWiringTests: XCTestCase {
                            ".navigationTitle(WikiChatCopy.editTitle)", "Button(WikiChatCopy.cancel) { dismiss() }",
                            "Button(WikiChatCopy.actionApply) {", ".disabled(saving || edits.isEmpty || blank)"], "Edit")
         XCTAssertTrue(edit.contains("private var edits: [WikiChatEditRequest.Op] { WikiChatLogic.editOps(card, words: words) }"))
+    }
+
+    /// A plan page attaches its document, and at one of its sections that section too (C12), by the logic the web's
+    /// page hook mirrors (`WikiChatLogic.planPage`).
+    func testAPlanPageAttachesItsDocumentAndTheSectionItShows() throws {
+        let views = code(try source("Views/WikiChatViews.swift"))
+        let follow = try slice(views, from: "private func follow(_ node: NavNode?, chat: WikiChatModel, space: WikiSpace) {",
+                               to: "private func presented<Page: View>(")
+        assertOrder(follow, ["case .wikiPlanDoc(let slug, _)?:", "chat.follow(spaceID: space.id, page: .plan(docSlug: slug, label: number ?? slug))",
+                             "case .wikiPlanSection(let slug, let index, _)?:",
+                             "chat.follow(spaceID: space.id, page: WikiChatLogic.planPage(slug: slug, index: index, number: number, plan: model.wiki?.plan))"],
+                    "the plan page's chip")
     }
 
     /// A section written since the reader last looked wears Updated beside its title, its new sentences a green
@@ -292,7 +377,7 @@ final class WikiChatWiringTests: XCTestCase {
         let views = code(try source("Views/WikiChatViews.swift"))
         let running = try slice(views, from: "private struct WikiChatRunningBody: View {", to: "private struct WikiChatEndedLine: View {")
         assertOrder(running, ["if let ended = endedLine(console) {", "WikiChatEndedLine(text: ended) { chat.newChat() }",
-                              "WikiChatComposer(chat: chat, space: space, console: console)",
+                              "WikiChatComposer(chat: chat, console: console)",
                               "WikiChatLogic.endedLine(trashed: trashed, status: session.effectiveRunStatus, retryPending: session.retryPending())"],
                     "the composer, or the line once the chat ended")
     }

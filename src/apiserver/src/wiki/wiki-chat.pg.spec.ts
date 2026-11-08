@@ -31,7 +31,10 @@
  *      the owner's own (`isOwnerTurn`); a wikiContext of the wrong shape is refused WIKI_SCHEMA, one sent to a session
  *      that is no chat is a 400, and neither files a turn;
  *   7. a request with a session header is refused WIKI_OWNER_CHANNEL_ONLY by both chat routes and by the settings PATCH;
- *   8. another account's space, chat, session and workspace are the plain 404.
+ *   8. another account's space, chat, session and workspace are the plain 404;
+ *   9. the first message's pictures and files ride the create (board 43): scoped to the chat and linked to its first turn
+ *      in the transaction that files it, and handed to the runner with the words; another account's upload, or one a
+ *      session already took, is a 400 and makes nothing; the toolbar's mode, effort and speed are the session's.
  *
  * The dossier's half (a chat's drafting calls are left out) is in wiki-dossier.pg.spec.ts, beside the wiki reads it
  * mirrors, and the runner's half (the checkout forks from the pin; an empty branch is dropped) in
@@ -629,8 +632,9 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
     const [, planBlock] = plan.content.split('Split this page.\n\n');
     assert.match(planBlock, /^<orbit_wiki_page of="plan" doc="1.1" slug="sessions-runtime">\n/u);
     const definition = JSON.parse(planBlock.split('\n').slice(1, -1).join('\n'));
-    assert.deepEqual(definition.sections.map((s: { key: string; covers: string }) => [s.key, s.covers]),
+    assert.deepEqual(definition.doc.sections.map((s: { key: string; covers: string }) => [s.key, s.covers]),
       planSections.map((s) => [s.key, s.covers]), 'what each section covers: the page brings the plan, which a session cannot read');
+    assert.equal(definition.doc.slug, 'sessions-runtime', 'the document as a plan card\'s change takes it (C12)');
     await answered(plan.turnId);
   });
 
@@ -681,5 +685,82 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
     const empty = await api('GET', `/api/wiki/spaces/${theirs.json.id}/chats`, strangerToken);
     assert.equal(empty.status, 200, empty.text);
     assert.deepEqual([empty.json.workspace, empty.json.choices, empty.json.chats], [null, [], []], 'a space with nothing to choose');
+  });
+
+  await t.test("9. the first message's pictures and files ride the create, linked to its first turn and handed over with it; another's or a used one makes nothing (board 43)", async () => {
+    /** An upload of `who`'s as the composer makes one before any session exists: no session, turn or task. */
+    const upload = async (who: string, fileName: string, mime: string, sessionId: string | null = null) =>
+      (await sql.query<{ id: string }>(
+        `INSERT INTO "attachment" (id, owner_id, session_id, mime_type, size_bytes, file_name, data)
+         VALUES (gen_random_uuid(), $1::uuid, $2::uuid, $3, 3, $4, '\\x89504e'::bytea) RETURNING id`,
+        [who, sessionId, mime, fileName],
+      )).rows[0].id;
+    const attachment = async (id: string) =>
+      (await sql.query(`SELECT "session_id", "turn_id" FROM "attachment" WHERE "id" = $1::uuid`, [id])).rows[0];
+    const picture = await upload(owner.id, 'lease-timeline.png', 'image/png');
+    const log = await upload(owner.id, 'runner.log', 'text/plain');
+
+    // Refused before anything is made: an upload of another account's, and one a session already took.
+    const theirs = await upload(stranger.id, 'theirs.png', 'image/png');
+    const used = await upload(owner.id, 'used.png', 'image/png', firstChat);
+    for (const [ids, why] of [[[picture, theirs], "another account's"], [[used], 'one a session already took']] as const) {
+      const before = await sessionsIn(wsDelivery);
+      const refused = await create({ workspaceId: pub(wsDelivery), attachmentIds: ids.map((id) => pub(id)) });
+      assert.equal(refused.status, 400, `${why}: ${refused.text}`);
+      assert.match(refused.text, /one or more attachments are unknown, not yours, or already used/u, why);
+      assert.equal(await sessionsIn(wsDelivery), before, `${why}: no session, and so no turn`);
+    }
+    // A blank id names no file, in the list (the pipe cannot decode it) or as the list itself (refused at the door).
+    for (const [attachmentIds, said] of [[[pub(picture), '   '], /invalid attachmentIds/u], ['   ', /a blank one names none/u]] as const) {
+      const before = await sessionsIn(wsDelivery);
+      const blank = await create({ workspaceId: pub(wsDelivery), attachmentIds });
+      assert.equal(blank.status, 400, `a blank attachment id: ${blank.text}`);
+      assert.match(blank.text, said);
+      assert.equal(await sessionsIn(wsDelivery), before, 'a blank attachment id: nothing is made');
+    }
+    assert.deepEqual(await attachment(picture), { session_id: null, turn_id: null }, 'the refused create took nothing of the owner\'s');
+    assert.deepEqual(await attachment(theirs), { session_id: null, turn_id: null }, "nor of the stranger's");
+
+    // Made with both, and with the toolbar's mode, effort and speed (board 43 ②).
+    await beat(delivery);
+    const words = 'Here is the timeline I see, and the runner log.';
+    const answer = await create({
+      workspaceId: pub(wsDelivery), content: words, attachmentIds: [pub(picture), pub(log)],
+      permissionMode: 'default', effort: 'high', fastMode: true,
+    });
+    assert.equal(answer.status, 201, answer.text);
+    const chatId = toUuid(answer.json.sessionId);
+    const row = await sessionRow(chatId);
+    assert.deepEqual([row.permission_mode, row.effort, row.fast_mode], ['default', 'high', true], 'the session starts as the toolbar showed it');
+    const turns = await turnsOf(chatId);
+    assert.equal(turns.length, 1, 'one turn, the one the create filed');
+    assert.equal(turns[0].content, words, "its content is the owner's words alone, whatever rides along");
+    for (const id of [picture, log]) {
+      assert.deepEqual(await attachment(id), { session_id: chatId, turn_id: turns[0].id }, 'scoped to the chat and linked to its first turn');
+    }
+
+    // The runner that claims it is handed the files with the words, as it is a later message's.
+    const claim = await api('GET', '/api/runner/sessions/claim', delivery.token, undefined, { 'x-orbit-runner-capabilities': CAPABILITIES });
+    assert.equal(claim.status, 200, claim.text);
+    assert.equal(toUuid(claim.json?.sessionId ?? '00000000-0000-0000-0000-000000000000'), chatId, claim.text.slice(0, 400));
+    assert.equal((await turnsOf(chatId)).length, 1, 'the claim laid no second opening turn down');
+    const leaseOwner = randomUUID();
+    const taken = await api('POST', `/api/runner/sessions/${pub(chatId)}/takeover-leases`, delivery.token,
+      { leaseOwner, expectedLeaseOwner: null }, { 'x-orbit-runner-capabilities': CAPABILITIES });
+    assert.equal(taken.status, 200, taken.text);
+    const generation = randomUUID();
+    const activated = await api('POST', `/api/runner/sessions/${pub(chatId)}/activate-leases`, delivery.token,
+      { leaseOwner, leaseGeneration: generation }, { 'x-orbit-runner-capabilities': CAPABILITIES });
+    assert.equal(activated.status, 200, activated.text);
+    const handed = await api('GET', `/api/runner/sessions/${pub(chatId)}/inbox?leaseGeneration=${generation}`, delivery.token,
+      undefined, { 'x-orbit-runner-capabilities': CAPABILITIES });
+    assert.equal(handed.status, 200, handed.text);
+    assert.equal(toUuid(handed.json.turnId), turns[0].id);
+    assert.equal(handed.json.content, `${words}\n\n${WIKI_CHAT_PROMPT}`, 'the words, then the chat\'s rules');
+    assert.deepEqual(
+      (handed.json.attachments as Array<{ id: string; mimeType: string; fileName?: string }>).map((a) => [toUuid(a.id), a.mimeType, a.fileName]),
+      [[picture, 'image/png', 'lease-timeline.png'], [log, 'text/plain', 'runner.log']],
+      'both files, in the order they were uploaded',
+    );
   });
 });

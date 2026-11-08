@@ -199,6 +199,10 @@ struct ComposerView: View {
     /// user came here to type. A live console leaves it false so opening a session doesn't grab focus.
     /// Turning it on later focuses too: an iPad's draft appears unasked with it off, and ✎ turns it on.
     var autoFocus = false
+    /// What the empty box says when no reply or machine has its own words: a wiki chat's panel says what to ask.
+    var emptyPlaceholder: String? = nil
+    /// Chips that lead the attachment row, before the staged files: a wiki chat's page and selection (board 43).
+    var leadingAttachments: AnyView? = nil
     @State private var slashIndex = 0
     @State private var slashDismissed: String?
     /// Measured height of the `/` menu's rows — the floating card is sized from this (see slashMenu).
@@ -302,6 +306,8 @@ struct ComposerView: View {
         if cursorTurnRunning, console.replyContext == nil { return CursorRuntime.runningPlaceholder }
         // A machine's new session page has no workspace to send to, and no question to answer.
         if let machine = console.machinePlaceholder { return machine }
+        // A wiki chat's panel says what to ask, unless a reply has its own words.
+        if console.replyContext == nil, let emptyPlaceholder { return emptyPlaceholder }
         return console.replyContext?.placeholder ?? "Message…"
     }
 
@@ -426,7 +432,7 @@ struct ComposerView: View {
             // long the message gets. Shell mode is reached by a `!` prefix (the + menu's Shell item
             // inserts it), not a toggle.
             VStack(alignment: .leading, spacing: 0) {
-                ComposerAttachmentsView(console: console)
+                ComposerAttachmentsView(console: console, leading: leadingAttachments)
 
                 inputField
                     // The guess sits on the empty field's first line, where the placeholder would.
@@ -1711,6 +1717,8 @@ private struct PromptSuggestionLine: View {
 /// separated from the text by the watching card, the tray and the git bar.
 struct ComposerAttachmentsView: View {
     let console: ConsoleModel
+    /// Chips drawn first in the row, the composer's own files after them (`ComposerView.leadingAttachments`).
+    var leading: AnyView? = nil
     @Namespace private var previewNS
     /// Tapped staged image → full-screen pager (iOS). Unused on macOS, where chips aren't tappable.
     @State private var previewTarget: ImagePreviewTarget?
@@ -1727,9 +1735,10 @@ struct ComposerAttachmentsView: View {
     }
 
     var body: some View {
-        if !console.pendingAttachments.isEmpty {
+        if !console.pendingAttachments.isEmpty || leading != nil {
             let previews = previewImages
             HStack(alignment: .top, spacing: 8) {
+                if let leading { leading }
                 ForEach(console.pendingAttachments) { attachmentChip($0, previews: previews) }
                 Spacer(minLength: 0)
             }

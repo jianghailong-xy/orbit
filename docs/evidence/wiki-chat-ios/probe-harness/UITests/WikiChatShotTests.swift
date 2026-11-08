@@ -246,6 +246,195 @@ final class WikiChatShotTests: ProbeCase {
         shot("\(platform)-4a-page-working")
     }
 
+    // MARK: C19 — the panel's composer is the Console's (board 43, task 34tEzSSp0Ii1rRpbXxRbi)
+
+    /// Board 43 ②: a new chat — Runs in holding the workspace alone, then the Console's composer card with the page and
+    /// the selection leading its attachment row (each with its cross), the words, and the toolbar (+, the mode, the
+    /// model, Send). Half height, then full height on a phone; the third column on an iPad and a Mac.
+    func testC19NewChatComposer() {
+        let tag = "\(platform)-c19-1-new"
+        let app = open("ask", tag)
+        // The quote comes from Ask; when a busy simulator loses the long press twice, the Chat button opens the new
+        // chat with the page alone (said in the notes), so Runs in and the composer are still photographed.
+        let quoted = askOnParagraph(app, tag)
+        if !quoted {
+            note("\(tag): Ask never opened; the new chat is opened from the Chat button, with the page chip alone")
+            press(fabButton(app))
+            settle(2)
+        }
+        let runsIn = exactly(app, "Runs in")
+        let workspace = app.buttons["Workspace"].exists ? app.buttons["Workspace"].firstMatch : app.menuButtons["Workspace"].firstMatch
+        let page = pageCross(app).firstMatch
+        let quote = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Remove Runner")).firstMatch
+        let mode = toolbarButton(app, "Auto")
+        let model = toolbarButton(app, "Opus 5.5")
+        guard page.waitForExistence(timeout: 15) else {
+            shot("\(tag)-no-chips")
+            tree(app, "\(tag)-no-chips")
+            return XCTFail("\(tag): the page chip's cross never showed in the composer")
+        }
+        settle(1.5)
+        for (name, element) in [("Runs in", runsIn), ("workspace", workspace), ("page ×", page), ("quote ×", quote),
+                                ("mode", mode), ("model", model)] {
+            note("\(tag): \(name): \(describe(element))")
+        }
+        XCTAssertTrue(runsIn.exists, "\(tag): a new chat shows no Runs in")
+        XCTAssertTrue(workspace.exists, "\(tag): Runs in names no workspace")
+        if quoted { XCTAssertTrue(quote.exists, "\(tag): the selection's chip has no cross") }
+        XCTAssertTrue(mode.exists, "\(tag): the composer's toolbar has no mode (Auto)")
+        XCTAssertTrue(model.exists, "\(tag): the composer's toolbar has no model (Opus 5.5)")
+        if quoted { XCTAssertTrue(appears(app, "1 sentence", timeout: 5), "\(tag): the quote chip lost its count") }
+        if runsIn.exists && workspace.exists && page.exists && mode.exists {
+            // Runs in stands over the conversation, alone on its line: the mode is the toolbar's, under the chips.
+            XCTAssertLessThan(runsIn.frame.maxY, page.frame.minY, "\(tag): Runs in is not above the composer")
+            XCTAssertGreaterThan(mode.frame.minY, workspace.frame.maxY + 40, "\(tag): the mode stands on Runs in's line")
+            // The chips are the attachment row of the composer card: above its toolbar, on one row.
+            XCTAssertLessThan(page.frame.maxY, mode.frame.minY, "\(tag): the page chip is not above the toolbar")
+            if quote.exists {
+                XCTAssertEqual(page.frame.midY, quote.frame.midY, accuracy: 4, "\(tag): the page and the selection are not one row")
+            }
+            XCTAssertLessThan(mode.frame.minY - page.frame.maxY, 140, "\(tag): the chips are not in the composer card")
+        }
+        shot("\(platform)-c19-1a-new-chat-half")
+        #if os(iOS)
+        if phone {
+            fullHeight(app, "New chat", tag)
+            shot("\(platform)-c19-1b-new-chat-full")
+        }
+        #endif
+        // A cross takes its chip off: what the row shows is what the message sends.
+        guard quoted else { return }
+        press(quote)
+        settle(1)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Remove Runner")).firstMatch.exists,
+                       "\(tag): the selection's cross left its chip")
+        XCTAssertTrue(page.exists, "\(tag): the selection's cross took the page too")
+        shot("\(platform)-c19-1c-quote-crossed")
+    }
+
+    /// Board 43 ⑤: a chat whose turn runs — no workspace shown, the page chip in the composer's row, and Send is Stop.
+    func testC19RunningChatComposer() {
+        let tag = "\(platform)-c19-2-running"
+        let app = open("working", tag)
+        let fab = fabButton(app)
+        XCTAssertTrue(waitForLabel(fab, "Working…", timeout: 20), "\(tag): the button never said Working…: \(describe(fab))")
+        press(fab)
+        let page = pageCross(app).firstMatch
+        guard page.waitForExistence(timeout: 40) else {
+            shot("\(tag)-no-composer")
+            tree(app, "\(tag)-no-composer")
+            return XCTFail("\(tag): the running chat's composer never showed the page chip")
+        }
+        let stop = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "stop")).firstMatch
+        XCTAssertTrue(stop.waitForExistence(timeout: 20), "\(tag): a running turn's composer has no Stop")
+        settle(1.5)
+        note("\(tag): Stop: \(describe(stop)); page ×: \(describe(page))")
+        XCTAssertFalse(exactly(app, "Runs in").exists, "\(tag): a chat that runs shows Runs in")
+        XCTAssertFalse(app.buttons["Workspace"].exists, "\(tag): a chat that runs shows its workspace")
+        XCTAssertTrue(toolbarButton(app, "Auto").exists || toolbarButton(app, "Default").exists,
+                      "\(tag): the running chat's toolbar has no mode")
+        if stop.exists { XCTAssertGreaterThan(stop.frame.minY, page.frame.maxY, "\(tag): Stop is not on the toolbar under the chips") }
+        shot("\(platform)-c19-2a-running-half")
+        #if os(iOS)
+        if phone {
+            fullHeight(app, chatTitle, tag)
+            shot("\(platform)-c19-2b-running-full")
+        }
+        #endif
+    }
+
+    /// Board 43 ④: a chat with an open card asks what to change in the draft, in the Console's composer.
+    func testC19CardOpenComposer() {
+        let tag = "\(platform)-c19-3-card"
+        let app = open("card", tag)
+        let fab = fabButton(app)
+        XCTAssertTrue(waitForLabel(fab, "1 needs you", timeout: 20), "\(tag): the button never said 1 needs you")
+        press(fab)
+        guard appears(app, "DRAFT · ADD DECISION", timeout: 40) else {
+            shot("\(tag)-no-card")
+            return XCTFail("\(tag): the chat never drew the card")
+        }
+        settle(1.5)
+        let placeholder = "Reply, or say what to change in the draft"
+        let input = app.textViews.firstMatch
+        note("\(tag): the composer's field: \(describe(input)) placeholder=\(input.exists ? (input.placeholderValue ?? "nil") : "-")")
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(appears(app, placeholder, timeout: 10) || (input.exists && (input.placeholderValue ?? "").contains(placeholder))
+                      || (field.exists && (field.placeholderValue ?? "").contains(placeholder)),
+                      "\(tag): the composer does not ask what to change in the draft")
+        XCTAssertTrue(pageCross(app).exists, "\(tag): the page chip is not in the composer's row")
+        XCTAssertFalse(exactly(app, "Runs in").exists, "\(tag): a chat that runs shows Runs in")
+        shot("\(platform)-c19-3a-card-open")
+    }
+
+    /// Ask on the paragraph, its second sentence tapped: the panel opens on a new chat with the page and the quote.
+    private func askOnParagraph(_ app: XCUIApplication, _ tag: String) -> Bool {
+        let paragraph = words(app, pageWords)
+        guard paragraph.waitForExistence(timeout: 20) else {
+            tree(app, "\(tag)-no-paragraph")
+            XCTFail("\(tag): the paragraph never showed")
+            return false
+        }
+        #if os(iOS)
+        paragraph.press(forDuration: 1.3)
+        let ask = button(app, beginning: "Ask")
+        if !ask.waitForExistence(timeout: 10) {
+            note("\(tag): the first long press offered no Ask; pressed again")
+            paragraph.press(forDuration: 1.6)
+        }
+        #else
+        paragraph.rightClick()
+        let ask = app.menuItems["Ask"]
+        #endif
+        guard ask.waitForExistence(timeout: 10) else {
+            shot("\(tag)-no-menu")
+            return false
+        }
+        press(ask)
+        settle(1.5)
+        let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", paragraphWords)).firstMatch
+        guard row.waitForExistence(timeout: 15) else {
+            shot("\(tag)-no-rows")
+            XCTFail("\(tag): the Ask sheet never listed the paragraph's sentences")
+            return false
+        }
+        press(row)
+        settle(0.8)
+        press(app.buttons["wiki-chat-ask-done"])
+        settle(2)
+        return true
+    }
+
+    /// The page chip's cross, whichever section of 3.1 the page shows (a Mac's page may not reach §3).
+    private func pageCross(_ app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Remove 3.1 §")).firstMatch
+    }
+
+    /// A control of the composer's toolbar by its words: a menu's button, or its text.
+    private func toolbarButton(_ app: XCUIApplication, _ words: String) -> XCUIElement {
+        let button = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", words)).firstMatch
+        if button.waitForExistence(timeout: 5) { return button }
+        let menu = app.menuButtons.matching(NSPredicate(format: "label CONTAINS %@", words)).firstMatch
+        if menu.exists { return menu }
+        return app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", words, words)).firstMatch
+    }
+
+    #if os(iOS)
+    /// A phone's sheet dragged to full height by its head row's empty middle (its title is the history menu's button).
+    private func fullHeight(_ app: XCUIApplication, _ title: String, _ tag: String) {
+        let head = words(app, title)
+        guard head.exists else { return XCTFail("\(tag): the panel's head never showed") }
+        let window = app.windows.firstMatch
+        let row = (head.frame.midY - window.frame.minY) / window.frame.height
+        let grip = window.coordinate(withNormalizedOffset: CGVector(dx: 0.62, dy: row))
+        grip.press(forDuration: 0.15, thenDragTo: window.coordinate(withNormalizedOffset: CGVector(dx: 0.62, dy: 0.04)),
+                   withVelocity: .slow, thenHoldForDuration: 0.4)
+        settle(1.5)
+        note("\(tag): the panel's head after the drag: \(describe(head))")
+        XCTAssertLessThan((head.frame.minY - window.frame.minY) / window.frame.height, 0.2, "\(tag): the sheet did not go to full height")
+    }
+    #endif
+
     // MARK: steps
 
     private func open(_ stage: String, _ tag: String) -> XCUIApplication {

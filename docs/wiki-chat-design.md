@@ -2,7 +2,8 @@
 
 > owner 11-06 问：wiki 页面上要有一个聊天窗口，用来边聊天边修改 wiki。
 > owner 11-06 定：入口是右下角的圆形悬浮按钮；五条按推荐；orbit 这个 space 默认用 `orbit-develop`（HPC）；定向重写只绕开不写文档的作业（§8.5）。全部见 §12。
-> 本文是产品方案，还没有任何实现。效果图：`docs/mocks/wiki/42-wiki-chat`（图里的对话、条目和合并都是示意）。
+> owner 11-07 定：面板的输入框换成 session 页的 composer，用方案 A（效果图 `docs/mocks/wiki/43-chat-session-composer`，§4.1、§4.2）。
+> 本文是产品方案，还没有任何实现。效果图：`docs/mocks/wiki/42-wiki-chat`（图里的对话、条目和合并都是示意）；面板的输入框以效果图 43 为准。
 > 它取代 `docs/wiki-comment-to-session-design.md` 的入口部分（§2、§3、§5、§11.1–§11.5），留用那份的 §12（任何改动进 main 都跟上、任何重写都留版），去掉其中的 runner 路径（§11.7）：P11（2026-10-19）已经删了 runner 上写文档的路径。
 
 ---
@@ -70,9 +71,14 @@
 
 ### 4.1 面板
 
-- **头：** 标题（点开是这个 space 的聊天历史）、`+` 新开、`↗` 换成完整会话页、`✕` 收起。标题下一行字写 `workspace · 机器 · 引擎 · 模式`，一直看得见在哪跑。
+- **头：** 标题（点开是这个 space 的聊天历史）、`+` 新开、`↗` 换成完整会话页、`✕` 收起。
+- **Runs in（owner 11-07 定，效果图 43 ②）：** 新聊天时标题下一行是 `Runs in`，只放 workspace，只在新聊天出现，发出第一句后收起。聊天开始以后不再显示 workspace，session 页也是开了就不能换。机器离线时照旧另写一行（§5.1）。
 - **地址：** 带 `?chat=<session>`，翻页不关，刷新还在。
-- **输入框：** 精简版：文字、附件、发送、Stop。别的（`#` 引用、模型切换、斜杠命令）交给 `↗`。
+- **输入框（owner 11-07 定，效果图 43 ②④⑤）：** 就是 session 页的 composer，是同一个组件，不是照着仿一个：附件行、输入框、工具栏、斜杠菜单，运行中的排队、插话与 Stop。工具栏和 session 页一样：`+`（图片、文件、命令、技能）、模式、模型与思考强度、用量圈、发送。发送键在运行中且输入框为空时变成 `Stop`；这时再发的消息按 session 页的规则插进这一轮，按住发送键或 ⌥Enter 排到下一轮，排队和插话中的消息在输入框上方，可以收回。以后 session 页改了，面板跟着变。
+  - 新聊天在工具栏选的模型、思考强度、速度与模式随第一句建聊天（`POST /api/wiki/spaces/:id/chats` 的 `model`、`effort`、`fastMode`、`permissionMode`）；聊天开始以后，改它们和 session 页一样改这场会话的配置。
+  - 占位文字沿用 wiki 的两句：`Ask about this page, or say what should change`；有卡片等你按时是 `Reply, or say what to change in the draft`。
+  - 面板宽 374 px 时工具栏一行放得下，不挤压模型芯片（效果图 43 ⑥ 是反例）。
+  - 和 session 页不同的只有两处：换 provider 与账号只在完整会话页（`↗`）；新聊天的第一句是 owner 的原话（§4.2），所以 `!` 命令要等聊天开始以后再发。
 - **聊天的归属：** 一场聊天属于一个 space，换 space 看到的是那个 space 的聊天。它也在 workspace 的会话列表里，页头有来处标签 `From Wiki`。
 
 | 窗口宽 | 面板 | 目录栏 |
@@ -88,7 +94,9 @@
 
 - **当前页：** 自动跟着你走，发送时定格。文档页带篇和节（按滚动位置取最近的节标题），条目抽屉带条目，plan 页带篇。
 - **引用：** 选中的句子，带脚注的代码位置、记录和经由的条目。最多 20 句。
-- **都能叉掉，没显示的不发。** 发出后气泡下面是 `⊕ Orbit attached: Wiki selection · 3.1 §3 · 1 sentence · 2 sources`，展开看全文。
+- **在输入框的附件行里（owner 11-07 定，效果图 43 ④）：** 当前页与引用排在附件行的最前面，和图片、文件排在一起，各带 `×`。
+- **都能叉掉，没显示的不发。** 发送时定格，叉掉的就不发。发出后气泡下面是 `⊕ Orbit attached: Wiki selection · 3.1 §3 · 1 sentence · 2 sources`，展开看全文。
+- **图片与文件：** 和 session 页一样上传，消息只带它们的 id。之后的消息走这场会话自己的发消息门；新聊天的第一条在建聊天的门（`POST /api/wiki/spaces/:id/chats` 的 `attachmentIds`）带上，和第一句在同一个事务里挂到第一条 turn 上。
 - **在服务端展开。** 客户端只发 `{ docSlug, sectionKey, sentenceIds }`，投递时服务端读当时的句子和脚注，走现有的附注机制（`control-plane-note.ts`、`deliveredMessage.ts` 的 `describeNote`）。`conversation_turn.content` 仍然只有你的话，所以这句话能被当一手出处（契约 `tiered.auto.ownerWords` 要求 owner 经 user 门发、带 UUID 的 client turn id）。
 - **不加读文档的工具。** 契约 §22.8「没有读写文档的 MCP 工具」不动：屏幕上有的，附注带过去；plan 同样由页面带。
 - 这一场的第一条消息多一段给 agent 的话（`<orbit_wiki_chat>`）：你在 wiki 页旁边聊天；先判断该改哪一层；条目改动用 `wiki_propose`，重写和 plan 用 `wiki_draft`，都只是草稿；不要改文档。
@@ -132,7 +140,7 @@
 |---|---|---|---|---|
 | 「这句的原因写错了」「这个坑修好了」 | 知识 | 条目 | `Add / Amend / Supersede / Retire` | 现有写入口，经草稿 |
 | 「这个数早就变了」 | 文档落后于 main | 重写这一节 | `Rewrite from main` | 新：按下排 `docs_follow` |
-| 「这篇太长，拆开」「写给新人看」 | 结构和写法 | plan（写法要求落在节的 `covers` 上，指纹包含它，下次重写还在） | `Plan change` | 现有 `plan/edits`、`confirm`、`build`，一按三步 |
+| 「这篇太长，拆开」「写给新人看」 | 结构和写法 | plan（写法要求落在节的 `covers` 上，指纹包含它，下次重写还在） | `Plan change`：一张卡可改几篇，拆一篇就是一张卡（移一节到新开的一篇），卡面先写移节、再逐篇写改动（图 42 ③） | 现有 `plan/edits`、`confirm`、`build`，一按三步；几篇的改动合成一次 plan 编辑，对改完的整份 plan 过一次闸，任何一篇过不了就什么都不写、卡上列出全部错误。Undo 把 plan 和那次重建写过的节放回去（§7.2） |
 | 「这里应该改成 45 秒」 | 系统本身 | 代码或它引用的设计文档 | 没有卡，是会话的改动条 | 审批照拨盘走，Merge 你按，进 main 后 §8.1 跟上 |
 
 agent 判断错了怎么办：你接着说，或者按 Discard。卡上写明落在哪一层，这个判断是看得见的。
@@ -156,7 +164,7 @@ agent 判断错了怎么办：你接着说，或者按 Discard。卡上写明落
 | `Apply` | `POST /api/wiki/chat-drafts/:id/apply`，只认 JWT，带会话头拒 `WIKI_OWNER_CHANNEL_ONLY` | 同一个事务里记变更集（origin agent，会话是这场聊天）并接受：trust = confirmed，不走核实。原则类是你自己的写入：trust = owner。然后排 §8 的重写 |
 | `Edit` | 同一道门 | 同 Review 的 Edit：记 edited，修订作者是你 |
 | `Discard` | 同一道门 | 只标记草稿。不记 Not true，不留反例 |
-| `Undo` | 现有 `changesets/:id/revert`，加恢复节的旧版 | 整次撤回，节恢复到 Apply 之前那一版 |
+| `Undo` | 现有 `changesets/:id/revert`，加恢复节的旧版 | 整次撤回，节恢复到 Apply 之前那一版。plan 卡（owner 11-07 定）：plan 回到这张卡按之前的内容，作为你的新版本存下并确认；那次重建改写或拿掉的节恢复到重建前留下的那一版，不调模型，留一版原因 `restore`；plan 在这张卡之后又动过时不可撤 |
 
 - **一张卡一按。** 一张卡可以有几个 op，一起生效。
 - **agent 下一轮知道结果。** Applied、Discarded、Undone 随下一条消息作为附注送达，不单独开回合。
@@ -173,6 +181,17 @@ agent 判断错了怎么办：你接着说，或者按 Discard。卡上写明落
 | `Applied · Confirmed by you` | 已按 | Undo · Open entry |
 | `Discarded` | 已弃 | — |
 | `Not applied` | 聊天结束了，草稿没处理 | — |
+| `Undone` | 已按，又按了 Undo | — |
+
+plan 卡（§6 第三行，一张卡可改几篇）：
+
+| 显示 | 条件 | 动作 |
+|---|---|---|
+| `Draft · Plan change` | 刚起草；卡面先写移节（`3.1 §3 … → new document 3.5`），再逐篇写改动和新的 covers，Rewrites 每篇一个（图 42 ③） | Apply & rebuild · Open in Plan · Discard |
+| `Changed since this draft` | plan 在起草之后又存过版本（草稿或确认版） | Redo · Discard |
+| `Applied · Confirmed by you` | 已按，plan 还停在这张卡按出的版本 | Undo · Open in Plan |
+| `Applied · Confirmed by you`，下一行 `The plan has changed since, so this can no longer be undone.` | 已按，plan 之后又动过 | Open in Plan |
+| `Undone` | 已撤：plan 回到按之前的内容（新的一版，已确认），重建写过的节放回去 | — |
 
 重写的进展接在卡下面，见 §8.3。
 
@@ -209,6 +228,8 @@ agent 判断错了怎么办：你接着说，或者按 Discard。卡上写明落
 任何来源的重写（维护、生成、跟进）都留一版旧句子和原因，每节至多 5 版，指纹没变不留（10-09 §12.2 原样）。`See changes` 逐句对照；节旁 `Updated`；Activity 的 Recently changed 加 Docs 行；原因可以是「After chat <标题>」。
 
 `Undo` 恢复的是这张卡触发的那一版之前的句子。恢复后这节按原指纹算，不会被下一次维护无故重写。
+
+撤销 `Rewrite from main` 卡（owner 11-07 定）：恢复的旧版是按旧提交写的。如果 main 改过这一节引用的文件，下一次维护按 main 再写一遍。这是有原因的重写，不算无故，行为不变；但不能静默，撤销后的这类卡上写一句 `If main has changed the files this section draws on, the next maintenance run writes it from main again.`（web 的 `WIKI_CHAT_UNDONE_REWRITE_NOTE`，iOS 的 `WikiChatCopy.cardUndoneRewriteNote`）。main 没改过这些文件时，指纹不变，下一次维护不动这一节。
 
 ### 8.5 和「一个 space 只跑一个作业」的冲突（owner 11-06 定）
 

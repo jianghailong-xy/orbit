@@ -423,6 +423,9 @@ final class ConsoleModel {
     @ObservationIgnored weak var machineSetup: MachineSetupModel?
     /// Draft only: fired with the freshly created session so the caller can open its live console.
     var onSessionCreated: ((Session) -> Void)?
+    /// Set while a wiki chat's panel draws this console's composer (board 43): what its messages carry beside the
+    /// words, and — on a new chat's draft — the door its first message makes the chat through.
+    @ObservationIgnored var wikiChat: WikiChatComposing?
     private(set) var state = TranscriptState()
     /// Bumped once per published `state` snapshot. Views that only need "the transcript changed"
     /// (auto-scroll, sticky-header recompute) observe this O(1) counter instead of an
@@ -2009,9 +2012,10 @@ final class ConsoleModel {
     /// runner builds an image-only user turn for it (no text block). That holds for a draft too:
     /// POST /sessions takes attachments alone as the opening message. A question reply keeps the
     /// text-is-required rule, since its deny+message channel carries text only. `send` also
-    /// excludes a bare `!`, which is a shell no-op rather than a message.
+    /// excludes a bare `!`, which is a shell no-op rather than a message. A new wiki chat opens with
+    /// the owner's words, so its files never go alone (contract `chat.create`).
     private var canSendAttachmentsAlone: Bool {
-        replyContext == nil && !pendingAttachments.isEmpty
+        replyContext == nil && !pendingAttachments.isEmpty && wikiChat?.create == nil
     }
 
     /// Whether to show a "working" row at the transcript tail: the agent owes a response it hasn't
@@ -2787,6 +2791,10 @@ final class ConsoleModel {
         guard !sending, !waitingForUploads else { return }
         // `false` for a retry: its message was handed in, so the composer keeps what it holds.
         let fromComposer = overrideText == nil
+        // A wiki chat's composer: the page and the selection its attachment row shows go beside the words, and leave
+        // the row once the server took them. A sentence handed in (a card's own) carries neither.
+        let wikiContext = wikiContext ?? (fromComposer ? wikiChat?.context() : nil)
+        let onAccepted = onAccepted ?? (fromComposer ? wikiChat?.accepted : nil)
         // A chip is staged the moment an image is picked, while its bytes are still going up (see
         // `attach`). Sending in that window would leave the image behind for good: only chips that
         // already carry a `remoteID` ride along, and the staged list is cleared below either way.
@@ -3365,6 +3373,22 @@ final class ConsoleModel {
     /// opens the live console; the pills already carry the agent's seeded config.
     private func createDraftSession() async {
         guard let agent = draftAgent else { return }
+        // A new wiki chat: its first message makes the chat through the wiki's door (contract `chat.create`), with
+        // the files staged here and what the toolbar shows. Words go first: files ride with them, never alone.
+        if let create = wikiChat?.create {
+            guard !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            sending = true
+            defer { sending = false }
+            let made = await create(WikiChatLogic.FirstMessage(
+                words: composerText, attachmentIds: pendingAttachments.compactMap(\.remoteID),
+                model: providerCapabilitiesResolved ? modelID : nil, permissionMode: permissionMode.rawValue,
+                effort: effort.rawValue, fastMode: fastMode))
+            guard made else { return }
+            composerText = ""
+            pendingAttachments = []
+            if permissionModeWasEdited { rememberDefaultPermissionMode(permissionMode.rawValue) }
+            return
+        }
         let (text, shell) = ComposerLogic.parseShell(composerText)
         if shell, executesDsh {
             statusMessage = Self.dshShellRefusal
@@ -5919,4 +5943,14 @@ private func composerThumbnail(from data: Data, maxDimension: CGFloat = 96) -> D
     let renderer = UIGraphicsImageRenderer(size: target)
     return renderer.pngData { _ in source.draw(in: CGRect(origin: .zero, size: target)) }
     #endif
+}
+
+/// What a wiki chat's panel hands the console whose composer it draws (board 43): the page and the selection its
+/// attachment row shows, frozen as a message goes; what to do once the server took them; and, on a new chat's draft,
+/// the create its first message goes through instead of a session's.
+struct WikiChatComposing {
+    let context: @MainActor () -> WikiChatContext?
+    let accepted: @MainActor () -> Void
+    /// True once the chat is made; false when it was refused, which the panel says.
+    var create: (@MainActor (WikiChatLogic.FirstMessage) async -> Bool)?
 }
