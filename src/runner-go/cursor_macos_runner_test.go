@@ -623,6 +623,14 @@ func cursorCLIStartSites(t *testing.T) []string {
 					return true
 				}
 			}
+			// The command helper starts Bash, never the credential-bearing CLI.
+			if name == "cursor_shell.go" && (enclosing(call.Pos()) == "runCursorShell" || enclosing(call.Pos()) == "runCursorFreshCommand") && sel.Sel.Name == "Command" && len(call.Args) > 0 {
+				if binary, ok := call.Args[0].(*ast.CallExpr); ok && len(binary.Args) == 0 {
+					if fn, ok := binary.Fun.(*ast.Ident); ok && fn.Name == "cursorBash" {
+						return true
+					}
+				}
+			}
 			if strings.HasPrefix(name, "cursor_") || strings.Contains(strings.ToLower(args), "cursor") {
 				sites = append(sites, name+" "+enclosing(call.Pos()))
 			}
