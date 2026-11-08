@@ -194,7 +194,7 @@ credential in `~/.orbit/config.json`; that file is private and must not be poste
 | `ORBIT_RUNNER_TOKEN` | Issued by registration; no public default | Long-lived machine credential; also available to authorized CLI/session contexts. Never invent or share it. | Yes | Re-register when revoked; registration restarts the installed service |
 | `ANTHROPIC_API_KEY` | Optional; unset uses local login | Usage-billed Claude Code authentication on the runner. | Yes | Update the service's private environment and restart it |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Optional; unset uses local login | Non-interactive subscription authentication from the runtime's token setup flow. | Yes | Update the service's private environment and restart it |
-| `ORBIT_HOME` | Optional; `~/.orbit` | Runner configuration and run scratch directory, and the CLI's saved login (`user.json`). A shell and service must use the same home. | Directory contains credentials | Update the service configuration and restart it |
+| `ORBIT_HOME` | Optional; `~/.orbit` | Runner configuration and run scratch directory, and the CLI's saved login (`user.json`). A shell and service must use the same home. Session checkouts are made in its `worktrees` directory, cloned from the workspace's checkout where both are on one filesystem that can clone files: [Session checkouts on the runner's disk](self-hosting.md#session-checkouts-on-the-runners-disk). | Directory contains credentials | Update the service configuration and restart it |
 | `ORBIT_NO_SELFUPDATE` | Optional; unset | Disables runner self-updates. | No | Restart runner with the setting |
 | `ORBIT_NO_ENGINE_UPDATE` | Optional; unset | Disables periodic coding-runtime updates. | No | Restart runner with the setting |
 

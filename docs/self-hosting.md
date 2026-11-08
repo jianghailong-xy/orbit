@@ -203,6 +203,31 @@ runner service's: that service's agent sessions can read the account's saved log
 On a Linux machine where several accounts each run a runner of their own, set the machine up once and have each
 account register itself: [Multi-user Linux machines](#multi-user-linux-machines).
 
+### Session checkouts on the runner's disk
+
+Each session works in a checkout of its own, under `<ORBIT_HOME>/worktrees` (`~/.orbit/worktrees` by default).
+Three things keep them from filling the runner's disk:
+
+- **Keep Free.** Set on the runner's page (Capacity), it is the free space below which the runner reclaims
+  checkouts: finished sessions' first, then those of resting sessions left unwritten for two weeks, when nothing
+  in them would be lost. With none set, a registered runner reclaims only finished sessions' checkouts beyond the
+  32 most recent. Set it at least as high as whatever else guards that disk. A managed runner has a default floor,
+  and takes resting sessions' checkouts sooner ([Their storage](#their-storage)).
+- **Cloned checkouts.** Where the filesystem can clone files, on APFS, XFS made with `reflink=1`, btrfs, or
+  OpenZFS 2.2 or later with block cloning enabled, a session's checkout is cloned from the workspace's own
+  checkout and costs next to nothing on disk until its files change. The workspace's checkout has to be on the
+  same filesystem as `ORBIT_HOME` (on btrfs, in the same subvolume). On ext4, exFAT and any other filesystem that
+  cannot clone, the runner falls back to a plain checkout, which git writes out in full, as before. It needs no
+  setting and no privilege either way.
+- **Paths a repository leaves out.** A repository that commits `.orbit/checkout-exclude`, one pattern a line in
+  gitignore syntax, gets session checkouts without those paths, on runners with git 2.34 or later. The runner
+  reads the file from the commit a session forks from, and an agent brings a left-out path in with
+  `git sparse-checkout add <path>`.
+
+What the runner logs about each checkout, and why one went:
+[runner troubleshooting](runner-troubleshooting.md#d-the-disk-is-short-or-a-sessions-checkout-has-gone),
+sections D to F.
+
 ## 5. Back up and monitor
 
 The Compose stack writes Postgres data to `./data/postgres` and attachment bytes to `./data/files`. A sidecar writes
@@ -1219,6 +1244,34 @@ which the paragraph above is about.
 Installing with `--no-managed-runner-firewall`, or turning the firewall off later, gives every account's runner this
 host's services and the private networks behind it again: anyone who can sign in can probe and reach them from code
 in their runner. Choose it only where those are firewalled otherwise, or where every account is trusted with them.
+
+### Their storage
+
+A managed runner keeps its sessions' checkouts on its data volume, 20 GiB by default (`storage.capacity` in
+`profile.json`). The channel stops a runner whose volume holds more than its limit (`VOLUME_OVER_LIMIT`), and the
+runner reclaims checkouts before that:
+
+- **Against the volume, not the host's disk.** The apiserver relays the channel's latest measurement of the volume
+  to the runner with each heartbeat answer, and the runner judges free space by what the volume has left under its
+  limit.
+- **The floor** is the owner's **Keep Free** when one is set, and a quarter of the volume's limit otherwise: 5 GiB
+  of 20 GiB. The default is worked out for each heartbeat answer and never stored, so the runner's page shows Keep
+  Free only as its owner set it, and auto-run, which holds ready tasks while a runner's disk is under its floor,
+  applies only that.
+- **Before a new checkout** that would leave less than the floor free, the runner makes room for it first. Below
+  the floor it reclaims resting sessions' checkouts however recently they were written, the oldest first, when
+  nothing in them would be lost; each comes back at its session's next message.
+- **A checkout is never refused,** and a session at work, or whose engine is still warm (up to four hours after
+  its turn), keeps its checkout. So the volume has to hold the workspace and its runner's Max Concurrent + 1
+  session checkouts, with what they install and build. The default profile (20 GiB, Max Concurrent 2) holds that
+  for a repository the size of Orbit's, whose checkout is about 1.75 GiB, or 0.93 GiB with the paths it leaves out.
+- **Clones count at full size.** Docker sizes a volume by adding up its files' apparent sizes, so the channel's
+  limit counts a cloned file as much as a copy. Putting Docker's data root on XFS (`reflink=1`) or btrfs saves this
+  host's disk, not an account's limit. A repository's `.orbit/checkout-exclude` lowers both.
+
+All of this needs managed runners switched on: with `ORBIT_MANAGED_RUNNERS_ENABLED` off, a runner gets neither the
+volume's measurement nor the default floor. The details and the runner's log lines are in
+[the runbook](managed-runner-docker-operations.md#session-checkouts-and-the-volumes-limit).
 
 ### Turn them off or on
 

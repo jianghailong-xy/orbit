@@ -590,6 +590,31 @@ After a failover, read the next generation's start in its log:
   and only the second was failed;
 - failover across separate physical machines: the lab's two nodes are VMs on one host.
 
+## Session checkouts and the volume
+
+Each session works in a checkout of its own on its runner's volume. Inside the Pod, `statfs` reports the claim's own
+ext4 filesystem, so the runner measures the volume itself and reclaims checkouts below its floor as any runner does
+([the rule](runner-troubleshooting.md#d-the-disk-is-short-or-a-sessions-checkout-has-gone)):
+
+- **The floor** is the owner's **Keep Free** (the runner's page, Capacity) whenever one is set. Otherwise it is a
+  quarter of the claim's size, the size admission reserved for it (the profile's `storage.capacity` when the claim
+  was made): 512 MiB of the lab's 2 GiB. The default is worked out for each heartbeat answer and never stored, so
+  the runner's page shows Keep Free only as its owner set it, and auto-run, which holds ready tasks while a runner's
+  disk is under its floor, applies only that. With managed runners switched off, a runner gets no default floor.
+- **No storage budget.** A storage budget is the Docker backend's, where `statfs` cannot see a volume's limit
+  ([its runbook](managed-runner-docker-operations.md#session-checkouts-and-the-volumes-limit)). Here the rules of a
+  runner without one apply: a resting session's checkout goes only once nothing in it has been written for two weeks
+  and every commit is on a remote, a look that finds nothing to take waits an hour, and no room is made before a new
+  checkout. So resting sessions keep their checkouts for two weeks, and a volume with many of them can fill up:
+  writes then fail with "no space left on device".
+- **No clones.** ext4 cannot clone files, so every session checkout is written out in full, and the runner says so
+  at start: `checkouts: plain: probe failed (EOPNOTSUPP): the filesystem of /var/lib/orbit/home/.orbit/worktrees
+  cannot clone files, so git writes out every session checkout`. A StorageClass whose filesystem is `xfs`, with
+  `reflink=1`, would let runners clone; switching to one is a later decision (D4 in the
+  [checkout storage design](session-checkout-storage-design.md#8-decisions-for-the-owner)), because it means running
+  the durability and power-cut drills again. A repository's `.orbit/checkout-exclude` makes checkouts smaller here
+  too ([the format](runner-troubleshooting.md#f-a-sessions-checkout-lacks-some-paths)).
+
 ## Where each setting lives
 
 | Setting | Where | Applies after |
@@ -597,6 +622,7 @@ After a failover, read the next generation's start in its log:
 | The switch and the profile's path | The authorized apiserver's environment (`ORBIT_MANAGED_RUNNERS_ENABLED`, `ORBIT_MANAGED_RUNNERS_PROFILE`) | Its restart |
 | Cluster, context, namespace, API server, storage class, per-runner capacity, image digest, `serverUrl`, runner resources | The profile (`kubernetes`, `storage`, `runner`) | The apiserver's restart; a runner's resources and image at its next start |
 | The capacity budget the manager admits runners into | The profile, `capacity` | The apiserver's restart |
+| The floor a runner reclaims session checkouts at | Its owner's **Keep Free** on the runner's page; with none, a quarter of the claim's size | The runner's next heartbeat |
 | Idle interval, attempts, backoff, poll, lease, startup deadline, heartbeat freshness, drain | The profile, `lifecycle` | The apiserver's restart |
 | The manager's identity and rights | Its ServiceAccount, Role, ClusterRole and the kubeconfig the profile names | At once (RBAC); the kubeconfig at the apiserver's restart |
 | The admission guard | `ValidatingWebhookConfiguration` `orbit-managed-runner-pods`; the API server's admission configuration (token) | At once; the token at the API server's restart |
