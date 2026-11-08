@@ -37,6 +37,7 @@ import type {
 } from '@orbit/shared';
 import { Client } from 'pg';
 
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { QueueService } from '../queue/queue.service';
@@ -259,6 +260,8 @@ test('the sentences about a merge into main name the project’s main branch, an
 
   /** An open item's next step as the project's open items read serves it, and as its delivery card does. */
   async function nextStep(w: World, itemId: string) {
+    await openItems.deliverOwed(w.projectId);
+    await receiveOpenItem(db, itemId);
     const listed = await openItems.list(ownerId, w.projectId);
     const row = [...listed.needsYou, ...listed.withCoordinator].find((each) => each.itemId === itemId);
     assert.ok(row, `CONTROL: the open items read lists ${itemId}`);
@@ -314,6 +317,15 @@ test('the sentences about a merge into main name the project’s main branch, an
     await t.test(`(2) ${upstream ? `on ${upstream}` : 'with no repository'}, every next step about the merge, `
       + 'on the open items read and the delivery card', async () => {
       const w = await world(`steps-${upstream ?? 'unbound'}`, upstream);
+      const coordinator = await prisma.session.create({
+        data: {
+          ownerId, creatorId: ownerId, title: 'Review integration items', prompt: 'Review integration items',
+          workspaceId: w.workspaceId, assignedRunnerId: w.runnerId, status: RunStatus.AWAITING_INPUT,
+        },
+      });
+      await prisma.project.update({
+        where: { id: w.projectId }, data: { coordinatorEnabled: true, coordinatorSessionId: coordinator.id },
+      });
       for (const [index, shape] of SHAPES.entries()) {
         const now = new Date();
         const item = await prisma.projectOpenItem.create({

@@ -14,6 +14,7 @@ import {
 } from '@prisma/client';
 import { Client } from 'pg';
 
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { PushService } from '../push/push.service';
@@ -395,6 +396,8 @@ test('(1) §10.8 O-T5: the coordinator\'s door queues an observation and marks, 
       const unknown = await doneTask(stack, w, 'identity-unknown', sha('2'), { frozen: false });
       const ownersTask = await doneTask(stack, w, 'owners-item', sha('3'));
       const mine = await unobserved(stack, w, waiting, 'COORDINATOR');
+      await stack.openItems.deliverForTasks([waiting.taskId]);
+      await receiveOpenItem(stack.db, mine);
       const cannotBeSeen = await unobserved(stack, w, unknown, 'COORDINATOR');
       const owners = await unobserved(stack, w, ownersTask, 'OWNER');
 
@@ -596,6 +599,8 @@ test('(6) §10.8: an observation that does not see the commit leaves the item OP
       const w = await world(stack, 'observe-after');
       const t = await doneTask(stack, w, 'late-push', sha('8'));
       const item = await unobserved(stack, w, t, 'COORDINATOR');
+      await stack.openItems.deliverForTasks([t.taskId]);
+      await receiveOpenItem(stack.db, item);
 
       const first = await observeAsSession(stack, w, w.coordinatorSessionId, { reason: 'the push may be there now' });
       const notYet = await claimObservation(stack, w);

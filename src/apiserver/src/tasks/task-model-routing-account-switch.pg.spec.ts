@@ -60,7 +60,7 @@ const CODEX = 'gpt-5.5-codex';
 /** The Agent's own effort, which no tier below XL picks: what a run that is not routed gets. */
 const AGENT_EFFORT = 'max';
 const HINT_REASON = 'one service plus its spec';
-const TIER_M = `Tier M: suggested by the coordinator — ${HINT_REASON}`;
+const TIER_M = `[coordinator] Tier M: suggested by the coordinator — ${HINT_REASON}`;
 const MOVED_OFF_SPENT_CLAUDE = 'Engine codex: claude is at 100% of its weekly quota';
 const WEEKLY_LIMIT = "You've hit your weekly limit · resets 1pm (Europe/Berlin)";
 /** Three days out: a window that stays in force for the whole spec. */

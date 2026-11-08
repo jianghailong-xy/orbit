@@ -13,6 +13,7 @@ import {
 import type { IntegrationJobCommand } from '@orbit/shared';
 import { Client } from 'pg';
 
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { PushService } from '../push/push.service';
@@ -843,6 +844,8 @@ async function servedError(stack: Stack, w: World, kind = 'INTEGRATION_ERROR') {
   const [item, ...more] = await itemsOf(stack, w, kind);
   assert.ok(item, 'CONTROL: the failure opened an item');
   assert.equal(more.length, 0, 'one failure, one item');
+  await stack.openItems.deliverOwed(w.projectId);
+  await receiveOpenItem(stack.db, item.id);
   const listed = await stack.openItems.list(w.ownerId, w.projectId);
   const row = [...listed.needsYou, ...listed.withCoordinator].find((each) => each.itemId === item.id);
   assert.ok(row, 'CONTROL: the open items read lists it');
