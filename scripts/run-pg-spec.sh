@@ -183,7 +183,9 @@ for spec in "${SPECS[@]}"; do
   psql_admin "CREATE DATABASE $DB TEMPLATE $TEMPLATE" >/dev/null || die "could not clone $TEMPLATE into $DB"
 
   URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DB"
+  # These disposable-database specs inject conflicts deliberately, just like project-pg-matrix.sh.
   child=(COORDINATOR_PG_EXPECTED_DATABASE="$DB"
+         ORBIT_DB_CONFLICT_ORIGIN=fault_injection
          COORDINATOR_PG_EXPECTED_USER="$ADMIN"
          COORDINATOR_PG_EXPECTED_SYSTEM_IDENTIFIER="$SYSTEM_ID"
          NODE_OPTIONS="$(pg_matrix_child_node_options)")
