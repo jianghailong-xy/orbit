@@ -255,6 +255,10 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
 偏好：飞书沿用已有的按 kind 开关（`notifySessionFinished`、`notifyAgentMessage`），另加应用上的总开关。
 不做「飞书送达了就不再推手机」的去重：两边都想收的人不少，不想要的关掉一边即可。
 
+实现（F1-4 第 3 版）：`enabled` 仍算飞书。`notifyAgentMessage` 找不到设备也找不到飞书目标时：服务器没配 APNs 与 FCM
+就答 `push is not configured on this server`（runner 读成 NO_PUSH），配了其中之一才答 `no devices are registered for this account`；
+有飞书目标的账号照样发卡。
+
 ### 6.2 卡片的生命周期
 
 - 每发一张卡记一行 `feishu_message`：飞书 message_id、chat、账号、kind、sessionId / approvalId / openItemId、状态。
