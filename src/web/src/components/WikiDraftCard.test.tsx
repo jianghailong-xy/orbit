@@ -126,7 +126,17 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
     writes.push({ method, path, body });
     if (refuse) return reply(refuse.status, refuse.body);
     const press = path.split('/').pop();
-    if (press === 'apply' || press === 'edit') card = { ...card, state: 'applied', decision: press === 'edit' ? 'edited' : 'applied', undoable: true };
+    if ((press === 'apply' || press === 'edit') && card.kind === 'plan' && card.change) {
+      // A plan card's press: the version it made, undoable while the plan stands there, its rebuild under it (contract
+      // `chat.presses.apply`, `chat.presses.undo`).
+      card = {
+        ...card, state: 'applied', decision: 'applied', undoable: true, change: { ...card.change, version: card.change.baseVersion + 1 },
+        rewrite: {
+          jobId: 'B1', result: 'rewriting', reason: null, sha: null, seen: false, settledAt: null,
+          sections: card.rewrites.map((one) => ({ doc: one.doc, key: one.key, where: one.where, result: null, changed: null, versionId: null })),
+        },
+      };
+    } else if (press === 'apply' || press === 'edit') card = { ...card, state: 'applied', decision: press === 'edit' ? 'edited' : 'applied', undoable: true };
     if (press === 'discard') card = { ...card, state: 'discarded', decision: 'discarded' };
     if (press === 'undo') card = { ...card, state: 'undone', undoable: false };
     if (press === 'retry' && card.rewrite) card = { ...card, rewrite: { ...card.rewrite, result: 'rewriting', reason: null } };
@@ -157,7 +167,7 @@ beforeEach(() => {
     openEntry: (entryId) => void calls.push(`entry ${entryId}`),
     openReview: (changesetId, seq) => void calls.push(`review ${changesetId}#${seq}`),
     openSettings: () => void calls.push('settings'),
-    openPlan: () => void calls.push('plan'),
+    openPlan: (doc) => void calls.push(doc ? `plan ${doc}` : 'plan'),
     send: async (text) => void calls.push(`send ${text}`),
     focus: null,
   };
@@ -311,6 +321,23 @@ describe('the presses (design §7.2, contract `chat.presses`)', () => {
     await press('Undo');
     expect(pressed()).toEqual(['discard', 'undo']);
     expect(text('.wk-draft-k')).toBe('Undone');
+    // An entry's Undo stands as it is: no note under the title.
+    expect(document.querySelector('.wk-draft-note')).toBeNull();
+  });
+
+  it('an undone Rewrite from main says that the next maintenance run writes it from main again, if main has moved its files', async () => {
+    // Design §8.4 (owner 11-07): the Undo puts back the version written at an older commit, and the next run follows main.
+    await show(draft({
+      kind: 'rewrite', label: 'Rewrite from main', ops: [], similar: [], rewrites: [REWRITES[0]!],
+      state: 'applied', decision: 'applied', undoable: true, rewrite: { ...UPDATED, seen: true },
+    }));
+    expect(document.querySelector('.wk-draft-note')).toBeNull();
+    await press('Undo');
+    expect(pressed()).toEqual(['undo']);
+    expect(text('.wk-draft-k')).toBe('Undone');
+    expect(text('.wk-draft-note')).toBe('If main has changed the files this section draws on, the next maintenance run writes it from main again.');
+    // A line, not a button: there is nothing to press about it.
+    expect(document.querySelector('.wk-draft-note')!.tagName).toBe('DIV');
   });
 
   it('Edit lays the owner’s version over the op and applies it; with nothing changed it waits', async () => {
@@ -356,6 +383,189 @@ describe('the presses (design §7.2, contract `chat.presses`)', () => {
       'The card couldn’t be pressed: what this card changes changed since it was drafted: nothing was applied. Ask the chat to draft it again from what is there now (Redo)',
     );
     expect(text('.wk-draft-k')).toBe('Draft · Add decision');
+  });
+});
+
+/** A plan card (C12): the owner's words put on a section's covers, against version 4 of the plan. */
+const PLAN_CHANGE: NonNullable<WikiChatDraftView['change']> = {
+  baseVersion: 4,
+  version: null,
+  docs: [{
+    slug: 'sessions-runtime', title: 'Sessions runtime', number: '3.1', added: false,
+    category: { key: 'runtime', title: 'Runtime', opens: false },
+    fields: [],
+    sections: [
+      { key: 'recovery', title: 'Recovery', number: 2, edit: 'changed', fields: ['covers'], covers: 'What survives a respawn, for a first-time reader: the model first.' },
+    ],
+  }],
+  moves: [],
+};
+/** A split (C17, board 42 ③): 3.1's §3 moved into a new document, 3.5, and 3.1's §1 written for a first-time reader. */
+const SPLIT: NonNullable<WikiChatDraftView['change']> = {
+  baseVersion: 4,
+  version: null,
+  docs: [
+    { slug: 'sessions-runtime', title: 'Sessions runtime', number: '3.1', added: false, category: { key: 'runtime', title: 'Runtime', opens: false }, fields: [],
+      sections: [{ key: 's1', title: 'Overview', number: 1, edit: 'changed', fields: ['covers'], covers: 'For a first-time reader: the model first.' }] },
+    { slug: 'delivery', title: 'Delivery and heartbeats', number: '3.5', added: true, category: { key: 'runtime', title: 'Runtime', opens: false }, fields: [], sections: [] },
+  ],
+  moves: [{ title: 'Delivery and heartbeats', from: { doc: 'sessions-runtime', number: '3.1', key: 's3', section: 3 }, to: { doc: 'delivery', number: '3.5', key: 's3', section: 1 }, fields: [], covers: null }],
+};
+const planCard = (over: Partial<WikiChatDraftView> = {}): WikiChatDraftView =>
+  draft({
+    kind: 'plan', label: 'Plan change', ops: [], similar: [], rationale: 'The owner wants it written for a first-time reader.',
+    sections: [{ doc: 'sessions-runtime', key: 'recovery', where: '3.1 §2', title: 'Recovery' }],
+    rewrites: [{ doc: 'sessions-runtime', key: 'recovery', where: '3.1 §2', title: 'Recovery' }],
+    change: PLAN_CHANGE,
+    ...over,
+  });
+
+describe('a plan card (C12, design §6 third row, board 42 ④ ③)', () => {
+  it('says what its change does to the document: the section it changes, the covers it writes, why, and what it rewrites', async () => {
+    await show(planCard());
+    expect(text('.wk-draft-k')).toBe('Draft · Plan change');
+    expect(text('.wk-draft-ti')).toBe('3.1 Sessions runtime');
+    expect(rows()).toEqual([
+      ['Changes', '§2 Recovery (covers)'],
+      ['Covers', '§2 Recovery: What survives a respawn, for a first-time reader: the model first.'],
+      ['Why', 'The owner wants it written for a first-time reader.'],
+      ['Rewrites', '3.1 §2'],
+    ]);
+    expect(buttons()).toEqual(['Apply & rebuild', 'Open in Plan', 'Discard']);
+    expect(button('Apply & rebuild').className).toContain('orbit-button-primary');
+    await press('3.1 §2');
+    expect(host.calls).toEqual(['section sessions-runtime#recovery']);
+  });
+
+  it('says a new document, and the category it opens', async () => {
+    await show(planCard({
+      rewrites: [],
+      change: {
+        ...PLAN_CHANGE,
+        docs: [{
+          slug: 'runbooks', title: 'Runbooks', number: '4.1', added: true,
+          category: { key: 'operations', title: 'Operations', opens: true },
+          fields: [],
+          sections: [{ key: 's1', title: 'Restarting the runner', number: 1, edit: 'added', fields: [], covers: 'The steps, in order.' }],
+        }],
+      },
+    }));
+    expect(text('.wk-draft-ti')).toBe('4.1 Runbooks');
+    expect(rows()).toEqual([
+      ['Document', 'New document in a new category, Operations'],
+      ['Adds', '§1 Restarting the runner'],
+      ['Covers', '§1 Restarting the runner: The steps, in order.'],
+      ['Why', 'The owner wants it written for a first-time reader.'],
+    ]);
+  });
+
+  it('Apply & rebuild presses the owner’s door once: the card is applied, with Undo and Open in Plan, and its rebuild stands under it', async () => {
+    await show(planCard());
+    await press('Apply & rebuild');
+    expect(pressed()).toEqual(['apply']);
+    expect(text('.wk-draft-k')).toBe('Applied · Confirmed by you');
+    expect(buttons()).toEqual(['Undo', 'Open in Plan']);
+    expect(document.querySelector('.wk-draft-note')).toBeNull();
+    expect(text('.wk-draft-result')).toBe('Rewriting 3.1 §2…');
+  });
+
+  it('a press the plan’s gate refused writes nothing, and the card says every error, a draft still', async () => {
+    await show(planCard());
+    refuse = {
+      status: 422,
+      body: {
+        code: 'WIKI_PLAN_GATE',
+        message: "This plan change, applied to version 4, did not pass the plan's gate (references): 1 error. Nothing was stored; fix every one and send it again.",
+        errors: [{ check: 'references', path: 'change.doc.sections[2].sources.sessions.projects[0]', message: 'no project of this account is titled "Runner hosting" or has that id' }],
+      },
+    };
+    await press('Apply & rebuild');
+    expect(document.querySelector('.wk-draft-failed')!.firstChild!.textContent).toBe(
+      "The card couldn’t be pressed: This plan change, applied to version 4, did not pass the plan's gate (references): 1 error. Nothing was stored; fix every one "
+        + 'and send it again.',
+    );
+    expect([...document.querySelectorAll('.wk-draft-failed-list li')].map((li) => li.textContent)).toEqual([
+      'change.doc.sections[2].sources.sessions.projects[0]: no project of this account is titled "Runner hosting" or has that id',
+    ]);
+    expect(text('.wk-draft-k')).toBe('Draft · Plan change');
+    expect(buttons()).toEqual(['Apply & rebuild', 'Open in Plan', 'Discard']);
+  });
+
+  it('Open in Plan opens its document on the plan page', async () => {
+    await show(planCard());
+    await press('Open in Plan');
+    expect(host.calls).toEqual(['plan sessions-runtime']);
+  });
+
+  it('a rebuild that failed offers Try again under it, and Try again asks for the build again', async () => {
+    await show(planCard({
+      state: 'applied', decision: 'applied', undoable: true, change: { ...PLAN_CHANGE, version: 5 },
+      rewrite: { ...UPDATED, result: 'failed', sections: [{ doc: 'sessions-runtime', key: 'recovery', where: '3.1 §2', result: 'failed', changed: null, versionId: null }] },
+    }));
+    expect(buttons()).toEqual(['Undo', 'Open in Plan']);
+    expect(text('.wk-draft-result .t')).toBe('Rewrite failed');
+    expect(buttons('.wk-draft-result')).toEqual(['Try again']);
+    await press('Try again');
+    expect(pressed()).toEqual(['seen', 'retry'], 'the failed rebuild was seen on screen, then asked for again');
+  });
+});
+
+describe('a plan card of several documents, and its Undo (C17, board 42 ③)', () => {
+  const splitCard = (over: Partial<WikiChatDraftView> = {}) => planCard({
+    rationale: '3.1 is too long.',
+    sections: [{ doc: 'sessions-runtime', key: 's1', where: '3.1 §1', title: 'Overview' }, { doc: 'delivery', key: 's3', where: '3.5 §1', title: 'Delivery and heartbeats' }],
+    rewrites: [{ doc: 'sessions-runtime', key: 's1', where: '3.1 §1', title: 'Overview' }, { doc: 'delivery', key: 's3', where: '3.5 §1', title: 'Delivery and heartbeats' }],
+    change: SPLIT,
+    ...over,
+  });
+
+  it('says the split document by document: the move, the covers, the new document — and Rewrites names each document once', async () => {
+    await show(splitCard());
+    expect(text('.wk-draft-k')).toBe('Draft · Plan change');
+    expect(text('.wk-draft-ti')).toBe('3.1 Sessions runtime · 3.5 Delivery and heartbeats');
+    expect(rows()).toEqual([
+      ['Moves', '3.1 §3 Delivery and heartbeats → new document 3.5'],
+      ['Changes', '3.1 §1 Overview (covers)'],
+      ['Covers', '3.1 §1 Overview: For a first-time reader: the model first.'],
+      ['Document', '3.5 · New document in Runtime'],
+      ['Why', '3.1 is too long.'],
+      ['Rewrites', '3.1 · 3.5'],
+    ]);
+    expect(buttons()).toEqual(['Apply & rebuild', 'Open in Plan', 'Discard']);
+    // A document's link opens its first section the press rewrites, beside the chat.
+    await press('3.5');
+    await press('Open in Plan');
+    expect(host.calls).toEqual(['section delivery#s3', 'plan sessions-runtime']);
+  });
+
+  it('Undo presses the owner’s door once, and the card reads Undone', async () => {
+    await show(splitCard({ state: 'applied', decision: 'applied', undoable: true, change: { ...SPLIT, version: 5 } }));
+    expect(buttons()).toEqual(['Undo', 'Open in Plan']);
+    await press('Undo');
+    expect(pressed()).toEqual(['undo']);
+    expect(text('.wk-draft-k')).toBe('Undone');
+    expect(buttons()).toEqual([]);
+  });
+
+  it('once the plan moved on, Undo is off and the card says why; Open in Plan stays', async () => {
+    await show(splitCard({ state: 'applied', decision: 'applied', undoable: false, change: { ...SPLIT, version: 5 } }));
+    expect(text('.wk-draft-k')).toBe('Applied · Confirmed by you');
+    expect(text('.wk-draft-note')).toBe('The plan has changed since, so this can no longer be undone.');
+    expect(buttons()).toEqual(['Open in Plan']);
+  });
+
+  it('an Undo the server refuses — the plan moved on meanwhile — says so on the card, and writes nothing', async () => {
+    await show(splitCard({ state: 'applied', decision: 'applied', undoable: true, change: { ...SPLIT, version: 5 } }));
+    refuse = {
+      status: 409,
+      body: { code: 'WIKI_REVISION_CONFLICT', message: "the plan moved on since this card's press made version 5: it stands at version 6 (draft) now, so nothing was undone. Change the plan on the Plan page (Open in Plan)." },
+    };
+    await press('Undo');
+    expect(document.querySelector('.wk-draft-failed')!.firstChild!.textContent).toBe(
+      "The card couldn’t be pressed: the plan moved on since this card's press made version 5: it stands at version 6 (draft) now, so nothing was undone. "
+        + 'Change the plan on the Plan page (Open in Plan).',
+    );
+    expect(text('.wk-draft-k')).toBe('Applied · Confirmed by you');
   });
 });
 

@@ -90,12 +90,18 @@ private func countNames(_ names: [String]) -> String {
 /// A wiki chat's blocks are named off their opening tag's attributes, as the web names them
 /// (`WikiChatLogic.noteLabel`, wiki contract `chat.notes`): "Wiki selection · 3.1 §3 · 1 sentence · 2
 /// sources". One whose tag lacks what its line needs is named generically, as any block this does not know.
+/// The chat's own words to its agent (`<orbit_wiki_chat>`, on its first message) are not named: they are
+/// not something the owner attached, so the line lists the page and the selection the composer showed
+/// (board 42 ①, C15), and a first message sent with neither names nothing. The fold still opens to every
+/// block the agent read.
 public func describeNote(_ note: String) -> String {
     var names: [String] = []
     var rest = note.trimmingCharacters(in: .whitespacesAndNewlines)
     while !rest.isEmpty {
         let tag = openingTag(rest)
-        if let tag, WikiChatLogic.noteTags.values.contains(tag) {
+        if let tag, tag == WikiChatLogic.noteTags["chat"] {
+            // Skipped past below, unnamed.
+        } else if let tag, WikiChatLogic.noteTags.values.contains(tag) {
             names.append(WikiChatLogic.parseNoteTag(rest).map(WikiChatLogic.noteLabel) ?? "context")
         } else {
             names.append(blockName(tag))

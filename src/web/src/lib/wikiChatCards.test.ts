@@ -1,14 +1,20 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { WIKI_CHAT_COPY, type WikiChatDraftView } from '@orbit/shared';
 import { ApiError } from '../api';
 import {
   WIKI_CHAT_SEND_FAILED,
+  WIKI_CHAT_UNDONE_REWRITE_NOTE,
   wikiChatCardFace,
   wikiChatCardLook,
   wikiChatDraftIdOf,
   wikiChatDraftingCall,
   wikiChatNeedsSeen,
+  wikiChatPressDetails,
+  wikiChatPressError,
   wikiChatResultLook,
+  wikiChatRewritesRow,
   wikiChatSendError,
 } from './wikiChat';
 import { wikiWaiting, wikiWaitingIn } from './wikiSpace';
@@ -119,7 +125,18 @@ describe('how a card looks in each state (design §7.3, board 42 ② ③ ④)', 
     ['not applied', { state: 'not_applied' }, 'Not applied', 'grey', [], null, true],
     ['undone', { state: 'undone' }, 'Undone', 'grey', [], null, true],
     ['a rewrite drafted', { kind: 'rewrite', label: 'Rewrite from main', state: 'draft' }, 'Draft · Rewrite from main', 'brand', ['rewrite', 'discard'], null, false],
+    // Its Undo holds until main moves what the section draws on (design §8.4, owner 11-07, C15).
+    [
+      'a rewrite undone', { kind: 'rewrite', label: 'Rewrite from main', state: 'undone' }, 'Undone', 'grey', [],
+      'If main has changed the files this section draws on, the next maintenance run writes it from main again.', true,
+    ],
     ['a plan change', { kind: 'plan', label: 'Plan change', state: 'draft' }, 'Draft · Plan change', 'brand', ['apply_rebuild', 'open_in_plan', 'discard'], null, false],
+    // An applied plan card (C17): Undo while the plan stands where its press left it, and Open in Plan; once the plan
+    // moved on, Open in Plan alone, and the card says why Undo is off.
+    ['a plan change applied', { kind: 'plan', label: 'Plan change', state: 'applied', undoable: true }, 'Applied · Confirmed by you', 'ok', ['undo', 'open_in_plan'], null, true],
+    ['a plan change applied, the plan moved on since', { kind: 'plan', label: 'Plan change', state: 'applied', undoable: false }, 'Applied · Confirmed by you', 'ok',
+      ['open_in_plan'], 'The plan has changed since, so this can no longer be undone.', true],
+    ['a plan change undone', { kind: 'plan', label: 'Plan change', state: 'undone' }, 'Undone', 'grey', [], null, true],
   ] as const)('%s', (_name, over, title, tone, actions, note, quiet) => {
     const look = wikiChatCardLook(card({ ops: add, ...(over as Partial<WikiChatDraftView>) }));
     expect(look.title).toBe(title);
@@ -128,6 +145,18 @@ describe('how a card looks in each state (design §7.3, board 42 ② ③ ④)', 
     expect(look.note).toBe(note);
     expect(look.quiet).toBe(quiet);
     expect(look.inReview).toBe(false);
+  });
+
+  it('says on an undone Rewrite from main what design §8.4 says the next maintenance run does (owner 11-07, C15)', () => {
+    const design = readFileSync(resolve(__dirname, '../../../../docs/wiki-chat-design.md'), 'utf8');
+    const versions = design.slice(design.indexOf('### 8.4'), design.indexOf('### 8.5'));
+    expect(versions).toContain('Rewrite from main');
+    expect(versions).toContain(WIKI_CHAT_UNDONE_REWRITE_NOTE);
+    // Only that card: an entry's Undo, or a rewrite still applied, carries no such line.
+    expect(wikiChatCardLook(card({ kind: 'rewrite', label: 'Rewrite from main', state: 'undone' })).note).toBe(WIKI_CHAT_UNDONE_REWRITE_NOTE);
+    expect(wikiChatCardLook(card({ kind: 'rewrite', label: 'Rewrite from main', state: 'applied', undoable: true })).note).toBeNull();
+    expect(wikiChatCardLook(card({ kind: 'entry', state: 'undone' })).note).toBeNull();
+    expect(wikiChatCardLook(card({ kind: 'plan', label: 'Plan change', state: 'undone' })).note).toBeNull();
   });
 
   it('says an applied card whose challenge waits in Review is in Review, amber, its note opening Review — not confirmed', () => {
@@ -272,6 +301,66 @@ describe('what a message that did not go says (C8 review)', () => {
     }
     expect(wikiChatSendError(new TypeError('Failed to fetch'))).toBe(WIKI_CHAT_SEND_FAILED);
     expect(WIKI_CHAT_SEND_FAILED).toMatch(/Check the connection/u);
+  });
+});
+
+describe('a plan card (C12): its face, and a press the plan’s gate refused', () => {
+  const change: NonNullable<WikiChatDraftView['change']> = {
+    baseVersion: 4,
+    version: null,
+    docs: [{
+      slug: 'sessions-runtime', title: 'Sessions runtime', number: '3.1', added: false,
+      category: { key: 'runtime', title: 'Runtime', opens: false },
+      fields: ['audience'],
+      sections: [
+        { key: 'recovery', title: 'Recovery', number: 2, edit: 'changed', fields: ['covers', 'sources'], covers: 'For a first-time reader.' },
+        { key: 'old', title: 'The old poll', number: 4, edit: 'removed', fields: [], covers: null },
+      ],
+    }],
+    moves: [],
+  };
+
+  it('says the document, what of it changes and the covers it writes, then why: no entry\'s rows', () => {
+    const face = wikiChatCardFace(card({ kind: 'plan', label: 'Plan change', change, rationale: 'Written for newcomers.' }));
+    expect(face).toEqual({
+      heading: '3.1 Sessions runtime',
+      rows: [
+        { label: 'Document', value: 'Changes its audience' },
+        { label: 'Changes', value: '§2 Recovery (covers and sources)' },
+        { label: 'Removes', value: '§4 The old poll' },
+        { label: 'Covers', value: '§2 Recovery: For a first-time reader.' },
+        { label: 'Why', value: 'Written for newcomers.' },
+      ],
+      diff: [],
+      sources: [],
+    });
+    // A plan card the server served without its change (an older one) says only why, as any card does.
+    expect(wikiChatCardFace(card({ kind: 'plan', label: 'Plan change' })).rows).toEqual([{ label: 'Why', value: 'To ride out one gateway restart.' }]);
+  });
+
+  it('lists every error the gate found under the press\'s reason, and nothing for any other refusal', () => {
+    const gate = new ApiError("The plan change did not pass the plan's gate (schema, protected): 2 errors.", 422, 'WIKI_PLAN_GATE', {
+      errors: [
+        { check: 'schema', path: 'change.doc.sections[1].kind', message: '"essay" is not a section kind' },
+        { check: 'protected', path: 'plan.docs[1]', message: 'runbooks is protected' },
+      ],
+    });
+    expect(wikiChatPressError(gate)).toBe("The card couldn’t be pressed: The plan change did not pass the plan's gate (schema, protected): 2 errors.");
+    expect(wikiChatPressDetails(gate)).toEqual(['change.doc.sections[1].kind: "essay" is not a section kind', 'plan.docs[1]: runbooks is protected']);
+    expect(wikiChatPressDetails(new ApiError('this card is applied', 409))).toEqual([]);
+    expect(wikiChatPressDetails(new TypeError('Failed to fetch'))).toEqual([]);
+  });
+
+  it('links its Rewrites by section within one document, and by document once the rebuild spans several (C17, board 42 ③)', () => {
+    const one = [{ doc: 'sessions-runtime', key: 'recovery', where: '3.1 §2', title: 'Recovery' }];
+    expect(wikiChatRewritesRow(card({ kind: 'plan', rewrites: one }))).toEqual([{ label: '3.1 §2', doc: 'sessions-runtime', key: 'recovery', title: 'Recovery' }]);
+    const split = [...one, { doc: 'delivery', key: 's3', where: '3.5 §1', title: 'Delivery' }, { doc: 'delivery', key: 's4', where: '3.5 §2', title: 'Heartbeats' }];
+    expect(wikiChatRewritesRow(card({ kind: 'plan', rewrites: split }))).toEqual([
+      { label: '3.1', doc: 'sessions-runtime', key: 'recovery', title: null },
+      { label: '3.5', doc: 'delivery', key: 's3', title: null },
+    ]);
+    // Any other card links each section, whatever documents they are in.
+    expect(wikiChatRewritesRow(card({ kind: 'rewrite', rewrites: split })).map((link) => link.label)).toEqual(['3.1 §2', '3.5 §1', '3.5 §2']);
   });
 });
 

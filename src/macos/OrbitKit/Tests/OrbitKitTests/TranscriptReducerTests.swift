@@ -923,6 +923,32 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(bubble?.attached?.text, coordinatorBlock)
     }
 
+    /// A wiki chat's first message (board 42 ①, C15): the entry under the owner's words is named for the page and the
+    /// selection they sent, not for the chat's words to its agent, and still opens to every block the agent read.
+    /// Sent with neither, the note names nothing and no entry is drawn (web parity: `UserBubble`).
+    func testAWikiChatsFirstMessageNamesOnlyWhatTheOwnerAttached() {
+        let rules = "<orbit_wiki_chat>\nYou are chatting beside a page of this repository's Orbit wiki.\n</orbit_wiki_chat>"
+        let page = "<orbit_wiki_page of=\"doc\" doc=\"3.1\" slug=\"sessions-runtime\" section=\"3\" key=\"turn-delivery\">\n"
+            + "§3 Turn delivery\n</orbit_wiki_page>"
+        let selection = "<orbit_wiki_selection doc=\"3.1\" slug=\"sessions-runtime\" section=\"3\" key=\"turn-delivery\" "
+            + "sentences=\"1\" sources=\"2\">\n§3 Turn delivery\nThe runner leases one turn at a time.\n</orbit_wiki_selection>"
+        let note = "\n\n\(rules)\n\n\(page)\n\n\(selection)"
+        var sent = TranscriptReducer()
+        sent.apply(userEvent(seq: 1, "Record this as a decision.\(note)", note: note))
+
+        let bubble = sent.state.items[0].asUser
+        XCTAssertEqual(bubble?.text, "Record this as a decision.")
+        XCTAssertEqual(bubble?.attached?.kind, "Wiki page · 3.1 §3, Wiki selection · 3.1 §3 · 1 sentence · 2 sources")
+        XCTAssertEqual(bubble?.attached?.text, "\(rules)\n\n\(page)\n\n\(selection)", "it opens to every block the agent read")
+
+        var bare = TranscriptReducer()
+        bare.apply(userEvent(seq: 1, "Is this still true?\n\n\(rules)", note: "\n\n\(rules)"))
+
+        XCTAssertEqual(bare.state.items[0].asUser?.text, "Is this still true?")
+        XCTAssertEqual(bare.state.items[0].asUser?.note, rules, "the note is recorded")
+        XCTAssertNil(bare.state.items[0].asUser?.attached, "but names nothing, so no line is drawn")
+    }
+
     /// Regression (the reported iOS bug): the durable `user` event can beat the POST /turns response
     /// that assigns the turnId — iOS runs SSE and REST on separate connection pools, so their
     /// ordering isn't guaranteed. The optimistic bubble is still untagged (turnId nil) when the event

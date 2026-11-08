@@ -19,8 +19,10 @@ import {
   wikiChatFoldsDirectory,
   wikiChatLayout,
   wikiChatOffline,
+  wikiChatPageSection,
   wikiChatPanelWidth,
   wikiChatQuoteCounts,
+  wikiChatReading,
   wikiChatRunLine,
   wikiChatRunsIn,
   wikiChatSearch,
@@ -30,10 +32,13 @@ import {
   type WikiChatAttachments,
   type WikiChatPage,
   type WikiChatQuote,
+  type WikiChatReading,
+  type WikiChatReadingAction,
   type WikiChatRow,
   type WikiChatSentence,
   type WikiChatWorkspace,
 } from './wikiChat';
+import { wikiDocSectionAnchor, wikiDocSectionOfAnchor } from './wikiDocs';
 
 /**
  * The wiki chat's rules on the web (docs/wiki-chat-design.md §3–§5, contract `chat`, board 42 ⓪ ①), as pure
@@ -260,6 +265,60 @@ describe('the attachments (design §4.2)', () => {
     expect(wikiChatContext(entry)).toEqual({ page: { kind: 'entry', entryId: 'E1' } });
     const plan = run({ type: 'follow', page: { kind: 'plan', docSlug: 'session-runtime', label: '3.1' } });
     expect(wikiChatContext(plan)).toEqual({ page: { kind: 'plan', docSlug: 'session-runtime' } });
-    for (const state of [entry, plan]) expect(wikiChatContextErrors(wikiChatContext(state))).toEqual([]);
+    // A plan page at one of its document's sections names that section too, so the agent is told which (C12).
+    const planSection = run({ type: 'follow', page: { kind: 'plan', docSlug: 'session-runtime', sectionKey: 'recovery', label: '3.1 §2' } });
+    expect(wikiChatContext(planSection)).toEqual({ page: { kind: 'plan', docSlug: 'session-runtime', sectionKey: 'recovery' } });
+    for (const state of [entry, plan, planSection]) expect(wikiChatContextErrors(wikiChatContext(state))).toEqual([]);
+  });
+});
+
+describe('the section a document page attaches (design §4.2, C15)', () => {
+  const keys = ['s1', 's3', 's7', 's9'];
+  const run = (...actions: WikiChatReadingAction[]): WikiChatReading => actions.reduce(wikiChatReading, { read: null, anchor: null });
+  const read = (key: string, slug = 'session-runtime'): WikiChatReadingAction => ({ type: 'read', slug, key });
+  const anchor = (key: string | null, slug: string | null = 'session-runtime'): WikiChatReadingAction => ({ type: 'anchor', slug, key });
+  const at = (state: WikiChatReading): string | null => wikiChatPageSection(state, 'session-runtime', keys);
+
+  it('follows the reading: the section nearest its top, and the first before any is announced', () => {
+    expect(at(run())).toBe('s1');
+    expect(at(run(read('s3'), read('s7')))).toBe('s7');
+  });
+
+  it('opened at an anchor, is the anchor’s section, though the jump landed with the section before it at the top', () => {
+    // The last section cannot scroll its heading to the top of the window, so the reading's top is still §3.
+    expect(at(run(anchor('s9')))).toBe('s9');
+    expect(at(run(anchor('s9'), read('s7')))).toBe('s9');
+    // Announced again where the jump landed, the reader has not moved on.
+    expect(at(run(anchor('s9'), read('s7'), read('s7')))).toBe('s9');
+  });
+
+  it('follows the reading again once the reader scrolls off where the jump landed, back to the anchor’s too', () => {
+    const scrolled = run(anchor('s9'), read('s7'), read('s3'));
+    expect(scrolled.anchor).toBeNull();
+    expect(at(scrolled)).toBe('s3');
+    expect(at(wikiChatReading(scrolled, read('s7')))).toBe('s7');
+    // A section that can reach the top lands on itself, and the reading moving off it is followed the same way.
+    expect(at(run(anchor('s3'), read('s3')))).toBe('s3');
+    expect(at(run(anchor('s3'), read('s3'), read('s7')))).toBe('s7');
+  });
+
+  it('takes the anchor anew whenever the address names one, and none when it names none', () => {
+    expect(at(run(anchor('s9'), read('s7'), read('s3'), anchor('s9'), read('s7')))).toBe('s9');
+    expect(at(run(anchor('s9'), read('s7'), anchor(null)))).toBe('s7');
+    expect(at(run(anchor('s9', null)))).toBe('s1');
+  });
+
+  it('holds an anchor for its own document only, and passes over a key its document does not have', () => {
+    // Another document's reading leaves this one's anchor as it was.
+    expect(at(run(anchor('s9'), read('x2', 'runner-architecture')))).toBe('s9');
+    expect(wikiChatPageSection(run(anchor('s9')), 'runner-architecture', ['x1', 'x2'])).toBe('x1');
+    expect(at(run(anchor('gone'), read('s7')))).toBe('s7');
+    expect(wikiChatPageSection(run(), 'empty', [])).toBeNull();
+  });
+
+  it('reads the anchor off the address the way the page decodes it, and nothing off any other hash', () => {
+    expect(wikiDocSectionOfAnchor(`#${wikiDocSectionAnchor('s9')}`)).toBe('s9');
+    expect(wikiDocSectionOfAnchor('#sec-turn%20delivery')).toBe('turn delivery');
+    for (const hash of ['', '#', '#sec-', '#wk-fnref-3', '#rv-C1-0', '#sec-%E0%A4%A']) expect(wikiDocSectionOfAnchor(hash), hash).toBeNull();
   });
 });

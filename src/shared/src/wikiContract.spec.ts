@@ -1789,6 +1789,22 @@ describe('wiki contract', () => {
     expect(WIKI_SOURCE_ROW_ID_KINDS).not.toContain('commit');
     expect(WIKI_SOURCE_REFS.tool_call).toMatch(/tool_use_id/u);
     expect(CONTRACT.sourceInput.toolUseId).toMatch(/that two sessions carry, is unresolved/u);
+    // A call made a moment before is cited pending, and settled where its op is: the press, or the owner's decision (C14).
+    expect(CONTRACT.sourceInput.toolUseId).toMatch(/calling session's own call not stored yet \(pending\)/u);
+    expect(CONTRACT.sourceInput.pending).toMatch(/resolves pending: its quote is kept unverified, nothing is stored for it, and the op waits for the owner/u);
+    expect(CONTRACT.sourceInput.pending).toMatch(/cited by the calling session while the engine is generating for it/u);
+    expect(CONTRACT.sourceInput.pending).toMatch(/a session between turns has had all its calls delivered, and is refused at once as ever/u);
+    expect(CONTRACT.sourceInput.pending).toMatch(/must then be the calling session's own call/u);
+    expect(CONTRACT.sourceInput.pending).toMatch(/in another session, in another account's or nowhere is refused WIKI_SOURCE_UNRESOLVED/u);
+    // So is a quote of the session's own call whose result is not stored yet, which the settle checks against the whole record (C20).
+    expect(CONTRACT.sourceInput.pending).toMatch(/A call's result comes the same way, a batch after the call/u);
+    expect(CONTRACT.sourceInput.pending).toMatch(/found by its own lookup by tool_use_id, never by a row id or in another session — whose result is not stored yet \(finished_at null\)/u);
+    expect(CONTRACT.sourceInput.pending).toMatch(/Its settle checks the quote against the whole record, the result included, and refuses it WIKI_QUOTE_NOT_FOUND with nothing written/u);
+    expect(CONTRACT.sourceInput.pending).toMatch(/A quote of what is stored of the call, such as its command, is verified at once and holds nothing/u);
+    expect(CONTRACT.sourceRules.quote).toMatch(/whose result is not stored yet, is checked where its op settles instead, on the terms sourceInput.pending gives/u);
+    // A quote kept in redacted form is found in the record redacted the same way; a quote with a value is held to the record's words.
+    expect(CONTRACT.sourceRules.quote).toMatch(/is also looked for in the record's text redacted the same way, and kept with quote_verified false/u);
+    expect(CONTRACT.sourceRules.quote).toMatch(/A quote that still carries a value is held to the record's own words/u);
 
     // A tool_use_id where a task's id goes is refused by its path, saying what goes there instead. As a
     // tool_call's ref it is a tool_use_id, which only the lookup can judge.

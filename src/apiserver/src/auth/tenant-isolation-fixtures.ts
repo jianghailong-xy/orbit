@@ -567,6 +567,23 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
        VALUES ($1,$2,$3,$4,'rewrite','The census section lags behind main.','[{"doc":"census","key":"census"}]','[{"doc":"census","key":"census"}]')`,
       [wikiChatDraftId, ownerId, wikiSpaceId, wikiChatId],
     );
+    // And an applied plan card of the chat (C17): its press changed the census section's covers and made version 99, which
+    // the plan never reached, so the plan has moved past it — its Undo is refused, and its Try again asks for no build.
+    const wikiPlanCardId = randomUUID();
+    await wiki(
+      `INSERT INTO "wiki_chat_draft"("id","owner_id","space_id","session_id","kind","rationale","change","sections","decision","decided_at")
+       VALUES ($1,$2,$3,$4,'plan','The census section should say who it is for.',$5::jsonb,'[{"doc":"census","key":"census"}]','applied',now())`,
+      [wikiPlanCardId, ownerId, wikiSpaceId, wikiChatId, JSON.stringify({
+        baseVersion: 1,
+        version: 99,
+        docs: [{
+          category: 'census', slug: 'census', title: 'Census', question: 'What does the census hold?', audience: [], scopeIn: [], scopeOut: [],
+          length: { min: 100, max: 1000 }, protected: false,
+          sections: [{ key: 'census', title: 'Census', kind: 'overview', covers: 'What the census holds, for a first-time reader.', length: 100, sources: {} }],
+        }],
+        categories: [],
+      })],
+    );
 
     const deviceUserCode = `${name.toUpperCase()}${RUN.slice(0, 4)}-CNSS`.slice(0, 9);
     await db.deviceEnrollment.create({
@@ -727,6 +744,7 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       wikiDocVersionId,
       wikiChatId,
       wikiChatDraftId,
+      wikiPlanCardId,
       wikiTopicSlug: 'census',
       feishuChatRouteId,
       adminSubjectId: adminSubject.userId,

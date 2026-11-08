@@ -2764,7 +2764,10 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   // of it looks like a block. Copying and the length cap follow the typed text for the same reason:
   // neither should be measured against a block nobody wrote.
   const typed = node.text;
-  const note = useControlPlaneNote(node.note ? { kind: describeNote(node.note), text: node.note } : null);
+  // A note that names nothing — a wiki chat's first message sent with neither page nor selection, which
+  // carries only the chat's words to its agent — draws no line: nothing was attached by the person.
+  const noteKind = node.note ? describeNote(node.note) : '';
+  const note = useControlPlaneNote(node.note && noteKind ? { kind: noteKind, text: node.note } : null);
   const longText = typed.length > USER_BUBBLE_TRUNCATE;
   const shownText = longText && !expanded && !exp ? typed.slice(0, USER_BUBBLE_TRUNCATE) : typed;
   const copy = () => {

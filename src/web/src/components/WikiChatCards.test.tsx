@@ -21,7 +21,12 @@ vi.mock('mermaid', () => ({ default: mermaid }));
 const stream = vi.hoisted(() => ({ events: [] as unknown[], approvals: [] as unknown[], idle: true }));
 vi.mock('../lib/useSessionStream', () => ({
   useSessionStream: () => ({
+    events: [],
+    eventsSessionId: null,
     transcriptEvents: stream.events,
+    queued: [],
+    visibleQueuedTurns: [],
+    setQueued: () => {},
     approvals: stream.approvals,
     setApprovals: () => {},
     idle: stream.idle,
@@ -307,8 +312,11 @@ async function press(node: Element | null | undefined): Promise<void> {
   await act(async () => (node as HTMLElement).click());
   await settle();
 }
+/** The panel's composer's field: the session page's composer (board 43). */
+const field = (): HTMLTextAreaElement | null => document.querySelector<HTMLTextAreaElement>('.wk-chat-composer .composer-field textarea');
+const sendButton = (): HTMLElement | null => document.querySelector<HTMLElement>('.wk-chat-composer [aria-label="Send"]');
 async function type(value: string): Promise<void> {
-  const area = document.querySelector<HTMLTextAreaElement>('textarea.wk-chat-input')!;
+  const area = field()!;
   const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
   await act(async () => {
     setValue.call(area, value);
@@ -330,7 +338,7 @@ describe('a card in the panel, and the page beside it (board 42 ②)', () => {
     expect(marked()).toEqual(['s3']);
     expect(text(document.querySelector('section[data-section="s3"] .wk-dc-would-tag'))).toBe('Draft would rewrite this section');
     // The composer asks for a reply to the draft while it is open.
-    expect(document.querySelector('textarea.wk-chat-input')!.getAttribute('placeholder')).toBe('Reply, or say what to change in the draft');
+    expect(field()!.getAttribute('placeholder')).toBe('Reply, or say what to change in the draft');
 
     // A Rewrites section opens on the left, the chat staying beside it.
     await press(buttonIn(drawn!, '3.1 §2'));
@@ -344,7 +352,7 @@ describe('a card in the panel, and the page beside it (board 42 ②)', () => {
     expect(writes.map((write) => write.path)).toEqual(['/api/wiki/chat-drafts/D1/apply']);
     expect(text(panel()!.querySelector('.wk-draft-k'))).toBe('Applied · Confirmed by you');
     expect(marked()).toEqual([]);
-    expect(document.querySelector('textarea.wk-chat-input')!.getAttribute('placeholder')).toBe('Ask about this page, or say what should change');
+    expect(field()!.getAttribute('placeholder')).toBe('Ask about this page, or say what should change');
   });
 
   it('opens at the card that needs the owner when the round button opens the chat (design §3)', async () => {
@@ -454,11 +462,11 @@ describe('the C8 review’s three', () => {
   it('says a chat that ended takes no more messages, and offers a new one', async () => {
     session = { ...session, runState: 'COMPLETED', status: 'COMPLETED' };
     await open('/wiki/orbit?chat=S1chat');
-    expect(document.querySelector('textarea.wk-chat-input')).toBeNull();
+    expect(field()).toBeNull();
     expect(text(document.querySelector('.wk-chat-ended .t'))).toBe('This chat has ended, so it takes no more messages. Start a new chat to keep going.');
     await press(document.querySelector('.wk-chat-ended-new'));
     expect(where()).toBe('/wiki/orbit?chat=new');
-    expect(document.querySelector('textarea.wk-chat-input')).toBeTruthy();
+    expect(field()).toBeTruthy();
   });
 
   it('says a chat in Trash takes no more messages either', async () => {
@@ -472,7 +480,7 @@ describe('the C8 review’s three', () => {
     const failure = () => text(document.querySelector('.wk-chat-failed'));
     sendFails = { status: 409, body: { statusCode: 409, message: 'The workspace turned its worktrees off: a wiki chat needs one of its own.' } };
     await type('Why three?');
-    await press(document.querySelector('.wk-chat-send'));
+    await press(sendButton());
     expect(failure()).toBe('Not sent: The workspace turned its worktrees off: a wiki chat needs one of its own.');
     expect(failure()).not.toMatch(/connection/u);
 
@@ -480,14 +488,14 @@ describe('the C8 review’s three', () => {
       status: 400,
       body: { code: 'WIKI_SCHEMA', message: 'wikiContext is { page?, selection? }', errors: [{ path: 'wikiContext.selection.sentenceIds', message: 'x' }] },
     };
-    await press(document.querySelector('.wk-chat-send'));
+    await press(sendButton());
     expect(failure()).toBe('The attachments weren’t taken: wikiContext is { page?, selection? }. Remove them and send again.');
 
     sendFails = 'network';
-    await press(document.querySelector('.wk-chat-send'));
+    await press(sendButton());
     expect(failure()).toBe('The message couldn’t be sent. Check the connection, then try again.');
     // The words stay for the next try.
-    expect(document.querySelector<HTMLTextAreaElement>('textarea.wk-chat-input')!.value).toBe('Why three?');
+    expect(field()!.value).toBe('Why three?');
   });
 
   it('floats Ask above the first line of what is lit, centred on it, never on the text (board 42 ①)', async () => {

@@ -57,6 +57,17 @@ export type {
 export const wikiDocPath = (spaceSlug: string, slug: string): string => `${WIKI_PATH}/${spaceSlug}/d/${slug}`;
 /** A section's place on its document's page, which the directory's section rows link to. */
 export const wikiDocSectionAnchor = (key: string): string => `sec-${key}`;
+/** The section an address's hash lands on (`#sec-<key>`, as the page decodes it), or null for any other hash. */
+export function wikiDocSectionOfAnchor(hash: string): string | null {
+  const prefix = wikiDocSectionAnchor('');
+  let id: string;
+  try {
+    id = decodeURIComponent(hash.replace(/^#/u, ''));
+  } catch {
+    return null;
+  }
+  return id.startsWith(prefix) && id.length > prefix.length ? id.slice(prefix.length) : null;
+}
 export const wikiDocSectionPath = (spaceSlug: string, slug: string, key: string): string =>
   `${wikiDocPath(spaceSlug, slug)}#${wikiDocSectionAnchor(key)}`;
 

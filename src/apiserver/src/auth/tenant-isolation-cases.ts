@@ -119,6 +119,11 @@ export interface Tenant {
   /** A wiki chat of the space (a session with `wiki_chat_space_id`), and a rewrite card its agent drafted. */
   wikiChatId: string;
   wikiChatDraftId: string;
+  /**
+   * An applied plan card of the same chat (C17), whose press made a version the plan has since moved past: its Undo and
+   * Try again read the plan and its builds past the card, so they are sent with this card.
+   */
+  wikiPlanCardId: string;
   wikiTopicSlug: string;
   /** A Feishu group connected to the account's app (docs/feishu-bot-design.md §8.1). */
   feishuChatRouteId: string;
@@ -754,7 +759,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'POST /wiki/doc-versions/:id/restore': { request: (of) => ({ params: { id: of.wikiDocVersionId } }) },
   // A chat's cards and the owner's presses (contract `chat.drafts.read`, `chat.presses`): another account's chat or card is
   // the plain 404 before anything is read. The owner's own presses, in this order, apply the census card, find it applied
-  // (edit and discard: 409), undo it, find it undone (retry: 409) and leave it seen — none a 401, 403 or 404.
+  // (edit and discard: 409) and leave it seen; Undo and Try again go to the applied plan card, whose plan moved past the
+  // version its press made (undo: 409 WIKI_REVISION_CONFLICT; retry: 409, that version is not in force) — none a 401,
+  // 403 or 404.
   'GET /wiki/chats/:id/drafts': { request: (of) => ({ params: { id: of.wikiChatId } }) },
   'GET /wiki/chat-drafts/:id': { request: (of) => ({ params: { id: of.wikiChatDraftId } }) },
   'POST /wiki/chat-drafts/:id/apply': { request: (of) => ({ params: { id: of.wikiChatDraftId } }) },
@@ -762,8 +769,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     request: (of) => ({ params: { id: of.wikiChatDraftId }, body: { ops: [{ seq: 0, changes: { title: 'From the census' } }] } }),
   },
   'POST /wiki/chat-drafts/:id/discard': { request: (of) => ({ params: { id: of.wikiChatDraftId } }) },
-  'POST /wiki/chat-drafts/:id/undo': { request: (of) => ({ params: { id: of.wikiChatDraftId } }) },
-  'POST /wiki/chat-drafts/:id/retry': { request: (of) => ({ params: { id: of.wikiChatDraftId } }) },
+  'POST /wiki/chat-drafts/:id/undo': { request: (of) => ({ params: { id: of.wikiPlanCardId } }) },
+  'POST /wiki/chat-drafts/:id/retry': { request: (of) => ({ params: { id: of.wikiPlanCardId } }) },
   'POST /wiki/chat-drafts/:id/seen': { request: (of) => ({ params: { id: of.wikiChatDraftId } }) },
   'GET /wiki/spaces/:id/share': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'PUT /wiki/spaces/:id/share': { request: (of) => ({ params: { id: of.wikiSpaceId }, body: {} }) },
@@ -1235,6 +1242,14 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
     request: (of, mine) => ({
       params: { id: mine.wikiSpaceId },
       body: { workspaceId: of.workspaceId, content: 'from the census', clientTurnId: CENSUS_CHAT_TURN },
+    }),
+  },
+  // A chat's first message sent with another account's upload (board 43): no such file for this one, as for a new
+  // session (SessionsService.assertScopableAttachments).
+  'POST /wiki/spaces/:id/chats body attachmentIds': {
+    request: (of, mine) => ({
+      params: { id: mine.wikiSpaceId },
+      body: { workspaceId: mine.workspaceId, content: 'from the census', clientTurnId: CENSUS_CHAT_TURN, attachmentIds: [of.attachmentId] },
     }),
   },
   // Where a space's chats run, set to another account's workspace: not one this space's chats may run in.

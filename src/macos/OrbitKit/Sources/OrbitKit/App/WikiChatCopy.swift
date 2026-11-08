@@ -64,6 +64,30 @@ public enum WikiChatCopy {
     public static let cardUndone = "Undone"
     public static let cardRedoMessage = "This draft no longer applies: what it changes has changed since. Draft it again from what is there now."
 
+    // MARK: a plan card's face (contract `chat.copy.card.plan*`, `chat.copy.planFields`; C12)
+
+    public static let cardPlanDocument = "Document"
+    public static let cardPlanNewDoc = "New document in {category}"
+    public static let cardPlanNewCategory = "New document in a new category, {category}"
+    public static let cardPlanDocFields = "Changes its {fields}"
+    public static let cardPlanAdds = "Adds"
+    public static let cardPlanChanges = "Changes"
+    public static let cardPlanRemoves = "Removes"
+    public static let cardPlanCovers = "Covers"
+    public static let cardPlanSectionFields = "{section} ({fields})"
+    public static let cardPlanSectionCovers = "{section}: {covers}"
+    /// The sections a plan card moves between its documents (C17): `3.1 §3 Delivery and heartbeats → new document 3.5`.
+    public static let cardPlanMoves = "Moves"
+    public static let cardPlanMove = "{section} → {doc}"
+    public static let cardPlanNewDocRef = "new document {doc}"
+    /// Under an applied plan card's title once the plan moved on since its press (`wikiChatPlanMovedNote`, C17).
+    public static let cardPlanMovedNote = "The plan has changed since, so this can no longer be undone."
+    /// The words a plan card says a document's or a section's field by (`chat.copy.planFields`).
+    public static let planFields: [String: String] = [
+        "category": "category", "title": "title", "question": "question", "audience": "audience", "scopeIn": "scope",
+        "scopeOut": "what it leaves out", "length": "length", "kind": "kind", "covers": "covers", "sources": "sources",
+    ]
+
     // MARK: what a card offers (contract `chat.copy.actions`)
 
     public static let actionApply = "Apply"
@@ -175,12 +199,8 @@ public enum WikiChatCopy {
     public static let noHistory = "No chats in this space yet"
     public static let openSession = "Open as a full session"
     public static let close = "Hide chat"
-    public static let send = "Send"
-    public static let stop = "Stop"
     public static let resize = "Resize chat"
     public static let workspace = "Workspace"
-    public static let model = "Model"
-    public static let mode = "Mode"
     public static let sendFailed = "The message couldn’t be sent. Check the connection, then try again."
     /// The phone's Ask sheet, over the paragraph's sentences (docs/wiki-comment-to-session-design.md §5).
     public static let pickSentences = "Tap the sentences you mean"
@@ -199,6 +219,9 @@ public enum WikiChatCopy {
     public static let pressFailed = "The card couldn’t be pressed"
     /// The card's read failing: the call stands, its card cannot be read now.
     public static let cardUnread = "This card couldn’t be read. It is still there: open the chat again to retry."
+    /// The note on an undone Rewrite from main card (design §8.4, owner 11-07, C15): the Undo holds until main moves
+    /// what the section draws on.
+    public static let cardUndoneRewriteNote = "If main has changed the files this section draws on, the next maintenance run writes it from main again."
     /// Edit's sheet (design §7.2: as Review's Edit, the owner's own version of the ops).
     public static let editTitle = "Edit, then apply"
     public static let editNote = "What you change here is applied as your own version of the draft."
@@ -258,6 +281,11 @@ public enum WikiChatCopy {
             "card.webNote": cardWebNote, "card.applied": cardApplied, "card.appliedInReview": cardAppliedInReview,
             "card.appliedInReviewNote": cardAppliedInReviewNote, "card.discarded": cardDiscarded,
             "card.notApplied": cardNotApplied, "card.undone": cardUndone, "card.redoMessage": cardRedoMessage,
+            "card.planDocument": cardPlanDocument, "card.planNewDoc": cardPlanNewDoc, "card.planNewCategory": cardPlanNewCategory,
+            "card.planDocFields": cardPlanDocFields, "card.planAdds": cardPlanAdds, "card.planChanges": cardPlanChanges,
+            "card.planRemoves": cardPlanRemoves, "card.planCovers": cardPlanCovers, "card.planSectionFields": cardPlanSectionFields,
+            "card.planSectionCovers": cardPlanSectionCovers, "card.planMoves": cardPlanMoves, "card.planMove": cardPlanMove,
+            "card.planNewDocRef": cardPlanNewDocRef, "card.planMovedNote": cardPlanMovedNote,
             "result.rewriting": resultRewriting, "result.rewritingFrom": resultRewritingFrom,
             "result.waiting": resultWaiting, "result.failed": resultFailed, "result.updatedLead": resultUpdatedLead,
             "result.sentenceOne": resultSentenceOne, "result.sentenceMany": resultSentenceMany,
@@ -274,6 +302,7 @@ public enum WikiChatCopy {
             "reasons.maintenance": reasonMaintenance, "reasons.build": reasonBuild, "reasons.merge": reasonMerge,
             "reasons.landing": reasonLanding, "reasons.chat": reasonChat, "reasons.restore": reasonRestore,
         ]
+        for (field, word) in planFields { table["planFields.\(field)"] = word }
         for action in WikiChatAction.allCases { table["actions.\(action.rawValue)"] = Self.action(action) }
         for reason in WikiDocsFollowWaiting.allCases where reason != .unknown {
             table["waiting.\(reason.rawValue)"] = waitingReason(reason)
@@ -297,12 +326,8 @@ public enum WikiChatCopy {
         "WIKI_CHAT_NO_HISTORY": noHistory,
         "WIKI_CHAT_OPEN_SESSION": openSession,
         "WIKI_CHAT_CLOSE": close,
-        "WIKI_CHAT_SEND": send,
-        "WIKI_CHAT_STOP": stop,
         "WIKI_CHAT_RESIZE": resize,
         "WIKI_CHAT_WORKSPACE": workspace,
-        "WIKI_CHAT_MODEL": model,
-        "WIKI_CHAT_MODE": mode,
         "WIKI_CHAT_SEND_FAILED": sendFailed,
         "WIKI_CHAT_PICK_SENTENCES": pickSentences,
         "WIKI_CHAT_ENDED": ended,
@@ -317,6 +342,7 @@ public enum WikiChatCopy {
         "WIKI_CHAT_REDO_MESSAGE": cardRedoMessage,
         "WIKI_CHAT_PRESS_FAILED": pressFailed,
         "WIKI_CHAT_CARD_UNREAD": cardUnread,
+        "WIKI_CHAT_UNDONE_REWRITE_NOTE": cardUndoneRewriteNote,
         "WIKI_CHAT_EDIT_TITLE": editTitle,
         "WIKI_CHAT_EDIT_NOTE": editNote,
         "WIKI_CHAT_EDIT_TITLE_FIELD": editTitleField,

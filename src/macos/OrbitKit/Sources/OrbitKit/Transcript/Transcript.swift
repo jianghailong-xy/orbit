@@ -154,10 +154,14 @@ public struct UserBubble: Equatable, Sendable, Codable {
     public var note: String?
     /// What delivery appended, as the one entry the view draws in the bubble under the person's
     /// words — named for its kind, and opening to the text the model read. Nil when the event
-    /// carried no note, so nothing is drawn as Orbit's own.
+    /// carried no note, so nothing is drawn as Orbit's own. Nil too when the note names nothing: a
+    /// wiki chat's first message sent with neither page nor selection carries only the chat's words
+    /// to its agent, which the person did not attach, so no line is drawn (web parity: `UserBubble`,
+    /// C15).
     public var attached: (kind: String, text: String)? {
         guard let note else { return nil }
-        return (describeNote(note), note)
+        let kind = describeNote(note)
+        return kind.isEmpty ? nil : (kind, note)
     }
     /// An exception item's delivery, when the control plane recorded the item's own fields beside
     /// this turn's echo (`openItemDelivery`, see `OpenItemDelivery.parse`). This turn is nobody's

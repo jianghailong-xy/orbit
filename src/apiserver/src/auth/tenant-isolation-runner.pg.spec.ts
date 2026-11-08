@@ -43,6 +43,7 @@ import { uuidToBase62 } from '@orbit/shared';
 import type { PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
+import { uploadExpiry } from '../files/file-retention';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { openItemsNoLongerOwed } from '../projects/project-open-item';
@@ -179,13 +180,22 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       });
       return id;
     };
-    /** A `file_upload` of the session's, its bytes kept: what a folder bundle is made of. */
+    /**
+     * A `file_upload` of the session's, its bytes kept: what a folder bundle is made of. Dated as the upload route dates one
+     * (`uploadExpiry`): an undated upload is what the retention sweep's first tick dates a minute after the apiserver started
+     * (`FileRetentionSweep.dateUndatedFiles`) — a write of A's the trap pinned on whichever request was in flight, and then
+     * found again late, whenever the census was still asking by then.
+     */
     const uploadOf = async (sessionId: string) => {
       const id = randomUUID();
       const sha256 = createHash('sha256').update('census').digest('hex');
       await db.fileBlob.upsert({ where: { sha256 }, create: { sha256, sizeBytes: 6, storage: 'local' }, update: {} });
+      const createdAt = new Date();
       await db.attachment.create({
-        data: { id, ownerId, sessionId, mimeType: 'text/plain', sizeBytes: 6, fileName: 'census.txt', sha256, retention: 'file_upload' },
+        data: {
+          id, ownerId, sessionId, mimeType: 'text/plain', sizeBytes: 6, fileName: 'census.txt', sha256, retention: 'file_upload',
+          createdAt, expiresAt: uploadExpiry(createdAt),
+        },
       });
       return id;
     };
