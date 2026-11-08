@@ -29,7 +29,8 @@ const { WebSocketServer } = require('ws') as { WebSocketServer: new (options: { 
  * neither is answered 404.
  *
  * It knows the self-built apps a spec registers (`addApp`) and answers what Orbit asks of them: the token trade,
- * `POST /open-apis/auth/v3/tenant_access_token/internal`; the bot's own name, `GET /open-apis/bot/v3/info`; sending,
+ * `POST /open-apis/auth/v3/tenant_access_token/internal`; the bot's own name, `GET /open-apis/bot/v3/info`; a person's name,
+ * `GET /open-apis/contact/v3/users/:user_id` (`userNames`); a group and its members, `GET /open-apis/im/v1/chats/:chat_id[/members]` (`chats`); sending,
  * replying to and updating messages under `/open-apis/im/v1/messages`; and the long connection as the SDK speaks it
  * (task F0-2's comment has the protocol): `POST /callback/ws/endpoint` answers a `ws://` address on this same server,
  * whose WebSocket carries `pbbp2.Frame`s (fake-frames.ts). Each open WebSocket is a `FakeConnection`; `push` sends it
@@ -77,6 +78,8 @@ export interface FakeRequest {
   body: unknown;
   /** When it arrived (Date.now()). */
   at: number;
+  /** A message send or reply: the message_id it was answered with — a repeat of a `uuid` gets the first one's. */
+  answeredWith?: string;
 }
 
 /** What a route answers: an HTTP status, a JSON body, and any headers beside the content type. */
@@ -88,13 +91,18 @@ export interface FakeAnswer {
 
 export type FakeRoute = (request: FakeRequest & { platform: FeishuPlatform }) => FakeAnswer | Promise<FakeAnswer>;
 
-export type FakeMode = 'ok' | 'unreachable' | 'not-json';
+/** How every route is answered: as Feishu would; the connection dropped; HTML; or HTTP 500 to every request. */
+export type FakeMode = 'ok' | 'unreachable' | 'not-json' | 'server-error';
 
 /** Feishu's refusals of a token trade, as the open platform words them. */
 export const FAKE_INVALID_PARAM = { code: 10003, msg: 'invalid param' } as const;
 export const FAKE_SECRET_INVALID = { code: 10014, msg: 'app secret invalid' } as const;
 /** The long connection's endpoint refusing credentials. */
 export const FAKE_WS_AUTH_FAILED = { code: 514, msg: 'auth failed' } as const;
+/** The contact API refusing a person outside the app's range, or without the permission granted. */
+export const FAKE_NO_USER_AUTHORITY = { code: 41050, msg: 'no user authority error' } as const;
+/** The chat API refusing a chat the bot is not in, or that does not exist. */
+export const FAKE_CHAT_NOT_FOUND = { code: 232011, msg: 'the bot is not in the chat' } as const;
 /** A request whose tenant_access_token the platform did not hand out. */
 export const FAKE_TOKEN_INVALID = { code: 99991663, msg: 'Invalid access token for authorization. Please make a request with token attached.' } as const;
 
@@ -112,7 +120,13 @@ export class FakeOpenPlatform {
   readonly connections: FakeConnection[] = [];
   /** Messages sent, replied and updated through `/open-apis/im/v1/messages`, as they arrived. */
   readonly messages: FakeRequest[] = [];
+  /** People's names by open_id, as the contact API answers them; an open_id not here is answered Feishu's refusal. */
+  readonly userNames = new Map<string, string>();
+  /** Groups by chat_id, as the chat API answers them; a chat_id not here is answered Feishu's refusal. */
+  readonly chats = new Map<string, { name: string; external: boolean; members?: Array<{ openId: string; name: string }> }>();
   private readonly apps = new Map<string, FakeFeishuApp>();
+  /** The message each de-duplication key (`uuid`) delivered, per app. */
+  private readonly byUuid = new Map<string, string>();
   private readonly routes = new Map<string, FakeRoute>();
   private readonly sockets = new Map<number, WsSocket>();
   private readonly pending = new Map<string, (ack: FakeAck) => void>();
@@ -127,13 +141,73 @@ export class FakeOpenPlatform {
     this.route('GET', '/open-apis/bot/v3/info', (request) =>
       this.withToken(request, (app) => ({ status: 200, body: { code: 0, msg: 'ok', bot: { app_name: app.botName ?? 'Fake bot', open_id: `ou_bot_${app.appId}` } } })));
     const message = (request: FakeRequest & { platform: FeishuPlatform }) =>
-      this.withToken(request, () => {
+      this.withToken(request, (app) => {
+        // Feishu delivers one message per `uuid` (its de-duplication key) within an hour, and answers a repeat with the
+        // message it already delivered; a repeat is in `requests`, never in `messages`.
+        const uuid = (request.body as { uuid?: unknown } | null)?.uuid;
+        const key = typeof uuid === 'string' && request.method === 'POST' ? `${app.platform}:${app.appId}:${uuid}` : null;
+        const known = key ? this.byUuid.get(key) : undefined;
+        if (known) {
+          request.answeredWith = known;
+          return { status: 200, body: { code: 0, msg: 'success', data: { message_id: known } } };
+        }
         this.messages.push(request);
-        return { status: 200, body: { code: 0, msg: 'success', data: { message_id: `om_fake_${randomBytes(8).toString('hex')}` } } };
+        const messageId = `om_fake_${randomBytes(8).toString('hex')}`;
+        if (request.method === 'POST') request.answeredWith = messageId;
+        if (key) this.byUuid.set(key, messageId);
+        return { status: 200, body: { code: 0, msg: 'success', data: { message_id: messageId } } };
       });
+    this.route('GET', '/open-apis/contact/v3/users/:user_id', (request) =>
+      this.withToken(request, () => {
+        const openId = decodeURIComponent(request.path.split('/').pop() ?? '');
+        const name = request.query.get('user_id_type') === 'open_id' ? this.userNames.get(openId) : undefined;
+        return name === undefined
+          ? { status: 400, body: FAKE_NO_USER_AUTHORITY }
+          : { status: 200, body: { code: 0, msg: 'success', data: { user: { open_id: openId, name } } } };
+      }));
+    this.route('GET', '/open-apis/im/v1/chats/:chat_id', (request) =>
+      this.withToken(request, () => {
+        const chat = this.chats.get(decodeURIComponent(request.path.split('/').pop() ?? ''));
+        return chat === undefined
+          ? { status: 400, body: FAKE_CHAT_NOT_FOUND }
+          : { status: 200, body: { code: 0, msg: 'success', data: { name: chat.name, external: chat.external, chat_mode: 'group' } } };
+      }));
+    // A group's members, two to a page, so a spec sees Orbit follow page_token.
+    this.route('GET', '/open-apis/im/v1/chats/:chat_id/members', (request) =>
+      this.withToken(request, () => {
+        const chat = this.chats.get(decodeURIComponent(request.path.split('/')[5] ?? ''));
+        if (chat === undefined || request.query.get('member_id_type') !== 'open_id') return { status: 400, body: FAKE_CHAT_NOT_FOUND };
+        const all = chat.members ?? [];
+        const from = Number(request.query.get('page_token') ?? '0');
+        const items = all.slice(from, from + 2).map((m) => ({ member_id_type: 'open_id', member_id: m.openId, name: m.name, tenant_key: 'fake' }));
+        const more = from + 2 < all.length;
+        return { status: 200, body: { code: 0, msg: 'success', data: { items, has_more: more, page_token: more ? String(from + 2) : '', member_total: all.length } } };
+      }));
     this.route('POST', '/open-apis/im/v1/messages', message);
     this.route('POST', '/open-apis/im/v1/messages/:message_id/reply', message);
     this.route('PATCH', '/open-apis/im/v1/messages/:message_id', message);
+    // A card callback's delayed update (§7.1): its token, from `cardTokens`, takes at most two updates.
+    this.route('POST', '/open-apis/interactive/v1/card/update', (request) =>
+      this.withToken(request, () => {
+        const token = (request.body as { token?: unknown } | null)?.token;
+        const used = typeof token === 'string' ? this.cardTokenUses.get(token) : undefined;
+        if (used === undefined || used >= 2) return { status: 400, body: { code: 200672, msg: 'token is invalid or expired' } };
+        this.cardTokenUses.set(token as string, used + 1);
+        this.cardUpdates.push(request);
+        return { status: 200, body: { code: 0, msg: 'success' } };
+      }));
+  }
+
+  /** Delayed card updates (`/open-apis/interactive/v1/card/update`) the platform took, as they arrived. */
+  readonly cardUpdates: FakeRequest[] = [];
+  /** How often each card callback's update token has been used; a spec registers a token with `cardToken`. */
+  private readonly cardTokenUses = new Map<string, number>();
+
+  /** A fresh update token for one card callback, as Feishu puts in `event.token`. */
+  cardToken(): string {
+    const token = `c-${randomBytes(12).toString('hex')}`;
+    this.cardTokenUses.set(token, 0);
+    return token;
   }
 
   /** Make an app known to the platform, or change its secret. */
@@ -253,18 +327,26 @@ export class FakeOpenPlatform {
       req.socket.destroy();
       return;
     }
+    if (this.mode === 'server-error') {
+      res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ code: 500, msg: 'internal error' }));
+      return;
+    }
     if (this.mode === 'not-json') {
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end('<html><body>Bad gateway</body></html>');
       return;
     }
     const route = this.match(request.method, request.path);
+    const routed = platform === null ? null : { ...request, platform };
     const answer: FakeAnswer =
-      platform === null
+      routed === null
         ? { status: 404, body: { code: 404, msg: `no platform at /${prefix}` } }
         : route
-          ? await route({ ...request, platform })
+          ? await route(routed)
           : { status: 404, body: { code: 404, msg: `no route for ${request.method} ${request.path}` } };
+    // What the route answered a send or reply with, on the request `requests` holds too.
+    if (routed?.answeredWith) request.answeredWith = routed.answeredWith;
     res.writeHead(answer.status, { ...answer.headers, 'content-type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify(answer.body));
   }

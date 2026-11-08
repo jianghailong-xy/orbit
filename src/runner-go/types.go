@@ -1475,6 +1475,11 @@ type RunInboxResponse struct {
 	// Attachments for this (message) turn; the runner fetches each blob and dispatches on
 	// its type (image/PDF → content block, else → written to the worktree). Nil if none.
 	Attachments []TurnAttachment `json:"attachments,omitempty"`
+	// ExternalSender is who outside Orbit sent this message — a member of a connected Feishu group
+	// (docs/feishu-bot-design.md §8.2) — on the first delivery of a message or steer only. The inbox
+	// fetch appends a block saying so after the words (external_sender.go), so the agent does not
+	// take them as the account owner's. Nil for every other turn and from an older control plane.
+	ExternalSender *ExternalSender `json:"externalSender,omitempty"`
 	// Env is the process environment to re-spawn the engine with, sent only on a `reload` that
 	// moved the session to another provider on the same runtime (a second account with the same
 	// vendor, say). It REPLACES job.Agent.Env, so the previous provider's variables go with it —

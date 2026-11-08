@@ -59,7 +59,7 @@ data class SessionLine(val text: String, val tone: Tone) {
                 // A sub-agent or workflow in flight: its launch cleared the tool line at once.
                 s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.subagentRunning(it)), Tone.RUNNING) }
                 // The agent hasn't answered yet: the message it was sent, not the previous turn's reply.
-                s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return orbitLine(it, OrbitMessageFrom.of(s.lastUserFromOrbit)) ?: sentLine(it, s.lastUserFrom) }
+                s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return orbitLine(it, OrbitMessageFrom.of(s.lastUserFromOrbit)) ?: externalLine(it, ExternalSender.parse(s.lastUserFromExternal)) ?: sentLine(it, s.lastUserFrom) }
                 s.lastAssistantText?.takeIf { it.isNotEmpty() }?.let { return SessionLine(plainPreview(it), Tone.PREVIEW) }
                 return SessionLine(SessionLineCopy.running, Tone.RUNNING)
             }
@@ -71,7 +71,7 @@ data class SessionLine(val text: String, val tone: Tone) {
             // Parked, with a background process still up: not idle, not the agent working either.
             if (live) s.runningBgCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.bgRunning(it)), Tone.BACKGROUND) }
             // A message that never got an answer is newer than the reply before it, and what the session waits on.
-            s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return orbitLine(it, OrbitMessageFrom.of(s.lastUserFromOrbit)) ?: sentLine(it, s.lastUserFrom) }
+            s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return orbitLine(it, OrbitMessageFrom.of(s.lastUserFromOrbit)) ?: externalLine(it, ExternalSender.parse(s.lastUserFromExternal)) ?: sentLine(it, s.lastUserFrom) }
             // The rolling recap (0418) takes the place of the reply preview it used to show, below every live line above and
             // above the raw reply. Off with the account's Session recaps switch, the line falls through to the reply exactly
             // as it did before the recap existed. Unlabelled (the owner, 2026-10-22): the whole line is the sentence, and when
@@ -83,6 +83,12 @@ data class SessionLine(val text: String, val tone: Tone) {
         }
 
         private fun sentLine(text: String, from: SessionMessageFrom?) = SessionLine(SessionLineCopy.sent(sender(from), plainPreview(text)), Tone.PREVIEW)
+
+        /** The line for a message somebody outside Orbit sent — a connected Feishu group's member (OrbitKit `SessionLine.externalLine`,
+         * web `sentBy`; docs/feishu-bot-design.md §8.2) — or null for anybody else's: named as the conversation names them over their
+         * words, `From Feishu · <name>`, never "You". */
+        internal fun externalLine(text: String, from: ExternalMessageFrom?): SessionLine? =
+            from?.let { SessionLine(SessionLineCopy.sent(ExternalSender.label(it), plainPreview(text)), Tone.PREVIEW) }
 
         /** Who sent a message the agent hasn't answered (OrbitKit `SessionLine.sender`, web `sentBy`): [SessionLineCopy.you] only for the
          * owner's own words — and for every message from an older server, which names no sender. A message another Orbit session sent

@@ -212,7 +212,7 @@ apiserver 要能出站访问 `open.feishu.cn`（或 `open.larksuite.com`）的 H
 
 1. Settings → Feishu → **Connect your Feishu account**（只接受 LOGIN，PAT 以 `ACCOUNT` 拒绝）。服务端生成一次性绑定码
    （8 位、10 分钟、只能用一次，库里只存哈希）。页面显示绑定码和 **Open the bot in Feishu**（飞书 applink，直达机器人私聊）。
-2. 用户在**私聊**里把码发给机器人；在群里发的码不受理。事件里的发送者 open_id 由飞书认证。码对得上，发送者就成为主人，码作废。
+2. 用户在**私聊**里把码发给机器人；在群里发的码不受理，并且立即作废（群里的人都看到了）。重新生成码会作废本账号之前的码。事件里的发送者 open_id 由飞书认证。码对得上，发送者就成为主人，码作废。
 3. 机器人回 `You're connected as the owner of this Orbit bot.`；设置页经控制面流显示主人的飞书名字。
 
 - 码只在本账号自己的应用上有效。剩下的风险是码泄露给同租户的人、被他抢先发出：他会成为主人，能收提醒、能答审批。
@@ -263,12 +263,28 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
   同一批「可能让 needs-you 变少」的事件，多做一步「关掉已不成立的卡」。飞书只允许更新 14 天内发出的卡，更早的不动。
 - **合并而不叠加**，粒度与 APNs 的 collapse id 相同：一个会话的一段待批（同一轮的多个审批进同一张卡，每条有自己的按钮）、
   一个 owner item、一次 settle 各一张卡。重复通告改原卡，不发第二张。
+- 实现（F1-4，迁移 0495）：`feishu_message` 以 `(app_id, collapse_key)` 唯一——审批是 `approval-<开启这一段的审批>`，
+  settle 是 `settled-<会话>-<最后一轮的 seq>`，owner item 是 `owner-item-<id>`，其余沿用推送的 collapse id；重复通告把 `revision` 加一。
+  谁拿到行上的租约（`lease_token` / `lease_until`）谁按库里此刻的内容画卡、发送或 PATCH，记下 `rendered_revision` 后放手并再看一次，
+  所以两个 apiserver 同时通告只发一张卡。没认领到 `claimApprovalAlert` 的审批只给这一段的卡加一（`joinApprovalStretch`），
+  卡上列出会话里所有仍待批的审批。
+- 实现（F1-5，迁移 0498：feishu_message 的 status 增加 CLOSED）：`PushService.reconcileBadge` 每次对账（不论角标动没动）都调 `FeishuTransport.closeSettled`，
+  `scheduleBadgeSync` 在只有飞书可用时也运行。看的是 14 天内发出、状态 `SENT` 的审批卡与 owner item 卡：审批卡在其会话仍在
+  needs-you 且所列审批还有待批时成立（少了几条就按此刻待批的重画一遍），否则改成终态；owner item 卡在事项不再 OPEN 时改。
+  改卡在行的租约下、且要求每次通告都已画过（`rendered_revision = revision`），用卡上次画的 alert 加终态一行重画、去掉按钮，
+  行记 `CLOSED`（pump 不再碰它）；飞书没接通或 5xx 时留在 `SENT`，下次对账再试，飞书明确拒绝也记 `CLOSED`。
+  终态文案：`Allowed in Orbit · 10:32 UTC`、`Denied in Orbit · …`、`Answered in Orbit · …`（有提问、或允许与拒绝都有）、
+  `Resolved in Orbit · …` / `Answered in Orbit · …`（owner item）、`No longer waiting in Orbit · …`（会话离开 needs-you 或审批作废）；
+  Orbit 不知道主人的时区，所以写明 UTC。`finished` / `failed` / `agent-message` 卡没有动作按钮，回复它们仍然进会话，不改。
 
 ### 6.3 限频、失败与文案
 
 - 飞书的限频：对同一用户 5 QPS；对同一群 5 QPS，由群内所有机器人共享；超限返回 429 并给出建议等待时间。
   `agent-message` 本来就是每会话每分钟一次。
 - 失败按「推送只是提示」处理：有限次重试后放弃，权威状态永远在 Orbit 里。
+  实现：飞书没接通或 5xx 时最多试 3 次（2 秒起翻倍），飞书明确拒绝（4xx、错误码）不重试；放弃时原因写进该行与应用的 `last_error`。
+- 首次发卡带飞书的去重键 `uuid`（`feishuDedupeUuid('alert-card', app_id, collapse_key)`，项目说明第 15 条）：应答丢失后重发、
+  租约过期被别的副本接手重发，飞书都只投递一条。PATCH 不需要。
 - 文案全英文；会话标题、agent 原文原样转发。
 
 ### 6.4 详情的边界（决定 5）
@@ -338,12 +354,43 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
 
 一个会话可能有几条消息链（从私聊开的那条，加上主人回复过的提醒卡）。回传（§7.5）发到最近一次有人发言的那条。
 
+落地（F2-3，`feishu/feishu-direct.service.ts`，迁移 0499）：
+
+- 回复成功不另发回执（与 iOS 横幅的 Reply 一样），会话的回答由 §7.5 回传；`createTurn` 拒绝时（会话已结束、在废纸篓）回
+  `Orbit didn't send this to the session: <原因>.`。回复一条不属于任何会话的消息，回一句说明，不开新会话。
+- 选默认 workspace 的卡片点完只写 `defaultWorkspaceId`、把卡改成终态，提示主人把消息再发一次；那条消息本身不补开会话。
+- 幂等：turn 的 clientTurnId 由 appId 与 event_id 派生（`feishuTurnKey`：`feishu:` 前缀加派生 UUID；裸的派生 UUID 是 Orbit 自己写的 turn 的键，见 orbit-authored-turn.ts），新会话的 id 由 appId 与 message_id 派生，同一事件再处理找到第一次写的行；
+  回执的飞书 uuid 由被回复的 message_id 与用途派生。每个新 turn / 新会话写一行 `activity`（`credential_kind = FEISHU`，
+  payload 带 appId、open_id、message_id），0499 把 `activity_credential_chk` 放宽到 FEISHU。
+
 ### 7.4 卡片按钮
 
 - **核对点击者**：卡片可以被转发。回调里的 open_id 必须等于应用的 `ownerOpenId`，否则回
   `Only the owner of this bot can answer this card.`，什么都不写。
 - 过期的卡（审批已在别处答了、会话已结束）：回 `Already answered in Orbit.`，并把卡改成终态。
 - 成功：toast，卡片原地变成终态（§6.2）。
+- 实现（F2-1，迁移 0500）：`FeishuCardActions`（`feishu/feishu-card-actions.ts`，独立的 `FeishuActionsModule`，因为
+  FeishuModule 不能 import SessionsModule——后者经 CoordinatorJudgmentModule 到 PushModule，PushModule 又 import FeishuModule；
+  它在启动时向 `FeishuRouter` 登记）。只受理工具审批的 `approval.allow` / `approval.deny`：`approvalsInFeishu` 关着、点击带
+  `rememberRules`（或 `remember`）、点名编排确认卡或提问，一律只回 toast、零写入；`SessionsService.decideApproval` 的
+  FEISHU 凭证本身也拒绝 `rememberRules` 与 `startAfterCreate`。是否过期按 `SessionsService.listApprovals(…, 'PENDING')`
+  （答复还能送达的待批）判断；别的账号的审批与不存在的同样回 `Already answered in Orbit.`。审批决定在 `approval` 行上记
+  `decided_credential_kind`（LOGIN / PAT / IMPERSONATION / FEISHU，Web 的决定也记）以及 FEISHU 时的
+  `decided_feishu_open_id`、`decided_feishu_message_id`。卡片不 PATCH：`FeishuTransport.answerCard` 在行的租约下按此刻画好
+  （还有待批就重画、否则终态并记 CLOSED），随回调同步返回 `{ toast, card: { type: 'raw', data } }`；行被别人持有时只回
+  toast，由对账改卡。收件箱给路由 2.5 秒，超时先回 `Working…`，算完后用回调的 `event.token` 调
+  `POST /open-apis/interactive/v1/card/update` 补卡一次（30 分钟内）。落地的 FEISHU 决定在同一事务里另记一行 Activity
+  （`feishu.approval.decided`，credential_kind FEISHU，payload 带 sessionId、approvalId、behavior、appId、openId、messageId）；
+  重放的事件、过期卡的点击不再记。
+- 实现（F2-2）：提问卡在 FULL 且 `approvalsInFeishu` 开着时，每个问题画一个表单项：问题的 header（没有就用问题本身）、
+  单选 `select_static` 或多选 `multi_select_static`（选项的 value 是它在 agent 列表里的序号），加一个 `input` 让主人自己写；
+  表单项的 name 为 `a<卡上第几条>_q<第几个问题>`（`_other` 是自填框），因为飞书要求 name 在卡内唯一。点 Submit 回
+  `question.answer`：`FeishuCardActions` 按审批行自己的 input 把序号换回 agent 写的标签，拼成与 Web 相同的 `QuestionAnswers`
+  （问题文本 → 标签），多选的自填答案排在所选之后，单选的自填答案取代所选（Web 的表单两者只留一个，卡上分不出先后，以手写的为准），
+  再以 `{ behavior: 'allow', answers }` 调 `decideApproval`，toast `Answer sent.`。有问题既没选也没写：回
+  `Answer every question, then submit.`，零写入。TITLES_ONLY 下卡上没有表单，点名提问的 `question.answer` 回
+  `This question is answered in Orbit. Open it in Orbit to answer.`，零写入；Allow once / Deny 点名提问、表单点名工具审批，都回
+  `Answer this in Orbit.`。幂等与过期的判定同上。
 
 ### 7.5 会话的回复回到飞书
 
@@ -352,6 +399,18 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
 - **turn-complete 只多写一行 `feishu_outbox`**，在提交之后、用它自己的语句写，失败只记日志；发送由 worker 做。
   turn 的确认永远不等飞书，也不会因为飞书失败（§1.3 第 6 条）。
 - 只回传正文，不回传工具输出与文件。不做逐字流式。
+
+落地（F2-4，`feishu/feishu-outbox.ts`、`feishu/feishu-outbox-register.ts`，迁移 0501）：
+
+- turn-complete 在提交之后（`finalized.applied && !steer`）调 `registerFeishuReply`：一条 `INSERT … SELECT`，取会话
+  `last_spoken_at` 最新的那条 `feishu_thread`，和该 turn 在 `run_event` 里 seq 最大、非子 agent（无 `parentToolUseId`）、
+  非空的 assistant 文本；两者缺一就不写。`feishu_outbox.turn_id` 唯一，重发的 turn-complete 不再写；出错只记日志。
+- worker 每个副本都跑，`FOR UPDATE SKIP LOCKED` 认领、`due_at` 兼作租约；同一会话里更早的行没发完，后面的行等着，保证顺序。
+  回复发给那条链的根消息：链所在的 chat 有 `feishu_chat_route` 就是群，`reply_in_thread`、只有正文；否则是私聊，附 Open in Orbit。
+  飞书 uuid 为 `feishuDedupeUuid('session-reply', appId, 行 id)`。两种详情模式都发。
+- 失败：没接通或 5xx 记 `FAILED` 与 `last_error`，5 秒起翻倍、最长 10 分钟，共 12 次后 `GAVE_UP`；飞书明确拒绝立即 `GAVE_UP`；
+  应用关了或 Secret 解不开也 `GAVE_UP`。该应用任一条回复发成功时，它其余 `FAILED` 的行立刻到期，恢复后马上补发。
+  已发或放弃 7 天的行由 leader 删除。
 
 ## 8. 群聊派活
 
@@ -366,6 +425,13 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
    - 上限：同时进行的会话数、每天新开的会话数（同项目的 `sessionBudgetPerDay`）。
 4. 确认是**所有者通道**动作（加进 `pat-owner-channel-routes.ts`，PAT 403），因为它让别人能在你的机器上启动 agent。
 5. 机器人被移出群（`im.chat.member.bot.deleted_v1`）时路由停用。
+6. 实现细节（F3-1）：`feishu_chat_route` 以 `(app_id, chat_id)` 唯一（同一个群可以分别接入不同账号的应用）。主人发 connect 时就建好这一行，
+   只存 ticket 的 SHA-256、发 connect 的 open_id 与过期时间（30 分钟），`confirmed_at` 为空；确认用一条带条件的 UPDATE 写入选择并清掉
+   ticket，所以 ticket 只能用一次，且发 connect 的人必须仍是主人。ticket 由 appId 与 event_id 派生，同一事件处理两次得到同一 ticket、
+   同一张卡（飞书 uuid 去重），已用过的 ticket 不会被重放的事件重新打开。未确认或已停用的群里 @机器人 只回一句英文说明，不开会话。
+   connect 只受理主人，且群不能是外部群（`GET /open-apis/im/v1/chats/:chat_id` 的 `external`）。
+   确认页的「指定的人」按名字勾选：服务端用 ticket 对应的群读 `GET /open-apis/im/v1/chats/:chat_id/members`（open_id，逐页），
+   列出主人以外的成员；读不到时只能选「群里所有人」。存的仍是 open_id。
 
 ### 8.2 一条群消息的路径（决定 4：每单一个话题）
 
@@ -377,6 +443,50 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
 - **发送者署名**：turn 记一个外部发送者（`FEISHU`、open_id、名字），扩展 0349 的 `sender_session_id` 与在途 0485 的
   `last_user_from_*`（会话列表的「From <title>」）。客户端画成 `From Feishu · <name>`；runner 投递时加一句前言，
   告诉 agent 这句话来自飞书群里的某人、**不是账号主人**。前言计入 agent 指令的 token 预算，加之前先量。
+
+落地（F3-2，`feishu/feishu-group.service.ts`，无迁移）：
+
+- `FeishuChatRouteService.handleGroupMessage` 对已确认且开着的路由返回路由，由 `FeishuGroupService` 接手；`connect`、未接入与已停用的群照旧由前者回一句。
+- 允许名单：主人总是可以；`allowed_open_ids` 为空即群里所有人；不在名单的人回
+  `This group's Orbit connection doesn't take requests from you, so nothing was started. Ask the bot's owner to add you in Orbit.`，零写入。
+- 顶层 @：`SessionsService.create(route.ownerId, { workspaceId: route.workspaceId, prompt, permissionMode: route.permissionMode })`，
+  会话 id 由 appId 与 message_id 派生；该消息就是 `feishu_thread` 的根，回执 `Started · <title>` 以 `reply_in_thread` 发出，
+  此后 §7.5 的发件箱把每轮正文回到这个话题。建会话前的拒绝把原因回到话题（`Orbit didn't start a session: <原因>.`）；上限与预检的细化归 F3-4。
+- 话题里 @（事件带 `root_id`）：根在 `feishu_thread` 里属于会话 S，就以 `createTurn` 进 S，不带 intent，按常规 steer / 排队；
+  clientTurnId 由 appId 与 event_id 派生。根不属于任何会话时回一句说明，不开会话。
+- 每个新会话 / 新 turn 写一行 activity（`feishu.group.session.created` / `feishu.group.session.turn`，credential_kind FEISHU）。
+
+落地（F3-4，`feishu/feishu-group.service.ts`，无迁移）：上限与预检。
+
+- 「同时进行」数的是该路由话题里 `PENDING` / `RUNNING` 的会话（有 turn 排队或在跑）；等下一句的（`AWAITING_INPUT`）、已结束的、
+  在回收站的不占名额，否则一个群开满几个会话后要主人逐个结束才能再派活。「每天」按 UTC 自然日，数的是当天开的话题。
+- 顶层 @ 在建会话前先占位：一个事务里对 `feishu_chat_route` 那一行 `FOR UPDATE`（跨副本串行化同一个群的开会话），数上面两个数，
+  未超限就先写这条请求的 `feishu_thread` 行（`last_spoken_at` 为 1970 纪元，表示「会话还在建」），提交后再 `SessionsService.create`。
+  所以两条同时到达的请求只有一条能占到最后一个名额。占位行在会话建成后由开话题的事务改成 now()，只有改到它的那次写 activity。
+  占了位但会话始终没建成的（进程中途死掉）10 分钟后不再占名额；同一事件再处理时找到自己的占位直接用。
+- 超限不建会话、零写入，在话题里回
+  `Orbit didn't start a session: this group already has <n> session(s) running, the most its connection allows at a time. Try again when one finishes.`
+  或 `Orbit didn't start a session: this group has started <n> session(s) today, the most its connection allows in a day. Try again after midnight UTC.`
+- 预检拒绝（没有能跑的 runner、引擎没登录、配额用完）时删掉占位，名额还回去，照 F3-2 回 `Orbit didn't start a session: <原因>.`。
+
+落地（F3-5，迁移 0502，发送者署名）：
+
+- `conversation_turn` 加 `external_sender_source`（`FEISHU`）、`external_sender_id`（open_id）、`external_sender_name`（飞书给的名字，
+  拿不到为空），CHECK 保证来源与 open_id 同在。群里成员的顶层 @ 开会话时，开头那个 turn 在建会话时就带着发送者铺下
+  （`SessionsService.create` 的内部选项 `externalSender`）；话题里的 @ 由 `createTurn` 的同名选项写入。**主人自己在群里发的不写**：那是主人本人。
+  名字用 `GET /open-apis/contact/v3/users/:open_id` 读，每次处理读一次；重放的 turn 保留它写入时的名字。
+- `session` 加 `last_user_from_external_source`、`last_user_from_external_name`，与 0485 的 `last_user_from_*` 同处写、同处清
+  （`pendingMessageColumns`）；列表行、详情、`session.updated` 摘要带 `lastUserFromExternal: { source: 'FEISHU', name } | null`。
+  open_id 不出现在任何客户端读口或 runner 的投递里。
+- 回声：`user` 事件的 payload 带 `externalSender`（与 `sessionMessage` 同一套 `readTurnCards`），排队视图同样带它。
+- runner：`GET /runner/sessions/:id/inbox` 在首次投递 message / steer 时带 `externalSender`，runner 的 `transport.inbox` 把
+  `<orbit-external-sender source="feishu" name="…">` 一段英文（这句话来自飞书群里的某人、不是账号主人；不是主人对任何需要问主人之事的批准）
+  **接在正文之后**，而不是放在前面：服务端靠「回声以作者原文开头」把其后部分记为控制面注释（`controlPlaneNoteOf`），放在前面会被当成发送者的话画进气泡，
+  这与服务端 §2.2 会话消息块放在正文之后是同一条理由。名字只出现在属性里，转义、单行、最多 200 字。
+  预算：常驻 agent 指令（`orbitCLIInstructions` + 图片投递一句）约 4611 字节 / ~1153 token，这一段约 244 字节 / ~61 token（+5.3%），
+  只出现在外部发送者的消息上；`external_sender_test.go` 把它钉在 80 token 以内。
+- Web：会话行写 `From Feishu · <name>: …`（拿不到名字时 `From Feishu: …`），对话里该气泡上方一行 `From Feishu · <name>`；
+  文案在 `src/web/src/lib/externalSender.ts`，iOS 与 Android 在 F3n 跟上。
 
 ### 8.3 安全边界
 

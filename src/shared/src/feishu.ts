@@ -74,6 +74,10 @@ export interface FeishuAppChange {
   enabled?: boolean;
   /** How much an alert card carries (§6.4). Details are stored on Feishu's servers once sent. */
   messageDetail?: FeishuMessageDetail;
+  /** Whether a tool approval's card has Allow once and Deny (§7.2). Off, it has only Open in Orbit. */
+  approvalsInFeishu?: boolean;
+  /** Where a session started from the owner's direct messages opens (§7.3); null clears it. */
+  defaultWorkspaceId?: string | null;
 }
 
 /**
@@ -127,3 +131,138 @@ export const FEISHU_APP_SCOPES = [
 ] as const;
 export const FEISHU_APP_EVENTS = ['im.message.receive_v1', 'im.chat.member.bot.deleted_v1'] as const;
 export const FEISHU_APP_CALLBACKS = ['card.action.trigger'] as const;
+
+/**
+ * The owner's identity (§5): who in the app's tenant the account is. A one-time code generated in Settings →
+ * Feishu, sent to the bot in a direct message, makes its sender the owner.
+ */
+export const FEISHU_CONNECT_CODE_LENGTH = 8;
+export const FEISHU_CONNECT_CODE_TTL_MINUTES = 10;
+
+/** `POST /api/integrations/feishu/connect-codes`: the code, once, when it stops working, and the link to the bot's chat. */
+export interface FeishuConnectCode {
+  code: string;
+  expiresAt: string;
+  /** A Feishu (or Lark) applink that opens a direct message with the bot. */
+  applink: string;
+}
+
+/** Where each platform's applinks open (§5.1). */
+export const FEISHU_APPLINK_ORIGINS: Readonly<Record<FeishuPlatform, string>> = {
+  FEISHU: 'https://applink.feishu.cn',
+  LARK: 'https://applink.larksuite.com',
+};
+
+/** The applink that opens a direct message with an app's bot. */
+export function feishuBotApplink(platform: FeishuPlatform, appId: string): string {
+  return `${FEISHU_APPLINK_ORIGINS[platform]}/client/bot/open?appId=${encodeURIComponent(appId)}`;
+}
+
+/** The 404 an owner route answers while the account has no app. */
+export const FEISHU_NO_APP_MESSAGE = 'No Feishu app is connected to this account.';
+
+/** The 409 `POST /api/integrations/feishu/test` answers while no owner is connected. */
+export const FEISHU_NO_OWNER = 'FEISHU_NO_OWNER';
+export const FEISHU_NO_OWNER_MESSAGE =
+  'Nobody is connected as the owner of this Feishu app yet, so there is no one to send a test message to. Connect your Feishu account first.';
+
+/** `POST /api/integrations/feishu/test`: Feishu accepted the message for the owner. */
+export interface FeishuTestMessageResult {
+  sent: true;
+}
+
+/**
+ * Group chats connected to Orbit (§8.1, §8.3). The owner sends `@<bot> connect` in a group; the bot answers with a card
+ * whose button opens Orbit's confirm page with a one-time ticket, where the owner chooses the workspace, the permission
+ * mode, who may start sessions and two limits. Confirming is an owner-channel action: a personal access token is refused.
+ */
+export const FEISHU_CONNECT_GROUP_PATH = '/settings/integrations/feishu/connect-group';
+/** How long the card's ticket works. */
+export const FEISHU_CHAT_TICKET_TTL_MINUTES = 30;
+
+/** The limits a route takes, and what the confirm page starts from. */
+export const FEISHU_CHAT_MAX_CONCURRENT_LIMIT = 100;
+export const FEISHU_CHAT_SESSIONS_PER_DAY_LIMIT = 10_000;
+export const FEISHU_CHAT_DEFAULT_MAX_CONCURRENT = 2;
+export const FEISHU_CHAT_DEFAULT_SESSIONS_PER_DAY = 20;
+/** The most people a route may name as allowed senders. */
+export const FEISHU_CHAT_ALLOWED_MAX = 200;
+
+/** Why a confirmed route is off: the bot was removed from the group, or the owner switched it off. */
+export const FEISHU_CHAT_DISABLED_REASONS = ['BOT_REMOVED', 'OWNER'] as const;
+export type FeishuChatDisabledReason = (typeof FEISHU_CHAT_DISABLED_REASONS)[number];
+
+/** One connected group, as `GET /api/integrations/feishu/chats` and the writes answer it. */
+export interface FeishuChatRoute {
+  id: string;
+  chatId: string;
+  chatName: string | null;
+  workspaceId: string;
+  /** A PermissionMode value. */
+  permissionMode: string;
+  /** Who may start sessions; empty means everyone in the group. The owner always may. */
+  allowedOpenIds: string[];
+  maxConcurrentSessions: number;
+  sessionsPerDay: number;
+  enabled: boolean;
+  disabledReason: FeishuChatDisabledReason | null;
+  confirmedAt: string;
+  updatedAt: string;
+}
+
+/** A group waiting to be confirmed with the ticket the confirm page was opened with. */
+export interface FeishuChatPending {
+  chatId: string;
+  chatName: string | null;
+  expiresAt: string;
+  /** The group is already connected: confirming replaces its settings. */
+  connected: boolean;
+  /**
+   * The people in the group other than the owner, by name, to choose the allowed senders from (§8.1); null when Feishu
+   * would not say who is in it. The owner may always start sessions.
+   */
+  members: FeishuChatMember[] | null;
+}
+
+/** One person in a group, as the confirm page offers them. */
+export interface FeishuChatMember {
+  openId: string;
+  /** Null when Feishu gave no name. */
+  name: string | null;
+}
+
+/** `GET /api/integrations/feishu/chats[?ticket=…]`: the confirmed groups, and the ticket's group when one was given and is live. */
+export interface FeishuChatRoutes {
+  routes: FeishuChatRoute[];
+  pending: FeishuChatPending | null;
+}
+
+/** `POST /api/integrations/feishu/chats/confirm`. */
+export interface FeishuChatConfirm {
+  ticket: string;
+  workspaceId: string;
+  permissionMode: string;
+  allowedOpenIds: string[];
+  maxConcurrentSessions: number;
+  sessionsPerDay: number;
+}
+
+/** `PATCH /api/integrations/feishu/chats/:id`: every field optional. */
+export interface FeishuChatChange {
+  enabled?: boolean;
+  permissionMode?: string;
+  allowedOpenIds?: string[];
+  maxConcurrentSessions?: number;
+  sessionsPerDay?: number;
+}
+
+/** The 409 a confirm answers when its ticket is unknown, used, expired, or was issued to someone no longer the owner. */
+export const FEISHU_CHAT_TICKET_INVALID = 'FEISHU_CHAT_TICKET_INVALID';
+export const FEISHU_CHAT_TICKET_INVALID_MESSAGE =
+  'This link to connect a group has expired or was already used. Send "@bot connect" in the group again for a new one.';
+/** The 409 switching a route back on answers while the bot is no longer in the group. */
+export const FEISHU_CHAT_BOT_REMOVED = 'FEISHU_CHAT_BOT_REMOVED';
+export const FEISHU_CHAT_BOT_REMOVED_MESSAGE =
+  'The bot was removed from this group. Add it back and send "@bot connect" in the group to connect it again.';
+/** The 404 a route answers for a group the account has not connected. */
+export const FEISHU_CHAT_NOT_FOUND_MESSAGE = 'No such connected group.';

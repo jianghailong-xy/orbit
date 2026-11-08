@@ -47,6 +47,7 @@ let injectedTagLabels: [String: String] = [
     "list-conditions": "list conditions",
     "background-jobs": "background jobs",
     "orbit-session-message": "session message",
+    "orbit-external-sender": "sender note",
     "orbit-session-reply": "session reply",
 ]
 

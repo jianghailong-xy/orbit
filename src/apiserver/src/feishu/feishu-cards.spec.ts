@@ -267,3 +267,56 @@ test("which of §6.1's approval rows an approval is", () => {
   assert.equal(approvalClass('orbit__agent_update'), 'tool');
   assert.equal(approvalClass('Bash'), 'tool');
 });
+
+/** Every button, form or input on a card that does anything other than open Orbit. */
+function actionControls(card: FeishuCard): string[] {
+  const out: string[] = [];
+  for (const tag of ['form', 'select_static', 'multi_select_static', 'input', 'checker']) {
+    if (tagged(card, tag).length > 0) out.push(tag);
+  }
+  for (const button of tagged(card, 'button')) {
+    const behaviors = (button.behaviors as { type: string }[] | undefined) ?? [];
+    if (behaviors.length === 0 || behaviors.some((b) => b.type !== 'open_url')) out.push(JSON.stringify(button));
+  }
+  return out;
+}
+
+test("decision 1: Orbit's confirmation cards and owner items carry no action button, only Open in Orbit (F2-1)", () => {
+  // The orchestration cards §7.2 keeps in the app: a task, a project, a workspace made or changed, a runner deleted,
+  // the MCP orchestration grant, and the rest the server files as `orbit_<name>`.
+  const orchestration = [
+    'orbit_task_create', 'orbit_task_batch', 'orbit_project_create', 'orbit_agent_create', 'orbit_agent_update',
+    'orbit_agent_delete', 'orbit_runner_delete', 'orbit_allow_orchestration', 'orbit_dag_change', 'orbit_blocker_resolve',
+    'orbit_provider_create', 'orbit_integration_skip_merge_check',
+  ];
+  for (const toolName of orchestration) {
+    for (const detail of ['TITLES_ONLY', 'FULL'] as const) {
+      // Approvals in Feishu on: the switch that gives a tool approval its buttons gives these none.
+      const card = renderFeishuCard({ kind: 'approval', sessionTitle: 'S', approvals: [{ id: 'o1', toolName, input: { title: 't' } }] }, ctx(detail));
+      assert.deepEqual(actionControls(card), [], `${toolName} ${detail}`);
+      assert.deepEqual(openUrls(card), [URL], `${toolName} ${detail}`);
+    }
+  }
+  for (const c of CASES.filter((x) => x.alert.kind === 'owner-item')) {
+    for (const detail of ['TITLES_ONLY', 'FULL'] as const) {
+      const card = renderFeishuCard(c.alert, ctx(detail));
+      assert.deepEqual(actionControls(card), [], `${c.name} ${detail}`);
+      assert.deepEqual(openUrls(card), [URL], `${c.name} ${detail}`);
+    }
+  }
+  // Beside a tool approval on the same card, an orchestration card still has none: only the tool's two buttons.
+  const mixed = renderFeishuCard({
+    kind: 'approval', sessionTitle: 'S',
+    approvals: [{ id: 't1', toolName: 'Bash', input: { command: 'ls' } }, { id: 'o1', toolName: 'orbit_task_create', input: {} }],
+  }, ctx('FULL'));
+  const values = tagged(mixed, 'button').flatMap((b) => (b.behaviors as { type: string; value?: { approvalId: string; action: string } }[])
+    .flatMap((x) => (x.value ? [`${x.value.action}:${x.value.approvalId}`] : [])));
+  assert.deepEqual(values, [`${FEISHU_CARD_ACTIONS.allow}:t1`, `${FEISHU_CARD_ACTIONS.deny}:t1`]);
+});
+
+test('decision 1: a tool approval offers Allow once and Deny, never "always allow"', () => {
+  const card = renderFeishuCard({ kind: 'approval', sessionTitle: 'S', approvals: [{ id: 't1', toolName: 'Bash', input: { command: 'ls' } }] }, ctx('FULL'));
+  assert.deepEqual(callbacks(card), [FEISHU_CARD_ACTIONS.allow, FEISHU_CARD_ACTIONS.deny]);
+  assert.ok(!strings(card).some((s) => /always/i.test(s)), 'no "always allow" anywhere on the card');
+  assert.ok(!JSON.stringify(card).includes('remember'), 'no button value asks to remember');
+});

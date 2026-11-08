@@ -136,6 +136,28 @@ const openInOrbit = (url: string): Element => ({
   tag: 'button', text: plain('Open in Orbit'), type: 'default', behaviors: [{ type: 'open_url', default_url: url }],
 });
 
+/** The card the bot answers the owner's `@<bot> connect` in a group with (§8.1): one button, to Orbit's confirm page. */
+export const CONNECT_GROUP_TITLE = 'Connect this group to Orbit';
+export const CONNECT_GROUP_BUTTON = 'Connect in Orbit';
+export function renderConnectGroupCard(chatName: string | null, confirmUrl: string, ttlMinutes: number): FeishuCard {
+  return {
+    schema: '2.0',
+    config: { update_multi: true, summary: { content: CONNECT_GROUP_TITLE } },
+    header: { title: plain(CONNECT_GROUP_TITLE), subtitle: plain(chatName ?? ''), template: 'blue' },
+    body: {
+      direction: 'vertical',
+      elements: [
+        text(
+          'Open Orbit to choose the workspace, the permission mode, who in this group can start sessions, and the limits. '
+          + 'Nothing runs from this group until you confirm there.',
+        ),
+        note(`Only you can use this link, once, within ${ttlMinutes} minutes.`),
+        row([{ tag: 'button', text: plain(CONNECT_GROUP_BUTTON), type: 'primary', behaviors: [{ type: 'open_url', default_url: confirmUrl }] }]),
+      ],
+    },
+  };
+}
+
 /**
  * A card within FEISHU_CARD_MAX_BYTES. Only what FULL adds can be long, so a card over the limit is drawn again with
  * every detail text cut shorter, each cut one saying so. A card that is still too long with none left (a stretch of
@@ -194,7 +216,7 @@ function build(
       template = 'orange';
       alert.approvals.forEach((approval, index) => {
         if (index > 0) elements.push(hr);
-        elements.push(...approvalSection(approval, ctx, full, live, cut));
+        elements.push(...approvalSection(approval, index, ctx, full, live, cut));
       });
       break;
     }
@@ -260,18 +282,22 @@ function approvalLine(approval: FeishuApprovalItem): string {
   }
 }
 
-interface Question {
+export interface FeishuQuestion {
   question: string;
   header: string;
   multiSelect: boolean;
   options: { label: string; description: string }[];
 }
 
-/** AskUserQuestion's questions, as much of them as is well formed. */
-function questionsOf(input: unknown): Question[] {
+/**
+ * AskUserQuestion's questions, as much of them as is well formed. The answer form numbers them and their options in
+ * this order, so a submitted form is read back against the approval's own input with this same function
+ * (feishu-card-actions.ts): what reaches the runner is the labels as the agent wrote them, never the card's text.
+ */
+export function questionsOf(input: unknown): FeishuQuestion[] {
   const raw = (input as { questions?: unknown } | null)?.questions;
   if (!Array.isArray(raw)) return [];
-  return raw.flatMap((q): Question[] => {
+  return raw.flatMap((q): FeishuQuestion[] => {
     if (!q || typeof q !== 'object' || typeof (q as { question?: unknown }).question !== 'string') return [];
     const item = q as { question: string; header?: unknown; multiSelect?: unknown; options?: unknown };
     const options = Array.isArray(item.options)
@@ -292,8 +318,22 @@ function questionsOf(input: unknown): Question[] {
   });
 }
 
+/**
+ * The answer form's field names (§7.2's "answer the agent's question"). Feishu wants a component's name unique within
+ * the card, and one card can hold several questions' forms, so each name carries the approval's place on the card;
+ * a submission carries only its own form's fields, so the handler reads them by their suffix alone.
+ */
+export const questionField = (section: number, question: number): string => `a${section}_q${question}`;
+export const questionOtherField = (section: number, question: number): string => `${questionField(section, question)}_other`;
+/** A submitted field's question and whether it is the typed answer: `a0_q1` is (1, false), `a0_q1_other` is (1, true). */
+export function parseQuestionField(name: string): { question: number; other: boolean } | null {
+  const m = /^a\d+_q(\d+)(_other)?$/.exec(name);
+  return m ? { question: Number(m[1]), other: m[2] !== undefined } : null;
+}
+
 function approvalSection(
   approval: FeishuApprovalItem,
+  section: number,
   ctx: FeishuCardContext,
   full: boolean,
   live: boolean,
@@ -324,22 +364,27 @@ function approvalSection(
   if (live && ctx.approvalsInFeishu && questions.length > 0) {
     out.push({
       tag: 'form',
-      name: `answer_${approval.id}`,
+      name: `answer_${section}`,
       elements: [
+        // Per question: which one it is, its options (one, or one or more), and a box for an answer of the owner's
+        // own, as the web app's form offers. An option's value is its place in the agent's list.
         ...questions.flatMap((q, index) => [
-          {
-            tag: q.multiSelect ? 'multi_select_static' : 'select_static',
-            name: `q${index}`,
-            placeholder: plain(q.multiSelect ? 'Choose one or more' : 'Choose one'),
-            options: q.options.map((o, value) => ({ text: plain(cut(o.label)), value: String(value) })),
-          },
-          { tag: 'input', name: `q${index}_other`, placeholder: plain('Or type your own answer') },
+          text(cut(q.header || q.question)),
+          ...(q.options.length > 0
+            ? [{
+              tag: q.multiSelect ? 'multi_select_static' : 'select_static',
+              name: questionField(section, index),
+              placeholder: plain(q.multiSelect ? 'Choose one or more' : 'Choose one'),
+              options: q.options.map((o, value) => ({ text: plain(cut(o.label)), value: String(value) })),
+            }]
+            : []),
+          { tag: 'input', name: questionOtherField(section, index), placeholder: plain('Or type your own answer') },
         ]),
         {
           tag: 'button',
           text: plain('Submit'),
           type: 'primary',
-          name: 'submit',
+          name: `answer_${section}_submit`,
           form_action_type: 'submit',
           behaviors: [{ type: 'callback', value: { action: FEISHU_CARD_ACTIONS.answer, approvalId: approval.id } }],
         },

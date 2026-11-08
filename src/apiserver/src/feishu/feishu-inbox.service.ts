@@ -16,7 +16,10 @@ export const FEISHU_INBOX_MAX_ATTEMPTS = 5;
 const CLAIM_BATCH = 20;
 
 /** A card callback's synchronous answer must reach Feishu within 3 seconds (§7.1); the router gets this much of them. */
-const CARD_ANSWER_BUDGET_MS = 2_500;
+export const CARD_ANSWER_BUDGET_MS = 2_500;
+
+/** What a click is answered with when its answer is not ready within the budget (§7.1). */
+export const CARD_WORKING = { toast: { type: 'info', content: 'Working…' } } as const;
 
 /** The event id and type of Feishu's envelope: schema 2.0's header, or a v1 event's `uuid` and `event.type`. */
 export function eventIdentity(envelope: unknown): { eventId: string; eventType: string } | null {
@@ -60,6 +63,8 @@ interface ClaimedRow {
 export class FeishuInboxService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(FeishuInboxService.name);
   private readonly timing: FeishuTiming = feishuTiming();
+  /** How long a card click's answer is waited for before `Working…`; a spec shortens it. */
+  cardAnswerBudgetMs = CARD_ANSWER_BUDGET_MS;
   private pollTimer?: ReturnType<typeof setInterval>;
   private purgeTimer?: ReturnType<typeof setInterval>;
   private draining?: Promise<void>;
@@ -118,10 +123,21 @@ export class FeishuInboxService implements OnApplicationBootstrap, OnModuleDestr
       this.kick();
       return undefined;
     }
-    // The card's answer is due now: route it here, under the claim the insert made, within Feishu's budget. Whatever
-    // is not done in time is settled by the same code path, late, and Feishu has shown its own fallback.
-    const work = this.process({ id: row.id, appId, ...identity, payload: envelope, attempts: 1 });
-    const timeout = new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), CARD_ANSWER_BUDGET_MS).unref());
+    // The card's answer is due now: route it here, under the claim the insert made, within Feishu's budget. What is not
+    // done in time is answered `Working…` (§7.1); the work goes on, and its card follows through the callback's update
+    // token (FeishuRouter.lateAnswer).
+    const clickedAt = Date.now();
+    let late = false;
+    const work = this.process({ id: row.id, appId, ...identity, payload: envelope, attempts: 1 }).then((answer) => {
+      if (late) void this.router.lateAnswer({ appId, ...identity, payload: envelope }, answer, clickedAt);
+      return answer;
+    });
+    let done = false;
+    void work.finally(() => { done = true; });
+    const timeout = new Promise<typeof CARD_WORKING>((resolve) => setTimeout(() => {
+      if (!done) late = true;
+      resolve(CARD_WORKING);
+    }, this.cardAnswerBudgetMs).unref());
     return Promise.race([work, timeout]);
   }
 

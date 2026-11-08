@@ -28,6 +28,7 @@ private val injectedTagLabels = mapOf(
     "list-conditions" to "list conditions",
     "background-jobs" to "background jobs",
     "orbit-session-message" to "session message",
+    "orbit-external-sender" to "sender note",
     "orbit-session-reply" to "session reply",
 )
 

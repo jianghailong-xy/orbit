@@ -2796,7 +2796,73 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // function, trigger, type or constraint is created, replaced or dropped, so it is not another writer of the
       // DONE fence. No INSERT, UPDATE or DELETE: a constant default is a catalog change, every stored session reads
       // false.
-      '0493_session_prompt_by_orbit'],
+      '0493_session_prompt_by_orbit',
+      // 0494 is one new table for the Feishu bot integration (docs/feishu-bot-design.md §5.1): `feishu_connect_code`, the
+      // owner-identity codes, with its primary key, a unique index on code_hash, indexes on owner_id and expires_at, one
+      // CHECK, and a foreign key to `user` (ON DELETE CASCADE). It is not a preserved relation, no `task`, `session`,
+      // `project` or `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no
+      // function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence. No
+      // INSERT, UPDATE or DELETE: the table starts empty.
+      '0494_feishu_connect_code',
+      // 0495 is one new table for the Feishu bot integration (docs/feishu-bot-design.md §6.2): `feishu_message`, the alert
+      // cards sent to an app's owner, with its primary key, unique indexes on (app_id, collapse_key) and message_id,
+      // indexes on session_id, open_item_id and owner_id, four CHECKs, and foreign keys to `user` and `feishu_app` (ON
+      // DELETE CASCADE). session_id names a session without a foreign key. It is not a preserved relation, no `task`,
+      // `session`, `project` or `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and
+      // no function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence. No
+      // INSERT, UPDATE or DELETE: the table starts empty.
+      '0495_feishu_message',
+      // 0496 is one new table for the Feishu bot integration (docs/feishu-bot-design.md §8.1): `feishu_chat_route`, the
+      // group chats an account connected, with its primary key, unique indexes on (app_id, chat_id) and ticket_hash,
+      // indexes on owner_id and workspace_id, five CHECKs, and foreign keys to `user`, `feishu_app` (app_id) and
+      // `workspace` (all ON DELETE CASCADE). It is not a preserved relation, no `task`, `session`, `project` or
+      // `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function, trigger
+      // or type is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE: the table starts empty.
+      '0496_feishu_chat_route',
+      // 0497 adds one TEXT NOT NULL DEFAULT 'cost' column to `workspace` (`model_routing_optimize_for`: what model
+      // routing optimizes for) and one CHECK on it (`workspace_model_routing_optimize_for_check`: cost, balance or
+      // intelligence), and nothing else. `workspace` is not a preserved relation, no `task`, `session`, `project` or
+      // `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function,
+      // trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT,
+      // UPDATE or DELETE: a constant default is a catalog change, every stored workspace reads 'cost'.
+      '0497_model_routing_optimize_for',
+      // 0498 replaces one CHECK of `feishu_message` (docs/feishu-bot-design.md §6.2, task F1-5): status gains CLOSED. It
+      // is not a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six
+      // preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it is
+      // not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '0498_feishu_message_closed',
+      // 0499 is one new table for the Feishu bot integration (docs/feishu-bot-design.md §7.3, task F2-3):
+      // `feishu_thread`, the Feishu message chains that belong to a session, with its primary key, a unique index on
+      // (app_id, chat_id, root_message_id), indexes on (session_id, last_spoken_at) and owner_id, one CHECK and foreign
+      // keys to `user` and `feishu_app` (app_id, both ON DELETE CASCADE); and `activity_credential_chk` replaced so
+      // credential_kind may also be FEISHU. Neither is a preserved relation, no `task`, `session`, `project` or
+      // `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function, trigger
+      // or type is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE.
+      '0499_feishu_thread',
+
+      // 0500 adds three nullable columns and one CHECK to `approval` (docs/feishu-bot-design.md §7.2, task F2-1): the
+      // credential an approval's decision came in by, and the Feishu clicker and card when that was a Feishu card. It is
+      // not a preserved relation, no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six
+      // preserved triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it
+      // is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '0500_approval_decided_via',
+      // 0501 is one new table for the Feishu bot integration (docs/feishu-bot-design.md §7.5, task F2-4):
+      // `feishu_outbox`, a session's replies on their way back to Feishu, with its primary key, a unique index on
+      // turn_id, a partial index on due_at, indexes on (session_id, created_at), owner_id and app_id, two CHECKs and
+      // foreign keys to `user` and `feishu_app` (app_id, both ON DELETE CASCADE). It is not a preserved relation, no
+      // `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved triggers/functions is
+      // named, and no function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE
+      // fence. No INSERT, UPDATE or DELETE.
+      '0501_feishu_outbox',
+      // 0502 adds three nullable columns and a CHECK to `conversation_turn` (`external_sender_*`: who outside Orbit sent
+      // the turn, a Feishu group's member — docs/feishu-bot-design.md §8.2, task F3-5) and two nullable columns and a
+      // CHECK to `session` (`last_user_from_external_*`, beside 0485's), in one DO statement that takes the locks in short
+      // tries, then validates both CHECKs. Neither is a preserved relation, no column any preserved trigger reads is
+      // touched, and no function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE
+      // fence. No INSERT, UPDATE or DELETE: every stored turn and session reads NULL in all five.
+      '0502_conversation_turn_external_sender'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

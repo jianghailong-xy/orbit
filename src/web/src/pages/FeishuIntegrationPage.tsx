@@ -9,21 +9,28 @@ import {
   type FeishuAppChange,
   type FeishuAppConnect,
   type FeishuAppSettings,
+  type FeishuChatChange,
+  type FeishuChatRoute,
+  type FeishuConnectCode,
   type FeishuIntegration,
   type FeishuPlatform,
+  type FeishuTestMessageResult,
 } from '@orbit/shared';
 import { api } from '../api';
 import { Alert } from '../components/ui/Alert';
 import { Badge } from '../components/ui/Badge';
-import { Button } from '../components/ui/Button';
+import { Button, LinkButton } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Popconfirm } from '../components/ui/Popconfirm';
 import { Radio, RadioGroup } from '../components/ui/Radio';
+import { Select } from '../components/ui/Select';
 import { Spinner } from '../components/ui/Spinner';
 import { Switch } from '../components/ui/Switch';
 import '../components/ui/Card.css';
 import { copyText } from '../lib/clipboard';
 import { useToast } from '../lib/toast';
+import { workspacesQuery } from '../lib/queries';
+import { feishuChatsQuery, modeLabel } from './FeishuConnectGroupPage';
 
 /** `GET /integrations/feishu` (docs/feishu-bot-design.md §4.1, §10): never the App Secret, only whether one is saved and readable. */
 export const feishuIntegrationQuery = () =>
@@ -54,6 +61,15 @@ export const MESSAGE_DETAIL_HINT =
   "Off by default: alerts carry only the session or project title, the kind of event and a tool's name. "
   + "On, they also carry tool inputs, recaps, failure reasons, the agent's messages and questions, and owner item text, "
   + "and all of it is stored on Feishu's servers.";
+
+/** §7.2, decision 1: what the approvals switch says. "Always allow" stays in Orbit either way. */
+export const APPROVALS_IN_FEISHU_HINT =
+  "On, a tool approval's card has Allow once and Deny, answered by you only. "
+  + '"Always allow", questions, and Orbit\'s own confirmation cards are answered in Orbit. Off, cards only open Orbit.';
+
+/** §7.3: what the default workspace is for. */
+export const DEFAULT_WORKSPACE_HINT =
+  'A new direct message to the bot starts a session here. With none chosen, the bot asks you to choose one in Feishu.';
 
 export const NOT_ALLOWED_NOTICE = 'An administrator has turned off Feishu bots on this Orbit server.';
 /** Said when the saved secret no longer decrypts (§4.1): the app stays, but Orbit cannot act as it until the secret is entered again. */
@@ -92,6 +108,9 @@ function AppSummary({
   const message = useToast();
   const switchId = useId();
   const detailId = useId();
+  const approvalsId = useId();
+  const workspaceId = useId();
+  const workspaces = useQuery(workspacesQuery());
   const change = useMutation({
     mutationFn: (body: FeishuAppChange) => api<FeishuIntegration>('/integrations/feishu', { method: 'PATCH', body }),
     onSuccess: (integration) => qc.setQueryData(feishuIntegrationQuery().queryKey, integration),
@@ -173,6 +192,39 @@ function AppSummary({
             onCheckedChange={(on) => change.mutate({ messageDetail: on ? 'FULL' : 'TITLES_ONLY' })}
           />
         </div>
+        <div className="admin-signin-row">
+          <div>
+            <div className="admin-signin-label" id={approvalsId}>
+              Answer approvals in Feishu
+            </div>
+            <div className="admin-signin-hint">{APPROVALS_IN_FEISHU_HINT}</div>
+          </div>
+          <Switch
+            aria-labelledby={approvalsId}
+            checked={app.approvalsInFeishu}
+            loading={change.isPending && change.variables?.approvalsInFeishu !== undefined}
+            onCheckedChange={(approvalsInFeishu) => change.mutate({ approvalsInFeishu })}
+          />
+        </div>
+        <div className="admin-signin-row">
+          <div>
+            <div className="admin-signin-label" id={workspaceId}>
+              Default workspace
+            </div>
+            <div className="admin-signin-hint">{DEFAULT_WORKSPACE_HINT}</div>
+          </div>
+          <Select
+            aria-labelledby={workspaceId}
+            style={{ minWidth: 200 }}
+            placeholder="None"
+            clearable
+            clearLabel="No default workspace"
+            loading={workspaces.isPending || (change.isPending && change.variables?.defaultWorkspaceId !== undefined)}
+            value={app.defaultWorkspaceId}
+            onValueChange={(defaultWorkspaceId) => change.mutate({ defaultWorkspaceId })}
+            options={(workspaces.data ?? []).map((w: { id: string; name: string }) => ({ value: w.id, label: w.name }))}
+          />
+        </div>
         <div className="feishu-actions">
           <Button onClick={onReplace} disabled={!allowed}>
             Replace credentials
@@ -190,6 +242,219 @@ function AppSummary({
             }
           />
         </div>
+      </div>
+    </section>
+  );
+}
+
+export const CONNECT_ACCOUNT = 'Connect your Feishu account';
+export const OPEN_BOT = 'Open the bot in Feishu';
+export const SEND_TEST = 'Send me a test message';
+export const DISCONNECT_OWNER = 'Disconnect';
+/** §5.1: what the owner's identity is for, and who can take it. */
+export const OWNER_HINT =
+  'Orbit sends your alerts to this Feishu account, and only takes direct messages and card answers from it. '
+  + 'Whoever sends the bot a code you generate here becomes the owner, so keep the code to yourself.';
+
+/**
+ * Who the app's owner is (docs/feishu-bot-design.md §5): the Feishu account Orbit sends alerts to. Connect your Feishu
+ * account generates a one-time code (8 characters, 10 minutes) to send the bot in a direct message; while one is shown,
+ * the page reads the app again every few seconds, so the owner's name appears as soon as the bot has the code.
+ * Disconnect clears it; the app stays connected. Send me a test message checks the whole way to the owner's chat.
+ */
+function OwnerSection({ app }: { app: FeishuAppSettings }) {
+  const qc = useQueryClient();
+  const message = useToast();
+  const [code, setCode] = useState<FeishuConnectCode | null>(null);
+  const owner = app.ownerOpenId;
+  // The code was answered while someone else, or nobody, was the owner: a new owner means it was used.
+  const [ownerAtCode, setOwnerAtCode] = useState<string | null>(null);
+  const waiting = code !== null && owner === ownerAtCode && Date.parse(code.expiresAt) > Date.now();
+  useQuery({ ...feishuIntegrationQuery(), refetchInterval: waiting ? 3_000 : false, enabled: waiting });
+  const shown = code !== null && owner === ownerAtCode ? code : null;
+  const generate = useMutation({
+    mutationFn: () => api<FeishuConnectCode>('/integrations/feishu/connect-codes', { method: 'POST' }),
+    onSuccess: (answer) => {
+      setOwnerAtCode(owner);
+      setCode(answer);
+    },
+    onError: (e: Error) => message.error("Couldn't generate a code", e.message),
+  });
+  const disconnect = useMutation({
+    mutationFn: () => api<FeishuIntegration>('/integrations/feishu/owner', { method: 'DELETE' }),
+    onSuccess: (integration) => {
+      qc.setQueryData(feishuIntegrationQuery().queryKey, integration);
+      setCode(null);
+      message.success('Feishu account disconnected', 'Orbit stops sending alerts to Feishu until you connect an account again.');
+    },
+    onError: (e: Error) => message.error("Couldn't disconnect", e.message),
+  });
+  const test = useMutation({
+    mutationFn: () => api<FeishuTestMessageResult>('/integrations/feishu/test', { method: 'POST' }),
+    onSuccess: () => message.success('Test message sent', 'Look for it in your direct messages with the bot.'),
+    onError: (e: Error) => message.error("Couldn't send the test message", e.message),
+  });
+  const copy = async (text: string) => {
+    if (await copyText(text)) message.success('Code copied');
+    else message.error("Couldn't copy the code", 'Select it and copy it by hand.');
+  };
+  return (
+    <section className="orbit-card feishu-card" aria-label="Your Feishu account">
+      <div className="orbit-card-head">
+        <h2 className="orbit-card-title">Your Feishu account</h2>
+        {owner ? <Badge tone="success">Connected</Badge> : <Badge>Not connected</Badge>}
+      </div>
+      <div className="orbit-card-body feishu-fields">
+        <p className="feishu-owner-state">
+          {owner ? (
+            <>
+              Connected as <strong className="feishu-owner-name">{app.ownerName ?? 'a Feishu user whose name Orbit could not read'}</strong>.
+            </>
+          ) : (
+            'No Feishu account is connected yet, so Orbit has nobody to send alerts to.'
+          )}
+        </p>
+        <p className="feishu-hint">{OWNER_HINT}</p>
+        {shown && (
+          <div className="feishu-code" aria-label="Your code">
+            <div className="feishu-code-row">
+              <code className="feishu-code-value">{shown.code}</code>
+              <Button size="small" onClick={() => void copy(shown.code)}>
+                Copy
+              </Button>
+            </div>
+            <p className="feishu-hint">
+              Send this code to the bot in a direct message, not in a group. It works once, until{' '}
+              {new Date(shown.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.
+            </p>
+            <div>
+              <LinkButton variant="primary" href={shown.applink} target="_blank" rel="noreferrer">
+                {OPEN_BOT}
+              </LinkButton>
+            </div>
+          </div>
+        )}
+        <div className="feishu-actions">
+          {owner && (
+            <Popconfirm
+              title="Disconnect your Feishu account?"
+              description="Orbit stops sending alerts to Feishu. The app stays connected, and you can connect an account again with a new code."
+              confirmText={DISCONNECT_OWNER}
+              danger
+              onConfirm={() => disconnect.mutateAsync()}
+              trigger={
+                <Button danger loading={disconnect.isPending}>
+                  {DISCONNECT_OWNER}
+                </Button>
+              }
+            />
+          )}
+          <Button disabled={!owner} loading={test.isPending} title={owner ? undefined : 'Connect your Feishu account first'} onClick={() => test.mutate()}>
+            {SEND_TEST}
+          </Button>
+          <Button variant={owner ? 'default' : 'primary'} loading={generate.isPending} onClick={() => generate.mutate()}>
+            {owner ? (shown ? 'Generate another code' : 'Connect a different account') : shown ? 'Generate another code' : CONNECT_ACCOUNT}
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** Why a connected group is off, in a sentence. */
+const OFF_REASON: Readonly<Record<string, string>> = {
+  BOT_REMOVED: 'The bot was removed from the group. Add it back and send "@bot connect" there to connect it again.',
+  OWNER: 'Switched off: mentions in the group start nothing.',
+};
+
+/** One connected group: where its sessions open and how, with its switch and its removal. */
+function GroupRow({ route, workspaceName }: { route: FeishuChatRoute; workspaceName: string }) {
+  const qc = useQueryClient();
+  const message = useToast();
+  const switchId = useId();
+  const refresh = () => qc.invalidateQueries({ queryKey: ['integrations', 'feishu', 'chats'] });
+  const change = useMutation({
+    mutationFn: (body: FeishuChatChange) => api<FeishuChatRoute>(`/integrations/feishu/chats/${route.id}`, { method: 'PATCH', body }),
+    onSuccess: () => void refresh(),
+    onError: (e: Error) => message.error("Couldn't change the group", e.message),
+  });
+  const remove = useMutation({
+    mutationFn: () => api<{ removed: true }>(`/integrations/feishu/chats/${route.id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void refresh();
+      message.success('Group removed');
+    },
+    onError: (e: Error) => message.error("Couldn't remove the group", e.message),
+  });
+  const name = route.chatName ?? 'Unnamed group';
+  const who = route.allowedOpenIds.length === 0
+    ? 'Everyone in the group'
+    : `${route.allowedOpenIds.length} ${route.allowedOpenIds.length === 1 ? 'person' : 'people'} and you`;
+  return (
+    <li className="feishu-group" aria-label={name}>
+      <div className="admin-signin-row">
+        <div>
+          <div className="admin-signin-label" id={switchId}>
+            {name}
+          </div>
+          <div className="admin-signin-hint">
+            {workspaceName} · {modeLabel(route.permissionMode)} mode · {who} · up to {route.maxConcurrentSessions} at a time,{' '}
+            {route.sessionsPerDay} a day
+          </div>
+          {!route.enabled && route.disabledReason && <div className="admin-signin-hint">{OFF_REASON[route.disabledReason]}</div>}
+        </div>
+        <div className="feishu-group-actions">
+          <Switch
+            aria-labelledby={switchId}
+            checked={route.enabled}
+            disabled={!route.enabled && route.disabledReason === 'BOT_REMOVED'}
+            loading={change.isPending}
+            onCheckedChange={(enabled) => change.mutate({ enabled })}
+          />
+          <Popconfirm
+            title={`Remove ${name} from Orbit?`}
+            description="Mentions in the group start nothing until it is connected again. Sessions it already started stay."
+            confirmText="Remove group"
+            danger
+            onConfirm={() => remove.mutateAsync()}
+            trigger={
+              <Button size="small" danger loading={remove.isPending}>
+                Remove
+              </Button>
+            }
+          />
+        </div>
+      </div>
+    </li>
+  );
+}
+
+/** §8.1: the groups connected to Orbit. A group is connected from Feishu — the owner sends `@bot connect` in it. */
+function GroupsSection() {
+  const chats = useQuery(feishuChatsQuery());
+  const workspaces = useQuery(workspacesQuery());
+  const nameOf = (id: string) => ((workspaces.data ?? []) as Array<{ id: string; name: string }>).find((w) => w.id === id)?.name ?? 'A workspace';
+  return (
+    <section className="orbit-card feishu-card" aria-label="Groups">
+      <div className="orbit-card-head">
+        <h2 className="orbit-card-title">Groups</h2>
+      </div>
+      <div className="orbit-card-body feishu-fields">
+        <p className="feishu-hint">
+          To connect a group, add the bot to it and send &quot;@bot connect&quot; there. The bot answers with a link to
+          choose the workspace, the permission mode and who can start sessions. Only groups inside your organization can be
+          connected.
+        </p>
+        {chats.isPending && <Spinner />}
+        {chats.isError && <Alert type="error" title="Couldn't load the groups" description={chats.error.message} />}
+        {chats.isSuccess && chats.data.routes.length === 0 && <p className="feishu-hint">No groups are connected.</p>}
+        {chats.isSuccess && chats.data.routes.length > 0 && (
+          <ul className="feishu-groups">
+            {chats.data.routes.map((route) => (
+              <GroupRow key={route.id} route={route} workspaceName={nameOf(route.workspaceId)} />
+            ))}
+          </ul>
+        )}
       </div>
     </section>
   );
@@ -438,6 +703,8 @@ export function FeishuIntegrationPage() {
         />
       )}
       {app && <AppSummary app={app} allowed={allowed} onReplace={() => setReplacing(true)} />}
+      {app && allowed && <OwnerSection app={app} />}
+      {app && allowed && <GroupsSection />}
       {(!app || replacing) && (
         <CredentialsForm key={app ? `${app.platform}:${app.appId}` : 'new'} app={app} allowed={allowed} onDone={app ? () => setReplacing(false) : undefined} />
       )}

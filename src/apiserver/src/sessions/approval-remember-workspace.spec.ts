@@ -37,6 +37,8 @@ function makeService(session: Row | null, opts: { landed?: boolean } = {}) {
       },
     },
   } as never;
+  // decideApproval runs its write in a retried transaction: this fake has no other client to hand it.
+  (prisma as { $transaction: unknown }).$transaction = async (fn: (tx: unknown) => unknown) => fn(prisma);
   const realtime = { publish: () => {} } as never;
   return { service: new SessionsService(prisma, {} as never, realtime), created };
 }

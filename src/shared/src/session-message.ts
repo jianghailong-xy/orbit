@@ -75,3 +75,23 @@ export interface OrbitMessageFrom {
    */
   coordinatorDelivery: CoordinatorDeliveryCard | null;
 }
+
+/**
+ * Who outside Orbit sent a turn (docs/feishu-bot-design.md §8.2): a member of a connected Feishu group, whose words
+ * the bot handed to one of the owner's sessions. The server records it from the event Feishu delivered, never from a
+ * request body. The bot owner's own words in a group are the owner's, and carry none.
+ *
+ * Said in three places from the turn's one record: on the `user` event's payload (`externalSender`), where the
+ * conversation draws "From Feishu · <name>" over the words; on a session row beside `lastUserText`
+ * (`lastUserFromExternal`), written and cleared with it, where the row says "From Feishu · <name>: …"; and to the
+ * runner on delivery, which tells the agent the message is not the account owner's.
+ */
+export interface ExternalMessageFrom {
+  /** Where the sender is: the one source there is so far. */
+  source: 'FEISHU';
+  /** The sender's name as Feishu gave it when the turn was written; null when Feishu would not say. */
+  name: string | null;
+}
+
+/** The sources `ExternalMessageFrom.source` takes, for a reader that has to check a payload. */
+export const EXTERNAL_MESSAGE_SOURCES = ['FEISHU'] as const;

@@ -120,7 +120,7 @@ class SessionLineCopyParityTest {
         assertTrue("SessionLine.swift no longer says a notification's own sentence",
             line.contains("mark.coordinatorDelivery.map(CoordinatorDeliveryCard.sentence)"))
         assertTrue("SessionLine.swift no longer asks Orbit first on both lines that show a pending message",
-            line.split("return orbitLine(u, s.lastUserFromOrbit) ?? sentLine(u, from: s.lastUserFrom)").size - 1 == 2)
+            line.split("return orbitLine(u, s.lastUserFromOrbit) ?? externalLine(u, s.lastUserFromExternal) ?? sentLine(u, from: s.lastUserFrom)").size - 1 == 2)
         val web = File(root, "src/web/src/components/WorkspaceView.tsx").readText()
         assertTrue("WorkspaceView.tsx no longer calls Orbit \"${SessionLineCopy.orbit}\"",
             web.contains("export const SENT_BY_ORBIT = '${SessionLineCopy.orbit}';"))

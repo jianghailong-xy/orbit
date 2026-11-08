@@ -85,4 +85,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /wiki/chat-drafts/:id/undo',
   'POST /wiki/chat-drafts/:id/retry',
   'POST /wiki/chat-drafts/:id/seen',
+  // Connecting a Feishu group, and changing or removing one (docs/feishu-bot-design.md §8.1, §8.3): each lets people in
+  // the group start agents on the owner's machines, in the mode the owner chose.
+  'POST /integrations/feishu/chats/confirm',
+  'PATCH /integrations/feishu/chats/:id',
+  'DELETE /integrations/feishu/chats/:id',
 ];

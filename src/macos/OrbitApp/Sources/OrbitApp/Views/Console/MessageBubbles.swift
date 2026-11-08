@@ -12,6 +12,9 @@ import OrbitKit
 /// revealing it never shifts the message below.
 struct UserBubbleView: View {
     let bubble: UserBubble
+    /// Who sent it when it was somebody outside Orbit (`UserBubble.externalSender`), drawn as one line over
+    /// the bubble; nil for the owner's own words. `UserTurnRow` decides it, as it decides every card.
+    var sender: ExternalMessageFrom? = nil
     /// Provided only for the queued tail (`ConsoleView`): withdraws this still-waiting message.
     /// Nil for every settled/inline bubble, so the Cancel affordance shows on queued turns alone.
     var onCancelQueued: (() -> Void)? = nil
@@ -63,6 +66,13 @@ struct UserBubbleView: View {
             // what the mock measures (a 361pt column and a 301pt bubble).
             if showsCard { Spacer().frame(width: 60) } else { Spacer(minLength: 60) }
             VStack(alignment: .trailing, spacing: 3) {
+                // Who sent it when it was not the owner — `From Feishu · <name>` (`ExternalSender`):
+                // one muted line over the bubble, on its trailing edge like the bubble itself (web's
+                // `.chat-user-from`).
+                if let from = sender {
+                    Text(ExternalSender.label(from))
+                        .font(.orbitMeta).foregroundStyle(.secondary)
+                }
                 if !images.isEmpty {
                     imageBlock
                 }

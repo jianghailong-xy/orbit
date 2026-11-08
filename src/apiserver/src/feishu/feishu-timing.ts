@@ -32,6 +32,16 @@ const BASE = {
   rateLimitDefaultMs: 1_000,
   /** The longest a 429's suggested wait is honoured for; longer gives up. */
   rateLimitCapMs: 60_000,
+  /** The wait before an alert card's second attempt (§6.3); it doubles before each one after. */
+  alertRetryMs: 2_000,
+  /** How long an alert card's row is held by the apiserver sending or updating it (push/feishu-transport.ts). */
+  alertLeaseMs: 120_000,
+  /** The wait before a session reply's second attempt (§7.5, feishu/feishu-outbox.ts); it doubles before each one after. */
+  outboxRetryMs: 5_000,
+  /** The longest wait between two attempts of a session reply. */
+  outboxRetryCapMs: 10 * 60_000,
+  /** How long a session reply's row is held by the apiserver sending it. */
+  outboxLeaseMs: 120_000,
 };
 
 export type FeishuTiming = typeof BASE;

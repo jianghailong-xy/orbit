@@ -8020,6 +8020,14 @@ button.chat-jump-start:hover {
   margin: 0;
   max-width: 100%;
 }
+/* Who sent a bubble when it was not the owner — `From Feishu · <name>` (lib/externalSender): one
+   muted line over the bubble, on its right edge like the bubble itself. */
+.chat-user-from {
+  margin-bottom: 3px;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--text-2);
+}
 /* Links in a user message (Markdown links, plus bare URLs remark-gfm autolinks); underline + brand
    colour so they read as clickable against the tinted bubble. break-word already lets a long link
    wrap. Wins over `.md a` for the underline — that rule only sets a colour. */
@@ -21895,6 +21903,31 @@ div.landing-jobs-open {
   align-items: center;
   gap: 6px;
 }
+/* The owner's identity (FeishuIntegrationPage OwnerSection): the one-time code, large enough to read off and type. */
+.feishu-owner-state {
+  margin: 0;
+}
+.feishu-code {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: var(--fill-muted);
+}
+.feishu-code p {
+  margin: 0;
+}
+.feishu-code-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.feishu-code-value {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 22px;
+  letter-spacing: 0.18em;
+  color: var(--text-1);
+}
 /* Admin → Users: one row an account — who, how they sign in, whether they can, when they last used
    Orbit, since when — and its actions: the one most often wanted in sight, the rest in its menu
    (docs/mocks/admin-users-redesign, direction A). Columns give way as the table's own box narrows,
@@ -26923,4 +26956,44 @@ button.agent-progress-agent:hover {
 :root[data-theme='dark'] .wk-chat-fab-badge { border-color: var(--bg-raised); }
 @media (max-width: 639px) {
   .wk-chat-fab { right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: 56px; height: 56px; font-size: 25px; }
+}
+
+/* Feishu groups (docs/feishu-bot-design.md §8.1): the confirm page and the settings list. */
+.orbit-radio-group.feishu-modes {
+  flex-direction: column;
+  align-items: flex-start;
+  display: grid;
+  gap: 6px;
+}
+.feishu-consequence {
+  margin-top: 10px;
+}
+.feishu-limits {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+.feishu-groups {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.feishu-group + .feishu-group {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+}
+.feishu-group-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.feishu-members {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px 16px;
+  margin-top: 4px;
 }
