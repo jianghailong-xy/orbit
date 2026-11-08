@@ -168,7 +168,19 @@ func codexPathWithinRoots(path string, roots []string) bool {
 }
 
 func codexAutoCommandNeedsApproval(command string, tempRoots []string) bool {
+	return codexAutoCommandNeedsApprovalWithInline(command, tempRoots, false)
+}
+
+// Inline code is only exempted when the caller enforces a command sandbox.
+func codexAutoCommandNeedsApprovalWithInline(command string, tempRoots []string, allowInline bool) bool {
 	lower := strings.ToLower(command)
+	if !allowInline {
+		for _, phrase := range []string{"python -c", "python3 -c", "node -e", "perl -e", "ruby -e"} {
+			if strings.Contains(lower, phrase) {
+				return true
+			}
+		}
+	}
 	for _, word := range []string{
 		"wget", "ssh", "scp", "socat", "sudo", "doas", "printenv",
 		"chmod", "chown", "mkfs", "shutdown", "reboot", "poweroff", "launchctl", "systemctl",
@@ -184,7 +196,7 @@ func codexAutoCommandNeedsApproval(command string, tempRoots []string) bool {
 		"git push", "git remote add", "git reset --hard", "git clean", "git fetch", "git pull", "git clone",
 		"git branch -d", "git update-ref", "git worktree",
 		"npm install", "npm ci", "pnpm install", "yarn install", "pip install", "go get", "cargo add", "docker pull",
-		"dd if=", "python -c", "python3 -c", "node -e", "perl -e", "ruby -e",
+		"dd if=",
 		"/etc/shadow", ".ssh/", ".aws/", ".netrc", ".env", "auth.json", "id_rsa", "id_ed25519",
 		"openai_api_key", "anthropic_api_key", "rm -rf", "rm -r ",
 	} {

@@ -1530,11 +1530,11 @@ func TestCursorPermissionBridge(t *testing.T) {
 			"sudo true":                         false,
 			"cp out.txt ../elsewhere.txt":       false,
 		} {
-			if got := cursorAutoAllows(command, work); got != routine {
+			if got := cursorAutoAllows(command, work, false); got != routine {
 				t.Errorf("cursorAutoAllows(%q) = %v, want %v", command, got, routine)
 			}
 		}
-		if cursorAutoAllows("touch x", "relative/work") || cursorAutoAllows("   ", work) {
+		if cursorAutoAllows("touch x", "relative/work", false) || cursorAutoAllows("   ", work, false) {
 			t.Error("Auto allowed a command it cannot place")
 		}
 	})
@@ -2078,4 +2078,87 @@ func TestCursorAgentInstructions(t *testing.T) {
 			t.Fatalf("prompts = %q", texts)
 		}
 	})
+}
+
+// TestCursorAutoSandboxInline covers the sandbox switch independently of host sandbox availability.
+func TestCursorAutoSandboxInline(t *testing.T) {
+	for _, tc := range []struct {
+		name, command string
+		allowed       bool
+	}{
+		{"python-heredoc", "python3 - <<'PY'\nprint(1)\nPY", true},
+		{"python-inline", "python3 -c 'print(1)'", true},
+		{"outside-shell-path", "cat /etc/passwd", false},
+		{"node-inline", "node -e 'console.log(1)'", true},
+		{"ruby-inline", "ruby -e 'puts 1'", true},
+		{"perl-inline", "perl -e 'print 1'", true},
+		{"bash-heredoc", "bash <<'SH'\necho ok\nSH", true},
+		{"git-push", "git push origin main", false},
+		{"node-heredoc", "node <<'JS'\nconsole.log(1)\nJS", true},
+		{"ruby-heredoc", "ruby <<'RB'\nputs 1\nRB", true},
+		{"perl-heredoc", "perl <<'PL'\nprint 1\nPL", true},
+		{"git-fetch", "git fetch origin", false},
+		{"git-pull", "git pull", false},
+		{"git-clone", "git clone https://example.com/repo", false},
+		{"curl", "curl https://example.com", false},
+		{"wget", "wget https://example.com", false},
+		{"npm", "npm install", false},
+		{"pnpm", "pnpm install", false},
+		{"yarn", "yarn install", false},
+		{"pip3", "pip3 install requests", false},
+		{"secret-directory", "cat ~/.aws", false},
+		{"git-fetch-options", "git -C /srv/work fetch origin", false},
+		{"pip", "pip install requests", false},
+		{"go-get", "go get example.com/pkg", false},
+		{"cargo", "cargo add serde", false},
+		{"recursive-delete", "rm -rf /srv/outside", false},
+		{"secret", "cat ~/.ssh/id_rsa", false},
+		{"ssh", "ssh example.com", false},
+		{"scp", "scp x example.com:x", false},
+		{"sudo", "sudo true", false},
+		{"container", "docker run alpine true", false},
+		{"other-system", "kubectl apply -f deploy.yaml", false},
+		{"body-push", "python3 - <<'PY'\nimport os\nos.system('git push')\nPY", false},
+		{"body-argv-push", "python3 - <<'PY'\nimport subprocess\nsubprocess.run(['git', 'push'])\nPY", false},
+		{"inline-push", "python3 -c \"import os; os.system('git push')\"", false},
+		{"unterminated", "python3 - <<'PY'\nprint(1)", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := cursorAutoAllows(tc.command, "/srv/work", true); got != tc.allowed {
+				t.Fatalf("sandboxed allow = %v, want %v", got, tc.allowed)
+			}
+			if !tc.allowed {
+				body := "python3 - <<'PY'\nimport os\nos.system(" + fmt.Sprintf("%q", tc.command) + ")\nPY"
+				if cursorAutoAllows(body, "/srv/work", true) && tc.name != "unterminated" && tc.name != "outside-shell-path" {
+					t.Fatalf("high-impact heredoc body was allowed: %s", body)
+				}
+			}
+			for _, sandboxed := range []bool{false, true} {
+				rig := newCursorBridgeRig("auto", nil)
+				rig.bridge.sandboxInForce = sandboxed
+				if err := rig.mapper.begin("turn"); err != nil {
+					t.Fatal(err)
+				}
+				rig.bridge.begin("turn")
+				call := map[string]interface{}{"toolCallId": "call", "kind": "execute", "title": "`" + tc.command + "`",
+					"status": "pending", "rawInput": map[string]interface{}{"command": tc.command}}
+				rig.mapper.update(map[string]interface{}{"sessionId": "s", "update": map[string]interface{}{
+					"sessionUpdate": "tool_call", "toolCallId": "call", "kind": "execute", "title": call["title"],
+					"status": "pending", "rawInput": call["rawInput"]}})
+				rig.bridge.permission(1, cursorPermissionParams(call))
+				rig.bridge.wait()
+				wantAllowed := sandboxed && tc.allowed || !sandboxed && tc.name == "pip3"
+				if (len(rig.cards) == 0) != wantAllowed {
+					t.Fatalf("sandbox=%v cards=%v, auto allow=%v", sandboxed, rig.cards, wantAllowed)
+				}
+			}
+		})
+	}
+	command := "python3 - <<'PY'\nprint(1)\nPY"
+	if cursorAutoAllows(command, "/srv/work", false) {
+		t.Fatal("unsandboxed interpreter heredoc was allowed")
+	}
+	if dshCommandStaysInWorkspace(command, "/srv/work", "/srv/work") {
+		t.Fatal("DSH interpreter heredoc policy changed")
+	}
 }

@@ -65,7 +65,7 @@ func TestCursorSandboxInstallFallback(t *testing.T) {
 				if rig.bridge.sandboxInForce || len(rig.notes) != 1 || !strings.Contains(rig.notes[0]["notice"].(string), "in progress") {
 					t.Fatalf("state=%v notices=%v", rig.bridge.sandboxInForce, rig.notes)
 				}
-				if cursorAutoAllows("python3 - <<'PY'\nprint(1)\nPY", t.TempDir()) {
+				if cursorAutoAllows("python3 - <<'PY'\nprint(1)\nPY", t.TempDir(), false) {
 					t.Fatal("unsandboxed heredoc was allowed")
 				}
 			}

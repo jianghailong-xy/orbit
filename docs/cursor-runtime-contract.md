@@ -564,6 +564,17 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
 
 ### 5.4 对 Orbit 权限模式的含义（本节给事实，P5c 的映射见 §16.5）
 
+Cursor Auto sandbox policy (2026-11-08): when the session's command sandbox is in force,
+Orbit may answer `allow-once` for inline interpreter scripts (`python3 -c`, `node -e`,
+and Python/Node/Ruby/Perl/shell heredocs). The sandbox enforces writable roots.
+Without the sandbox, Auto retains the original conservative classifier: interpreter
+heredocs and the previously refused inline forms still get an approval card.
+In both cases, git push/fetch/pull/clone, remote curl/wget, package installs, ssh/scp,
+sudo, recursive deletes outside temporary directories, secret files, other systems
+(`dshToolGateMatch`), and containers still require a card. Sandboxed Auto scans the
+entire script body for these markers, including quoted command arguments; an
+unterminated heredoc also gets a card. This does not change DSH's classifier.
+
 | Orbit 模式 | 能否强制 | 依据 |
 | --- | --- | --- |
 | `bypassPermissions` | 能：`--force`（团队否决时退回白名单，见上） | 【实测；`p5c/bypass`：没有任何权限请求】 |
@@ -1407,7 +1418,7 @@ env:  三层，后面的覆盖前面的（见下）：白名单（PATH、LANG、
 | Orbit 模式 | 启动参数（`acp --disable-auto-update --disable-indexing` 之后） | Cursor 模式 | Orbit 对权限请求的处理 | 实测 |
 | --- | --- | --- | --- | --- |
 | `acceptEdits`（没指定模式时的默认，D6） | `--disable-project-configs` | agent | 审批卡；卡上的「总是允许」回 `allow-once`（§5.2） | `p5c/accept-edits-allow-deny`、`p5c/allow-always` |
-| `auto` | 同上，**不用** `--force` | agent | Orbit 自己的请求级分类：例行命令由 runner 直接 `allow-once`，其余出卡。例行指：按 Codex Auto 的规则是例行的（`codexAutoApproval`：不 push、fetch、install，没有远程 shell、内联解释器、密钥文件、递归删除），不作用于别的系统（DSH 的工具闸 `dshToolGateMatch`），不起容器，路径不出工作区和临时目录（`cursorAutoAllows`） | `p5c/auto` |
+| `auto` | Same as above; no `--force` | agent | Routine commands receive `allow-once`; all others get a card. With the session sandbox in force, inline scripts and heredocs may run after high-impact marker checks over the full body. Without it, the original Codex Auto and workspace checks apply, including refusal of interpreter heredocs. See §5.4 for the retained card boundaries. | `p5c/auto`; `TestCursorAutoSandboxInline` |
 | `plan` | 同上 | plan，每轮发 prompt 前核对 | 一律 `reject-once`，不出卡；提问和计划照常出卡；看到 `switch_mode` 工具卡就终止这一轮（§4.2） | `p5c/plan`、`p5c/plan-switch-mode` |
 | `dontAsk` | 同上 | agent | 一律 `reject-once`，不出卡；提问回 `skipped`，计划回 `rejected`；工作区内的写照样发生，模式说明如实写明 | `p5c/dont-ask` |
 | `bypassPermissions` | `--force --disable-project-configs` | agent | 不会来请求；团队否决 Run Everything 时来了就出卡问人，每个进程提示一次（§5.3） | `p5c/bypass`；团队否决只有回放 |
