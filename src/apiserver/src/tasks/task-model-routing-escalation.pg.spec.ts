@@ -244,7 +244,7 @@ test('a run that failed its acceptance command is followed by a fresh run one ti
         lastRun: { ordinal: 1, level: 'M', model: SONNET, outcome: 'ACCEPTANCE_FAILED' },
         escalatedFrom: 'M',
       });
-      assert.deepEqual(row.reasons, ['Tier L — raised after run 1 (M) failed its acceptance command', ENGINE]);
+      assert.deepEqual(row.reasons, ['[escalate] Tier L — raised after run 1 (M) failed its acceptance command', ENGINE]);
       assert.deepEqual(await sessionOf(services.db, run2), { provider: 'claude', model: OPUS, effort: 'high' });
       assert.equal(await escalatedMark(services, target, taskId, run2), true);
       assert.deepEqual(
@@ -284,7 +284,7 @@ test('a verifier\'s FAIL and the owner\'s SEND_BACK each count against the run t
         lastRun: { ordinal: 1, level: 'S', model: SONNET, outcome: 'VERIFICATION_FAILED' },
         escalatedFrom: 'S',
       });
-      assert.deepEqual(row.reasons, ['Tier M — raised after run 1 (S) was failed by its verifier', ENGINE]);
+      assert.deepEqual(row.reasons, ['[escalate] Tier M — raised after run 1 (S) was failed by its verifier', ENGINE]);
 
       // Run 2 finishes and submits its work; the owner sends it back.
       await end(db, run2, RunStatus.SUCCEEDED);
@@ -302,7 +302,7 @@ test('a verifier\'s FAIL and the owner\'s SEND_BACK each count against the run t
         lastRun: { ordinal: 2, level: 'M', model: SONNET, outcome: 'SENT_BACK' },
         escalatedFrom: 'M',
       });
-      assert.deepEqual(row.reasons, ['Tier L — raised after run 2 (M) was sent back by the owner', ENGINE]);
+      assert.deepEqual(row.reasons, ['[escalate] Tier L — raised after run 2 (M) was sent back by the owner', ENGINE]);
       assert.equal((row.features as Record<string, unknown>).priorFailures, 2,
         'run 1 failed by its verifier and run 2 sent back, each once');
       assert.deepEqual(await sessionOf(db, run3), { provider: 'claude', model: OPUS, effort: 'high' });
@@ -318,7 +318,7 @@ test('a verifier\'s FAIL and the owner\'s SEND_BACK each count against the run t
         lastRun: { ordinal: 3, level: 'L', model: OPUS, outcome: 'OK' },
         escalatedFrom: null,
       });
-      assert.deepEqual(row.reasons, [`Tier S: suggested by the coordinator — ${HINT_REASON}`, ENGINE]);
+      assert.deepEqual(row.reasons, [`[coordinator] Tier S: suggested by the coordinator — ${HINT_REASON}`, ENGINE]);
       assert.equal((row.features as Record<string, unknown>).priorFailures, 2);
     } finally {
       await services.db.$disconnect();
@@ -344,7 +344,7 @@ test('a usage-limit failure is not counted: it neither raises the tier nor break
         level: 'M', applied: true, model: SONNET, effort: 'medium', lastRun: null, escalatedFrom: null,
       });
       assert.deepEqual(row.reasons, [
-        `Tier M: suggested by the coordinator — ${HINT_REASON}`, 'Run 1 hit a usage limit — not counted', ENGINE,
+        `[coordinator] Tier M: suggested by the coordinator — ${HINT_REASON}`, 'Run 1 hit a usage limit — not counted', ENGINE,
       ]);
 
       // M fails with no error text — the runner's /finalize when the engine died silently. That counts,
@@ -364,7 +364,7 @@ test('a usage-limit failure is not counted: it neither raises the tier nor break
         escalatedFrom: 'M',
       });
       assert.deepEqual(row.reasons, [
-        'Tier L — raised after run 2 (M) failed', 'Run 3 hit a usage limit — not counted', ENGINE,
+        '[escalate] Tier L — raised after run 2 (M) failed', 'Run 3 hit a usage limit — not counted', ENGINE,
       ]);
       const features = row.features as Record<string, unknown>;
       assert.deepEqual(
@@ -396,7 +396,7 @@ test('a model-at-capacity failure is not counted: it neither raises the tier nor
         level: 'M', applied: true, model: SONNET, effort: 'medium', lastRun: null, escalatedFrom: null,
       });
       assert.deepEqual(row.reasons, [
-        `Tier M: suggested by the coordinator — ${HINT_REASON}`, 'Run 1 found the model at capacity — not counted', ENGINE,
+        `[coordinator] Tier M: suggested by the coordinator — ${HINT_REASON}`, 'Run 1 found the model at capacity — not counted', ENGINE,
       ]);
 
       // A genuine failure still counts: run 3 is L. Run 3 then finds the model at capacity, so run 4
@@ -414,7 +414,7 @@ test('a model-at-capacity failure is not counted: it neither raises the tier nor
         escalatedFrom: 'M',
       });
       assert.deepEqual(row.reasons, [
-        'Tier L — raised after run 2 (M) failed', 'Run 3 found the model at capacity — not counted', ENGINE,
+        '[escalate] Tier L — raised after run 2 (M) failed', 'Run 3 found the model at capacity — not counted', ENGINE,
       ]);
       const features = row.features as Record<string, unknown>;
       assert.deepEqual(
@@ -454,7 +454,7 @@ test('the tier is one above the last run\'s or the suggestion, whichever is high
         escalatedFrom: 'M',
       });
       assert.deepEqual(row.reasons, [
-        'Tier XL — raised after run 2 (M) failed', 'Coordinator suggested tier XL: a redesign, not a fix', ENGINE,
+        '[escalate] Tier XL — raised after run 2 (M) failed', '[coordinator] Coordinator suggested tier XL: a redesign, not a fix', ENGINE,
       ]);
 
       // XL fails too: XL is as high as it goes, so the next run stays there, without the ↑.
@@ -467,7 +467,7 @@ test('the tier is one above the last run\'s or the suggestion, whichever is high
         lastRun: { ordinal: 3, level: 'XL', model: OPUS, outcome: 'FAILED' },
         escalatedFrom: null,
       });
-      assert.deepEqual(row.reasons, ['Tier XL — already the highest tier after run 3 (XL) failed', ENGINE]);
+      assert.deepEqual(row.reasons, ['[escalate] Tier XL — already the highest tier after run 3 (XL) failed', ENGINE]);
       assert.deepEqual(await sessionOf(db, run4), { provider: 'claude', model: OPUS, effort: 'max' });
       assert.equal(await escalatedMark(services, target, taskId, run4), false);
     } finally {
@@ -500,14 +500,14 @@ test('a task with no suggestion still escalates; with no tier on record, the mod
         escalatedFrom: 'L',
       });
       assert.deepEqual(row.reasons, [
-        'Tier XL — raised after run 1 (L) failed', `Run 1 used Opus 5.5 · ${AGENT_EFFORT}, which counts as tier L`, ENGINE,
+        '[escalate] Tier XL — raised after run 1 (L) failed', `[escalate] Run 1 used Opus 5.5 · ${AGENT_EFFORT}, which counts as tier L`, ENGINE,
       ]);
       assert.deepEqual(await sessionOf(db, afterLegacy), { provider: 'claude', model: OPUS, effort: 'max' });
 
       // Run 1 ran on a Sonnet pin the owner has since taken off: its decision named no tier.
       const unpinned = await taskIn(db, target, { ...unsuggested, model: SONNET });
       const pinnedRun = await runNow(services, target, unpinned);
-      assert.deepEqual((await decisionOf(db, pinnedRun)).reasons, [`Task pin: ${SONNET}`]);
+      assert.deepEqual((await decisionOf(db, pinnedRun)).reasons, [`[not-routed] Task pin: ${SONNET}`]);
       await end(db, pinnedRun, RunStatus.FAILED, { error: CRASH });
       await db.task.update({ where: { id: unpinned }, data: { model: null } });
 
@@ -520,7 +520,7 @@ test('a task with no suggestion still escalates; with no tier on record, the mod
         escalatedFrom: 'M',
       });
       assert.deepEqual(row.reasons, [
-        'Tier L — raised after run 1 (M) failed', `Run 1 used Sonnet 5.5 · ${AGENT_EFFORT}, which counts as tier M`, ENGINE,
+        '[escalate] Tier L — raised after run 1 (M) failed', `[escalate] Run 1 used Sonnet 5.5 · ${AGENT_EFFORT}, which counts as tier M`, ENGINE,
       ]);
       assert.deepEqual(await sessionOf(db, afterPin), { provider: 'claude', model: OPUS, effort: 'high' });
     } finally {
@@ -550,7 +550,7 @@ test('the last tier is the one its decision named, a shadow one included, not th
         lastRun: { ordinal: 1, level: 'M', model: OPUS, outcome: 'FAILED' },
         escalatedFrom: 'M',
       });
-      assert.deepEqual(row.reasons, ['Tier L — raised after run 1 (M) failed', ENGINE], 'one above M, not above Opus\'s L');
+      assert.deepEqual(row.reasons, ['[escalate] Tier L — raised after run 1 (M) failed', ENGINE], 'one above M, not above Opus\'s L');
       assert.deepEqual(await sessionOf(db, run2), { provider: 'claude', model: null, effort: AGENT_EFFORT },
         'and in shadow the run is still the baseline');
     } finally {
@@ -608,7 +608,7 @@ test('an automatic re-run is a fresh run too: the sweep starts it one tier up',
         lastRun: { ordinal: 1, level: 'M', model: SONNET, outcome: 'FAILED' },
         escalatedFrom: 'M',
       });
-      assert.deepEqual(row.reasons, ['Tier L — raised after run 1 (M) failed', ENGINE]);
+      assert.deepEqual(row.reasons, ['[escalate] Tier L — raised after run 1 (M) failed', ENGINE]);
       assert.deepEqual(await sessionOf(db, run2), { provider: 'claude', model: OPUS, effort: 'high' });
     } finally {
       await services.db.$disconnect();

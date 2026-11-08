@@ -198,7 +198,7 @@ test('a fresh run records one shadow decision, frozen in a v3 target, and runs t
           provider: row.provider, model: row.model, effort: row.effort },
         { applied: false, policyVersion: 2, level: 'M', provider: 'claude', model: SONNET, effort: 'medium' },
       );
-      assert.equal(row.reasons[0], `Tier M: suggested by the coordinator — ${HINT_REASON}`);
+      assert.equal(row.reasons[0], `[coordinator] Tier M: suggested by the coordinator — ${HINT_REASON}`);
       assert.deepEqual(row.baseline, {
         // The task pins only the provider, so its engine is the one that provider runs on by default.
         engine: 'claude', engineSource: 'provider-pin',
@@ -263,18 +263,18 @@ test('a bulk run records one decision per fresh item, under that item\'s own req
         [suggested, {
           decision: { level: 'S', model: SONNET, effort: 'low' },
           session: { provider: 'claude', model: null, effort: AGENT_EFFORT },
-          reason: `Tier S: suggested by the coordinator — ${HINT_REASON}`,
+          reason: `[coordinator] Tier S: suggested by the coordinator — ${HINT_REASON}`,
         }],
         [unsuggested, {
           // Not routed: the baseline, whose model is the runtime default the first claim resolves.
           decision: { level: null, model: null, effort: AGENT_EFFORT },
           session: { provider: 'claude', model: null, effort: AGENT_EFFORT },
-          reason: "No suggestion — keeps the agent's model, as today",
+          reason: "[not-routed] No suggestion — keeps the agent's model, as today",
         }],
         [pinned, {
           decision: { level: null, model: OPUS, effort: AGENT_EFFORT },
           session: { provider: 'claude', model: OPUS, effort: AGENT_EFFORT },
-          reason: `Task pin: ${OPUS}`,
+          reason: `[not-routed] Task pin: ${OPUS}`,
         }],
       ]);
       for (const [taskId, want] of expected) {
