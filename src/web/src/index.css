@@ -14875,6 +14875,14 @@ button.chat-jump-start:hover {
   font-size: 11px;
   color: var(--text-3);
 }
+.tdp-route-source {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 650;
+}
 .tdp-dot {
   width: 8px;
   height: 8px;

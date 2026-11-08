@@ -138,6 +138,13 @@ afterEach(async () => {
 });
 
 describe('smart model selection, one switch for the whole account', () => {
+  it('keeps optimize mode on the Agent rather than introducing account inheritance', async () => {
+    await mount({ modelRouting: true });
+    expect(document.body.querySelector('[aria-label="Optimize For"]')).toBeNull();
+    expect(checked()).toBe('true');
+    expect(patches()).toEqual([]);
+  });
+
   it('sits in Session defaults under Default permission mode, saying what it does', async () => {
     await mount({});
     expect(label().nextElementSibling?.textContent).toBe(HINT);

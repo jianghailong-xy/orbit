@@ -9,7 +9,7 @@ import {
   type RuntimeDefaultModels,
 } from '@orbit/shared';
 
-export const MODEL_ROUTING_POLICY_VERSION = 1;
+export const MODEL_ROUTING_POLICY_VERSION = 2;
 export const MODEL_ROUTING_LEVELS = ['S', 'M', 'L', 'XL'] as const;
 export type ModelRoutingLevel = (typeof MODEL_ROUTING_LEVELS)[number];
 
@@ -77,7 +77,47 @@ export interface ModelRoutingRun {
   outcome?: ModelRoutingOutcome;
 }
 
+export interface ModelRoutingFeatures {
+  completionCriterion?: string | null;
+  hasAcceptanceCommand?: boolean;
+  verifiesTask?: boolean;
+  isForeman?: boolean;
+  dependents?: number;
+  promptChars?: number;
+}
+
+/** Structural inference uses only the same value snapshot recorded with the decision. */
+export function inferRuleTier(features: ModelRoutingFeatures = {}): {
+  level: ModelRoutingLevel | null; source: 'rule'; reasons: string[];
+} {
+  const validCount = (value: number | undefined): value is number =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  const { completionCriterion, hasAcceptanceCommand, verifiesTask, isForeman, dependents, promptChars } = features;
+  let level: ModelRoutingLevel | null = null;
+  let body = 'No structural rule matched';
+  if (isForeman === true || verifiesTask === true ||
+      completionCriterion === 'OWNER_CONFIRMED' || completionCriterion === 'VERIFICATION') {
+    level = 'L';
+    body = 'Tier L: review or coordination requires a conservative starting tier';
+  } else if ((validCount(dependents) && dependents >= 3) || (validCount(promptChars) && promptChars >= 8000)) {
+    level = 'L';
+    body = 'Tier L: broad dependency impact or a large prompt';
+  } else if (completionCriterion === 'EXECUTABLE' && hasAcceptanceCommand === true) {
+    level = 'M';
+    body = 'Tier M: executable work with acceptance feedback';
+    if (dependents === 0 && validCount(promptChars) && promptChars > 0 && promptChars <= 2000) {
+      level = 'S';
+      body = 'Tier S: bounded executable work with immediate acceptance feedback';
+    }
+  }
+  return { level, source: 'rule', reasons: [`[rule] Rule inference — ${body}`] };
+}
+
+export type ModelRoutingOptimizeFor = 'cost' | 'balance' | 'intelligence';
+
 export interface ModelRoutingInput {
+  optimizeFor?: ModelRoutingOptimizeFor;
+  features?: ModelRoutingFeatures;
   task: {
     /** The task's engine pin: like a provider pin, it keeps the run on its engine. */
     engine?: string | null;
@@ -223,7 +263,7 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
     effort: baseline.effort,
     policyVersion: MODEL_ROUTING_POLICY_VERSION,
     level: null,
-    reasons,
+    reasons: reasons.map((reason) => reason.startsWith('[') ? reason : `[not-routed] ${reason}`),
   });
   if (task.model != null) return unchanged([`Task pin: ${task.model}`]);
   if (
@@ -245,8 +285,15 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
       break;
     }
   }
-  let level = task.modelHint ?? null;
-  const reasons: string[] = [];
+  const rule = task.modelHint ? null : inferRuleTier(input.features);
+  let level = task.modelHint ?? rule?.level ?? null;
+  const reasons: string[] = rule?.level ? [...rule.reasons] : [];
+  const mode = input.optimizeFor ?? 'cost';
+  const floor = mode === 'balance' ? 'M' : mode === 'intelligence' ? 'L' : null;
+  if (!task.modelHint && floor && (!level || MODEL_ROUTING_LEVELS.indexOf(level) < MODEL_ROUTING_LEVELS.indexOf(floor))) {
+    level = floor;
+    reasons.push(`[default] Tier ${floor}: ${mode === 'balance' ? 'Balance' : 'Intelligence'} minimum for a task without a suggestion`);
+  }
   const lastLevel = last ? priorLevel(last, runtime) : null;
   const failure = last?.outcome && last.outcome !== 'OK'
     ? last.outcome
@@ -255,24 +302,24 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
     const next = Math.min(MODEL_ROUTING_LEVELS.indexOf(lastLevel) + 1, 3);
     level = MODEL_ROUTING_LEVELS[Math.max(next, level ? MODEL_ROUTING_LEVELS.indexOf(level) : 0)];
     reasons.push(
-      `Tier ${level} — ${level === lastLevel ? 'already the highest tier after' : 'raised after'} ` +
+      `[escalate] Tier ${level} — ${level === lastLevel ? 'already the highest tier after' : 'raised after'} ` +
       `run ${last.ordinal} (${lastLevel}) ${FAILURE_WORDING[failure]}`,
     );
     if (!last.level) {
       const label = runnerCatalogRow(last.runtime ?? runtime, last.model ?? '', environment.modelCatalog)?.label
         ?? last.model ?? runtime;
       reasons.push(
-        `Run ${last.ordinal} used ${label}` +
+        `[escalate] Run ${last.ordinal} used ${label}` +
         `${last.effort ? ` · ${last.effort}` : ''}, which counts as tier ${lastLevel}`,
       );
     }
     if (task.modelHint && MODEL_ROUTING_LEVELS.indexOf(task.modelHint) > next) {
-      reasons.push(`Coordinator suggested tier ${task.modelHint}${task.modelHintReason ? `: ${task.modelHintReason}` : ''}`);
+      reasons.push(`[coordinator] Coordinator suggested tier ${task.modelHint}${task.modelHintReason ? `: ${task.modelHintReason}` : ''}`);
     }
-  } else if (level) {
-    reasons.push(`Tier ${level}: suggested by the coordinator${task.modelHintReason ? ` — ${task.modelHintReason}` : ''}`);
-  } else {
-    reasons.push("No suggestion — keeps the agent's model, as today");
+  } else if (task.modelHint) {
+    reasons.push(`[coordinator] Tier ${level}: suggested by the coordinator${task.modelHintReason ? ` — ${task.modelHintReason}` : ''}`);
+  } else if (!level) {
+    reasons.push("[not-routed] No suggestion — keeps the agent's model, as today");
   }
   reasons.push(...skipped);
   if (!level) {

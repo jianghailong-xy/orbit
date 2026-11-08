@@ -56,9 +56,9 @@ function assertDecision(
 ): void {
   const { reasons, engine, ...selection } = actual;
   const { engine: expectedEngine, ...rest } = expected;
-  assert.deepEqual(selection, { policyVersion: 1, ...rest });
+  assert.deepEqual(selection, { policyVersion: 2, ...rest });
   if (expectedEngine !== undefined) assert.equal(engine, expectedEngine);
-  assert.ok(reasons.length > 0);
+  assert.ok(reasons.some((reason) => /^\[(coordinator|rule|escalate|not-routed)\]/.test(reason)));
   assert.ok(reasons.every((reason) => typeof reason === 'string' && reason.length > 0));
 }
 
@@ -75,8 +75,8 @@ for (const [level, model, effort] of claudeTiers) {
   });
 }
 
-test('policy version is one', () => {
-  assert.equal(MODEL_ROUTING_POLICY_VERSION, 1);
+test('policy version is two', () => {
+  assert.equal(MODEL_ROUTING_POLICY_VERSION, 2);
 });
 
 test('no suggestion preserves the full baseline for new and nonfailed runs', () => {
@@ -111,7 +111,7 @@ test('task model pin overrides suggestions, failures, catalog, Auto and quota co
   value.environment.planUsage = { claude: { sevenDayOpus: { utilization: 100 } } };
   const result = routeTaskRun(value);
   assertDecision(result, { level: null, provider: 'claude-pool', model: 'owner-model', effort: 'max' });
-  assert.deepEqual(result.reasons, ['Task pin: owner-model']);
+  assert.deepEqual(result.reasons, ['[not-routed] Task pin: owner-model']);
 });
 
 test('a provider pin fixes the engine and still routes model and effort', () => {
@@ -356,7 +356,7 @@ for (const [model, expected] of [[SONNET, 'L'], [OPUS, 'XL'], ['sonnet', 'L'], [
     const result = routeTaskRun(value);
     assert.equal(result.level, expected);
     const label = model === SONNET ? 'Sonnet 5.5' : model === OPUS ? 'Opus 5.5' : model;
-    assert.ok(result.reasons.some((reason) => reason.startsWith(`Run 1 used ${label}, which counts as tier`)));
+    assert.ok(result.reasons.some((reason) => reason.startsWith(`[escalate] Run 1 used ${label}, which counts as tier`)));
   });
 }
 
@@ -500,7 +500,7 @@ test('an agent\'s own engine signed out on the runner moves the run to an allowe
   const result = routeTaskRun(value);
   assertDecision(result, { level: 'XL', engine: 'codex', provider: 'codex', model: 'gpt-default', effort: 'xhigh' });
   assert.deepEqual(result.reasons, [
-    'Tier XL: suggested by the coordinator', 'Engine codex: claude is signed out on this runner',
+    '[coordinator] Tier XL: suggested by the coordinator', 'Engine codex: claude is signed out on this runner',
   ]);
 });
 
@@ -512,7 +512,7 @@ test('Claude\'s sign-in on a runner the region check blocks is ruled out as a si
   const result = routeTaskRun(value);
   assertDecision(result, { level: 'XL', engine: 'codex', provider: 'codex', model: 'gpt-default', effort: 'xhigh' });
   assert.deepEqual(result.reasons, [
-    'Tier XL: suggested by the coordinator', 'Engine codex: claude can’t use Anthropic on this runner',
+    '[coordinator] Tier XL: suggested by the coordinator', 'Engine codex: claude can’t use Anthropic on this runner',
   ]);
 });
 
@@ -589,7 +589,7 @@ test('a provider pin and an undecided tier both keep the run on its engine', () 
   setState(unsuggested, 'claude', { quota: { utilization: 100, window: 'weekly' } });
   result = routeTaskRun(unsuggested);
   assertDecision(result, { ...unsuggested.baseline, level: null });
-  assert.deepEqual(result.reasons, ["No suggestion — keeps the agent's model, as today", "Engine claude: this agent's own engine"]);
+  assert.deepEqual(result.reasons, ["[not-routed] No suggestion — keeps the agent's model, as today", "[not-routed] Engine claude: this agent's own engine"]);
 });
 
 test('an engine with no tier table is never a candidate, nor the same runtime under another name', () => {
@@ -606,4 +606,111 @@ test('an engine with no tier table is never a candidate, nor the same runtime un
   const pooled = routeTaskRun(pool);
   assert.equal(pooled.provider, 'claude-pool');
   assert.ok(pooled.reasons.includes("Engine claude: this agent's own engine"));
+});
+
+test('rule inference follows structural thresholds and abstains on missing or invalid inputs', () => {
+  const cases: Array<[ModelRoutingInput['features'], ModelRoutingLevel | null]> = [
+    [{ isForeman: true }, 'L'], [{ verifiesTask: true }, 'L'],
+    [{ completionCriterion: 'OWNER_CONFIRMED' }, 'L'], [{ completionCriterion: 'VERIFICATION' }, 'L'],
+    [{ dependents: 3 }, 'L'], [{ promptChars: 8000 }, 'L'],
+    [{ completionCriterion: 'EXECUTABLE', hasAcceptanceCommand: true, dependents: 0, promptChars: 2000 }, 'S'],
+    [{ completionCriterion: 'EXECUTABLE', hasAcceptanceCommand: true, dependents: 0, promptChars: 2001 }, 'M'],
+    [{ completionCriterion: 'EXECUTABLE', hasAcceptanceCommand: true }, 'M'],
+    [{ dependents: -1, promptChars: NaN }, null], [{}, null],
+  ];
+  for (const [features, level] of cases) {
+    const value = input();
+    value.features = features;
+    const before = structuredClone(value);
+    const decision = routeTaskRun(value);
+    assert.equal(decision.level, level, JSON.stringify(features));
+    if (level) assert.match(decision.reasons[0], /\[rule\] Rule inference/);
+    assert.deepEqual(value, before);
+  }
+});
+
+test('rules preserve hint and pin precedence and cannot lower failure escalation', () => {
+  const value = input();
+  value.features = { isForeman: true };
+  value.task.modelHint = 'S';
+  assert.equal(routeTaskRun(value).level, 'S');
+  value.task.model = 'pinned';
+  assert.equal(routeTaskRun(value).model, 'pinned');
+  assert.equal(routeTaskRun(value).level, null);
+  value.task = {};
+  value.features = { completionCriterion: 'EXECUTABLE', hasAcceptanceCommand: true, dependents: 0, promptChars: 100 };
+  value.history = [{ ordinal: 1, status: 'FAILED', quotaFailure: false, level: 'L' }];
+  assert.equal(routeTaskRun(value).level, 'XL');
+  value.history[0].capacityFailure = true;
+  assert.equal(routeTaskRun(value).level, 'S');
+  value.environment.hasOwnModelSpace = true;
+  assert.equal(routeTaskRun(value).level, null);
+});
+
+
+test('reason tags identify coordinator, rule, escalation and every not-routed exit', () => {
+  const value = input();
+  value.task.modelHint = 'XL';
+  assert.match(routeTaskRun(value).reasons[0], /^\[coordinator\]/);
+  value.history = [{ ordinal: 1, status: 'FAILED', quotaFailure: false, level: 'S' }];
+  let reasons = routeTaskRun(value).reasons;
+  assert.ok(reasons.some((reason) => /^\[escalate\]/.test(reason)));
+  assert.ok(reasons.some((reason) => /^\[coordinator\]/.test(reason)));
+  value.task = {};
+  value.features = { isForeman: true };
+  reasons = routeTaskRun(value).reasons;
+  assert.ok(reasons.some((reason) => /^\[rule\]/.test(reason)));
+  assert.ok(reasons.some((reason) => /^\[escalate\]/.test(reason)));
+
+  const notRouted: ModelRoutingInput[] = [];
+  notRouted.push(input());
+  const pinned = input();
+  pinned.task.model = 'pinned';
+  notRouted.push(pinned);
+  const custom = input();
+  custom.environment.hasOwnModelSpace = true;
+  notRouted.push(custom);
+  const unsupported = input();
+  unsupported.environment.runtime = 'other';
+  notRouted.push(unsupported);
+  const missingCatalog = input();
+  missingCatalog.task.modelHint = 'M';
+  missingCatalog.environment.modelCatalog = {};
+  notRouted.push(missingCatalog);
+  const missingFamily = input();
+  missingFamily.task.modelHint = 'L';
+  missingFamily.environment.modelCatalog = { claude: [{ value: 'other', label: 'Other' }] };
+  notRouted.push(missingFamily);
+  for (const candidate of notRouted) {
+    const decision = routeTaskRun(candidate);
+    assert.equal(decision.level, null);
+    assert.ok(decision.reasons.some((reason) => /^\[not-routed\]/.test(reason)), JSON.stringify(decision));
+  }
+});
+
+test('Optimize For floors only missing hints, with the same escalation and pin precedence', () => {
+  for (const [optimizeFor, bounded, abstained] of [
+    ['cost', 'S', null], ['balance', 'M', 'M'], ['intelligence', 'L', 'L'],
+  ] as const) {
+    const value = input();
+    value.optimizeFor = optimizeFor;
+    value.task.modelHint = null;
+    value.features = { completionCriterion: 'EXECUTABLE', hasAcceptanceCommand: true, dependents: 0, promptChars: 100 };
+    const before = JSON.stringify(value);
+    assert.equal(routeTaskRun(value).level, bounded);
+    assert.equal(JSON.stringify(value), before, 'routing does not mutate its snapshot');
+    value.features = { isForeman: true };
+    assert.equal(routeTaskRun(value).level, 'L', 'mode floors never lower the rule tier');
+    value.features = {};
+    assert.equal(routeTaskRun(value).level, abstained);
+    value.task.modelHint = 'S';
+    assert.equal(routeTaskRun(value).level, 'S');
+    value.history = [{ ordinal: 1, status: 'FAILED', quotaFailure: false, level: 'M' }];
+    assert.equal(routeTaskRun(value).level, 'L');
+    value.history = [{ ordinal: 1, status: 'FAILED', quotaFailure: false, level: 'XL' }];
+    assert.equal(routeTaskRun(value).level, 'XL');
+    value.task.model = 'pinned';
+    assert.equal(routeTaskRun(value).model, 'pinned');
+    assert.equal(routeTaskRun(value).level, null);
+  }
 });
