@@ -13,6 +13,7 @@ import {
 } from '@prisma/client';
 import { Client } from 'pg';
 
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { PushService } from '../push/push.service';
@@ -478,6 +479,8 @@ test('(1) §10.7: LANDING_UNOBSERVED opens for an Automatic project\'s live coor
       assert.doesNotMatch(message, /\bopen_item_resolve\b/, 'the message offers the hand-close the item refuses');
       assert.doesNotMatch(message, /\bintegration_retry\b/);
       assert.deepEqual(stack.pushed, [], 'an item still the coordinator\'s rang the owner\'s phone');
+
+      await receiveOpenItem(stack.db, opened.itemId);
 
       // The project page draws it with the coordinator, and the owner's surfaces leave it out.
       const list = await stack.openItems.list(w.ownerId, w.projectId);

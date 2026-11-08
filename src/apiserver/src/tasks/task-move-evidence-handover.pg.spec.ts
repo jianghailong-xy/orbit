@@ -533,6 +533,11 @@ test('(a) a decidable revision is handed to the target coordinator to decide, an
       assert.deepEqual(after.run, []);
       assert.deepEqual(await judgmentSessions(stack.db, w.ownerId), []);
 
+      await stack.db.conversationTurn.updateMany({
+        where: { sessionId: w.coordB, clientTurnId: message!.clientTurnId },
+        data: { deliveredAt: new Date() },
+      });
+
       // B's coordinator holds it: the owner is not asked there until the escalation clock runs out.
       // A is never asked again — it is not A's task any more.
       assert.deepEqual(await ownerAsked(stack, w, w.coordB), []);
