@@ -516,7 +516,58 @@ pass 2b "orbit host setup run through $BIN, a link to alice's ~/.orbit/bin/orbit
 
 # --- 3. alice registers, without root ------------------------------------------------------------
 
-echo "==> 3. alice: orbit register (enrollment token, non-interactive, --proxy)"
+echo "==> 3. alice: orbit register past a legacy unit that refuses to stop, then once it can (enrollment token, non-interactive, --proxy)"
+# What V1 showed by hand: an older unit of the account that will not stop. hostd refuses to enable
+# the instance beside it, register stops at that refusal with hostd's message and no sudo fallback,
+# and alice keeps exactly one runner — the old one — at every sample.
+REFUSE_DIR=/etc/systemd/system/orbit-runner-alice.service.d
+cx mkdir -p "$REFUSE_DIR" &&
+  printf '[Unit]\nRefuseManualStop=yes\n' | docker exec -i "$CTR" tee "$REFUSE_DIR/refuse-stop.conf" >/dev/null &&
+  cx systemctl daemon-reload || harness_fail "cannot make orbit-runner-alice.service refuse to stop"
+[ "$(unit_prop orbit-runner-alice.service RefuseManualStop)" = yes ] && unit_running orbit-runner-alice.service &&
+  [ "$(main_pid orbit-runner-alice.service)" = "$legacy_pid" ] ||
+  fail 3 "orbit-runner-alice.service is not running pid $legacy_pid with RefuseManualStop=yes" orbit-runner-alice.service
+cx systemctl stop orbit-runner-alice.service >/dev/null 2>&1 &&
+  fail 3 "systemctl stop of orbit-runner-alice.service succeeded despite RefuseManualStop=yes" orbit-runner-alice.service
+one_old_runner() {
+  local pids
+  pids=$(csh "runner_pids $UID_A")
+  [ "$pids" = "$legacy_pid" ] ||
+    fail 3 "sample $1: uid $UID_A runs orbit runner process(es) [$(tr '\n' ' ' <<<"$pids")], want exactly orbit-runner-alice.service's $legacy_pid" orbit-runner-alice.service "$UNIT_A"
+}
+as alice "orbit register --server $SERVER --token e2e-enroll-alice-blocked --name alice-blocked --force" >"$WORK/blocked.out" 2>&1 &
+reg=$!
+samples=0
+while kill -0 "$reg" 2>/dev/null; do
+  samples=$((samples + 1))
+  one_old_runner "$samples"
+done
+wait "$reg"
+rc=$?
+out=$(cat "$WORK/blocked.out")
+show "$out"
+# And for a few seconds after: Restart= or a late start must not bring a second one up.
+for _ in 1 2 3 4 5; do
+  samples=$((samples + 1))
+  one_old_runner "$samples"
+  sleep 1
+done
+[ "$rc" -eq 1 ] || fail 3 "orbit register past the unit that refuses to stop exited $rc, want 1" orbit-runner-alice.service "$UNIT_A"
+grep -qF "✗ Could not start the background service: refusing to enable $UNIT_A: alice's older runner orbit-runner-alice.service could not be stopped: systemctl stop orbit-runner-alice.service failed: exit status " <<<"$out" &&
+  grep -qF "Operation refused" <<<"$out" &&
+  grep -qxF "It is still alice's runner, so $UNIT_A was neither enabled nor started. Once it can be stopped, run \`orbit register\` again." <<<"$out" ||
+  fail 3 "orbit register did not stop with hostd's refusal naming orbit-runner-alice.service and systemd's answer" orbit-runner-alice.service
+grep -qi sudo <<<"$out" && fail 3 "orbit register past the unit that refuses to stop mentions sudo — it left the broker path for the legacy one"
+unit_running orbit-runner-alice.service && [ "$(main_pid orbit-runner-alice.service)" = "$legacy_pid" ] &&
+  [ "$(unit_prop orbit-runner-alice.service UnitFileState)" = enabled ] && cx test -e /etc/systemd/system/orbit-runner-alice.service ||
+  fail 3 "orbit-runner-alice.service is not still running pid $legacy_pid, enabled, with its unit file in place" orbit-runner-alice.service
+[ "$(unit_prop "$UNIT_A" ActiveState)" = inactive ] && [ "$(unit_prop "$UNIT_A" UnitFileState)" = disabled ] ||
+  fail 3 "$UNIT_A is $(unit_prop "$UNIT_A" ActiveState) and $(unit_prop "$UNIT_A" UnitFileState); hostd must neither enable nor start it" "$UNIT_A"
+check_no_sudo "after alice's refused registration"
+blocked_samples=$samples
+# docs: "Migrating from per-user units" — the unit can stop again, and the next registration retires it.
+cx rm -rf "$REFUSE_DIR" && cx systemctl daemon-reload || harness_fail "cannot let orbit-runner-alice.service stop again"
+[ "$(unit_prop orbit-runner-alice.service RefuseManualStop)" = no ] || fail 3 "orbit-runner-alice.service still refuses to stop" orbit-runner-alice.service
 # docs: "Migrating from per-user units" — the account's next registration retires its legacy unit.
 # docs: "Known limitations" — and --proxy, which the shared template does not carry.
 out=$(as alice "orbit register --server $SERVER --token e2e-enroll-alice --name alice-e2e --force --proxy $PROXY" 2>&1)
@@ -544,7 +595,7 @@ cx test ! -e /etc/systemd/system/multi-user.target.wants/orbit-runner-alice.serv
 check_one_runner 3 "$UID_A" "$UNIT_A"
 check_machine_binary 3 "$SHA_V1"
 check_no_sudo "after alice registered"
-pass 3 "alice: orbit register exit 0 without root; $UNIT_A enabled and active (User=alice, ExecStart argv /bin/sh -c exec \"\$HOME/.orbit/bin/orbit\" run), main process $PID_A euid $UID_A (alice), exe /home/alice/.orbit/bin/orbit; legacy orbit-runner-alice.service stopped, its unit file removed, unknown to systemd; alice runs exactly one runner; $BIN still the root-owned machine binary; --proxy reported as not carried, and $UNIT_A runs with no proxy environment"
+pass 3 "alice: with orbit-runner-alice.service refusing to stop (RefuseManualStop=yes), orbit register exit 1 with hostd's refusal naming it and systemd's answer, no sudo fallback, $UNIT_A neither enabled nor started, the legacy unit still running pid $legacy_pid, enabled, its file in place, and exactly that one runner for uid $UID_A at all $blocked_samples samples; once it could stop, orbit register exit 0 without root; $UNIT_A enabled and active (User=alice, ExecStart argv /bin/sh -c exec \"\$HOME/.orbit/bin/orbit\" run), main process $PID_A euid $UID_A (alice), exe /home/alice/.orbit/bin/orbit; legacy orbit-runner-alice.service stopped, its unit file removed, unknown to systemd; alice runs exactly one runner; $BIN still the root-owned machine binary; --proxy reported as not carried, and $UNIT_A runs with no proxy environment"
 
 # --- 4. test.user registers too ------------------------------------------------------------------
 

@@ -707,8 +707,11 @@ func startService(cfg *RunnerConfig, proxyVars []envVar) registerOutcome {
 	svc, err := setupService(machineHome(), proxyVars)
 	if err != nil {
 		printServiceFailure(os.Stderr, err)
-		// Whoever registers under sudo asked for a running service, with root in hand.
-		if handedOffBySudo() {
+		// Whoever registers under sudo asked for a running service, with root in hand. And
+		// an account whose older runner could not be taken down, or whose broker is still
+		// working, is left with a runner that is not this registration's.
+		var refused *hostdRegisterRefusal
+		if handedOffBySudo() || errors.As(err, &refused) && refused.code != hostdRefusedOwnCopy {
 			return serviceNotOnline
 		}
 		return registeredOnly
@@ -734,10 +737,11 @@ func startService(cfg *RunnerConfig, proxyVars []envVar) registerOutcome {
 }
 
 // printServiceFailure says why the background service did not start and what to do
-// instead. The machine broker's refusal of an account with no copy of its own names the
-// one command that puts it right, so it is printed whole, in place of the foreground hint.
+// instead. The machine broker's answers that register stops at (hostdRegisterRefusal) say
+// what is in the way and what puts it right, so they are printed whole, in place of the
+// foreground hint.
 func printServiceFailure(w io.Writer, err error) {
-	var refused *hostdOwnCopyRefusal
+	var refused *hostdRegisterRefusal
 	if errors.As(err, &refused) {
 		fmt.Fprintf(w, "\n✗ Could not start the background service: %s\n", refused.reason)
 		return
@@ -762,7 +766,8 @@ const (
 	// serviceOnline: the service started and the control plane heard from it.
 	serviceOnline
 	// serviceNotOnline: the service was installed and started and the control plane did not hear
-	// from it (printNotOnline said why), or under sudo it could not be installed (printServiceFailure).
+	// from it (printNotOnline said why), or under sudo it could not be installed, or the machine
+	// broker could not take the account's older runner down (printServiceFailure).
 	serviceNotOnline
 )
 
