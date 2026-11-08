@@ -557,7 +557,11 @@ export class PushService {
 
       const { tokens, feishu } = await this.channels(input.ownerId);
       if (tokens.length === 0 && !feishu) {
-        return { delivered: false, reason: 'no devices are registered for this account' };
+        // Nothing to reach this account through. Without device push on this server that is the
+        // server's answer, not the account's: registering a device would change nothing.
+        return this.apnsEnabled || this.fcm.enabled
+          ? { delivered: false, reason: 'no devices are registered for this account' }
+          : { delivered: false, reason: 'push is not configured on this server' };
       }
 
       const body = JSON.stringify({

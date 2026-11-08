@@ -167,6 +167,34 @@ test('an agent message reaches Feishu with no device, and is answered delivered'
   assert.equal(posted.length, 1, 'notifyAgentMessage off: no card either');
 });
 
+test('an agent message with nowhere to go says whose answer it is: the server\'s without device push, the account\'s with it', async () => {
+  const APNS = { get: (key: string) => ({ APNS_KEY_ID: 'key-id', APNS_TEAM_ID: 'team-id', APNS_KEY: Buffer.from('k').toString('base64') } as Record<string, string>)[key] } as unknown as ConfigService;
+  const prisma = {
+    session: {
+      findFirst: async () => ({ title: 'Migrate the data', agentNotifiedAt: null }),
+      updateMany: async () => ({ count: 1 }),
+    },
+    user: { findUnique: async () => ({ preferences: {}, agentNotifiedAt: null }) },
+    deviceToken: { findMany: async () => [] },
+  };
+  const input = { ownerId: OWNER, sessionId: randomUUID(), fallbackTitle: 'runner', message: 'Need the staging password' };
+
+  // Neither APNs nor FCM, and the account has no Feishu target: nothing on this server could reach anyone.
+  const bare = new PushService(prisma as never, NO_DEVICES, fakeFeishu(prisma, null).transport);
+  assert.deepEqual(await bare.notifyAgentMessage(input), { delivered: false, reason: 'push is not configured on this server' });
+
+  // APNs configured, no device and no Feishu target: registering a device is what is missing.
+  const apns = new PushService(prisma as never, APNS, fakeFeishu(prisma, null).transport);
+  assert.deepEqual(await apns.notifyAgentMessage(input), { delivered: false, reason: 'no devices are registered for this account' });
+
+  // Neither APNs nor FCM, but the account has a Feishu target: its card goes out.
+  const { transport, posted } = fakeFeishu(prisma);
+  const carded = new PushService(prisma as never, NO_DEVICES, transport);
+  assert.deepEqual(await carded.notifyAgentMessage(input), { delivered: true, devices: 0, feishu: true });
+  assert.equal(posted.length, 1);
+  assert.equal(posted[0].spec.kind, 'agent-message');
+});
+
 test('an owner item reaches Feishu: one card per item, announced again into the same card', async () => {
   const itemId = randomUUID();
   const projectId = randomUUID();

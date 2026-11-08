@@ -64,6 +64,9 @@ before(async () => {
   // (migration 0448): read with the session lock, NULL on every case here, which polls as HTTPS does.
   // `wiki_context` is the page and selection a wiki chat message carried (migration 0476): the claim
   // returns it with the turn it hands out, NULL on every case here, as on every turn outside a chat.
+  // `external_sender_{source,id,name}` are who outside Orbit sent a turn (migration 0502, a Feishu group
+  // member): the claim and the resend read return source and name with the turn, NULL on every case here,
+  // as on every turn the owner or a session sent.
   await client.query(`
     DROP TABLE IF EXISTS steer_dequeue_test."conversation_turn";
     DROP TABLE IF EXISTS steer_dequeue_test."inbox_lease_generation";
@@ -105,6 +108,9 @@ before(async () => {
       coordinator_context_key text,
       sender_session_id uuid,
       wiki_context jsonb,
+      external_sender_source text,
+      external_sender_id text,
+      external_sender_name text,
       created_at timestamptz NOT NULL DEFAULT now()
     );
   `);
