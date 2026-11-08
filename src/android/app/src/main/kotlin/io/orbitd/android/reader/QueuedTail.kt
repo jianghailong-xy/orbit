@@ -121,6 +121,8 @@ private fun echoPayload(row: JsonObject) = buildJsonObject {
         } }
     }
     SteerDelivery.cardKeys.forEach { key -> row[key]?.takeIf { it != JsonNull }?.let { put(key, it) } }
+    // Who outside Orbit sent it, which the listing carries beside the cards (turn-cards.ts): the accepted head says what its echo will.
+    row["externalSender"]?.takeIf { it != JsonNull }?.let { put("externalSender", it) }
     if (row.text("kind") == "steer") put("steer", true)
 }
 

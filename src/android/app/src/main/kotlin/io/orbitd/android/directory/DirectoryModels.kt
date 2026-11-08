@@ -53,6 +53,10 @@ data class DirectorySession(
      *  Null for anybody else's words, and from an older server. Kept as the JSON it came as, so a shape this build cannot read is no
      *  mark rather than a list that fails to decode. */
     val lastUserFromOrbit: JsonElement? = null,
+    /** Who sent [lastUserText] when somebody outside Orbit did — a connected Feishu group's member (docs/feishu-bot-design.md §8.2):
+     *  the row says `From Feishu · <name>` instead of "You" ([SessionLine.externalLine], read by [ExternalSender.parse]). Null for anybody
+     *  else, and from an older server. Kept as the JSON it came as, so a source this build does not know is no sender. */
+    val lastUserFromExternal: JsonElement? = null,
     /** The rolling recap the server wrote about this session and when it wrote it (0418), clipped like the previews beside it; the
      *  line the list prefers to [lastAssistantText]. Both null on a session no pass has recapped yet, and from a server that writes
      *  no recaps (`ORBIT_RECAP_ENABLED=0`) — exactly what the row falls back from. The account's Session recaps switch can also hold
