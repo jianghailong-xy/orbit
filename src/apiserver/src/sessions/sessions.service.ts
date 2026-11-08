@@ -173,7 +173,7 @@ import { chatSourceColumns, decideSessionSource, type SessionSourceTaskRow } fro
 import { readWikiChatContext, sameWikiChatContext, wikiContextOutsideChat } from '../wiki/wiki-chat-context';
 import { branchName } from '../projects/project-criterion-landing';
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
-import { INTEGRATION_ITEM_KINDS, openItemOwed } from '../projects/project-open-item';
+import { INTEGRATION_ITEM_KINDS, openItemOwed, openItemVisible } from '../projects/project-open-item';
 import { readSourceLanding } from '../projects/landing-session';
 import { readLandingIntegrationLog, type IntegrationLogSelectors } from '../projects/project-integration-log';
 import {
@@ -3973,6 +3973,7 @@ export class SessionsService {
                    AND oi.project_id = l.project_id
                    AND oi.kind IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
                    AND ${openItemOwed('oi')}
+                   AND ${openItemVisible('oi')}
                    AND (oi.task_id = l.task_id
                         OR oi.promotion_id = l.promotion_id
                         OR EXISTS (

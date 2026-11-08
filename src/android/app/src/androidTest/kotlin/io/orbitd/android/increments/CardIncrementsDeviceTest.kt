@@ -242,32 +242,6 @@ class CardIncrementsDeviceTest : IncrementDeviceTest() {
         capture("02-wake-details")
     }
 
-    /** A08-16: a revision waiting for the paused coordinator is a card that asks nothing until Decide it myself; one already sent to it
-     * is a line. */
-    @Test fun evidenceWaitingOnAPausedCoordinatorFoldsToAWaitingCard() = journey {
-        paused = true
-        openQuestion = false
-        openConversation()
-        val key = "evidence:$waitingTask:1"
-        scrollTranscriptTo(hasTestTag(key))
-        verify("the card is titled for the coordinator", says(key, CoordinatorQueue.title))
-        verify("it says why it waits", textOf("$key:paused") ==
-            "Coordinator paused · weekly limit · resets ${OwnerReview.receiptTime(retryAt)}")
-        verify("and that the owner may still decide", textOf("$key:note") == CoordinatorQueue.explanation)
-        verify("it asks nothing yet", !exists(hasTestTag("$key:CONFIRM_EVIDENCE")) && !exists(hasTestTag("$key:SEND_BACK")))
-        verify("the sent revision is one line", textOf("evidence:$sentTask:1").ifEmpty {
-            compose.onAllNodes(hasAnyAncestor(hasTestTag("evidence:$sentTask:1")), useUnmergedTree = true).fetchSemanticsNodes()
-                .mapNotNull { it.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { t -> t.text } }.joinToString("")
-        } == CoordinatorQueue.sentLine(OwnerReview.receiptTime(sentAt)))
-        verify("nothing waiting for the coordinator is counted", !exists(hasTestTag("needs-you-bar")))
-        capture("01-waiting-card")
-        compose.onNodeWithTag("$key:DECIDE_MYSELF").performScrollTo().performClick()
-        await("today's evidence card in place") { exists(hasTestTag("$key:CONFIRM_EVIDENCE")) }
-        verify("deciding here is the owner's choice", textOf("$key:note") == CoordinatorQueue.decideHere)
-        compose.onNodeWithTag("$key:SEND_BACK").performScrollTo()
-        capture("02-decide-it-myself")
-    }
-
     /** A08-19: the owner's answer handed to the coordinator is one grey line that opens to the words the agent read. */
     @Test fun ownersAnswerToTheCoordinatorIsOneLine() = journey {
         openConversation()

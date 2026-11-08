@@ -26,6 +26,10 @@ import {
 } from './coordinator-pg-test-safety';
 import { IntegrationSettings, configureProjectIntegration } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
+import { escalatesAt } from './open-item-escalation.service';
+import { readProjectListAttention } from './project-list-attention';
+import { readOwnerDecisionSignals } from './owner-decision-signal';
+import { readOpenListVersion } from '../sessions/open-list-version';
 import '../test-support/dequeue-under-lease';
 
 /**
@@ -317,6 +321,7 @@ async function failedTask(stack: Stack, w: World, label: string): Promise<ItemRo
     projectId: w.projectId,
   });
   await stack.tasks.update(w.ownerId, declared.id, { status: DeclaredTaskStatus.FAILED });
+  await stack.openItems.deliverForTasks([declared.id]);
   const opened = (await items(stack.db, w.projectId)).filter((row) => row.taskId === declared.id);
   assert.equal(opened.length, 1, `${label}: one failure opens one item`);
   assert.equal(opened[0]!.assignee, 'COORDINATOR', `${label}: a new item is the coordinator's`);
@@ -496,6 +501,7 @@ test('an item unhandled for the default two hours escalates to the owner', { ski
     assert.equal(await windowOf(stack, w.projectId), DEFAULT_WINDOW_SECONDS,
       'a project nobody configured waits two hours before an exception becomes the owner\'s');
     const item = await failedTask(stack, w, 'default-window');
+    await handTurn(stack, w);
     assert.equal(frozenWindowMs(item), DEFAULT_WINDOW_SECONDS * 1_000,
       'the window is frozen into the item when it is opened');
 
@@ -507,6 +513,7 @@ test('an item unhandled for the default two hours escalates to the owner', { ski
     );
 
     await age(stack.db, item, 2 * 60 * MINUTE + MINUTE);
+    await quiet(stack.db, w.coordinatorSessionId, 2 * 60 * MINUTE + MINUTE);
     const escalated = await tick(stack.prisma);
 
     const after = await reread(stack.db, item);
@@ -543,6 +550,8 @@ test('a project-specific escalation time is honoured', { skip, timeout: 180_000 
     const patient = await world(stack, 'default-beside-short');
     const short = await failedTask(stack, w, 'short-window');
     const long = await failedTask(stack, patient, 'default-beside-short');
+    await handTurn(stack, w);
+    await handTurn(stack, patient);
     assert.equal(frozenWindowMs(short), SHORT_WINDOW_SECONDS * 1_000,
       'the item froze this project\'s window, not the default');
     assert.equal(frozenWindowMs(long), DEFAULT_WINDOW_SECONDS * 1_000);
@@ -551,6 +560,8 @@ test('a project-specific escalation time is honoured', { skip, timeout: 180_000 
     // kept. One tick, two projects, and the difference between them is the setting.
     await age(stack.db, short, 10 * MINUTE);
     await age(stack.db, long, 10 * MINUTE);
+    await quiet(stack.db, w.coordinatorSessionId, 10 * MINUTE);
+    await quiet(stack.db, patient.coordinatorSessionId, 10 * MINUTE);
     const escalated = await tick(stack.prisma);
 
     const shortAfter = await reread(stack.db, short);
@@ -573,6 +584,8 @@ test('escalation writes no conversation_turn, session or wake row', { skip, time
   try {
     const w = await world(stack, 'people-only');
     const item = await failedTask(stack, w, 'people-only');
+    await handTurn(stack, w);
+    await quiet(stack.db, w.coordinatorSessionId, 3 * 60 * MINUTE);
     await age(stack.db, item, 3 * 60 * MINUTE);
 
     const before = await agentWork(stack.db);
@@ -601,6 +614,8 @@ test('an item inside its window does not escalate', { skip, timeout: 180_000 }, 
   try {
     const w = await world(stack, 'inside-window');
     const item = await failedTask(stack, w, 'inside-window');
+    await handTurn(stack, w);
+    await quiet(stack.db, w.coordinatorSessionId, 2 * 60 * MINUTE - MINUTE);
     await age(stack.db, item, 2 * 60 * MINUTE - MINUTE);
 
     const escalated = await tick(stack.prisma);
@@ -670,73 +685,6 @@ test('a coordinator that took the item keeps it however long the work takes, and
         [0, [[item.id, null]]],
         'the owner is shown nothing, and the coordinator\'s row has no moment it goes to them',
       );
-    } finally {
-      await stack.db.$disconnect();
-    }
-  });
-
-/**
- * The guard on the other side, and the reason the clock exists at all: a conversation that has not
- * moved since the item was put on it is not carrying it, whatever it did before. This one was handed
- * a turn just before the failure and never came back from it, so the item's own turn is still queued
- * behind that one — never handed over. The item escalates exactly as it always did, and once it is
- * the owner's the conversation's press is the wrong one (§4.7): what changed is WHEN the clock hands
- * an item over, never what handing it over means.
- */
-test('an item never handed to a coordinator stuck in an earlier turn escalates as before, and is then the owner\'s to close',
-  { skip, timeout: 180_000 }, async () => {
-    const stack = await connect();
-    try {
-      const w = await world(stack, 'stuck');
-      await stack.sessions.createTurn(w.ownerId, w.coordinatorSessionId, {
-        clientTurnId: randomUUID(),
-        content: 'rebase the project branch onto main',
-        intent: 'NEXT_TURN',
-      });
-      const stuck = await handTurn(stack, w);
-      assert.match(stuck.content, /rebase the project branch/, 'the turn it is stuck in is the owner\'s');
-      const item = await failedTask(stack, w, 'stuck');
-
-      // That turn was handed a minute before the failure, and the failure was two hours and one
-      // minute ago; nothing about the conversation has moved since.
-      await quiet(stack.db, w.coordinatorSessionId, 2 * 60 * MINUTE + 2 * MINUTE);
-      await age(stack.db, item, 2 * 60 * MINUTE + MINUTE);
-      const waiting = await stack.openItems.list(w.ownerId, w.projectId);
-      assert.deepEqual(
-        waiting.withCoordinator.map((row) => [row.itemId, row.delivery.state]),
-        [[item.id, 'QUEUED']],
-        'the item is queued on the conversation, behind the turn it is stuck in',
-      );
-
-      const escalated = await tick(stack.prisma);
-
-      const after = await reread(stack.db, item);
-      assert.deepEqual([after.assignee, after.assigneeReason], ['OWNER', 'ESCALATED'],
-        `a conversation that has not moved since the item was put on it is not carrying it — ${NO_CLOCK}`);
-      assert.ok(escalated.some((row) => row.itemId === item.id),
-        'and the tick reports it, which is what its owner is told about');
-
-      assert.equal(
-        await refusalOf(() => stack.openItems.resolveOpenItem(
-          w.ownerId,
-          w.projectId,
-          item.id,
-          { note: 'I am on it' },
-          { kind: 'SESSION', sessionId: w.coordinatorSessionId },
-        )),
-        'OPEN_ITEM_NOT_COORDINATOR_ITEM',
-        'an escalated item is the owner\'s, so the conversation it was taken from is refused',
-      );
-      assert.equal((await reread(stack.db, item)).state, 'OPEN', 'and the refusal closes nothing');
-      const closed = await stack.openItems.resolveOpenItem(
-        w.ownerId,
-        w.projectId,
-        item.id,
-        { note: 'the coordinator is wedged; restarting it and re-running the task by hand' },
-        { kind: 'OWNER' },
-      );
-      assert.deepEqual([closed.state, closed.resolution], ['RESOLVED', 'HANDLED'],
-        'while the owner\'s own press closes it exactly as before');
     } finally {
       await stack.db.$disconnect();
     }
@@ -857,6 +805,10 @@ test('asked again, the item is the coordinator\'s to take up afresh: only an ans
         // The answer it gave before the owner had it is three hours old by the time it is asked again.
         await quiet(stack.db, w.coordinatorSessionId, 3 * 60 * MINUTE);
         await stack.openItems.returnToCoordinator(w.ownerId, w.projectId, item.id);
+        const queued = await stack.openItems.list(w.ownerId, w.projectId);
+        assert.deepEqual([queued.needsYou.length, queued.withCoordinator.length], [0, 0],
+          'Ask again moves waiting_since: the old delivery does not make the new assignment visible');
+        assert.equal(await deadline(stack, item.id), null);
         if (answers) {
           const took = await takeTurn(stack, w);
           assert.match(took.content, new RegExp(`Task failed: ${label}`), `${label}: the turn it took is the item again`);
@@ -868,13 +820,124 @@ test('asked again, the item is the coordinator\'s to take up afresh: only an ans
         const after = await reread(stack.db, item);
         assert.deepEqual(
           [after.assignee, after.assigneeReason],
-          answers ? ['COORDINATOR', 'DEFAULT'] : ['OWNER', 'ESCALATED'],
+          ['COORDINATOR', 'DEFAULT'],
           answers
             ? `${label}: it answered the delivery the press made, so it holds the item again`
-            : `${label}: an answer from before the press is not taking the item up again — ${NO_CLOCK}`,
+            : `${label}: the new delivery is still queued, so no window has started`,
         );
       }
     } finally {
       await stack.db.$disconnect();
     }
   });
+
+async function deadline(stack: Stack, itemId: string): Promise<Date | null> {
+  const [row] = await stack.db.$queryRaw<Array<{ at: Date | null }>>(Prisma.sql`
+    SELECT ${escalatesAt('item')} AS at FROM project_open_item item WHERE id = ${itemId}::uuid`);
+  return row!.at;
+}
+
+for (const state of ['FAILED', 'retryAt', 'PENDING', 'RUNNING'] as const) {
+  test(`undelivered ITEM waits without a deadline or owner card: ${state}`, { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, `queued-${state}`);
+      if (state === 'RUNNING') {
+        await stack.sessions.createTurn(w.ownerId, w.coordinatorSessionId, {
+          clientTurnId: randomUUID(), content: 'unrelated long work', intent: 'NEXT_TURN',
+        });
+        await handTurn(stack, w);
+      }
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: {
+        status: state === 'retryAt' ? RunStatus.FAILED : RunStatus[state],
+        ...(state === 'retryAt' ? { retryAt: new Date(Date.now() + 60 * MINUTE) } : {}),
+      } });
+      const item = await failedTask(stack, w, `queued-${state}`);
+      await age(stack.db, item, 24 * 60 * MINUTE);
+      assert.equal(await deadline(stack, item.id), null, 'no receipt means no deadline, even after a day');
+      assert.deepEqual(await tick(stack.prisma), []);
+      assert.equal((await reread(stack.db, item)).assignee, 'COORDINATOR');
+      const list = await stack.openItems.list(w.ownerId, w.projectId);
+      assert.deepEqual([list.needsYou.length, list.withCoordinator.length], [0, 0]);
+      const attention = (await readProjectListAttention(stack.prisma, w.ownerId)).get(w.projectId);
+      assert.equal(attention?.coordinatorItems ?? null, null);
+      assert.deepEqual(attention?.ownerItems ?? [], []);
+      assert.deepEqual(await readOwnerDecisionSignals(stack.db, w.ownerId), []);
+      const rows = await stack.sessions.list(w.ownerId, { view: 'open' });
+      assert.ok(rows.every((row) => (row.ownerItems?.length ?? 0) === 0));
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+}
+
+test('receipt starts a full frozen window and invalidates the Open-list version', { skip, timeout: 180_000 }, async () => {
+  const stack = await connect();
+  try {
+    const w = await world(stack, 'receipt-window');
+    const item = await failedTask(stack, w, 'receipt-window');
+    await age(stack.db, item, 24 * 60 * MINUTE);
+    const version = await readOpenListVersion(stack.prisma, w.ownerId);
+    const handed = await handTurn(stack, w);
+    const turn = await stack.db.conversationTurn.findUniqueOrThrow({ where: { id: handed.turnId } });
+    const expected = new Date(turn.deliveredAt!.getTime() + frozenWindowMs(item));
+    assert.equal((await deadline(stack, item.id))?.getTime(), expected.getTime());
+    const list = await stack.openItems.list(w.ownerId, w.projectId);
+    assert.equal(list.withCoordinator[0]?.itemId, item.id);
+    assert.equal(list.withCoordinator[0]?.escalateAt?.getTime(), expected.getTime());
+    const attention = (await readProjectListAttention(stack.prisma, w.ownerId)).get(w.projectId);
+    assert.equal(attention?.coordinatorItems?.count, 1);
+    assert.equal(attention?.coordinatorItems?.nextEscalationAt?.getTime(), expected.getTime());
+    assert.notEqual(await readOpenListVersion(stack.prisma, w.ownerId), version);
+    assert.deepEqual(await tick(stack.prisma), [], 'old item age cannot shorten the delivery window');
+    // Move both timelines so delivery stays within this assignment, beyond its full window.
+    await age(stack.db, item, 2 * 60 * MINUTE + MINUTE);
+    await quiet(stack.db, w.coordinatorSessionId, 2 * 60 * MINUTE + MINUTE);
+    assert.deepEqual((await tick(stack.prisma)).map((row) => row.itemId), [item.id]);
+    assert.equal((await reread(stack.db, item)).assignee, 'OWNER');
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
+
+for (const ending of ['completed', 'trash', 'automatic-off'] as const) {
+  test(`an unavailable delivery target still gives a new item immediately to its owner: ${ending}`,
+    { skip, timeout: 180_000 }, async () => {
+      const stack = await connect();
+      try {
+        const w = await world(stack, ending);
+        if (ending === 'completed') await stack.sessions.complete(w.ownerId, w.coordinatorSessionId);
+        else if (ending === 'trash') await stack.sessions.remove(w.ownerId, w.coordinatorSessionId);
+        else await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: false } });
+        const task = await stack.tasks.create(w.ownerId, {
+          title: ending, assigneeId: w.workspaceId, projectId: w.projectId,
+        });
+        await stack.tasks.update(w.ownerId, task.id, { status: DeclaredTaskStatus.FAILED });
+        await stack.openItems.deliverForTasks([task.id]);
+        const item = (await items(stack.db, w.projectId))[0]!;
+        assert.equal(item.assignee, 'OWNER', 'no elapsed window or receipt is needed');
+        const list = await stack.openItems.list(w.ownerId, w.projectId);
+        assert.deepEqual(list.needsYou.map((row) => row.itemId), [item.id]);
+      } finally {
+        await stack.db.$disconnect();
+      }
+    });
+}
+
+for (const ending of ['completed', 'trash'] as const) {
+  test(`ending a coordinator with an unread ITEM hands it over immediately: ${ending}`,
+    { skip, timeout: 180_000 }, async () => {
+      const stack = await connect();
+      try {
+        const w = await world(stack, `unread-${ending}`);
+        const item = await failedTask(stack, w, ending);
+        assert.equal(await deadline(stack, item.id), null);
+        if (ending === 'completed') await stack.sessions.complete(w.ownerId, w.coordinatorSessionId);
+        else await stack.sessions.remove(w.ownerId, w.coordinatorSessionId);
+        assert.equal((await reread(stack.db, item)).assignee, 'OWNER');
+        assert.deepEqual((await stack.openItems.list(w.ownerId, w.projectId)).needsYou.map((row) => row.itemId), [item.id]);
+      } finally {
+        await stack.db.$disconnect();
+      }
+    });
+}

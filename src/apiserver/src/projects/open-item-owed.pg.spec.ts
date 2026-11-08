@@ -1,3 +1,4 @@
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -625,8 +626,8 @@ test('(2) the sweep neither escalates nor announces an item nobody owes, and the
       const w = await world(stack, 'sweep');
       const superseded = await candidate(stack, w, 'SUPERSEDED');
       const blocked = await candidate(stack, w, 'BLOCKED');
-      // Both opened five hours ago with the default two-hour window, and never put on the
-      // conversation: due three hours ago, by the item's own clock.
+      // Both opened five hours ago with the default two-hour window. The owed control below
+      // was received then, so its delivery window expired three hours ago.
       const opened = new Date(Date.now() - 5 * HOUR);
       const due = {
         waitingSince: opened, assignedAt: opened, escalateAt: new Date(opened.getTime() + 2 * HOUR),
@@ -637,6 +638,8 @@ test('(2) the sweep neither escalates nor announces an item nobody owes, and the
       const owed = await openItem(stack, w, {
         kind: 'INTEGRATION_CHECK_FAILED', promotionId: blocked, ...due,
       });
+      await stack.openItems.deliverForItems([owed]);
+      await receiveOpenItem(stack.db, owed);
       // And a failure whose task is DONE: overdue by the same clock, owed by nobody.
       const done = await task(stack, w, TaskStatus.DONE, 'done');
       const failureZombie = await openItem(stack, w, { kind: 'TASK_FAILED', taskId: done, ...due });
@@ -812,14 +815,14 @@ test('(3) every reader leaves out an item nobody owes, and counts the owed one b
 
       assert.deepEqual(await reads(), {
         needsYou: [escalated],
-        withCoordinator: [held, failureHeld],
+        withCoordinator: [],
         rowOwnerItems: [escalated],
         rowCount: 1,
         workspaceNeedsYou: 1,
         badge: true,
         signals: [escalated],
         listOwnerItems: [['ESCALATED', 1]],
-        listCoordinatorItems: 2,
+        listCoordinatorItems: 0,
       }, 'every reader counts the owed items, and only those');
       await push.notifyOwnerItem(escalated);
       assert.deepEqual(pushed, [escalated], 'the owed one rings the phone');

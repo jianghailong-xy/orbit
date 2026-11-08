@@ -833,6 +833,29 @@ export const INTEGRATION_ITEM_KINDS: readonly OpenItemKind[] = [
   'INTEGRATION_ERROR',
 ];
 
+/** The current assignment starts its window only when its ITEM turn reaches the engine.
+ * waiting_since moves on "Ask the coordinator again", so an older delivery cannot start it. */
+export function openItemDeliveredAt(alias: string): Prisma.Sql {
+  const item = Prisma.raw(`"${alias}"`);
+  return Prisma.sql`(
+    SELECT min(turn."delivered_at")
+      FROM "project_open_item_delivery" delivery
+      JOIN "conversation_turn" turn
+        ON turn."session_id" = delivery."session_id"
+       AND turn."client_turn_id" = delivery."client_turn_id"
+     WHERE delivery."item_id" = ${item}."id"
+       AND delivery."purpose" = 'ITEM'
+       AND turn."kind" = 'message'
+       AND turn."delivered_at" >= ${item}."waiting_since"
+  )`;
+}
+
+/** Owner-facing lists omit coordinator items still waiting in the conversation's queue. */
+export function openItemVisible(alias: string): Prisma.Sql {
+  const item = Prisma.raw(`"${alias}"`);
+  return Prisma.sql`(${item}."assignee" <> 'COORDINATOR' OR ${openItemDeliveredAt(alias)} IS NOT NULL)`;
+}
+
 /**
  * Whether an OPEN item is still owed — whether what it is about can still be put right by whoever it
  * is in front of — as SQL over the `project_open_item` row aliased `alias`. The one definition every

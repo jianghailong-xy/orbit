@@ -20,27 +20,12 @@ import {
 } from './evidence-review';
 
 /** What one delivery came to: handed over, refused with its reason, or not a revision anybody is handed. */
-export type EvidenceReviewDelivery = 'DELIVERED' | EvidenceReviewDeliveryRefusalCode | null;
+export type EvidenceReviewDelivery = 'DELIVERED' | 'WAITING' | EvidenceReviewDeliveryRefusalCode | null;
 
 /**
- * Hands a dispatched task's evidence revision to the session that dispatched it (`evidence-review.ts`).
- *
- * The delivery of a confirmation request to its reviewer, applied to an evidence revision
- * (`OwnerConfirmationReviewService.deliver`, docs/owner-confirmation-review-contract.md §2 D2): after
- * the commit that wrote the revision, one `NEXT_TURN` platform turn keyed by the revision, no
- * words of anybody's, never reviving a conversation that has ended, and the owner's card covering
- * every refusal.
- *
- * Written into the turn the session is running when it can be (`steerIfLive`, the way a background
- * job's exit is): a dispatching session usually is running one — watching the very tasks it filed —
- * and a review queued behind it waited out the whole 30-minute hold unread, so the owner was asked
- * every time (2026-10-06: four revisions, all PENDING while every message after them steered in). It differs in keeping nothing of its own: the turn is the delivery, so a refusal
- * writes nothing and a fault leaves the revision undelivered — and either way not held, which puts it
- * in front of the owner at once.
- *
- * The same unit also carries the one delivery a decision makes: `deliverSendBack` hands a recorded
- * SEND_BACK's note to the run that submitted the revision, so the loop the decision opens has
- * somebody told to walk it.
+ * Delivers dispatched evidence and recovers unread deliveries when the conversation returns.
+ * Failed runs and scheduled retries wait; genuinely ended conversations retain the owner route.
+ * SEND_BACK notes are delivered to the run that submitted the evidence.
  */
 @Injectable()
 export class EvidenceReviewService {
@@ -64,19 +49,31 @@ export class EvidenceReviewService {
     if (!task || task.projectId !== null || !task.creatorSessionId
       || task.completionCriterion !== 'EVIDENCE_JUDGMENT') return null;
     const reviewerSessionId = task.creatorSessionId;
-    // Read before the turn, because `createTurn` refuses an ended conversation by itself and before
-    // the hook below runs, which would read as SESSION_UNAVAILABLE where the reason is that it ended.
-    // The hook asks again under the lock.
-    const reviewer = await this.prisma.session.findFirst({
-      where: { id: reviewerSessionId, ownerId },
-      select: SESSION_ENDING_SELECT,
+    // Refused revisions are not owed a turn. This write-free preflight keeps the periodic sweep
+    // from opening send transactions or logging the same permanent refusal on every tick.
+    // The send hook checks again under the session lock to cover changes after these reads.
+    try {
+      await bindEvidenceReviewDelivery(this.prisma, { id: evidenceId, taskId, ownerId }, reviewerSessionId);
+    } catch (error) {
+      if (error instanceof EvidenceReviewDeliveryRefused) {
+        return error.refusalCode === 'SESSION_UNAVAILABLE' ? 'WAITING' : error.refusalCode;
+      }
+      throw error;
+    }
+    const previous = await this.prisma.conversationTurn.findFirst({
+      where: { sessionId: reviewerSessionId, clientTurnId: { startsWith: evidenceReviewTurnId(evidenceId) } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
-    if (!reviewer || sessionHasEnded(reviewer)) return this.refused(taskId, 'REVIEWER_ENDED');
+    if (previous && (previous.deliveredAt || previous.status !== 'ANSWERED')) return 'DELIVERED';
+    // Concurrent recovery attempts derive the same replacement key; createTurn serializes its write.
+    const clientTurnId = previous
+      ? `${evidenceReviewTurnId(evidenceId)}:retry:${previous.id}`
+      : evidenceReviewTurnId(evidenceId);
     try {
       await this.sessions.createTurn(
         ownerId,
         reviewerSessionId,
-        { clientTurnId: evidenceReviewTurnId(evidenceId), content: '', intent: 'NEXT_TURN' },
+        { clientTurnId, content: '', intent: 'NEXT_TURN' },
         {
           steerIfLive: true,
           participateSendTransaction: (tx) => bindEvidenceReviewDelivery(
@@ -86,14 +83,44 @@ export class EvidenceReviewService {
       );
     } catch (error) {
       // Checked first: it is a Conflict too, and its code is the one the hook found.
-      if (error instanceof EvidenceReviewDeliveryRefused) return this.refused(taskId, error.refusalCode);
+      if (error instanceof EvidenceReviewDeliveryRefused) {
+        return error.refusalCode === 'SESSION_UNAVAILABLE' ? 'WAITING' : this.refused(taskId, error.refusalCode);
+      }
       if (error instanceof NotFoundException || error instanceof ConflictException
         || error instanceof ForbiddenException || error instanceof BadRequestException) {
-        return this.refused(taskId, 'SESSION_UNAVAILABLE');
+        return 'WAITING';
       }
       throw error;
     }
     return 'DELIVERED';
+  }
+
+  /** Recover only the latest undecided revision, on turn end and the periodic idle sweep. */
+  async deliverOwedTo(sessionId?: string): Promise<void> {
+    try {
+      const tasks = await this.prisma.task.findMany({
+        where: {
+          projectId: null, completionCriterion: 'EVIDENCE_JUDGMENT',
+          status: { in: ['OPEN', 'IN_PROGRESS'] },
+          creatorSession: {
+            ...(sessionId ? { id: sessionId } : { status: { in: ['AWAITING_INPUT', 'INTERRUPTED'] } }),
+          },
+        },
+        select: {
+          id: true, ownerId: true,
+          completionEvidence: { orderBy: { revision: 'desc' }, take: 1,
+            select: { id: true, submittedAt: true, decisions: { select: { id: true } } } },
+        },
+      });
+      tasks.sort((a, b) => (a.completionEvidence[0]?.submittedAt.getTime() ?? 0)
+        - (b.completionEvidence[0]?.submittedAt.getTime() ?? 0));
+      for (const task of tasks) {
+        const revision = task.completionEvidence[0];
+        if (revision && revision.decisions.length === 0) await this.deliver(task.ownerId, task.id, revision.id);
+      }
+    } catch (error) {
+      this.logger.warn(`waiting evidence delivery failed: ${error instanceof Error ? error.message : error}`);
+    }
   }
 
   private refused(taskId: string, code: EvidenceReviewDeliveryRefusalCode): EvidenceReviewDeliveryRefusalCode {

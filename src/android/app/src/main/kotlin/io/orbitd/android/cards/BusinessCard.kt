@@ -60,13 +60,7 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
         }, reason = reason)
     fun send(verb: CardVerb) = submit(verb, input)
     val body: @Composable ColumnScope.() -> Unit = {
-        // A revision waiting for the coordinator says when it was submitted, beside its title (`CoordinatorQueue`).
-        val submitted = card.source.text("submittedAt")?.takeIf { card.family == CardFamily.COORDINATOR_QUEUE || CoordinatorQueue.isDecidingMyself(card) }
-            ?.let { OwnerReview.receiptTime(it) }
-        if (!review && submitted != null) Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            Text(card.title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-            Text(submitted, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else if (!review) Text(card.title, style = MaterialTheme.typography.titleMedium)
+        if (!review) Text(card.title, style = MaterialTheme.typography.titleMedium)
         // A record's words are dimmed, still readable — and what opens (a fold, a task) still opens.
         Column(Modifier.alpha(if (recorded != null) 0.6f else 1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("From Orbit", style = MaterialTheme.typography.labelSmall)
@@ -136,8 +130,7 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
         // Reopen task is pressed in the review's box (iOS `OwnerConfirmationReviewBarView`), not among the card's buttons.
         card.actions.filter { it != CardVerb.REOPEN_TASK }.forEach { verb ->
             val requiresNote = verb in setOf(CardVerb.SEND_BACK, CardVerb.CHAT)
-            // Decide it myself sends nothing: it opens the waiting revision's decision here (`CoordinatorQueue.decideMyself`).
-            val valid = verb == CardVerb.DECIDE_MYSELF || runCatching { CardRequests.build(card, verb, input) }.isSuccess
+            val valid = runCatching { CardRequests.build(card, verb, input) }.isSuccess
             val label = if (verb == CardVerb.REMEMBER) {
                 val rules = ApprovalRules.remember(card.source.text("toolName") ?: "", card.source.obj("input") ?: JsonObject(emptyMap()))
                 "Allow & remember " + rules.joinToString(", ") { it.ruleContent?.removeSuffix(":*") ?: it.toolName }

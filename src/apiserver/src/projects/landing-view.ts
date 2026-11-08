@@ -12,7 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { readInFlightJobs } from './project-integration-line';
 import { pushBoundaryPassed } from './project-integration-job';
 import { readLandingTimeline } from './landing-timeline';
-import { INTEGRATION_ITEM_KINDS, openItemOwed } from './project-open-item';
+import { INTEGRATION_ITEM_KINDS, openItemOwed, openItemVisible } from './project-open-item';
 
 /**
  * The landing view (docs/project-integration-line-contract.md §2.9 LS1, LS6; errata E4):
@@ -215,5 +215,6 @@ async function readLandingTodos(
        AND item."kind" IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
        AND (${Prisma.join(tiers, ' OR ')})
        AND ${openItemOwed('item')}
+       AND ${openItemVisible('item')}
      ORDER BY item."waiting_since" ASC, item."id" ASC`);
 }

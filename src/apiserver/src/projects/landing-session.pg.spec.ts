@@ -1,3 +1,4 @@
+import { receiveOpenItem } from '../test-support/open-item-delivery';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -1185,6 +1186,17 @@ test('the landing’s todos list its owed INTEGRATION_* item and not another kin
     const stack = await connect();
     try {
       const { w, task, job, landing, failedId } = await redLanding(stack, 'todos-kind');
+      await stack.openItems.deliverForItems([failedId]);
+      for (const status of [RunStatus.FAILED, RunStatus.PENDING, RunStatus.RUNNING]) {
+        await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status } });
+        assert.deepEqual(await todosOf(stack, w, landing.sessionId), [],
+          `${status}: an unread coordinator item is not an owner-facing landing todo`);
+        assert.equal(await rowStateOf(stack, w, landing.sessionId), 'IN_FLIGHT',
+          `${status}: the unread item does not mark the landing as awaiting a decision`);
+      }
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+      await receiveOpenItem(stack.db, failedId);
+
 
       // Another kind about the same task and the same job, and owed (a delivery review of a DONE
       // task is): the landing is not where it is answered, so it is not one of its todos.
@@ -1222,6 +1234,8 @@ test('an INTEGRATION_* item still OPEN but owed by nobody is not one of the land
     const stack = await connect();
     try {
       const { w, task, landing, failedId } = await redLanding(stack, 'todos-owed');
+      await stack.openItems.deliverForItems([failedId]);
+      await receiveOpenItem(stack.db, failedId);
       assert.deepEqual(
         await todosOf(stack, w, landing.sessionId),
         [[failedId, 'INTEGRATION_CHECK_FAILED', 'OPEN']],
@@ -1305,6 +1319,8 @@ test('an owed INTEGRATION_* item about the round’s candidate is a todo though 
         },
         select: { id: true },
       });
+      await stack.openItems.deliverForItems([legacy.id]);
+      await receiveOpenItem(stack.db, legacy.id);
       assert.equal(
         await stack.db.projectIntegrationJob.count({ where: { id: legacyJobId, landingId: round.id } }),
         0,

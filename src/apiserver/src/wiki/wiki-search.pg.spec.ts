@@ -15,6 +15,7 @@
  * tenant and space isolation on both doors, the match reasons the contract lists, and the semantic
  * placeholder changing nothing. And what the read fix added: the keyword leg's last pass, and the
  * `wiki_exposure` row a session's search or read leaves, which a failed write does not cost the read.
+ * And that the last pass, built for speed since, answers what the statement it replaced answered.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-search.pg.spec.ts
  *
@@ -30,7 +31,7 @@ import { after, test } from 'node:test';
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { WIKI_LIMITS, toUuid, type WikiAnchorState, type WikiSearchMatch, type WikiTrust } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -1176,5 +1177,155 @@ test('the path leg puts the asked file first, takes the asked paths in turn, and
     const both = await on({ q: 'lantern', paths: 'apps/hub/Lamp.kt' });
     assert.equal(ids(both)[0], lamp);
     assert.deepEqual(hitsOf(both)[0].match, ['keyword', 'path']);
+  });
+});
+
+/**
+ * The last pass builds each entry's text once, counts its groups on the lowered text, and asks
+ * `word_similarity` only of the entries that can still reach the cap (task 34t7MlnhUVsNSIh1X5tvK). None of
+ * that may change an answer, so this holds the pass to the statement it replaced, written out below as the
+ * reference: every group an ILIKE of its own, every entry found ranked. Both run over the same entries:
+ * more than the cap holding some of the words, so the cut has a tier to keep; five that say the same thing,
+ * so the order among equals is the id's; case only Unicode tells apart; marks the search text drops; and
+ * the characters a LIKE pattern means something by.
+ */
+test('the last pass answers what it answered one word at a time: the same entries, in the same order', { skip, concurrency: 1, timeout: 300_000 }, async (t) => {
+  const h = await boot();
+  const owner = await account(h, 'the owner of the last pass');
+  const here = await space(h, owner, 'git@github.com:orbit/last-pass.git');
+  const spaceId = toUuid(here);
+
+  // A seeded stream of entries, each holding some of four words, a filler word, and one of the spellings below.
+  let seed = 347;
+  const next = (): number => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let x = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+    return ((x ^ (x >>> 14)) >>> 0) / 4_294_967_296;
+  };
+  const SPELLINGS = ['WOMBAT', 'Wombat', '**wombat**', '`quokka`', 'ÄRGER', 'Ärger', 'ΣΊΣΥΦΟΣ', 'Σίσυφος', '闭集', '知识空间', 'snake_case', 'snakeXcase', '100%', '1000', 'koala'];
+  const FILLER = ['tapir', 'dugong', 'echidna', 'platypus', 'wallaby', 'cassowary'];
+  const drafts: Array<Record<string, unknown>> = [];
+  for (let i = 0; i < 140; i += 1) {
+    const held = ['wombat', 'quokka', 'numbat', 'bilby'].filter(() => next() < 0.45);
+    const spelling = SPELLINGS[Math.floor(next() * SPELLINGS.length)];
+    const filler = FILLER[Math.floor(next() * FILLER.length)];
+    drafts.push({
+      kind: 'concept',
+      title: `Entry ${i}: ${[filler, ...held.slice(0, 2)].join(' ')}`,
+      summary: `It mentions ${spelling} beside a ${filler}.`,
+      fields: { definition: `${held.slice(2).join(' and ') || 'nothing more'} ${filler}`, boundaries: `Only entry ${i}.` },
+    });
+  }
+  // Five entries with one text holding all four words, so that what they hold and how similar they are tie,
+  // they sit in the tier the cut keeps, and the id decides their order.
+  for (let i = 0; i < 5; i += 1) {
+    drafts.push({
+      kind: 'concept',
+      title: 'Twins hold a wombat, a quokka, a numbat and a bilby',
+      summary: 'The same words as every twin.',
+      fields: { definition: 'A wombat, a quokka, a numbat and a bilby.', boundaries: 'Only the twins.' },
+    });
+  }
+  for (let from = 0; from < drafts.length; from += WIKI_LIMITS.opsPerChangeset) {
+    const answer = await call(h, { bearer: owner.bearer }, 'POST', `/wiki/spaces/${here}/changesets`, {
+      rationale: 'the owner records the entries the last pass reads',
+      ops: drafts.slice(from, from + WIKI_LIMITS.opsPerChangeset).map((entry) => ({ op: 'add', entry })),
+    });
+    expectStatus(answer, 200, `the owner records entries ${from} onward`);
+  }
+
+  // The statement this task replaced, as it stood on main at 52361c4c5, over the owner door's hard filter.
+  const SEARCH_TEXT = Prisma.sql`wiki_entry_search_text(e."title", e."summary", e."aliases", e."fields")`;
+  const reference = async (q: string): Promise<string[]> => {
+    const norm = normalizeSearchQuery(q)!;
+    const groups = anyWordPatterns(norm)!;
+    const holds = (col: Prisma.Sql, group: string[]): Prisma.Sql =>
+      Prisma.sql`(${Prisma.join(group.map((pattern) => Prisma.sql`${col} ILIKE ${pattern}`), ' OR ')})`;
+    const text = Prisma.sql`m."text"`;
+    const rows = await h.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT m."id" AS "id"
+        FROM (
+          SELECT e."id" AS "id", ${SEARCH_TEXT} AS "text"
+            FROM "wiki_entry" e
+           WHERE e."owner_id" = ${owner.id}::uuid AND e."status" = 'active' AND e."space_id" = ${spaceId}::uuid
+             AND (${Prisma.join(groups.map((group) => holds(SEARCH_TEXT, group)), ' OR ')})
+          OFFSET 0
+        ) m
+       ORDER BY (${Prisma.join(groups.map((group) => Prisma.sql`${holds(text, group)}::int`), ' + ')}) DESC,
+                word_similarity(${norm.raw}, ${text}) DESC,
+                m."id"
+       LIMIT 50
+    `);
+    return rows.map((row) => row.id);
+  };
+  // The retrieval's own last pass: the third statement a search with no paths sends.
+  const lastPass = async (q: string): Promise<{ ids: string[]; text: string }> => {
+    const sent: Array<{ text: string; ids: string[] }> = [];
+    const recorder = {
+      wikiEntry: h.prisma.wikiEntry,
+      $queryRaw: async (statement: Prisma.Sql) => {
+        const rows = await h.prisma.$queryRaw<Array<{ id?: string }>>(statement);
+        sent.push({ text: statement.text, ids: rows.map((row) => String(row.id)) });
+        return rows;
+      },
+    };
+    await new WikiRetrieval(recorder as unknown as PrismaService).search({ ownerId: owner.id, spaceId, q });
+    assert.ok(sent.length >= 3, `the phrase, every word and any word were asked for ${q}`);
+    return sent[2];
+  };
+
+  const QUERIES = [
+    // English, every word with a trigram: the trigram index may answer which entries hold one.
+    'wombat quokka numbat bilby nowhereatall',
+    // A CJK pair has no trigram, so this one reads every entry.
+    'wombat 闭集 numbat nowhereatall',
+    // Case Unicode folds, asked in capitals, words of three or more characters.
+    'ÄRGER Σίσυφος Wombat nowhereatall',
+    // `_` and `%` are characters here, not patterns.
+    'snake_case 100% bilby nowhereatall',
+    // Fewer entries than the cap: nothing is cut, once read through the index and once with a pair.
+    'koala nowhereatall',
+    '闭集 koala nowhereatall',
+  ];
+  for (const q of QUERIES) {
+    await t.test(`"${q}"`, async () => {
+      const expected = await reference(q);
+      const actual = await lastPass(q);
+      assert.deepEqual(actual.ids, expected, `the last pass answers what the reference answers for ${q}`);
+      const answer = await ownerSearch(h, owner, { q, space: here });
+      assert.deepEqual(hitsOf(answer).map((hit) => toUuid(hit.id)), expected.slice(0, WIKI_LIMITS.searchLimitMax), `and so does the door for ${q}`);
+    });
+  }
+
+  await t.test('the cut keeps a tier, the twins tie, and the shape follows the words', async () => {
+    const found = await h.sql.query<{ held: number; n: number }>(
+      `SELECT held, count(*)::int AS n FROM (
+         SELECT ((t ILIKE '%wombat%')::int + (t ILIKE '%quokka%')::int + (t ILIKE '%numbat%')::int + (t ILIKE '%bilby%')::int) AS held
+           FROM (SELECT wiki_entry_search_text(title, summary, aliases, fields) AS t FROM wiki_entry WHERE space_id = $1::uuid) x
+       ) y WHERE held > 0 GROUP BY held ORDER BY held DESC`,
+      [spaceId],
+    );
+    const total = found.rows.reduce((sum, row) => sum + row.n, 0);
+    assert.ok(total > 50, `more entries hold a word than the cap: ${JSON.stringify(found.rows)}`);
+    let above = 0;
+    for (const row of found.rows) {
+      if (above + row.n >= 50) {
+        assert.ok(above + row.n < total, `the cap's tier leaves entries out: ${JSON.stringify(found.rows)}`);
+        break;
+      }
+      above += row.n;
+    }
+    const twins = await h.prisma.wikiEntry.findMany({ where: { spaceId, title: 'Twins hold a wombat, a quokka, a numbat and a bilby' }, select: { id: true } });
+    const order = (await lastPass('wombat quokka numbat bilby nowhereatall')).ids;
+    const places = twins.map((twin) => order.indexOf(twin.id));
+    assert.ok(places.every((place) => place >= 0), `the twins are found: ${JSON.stringify(places)}`);
+    assert.deepEqual(
+      places.slice().sort((a, b) => a - b).map((place) => order[place]),
+      twins.map((twin) => twin.id).sort(),
+      'equal entries come in id order',
+    );
+    assert.match((await lastPass('wombat quokka numbat bilby nowhereatall')).text, /ILIKE ANY/u, 'words with trigrams ask the index');
+    assert.doesNotMatch((await lastPass('wombat 闭集 numbat nowhereatall')).text, /ILIKE/u, 'a pair reads every entry and asks no ILIKE at all');
   });
 });
