@@ -874,6 +874,66 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
 重复 permission 答复、消费答复丢失、取消/过期/重启，以及后台生命周期；不能把本节的设计要求当作已有实测。
 本次没有证明 wrapper 自行执行不安全，因此不选择复杂度更高的 runner 代执行变体。
 
+#### 8.5.1 Linux implementation and fresh-shell decision (2026-11-08)
+
+The preceding text records task 1's proposed design. Task 4 implements the Linux
+path in `cursor_shell.go` and `cursor_shell_linux.go`; the coordinator's decision
+changes the approved path to **fresh Bash**, rather than escaping with Cursor's loader.
+[Real CLI recording and reproduction](evidence/cursor-cli/2026.10.14-941492e/sandbox-execution-linux/README.md).
+
+Cursor's recorded state dumper captures all functions (`index.js`, byte 7412753
+on the pinned build), and its loader evaluates that snapshot before the command
+(byte 7373068). A prior command can define `printf` to perform another write.
+The local producer/consumer replay `snapshot-state-replay.py` reproduces that
+additional write without changing the later command bytes. This was first
+recorded in runner job `bgj_5bc8ee3a6de0`; it is a Bash replay, not a real CLI escape.
+
+In Auto with a usable OS sandbox, `orbit-bash` keeps its existing HOME/environment
+restoration, then invokes the runner's shell helper. Unknown invocations, snapshots,
+unasked commands, standing-rule approvals, and Auto approvals all stay sandboxed.
+The helper recognizes the pinned argv/loader and a single NUL-terminated UTF-8
+fd-5 payload; it replays those exact bytes when no grant is available. Invalid,
+oversized, or ambiguous payloads fail without executing. Failed sandbox commands
+include an English explanation of the writable-root restriction on stderr.
+
+Only a card-path `ALLOWED` response with the server's `decidedById` creates a grant,
+under the bridge's turn lock and before `allow-once` is queued. Older servers
+without that optional field cannot authorize an escape. Grants live in runner
+memory, are deduplicated by the server's approval ID (including a repeated RPC
+for the same answered card), expire after one minute, and are
+cleared at turn cancellation/settlement, policy change, or process exit. Exact
+conversation/cwd/command comparison and consumption share one mutex. A lost
+response consumes the approval; no retry restores it.
+
+The private Unix socket is hidden behind a read-only empty mount in sandboxed
+commands. The Linux broker checks kernel peer credentials, helper executable
+identity, pinned argv/config, the pinned CLI as direct parent, the live runner
+scope ancestry and process generation, plus `/proc` cwd and conversation env.
+An arbitrary same-UID client or a nested shell is insufficient. Launch files and
+their writable ancestors are sealed; writable workspace/cache/temp mounts remain
+available. No grant token or broker connection is inherited by command children.
+
+After a successful consumption, the helper drains fd 3 as **inert bytes** and runs
+only the matched command with `bash --noprofile --norc -c`, from the wrapper's
+startup cwd and restored environment. It removes shell startup injection variables
+and imported function env entries. It never evaluates the snapshot, its functions,
+aliases, options, variables, or restore snippets. Stdout/stderr and the exit code
+go to Cursor normally. The original snapshot is framed back onto fd 4 without
+executing it, preserving state for subsequent **sandboxed** commands. Approved
+commands do not persist new shell state or `cd` changes.
+
+Limits: permission events expose command text but no independently trusted current
+cwd. Grants are therefore restricted to the runner's known checkout cwd; a wrapper
+started elsewhere stays sandboxed. Snapshot cwd tracking is not implemented.
+The committed recording uses the real CLI and the runner's real card path against
+a controlled server, which supplies person-decision provenance for the approved
+command; it does **not** establish a production human UI click. The blocked Python
+and function-definition requests receive `ALLOWED` without person provenance and
+remain sandboxed; task 5 still owns relaxing Auto's inline-script classifier.
+macOS peer/process authentication is not implemented: its helper refuses every
+escape, pending the separate macOS work. Other permission modes retain their
+existing wrappers; entering or leaving Auto restarts the CLI process.
+
 ---
 
 ## 9. 登录、API key 与 token（覆盖要求 7）

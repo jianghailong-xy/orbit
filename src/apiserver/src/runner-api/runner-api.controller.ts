@@ -5791,6 +5791,7 @@ export class RunnerApiController {
           message: a.message ?? undefined,
           answers: (a.answers as QuestionAnswers | null) ?? undefined,
           ...normalizeStoredRememberRules(a.rememberRule),
+          ...(a.decidedById ? { decidedById: a.decidedById } : {}),
           // Only when the owner chose it, so every other answer reads exactly as it did before.
           ...(a.startAfterCreate ? { startAfterCreate: true } : {}),
         };

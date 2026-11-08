@@ -20,7 +20,7 @@ type SessionRow = {
   workspaceId?: string | null;
 };
 
-function harness(session: SessionRow, rules: { toolName: string; ruleContent: string }[]) {
+function harness(session: SessionRow, rules: { toolName: string; ruleContent: string }[], decidedById?: string) {
   const created: Record<string, unknown>[] = [];
   const published: unknown[] = [];
   const pushed: unknown[] = [];
@@ -36,6 +36,7 @@ function harness(session: SessionRow, rules: { toolName: string; ruleContent: st
       }),
     },
     approval: {
+      findFirst: async () => ({ id: 'approval-1', status: 'ALLOWED', decidedById: decidedById ?? null }),
       findUnique: async () => null,
       create: async ({ data }: { data: Record<string, unknown> }) => {
         created.push(data);
@@ -75,6 +76,15 @@ const askAbout = (command: string) => ({
   toolName: 'Bash',
   input: { command, cwd: '/repo' },
   toolUseId: 'call-1',
+});
+
+test('the approval poll identifies human answers and leaves standing grants without a decider', async () => {
+  for (const decider of [undefined, OWNER]) {
+    const h = harness({ provider: AgentProvider.CURSOR }, [], decider);
+    const decision = await h.controller.pollApproval(runner, SESSION, 'approval-1');
+    assert.equal(decision.decidedById, decider);
+    assert.equal(Object.hasOwn(decision, 'decidedById'), decider !== undefined);
+  }
 });
 
 test('Codex stops asking about a command the workspace already granted', async () => {

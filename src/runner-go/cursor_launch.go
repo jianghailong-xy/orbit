@@ -149,14 +149,15 @@ func checkCursorSessionKey(ctx context.Context, exe string, job *ClaimedSession,
 // and environment it starts with, the session's checkout, and the session's own directories. Env will
 // carry the session's credential, so the spec never prints or serializes it.
 type CursorLaunchSpec struct {
-	Executable string
-	Args       []string
-	Env        []string
-	Cwd        string
-	ConfigDir  string // CURSOR_CONFIG_DIR
-	DataDir    string // CURSOR_DATA_DIR
-	Home       string // the CLI's HOME, never the runner user's
-	Version    string
+	Executable  string
+	Args        []string
+	Env         []string
+	Cwd         string
+	ConfigDir   string // CURSOR_CONFIG_DIR
+	DataDir     string // CURSOR_DATA_DIR
+	Home        string // the CLI's HOME, never the runner user's
+	Version     string
+	shellConfig string
 }
 
 func (s CursorLaunchSpec) String() string {
@@ -293,6 +294,9 @@ func prepareCursorLaunch(job *ClaimedSession, execDir, exe, dir string) (CursorL
 			}
 		}
 		spec.Env = append(kept, credential+"="+value)
+	}
+	if err := prepareCursorShellSandbox(job, &spec, dir); err != nil {
+		return CursorLaunchSpec{}, fmt.Errorf("CURSOR_CONFIG_CONFLICT: cannot prepare Auto sandbox: %w", err)
 	}
 	return spec, nil
 }
@@ -466,7 +470,7 @@ func cursorShellPathUsable(path string) bool {
 // HOME is the runner user's; what else it restores is the session's (cursorCommandEnv), so each session
 // has a wrapper of its own. A path the CLI would not take as bash is refused: the CLI would run the
 // commands in a bash of its own choosing, on the CLI's HOME and with its credentials.
-func writeCursorShellWrapper(dir string, agentEnv map[string]string) (string, error) {
+func writeCursorShellWrapper(dir string, agentEnv map[string]string, launcher ...[]string) (string, error) {
 	home := userHome()
 	if home == "" {
 		return "", errors.New("the runner user's home directory is unknown")
@@ -493,7 +497,15 @@ func writeCursorShellWrapper(dir string, agentEnv map[string]string) (string, er
 			script.WriteString(key + "=" + shellQuote(value) + "\n" + "export " + key + "\n")
 		}
 	}
-	script.WriteString("exec " + shellQuote(cursorBash()) + " \"$@\"\n")
+	command := []string{cursorBash()}
+	if len(launcher) > 0 {
+		command = launcher[0]
+	}
+	script.WriteString("exec")
+	for _, arg := range command {
+		script.WriteString(" " + shellQuote(arg))
+	}
+	script.WriteString(" \"$@\"\n")
 	if current, err := os.ReadFile(path); err == nil && string(current) == script.String() {
 		return path, nil
 	}

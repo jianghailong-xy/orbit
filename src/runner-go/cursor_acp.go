@@ -121,9 +121,23 @@ type cursorACPClient struct {
 	// a current_mode_update); "" once the model may have switched it itself (cursorEventMapper.onSwitchMode).
 	modeMu sync.Mutex
 	mode   string
+	grants *cursorGrantBroker
 }
 
 func startCursorACP(ctx context.Context, spec CursorLaunchSpec, mapper *cursorEventMapper, bridge *cursorPermissionBridge, emit emitFn) (*cursorACPClient, error) {
+	var broker *cursorGrantBroker
+	if spec.shellConfig != "" {
+		var err error
+		broker, err = startCursorGrantBroker(spec)
+		if err != nil {
+			return nil, fmt.Errorf("cannot start Cursor Auto grant broker: %w", err)
+		}
+		defer func() {
+			if broker != nil {
+				broker.close()
+			}
+		}()
+	}
 	if spec.Version != cursorSupportedVersion {
 		return nil, fmt.Errorf("CURSOR_VERSION_INCOMPATIBLE: Orbit runs Cursor CLI %s, not %q", cursorSupportedVersion, spec.Version)
 	}
@@ -162,9 +176,18 @@ func startCursorACP(ctx context.Context, spec CursorLaunchSpec, mapper *cursorEv
 		cancel()
 		return nil, err
 	}
+	if broker != nil {
+		broker.cliPID = cmd.Process.Pid
+		broker.cliStart = cursorShellStartIdentity(cmd.Process.Pid)
+		go broker.serve()
+		if bridge != nil {
+			bridge.grants = broker
+		}
+	}
 	a := &cursorACPClient{cmd: cmd, scope: scope, cancel: cancel, stdin: stdin, mapper: mapper, secrets: cursorLaunchSecrets(spec.Env),
 		pending: map[string]cursorPending{}, writes: make(chan cursorWrite, 16), done: make(chan struct{}), readDone: make(chan struct{}),
 		stderrDone: make(chan struct{}), reapNow: make(chan struct{}), exited: make(chan struct{}), bridge: bridge}
+	a.grants = broker
 	if bridge != nil {
 		bridge.reply = a.respond
 	}
@@ -184,6 +207,7 @@ func startCursorACP(ctx context.Context, spec CursorLaunchSpec, mapper *cursorEv
 			emit(evSystem, map[string]interface{}{"stderr": a.redact(stripANSI(sc.Text())) + "\n"})
 		}
 	}()
+	broker = nil // Ownership passes to the client until the process is reaped.
 	return a, nil
 }
 
@@ -350,6 +374,9 @@ func (a *cursorACPClient) watchExit() {
 	case <-a.reapNow:
 	}
 	err := waitSessionProcessTree(a.cmd)
+	if a.grants != nil {
+		a.grants.close()
+	}
 	if state := a.cmd.ProcessState; state != nil {
 		a.exit = state.String()
 	} else if err != nil {
@@ -1544,7 +1571,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 				}
 				// The workspace's variables, the credential among them, and the flags a permission mode starts
 				// the CLI with (Bypass's --force) are the process's: a new process.
-				if cursorLaunchIdentity(p.job.Agent.Env) != before ||
+				if cursorLaunchIdentity(p.job.Agent.Env) != before || (p.job.Agent.PermissionMode == "auto") != (beforeMode == "auto") ||
 					strings.Join(cursorPermissionArgs(p.job.Agent.PermissionMode), " ") != strings.Join(cursorPermissionArgs(beforeMode), " ") {
 					if activeID != "" {
 						stopped = true

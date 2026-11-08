@@ -194,6 +194,7 @@ type cursorPermissionBridge struct {
 	emit        emitTurnFn
 	// workspace is the session's checkout, the one place a routine command in Auto may touch.
 	workspace string
+	grants    *cursorGrantBroker
 }
 
 func newCursorPermissionBridge(policy cursorPermissionPolicy, ask func(map[string]interface{}) (cursorPermissionAsk, bool),
@@ -214,6 +215,9 @@ func (b *cursorPermissionBridge) policy() cursorPermissionPolicy {
 func (b *cursorPermissionBridge) setPolicy(policy cursorPermissionPolicy) {
 	b.mu.Lock()
 	b.mode = policy
+	if b.grants != nil {
+		b.grants.revoke()
+	}
 	b.mu.Unlock()
 }
 
@@ -239,6 +243,9 @@ func (b *cursorPermissionBridge) begin(turnID string) {
 func (b *cursorPermissionBridge) close() {
 	b.mu.Lock()
 	b.open = false
+	if b.grants != nil {
+		b.grants.revoke()
+	}
 	for key, waiting := range b.pending {
 		waiting.cancel()
 		if waiting.card != "" {
@@ -294,7 +301,7 @@ func (b *cursorPermissionBridge) answerClosed(id interface{}, card string) {
 
 // later answers once decide has, on a goroutine of its own, so the reader never waits on a person; with
 // cancelled if decide gives no answer or the bridge closed first.
-func (b *cursorPermissionBridge) later(id interface{}, card string, decide func(ctx context.Context) map[string]interface{}) {
+func (b *cursorPermissionBridge) later(id interface{}, card string, decide func(ctx context.Context) map[string]interface{}, beforeReply ...func()) {
 	ctx, cancel := context.WithCancel(context.Background())
 	b.mu.Lock()
 	if !b.open {
@@ -322,6 +329,11 @@ func (b *cursorPermissionBridge) later(id interface{}, card string, decide func(
 		}
 		delete(b.pending, key)
 		cancel()
+		if !withdrawn && firstString(mapValue(result["outcome"]), "optionId") == cursorAllowOnce {
+			for _, commit := range beforeReply {
+				commit()
+			}
+		}
 		b.reply(id, result)
 	}()
 }
@@ -381,6 +393,8 @@ func (b *cursorPermissionBridge) permission(id interface{}, params map[string]in
 		if policy.Mode == "bypassPermissions" {
 			b.noteBypass(ask.TurnID)
 		}
+		personApproved := false
+		approvalID := ""
 		b.later(id, ask.ToolUseID, func(ctx context.Context) map[string]interface{} {
 			decision, err := b.card(ctx, ask.Name, ask.Input, ask.ToolUseID)
 			if err != nil {
@@ -388,12 +402,18 @@ func (b *cursorPermissionBridge) permission(id interface{}, params map[string]in
 			}
 			switch decision.Status {
 			case "ALLOWED":
+				personApproved = decision.DecidedByID != "" && decision.ID != ""
+				approvalID = decision.ID
 				// Once, even for "always": the standing grant answers the next card of its kind.
 				return cursorSelected(cursorAllowOnce)
 			case "DENIED":
 				return cursorSelected(cursorRejectOnce)
 			}
 			return nil
+		}, func() {
+			if personApproved && b.grants != nil && b.mode.Mode == "auto" && ask.Name == "Bash" {
+				b.grants.add(approvalID, cursorGrantKey{firstString(params, "sessionId"), b.workspace, firstString(mapValue(ask.Input), "command")})
+			}
 		})
 	}
 }

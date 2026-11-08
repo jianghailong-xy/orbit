@@ -2237,6 +2237,8 @@ export interface ApprovalDecisionRequest {
 /** Control plane → runner: the resolved decision (returned by the approval
  *  long-poll). status === 'PENDING' means the long-poll window elapsed undecided. */
 export interface ApprovalDecisionResponse {
+  /** Present only when a person answered; standing grants have no decider. */
+  decidedById?: string;
   id: string;
   status: ApprovalStatus;
   behavior?: 'allow' | 'deny';
