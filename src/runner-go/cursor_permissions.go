@@ -49,6 +49,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 )
@@ -385,7 +386,7 @@ func (b *cursorPermissionBridge) permission(id interface{}, params map[string]in
 		if b.now(id, ask.ToolUseID, cursorSelected(cursorRejectOnce)) {
 			b.note(ask.TurnID, "permission_denied", ask.ToolUseID, ask.Name, cursorModeName(policy.Mode)+" refuses without asking")
 		}
-	case policy.Answer == cursorAnswerReview && ask.Name == "Bash" && cursorAutoAllows(firstString(mapValue(ask.Input), "command"), b.workspace):
+	case policy.Answer == cursorAnswerReview && ask.Name == "Bash" && cursorAutoAllows(firstString(mapValue(ask.Input), "command"), b.workspace, b.sandboxInForce):
 		if b.now(id, ask.ToolUseID, cursorSelected(cursorAllowOnce)) {
 			b.note(ask.TurnID, "permission_auto_allowed", ask.ToolUseID, ask.Name, "Auto allows a routine command in the workspace")
 		}
@@ -583,15 +584,65 @@ func cursorPreApproved(agent AgentExecConfig, ask cursorPermissionAsk) bool {
 	return false
 }
 
-// cursorAutoAllows is whether Auto lets a command run without a person: a command Cursor CLI asked about
-// runs with no sandbox at all, so only one that is routine by Codex's Auto rules (codexAutoApproval: no
-// push, fetch, install, remote shell, inline interpreter, secret file or recursive delete), that acts on
-// no other system (dshToolGateMatch), starts no container, and names no path outside the workspace and
-// the temporary directories (dshCommandStaysInWorkspace). Anything this cannot read goes to a person.
-func cursorAutoAllows(command, workspace string) bool {
+var cursorSandboxHighImpact = regexp.MustCompile(`(?i)(?:\.ssh|\.aws|\bgit(?:\s+[^;|&\n]+)*\s+(?:push|fetch|pull|clone)\b|\b(?:npm|pnpm|yarn|pip[0-9.]*)(?:\s+[^;|&\n]+)*\s+(?:install|ci|add)\b)`)
+
+var cursorInlineInterpreter = regexp.MustCompile(`(?:^|[\s;|&(])(?:python[0-9.]*|node|ruby|perl|bash|sh|zsh|dash|ksh)\s+(?:-[ce]|--eval)(?:\s|$)`)
+
+// cursorAutoAllows keeps the original unsandboxed policy unless the launcher's sandbox is in force.
+// Sandboxed code still goes to a person when any high-impact marker appears, including in script bodies.
+func cursorAutoAllows(command, workspace string, sandboxInForce bool) bool {
 	command = strings.TrimSpace(command)
 	if command == "" || !filepath.IsAbs(workspace) {
 		return false
+	}
+	if sandboxInForce && cursorSandboxHighImpact.MatchString(command) {
+		return false
+	}
+	inline := cursorInlineInterpreter.MatchString(command)
+	for _, line := range strings.Split(command, "\n") {
+		if match := dshHeredoc.FindStringIndex(line); match != nil && dshHeredocInterpreter.MatchString(line[:match[0]]) {
+			inline = true
+		}
+	}
+	if sandboxInForce && inline {
+		// Normalize script string arguments as well as shell words, so e.g. ['git', 'push']
+		// and os.system("git push") meet the same markers as a shell invocation.
+		text := strings.Join(strings.Fields(strings.NewReplacer("'", " ", "\"", " ", "(", ";", ")", " ",
+			"[", ";", "]", " ", ",", " ").Replace(command)), " ")
+		if codexAutoCommandNeedsApprovalWithInline(command, dshWritableRoots(workspace)[1:], true) ||
+			codexAutoCommandNeedsApprovalWithInline(text, dshWritableRoots(workspace)[1:], true) ||
+			cursorSandboxHighImpact.MatchString(text) || dshContainerCommand.MatchString(text) {
+			return false
+		}
+		for _, pattern := range dshToolGatePatterns {
+			if pattern.MatchString(command) || pattern.MatchString(text) {
+				return false
+			}
+		}
+		// Retain fail-closed handling of an unterminated here-document without changing DSH.
+		lines := strings.Split(command, "\n")
+		for i := 0; i < len(lines); i++ {
+			line := lines[i]
+			for _, match := range dshHeredoc.FindAllStringSubmatchIndex(line, -1) {
+				delimiter := line[match[2]:match[3]]
+				trimTabs := strings.HasPrefix(line[match[0]:], "<<-")
+				end := i + 1
+				for ; end < len(lines); end++ {
+					body := lines[end]
+					if trimTabs {
+						body = strings.TrimLeft(body, "\t")
+					}
+					if body == delimiter {
+						break
+					}
+				}
+				if end == len(lines) {
+					return false
+				}
+				i = end
+			}
+		}
+		return true
 	}
 	allowed, decided := codexAutoApproval(codexApprovalRequest{}, map[string]interface{}{"command": command, "cwd": workspace},
 		codexAutoApprovalContext{workspaceRoots: []string{workspace}})
