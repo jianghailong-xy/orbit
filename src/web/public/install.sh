@@ -4,22 +4,21 @@
 # Extra args go to `orbit register`:  ... | bash -s -- --labels sg --max-concurrent 2
 # Set ORBIT_NO_REGISTER=1 to install the binary only.
 #
-# On a machine set up with `orbit host setup`, hostd and every account's runner run
-# /usr/local/bin/orbit, so the binary replaces that file as root, owned by uid 0 and gid 0 with
-# mode 0755, through sudo unless already root. Anywhere else it goes to ~/.orbit/bin/orbit of the
-# account the runner service runs as (under sudo, the account that invoked it; root included),
-# where the runner can replace it when it updates itself. A launcher, ~/.local/bin/orbit, is a
-# symlink to it. install.sh never edits ~/.bashrc or ~/.zshrc: when ~/.local/bin is not on PATH,
-# it prints the line that adds it, for the account to run. The account writes all of that itself,
-# under sudo too, so root follows no link in its home, and it runs `orbit register` itself, so
-# root never executes a file the account can replace.
-# Set ORBIT_BIN_DIR to install the binary straight into that directory instead; /usr/local/bin
-# itself is still written as on a set-up machine.
+# The binary goes to ~/.orbit/bin/orbit of the account the runner service runs as (under sudo, the
+# account that invoked it; root included), where the runner can replace it when it updates itself.
+# That holds on a machine set up with `orbit host setup` too: each account's runner there runs its
+# own copy, and /usr/local/bin/orbit is hostd's alone, which install.sh never writes. A launcher,
+# ~/.local/bin/orbit, is a symlink to it. install.sh never edits ~/.bashrc or ~/.zshrc: when
+# ~/.local/bin is not on PATH, it prints the line that adds it, for the account to run. The account
+# writes all of that itself, under sudo too, so root follows no link in its home, and it runs
+# `orbit register` itself, so root never executes a file the account can replace.
+# Set ORBIT_BIN_DIR to install the binary straight into that directory instead; naming
+# /usr/local/bin puts a file of root's there (uid 0, gid 0, mode 0755), through sudo unless already
+# root, or nothing.
 set -euo pipefail
 
 BASE_URL="${ORBIT_BASE_URL:-https://orbitd.io}"
 MACHINE_DIR="/usr/local/bin"
-TEMPLATE="/etc/systemd/system/orbit-runner@.service"
 NAME="orbit"
 
 case "$(uname -s)" in
@@ -85,16 +84,13 @@ as_owner() {
   if [ "$(id -un)" = "$owner" ]; then "$@"; else sudo -u "$owner" -- "$@"; fi
 }
 
-# A machine set up with `orbit host setup` has the runner template, and then hostd (as root) and
-# every account's orbit-runner@<uid> run /usr/local/bin/orbit: whatever is written there has to be
-# root's alone, and ORBIT_BIN_DIR naming /usr/local/bin writes that same file.
+# ORBIT_BIN_DIR naming /usr/local/bin writes /usr/local/bin/orbit, which root may run (hostd does,
+# on a machine set up with `orbit host setup`): whatever is written there has to be root's alone.
 machine=""
 if [ -n "${ORBIT_BIN_DIR:-}" ]; then
   if [ "${ORBIT_BIN_DIR%/}" = "$MACHINE_DIR" ] || [ "$ORBIT_BIN_DIR" -ef "$MACHINE_DIR" ]; then
     machine=1
   fi
-elif [ -e "$TEMPLATE" ]; then
-  machine=1
 fi
 
 launcher=""
@@ -102,11 +98,10 @@ local_bin=""
 path_hint=""
 if [ -n "$machine" ]; then
   target="${MACHINE_DIR}/${NAME}"
-  [ ! -e "$TEMPLATE" ] || echo "note: hostd and every account's runner on this machine run ${target}, so it is installed there, as root."
   [ "$(id -u)" = "0" ] || echo "Installing ${target} (needs sudo)..."
   # install(1) sets owner, group (numeric: root's group is wheel on macOS) and mode, and puts a new
-  # file in place of the old one rather than writing into it: hostd and the runners may be running
-  # it, and a link there is replaced, not followed. The directory may not exist yet (e.g.
+  # file in place of the old one rather than writing into it: hostd may be running it, and a link
+  # there is replaced, not followed. The directory may not exist yet (e.g.
   # /usr/local/bin on a fresh Apple Silicon Mac).
   if ! { { [ -d "$MACHINE_DIR" ] || as_root mkdir -p "$MACHINE_DIR"; } && as_root install -o 0 -g 0 -m 0755 "$tmp" "$target"; }; then
     echo "orbit: installing ${target} needs root; re-run as root or with sudo" >&2

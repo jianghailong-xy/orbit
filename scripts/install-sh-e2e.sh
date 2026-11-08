@@ -13,18 +13,17 @@
 # as /dl/orbit-linux-<arch>.gz). The accounts' sudo logs every call, so a run shows whether
 # install.sh asked for it.
 #
-# Set up (the template `orbit host setup` writes, scripts/install-sh-e2e/orbit-runner@.service):
-#   S1  alice installs: /usr/local/bin/orbit is a regular file, uid 0, gid 0, mode 0755, the release,
-#       and alice can neither write nor replace it
-#   S2  as S1, with /usr/local/bin writable by alice's group (only writing the file is checked:
-#       replacing it is then up to the directory, which orbit host setup refuses)
-#   S3  bob installs, /usr/local/bin writable by bob's group: fails, says root is needed, and leaves
-#       no /usr/local/bin/orbit of bob's
-#   S4  root installs: a regular file, uid 0, gid 0, mode 0755, the release
-#   S5  alice pipes it into sudo (curl … | sudo env … bash): as S4
-#   S6  /usr/local/bin/orbit is a link to alice's own copy; alice installs: the link is replaced by
-#       root's file, and alice's copy is left as it was
-#   S7  /usr/local/bin/orbit is running; alice installs: it is replaced, not written into
+# Set up (the template `orbit host setup` writes, scripts/install-sh-e2e/orbit-runner@.service), each
+# run once with no /usr/local/bin/orbit and once with a root-owned file there (hostd's binary, put in
+# place by the admin before setup). Every run installs as on a machine that is not set up: the
+# account's own ~/.orbit/bin/orbit, a regular file of its own with mode 0755 and the release; its
+# ~/.local/bin/orbit, a symlink of its own to that file; both rc files as they were; the closing
+# hint; and /usr/local/bin/orbit as it was before (type, owner, group, mode, sha256, or absent):
+#   S1  alice (passwordless sudo) runs curl … | bash: no sudo call either
+#   S2  bob (no sudo right) runs curl … | bash: no sudo call either
+#   S3  bob, with /usr/local/bin writable by bob's group (root:bob 2775): no sudo call either
+#   S4  root runs curl … | bash: root's own /root/.orbit/bin/orbit, as N2
+#   S5  alice pipes it into sudo (curl … | sudo env … bash): her own copy, all hers, as N3
 # Not set up (no template):
 #   N1  bob installs: his own ~/.orbit/bin/orbit and ~/.local/bin/orbit, the release, without sudo;
 #       no /usr/local/bin/orbit, and his rc files are left as they were
@@ -41,8 +40,8 @@
 #       copy, ~/.bashrc and ~/.zshrc are as the first run left them (install.sh edits neither), a
 #       shell with ~/.local/bin on PATH finds the account's own copy, and both runs print the
 #       closing hint and name the binary by its absolute path
-#   N7  alice installs with ORBIT_BIN_DIR=/usr/local/bin/: that is the machine's file all the same,
-#       written as on a set-up machine (as S1), with no launcher
+#   N7  alice installs with ORBIT_BIN_DIR=/usr/local/bin/: /usr/local/bin/orbit is a regular file, uid
+#       0, gid 0, mode 0755, the release, never one of hers, with no launcher
 #   N8  alice's ~/.orbit/bin/orbit is running (a copy of sleep); alice installs through sudo (curl … |
 #       sudo env … bash): it is replaced, not written into, by a file of hers with mode 0755
 # Not set up, with a link alice planted in her home; she installs through sudo, as in N8:
@@ -256,16 +255,6 @@ no_sudo() {
   expect "$1" "sudo run by $2" "${calls:-none}" "none"
 }
 
-# cannot ID ACCOUNT WHAT LINE — LINE, run as ACCOUNT, fails.
-cannot() {
-  local out
-  if out=$(as "$2" "$4" 2>&1); then
-    fail "$1" "$2 can $3: \`$4\` succeeded"
-  else
-    pass "$1" "$2 cannot $3: $(tail -n 1 <<<"$out")"
-  fi
-}
-
 # closing ID RUN ACCOUNT OUTPUT — the closing words of a home install: the launcher, the line that
 # adds ~/.local/bin to PATH when it is not there, non-interactive use (ssh, cron) the absolute path,
 # and the Next: line names the binary by that path.
@@ -343,6 +332,35 @@ kept() {
   expect "$1" "new entries under $2" "${gained:-none}" none
 }
 
+# machine_state — /usr/local/bin/orbit itself, a link not followed: its type, owner, group and mode,
+# and the sha256 of what it holds; "absent, sha256 absent" when there is nothing.
+machine_state() { echo "$(st '%F, %u:%g, mode %a' "$BIN"), sha256 $(sha_of "$BIN")"; }
+
+# set_up ID ACCOUNT HOW BIN — on a machine set up with orbit host setup, ACCOUNT runs install.sh
+# (HOW as in install_as) with /usr/local/bin/orbit absent or a root-owned file (BIN: absent or
+# file). It installs as on a machine not set up, and leaves /usr/local/bin/orbit as it was. A run
+# through sudo is a sudo call itself, and root has no sudo to log, so only the accounts' own runs
+# are held to no sudo call.
+set_up() {
+  local id=$1 acct=$2 how=$3 home rc_before bin_before
+  home=$(home_of "$acct")
+  if [ "$4" = file ]; then
+    cx install -o 0 -g 0 -m 0755 /bin/true "$BIN" || harness_fail "cannot put a root-owned file at $BIN"
+  fi
+  bin_before=$(machine_state)
+  echo "    before: $BIN $bin_before"
+  rc_before=$(rc_sums "$acct")
+  install_as "$acct" "$how"
+  exited "$id"
+  own_binary "$id" "$acct"
+  expect "$id" "$home/.orbit/bin/orbit mode" "$(st %a "$home/.orbit/bin/orbit")" 755
+  launcher "$id" "$acct"
+  rcs_kept "$id" "$acct" "$rc_before"
+  if [ "$acct" != root ] && [ "$how" = pipe ]; then no_sudo "$id" "$acct"; fi
+  expect "$id" "$BIN type, owner, group, mode and sha256, as before" "$(machine_state)" "$bin_before"
+  closing "$id" 1 "$acct" "$OUT"
+}
+
 # planted ID REL SETUP — L1 and L2: on a machine not set up, with a unit of root's added to
 # /etc/systemd/system, alice runs SETUP, which makes ~/REL a link to that directory, and then pipes
 # install.sh into sudo. The directory is kept as it was, and install.sh either exits 0 with her
@@ -395,70 +413,28 @@ echo "    alice: passwordless sudo; bob: no sudo right"
 
 # --- set up: the runner template is in place ----------------------------------------------------
 
-fresh "S1 set up; alice runs curl … | bash" setup
-install_as alice pipe
-exited S1
-machine_binary S1
-cannot S1 alice "write $BIN" "echo tampered >>$BIN"
-cannot S1 alice "rename another file over $BIN" 'f=$(mktemp) && mv -f "$f" '"$BIN"
-cannot S1 alice "replace $BIN with a link" "ln -sf /bin/sh $BIN"
-cannot S1 alice "remove $BIN" "rm -f $BIN"
+for bin in absent file; do
+  case $bin in
+    absent) had="no $BIN" ;;
+    file) had="$BIN a root-owned file" ;;
+  esac
+  fresh "S1 set up, $had; alice runs curl … | bash" setup
+  set_up S1 alice pipe "$bin"
 
-fresh "S2 set up, /usr/local/bin writable by alice's group (root:alice 2775); alice runs curl … | bash" setup
-{ cx chgrp alice /usr/local/bin && cx chmod 2775 /usr/local/bin; } || harness_fail "cannot give /usr/local/bin to alice's group"
-install_as alice pipe
-exited S2
-machine_binary S2
-cannot S2 alice "write $BIN" "echo tampered >>$BIN"
-echo "    note: S2 does not check replacing $BIN: a group that can write /usr/local/bin can rename and remove anything in it, whoever owns it, and orbit host setup refuses such a directory"
+  fresh "S2 set up, $had; bob runs curl … | bash" setup
+  set_up S2 bob pipe "$bin"
 
-fresh "S3 set up, /usr/local/bin writable by bob's group (root:bob 2775); bob runs curl … | bash" setup
-{ cx chgrp bob /usr/local/bin && cx chmod 2775 /usr/local/bin; } || harness_fail "cannot give /usr/local/bin to bob's group"
-install_as bob pipe
-if [ "$RC" -ne 0 ]; then pass S3 "install.sh exit status: $RC, not 0"; else fail S3 "install.sh exit status: 0, want a failure"; fi
-said=$(grep -i -m 1 'needs root' <<<"$OUT")
-if [ -n "$said" ]; then pass S3 "the output says root is needed: $said"; else fail S3 "the output does not say that root is needed"; fi
-owner=$(st '%u (%U)' "$BIN")
-if [ "${owner%% *}" != "$(uid_of bob)" ]; then pass S3 "$BIN is not bob's: $owner"; else fail S3 "$BIN is bob's: $owner"; fi
+  fresh "S3 set up, $had, /usr/local/bin writable by bob's group (root:bob 2775); bob runs curl … | bash" setup
+  { cx chgrp bob /usr/local/bin && cx chmod 2775 /usr/local/bin; } || harness_fail "cannot give /usr/local/bin to bob's group"
+  set_up S3 bob pipe "$bin"
 
-fresh "S4 set up; root runs curl … | bash" setup
-install_as root pipe
-exited S4
-machine_binary S4
+  fresh "S4 set up, $had; root runs curl … | bash" setup
+  set_up S4 root pipe "$bin"
 
-fresh "S5 set up; alice runs curl … | sudo env … bash (stdin a pipe, SUDO_USER=alice)" setup
-install_as alice sudo-pipe
-exited S5
-machine_binary S5
-
-fresh "S6 set up, $BIN a link to alice's own ~/.orbit/bin/orbit (the earlier single-account layout); alice runs curl … | bash" setup
-own=/home/alice/.orbit/bin/orbit
-{ cx install -d -o alice -g alice -m 0700 /home/alice/.orbit && cx install -d -o alice -g alice /home/alice/.orbit/bin &&
-  cx install -o alice -g alice -m 0755 /bin/true "$own" && cx ln -s "$own" "$BIN"; } || harness_fail "cannot lay out S6"
-own_before="$(st '%F %U %a' "$own"), sha256 $(sha_of "$own")"
-install_as alice pipe
-exited S6
-machine_binary S6
-expect S6 "$own, where the link led" "$(st '%F %U %a' "$own"), sha256 $(sha_of "$own")" "$own_before"
-
-fresh "S7 set up, $BIN running (a copy of sleep); alice runs curl … | bash" setup
-{ cx install -m 0755 /bin/sleep "$BIN" && docker exec -d "$CTR" "$BIN" 600; } || harness_fail "cannot start $BIN"
-pid=""
-for _ in $(seq 50); do
-  pid=$(cx sh -c 'for p in /proc/[0-9]*; do [ "$(readlink "$p/exe")" = "$1" ] && echo "${p#/proc/}"; done; true' sh "$BIN" | head -n 1)
-  [ -n "$pid" ] && break
-  sleep 0.1
+  fresh "S5 set up, $had; alice runs curl … | sudo env … bash (stdin a pipe, SUDO_USER=alice)" setup
+  set_up S5 alice sudo-pipe "$bin"
+  expect S5 "/home/alice/.orbit/bin owner" "$(st %U /home/alice/.orbit/bin)" alice
 done
-[ -n "$pid" ] || harness_fail "$BIN did not start"
-if out=$(cx cp /opt/install-sh-e2e/orbit-stub "$BIN" 2>&1); then
-  fail S7 "control: writing into the running $BIN succeeded, so this run cannot tell replacing it from writing into it"
-else
-  pass S7 "control: writing into the running $BIN fails: $out"
-fi
-install_as alice pipe
-exited S7
-machine_binary S7
-expect S7 "the process that was running $BIN (pid $pid) runs" "$(cx readlink "/proc/$pid/exe" 2>/dev/null || echo nothing)" "$BIN (deleted)"
 
 # --- not set up: no template --------------------------------------------------------------------
 
