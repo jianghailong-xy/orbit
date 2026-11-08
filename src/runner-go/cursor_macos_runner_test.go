@@ -613,6 +613,12 @@ func cursorCLIStartSites(t *testing.T) []string {
 				return true
 			}
 			args := string(src[fset.Position(call.Lparen).Offset:fset.Position(call.Rparen).Offset])
+			// The sandbox availability trial starts a shell, not Cursor CLI.
+			if name == "cursor_sandbox.go" && enclosing(call.Pos()) == "detectCursorSandbox" && sel.Sel.Name == "CommandContext" && len(call.Args) > 1 {
+				if binary, ok := call.Args[1].(*ast.BasicLit); ok && binary.Value == `"/bin/sh"` {
+					return true
+				}
+			}
 			if strings.HasPrefix(name, "cursor_") || strings.Contains(strings.ToLower(args), "cursor") {
 				sites = append(sites, name+" "+enclosing(call.Pos()))
 			}
